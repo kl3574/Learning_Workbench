@@ -28,6 +28,7 @@ from ..infrastructure.database import Database, utc_now
 from ..infrastructure.idempotency import execute_idempotent
 from ..infrastructure.import_mapping import object_key, remap_import
 from ..infrastructure.import_repository import ImportRepository, identifier, json_object, json_text
+from ..infrastructure.provenance_repository import ProvenanceRepository
 from ..infrastructure.security import SessionIdentity, guard_subject_access
 from .content import ContentService
 from .errors import ApiError
@@ -434,8 +435,10 @@ class ImportService:
                 source_metadata["symbols"] = mapped_symbols
                 repository.connection.execute("UPDATE sources SET metadata_json=? WHERE id=? AND workspace_id=?",
                                               (json_text(source_metadata), row["source_id"], identity.workspace_id))
+                ProvenanceRepository(repository.connection, identity.workspace_id).freeze_import(id, values)
                 receipt = {"schema_version": "3.0.0", "kind": "import_migration_receipt", "input_sha256": row["input_sha256"],
                            "source_id": row["source_id"], "parser_version": preview["parser_version"], "id_mapping": mapping,
+                           "commit_request": request.model_dump(mode="json"),
                            "target_base_ref": target, "budgets": asdict(self.frozen_budgets(row)),
                            "workspace_remapped_note_ids": [value.id for value in values if isinstance(value, dm.Note)],
                            "course_refs": [value.model_dump(mode="json") for value in course_refs],

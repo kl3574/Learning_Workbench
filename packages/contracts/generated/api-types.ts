@@ -20,6 +20,23 @@ export type BlockDraftPayload = {
   "citations"?: Array<Citation>;
 };
 
+export type BlockProvenanceResponse = {
+  "block": ContentBlock;
+  "block_ref": ContentRef;
+  "original_source": (RetainedOriginal | null);
+  "citations": Array<ResolvedCitation>;
+  "unresolved_citation_ids": Array<string>;
+  "warnings": Array<Warning>;
+};
+
+export type BlockReadResponse = (ContentBlock | BlockProvenanceResponse);
+
+export type BookmarkState = {
+  "ref": ContentRef;
+  "value": boolean;
+  "updated_at": string;
+};
+
 export type BootstrapRequest = {
   "one_time_code": string;
 };
@@ -109,6 +126,21 @@ export type CourseSummary = {
   "language": string;
   "lesson_count": number;
   "review_state"?: "unreviewed";
+};
+
+export type DirectoryAncestor = {
+  "id": string;
+  "title": string;
+};
+
+export type DirectoryHit = {
+  "ref": ContentRef;
+  "title": string;
+  "ancestors": Array<DirectoryAncestor>;
+};
+
+export type DirectorySearchResponse = {
+  "hits": Array<DirectoryHit>;
 };
 
 export type DownloadArtifact = {
@@ -225,6 +257,25 @@ export type JobSnapshot = {
   "error": (ErrorDetail | null);
 };
 
+export type LearningActionRequest = {
+  "kind": "read_marked" | "bookmark_set";
+  "ref": ContentRef;
+  "expected_revision": number;
+  "value": boolean;
+};
+
+export type LearningActionResponse = {
+  "event_id": string;
+  "progress_revision": number;
+};
+
+export type LearningProgress = {
+  "revision": number;
+  "readings": Array<ReadingState>;
+  "route_steps": Array<RouteStepState>;
+  "bookmarks": Array<BookmarkState>;
+};
+
 export type Lesson = {
   "schema_version"?: "3.0.0";
   "id": string;
@@ -258,8 +309,42 @@ export type Note = {
   "anchor_state"?: "exact" | "stale" | "unresolved";
 };
 
+export type NoteDeleted = {
+  "id": string;
+  "deleted"?: true;
+};
+
+export type OutlineBlock = {
+  "ref": ContentRef;
+  "kind": "orientation" | "definition" | "theorem" | "proof" | "intuition" | "worked_example" | "boundary" | "summary" | "text" | "code" | "figure";
+  "title": string;
+};
+
+export type OutlineLesson = {
+  "ref": ContentRef;
+  "title": string;
+  "blocks": Array<OutlineBlock>;
+  "reading_state": "unread" | "read" | "stale";
+};
+
+export type OutlineResponse = {
+  "course_ref": ContentRef;
+  "sections": Array<OutlineSection>;
+};
+
+export type OutlineSection = {
+  "id": string;
+  "title": string;
+  "lessons": Array<OutlineLesson>;
+};
+
 export type PageCourse = {
   "items": Array<CourseSummary>;
+  "next_cursor": (string | null);
+};
+
+export type PageNote = {
+  "items": Array<Note>;
   "next_cursor": (string | null);
 };
 
@@ -291,6 +376,15 @@ export type PreferencesRequest = {
   "preferences": PreferencesPatch;
 };
 
+export type ProvenanceSource = {
+  "id": string;
+  "media_type": string;
+  "size": number;
+  "sha256": string;
+  "rights": string;
+  "parser_version": (string | null);
+};
+
 export type QuestionPublic = {
   "schema_version"?: "3.0.0";
   "id": string;
@@ -312,6 +406,23 @@ export type ReadinessResponse = {
   "data_schema_version": string;
   "migrations_pending": boolean;
   "providers_configured": boolean;
+};
+
+export type ReadingState = {
+  "ref": ContentRef;
+  "read": boolean;
+  "read_at": (string | null);
+};
+
+export type ResolvedCitation = {
+  "citation": Citation;
+  "source": ProvenanceSource;
+  "original_access": "allowed" | "author_required" | "unavailable";
+};
+
+export type RetainedOriginal = {
+  "source": ProvenanceSource;
+  "original_access": "allowed" | "author_required" | "unavailable";
 };
 
 export type RevisionSummary = {
@@ -341,6 +452,12 @@ export type RouteStep = {
   "target": ContentRef;
   "requires_steps"?: Array<string>;
   "completion_rule": "manual" | "read" | "practice_submitted" | "assessment_submitted";
+};
+
+export type RouteStepState = {
+  "route_ref": ContentRef;
+  "step_id": string;
+  "completed": boolean;
 };
 
 export type SavedTab = {

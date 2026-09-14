@@ -8,12 +8,14 @@ from fastapi.staticfiles import StaticFiles
 from packages.contracts.domain_models import ErrorEnvelope
 
 from .application.imports import ImportService
+from .application.reader import backfill_provenance
 from .config import Settings
 from .database import Database
 from .interfaces.boundary import install_boundary
 from .interfaces.content_http import create_content_router
 from .interfaces.http import create_router
 from .interfaces.import_http import create_import_router
+from .interfaces.learning_http import create_learning_router
 from .infrastructure.import_worker import ImportWorker
 
 
@@ -26,6 +28,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         database.initialize()
+        application.state.provenance_backfill = backfill_provenance(database)
         import_worker.start()
         try:
             yield
@@ -47,6 +50,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(create_router(settings, database, worker_ready=import_worker.is_alive))
     application.include_router(create_content_router(database))
     application.include_router(create_import_router(settings, import_service))
+    application.include_router(create_learning_router(database))
     if settings.static_dir.is_dir():
         application.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="workbench")
     return application

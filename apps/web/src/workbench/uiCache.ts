@@ -26,11 +26,11 @@ export function saveDirectory(workspace: string | null, course: string | null, n
   return !workspace || writeLocal(directoryKey(workspace, course, navigation), String(offset))
 }
 
-export type ReaderViewState = { expandedDetails: string[]; focusKey: string | null }
+export type ReaderViewState = { expandedDetails: string[]; focusKey: string | null; positionKnown?: boolean }
 const readerViewKey = (workspace: string, tabId: string) => `${prefix}.${workspace}.${tabId}.reader-view.v1`
 export function readReaderView(workspace: string | null, tabId: string): ReaderViewState {
   if (!workspace) return { expandedDetails: [], focusKey: null }
-  try { const value = JSON.parse(readLocal(readerViewKey(workspace, tabId)) ?? 'null'); return { expandedDetails: Array.isArray(value?.expandedDetails) ? value.expandedDetails.filter((key: unknown): key is string => typeof key === 'string') : [], focusKey: typeof value?.focusKey === 'string' ? value.focusKey : null } } catch { return { expandedDetails: [], focusKey: null } }
+  try { const value = JSON.parse(readLocal(readerViewKey(workspace, tabId)) ?? 'null'); return { expandedDetails: Array.isArray(value?.expandedDetails) ? value.expandedDetails.filter((key: unknown): key is string => typeof key === 'string') : [], focusKey: typeof value?.focusKey === 'string' ? value.focusKey : null, ...(value?.positionKnown === true ? { positionKnown: true } : {}) } } catch { return { expandedDetails: [], focusKey: null } }
 }
 export function saveReaderView(workspace: string | null, tabId: string, state: ReaderViewState): boolean {
   return !!workspace && writeLocal(readerViewKey(workspace, tabId), JSON.stringify(state))
