@@ -1,7 +1,8 @@
-import { expect, test, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
+import { expect, test, type Locator, type Page, type TestInfo } from '../../apps/web/node_modules/@playwright/test/index.mjs'
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { resolve } from 'node:path'
+import { writeFileSync } from 'node:fs'
 import { bootstrap } from './helpers'
 
 function originalSyntheticAuthorPackage() {
@@ -39,6 +40,45 @@ async function openImports(page: Page) {
   const dialog = page.getByRole('dialog', { name: '导入', exact: true })
   await expect(dialog.getByText('操作角色：学习者')).toBeVisible()
   return dialog
+}
+
+async function assertImportHeaderVisible(dialog: Locator, testInfo: TestInfo, label: string, scrolled = false) {
+  const metrics = await dialog.evaluate(element => {
+    const inner = element.querySelector<HTMLElement>('.dialog-inner')!
+    const workflow = element.querySelector<HTMLElement>('.import-workflow')!
+    const header = inner.querySelector<HTMLElement>(':scope > header')!
+    const title = header.querySelector<HTMLElement>('h2')!
+    const close = header.querySelector<HTMLElement>('button')!
+    const box = (node: Element) => {
+      const { x, y, width, height, top, bottom, left, right } = node.getBoundingClientRect()
+      return { x, y, width, height, top, bottom, left, right }
+    }
+    const hitTests = (node: HTMLElement) => {
+      const rect = node.getBoundingClientRect()
+      const cx = rect.left + rect.width / 2
+      const cy = rect.top + rect.height / 2
+      // Sample the center and axial edges, inside the rounded button shape.
+      return [[cx, cy], [cx, rect.top + 2], [cx, rect.bottom - 2], [rect.left + 2, cy], [rect.right - 2, cy]]
+        .map(([x, y]) => { const hit = document.elementFromPoint(x, y); return { x, y, tag: hit?.tagName ?? null, within: node.contains(hit) } })
+    }
+    const scroll = (node: Element) => ({ top: node.scrollTop, height: node.scrollHeight, client: node.clientHeight, overflow: getComputedStyle(node).overflowY })
+    return { viewport: { width: innerWidth, height: innerHeight }, dialog: box(element), header: box(header), workflow: box(workflow), title: box(title), close: box(close), titleHits: hitTests(title), closeHits: hitTests(close), scrolling: { dialog: scroll(element), inner: scroll(inner), workflow: scroll(workflow) } }
+  })
+  writeFileSync(testInfo.outputPath(`imports-layout-${label}.json`), JSON.stringify(metrics, null, 2))
+  if (scrolled) expect(metrics.scrolling.workflow.top + metrics.scrolling.inner.top + metrics.scrolling.dialog.top).toBeGreaterThan(0)
+  expect(metrics.scrolling.dialog.top).toBe(0)
+  expect(metrics.scrolling.inner.top).toBe(0)
+  expect(metrics.workflow.top).toBeGreaterThanOrEqual(metrics.header.bottom - 1)
+  expect(metrics.header.top).toBeGreaterThanOrEqual(metrics.dialog.top)
+  expect(metrics.header.bottom).toBeLessThanOrEqual(metrics.dialog.bottom)
+  for (const target of [metrics.title, metrics.close]) {
+    expect(target.top).toBeGreaterThanOrEqual(0)
+    expect(target.bottom).toBeLessThanOrEqual(metrics.viewport.height)
+    expect(target.left).toBeGreaterThanOrEqual(0)
+    expect(target.right).toBeLessThanOrEqual(metrics.viewport.width)
+  }
+  expect(metrics.titleHits.every(hit => hit.within)).toBe(true)
+  expect(metrics.closeHits.every(hit => hit.within)).toBe(true)
 }
 
 async function upload(page: Page, filename: string, text: string, kind: string) {
@@ -140,6 +180,7 @@ test('real Markdown upload stays staged, previews and downloads exact bytes, res
   expect(courseResponse.status()).toBe(200)
   expect(courseResponse.headers().etag).toBe(`"${ref.sha256}"`)
   await expect(dialog.locator('.import-result')).toContainText((await courseResponse.json()).title)
+  await assertImportHeaderVisible(dialog, testInfo, 'committed-1440')
   await page.screenshot({ path: testInfo.outputPath('imports-committed-result-1440.png') })
   await dialog.getByRole('button', { name: '完成并关闭导入' }).click()
   await expect(dialog).toBeHidden()
@@ -165,6 +206,7 @@ test('safe HTML warning requires explicit acceptance and native cancel leaves co
   await page.keyboard.press('Tab')
   expect(await page.evaluate(() => !!document.querySelector('dialog')?.contains(document.activeElement))).toBe(true)
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  await assertImportHeaderVisible(dialog, testInfo, 'html-390', true)
   await page.screenshot({ path: testInfo.outputPath('imports-html-preview-390.png') })
   await dialog.getByRole('button', { name: '取消本次导入', exact: true }).click()
   await expect(dialog.getByText('已取消', { exact: true })).toBeVisible()
@@ -319,6 +361,7 @@ test('local encoding choice preserves the failed original and creates a separate
   expect(createHash('sha256').update(derivative).digest('hex')).not.toBe(originalHash)
   expect(uploadCount).toBe(1)
   await expect(dialog.getByRole('button', { name: '确认导入当前候选' })).toHaveCount(0)
+  await assertImportHeaderVisible(dialog, testInfo, 'encoding-1440', true)
   await page.screenshot({ path: testInfo.outputPath('imports-local-encoding-preview-1440.png') })
   await dialog.getByRole('button', { name: '关闭并更换原件' }).click()
   await openImports(page)
