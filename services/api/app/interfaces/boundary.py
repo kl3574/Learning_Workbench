@@ -39,14 +39,18 @@ def install_boundary(application: FastAPI, settings: Settings, database: Databas
                 if unsafe:
                     check_csrf(request, request.state.identity)
             if unsafe:
+                # An authenticated import has its own finite file budget; ordinary
+                # JSON mutations retain the smaller existing request limit.
+                upload = request.method == "POST" and request.url.path == "/api/v1/imports"
+                body_limit = settings.max_upload_bytes + 65536 if upload else settings.max_request_bytes
                 declared_length = request.headers.get("content-length")
-                if declared_length and (not declared_length.isdecimal() or int(declared_length) > settings.max_request_bytes):
+                if declared_length and (not declared_length.isdecimal() or int(declared_length) > body_limit):
                     raise ApiError(413, "REQUEST_TOO_LARGE", "请求超过本机接口大小限制。")
                 chunks: list[bytes] = []
                 total = 0
                 async for chunk in request.stream():
                     total += len(chunk)
-                    if total > settings.max_request_bytes:
+                    if total > body_limit:
                         raise ApiError(413, "REQUEST_TOO_LARGE", "请求超过本机接口大小限制。")
                     chunks.append(chunk)
                 # Starlette's cached request body is replayed to the downstream FastAPI request.

@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-14T10:25:16Z；规范 SHA-256：`ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
+更新：2026-09-14T11:40:39Z；规范 SHA-256：`ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED
-实施：IN_PROGRESS；当前任务：None；下一任务：M2.2
+实施：IN_PROGRESS；当前任务：M2.2；下一任务：M2.3
 
-M0、M1、M2.1已本地验证并待PR审查。接续M2.2：导入暂存、预览、确认/取消与恶意HTML/ZIP/哈希失败测试；M2.3及以后未实施。
+PR #40已发布；映射预算边界修复fb2bb03通过403Python及lint/types/spec，未变UI沿用6b41b8e的49单测/27浏览器/视觉证据；推送补充修复并核验CI后继续M2.3。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -18,7 +18,7 @@ M0、M1、M2.1已本地验证并待PR审查。接续M2.2：导入暂存、预览
 | M1.2 可访问分隔条、折叠、焦点、快捷键、命令面板 | review | [#14](https://github.com/kl3574/Learning_Workbench/issues/14) | 1c5963d058e56fc36eec378ee3a7f67d665f2307 |
 | M1.3 ViewContext/ContextBridge、按对象保存草稿与会话 | review | [#15](https://github.com/kl3574/Learning_Workbench/issues/15) | 1c5963d058e56fc36eec378ee3a7f67d665f2307 |
 | M2.1 SQLite/blob、精确版本、原子文件、对象读取 | review | [#16](https://github.com/kl3574/Learning_Workbench/issues/16) | f304193f95461ebc3bdc60d6661c7b80f493cb1d |
-| M2.2 MD/TXT/HTML/learnpack 导入暂存和确认 | todo | [#17](https://github.com/kl3574/Learning_Workbench/issues/17) | 未验证提交 |
+| M2.2 MD/TXT/HTML/learnpack 导入暂存和确认 | review | [#17](https://github.com/kl3574/Learning_Workbench/issues/17) | fb2bb033060f8aaacb59e1a81c9826c65509f343 |
 | M2.3 PDFtext/DOCX 提取隔离、低保真诊断 | todo | [#18](https://github.com/kl3574/Learning_Workbench/issues/18) | 未验证提交 |
 | M2.4 Reader/LaTeX、例题锚点、笔记、阅读位置 | todo | [#19](https://github.com/kl3574/Learning_Workbench/issues/19) | 未验证提交 |
 | M3.1 题面/私有答案库、练习/提示/暴露记录 | todo | [#20](https://github.com/kl3574/Learning_Workbench/issues/20) | 未验证提交 |
@@ -42,14 +42,14 @@ M0、M1、M2.1已本地验证并待PR审查。接续M2.2：导入暂存、预览
 ## 验证边界
 
 - spec_checks: PASS
-- unit: PASS_THROUGH_M2_1_SCOPE
-- contract: PASS_THROUGH_M2_1_SCOPE
-- integration: PASS_THROUGH_M2_1_SCOPE
-- browser_native: PASS_M1_REGRESSION_ON_M2_1_CODE
+- unit: PASS_THROUGH_M2_2_SCOPE
+- contract: PASS_THROUGH_M2_2_SCOPE
+- integration: PASS_THROUGH_M2_2_SCOPE
+- browser_native: PASS_27_ON_6b41b8e_UNCHANGED_UI
 - real_provider: NOT_RUN
 - real_codex: NOT_RUN
 - learning_effectiveness: NOT_RUN
-- ci: PASS_M2_1_PR_HEAD_844636c
+- ci: PR40_PREVIOUS_HEAD_39dc3f1_12_SUCCESS_MAPPING_FIX_PENDING
 
 ## 阻塞与待决项
 

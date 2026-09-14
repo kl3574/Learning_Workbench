@@ -7,21 +7,30 @@ from fastapi.staticfiles import StaticFiles
 
 from packages.contracts.domain_models import ErrorEnvelope
 
+from .application.imports import ImportService
 from .config import Settings
 from .database import Database
 from .interfaces.boundary import install_boundary
 from .interfaces.content_http import create_content_router
 from .interfaces.http import create_router
+from .interfaces.import_http import create_import_router
+from .infrastructure.import_worker import ImportWorker
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     database = Database(settings)
+    import_service = ImportService(database)
+    import_worker = ImportWorker(database)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         database.initialize()
-        yield
+        import_worker.start()
+        try:
+            yield
+        finally:
+            import_worker.stop()
 
     application = FastAPI(
         title="知径 Learning Workbench",
@@ -33,9 +42,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     application.state.database = database
     application.state.settings = settings
+    application.state.import_worker = import_worker
     install_boundary(application, settings, database)
-    application.include_router(create_router(settings, database))
+    application.include_router(create_router(settings, database, worker_ready=import_worker.is_alive))
     application.include_router(create_content_router(database))
+    application.include_router(create_import_router(settings, import_service))
     if settings.static_dir.is_dir():
         application.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="workbench")
     return application

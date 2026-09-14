@@ -7,13 +7,17 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path, PurePosixPath
 import stat
+from types import GenericAlias
+from typing import cast
 import zipfile
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, create_model
 
 from packages.contracts import domain_models as dm
+from packages.contracts.budgets import ImportBudgets
 from packages.contracts.canonical import metadata_sha256, sha256_bytes, strict_json
 
 MAX_PACKAGE_BYTES = 200 * 1024 * 1024
@@ -28,6 +32,29 @@ ENTITY_MODELS: dict[str, type[PublishedModel]] = {
     "concept": dm.Concept, "route": dm.Route, "question": dm.QuestionPublic,
     "practice_set": dm.PracticeSet, "assessment": dm.AssessmentBlueprint, "note": dm.Note,
 }
+
+
+@lru_cache(maxsize=16)
+def _manifest_model(max_bytes: int, max_files: int) -> type[dm.Manifest]:
+    """Keep Appendix B's default schema intact while applying section 10.1 budgets.
+
+    Only resource limits vary; inherited path, visibility, strict-field and
+    manifest completeness validators continue to execute without bypasses.
+    """
+    if (max_bytes, max_files) == (MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES):
+        return dm.Manifest
+    entry_model = create_model(
+        "BudgetFileEntry", __base__=dm.FileEntry,
+        size=(int, Field(ge=0, le=max_bytes)),
+    )
+    return cast(type[dm.Manifest], create_model(
+        "BudgetManifest", __base__=dm.Manifest,
+        files=(GenericAlias(list, entry_model), Field(min_length=1, max_length=max_files)),
+    ))
+
+
+def parse_manifest(value: object, *, budgets: ImportBudgets = ImportBudgets()) -> dm.Manifest:
+    return _manifest_model(budgets.max_package_bytes, budgets.max_package_files).model_validate(value)
 
 
 def canonical_path(name: str) -> str:
@@ -85,7 +112,8 @@ def validate_route(route: dm.Route) -> None:
             raise ValueError("route completion rule does not match target")
 
 
-def validate_objects(objects: Iterable[PublishedModel], payloads: Mapping[str, bytes]) -> dict[tuple[str, str, int], PublishedModel]:
+def validate_objects(objects: Iterable[PublishedModel], payloads: Mapping[str, bytes], *,
+                     budgets: ImportBudgets = ImportBudgets()) -> dict[tuple[str, str, int], PublishedModel]:
     objects = list(objects)
     registry: dict[tuple[str, str, int], PublishedModel] = {}
     identities: dict[str, str] = {}
@@ -121,7 +149,7 @@ def validate_objects(objects: Iterable[PublishedModel], payloads: Mapping[str, b
             if body is None or sha256_bytes(body) != obj.body_sha256:
                 raise ValueError("body bytes missing or hash mismatch")
             text = body.decode("utf-8")
-            if "\r" in text or len(text) > 400000:
+            if "\r" in text or len(text) > budgets.max_block_characters:
                 raise ValueError("body must use LF and fit text budget")
             if not set(obj.concepts).issubset(concept_graph):
                 raise ValueError("block concept missing")
@@ -148,11 +176,12 @@ class PackageReceipt:
     scope: str = "structure_and_integrity_only"
 
 
-def validate_payloads(manifest: dm.Manifest, payloads: Mapping[str, bytes]) -> int:
+def validate_payloads(manifest: dm.Manifest, payloads: Mapping[str, bytes], *,
+                      budgets: ImportBudgets = ImportBudgets()) -> int:
     declared = {entry.path for entry in manifest.files}
     if declared != set(payloads):
         raise ValueError("undeclared or missing payload file")
-    if sum(map(len, payloads.values())) > MAX_PACKAGE_BYTES:
+    if len(payloads) + 1 > budgets.max_package_files or sum(map(len, payloads.values())) > budgets.max_package_bytes:
         raise ValueError("package byte budget exceeded")
     for entry in manifest.files:
         data = payloads[entry.path]
@@ -196,7 +225,7 @@ def validate_payloads(manifest: dm.Manifest, payloads: Mapping[str, bytes]) -> i
             obj.body_path.startswith("private/") or visibility.get(obj.body_path) != "learner"
         ):
             raise ValueError("public content body cannot reference private payload")
-    registry = validate_objects(objects, payloads)
+    registry = validate_objects(objects, payloads, budgets=budgets)
     if ("course", root.id, root.revision) not in registry:
         raise ValueError("root course missing")
     for value in [*solutions, *symbols]:
@@ -217,11 +246,11 @@ def validate_payloads(manifest: dm.Manifest, payloads: Mapping[str, bytes]) -> i
     return len(objects)
 
 
-def validate_package(archive_path: Path) -> PackageReceipt:
+def validate_package(archive_path: Path, *, budgets: ImportBudgets = ImportBudgets()) -> PackageReceipt:
     """Read without extracting, checking budgets before decompressing payloads."""
     with zipfile.ZipFile(archive_path) as archive:
         entries = archive.infolist()
-        if not entries or len(entries) > MAX_PACKAGE_FILES:
+        if not entries or len(entries) > budgets.max_package_files:
             raise ValueError("package file count exceeded")
         names: set[str] = set()
         for entry in entries:
@@ -232,14 +261,14 @@ def validate_package(archive_path: Path) -> PackageReceipt:
             mode = entry.external_attr >> 16
             if entry.is_dir() or stat.S_IFMT(mode) not in (0, stat.S_IFREG):
                 raise ValueError("ZIP contains non-regular file")
-            if entry.file_size > MAX_COMPRESSION_RATIO * max(1, entry.compress_size):
+            if entry.file_size > budgets.max_compression_ratio * max(1, entry.compress_size):
                 raise ValueError("ZIP compression ratio exceeded")
-        if sum(entry.file_size for entry in entries) > MAX_PACKAGE_BYTES:
+        if sum(entry.file_size for entry in entries) > budgets.max_package_bytes:
             raise ValueError("package byte budget exceeded")
         if "manifest.json" not in names:
             raise ValueError("manifest missing")
-        manifest = dm.Manifest.model_validate(strict_json(archive.read("manifest.json")))
+        manifest = parse_manifest(strict_json(archive.read("manifest.json")), budgets=budgets)
         payloads = {name: archive.read(name) for name in names if name != "manifest.json"}
-    count = validate_payloads(manifest, payloads)
+    count = validate_payloads(manifest, payloads, budgets=budgets)
     return PackageReceipt(manifest.profile, len(payloads), sum(map(len, payloads.values())), count,
                           sha256_bytes(archive_path.read_bytes()))

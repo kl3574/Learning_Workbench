@@ -20,6 +20,8 @@ def typescript_type(schema: dict[str, Any]) -> str:
         if keyword in schema:
             return "(" + operator.join(typescript_type(item) for item in schema[keyword]) + ")"
     kind = schema.get("type")
+    if kind == "string" and (schema.get("format") == "binary" or schema.get("contentMediaType") == "application/octet-stream"):
+        return "Blob"
     if kind in ("string", "boolean", "null"):
         return kind
     if kind in ("integer", "number"):

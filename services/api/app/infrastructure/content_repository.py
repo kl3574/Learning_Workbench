@@ -36,9 +36,10 @@ def damaged() -> ApiError:
 
 
 class ContentRepository:
-    def __init__(self, connection: sqlite3.Connection, workspace_id: str):
+    def __init__(self, connection: sqlite3.Connection, workspace_id: str, *, allow_notes: bool = False):
         self.connection = connection
         self.workspace_id = workspace_id
+        self.allow_notes = allow_notes
 
     def require_workspace(self) -> None:
         if self.connection.execute("SELECT 1 FROM workspace WHERE id=?", (self.workspace_id,)).fetchone() is None:
@@ -48,13 +49,13 @@ class ContentRepository:
         row = self.connection.execute(
             "SELECT * FROM objects WHERE id=? AND workspace_id=?", (object_id, self.workspace_id),
         ).fetchone()
-        if row is None or row["kind"] == "note":
+        if row is None or row["kind"] == "note" and not self.allow_notes:
             # Notes have their own permission and anchor lifecycle, outside M2.1.
             raise missing()
         return row
 
     def load(self, entity: str, object_id: str, revision: int) -> StoredRevision:
-        if entity not in ENTITY_MODELS or entity == "note":
+        if entity not in ENTITY_MODELS or entity == "note" and not self.allow_notes:
             raise missing()
         row = self.connection.execute(
             "SELECT r.*,o.kind,o.lifecycle FROM revisions r JOIN objects o ON o.id=r.object_id "

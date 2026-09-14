@@ -31,7 +31,7 @@ def test_health_is_public_and_readiness_is_authenticated(runtime):
     assert client.get("/api/v1/readiness").status_code == 401
     login(application, client, settings)
     assert client.get("/api/v1/readiness").json() == {
-        "database_ready": True, "worker_ready": False, "data_schema_version": "3.0.0",
+        "database_ready": True, "worker_ready": True, "data_schema_version": "3.0.0",
         "migrations_pending": False, "providers_configured": False,
     }
 

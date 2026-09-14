@@ -31,8 +31,8 @@ def test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec():
     projection = {(method.upper(), path) for path, methods in api["paths"].items() for method in methods if method in HTTP_METHODS}
     assert runtime == projection
     assert projection <= SPEC_ROUTES
-    assert len(projection) == 17
-    assert len(SPEC_ROUTES - projection) == 85
+    assert len(projection) == 26
+    assert len(SPEC_ROUTES - projection) == 76
 
 
 OPERATIONS = [(path, method, operation) for path, methods in create_app().openapi()["paths"].items()
@@ -50,7 +50,9 @@ def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, meth
         if int(code) >= 400:
             assert response["content"]["application/json"]["schema"]["$ref"] == "#/components/schemas/ErrorEnvelope"
     if method != "get":
-        assert operation["requestBody"]["content"]["application/json"]["schema"]["$ref"]
+        media = "multipart/form-data" if path == "/api/v1/imports" else "application/json"
+        assert set(operation["requestBody"]["content"]) == {media}
+        assert operation["requestBody"]["content"][media]["schema"]["$ref"]
 
 
 def test_saved_openapi_matches_actual_registered_handlers_and_coverage():

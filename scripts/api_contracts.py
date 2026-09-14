@@ -84,6 +84,32 @@ def parameter_type(parameters: list[dict[str, Any]]) -> str:
     ) + " }"
 
 
+def request_contract(operation: dict, schemas: dict) -> tuple[str, str, list[dict]]:
+    if "requestBody" not in operation:
+        return "undefined", "json", []
+    content = operation["requestBody"]["content"]
+    if set(content) != {"multipart/form-data"}:
+        return typescript_type(json_schema(content)), "json", []
+    schema = content["multipart/form-data"]["schema"]
+    if "$ref" not in schema:
+        raise ValueError("Multipart requires an explicit generated adapter with a named strict DTO")
+    model = schema["$ref"].rsplit("/", 1)[1]
+    definition = schemas[model]
+    if definition.get("additionalProperties") is not False:
+        raise ValueError("Multipart requires an explicit generated adapter with closed fields")
+    required = set(definition.get("required", []))
+    fields = []
+    for name, field in definition.get("properties", {}).items():
+        options = [option for option in field.get("anyOf", [field]) if option.get("type") != "null"]
+        if len(options) != 1 or options[0].get("type") != "string":
+            raise ValueError("Multipart requires an explicit generated adapter for non-string fields")
+        binary = options[0].get("format") == "binary" or options[0].get("contentMediaType") == "application/octet-stream"
+        fields.append({"name": name, "required": name in required, "binary": binary})
+    if not any(field["binary"] and field["required"] for field in fields):
+        raise ValueError("Multipart requires an explicit generated adapter with a required binary file")
+    return model, "multipart", fields
+
+
 def response_contract(operation: dict) -> tuple[list[str], str, set[str]]:
     response_types: list[str] = []
     kinds: set[str] = set()
@@ -100,6 +126,12 @@ def response_contract(operation: dict) -> tuple[list[str], str, set[str]]:
                 raise ValueError("Markdown responses require an explicit string schema")
             response_types.append("string")
             kinds.add("text")
+        elif set(content) == {"application/octet-stream"}:
+            schema = content["application/octet-stream"].get("schema", {})
+            if schema.get("type") != "string" or schema.get("format") != "binary":
+                raise ValueError("Binary response needs an explicit generated adapter and binary schema")
+            response_types.append("Blob")
+            kinds.add("blob")
         else:
             model = typescript_type(json_schema(content))
             response_types.append(model)
@@ -124,7 +156,7 @@ export type ApiArgs<K extends EndpointKey> = ApiEndpointMap[K]['parametersRequir
     ? [body: ApiRequest<K>, headers?: undefined, parameters?: ApiParameters<K>]
     : [body: ApiRequest<K>, headers: ApiHeaders<K>, parameters?: ApiParameters<K>];
 
-export type ResponseKind = 'json' | 'text';
+export type ResponseKind = 'json' | 'text' | 'blob';
 // The caller owns same-origin session/CSRF and HTTP error handling.
 // Raw transport data is unknown; endpoint results always use generated DTOs.
 export type ApiTransport = (path: string, init: RequestInit, responseKind?: ResponseKind) => Promise<unknown>;
@@ -137,8 +169,34 @@ type Parameter = {
 };
 type Endpoint = {
   method: string; path: string; responseKind: ResponseKind;
+  requestKind: 'json' | 'multipart';
+  multipartFields: readonly { name: string; required: boolean; binary: boolean }[];
   pathParameters: readonly Parameter[]; queryParameters: readonly Parameter[];
 };
+
+function requestBody(endpoint: Endpoint, value: unknown): BodyInit | undefined {
+  if (endpoint.requestKind === 'json') return value === undefined ? undefined : JSON.stringify(value);
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) throw new TypeError('Multipart body required');
+  const fields = value as Record<string, unknown>;
+  const declared = new Set(endpoint.multipartFields.map(field => field.name));
+  if (Object.keys(fields).some(name => !declared.has(name))) throw new TypeError('Undeclared multipart field');
+  const form = new FormData();
+  for (const field of endpoint.multipartFields) {
+    const item = Object.hasOwn(fields, field.name) ? fields[field.name] : undefined;
+    if (item === undefined || item === null) {
+      if (field.required) throw new TypeError(`Missing multipart field: ${field.name}`);
+      continue;
+    }
+    if (field.binary) {
+      if (!(item instanceof Blob)) throw new TypeError(`Binary file required: ${field.name}`);
+      form.append(field.name, item);
+    } else {
+      if (typeof item !== 'string') throw new TypeError(`String form field required: ${field.name}`);
+      form.append(field.name, item);
+    }
+  }
+  return form;
+}
 
 function parameterValue(parameter: Parameter, value: Scalar): string | undefined {
   if (value === undefined || value === null) {
@@ -176,9 +234,10 @@ export function createApiClient(transport: ApiTransport) {
     const paths = new Map(parameterEntries(endpoint.pathParameters, parameters.path));
     const path = endpoint.path.replace(/\\{([^{}]+)\\}/g, (_match, name: string) => encodeURIComponent(paths.get(name)!));
     const query = new URLSearchParams(parameterEntries(endpoint.queryParameters, parameters.query)).toString();
+    const body = requestBody(endpoint, args[0]);
     return transport(path + (query ? `?${query}` : ''), {
       method: endpoint.method,
-      ...(args[0] !== undefined ? { body: JSON.stringify(args[0]) } : {}),
+      ...(body !== undefined ? { body } : {}),
       ...(args[1] ? { headers: args[1] as Record<string, string> } : {}),
     }, endpoint.responseKind) as Promise<ApiResponse<K>>;
   };
@@ -198,9 +257,8 @@ def api_artifacts(openapi: dict, catalog: dict, provenance: dict[str, str]) -> d
                 continue
             if (method.upper(), path) not in declared:
                 raise ValueError("Runtime route is not declared in the single specification")
-            request_type = "undefined"
-            if "requestBody" in operation:
-                request_type = typescript_type(json_schema(operation["requestBody"]["content"]))
+            request_type, request_kind, multipart_fields = request_contract(operation, schemas)
+            if request_type != "undefined":
                 models_needed.add(request_type)
             response_types, response_kind, response_models = response_contract(operation)
             models_needed.update(response_models)
@@ -215,6 +273,7 @@ def api_artifacts(openapi: dict, catalog: dict, provenance: dict[str, str]) -> d
             required_params = any(item["required"] for location in ("path", "query") for item in parameters[location])
             key = method.upper() + " " + path
             endpoints[key] = {"method": method.upper(), "path": path, "responseKind": response_kind,
+                              "requestKind": request_kind, "multipartFields": multipart_fields,
                               **{location + "Parameters": [{name: value for name, value in item.items() if name != "typescript"}
                                                             for item in parameters[location]] for location in ("path", "query")}}
             entries.append(f"  {json.dumps(key)}: {{ request: {request_type}; response: {' | '.join(response_types)}; "

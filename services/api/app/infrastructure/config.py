@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from packages.contracts.budgets import ImportBudgets
+
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 
 
@@ -23,12 +25,20 @@ class Settings:
     session_seconds: int = 43200
     bootstrap_seconds: int = 120
     max_request_bytes: int = 2_097_152
+    max_upload_bytes: int = 50 * 1024 * 1024
+    max_block_characters: int = 400_000
+    max_package_bytes: int = 200 * 1024 * 1024
+    max_package_files: int = 2_000
+    max_compression_ratio: int = 100
 
     def __post_init__(self) -> None:
         if self.host not in {"127.0.0.1", "::1"}:
             raise ValueError("Public deployment is not supported; use a loopback bind address.")
         if not 1 <= self.port <= 65535:
             raise ValueError("Invalid local port.")
+        if type(self.max_upload_bytes) is not int or self.max_upload_bytes <= 0:
+            raise ValueError("Upload budget must be a positive integer.")
+        self.import_budgets  # Validate every explicit budget before opening a database or accepting uploads.
         if self.data_dir.resolve().is_relative_to(REPOSITORY_ROOT):
             raise ValueError("Application data must be outside the source repository.")
         if self.ui_origin:
@@ -44,6 +54,16 @@ class Settings:
                 or parsed.port is None
             ):
                 raise ValueError("Development UI must use an explicit loopback HTTP origin.")
+
+    @property
+    def import_budgets(self) -> ImportBudgets:
+        return ImportBudgets(
+            max_source_bytes=self.max_upload_bytes,
+            max_block_characters=self.max_block_characters,
+            max_package_bytes=self.max_package_bytes,
+            max_package_files=self.max_package_files,
+            max_compression_ratio=self.max_compression_ratio,
+        )
 
     @property
     def origin(self) -> str:
@@ -65,4 +85,9 @@ class Settings:
             host=os.environ.get("LEARNING_HOST", "127.0.0.1"),
             port=int(os.environ.get("LEARNING_PORT", "8765")),
             ui_origin=os.environ.get("LEARNING_UI_ORIGIN") or None,
+            max_upload_bytes=int(os.environ.get("LEARNING_MAX_UPLOAD_BYTES", 50 * 1024 * 1024)),
+            max_block_characters=int(os.environ.get("LEARNING_MAX_BLOCK_CHARACTERS", 400_000)),
+            max_package_bytes=int(os.environ.get("LEARNING_MAX_PACKAGE_BYTES", 200 * 1024 * 1024)),
+            max_package_files=int(os.environ.get("LEARNING_MAX_PACKAGE_FILES", 2_000)),
+            max_compression_ratio=int(os.environ.get("LEARNING_MAX_COMPRESSION_RATIO", 100)),
         )

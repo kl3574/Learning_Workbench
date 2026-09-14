@@ -13,9 +13,10 @@ import time
 from pydantic import ValidationError
 
 from packages.contracts import domain_models as dm
+from packages.contracts.budgets import ImportBudgets
 from packages.contracts.canonical import canonical_bytes, metadata_sha256, sha256_bytes, strict_json
 from packages.contracts.validation import (
-    ENTITY_MODELS, MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES, PublishedModel,
+    ENTITY_MODELS, PublishedModel,
     canonical_path, refs_in, validate_dag, validate_route,
 )
 
@@ -48,7 +49,7 @@ def concept_ids(value: PublishedModel) -> list[str]:
 class ContentService:
     def __init__(self, database: Database):
         self.database = database
-        self.blobs = BlobStore(database.settings.data_dir)
+        self.blobs = BlobStore(database.settings.data_dir, max_bytes=max(database.settings.import_budgets.max_package_bytes, database.settings.import_budgets.max_source_bytes))
         # Short-lived server-issued pagination; restart requires a fresh first page.
         self._cursor_key = secrets.token_bytes(32)
 
@@ -83,7 +84,7 @@ class ContentService:
             if not isinstance(value, dm.ContentBlock):
                 raise damaged()
             info = repository.body_info(value)
-            return self.blobs.read(info.sha256, expected_size=info.size), info.sha256
+            return BlobStore(self.database.settings.data_dir, max_bytes=max(self.blobs.max_bytes, info.size)).read(info.sha256, expected_size=info.size), info.sha256
 
     def current(self, workspace_id: str, id: str) -> dm.ContentRef:
         self._identity(id)
@@ -160,40 +161,47 @@ class ContentService:
             return PageRevision(items=items, next_cursor=self._cursor(context, items[-1].ref.revision) if len(rows) > limit else None)
 
     @staticmethod
-    def _candidates(objects: Iterable[PublishedModel]) -> list[PublishedModel]:
+    def _candidates(objects: Iterable[PublishedModel], *, import_history: bool = False, budgets: ImportBudgets = ImportBudgets()) -> list[PublishedModel]:
         values: list[PublishedModel] = []
         identities: set[str] = set()
+        revisions: set[str] = set()
+        entities: dict[str, str] = {}
         try:
             for candidate in objects:
-                if len(values) >= MAX_PACKAGE_FILES or not isinstance(candidate, tuple(ENTITY_MODELS.values())):
+                if len(values) >= budgets.max_package_files or not isinstance(candidate, tuple(ENTITY_MODELS.values())):
                     raise invalid()
-                if candidate.entity == "note" or candidate.id in identities:
+                if ((candidate.entity == "note" or candidate.id in identities) and not import_history
+                        or key(candidate) in revisions
+                        or candidate.id in entities and entities[candidate.id] != candidate.entity):
                     raise invalid()
                 # Revalidate even model_construct/model_copy input; never serialize a secret-bearing subclass.
                 value = ENTITY_MODELS[candidate.entity].model_validate(candidate.model_dump(mode="python"))
                 identities.add(value.id)
+                revisions.add(key(value))
+                entities[value.id] = value.entity
                 values.append(value)
             if not values:
                 raise invalid()
-            if sum(len(canonical_bytes(value)) for value in values) > MAX_PACKAGE_BYTES:
+            if sum(len(canonical_bytes(value)) for value in values) > budgets.max_package_bytes:
                 raise invalid()
             return values
         except (ValueError, TypeError, AttributeError, KeyError, ValidationError):
             raise invalid() from None
 
     @staticmethod
-    def _body_bytes(value: dm.ContentBlock, body: bytes) -> None:
+    def _body_bytes(value: dm.ContentBlock, body: bytes, budgets: ImportBudgets = ImportBudgets()) -> None:
         try:
             if (type(body) is not bytes or sha256_bytes(body) != value.body_sha256
-                    or len(body) > 50 * 1024 * 1024):
+                    or len(body) > budgets.max_package_bytes):
                 raise invalid()
             text = body.decode("utf-8")
-            if "\r" in text or len(text) > 400000:
+            if "\r" in text or len(text) > budgets.max_block_characters:
                 raise invalid()
         except (ValueError, TypeError, UnicodeError):
             raise invalid() from None
 
-    def _stage(self, repository: ContentRepository, values: list[PublishedModel], bodies: Mapping[str, bytes]) -> dict[str, BlobInfo]:
+    def _stage(self, repository: ContentRepository, values: list[PublishedModel], bodies: Mapping[str, bytes], budgets: ImportBudgets) -> dict[str, BlobInfo]:
+        blob_store = self.blobs if budgets == self.database.settings.import_budgets else BlobStore(self.database.settings.data_dir, max_bytes=max(budgets.max_package_bytes, budgets.max_source_bytes))
         required: dict[str, str] = {}
         try:
             for value in values:
@@ -203,7 +211,7 @@ class ContentService:
                         raise invalid()
                     required[path] = value.body_sha256
             if (set(bodies) - set(required) or sum(len(body) for body in bodies.values())
-                    + sum(len(canonical_bytes(value)) for value in values) > MAX_PACKAGE_BYTES):
+                    + sum(len(canonical_bytes(value)) for value in values) > budgets.max_package_bytes):
                 raise invalid()
             output = {}
             for value in values:
@@ -212,25 +220,50 @@ class ContentService:
                 body = bodies.get(value.body_path)
                 if body is None:
                     info = repository.public_body(value.body_sha256)
-                    body = self.blobs.read(info.sha256, expected_size=info.size)
-                self._body_bytes(value, body)
-                output[value.body_sha256] = self.blobs.write(body, expected_sha256=value.body_sha256)
+                    body = blob_store.read(info.sha256, expected_size=info.size)
+                self._body_bytes(value, body, budgets)
+                output[value.body_sha256] = blob_store.write(body, expected_sha256=value.body_sha256)
             return output
         except (ValueError, TypeError):
             raise invalid() from None
 
-    def _closure(self, repository: ContentRepository, values: list[PublishedModel]) -> tuple[
+    def _closure(self, repository: ContentRepository, values: list[PublishedModel], budgets: ImportBudgets) -> tuple[
         dict[str, PublishedModel], dict[str, list[tuple[dm.ContentRef, str]]], dict[str, dict[str, dm.Concept]],
     ]:
         registry = {key(value): value for value in values}
-        candidate_concepts = {value.id: value for value in values if isinstance(value, dm.Concept)}
+        candidate_concepts: dict[str, list[dm.Concept]] = {}
+        for value in values:
+            if isinstance(value, dm.Concept):
+                candidate_concepts.setdefault(value.id, []).append(value)
+        # A course's exact concept_refs disambiguate historical pure-ID edges.
+        bindings: dict[str, dict[str, dm.ContentRef]] = {}
+        for course in (value for value in values if isinstance(value, dm.Course)):
+            selections = {ref.id: ref for ref in course.concept_refs}
+            ref_queue = list(refs_in(course))
+            seen: set[str] = set()
+            while ref_queue:
+                ref = ref_queue.pop()
+                if key(ref) in seen:
+                    continue
+                seen.add(key(ref))
+                target = registry.get(key(ref))
+                if target is None:
+                    continue
+                owned = bindings.setdefault(key(target), {})
+                for identifier, selection in selections.items():
+                    if identifier not in concept_ids(target):
+                        continue
+                    if identifier in owned and owned[identifier] != selection:
+                        raise invalid()
+                    owned[identifier] = selection
+                ref_queue.extend(refs_in(target))
         candidate_keys = set(registry)
         pending = list(values)
         dependencies: dict[str, list[tuple[dm.ContentRef, str]]] = {}
 
         def include(value: PublishedModel) -> None:
             if key(value) not in registry:
-                if len(registry) >= 10000:
+                if len(registry) >= max(10000, budgets.max_package_files * 5):
                     raise invalid()
                 registry[key(value)] = value
                 pending.append(value)
@@ -249,7 +282,16 @@ class ContentService:
                 frozen = repository.concept_dependency(owner, identifier)
                 include(frozen)
                 return frozen
-            value = candidate_concepts.get(identifier)
+            choices = candidate_concepts.get(identifier, [])
+            selection = bindings.get(key(owner), {}).get(identifier)
+            if selection is not None:
+                chosen = resolve(selection)
+                if not isinstance(chosen, dm.Concept):
+                    raise invalid()
+                return chosen
+            if len(choices) > 1:
+                raise ApiError(422, "IMPORT_CONCEPT_AMBIGUOUS", "历史概念的纯 ID 依赖缺少可验证的精确版本。")
+            value = choices[0] if choices else None
             if value is None:
                 stored = repository.current(identifier).value
                 if not isinstance(stored, dm.Concept):
@@ -262,6 +304,8 @@ class ContentService:
             value = pending.pop()
             targets = [(ref, "reference") for ref in refs_in(value)]
             for ref, _ in targets:
+                if ref.entity == "note" and not isinstance(value, dm.Note):
+                    raise invalid()
                 resolve(ref)
             for identifier in concept_ids(value):
                 targets.append((reference(concept(identifier, value)), "concept"))
@@ -311,19 +355,39 @@ class ContentService:
         commit can leave only unreferenced, content-addressed blobs for future GC.
         No approvals, learning evidence or private solutions are created here.
         """
-        values = self._candidates(objects)
         with self._access(workspace_id) as repository:
-            repository.ensure_new(values)
-            try:
-                _, dependencies, courses = self._closure(repository, values)
-                staged = self._stage(repository, values, bodies)
-            except (ValueError, TypeError, ValidationError):
-                raise invalid() from None
-            repository.insert_revisions(values, staged)
-            for value in values:
-                repository.insert_dependencies(value, dependencies[key(value)])
-                if isinstance(value, dm.Course):
-                    repository.insert_concept_edges(value, courses[key(value)])
-            for value in values:
-                repository.advance(value)
+            return self.publish_in_transaction(repository.connection, workspace_id, objects, bodies)
+
+    def publish_in_transaction(self, connection: sqlite3.Connection, workspace_id: str,
+                               objects: Iterable[PublishedModel], bodies: Mapping[str, bytes], *,
+                               import_history: bool = False, budgets: ImportBudgets | None = None) -> list[dm.ContentRef]:
+        """Caller must own an active transaction, including import receipts and state."""
+        if not connection.in_transaction:
+            raise ApiError(409, "TRANSACTION_REQUIRED", "发布需要有效事务。")
+        guard_subject_access(connection, workspace_id)
+        repository = ContentRepository(connection, workspace_id, allow_notes=import_history)
+        repository.require_workspace()
+        budgets = budgets or self.database.settings.import_budgets
+        values = self._candidates(objects, import_history=import_history, budgets=budgets)
+        if any(isinstance(value, dm.Note) and value.workspace_id != workspace_id for value in values):
+            raise invalid()
+        repository.ensure_new(values)
+        try:
+            _, dependencies, courses = self._closure(repository, values, budgets)
+            staged = self._stage(repository, values, bodies, budgets)
+        except (ValueError, TypeError, ValidationError):
+            raise invalid() from None
+        repository.insert_revisions(values, staged)
+        for value in values:
+            repository.insert_dependencies(value, dependencies[key(value)])
+            if isinstance(value, dm.Course):
+                repository.insert_concept_edges(value, courses[key(value)])
+            if isinstance(value, dm.Note):
+                connection.execute(
+                    "INSERT INTO notes_index(note_id,note_revision,workspace_id,anchor_id,anchor_revision,anchor_state) "
+                    "VALUES(?,?,?,?,?,?)", (value.id, value.revision, workspace_id, value.anchor.ref.id,
+                                           value.anchor.ref.revision, value.anchor_state),
+                )
+        for value in sorted(values, key=lambda item: (item.id, item.revision)):
+            repository.advance(value)
         return [reference(value) for value in values]
