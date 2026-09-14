@@ -241,14 +241,14 @@ def test_job_cancel_checks_revision_and_returns_full_snapshot(importing):
     assert client.get(f"/api/v1/imports/{candidate['id']}").json()["status"] == "cancelled"
 
 
-def test_m2_3_extraction_is_explicitly_unimplemented_and_never_publishes(importing):
+def test_malformed_pdf_is_explicitly_rejected_and_never_publishes(importing):
     app, client, settings = importing
-    staged = upload(client, settings, b"%PDF-1.4\nSynthetic placeholder for unsupported-format testing\n", filename="synthetic.pdf")
+    staged = upload(client, settings, b"%PDF-1.4\nSynthetic malformed document for rejection testing\n", filename="synthetic.pdf")
     candidate = preview(client, staged["import_id"])
     assert candidate["status"] == "failed" and candidate["preview_refs"] == []
-    assert any(w["code"] == "EXTRACTION_NOT_IMPLEMENTED" for w in candidate["warnings"])
+    assert any(w["code"] == "PDF_MALFORMED" for w in candidate["warnings"])
     job = client.get(f"/api/v1/jobs/{staged['job']['id']}").json()
-    assert job["status"] == "failed" and job["error"]["code"] == "EXTRACTION_NOT_IMPLEMENTED"
+    assert job["status"] == "failed" and job["error"]["code"] == "PDF_MALFORMED"
     with app.state.database.connect() as connection:
         assert connection.execute("SELECT COUNT(*) FROM revisions").fetchone()[0] == 0
 

@@ -351,11 +351,11 @@ def test_zip_duplicate_symlink_and_compression_bomb_are_rejected():
         (b"\xffbad", "text", "ENCODING_CHOICE_REQUIRED"),
         (b"a\x00b", "text", "TEXT_BINARY_CONTENT"),
         (b"", "text", "EMPTY_CONTENT"),
-        (b"%PDF-1.7", "pdf", "EXTRACTION_NOT_IMPLEMENTED"),
-        (b"PK", "docx", "EXTRACTION_NOT_IMPLEMENTED"),
+        (b"%PDF-1.7", "pdf", "PDF_MALFORMED"),
+        (b"PK", "docx", "DOCX_CONTAINER_UNSUPPORTED"),
     ],
 )
-def test_invalid_encoding_empty_and_unimplemented_extraction_are_visible_failures(data, kind, code):
+def test_invalid_encoding_empty_and_malformed_extraction_are_visible_failures(data, kind, code):
     with pytest.raises(ImportParsingError) as error:
         parse(data, kind)
     assert error.value.code == code

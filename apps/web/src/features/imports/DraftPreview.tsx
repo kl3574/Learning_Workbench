@@ -4,6 +4,7 @@ import { bytesToHex } from '@noble/hashes/utils.js'
 import { request } from '../../api/client'
 import type { DraftSnapshot, SourceSnapshot } from './contracts'
 import { controlledDownloadPath } from './recovery'
+import { SourceProvenance } from './SourceProvenance'
 
 const Markdown = lazy(() => import('../../shared/Markdown').then(module => ({ default: module.Markdown })))
 
@@ -54,10 +55,10 @@ function OriginalDownload({ source, accessEpoch }: { source: SourceSnapshot; acc
   return <div><div className="import-buttons"><button type="button" disabled={busy} onClick={() => void download()}>{busy ? '正在校验原件…' : '下载受控原件'}</button><small>{source.media_type} · {source.size} 字节</small></div>{error && <p role="alert" className="import-error">{error}</p>}</div>
 }
 
-export function DraftPreview({ ids, selected, draft, source, accessEpoch, loading, error, choose }: {
+export function DraftPreview({ ids, selected, draft, source, sourceError, accessEpoch, loading, error, choose }: {
   ids: string[]; selected: string; draft: DraftSnapshot | null; source: SourceSnapshot | null;
   accessEpoch: RefObject<number>;
-  loading: boolean; error: string; choose: (id: string) => void;
+  loading: boolean; error: string; sourceError: string; choose: (id: string) => void;
 }) {
   const index = ids.indexOf(selected)
   return <section aria-label="候选正文预览"><h3>候选正文预览</h3><p className="muted">这里展示暂存候选。候选 ID 不代表正式发布或内容审核通过。</p>
@@ -66,6 +67,8 @@ export function DraftPreview({ ids, selected, draft, source, accessEpoch, loadin
     {loading && <p role="status">读取候选正文…</p>}
     {error && <div className="import-error" role="alert"><p>{error}</p><button onClick={() => choose(selected)}>重试读取候选</button></div>}
     {draft && <><div className="import-preview" tabIndex={0} aria-label="当前候选正文"><CandidateContent draft={draft} /></div><details><summary>候选修订与校验信息</summary><dl className="import-details"><dt>候选 ID</dt><dd>{draft.id}</dd><dt>候选对象 ID</dt><dd>{'metadata' in draft.payload ? draft.payload.metadata.id : draft.payload.id}</dd><dt>候选修订</dt><dd>{draft.revision}</dd><dt>候选 SHA-256</dt><dd><code className="import-hash">{draft.candidate_sha256}</code></dd></dl></details></>}
+    {draft && 'metadata' in draft.payload && <SourceProvenance citations={draft.payload.citations ?? []} />}
+    {sourceError && <div className="import-warning" role="status"><p>原件暂不可读取：{sourceError}</p><p>安全候选正文已单独读取。需要作者权限时，可在窗口顶部显式切换角色；这不会自动认证候选内容。</p><button type="button" disabled={loading} onClick={() => choose(selected)}>重试读取原件信息</button></div>}
     {source && <OriginalDownload key={source.id} source={source} accessEpoch={accessEpoch} />}
   </section>
 }

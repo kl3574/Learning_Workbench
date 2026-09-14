@@ -48,6 +48,11 @@ def visibility(row: sqlite3.Row) -> str:
     return str(metadata.get("visibility", "author_private"))
 
 
+def preview_visibility(row: sqlite3.Row) -> str:
+    metadata = json_object(row["source_metadata"])
+    return str(metadata.get("preview_visibility", metadata.get("visibility", "author_private")))
+
+
 class ImportService:
     def __init__(self, database: Database):
         self.database = database
@@ -66,7 +71,7 @@ class ImportService:
 
     @staticmethod
     def _private(identity: SessionIdentity, row: sqlite3.Row, *, pending_ok: bool = False) -> None:
-        if visibility(row) != "learner" and identity.role != "author":
+        if preview_visibility(row) != "learner" and identity.role != "author":
             if pending_ok and row["status"] in {"staged", "parsing", "failed", "cancelled"}:
                 return
             raise ApiError(403, "POLICY_DENIED", "此作者私有材料需要作者角色。")
@@ -92,7 +97,7 @@ class ImportService:
                 import_id, source_id, job_id, artifact_id = (identifier(prefix) for prefix in ("import", "source", "job", "artifact"))
                 from .import_parsing import detect_import_visibility
                 archive_detected = zipfile.is_zipfile(io.BytesIO(data))
-                raw_visibility = "author_private" if archive_detected else detect_import_visibility(data, kind, filename)
+                raw_visibility = "author_private" if archive_detected or kind == "docx" else detect_import_visibility(data, kind, filename)
                 media_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
                 now = utc_now()
                 source_metadata = {"artifact_id": artifact_id, "filename": filename, "visibility": raw_visibility,
@@ -138,12 +143,13 @@ class ImportService:
         }
 
     def _public_preview_data(self, identity: SessionIdentity, row: sqlite3.Row) -> dict[str, Any]:
-        if visibility(row) != "learner" and identity.role != "author" and row["status"] in {"failed", "cancelled"}:
+        if preview_visibility(row) != "learner" and identity.role != "author" and row["status"] in {"failed", "cancelled"}:
             warnings = []
             if row["status"] == "failed":
                 result = json_object(row["result_json"]) if row["result_json"] else {}
                 code = result.get("error", {}).get("code", "IMPORT_PARSE_FAILED")
-                warnings = [dm.Warning(code=code, message="导入解析失败；原件保留，未确认正式内容。", severity="error").model_dump(mode="json")]
+                metadata = json_object(row["source_metadata"])
+                warnings = metadata.get("safe_failure_diagnostics", []) + [dm.Warning(code=code, message="导入解析失败；原件保留，未确认正式内容。", severity="error").model_dump(mode="json")]
             return {"warnings": warnings, "objects": [], "draft_ids": [], "unresolved_refs": []}
         return self._preview_data(row)
 
@@ -211,7 +217,7 @@ class ImportService:
         job = repository.connection.execute("SELECT * FROM jobs WHERE id=? AND workspace_id=?", (row["job_id"], identity.workspace_id)).fetchone()
         data = self._public_preview_data(identity, row)
         result = json_object(job["result_json"]) if job["result_json"] else {}
-        if visibility(row) != "learner" and identity.role != "author" and row["status"] in {"failed", "cancelled"}:
+        if preview_visibility(row) != "learner" and identity.role != "author" and row["status"] in {"failed", "cancelled"}:
             result.pop("course_refs", None)
             if result.get("error"):
                 result["error"] = dm.ErrorDetail(code=result["error"]["code"], message="导入解析失败；原件保留，未确认正式内容。",
@@ -240,13 +246,23 @@ class ImportService:
             if metadata_sha256(value) != draft["candidate_sha256"]:
                 raise damaged()
             payload: Any = value
+            warnings = [dm.Warning.model_validate(warning) for warning in self._preview_data(row)["warnings"]]
             if isinstance(value, dm.ContentBlock):
                 info = repository.blob(value.body_sha256)
                 body = self.frozen_store(row).read(info.sha256, expected_size=info.size).decode("utf-8")
-                payload = BlockDraftPayload(metadata=value, body_markdown=body, source_id=row["source_id"])
+                metadata = json_object(row["source_metadata"])
+                citations = [dm.Citation.model_validate(item) for item in metadata.get("citations", []) if item["id"] in value.citations]
+                if {citation.id for citation in citations} != set(value.citations) or len(citations) != len(set(value.citations)):
+                    raise damaged()
+                locators = {citation.locator for citation in citations}
+                warnings = [warning for warning in warnings if warning.locator is None
+                            or warning.locator in {f"source:{row['source_id']}", f"source:{row['source_id']};docx:container"}
+                            or warning.locator in locators
+                            or any(locator.startswith(warning.locator + "/") for locator in locators)]
+                payload = BlockDraftPayload(metadata=value, body_markdown=body, source_id=row["source_id"], citations=citations)
             return ImportDraftSnapshot(id=id, kind=value.entity, revision=draft["revision"], base_ref=None,
                 state=draft["status"], candidate_sha256=draft["candidate_sha256"], payload=payload,
-                warnings=[dm.Warning.model_validate(value) for value in self._preview_data(row)["warnings"]])
+                warnings=warnings)
 
     def _artifact(self, repository: ImportRepository, identity: SessionIdentity, id: str) -> tuple[sqlite3.Row, DownloadArtifact]:
         row = repository.connection.execute("SELECT * FROM artifacts WHERE id=? AND workspace_id=?", (id, identity.workspace_id)).fetchone()
@@ -427,7 +443,7 @@ class ImportService:
                            "private_solution_count": len(private), "solution_review_status": "needs_review", "created_at": utc_now()}
                 info = self.frozen_store(row).write(canonical_bytes(receipt))
                 receipt_id = repository.artifact(info=info, filename="import-receipt.json", media_type="application/json",
-                                                 visibility=visibility(row), profile="import_receipt", job_id=row["job_id"])
+                                                 visibility=preview_visibility(row), profile="import_receipt", job_id=row["job_id"])
                 result = ImportCommitResponse(course_refs=course_refs, migration_receipt_id=receipt_id).model_dump(mode="json")
                 preview["commit_request_sha256"] = request_hash
                 preview["commit_result"] = result

@@ -302,10 +302,10 @@ def test_prefixed_author_zip_cannot_download_as_learner_before_or_after_parse(im
 
 
 @pytest.mark.parametrize("kind,filename,data,code", [
-    ("pdf", "sample.pdf", b"%PDF synthetic", "EXTRACTION_NOT_IMPLEMENTED"),
-    ("docx", "sample.docx", b"not_a_docx", "EXTRACTION_NOT_IMPLEMENTED"),
+    ("pdf", "sample.pdf", b"%PDF synthetic", "PDF_MALFORMED"),
+    ("docx", "sample.docx", b"not_a_docx", "DOCX_CONTAINER_UNSUPPORTED"),
 ])
-def test_unsupported_extraction_retains_explicit_parser_error_without_false_preview(imports, kind, filename, data, code):
+def test_damaged_document_retains_explicit_parser_error_without_false_preview(imports, kind, filename, data, code):
     database, service, worker, identity = imports
     staged = service.stage(identity, data=data, filename=filename, kind=kind, key="unsupported")
     assert worker.run_once()

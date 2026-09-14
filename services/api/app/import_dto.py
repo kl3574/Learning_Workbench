@@ -143,6 +143,7 @@ class BlockDraftPayload(dm.StrictModel):
     metadata: dm.ContentBlock
     body_markdown: str
     source_id: dm.Id
+    citations: list[dm.Citation] = Field(default_factory=list)
 
 
 DraftPayload = (BlockDraftPayload | dm.Course | dm.Lesson | dm.Concept | dm.Route
