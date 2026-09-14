@@ -128,3 +128,44 @@ class LearningRepository:
                 raise ValueError("event association mismatch")
         except (ValueError, TypeError, KeyError):
             raise ApiError(409, "PRACTICE_SNAPSHOT_INVALID", "练习关联的学习事件完整性校验失败。") from None
+
+    def test_submitted(self, ref: dm.ContentRef, attempt_id: str) -> str:
+        previous = self.progress()
+        event = dm.LearningEvent(event_id=f"event_{uuid4().hex}", workspace_id=self.workspace_id, actor="server",
+            origin="native", kind="test_submitted", ref=ref, occurred_at=utc_now(), attempt_id=attempt_id)
+        updated = LearningProgress(revision=previous.revision + 1, readings=previous.readings,
+                                   route_steps=previous.route_steps, bookmarks=previous.bookmarks)
+        self.append(event)
+        self.save(previous, updated, event.event_id)
+        return event.event_id
+
+    def validate_test_submitted(self, event_id: str, ref: dm.ContentRef, attempt_id: str) -> None:
+        row = self.connection.execute("SELECT * FROM learning_events WHERE event_id=? AND workspace_id=?",
+                                      (event_id, self.workspace_id)).fetchone()
+        try:
+            if row is None:
+                raise ValueError("missing event")
+            event = dm.LearningEvent.model_validate(strict_json(row["payload_json"]))
+            if (event.event_id != event_id or event.workspace_id != self.workspace_id or event.actor != "server"
+                    or event.origin != "native" or row["origin"] != event.origin
+                    or event.kind != "test_submitted" or row["kind"] != event.kind
+                    or event.ref != ref or event.attempt_id != attempt_id
+                    or event.occurred_at != row["occurred_at"]):
+                raise ValueError("event association mismatch")
+        except (ValueError, TypeError, KeyError):
+            raise ApiError(409, "ASSESSMENT_SNAPSHOT_INVALID", "测验关联的学习事件完整性校验失败。") from None
+
+    def read_learning_event(self, event_id: str) -> dm.LearningEvent:
+        row = self.connection.execute("SELECT * FROM learning_events WHERE event_id=? AND workspace_id=?",
+                                      (event_id, self.workspace_id)).fetchone()
+        try:
+            if row is None:
+                raise ValueError("missing event")
+            event = dm.LearningEvent.model_validate(strict_json(row['payload_json']))
+            if (event.event_id != event_id or event.workspace_id != self.workspace_id
+                    or event.kind != row['kind'] or event.origin != row['origin']
+                    or event.occurred_at != row['occurred_at']):
+                raise ValueError("event binding mismatch")
+            return event
+        except (ValueError, TypeError, KeyError):
+            raise ApiError(409, 'LEARNING_EVENT_INVALID', '学习事件记录无法通过完整性校验。') from None

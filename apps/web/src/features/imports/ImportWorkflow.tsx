@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { ContentRef } from '../../../../../packages/contracts/generated/types'
 import { DraftPreview } from './DraftPreview'
 import { EncodingPreview } from './EncodingPreview'
@@ -12,8 +12,8 @@ import './imports.css'
 const statusLabels = { staged: '原件已暂存', parsing: '正在解析', preview_ready: '预览已就绪，等待确认', committed: '已确认入库', cancelled: '已取消', failed: '导入失败' }
 const jobLabels = { queued: '排队中', running: '运行中', awaiting_approval: '等待确认', completed: '任务已完成', failed: '任务失败', cancelled: '任务已取消' }
 
-export function ImportWorkflow({ workspaceId, close, openCourse }: { workspaceId: string; close: () => void; openCourse?: (ref: ContentRef) => void }) {
-  const state = useImportWorkflow(workspaceId)
+export function ImportWorkflow({ workspaceId, paused = false, close, openCourse }: { workspaceId: string; paused?: boolean; close: () => void; openCourse?: (ref: ContentRef) => void }) {
+  const state = useImportWorkflow(workspaceId, paused)
   const [manualId, setManualId] = useState('')
   const snapshot = state.snapshot
   const blockers = snapshot?.warnings.some(warning => warning.severity === 'error') ?? false
@@ -24,7 +24,13 @@ export function ImportWorkflow({ workspaceId, close, openCourse }: { workspaceId
   const courseRefs: ContentRef[] = state.result?.course_refs ?? (snapshot?.status === 'committed' && state.job?.status === 'completed' ? state.job.result_refs.filter(ref => ref.entity === 'course') : [])
   const activeTest = !!state.auth?.active_independent_attempt_id
   const canCommit = snapshot?.status === 'preview_ready' && !state.busy && !state.draftBusy && !!state.draft && !blockers && warningsAccepted && mappingValid && state.confirmed && !activeTest
+  const suspended = paused || !state.accessReady
+  const lastOperation = useRef<{ role: 'author' | 'learner' | null; status: keyof typeof statusLabels | null }>({ role: null, status: null })
+  if (!suspended) lastOperation.current = { role: state.auth?.role ?? lastOperation.current.role, status: snapshot?.status ?? lastOperation.current.status }
+  const operationRole = !state.roleChanging && state.auth ? state.auth.role : lastOperation.current.role
   return <div className="import-workflow">
+    <UploadForm suspended={suspended || !!state.active} disabled={state.busy || !state.auth || activeTest} courses={state.courses} moreCourses={!!state.courseCursor} onMoreCourses={() => void state.loadCourses()} submit={state.upload} />
+    {suspended ? <div role="status">{operationRole && <p>操作角色：{operationRole === 'author' ? '作者' : '学习者'}（上次确认，正在重新核验）</p>}{lastOperation.current.status && <p>上次确认的流程状态：<span>{statusLabels[lastOperation.current.status]}</span>；当前不能预览或确认。</p>}<p>正在核验导入访问权限。测试限制期间，材料预览与原件下载暂不可用。</p><p>当前导入记录、已选择的本机文件与未提交设置仍保留。权限恢复后会重新读取服务端内容。</p></div> : <>
     <div className="import-role"><span>操作角色：{state.auth ? state.auth.role === 'author' ? '作者' : '学习者' : '正在核对会话…'}</span><button disabled={!state.auth || state.busy || activeTest} onClick={() => void state.changeRole()}>{state.auth?.role === 'author' ? '切换为学习者角色' : '切换为作者角色'}</button></div>
     <p className="muted">含私有材料的学习包及原件需要作者角色；切换角色须由你明确操作。</p>
     {activeTest && <p role="alert" className="import-error">独立测试进行中，导入、预览与原件下载暂不可用。</p>}
@@ -32,7 +38,6 @@ export function ImportWorkflow({ workspaceId, close, openCourse }: { workspaceId
     {state.cacheError && <p className="import-warning" role="status">{state.cacheError}</p>}
     {state.busy && <p role="status">正在等待服务端响应…</p>}
     {!state.active && <>
-      <UploadForm disabled={state.busy || !state.auth || activeTest} courses={state.courses} moreCourses={!!state.courseCursor} onMoreCourses={() => void state.loadCourses()} submit={state.upload} />
       <details open={state.recovery.length > 0}><summary>恢复已有导入</summary><p className="muted">浏览器只保存任务 ID。原件、正文、警告和提交结果均从服务端重新读取。</p>
         {state.recovery.length > 0 && <div className="import-history">{state.recovery.map(item => <button key={item.importId} disabled={state.busy || !state.auth} onClick={() => void state.resume(item)}>恢复 {item.importId}</button>)}</div>}
         <div className="import-fields"><label>服务端导入 ID<input value={manualId} onChange={event => setManualId(event.target.value)} /></label></div>
@@ -51,13 +56,14 @@ export function ImportWorkflow({ workspaceId, close, openCourse }: { workspaceId
         <div className="import-buttons"><button className="primary-button" disabled={!canCommit || !snapshot.preview_refs.length || !!state.draftError} onClick={() => void state.commit()}>确认导入当前候选</button></div>
       </>}
       {snapshot && snapshot.status !== 'preview_ready' && snapshot.warnings.length > 0 && <ReviewWarnings warnings={snapshot.warnings} accepted={state.accepted} change={state.setAccepted} disabled />}
-      {snapshot?.status === 'failed' && snapshot.warnings.some(warning => warning.code === 'ENCODING_CHOICE_REQUIRED') && <EncodingPreview key={snapshot.id} originalFile={state.originalFile} expectedHash={snapshot.input_sha256} accessEpoch={state.accessEpoch} />}
-      {snapshot?.status === 'failed' && !snapshot.warnings.some(warning => warning.code === 'ENCODING_CHOICE_REQUIRED') && <FailedOriginal key={snapshot.id} originalFile={state.originalFile} expectedHash={snapshot.input_sha256} accessEpoch={state.accessEpoch} />}
+      {snapshot?.status === 'failed' && snapshot.warnings.some(warning => warning.code === 'ENCODING_CHOICE_REQUIRED') && <EncodingPreview key={snapshot.id} originalFile={state.originalFile} onOriginalFile={state.rememberOriginalFile} expectedHash={snapshot.input_sha256} accessEpoch={state.accessEpoch} />}
+      {snapshot?.status === 'failed' && !snapshot.warnings.some(warning => warning.code === 'ENCODING_CHOICE_REQUIRED') && <FailedOriginal key={snapshot.id} originalFile={state.originalFile} onOriginalFile={state.rememberOriginalFile} expectedHash={snapshot.input_sha256} accessEpoch={state.accessEpoch} />}
       {(snapshot?.status === 'committed' || state.result) && <div className="import-result" role="status"><h3>导入已提交</h3><p>以下为服务端返回的正式课程引用，可打开精确课程目录开始阅读。</p>{courseRefs.length ? <ul>{courseRefs.map(ref => <li key={`${ref.id}:${ref.revision}`}><strong>{state.committedCourses.find(course => course.id === ref.id && course.revision === ref.revision)?.title ?? ref.id}</strong><br />{ref.id} · 修订 {ref.revision}<code className="import-hash">{ref.sha256}</code>{openCourse && <button onClick={() => openCourse(ref)}>打开已导入课程</button>}</li>)}</ul> : <p>服务端确认已提交；当前恢复信息没有关联任务的课程引用。已保留导入状态，不会把暂存候选当成正式引用。</p>}{state.result && <p>迁移回执：{state.result.migration_receipt_id}</p>}<button onClick={close}>完成并关闭导入</button></div>}
       {snapshot?.status === 'cancelled' && <p className="import-notice">服务端已取消本次导入；没有通过取消操作删除正式课程。</p>}
       {snapshot?.status === 'failed' && <div className="import-warning"><p>失败任务已经终止，原件仍保留在服务端。请修正原件后重新上传。</p><button onClick={close}>关闭并更换原件</button></div>}
       {snapshot && !['committed', 'cancelled', 'failed'].includes(snapshot.status) && <div className="import-buttons"><button disabled={state.busy || activeTest} onClick={() => void state.cancel()}>取消本次导入</button></div>}
       <p className="muted">关闭窗口不会确认或取消任务。下次打开“导入”可从恢复记录继续。</p>
+    </>}
     </>}
   </div>
 }

@@ -1,0 +1,121 @@
+
+> @learning-workbench/web@0.1.0 test:e2e
+> playwright test --config ../../tests/e2e/playwright.config.ts assessments.spec.ts --output=<temporary>/m32-assessment-native-complete-first
+
+[WebServer] INFO:     Started server process [<pid>]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on <test-origin> (Press CTRL+C to quit)
+[WebServer] (node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 6 tests using 1 worker
+
+(node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 ../../tests/e2e/assessments.spec.ts:41:1 › real unreviewed independent assessment saves five types and submits without fabricated grades or answer calls (4.0s)
+(node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  2 ../../tests/e2e/assessments.spec.ts:82:1 › open-book and assisted freeze actual policies; explicit abandon retains saved answers and yields no score (4.1s)
+(node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  3 ../../tests/e2e/assessments.spec.ts:101:1 › two profiles retain a real server CAS conflict with three-way comparison and reject forged same-identity parent (4.1s)
+(node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  4 ../../tests/e2e/assessments.spec.ts:130:1 › missing private binding visibly blocks start instead of fabricating a usable test (3.6s)
+  ✘  5 ../../tests/e2e/assessments.spec.ts:137:1 › two pages preserve independent local CAS candidates; a later submitted snapshot never accepts restored edits (1.4s)
+
+
+  1) ../../tests/e2e/assessments.spec.ts:41:1 › real unreviewed independent assessment saves five types and submits without fabricated grades or answer calls
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 503
+
+      29 |   const creating = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith(`/assessments/${fixture.assessment.id}/attempts`))
+      30 |   await page.getByRole('button', { name: '明确开始本次测试', exact: true }).click()
+    > 31 |   const response = await creating; expect(response.status()).toBe(201)
+         |                                                              ^
+      32 |   const attempt: AttemptSnapshot = await response.json()
+      33 |   await saved(page)
+      34 |   return { fixture, attempt }
+        at begin (<worktree>/tests/e2e/assessments.spec.ts:31:62)
+        at <worktree>/tests/e2e/assessments.spec.ts:45:32
+
+    Error Context: ../../../m32-assessment-native-complete-first/assessments-real-unreviewe-bb983-ated-grades-or-answer-calls/error-context.md
+
+  2) ../../tests/e2e/assessments.spec.ts:82:1 › open-book and assisted freeze actual policies; explicit abandon retains saved answers and yields no score
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 503
+
+      29 |   const creating = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith(`/assessments/${fixture.assessment.id}/attempts`))
+      30 |   await page.getByRole('button', { name: '明确开始本次测试', exact: true }).click()
+    > 31 |   const response = await creating; expect(response.status()).toBe(201)
+         |                                                              ^
+      32 |   const attempt: AttemptSnapshot = await response.json()
+      33 |   await saved(page)
+      34 |   return { fixture, attempt }
+        at begin (<worktree>/tests/e2e/assessments.spec.ts:31:62)
+        at <worktree>/tests/e2e/assessments.spec.ts:83:23
+
+    Error Context: ../../../m32-assessment-native-complete-first/assessments-open-book-and--94d22-answers-and-yields-no-score/error-context.md
+
+  3) ../../tests/e2e/assessments.spec.ts:101:1 › two profiles retain a real server CAS conflict with three-way comparison and reject forged same-identity parent
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 503
+
+      29 |   const creating = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith(`/assessments/${fixture.assessment.id}/attempts`))
+      30 |   await page.getByRole('button', { name: '明确开始本次测试', exact: true }).click()
+    > 31 |   const response = await creating; expect(response.status()).toBe(201)
+         |                                                              ^
+      32 |   const attempt: AttemptSnapshot = await response.json()
+      33 |   await saved(page)
+      34 |   return { fixture, attempt }
+        at begin (<worktree>/tests/e2e/assessments.spec.ts:31:62)
+        at <worktree>/tests/e2e/assessments.spec.ts:102:32
+
+    Error Context: ../../../m32-assessment-native-complete-first/assessments-two-profiles-r-254fa-forged-same-identity-parent/error-context.md
+
+  4) ../../tests/e2e/assessments.spec.ts:137:1 › two pages preserve independent local CAS candidates; a later submitted snapshot never accepts restored edits
+
+    Test was interrupted.
+
+    Error: expect(page).toHaveURL(expected) failed
+
+    Expected: "<test-origin>/"
+    Received: ""
+
+    Call log:
+      - Expect "toHaveURL" with timeout 5000ms
+      - Protocol error (Runtime.callFunctionOn): Internal server error, session closed.
+
+
+       at restartRuntime.ts:139
+
+      137 |     await page.goto(`${this.origin}/#bootstrap=${code}`)
+      138 |     await expect(page.getByText('✓ UI 会话已保存')).toBeVisible()
+    > 139 |     await expect(page).toHaveURL(`${this.origin}/`)
+          |                        ^
+      140 |   }
+      141 |
+      142 |   databaseIdentity() {
+        at RestartRuntime.authenticateOnly (<worktree>/tests/e2e/restartRuntime.ts:139:24)
+        at Object.page (<worktree>/tests/e2e/assessments.spec.ts:7:142)
+
+    Error Context: ../../../m32-assessment-native-complete-first/assessments-two-pages-pres-696c0-ever-accepts-restored-edits/error-context.md
+
+  3 failed
+    ../../tests/e2e/assessments.spec.ts:41:1 › real unreviewed independent assessment saves five types and submits without fabricated grades or answer calls
+    ../../tests/e2e/assessments.spec.ts:82:1 › open-book and assisted freeze actual policies; explicit abandon retains saved answers and yields no score
+    ../../tests/e2e/assessments.spec.ts:101:1 › two profiles retain a real server CAS conflict with three-way comparison and reject forged same-identity parent
+  1 interrupted
+    ../../tests/e2e/assessments.spec.ts:137:1 › two pages preserve independent local CAS candidates; a later submitted snapshot never accepts restored edits
+  1 did not run
+  1 passed (20.2s)

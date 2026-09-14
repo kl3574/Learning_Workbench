@@ -2,6 +2,11 @@
 // spec_sha256: ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c
 // JSON Schema is the type source; runtime semantic checks remain required.
 
+export type AssessmentAttemptCreate = {
+  "assessment_ref": ContentRef;
+  "mode": "independent" | "assisted" | "open_book";
+};
+
 export type AssessmentBlueprint = {
   "schema_version"?: "3.0.0";
   "id": string;
@@ -11,6 +16,52 @@ export type AssessmentBlueprint = {
   "question_refs": Array<ContentRef>;
   "allowed_modes": Array<"independent" | "assisted" | "open_book">;
   "time_limit_seconds"?: (number | null);
+};
+
+export type AssessmentPreflight = {
+  "course_refs": Array<ContentRef>;
+  "question_kinds": Array<QuestionKindCount>;
+  "target_concept_refs": Array<ContentRef>;
+  "grading": GradingReadiness;
+  "prior_seen": PriorSeen;
+  "startable": boolean;
+  "start_block_reason_codes": Array<string>;
+};
+
+export type AssessmentSummary = {
+  "ref": ContentRef;
+  "title": string;
+  "question_count": number;
+  "allowed_modes": Array<"independent" | "assisted" | "open_book">;
+  "time_limit_seconds": (number | null);
+  "preflight": AssessmentPreflight;
+  "recent_attempts": Array<RecentAttempt>;
+  "recent_attempts_truncated": boolean;
+};
+
+export type AttemptResponses = {
+  "revision": number;
+  "responses": Array<ResponseDraft>;
+  "saved_at": (string | null);
+};
+
+export type AttemptSnapshot = {
+  "id": string;
+  "workspace_id": string;
+  "assessment_ref": ContentRef;
+  "status": "active" | "submitted" | "grading" | "graded" | "needs_review" | "abandoned";
+  "policy": PolicySnapshot;
+  "questions": Array<QuestionPublic>;
+  "revision": number;
+  "created_at": string;
+  "deadline_at"?: (string | null);
+  "submitted_at"?: (string | null);
+  "preflight": AssessmentPreflight;
+  "grading_status": "not_graded";
+};
+
+export type AttemptSubmit = {
+  "expected_revision": number;
 };
 
 export type BlockDraftPayload = {
@@ -164,6 +215,16 @@ export type ErrorDetail = {
 
 export type ErrorEnvelope = {
   "error": ErrorDetail;
+};
+
+export type GradingReadiness = {
+  "status": "reviewed" | "unreviewed" | "unavailable";
+  "approved_count": number;
+  "draft_count": number;
+  "needs_review_count": number;
+  "missing_count": number;
+  "damaged_count": number;
+  "reason_codes": Array<string>;
 };
 
 export type HealthResponse = {
@@ -347,6 +408,11 @@ export type OutlineSection = {
   "lessons": Array<OutlineLesson>;
 };
 
+export type PageAssessment = {
+  "items": Array<AssessmentSummary>;
+  "next_cursor": (string | null);
+};
+
 export type PageCourse = {
   "items": Array<CourseSummary>;
   "next_cursor": (string | null);
@@ -365,6 +431,15 @@ export type PagePracticeSet = {
 export type PageRevision = {
   "items": Array<RevisionSummary>;
   "next_cursor": (string | null);
+};
+
+export type PolicySnapshot = {
+  "policy_version"?: "1.0.0";
+  "mode": "independent" | "assisted" | "open_book";
+  "tutor_scope": "operation_help_only" | "academic";
+  "allow_web": boolean;
+  "allow_materials": boolean;
+  "solution_release"?: "after_submit";
 };
 
 export type PracticeAssistance = {
@@ -482,6 +557,17 @@ export type PreferencesRequest = {
   "preferences": PreferencesPatch;
 };
 
+export type PriorSeen = {
+  "status": "known" | "unknown";
+  "questions": Array<PriorSeenQuestion>;
+};
+
+export type PriorSeenQuestion = {
+  "question_ref": ContentRef;
+  "state": "unseen" | "seen" | "unknown";
+  "reason_codes": Array<string>;
+};
+
 export type ProvenanceSource = {
   "id": string;
   "media_type": string;
@@ -489,6 +575,11 @@ export type ProvenanceSource = {
   "sha256": string;
   "rights": string;
   "parser_version": (string | null);
+};
+
+export type QuestionKindCount = {
+  "kind": "single_choice" | "text_blank" | "numeric" | "expression" | "calculation";
+  "count": number;
 };
 
 export type QuestionPublic = {
@@ -518,6 +609,15 @@ export type ReadingState = {
   "ref": ContentRef;
   "read": boolean;
   "read_at": (string | null);
+};
+
+export type RecentAttempt = {
+  "id": string;
+  "revision": number;
+  "status": "active" | "submitted" | "grading" | "graded" | "needs_review" | "abandoned";
+  "mode": "independent" | "assisted" | "open_book";
+  "created_at": string;
+  "submitted_at": (string | null);
 };
 
 export type ResolvedCitation = {

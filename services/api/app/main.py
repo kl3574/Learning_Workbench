@@ -12,6 +12,7 @@ from .application.reader import backfill_provenance
 from .config import Settings
 from .database import Database
 from .interfaces.boundary import install_boundary
+from .interfaces.assessment_http import create_assessment_router
 from .interfaces.content_http import create_content_router
 from .interfaces.http import create_router
 from .interfaces.import_http import create_import_router
@@ -53,6 +54,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(create_import_router(settings, import_service))
     application.include_router(create_learning_router(database))
     application.include_router(create_practice_router(database))
+    application.include_router(create_assessment_router(database))
     if settings.static_dir.is_dir():
         application.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="workbench")
     return application

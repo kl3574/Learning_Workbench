@@ -1,0 +1,24 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+___ test_valid_native_hint_does_not_mark_unrelated_question_history_unknown ____
+
+state = (<services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>, SessionIdentity(id='session_assessment_...ted'], time_limit_seconds=None)), <services.api.app.application.assessment.AssessmentService object at <RUNTIME_ADDRESS>>)
+
+    def test_valid_native_hint_does_not_mark_unrelated_question_history_unknown(state):
+        database, identity, fixture, _ = state
+        service, session = practice(state)
+        service.hint(identity, session.id, PracticeHintRequest(question_id=fixture.questions[0].id, expected_revision=1, level=1), 'actual-hint')
+        other = fixture.questions[0].model_copy(update={'id': 'question_never_seen', 'exposure_group': 'exposure_never_seen'})
+        ContentService(database).publish(identity.workspace_id, [other], {})
+        with database.transaction() as connection:
+            facts = PracticeHistory(connection, identity.workspace_id).seen([fixture.questions[0], other])
+>           assert [fact.state for fact in facts] == ['seen', 'unseen']
+E           AssertionError: assert ['seen', 'unknown'] == ['seen', 'unseen']
+E             
+E             At index 1 diff: 'unknown' != 'unseen'
+E             Use -v to get more diff
+
+tests/integration/test_assessment_policy.py:246: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/test_assessment_policy.py::test_valid_native_hint_does_not_mark_unrelated_question_history_unknown
+1 failed in 0.45s

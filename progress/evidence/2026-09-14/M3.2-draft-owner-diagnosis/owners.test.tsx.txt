@@ -1,0 +1,37 @@
+import { afterEach, expect, test, vi } from 'vitest'
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
+import { IDBFactory } from 'fake-indexeddb'
+import { DraftStore } from '__CHECKOUT__/apps/web/src/workbench/DraftStore'
+import { createResponseDraftJournal } from '__CHECKOUT__/apps/web/src/shared/createResponseDraftJournal'
+type Envelope={key:string,base:string,candidate:string}
+const opened:DraftStore[]=[]
+afterEach(async()=>{cleanup();await Promise.all(opened.splice(0).map(store=>store.close()));vi.restoreAllMocks()})
+test('live dirty owner B republishes its removed candidate; closing durable B first allows single-owner resolution',async()=>{
+ const factory=new IDBFactory(),name='two-owner-'+crypto.randomUUID(),workspace='workspace_synthetic',key='attempt_synthetic'
+ const A=new DraftStore({factory,name}),B=new DraftStore({factory,name});opened.push(A,B)
+ const values=(record:{text:string,conflicts:{text:string}[]})=>[...new Set([record.text,...record.conflicts.map(item=>item.text)].map(text=>JSON.parse(text).candidate))].sort()
+ const trace:{owner:string,expected:number,resolved:number,kind:string,values:string[]}[]=[]
+ for(const [owner,store] of [['A',A],['B',B]] as const){const original=store.save.bind(store);vi.spyOn(store,'save').mockImplementation(async(...args)=>{const result=await original(...args);trace.push({owner,expected:args[3],resolved:args[4]?.length??0,kind:result.kind,values:values(result.record)});return result})}
+ const build=(store:DraftStore)=>createResponseDraftJournal<Envelope>({store,decode:raw=>JSON.parse(raw),key:value=>value.key,dirty:value=>value.base!==value.candidate})
+ // Separate factories create separate page-memory journals, as two pages do.
+ const useA=build(A),useB=build(B),a={key,base:'server baseline',candidate:'A unsynced'},b={...a,candidate:'B unsynced'}
+ const one=renderHook(()=>useA(workspace));await waitFor(()=>expect(one.result.current.ready).toBe(true))
+ act(()=>one.result.current.save(a));await waitFor(()=>expect(one.result.current.unsafe).toBe(false))
+ const two=renderHook(()=>useB(workspace));await waitFor(()=>expect(two.result.current.ready).toBe(true))
+ act(()=>two.result.current.save(b));await waitFor(()=>expect(two.result.current.unsafe).toBe(false))
+ await waitFor(()=>expect(values(one.result.current.records[key])).toEqual(['A unsynced','B unsynced']))
+ await waitFor(()=>expect(one.result.current.saving||two.result.current.saving).toBe(false))
+ const start=trace.length
+ await act(async()=>{await one.result.current.resolve(key,JSON.stringify(a))})
+ await waitFor(()=>expect(values(one.result.current.records[key])).toContain('B unsynced'))
+ await waitFor(()=>expect(one.result.current.saving||two.result.current.saving).toBe(false))
+ const liveTrace=trace.slice(start)
+ expect(liveTrace.some(item=>item.owner==='A'&&item.kind==='saved'&&!item.values.includes('B unsynced'))).toBe(true)
+ expect(liveTrace.some(item=>item.owner==='B'&&item.expected===0&&item.values.includes('B unsynced'))).toBe(true)
+ expect(two.result.current.unsafe).toBe(false)
+ two.unmount();await B.close()
+ await act(async()=>{await one.result.current.resolve(key,JSON.stringify(a))})
+ await waitFor(()=>expect(one.result.current.records[key].conflicts).toHaveLength(0))
+ expect(values((await A.load(workspace))[key])).toEqual(['A unsynced'])
+ console.log(JSON.stringify({live_owner_resolution_trace:liveTrace,closed_durable_owner_resolution:values((await A.load(workspace))[key]),ui_conflicts_after_close:one.result.current.records[key].conflicts.length}))
+})

@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, type RefObject } from 'react'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex } from '@noble/hashes/utils.js'
 
-export function FailedOriginal({ originalFile, expectedHash, accessEpoch }: {
-  originalFile: File | null; expectedHash: string; accessEpoch: RefObject<number>;
+export function FailedOriginal({ originalFile, expectedHash, accessEpoch, onOriginalFile }: {
+  originalFile: File | null; expectedHash: string; accessEpoch: RefObject<number>; onOriginalFile?: (file: File | null) => void;
 }) {
   const [file, setFile] = useState(originalFile)
   const [verified, setVerified] = useState(false)
@@ -45,7 +45,7 @@ export function FailedOriginal({ originalFile, expectedHash, accessEpoch }: {
     <p>失败原件及其哈希已在服务端保留，目前暂不能从这里下载。你可以选择本机原件核对哈希，再保存副本，用本机阅读器查看。</p>
     {!originalFile && <p>刷新或关闭后，浏览器不再持有原始文件。请重新选择原件进行哈希核对。</p>}
     {file && <p>本机文件：{file.name} · {file.size} 字节</p>}
-    <label className="import-file">选择用于核对的原始文件<input type="file" onChange={event => { generation.current++; setFile(event.target.files?.[0] ?? null); setVerified(false); setError(''); setBusy(false); setSaved(false) }} /></label>
+    <label className="import-file">选择用于核对的原始文件<input type="file" onChange={event => { generation.current++; setFile(event.target.files?.[0] ?? null); onOriginalFile?.(event.target.files?.[0] ?? null); setVerified(false); setError(''); setBusy(false); setSaved(false) }} /></label>
     <div className="import-buttons"><button type="button" disabled={!file || busy} onClick={() => void verify()}>{busy ? '正在核对原件哈希…' : '核对本机原件 SHA-256'}</button></div>
     {error && <p className="import-error" role="alert">{error}</p>}
     {verified && <><p role="status">本机文件与失败导入的原件哈希一致。本次本机核对未提取正文、未运行 OCR，也未改变导入状态。</p><button type="button" onClick={save}>保存本机原件副本以查看</button><p>保存的是相同原始字节，可用本机阅读器查看。此操作不是服务端下载，浏览器仅复制字节。</p></>}

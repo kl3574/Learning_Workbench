@@ -1,0 +1,52 @@
+
+Running 2 tests using 1 worker
+
+(node:423443) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/e2e/assessment-restart.spec.ts:43:1 › same assessment instance rejects forged course and assessment hashes while its independent policy remains active (3.8s)
+(node:423801) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  2 tests/e2e/assessment-restart.spec.ts:83:1 › actual browser and API restarts retain independent drafts and keep old solution receipts protected after submission (3.5s)
+
+
+  1) tests/e2e/assessment-restart.spec.ts:43:1 › same assessment instance rejects forged course and assessment hashes while its independent policy remains active 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 409
+
+       8 | async function workbench(page: Page): Promise<WorkbenchSession> {
+       9 |   const response = await page.request.get('/api/v1/workbench/session')
+    > 10 |   expect(response.status()).toBe(200)
+         |                             ^
+      11 |   return response.json()
+      12 | }
+      13 | async function attempt(page: Page, id: string): Promise<AttemptSnapshot> {
+        at workbench (<DEVELOPMENT_CHECKOUT>/tests/e2e/assessment-restart.spec.ts:10:29)
+        at <DEVELOPMENT_CHECKOUT>/tests/e2e/assessment-restart.spec.ts:53:23
+        at <DEVELOPMENT_CHECKOUT>/tests/e2e/assessment-restart.spec.ts:52:5
+
+    Error Context: ../m32-restart-development-first/assessment-restart-same-as-4fd7a-ndent-policy-remains-active/error-context.md
+
+  2) tests/e2e/assessment-restart.spec.ts:83:1 › actual browser and API restarts retain independent drafts and keep old solution receipts protected after submission 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 201
+    Received: 403
+
+       99 |     const token = await csrf(page)
+      100 |     const practiceResponse = await page.request.post('/api/v1/practice/sessions', { headers: { 'X-CSRF-Token': token, 'Idempotency-Key': 'prior-practice' }, data: { practice_ref: fixture.practice } })
+    > 101 |     expect(practiceResponse.status()).toBe(201)
+          |                                       ^
+      102 |     const practice: PracticeSessionCreated = await practiceResponse.json()
+      103 |     const solutionPath = `/api/v1/practice/sessions/${practice.id}/solutions`
+      104 |     const solutionBody = { question_id: fixture.questions[0].id, expected_revision: practice.revision }
+        at <DEVELOPMENT_CHECKOUT>/tests/e2e/assessment-restart.spec.ts:101:39
+
+    Error Context: ../m32-restart-development-first/assessment-restart-actual--a6277--protected-after-submission/error-context.md
+
+  2 failed
+    tests/e2e/assessment-restart.spec.ts:43:1 › same assessment instance rejects forged course and assessment hashes while its independent policy remains active 
+    tests/e2e/assessment-restart.spec.ts:83:1 › actual browser and API restarts retain independent drafts and keep old solution receipts protected after submission 

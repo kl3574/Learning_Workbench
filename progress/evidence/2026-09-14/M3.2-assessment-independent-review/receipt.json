@@ -1,0 +1,133 @@
+{
+  "version": 1,
+  "task": "M3.2 bounded independent backend review",
+  "spec_sha256": "ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c",
+  "scope": [
+    "Assessment service/repository/DTO/HTTP/migration static review",
+    "Seven real SQLite/service corruption and cross-operation probes",
+    "No Policy implementation re-review, no new grader or provider work"
+  ],
+  "red": {
+    "receipt": "red-run-receipt.json",
+    "summary": "3 failed, 4 passed in 1.96s",
+    "exit_code": 1,
+    "log": "red.log"
+  },
+  "green": {
+    "receipt": "green-run-receipt.json",
+    "summary": "7 passed in 2.03s",
+    "exit_code": 0,
+    "log": "green.log"
+  },
+  "source_snapshots": "Full pre-fix copies of the five reviewed backend files and post-fix copies of those files plus the unchanged probe are included as .txt. Red source before/after checks and green six-file before/after checks were unchanged.",
+  "findings": [
+    {
+      "id": "M32_REPLAY_ALLOCATION_UNBOUND",
+      "status": "fixed_and_independently_retested",
+      "evidence": "Three failed cases: replacing an old create receipt with another active own attempt result redirected the key; altering cached question stem or frozen question ref hash returned inconsistent allocation data.",
+      "fault_model": "Direct SQLite test-only corruption of idempotency.result_json; request hash and key retained. This does not claim a public SQL-write capability or a normal user ability to alter the database.",
+      "fix": "Immutable assessment_receipts bind the live idempotency instance created_at/request hash to its actual allocation hash and canonical result hash; replay obtains the sealed target, rechecks current Policy and compares immutable public fields to the true assignment. Expiration cascades the old binding; original status/revision receipts remain historical.",
+      "source_locations": [
+        "services/api/app/infrastructure/assessment_repository.py:232",
+        "services/api/app/application/assessment.py:184",
+        "migrations/0004_assessment_attempts.sql:23"
+      ]
+    }
+  ],
+  "positive_probes": [
+    "Concurrent final response save versus submit has one authoritative winner with no mixed response array or duplicate grading intent.",
+    "Changing submitted outbox event type, workspace binding or event binding blocks GET and submit replay without repairing or creating work."
+  ],
+  "remaining_findings_in_bounded_scope": [],
+  "static": {
+    "command": "uv run --frozen ruff check tests/integration/test_assessment_independent_review.py",
+    "exit_code": 0,
+    "log": "ruff.log"
+  },
+  "limits": [
+    "Seven probes are not full platform or milestone acceptance; the root performs whole-branch gates separately.",
+    "The bounded run is SQLite plus real service/import worker calls, not a browser or all-route HTTP acceptance.",
+    "Shared runtime and fixture dependencies were ongoing development state; exact source stability is asserted only for the explicitly listed reviewed files.",
+    "No score, certification, academic model use, or public deployment completion is asserted."
+  ],
+  "raw_artifacts": {
+    "final-source-0004_assessment_attempts.sql.txt": {
+      "sha256": "453f6c51cfad0002c69cfbd8e27ef2add730a96784d7a4b9c146adaec4d7524a",
+      "bytes": 4320
+    },
+    "final-source-assessment.py.txt": {
+      "sha256": "2a1a045dcf6a0036cb138d0ea1579ff662262af3e6dacece53956672965f045b",
+      "bytes": 18105
+    },
+    "final-source-assessment_dto.py.txt": {
+      "sha256": "6c9fa7f89fa8f0f8aa96fc0c2a3c041e11c1e1a806e1b3580933fe6b45aa9419",
+      "bytes": 6526
+    },
+    "final-source-assessment_http.py.txt": {
+      "sha256": "29d3beec97ed2e2c6e0ca5e6be7d6ba1f6b8c0fdb0914f0166a5a99d004e43e9",
+      "bytes": 3125
+    },
+    "final-source-assessment_repository.py.txt": {
+      "sha256": "91ccb1788081a80ce47273fc3dc9feb5f8ed2a688f3906b00d3861f7eabd6dd2",
+      "bytes": 16181
+    },
+    "final-source-test_assessment_independent_review.py.txt": {
+      "sha256": "883db0f084177ed3c5a14ee557c07453c83a48aaa276eff2d1f34c19780c0ecb",
+      "bytes": 6442
+    },
+    "green-run-receipt.json": {
+      "sha256": "cf5c96213bd2e09d39aba9c5100dc78c12cb2e0ad865697cea031179577527ad",
+      "bytes": 1983
+    },
+    "green.log": {
+      "sha256": "951a3db04da8dd06b4d71a9e2af1ce9411fa27e2985913b1e487de0484f92307",
+      "bytes": 98
+    },
+    "red-run-receipt.json": {
+      "sha256": "5c711de146f44624f53545be23f93cbea9d2b4b4b78a48a9283192aecb0952a8",
+      "bytes": 1962
+    },
+    "red-source-0004_assessment_attempts.sql.txt": {
+      "sha256": "6b7fd3f1291ce2430e3507f74a567cdb6aafd7d82fd163dffb8ef909509d2251",
+      "bytes": 3468
+    },
+    "red-source-assessment.py.txt": {
+      "sha256": "da8f53797bc34b9cce1a85a861ddff248b078aa71550e1df2c7337c7e3e150c6",
+      "bytes": 16346
+    },
+    "red-source-assessment_dto.py.txt": {
+      "sha256": "6c9fa7f89fa8f0f8aa96fc0c2a3c041e11c1e1a806e1b3580933fe6b45aa9419",
+      "bytes": 6526
+    },
+    "red-source-assessment_http.py.txt": {
+      "sha256": "29d3beec97ed2e2c6e0ca5e6be7d6ba1f6b8c0fdb0914f0166a5a99d004e43e9",
+      "bytes": 3125
+    },
+    "red-source-assessment_repository.py.txt": {
+      "sha256": "db5dcc5f86172cfb033c809d5cd16eaab538ac24b2dbac8a113f1267f9f5fa57",
+      "bytes": 14443
+    },
+    "red-source-manifest.json": {
+      "sha256": "9014629dfa6e0605acc3b82a7cbaa8844e734ca26c237cf0b159d032ecbd6a8b",
+      "bytes": 965
+    },
+    "red.log": {
+      "sha256": "2cf33bedbe1d0ad9543164c37ca3e8e0dc780414e36668928c7dca899c4ff0bc",
+      "bytes": 5045
+    },
+    "ruff.log": {
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "bytes": 19
+    },
+    "run-independent-review.py.txt": {
+      "sha256": "d0fdee3b10a088f89d866f5fbbebf026a6c4fc33602657a0e6ac056b48df633e",
+      "bytes": 1750
+    }
+  },
+  "public_derivative": {
+    "source_receipt_sha256": "3714b7d7e6844cbdfeae38efd5c12f98083529c3ec231b5ee5ac2f4a151a1718",
+    "raw_hashes_are_originals": true,
+    "published_hashes_are_separate": "manifest.json",
+    "references": "All artifact filenames refer to this package. Original private absolute directories are omitted."
+  }
+}

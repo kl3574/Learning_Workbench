@@ -1,0 +1,45 @@
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import type { ContentRef, PolicySnapshot, SavedTab } from '../../../../../packages/contracts/generated/types'
+import type { AssessmentTarget } from './target'
+import { useAssessmentAttempt } from './useAssessmentAttempt'
+import { QuestionEditor } from '../practice/QuestionEditor'
+import { ResponseText } from '../practice/ResponseComparison'
+import { AssessmentRecovery } from './AssessmentRecovery'
+import { PreflightFacts, modeLabels, statusLabels } from './PreflightFacts'
+import { Dialog } from '../../workbench/Controls'
+import { readLocal, writeLocal, readReaderView, saveReaderView } from '../../workbench/uiCache'
+import '../practice/practice.css'
+import './assessment.css'
+export type AssessmentViewState = { dirty: boolean; safe: boolean; summary: string; policy: PolicySnapshot | null; status: string | null; questionId: string | null; questions: { id: string; label: string }[] }
+const saveLabels = { loading: '正在读取测试作答', saved: '服务端作答已保存', dirty: '作答待同步', saving: '作答保存中…', offline: '作答尚未确认同步', conflict: '作答版本冲突' }
+export function AssessmentView({ workspace, target, tab, onState, onScroll, loaded, requestedQuestion, course }: { workspace: string; target: AssessmentTarget & { attempt_id: string }; tab: SavedTab; onState: (state: AssessmentViewState) => void; onScroll: (offset: number) => void; loaded: (title: string, resolved: boolean) => void; requestedQuestion?: { id: string; sequence: number }; course?: (ref: ContentRef) => void }) {
+  const session = useAssessmentAttempt(workspace, target), snapshot = session.snapshot
+  const [confirm, setConfirm] = useState<'submit' | 'abandon' | null>(null), [viewError, setViewError] = useState(''), [markdownReady, setMarkdownReady] = useState(false)
+  const key = `learning-workbench.${workspace}.${tab.id}.assessment-question.v1`
+  const [questionId, setQuestionId] = useState(readLocal(key))
+  const scroll = useRef<HTMLDivElement>(null), ready = useRef(false), offset = useRef(tab.scroll_offset ?? 0), view = useRef(readReaderView(workspace, tab.id))
+  const callbacks = useRef({ onState, loaded }); callbacks.current = { onState, loaded }
+  const index = Math.max(0, snapshot?.questions.findIndex(question => question.id === questionId) ?? 0), question = snapshot?.questions[index]
+  const response = session.responses.find(item => item.question_id === question?.id)
+  const summary = snapshot ? `${modeLabels[snapshot.policy.mode]} · ${statusLabels[snapshot.status]}` : '测试状态待读取'
+  useEffect(() => { callbacks.current.loaded('测试作答', !!snapshot); callbacks.current.onState({ dirty: session.dirty, safe: session.safe, summary, policy: snapshot?.policy ?? null, status: snapshot?.status ?? null, questionId: question?.id ?? null, questions: snapshot?.questions.map((value, number) => ({ id: value.id, label: `第 ${number + 1} 题` })) ?? [] }) }, [session.dirty, session.safe, summary, question?.id, snapshot])
+  useEffect(() => { let live = true; void import('../../shared/Markdown').then(() => { if (live) setMarkdownReady(true) }); return () => { live = false } }, [])
+  const saveView = () => { if (!saveReaderView(workspace, tab.id, view.current)) setViewError('展开或焦点位置尚未保存，本页状态仍保留。') }
+  useEffect(() => { const element = scroll.current; const toggle = (event: Event) => { if (!ready.current || !(event.target instanceof HTMLDetailsElement) || !event.target.dataset.viewKey) return; view.current.expandedDetails = [...(element?.querySelectorAll<HTMLDetailsElement>('details[data-view-key][open]') ?? [])].map(item => item.dataset.viewKey!); saveView() }; element?.addEventListener('toggle', toggle, true); return () => element?.removeEventListener('toggle', toggle, true) }, [])
+  const restoreView = () => { if (!scroll.current || ready.current || !markdownReady) return; for (const detail of scroll.current.querySelectorAll<HTMLDetailsElement>('details[data-view-key]')) detail.open = view.current.expandedDetails.includes(detail.dataset.viewKey!); scroll.current.scrollTop = offset.current; if (view.current.focusKey && !document.querySelector('dialog[open]')) scroll.current.querySelector<HTMLElement>(`[data-focus-key="${CSS.escape(view.current.focusKey)}"]`)?.focus({ preventScroll: true }); ready.current = true }
+  const select = (id: string) => { setQuestionId(id); if (!writeLocal(key, id)) setViewError('题号尚未保存到本机；测试草稿独立保留。'); if (scroll.current) scroll.current.scrollTop = 0 }
+  useEffect(() => { if (requestedQuestion && snapshot?.questions.some(item => item.id === requestedQuestion.id)) select(requestedQuestion.id) }, [requestedQuestion?.sequence])
+  const disabled = !session.localReady || snapshot?.status !== 'active' || session.busy || !!session.conflict || session.needsRecovery || !!session.localConflicts.length || !!session.localError
+  return <div ref={scroll} className="reader-scroll assessment-scroll" onScroll={event => { if (ready.current) { offset.current = event.currentTarget.scrollTop; onScroll(offset.current) } }}><article className="reader-content assessment-content" onFocusCapture={event => { const element = event.target as HTMLElement; if (ready.current && element.dataset.focusKey) { view.current.focusKey = element.dataset.focusKey; saveView() } }}><div className="eyebrow">测试 · 冻结作答实例</div><h1>本次测试作答</h1><div className="practice-status"><strong>{summary}</strong><span role="status">{session.needsRecovery || session.localConflicts.length ? '本机测试作答待选择，尚未同步' : saveLabels[session.state]}</span><span>{session.localSaving ? '本机草稿保存中…' : session.safe ? '本机草稿存储可用' : '本机草稿尚未安全保存'}</span></div><p>会话修订 {snapshot?.revision ?? '…'}。{snapshot?.status === 'abandoned' ? '已放弃，不计为独立测试零分。' : snapshot?.status === 'submitted' ? '已提交，作答快照已冻结；等待后续评分阶段。' : '本次测试不计时，提交前可明确放弃。'}未评分 · 分数为空。</p>
+    {snapshot && <p className="assessment-policy">冻结策略：{snapshot.policy.allow_materials ? '获准材料可读' : '工作区教材与笔记受限'}；Agent {snapshot.policy.tutor_scope === 'academic' ? '允许获授权的学科帮助，模型尚未配置' : '仅固定操作帮助'}；联网{snapshot.policy.allow_web ? '仍须单独授权' : '未获许可'}；标准答案未释放。</p>}
+    <div className="reader-actions"><button disabled={session.busy || session.state === 'saving'} onClick={() => void session.retry()}>重新读取测试状态</button><button disabled={disabled || session.state === 'saving'} onClick={() => void session.save()}>立即保存测试作答</button></div>
+    {[session.error, session.localError, viewError].filter(Boolean).map((text, number) => <p className="practice-error" role="alert" key={number}>{text}</p>)}{session.localError && <button onClick={session.retryLocal}>重试本机测试草稿保存</button>}
+    <AssessmentRecovery session={session} workspace={workspace} />
+    {!snapshot && <><p>尚未取得一致的题目与作答快照。不会推测题目或评分。</p><ResponseText values={session.responses} /></>}
+    {snapshot && <><nav className="practice-question-nav" aria-label="本次测试题目">{snapshot.questions.map((value, number) => <button key={value.id} data-focus-key={`assessment-question-${value.id}`} aria-current={value.id === question?.id ? 'step' : undefined} onClick={() => select(value.id)}>第 {number + 1} 题{session.responses.some(item => item.question_id === value.id && (item.answer || item.steps_markdown)) ? ' · 已填写' : ''}</button>)}</nav>{question && <QuestionEditor key={question.id} question={question} response={response} index={index} disabled={disabled} update={session.update} contentNotice="按冻结内容状态核对；当前尚未评分" />}
+    <section className="practice-submit"><h2>{snapshot.status === 'active' ? '结束本次测试' : '测试结束状态'}</h2>{snapshot.status === 'active' ? <><p>提交只使用服务端已保存的作答；关闭标签不会提交。放弃后不产生独立分数，未同步候选仍可保留在本机。</p><div className="reader-actions"><button className="primary-button" disabled={!session.commandReady} onClick={() => setConfirm('submit')}>提交本次测试</button><button disabled={!session.abandonReady} onClick={() => setConfirm('abandon')}>放弃本次测试</button></div></> : <p>{snapshot.status === 'submitted' ? '已提交，尚未评分。作答已冻结；评分服务暂不可用，标准答案尚未释放。' : '已放弃 · 无分数。'}测试作答不可修改；本机候选单独保留。</p>}</section>
+    <details data-view-key="assessment-frozen"><summary data-focus-key="assessment-frozen">本次测试的冻结引用与范围</summary><p>作答实例：{target.attempt_id}</p><code>{target.assessment_ref.id} · r{target.assessment_ref.revision}<br />SHA-256 {target.assessment_ref.sha256}</code><PreflightFacts facts={snapshot.preflight} course={course} /></details>{markdownReady && <Ready restore={restoreView} />}</>}
+    {confirm && <Dialog title={confirm === 'submit' ? '确认提交测试' : '确认放弃测试'} close={() => setConfirm(null)}><p>{confirm === 'submit' ? '提交将冻结已保存作答；当前尚未评分，标准答案尚未释放。' : '放弃后停止作答，已有服务端记录保留；本机未同步候选保留，不计为独立零分。'}</p><button className="primary-button" disabled={confirm === 'submit' ? !session.commandReady : !session.abandonReady} onClick={() => { const kind = confirm; setConfirm(null); if (kind === 'submit') void session.submit(); else void session.abandon() }}>{confirm === 'submit' ? '确认提交已保存作答' : '确认放弃并保留本机候选'}</button><button onClick={() => setConfirm(null)}>返回作答</button></Dialog>}
+  </article></div>
+}
+function Ready({ restore }: { restore: () => void }) { useLayoutEffect(restore); return null }

@@ -1,0 +1,85 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+rootdir: <REPO>
+configfile: pyproject.toml
+testpaths: tests
+plugins: anyio-4.15.1
+collected 731 items
+
+tests/contract/test_api_projection.py .F................................ [  4%]
+.................                                                        [  6%]
+tests/contract/test_generated_transport.py ...............               [  9%]
+tests/contract/test_generated_upload.py ..                               [  9%]
+tests/contract/test_models.py ............................               [ 13%]
+tests/contract/test_optional_patch.py .                                  [ 13%]
+tests/contract/test_package_integrity.py ........................        [ 16%]
+tests/contract/test_practice_public_projection.py ...................... [ 19%]
+.............                                                            [ 21%]
+tests/integration/test_assessment_attempts.py .......................... [ 24%]
+...........                                                              [ 26%]
+tests/integration/test_assessment_independent_review.py .......          [ 27%]
+tests/integration/test_assessment_learning_port.py ...........           [ 28%]
+tests/integration/test_assessment_policy.py ...................          [ 31%]
+tests/integration/test_content_http.py ...........                       [ 32%]
+tests/integration/test_content_repository.py ........................... [ 36%]
+........                                                                 [ 37%]
+tests/integration/test_document_http.py ......                           [ 38%]
+tests/integration/test_document_imports.py ......                        [ 39%]
+tests/integration/test_import_http.py ...............                    [ 41%]
+tests/integration/test_import_repository.py ............................ [ 45%]
+......                                                                   [ 46%]
+tests/integration/test_learning_course_history.py ..                     [ 46%]
+tests/integration/test_notes_learning.py ............................... [ 50%]
+.................                                                        [ 52%]
+tests/integration/test_practice_independent_review.py ........           [ 54%]
+tests/integration/test_practice_learning_port.py ............            [ 55%]
+tests/integration/test_practice_sessions.py ........................     [ 58%]
+tests/integration/test_provenance_recovery_integrity.py ......           [ 59%]
+tests/integration/test_reader_directory.py ....                          [ 60%]
+tests/integration/test_reader_provenance.py ...........                  [ 61%]
+tests/integration/test_workbench_assessment_policy.py ......             [ 62%]
+tests/integration/test_workbench_persistence.py ...............          [ 64%]
+tests/security/test_document_sandbox.py ...............                  [ 66%]
+tests/security/test_local_boundary.py .................................  [ 71%]
+tests/unit/test_backend_database.py ........                             [ 72%]
+tests/unit/test_backup_command.py ...                                    [ 72%]
+tests/unit/test_content_store.py ....................................... [ 78%]
+...........................                                              [ 81%]
+tests/unit/test_document_extraction.py ................................. [ 86%]
+................                                                         [ 88%]
+tests/unit/test_governance.py .....                                      [ 89%]
+tests/unit/test_import_budgets.py ......................                 [ 92%]
+tests/unit/test_import_parsing.py ...................................... [ 97%]
+......                                                                   [ 98%]
+tests/unit/test_spec_catalog.py ....                                     [ 98%]
+tests/unit/test_spec_extraction.py .........                             [100%]
+
+=================================== FAILURES ===================================
+_____ test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec _____
+
+    def test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec():
+        application = create_app()
+        api = application.openapi()
+        runtime = {(method, context.path) for context in iter_route_contexts(application.routes)
+                   if isinstance(context.original_route, APIRoute) for method in context.methods}
+        projection = {(method.upper(), path) for path, methods in api["paths"].items() for method in methods if method in HTTP_METHODS}
+        assert runtime == projection
+        assert projection <= SPEC_ROUTES
+>       assert len(projection) == 41
+E       AssertionError: assert 48 == 41
+E        +  where 48 = len({('DELETE', '/api/v1/notes/{id}'), ('GET', '/api/v1/artifacts/{id}/download'), ('GET', '/api/v1/assessments'), ('GET', '/api/v1/attempts/{id}'), ('GET', '/api/v1/attempts/{id}/responses'), ('GET', '/api/v1/blocks/{id}'), ...})
+
+tests/contract/test_api_projection.py:34: AssertionError
+=============================== warnings summary ===============================
+../..<USER_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <USER_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../..<USER_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <USER_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/contract/test_api_projection.py::test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec
+============ 1 failed, 730 passed, 2 warnings in 102.95s (0:01:42) =============

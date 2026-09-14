@@ -1,0 +1,50 @@
+
+> @learning-workbench/web@0.1.0 test:e2e
+> playwright test --config ../../tests/e2e/playwright.config.ts document-imports.spec.ts imports-policy.spec.ts --grep real DOCX safe text|an open author import --output=<temporary>/m32-import-regression-boundary-first
+
+[WebServer] INFO:     Started server process [<pid>]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on <test-origin> (Press CTRL+C to quit)
+[WebServer] (node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 2 tests using 1 worker
+
+(node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  1 ../../tests/e2e/document-imports.spec.ts:127:1 › real DOCX safe text stays readable for learner while original bytes require an explicit author role (3.3s)
+  ✘  2 ../../tests/e2e/imports-policy.spec.ts:11:1 › an open author import retains its task across independent start and submit but rechecks pending-answer protection before restoring content (10.7s)
+
+
+  1) ../../tests/e2e/imports-policy.spec.ts:11:1 › an open author import retains its task across independent start and submit but rechecks pending-answer protection before restoring content
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: getByRole('dialog', { name: '导入', exact: true }).getByRole('alert')
+    Expected substring: "测试"
+    Received string:    "相关测验的帮助或解答仍受策略保护；提交及必要评分完成前暂不可读取。重试读取导入状态"
+    Timeout: 5000ms
+
+    Call log:
+      - Expect "toContainText" getByRole('dialog', { name: '导入', exact: true }).getByRole('alert') with timeout 5000ms
+      - waiting for getByRole('dialog', { name: '导入', exact: true }).getByRole('alert')
+        12 × locator resolved to <div role="alert" class="import-error">…</div>
+           - unexpected value "相关测验的帮助或解答仍受策略保护；提交及必要评分完成前暂不可读取。重试读取导入状态"
+
+
+      47 |   await testPage.getByRole('dialog', { name: '确认提交测试', exact: true }).getByRole('button', { name: '确认提交已保存作答', exact: true }).click()
+      48 |   expect((await submitting).status()).toBe(202)
+    > 49 |   await expect(dialog.getByRole('alert')).toContainText('测试')
+         |                                           ^
+      50 |   // Its original task is still active in this dialog, but its old private
+      51 |   // projection cannot reappear after the ordinary material lock has ended.
+      52 |   await expect(dialog.locator('.import-details')).toContainText(receipt.import_id)
+        at <worktree>/tests/e2e/imports-policy.spec.ts:49:43
+
+    Error Context: ../../../m32-import-regression-boundary-first/imports-policy-an-open-aut-a4111-on-before-restoring-content/error-context.md
+
+  1 failed
+    ../../tests/e2e/imports-policy.spec.ts:11:1 › an open author import retains its task across independent start and submit but rechecks pending-answer protection before restoring content
+  1 passed (16.2s)

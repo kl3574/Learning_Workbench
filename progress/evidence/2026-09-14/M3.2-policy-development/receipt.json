@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "task": "M3.2 Content Policy Practice-history development verification",
+  "baseline_commit": "befe34a50f275e117d809a2592767f03d7900ad0",
+  "spec_sha256": "ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c",
+  "source_sha256": {
+    "services/api/app/application/assessment_content.py": "da593be554cc80159d50092c375c83c270ed4db5f426fb218184ef3600d4f13c",
+    "services/api/app/application/assessment_access.py": "6129bbe0015574a7e64d7614ba2c2255fa718dd5811c185a06f46637fa9f0e55",
+    "services/api/app/application/policy.py": "683bd311dd72750815219d86e6f5bbae31e9831c4ec130aaa7d7cdd1b1d12818",
+    "services/api/app/application/jobs.py": "0f366e23fe2d0ae7a29f2e77459d7c74b3c86880f6c2d4204f9e1f8f9e491217",
+    "services/api/app/application/practice_history.py": "bc64e498decad1db9f0956c6b43a39d6da99f298ce28a20934a9f1ac9fe131de",
+    "services/api/app/application/imports.py": "e7f608d2326ad465cd087294a89f56a4cc0293caa91bc551f7e4d409b4313460",
+    "services/api/app/application/practice.py": "62916cc489a6ff025a43af8d6bc43331a7c931b84f921ab6c23551c3ddef2789",
+    "services/api/app/infrastructure/security.py": "fde8871deff1192c46e01aec09ed58c0aacc6990695f1264090db32a1f3956f9",
+    "tests/integration/test_assessment_policy.py": "1048caf0f03b89d0b57595b193a226e4cc73aeceb5c50fbc6bae68504846859f"
+  },
+  "source_scope": "Owned source and tests frozen after the final run. Other agents shared development dependencies; this receipt is not the later whole-branch exact-source gate.",
+  "test_command": "uv run --frozen pytest tests/integration/test_assessment_policy.py tests/integration/test_practice_sessions.py tests/integration/test_assessment_learning_port.py -q",
+  "final_exit_code": 0,
+  "final_summary": "54 passed, 2 dependency deprecation warnings in 14.01s; 19 owned policy checks + 24 existing Practice checks + 11 Learning checks",
+  "final_log": "final-regression.log",
+  "static": {
+    "ruff": {
+      "exit_code": 0,
+      "log": "ruff-final.log",
+      "scope": "8 owned production files plus owned test file"
+    },
+    "mypy": {
+      "exit_code": 0,
+      "log": "mypy-final.log",
+      "scope": "8 owned production files"
+    }
+  },
+  "red_runs": [
+    {
+      "log": "initial-integration.log",
+      "exit_code": 1,
+      "classification": "actual migration issue in concurrently developed backend",
+      "summary": "35 setup errors: SQLite ADD COLUMN UNIQUE unsupported; backend replaced inline unique with separate unique index."
+    },
+    {
+      "log": "policy-first.log",
+      "exit_code": 1,
+      "classification": "test setup mistake",
+      "summary": "12 passed, 1 failed: fault injection named the wrong existing trigger; test corrected to solution_no_update."
+    },
+    {
+      "log": "history-time-red.log",
+      "exit_code": 1,
+      "classification": "actual overstrict history projection",
+      "summary": "Native exposure and Learning event were separately timestamped in same transaction; equality caused unrelated unseen question to become unknown. Equality removed; each owner timestamp remains strict UTC and Learning row/payload validated.",
+      "source_record": "history-time-red-source.json"
+    },
+    {
+      "log": "cancel-replay-red.log",
+      "exit_code": 1,
+      "classification": "actual private diagnostic replay disclosure",
+      "summary": "Successful cancellation cached before later answer protection could replay private preview warnings. Cancellation still succeeds, but protected current/replayed acknowledgement strips warnings/result refs/error.",
+      "source_record": "cancel-replay-red-source.json"
+    }
+  ],
+  "raw_logs": {
+    "cancel-replay-red.log": {
+      "sha256": "802e9c9d241be35f5facfed76af01804eec113e9d5c2e50db1c41444d9e1df03",
+      "size": 2251
+    },
+    "final-regression.log": {
+      "sha256": "4cfdae095dd321daefbbda56192d154651c9d79ac8b8806ec0ff2ddc72673cf9",
+      "size": 1095
+    },
+    "history-time-red.log": {
+      "sha256": "d9896d03f81b0487ea1ddfada09386fe889ea1bd7f46da7d5ad7e680d46240e9",
+      "size": 1722
+    },
+    "initial-integration.log": {
+      "sha256": "c5e700a56705c7781cd000c9bedbb3eb4f573107fe2009c6ba4b8359d89ea5a2",
+      "size": 69345
+    },
+    "integration-after-migration.log": {
+      "sha256": "428cf996a1373954538256143abb5cb6afa582326aed434b78855d4ac36f0cc2",
+      "size": 1094
+    },
+    "mypy-final.log": {
+      "sha256": "157a09cfcdfdfb5977479c5a1c08345149263a3e990a2ec976ef28aaeec9cae6",
+      "size": 43
+    },
+    "policy-and-regression-green.log": {
+      "sha256": "d18f15e5c141894481029d0f4e4e42fc1464bd26c4d6cc7ba87e4ea9554ee79d",
+      "size": 1095
+    },
+    "policy-final.log": {
+      "sha256": "15b0daa6fce6962b5c9c22e4ad08556d8195aee929927c1bd062d14b5e327c16",
+      "size": 99
+    },
+    "policy-first.log": {
+      "sha256": "b7d4b9c5fe6d198cd55297a2957b8551da3500671ecaab14a17593066fb36e07",
+      "size": 1229
+    },
+    "policy-second.log": {
+      "sha256": "5a73b3321991abc24c875aa70d3b304f5989faf249623243cfd4b1bfd4c17aba",
+      "size": 99
+    },
+    "ruff-final.log": {
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "size": 19
+    }
+  },
+  "limits": [
+    "M3.2 does not grade answers or invoke academic providers; no full platform acceptance claimed.",
+    "Policy cannot erase material legitimately viewed or downloaded before a protected attempt.",
+    "Private opaque originals are conservatively withheld; normal safe Reader bodies resume after independent submission.",
+    "Raw logs contain local paths; do not publish raw logs without explicit sanitization and separate derived hashes.",
+    "For two self-review red source states only SHA records were saved, not complete prior source snapshots."
+  ],
+  "public_derivative": {
+    "source_receipt_sha256": "74c19a838184d0743bf94aeaf3f36257eeedbc514a52899532b1894c70bcc453",
+    "raw_hashes_are_originals": true,
+    "published_hashes_are_separate": "manifest.json",
+    "references": "All artifact filenames refer to this package. Original private absolute directories are omitted."
+  }
+}

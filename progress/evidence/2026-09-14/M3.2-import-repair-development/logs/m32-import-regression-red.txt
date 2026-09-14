@@ -1,0 +1,118 @@
+
+> @learning-workbench/web@0.1.0 test:e2e
+> playwright test --config ../../tests/e2e/playwright.config.ts document-imports.spec.ts imports.spec.ts --grep real DOCX safe text|author package requires explicit role|deferred author preview --output=<temporary>/m32-import-regression-red
+
+[WebServer] INFO:     Started server process [<pid>]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on <test-origin> (Press CTRL+C to quit)
+[WebServer] (node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 3 tests using 1 worker
+
+(node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘  1 ../../tests/e2e/document-imports.spec.ts:127:1 › real DOCX safe text stays readable for learner while original bytes require an explicit author role (7.9s)
+(node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘  2 ../../tests/e2e/imports.spec.ts:254:1 › author package requires explicit role change and clears the private preview after returning to learner (7.3s)
+(node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘  3 ../../tests/e2e/imports.spec.ts:379:1 › deferred author preview and original responses cannot restore content after the role is lowered (7.9s)
+
+
+  1) ../../tests/e2e/document-imports.spec.ts:127:1 › real DOCX safe text stays readable for learner while original bytes require an explicit author role
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('dialog', { name: '导入', exact: true }).getByText('预览已就绪，等待确认', { exact: true })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('dialog', { name: '导入', exact: true }).getByText('预览已就绪，等待确认', { exact: true }) with timeout 5000ms
+      - waiting for getByRole('dialog', { name: '导入', exact: true }).getByText('预览已就绪，等待确认', { exact: true })
+
+
+      61 |   // flight. Wait for that role's refresh to finish before snapshotting options.
+      62 |   await expect(dialog.getByRole('button', { name: role === 'learner' ? '切换为作者角色' : '切换为学习者角色', exact: true })).toBeEnabled()
+    > 63 |   await expect(dialog.getByText('预览已就绪，等待确认', { exact: true })).toBeVisible()
+         |                                                                 ^
+      64 |   await expect(dialog.getByLabel('选择预览候选')).toBeVisible()
+      65 |   await expect(dialog.getByLabel('选择预览候选').locator('option').first()).toBeAttached()
+      66 | }
+        at changeRole (<worktree>/tests/e2e/document-imports.spec.ts:63:65)
+        at <worktree>/tests/e2e/document-imports.spec.ts:151:3
+
+    Error Context: ../../../m32-import-regression-red/document-imports-real-DOCX-54907-ire-an-explicit-author-role/error-context.md
+
+  2) ../../tests/e2e/imports.spec.ts:254:1 › author package requires explicit role change and clears the private preview after returning to learner
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('dialog', { name: '导入', exact: true }).getByText('预览已就绪，等待确认', { exact: true })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('dialog', { name: '导入', exact: true }).getByText('预览已就绪，等待确认', { exact: true }) with timeout 5000ms
+      - waiting for getByRole('dialog', { name: '导入', exact: true }).getByText('预览已就绪，等待确认', { exact: true })
+
+
+      265 |   const sourceResponse = page.waitForResponse(response => /\/api\/v1\/sources\/[^/]+$/.test(response.url()))
+      266 |   await dialog.getByRole('button', { name: '切换为作者角色', exact: true }).click()
+    > 267 |   await expect(dialog.getByText('预览已就绪，等待确认', { exact: true })).toBeVisible()
+          |                                                                 ^
+      268 |   await expect(dialog.getByLabel('当前候选正文')).toContainText('Synthetic author-package public body.')
+      269 |   await expect(dialog.getByRole('button', { name: '下载受控原件' })).toBeVisible()
+      270 |   const source = await (await sourceResponse).json()
+        at <worktree>/tests/e2e/imports.spec.ts:267:65
+
+    Error: page.waitForResponse: Test ended.
+
+      263 |   await expect(dialog.getByRole('alert')).toContainText('需要作者角色')
+      264 |   await expect(dialog.getByLabel('当前候选正文')).toHaveCount(0)
+    > 265 |   const sourceResponse = page.waitForResponse(response => /\/api\/v1\/sources\/[^/]+$/.test(response.url()))
+          |                               ^
+      266 |   await dialog.getByRole('button', { name: '切换为作者角色', exact: true }).click()
+      267 |   await expect(dialog.getByText('预览已就绪，等待确认', { exact: true })).toBeVisible()
+      268 |   await expect(dialog.getByLabel('当前候选正文')).toContainText('Synthetic author-package public body.')
+        at <worktree>/tests/e2e/imports.spec.ts:265:31
+
+    Error Context: ../../../m32-import-regression-red/imports-author-package-req-de787--after-returning-to-learner/error-context.md
+
+  3) ../../tests/e2e/imports.spec.ts:379:1 › deferred author preview and original responses cannot restore content after the role is lowered
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: getByRole('dialog', { name: '导入', exact: true }).getByRole('alert')
+    Expected substring: "需要作者角色"
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toContainText" getByRole('dialog', { name: '导入', exact: true }).getByRole('alert') with timeout 5000ms
+      - waiting for getByRole('dialog', { name: '导入', exact: true }).getByRole('alert')
+
+
+      403 |   expect(sawPending).toBe(true)
+      404 |   await dialog.getByRole('button', { name: '切换为学习者角色', exact: true }).click()
+    > 405 |   await expect(dialog.getByRole('alert')).toContainText('需要作者角色')
+          |                                           ^
+      406 |   const delayedPreview = page.waitForResponse(response => pattern.test(response.url()) && response.status() === 200)
+      407 |   releasePreview()
+      408 |   await (await delayedPreview).finished()
+        at <worktree>/tests/e2e/imports.spec.ts:405:43
+
+    Error Context: ../../../m32-import-regression-red/imports-deferred-author-pr-4bbb6-t-after-the-role-is-lowered/error-context.md
+
+  3 failed
+    ../../tests/e2e/document-imports.spec.ts:127:1 › real DOCX safe text stays readable for learner while original bytes require an explicit author role
+    ../../tests/e2e/imports.spec.ts:254:1 › author package requires explicit role change and clears the private preview after returning to learner
+    ../../tests/e2e/imports.spec.ts:379:1 › deferred author preview and original responses cannot restore content after the role is lowered

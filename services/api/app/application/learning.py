@@ -164,3 +164,41 @@ def validate_practice_event(connection: sqlite3.Connection, workspace_id: str, e
     guard_subject_access(connection, workspace_id)
     validated_ref(content, ref)
     LearningRepository(connection, workspace_id).validate_practice_event(event_id, kind, ref, practice_session_id)
+
+
+def record_test_submitted(connection: sqlite3.Connection, workspace_id: str,
+                          assessment_ref: dm.ContentRef, attempt_id: str) -> str:
+    """Trusted Assessment port; only the caller's just-submitted transaction may append."""
+    from .assessment_content import validate_assessment_reference
+    from .policy import guard_attempt_access
+
+    if not connection.in_transaction:
+        raise ApiError(409, "TRANSACTION_REQUIRED", "测验提交事件需要有效事务。")
+    if assessment_ref.entity != "assessment":
+        raise ApiError(422, "SCHEMA_INVALID", "测验提交事件必须引用准确测验修订。")
+    access = guard_attempt_access(connection, workspace_id, attempt_id, assessment_ref=assessment_ref)
+    if access.status != "submitted":
+        raise ApiError(409, "ASSESSMENT_STATE_INVALID", "只有已持久化交卷的测验可记录提交事件。")
+    validate_assessment_reference(connection, workspace_id, assessment_ref)
+    return LearningRepository(connection, workspace_id).test_submitted(assessment_ref, attempt_id)
+
+
+def validate_test_submitted(connection: sqlite3.Connection, workspace_id: str, event_id: str,
+                            assessment_ref: dm.ContentRef, attempt_id: str) -> None:
+    """Read-only validation of the real Assessment-to-Learning event association."""
+    from .assessment_content import validate_assessment_reference
+    from .policy import guard_attempt_access
+
+    if assessment_ref.entity != "assessment":
+        raise ApiError(409, "ASSESSMENT_SNAPSHOT_INVALID", "测验事件引用类型无效。")
+    access = guard_attempt_access(connection, workspace_id, attempt_id, assessment_ref=assessment_ref)
+    if access.status not in {"submitted", "grading", "graded", "needs_review"}:
+        raise ApiError(409, "ASSESSMENT_SNAPSHOT_INVALID", "未交卷测验不能关联提交事件。")
+    validate_assessment_reference(connection, workspace_id, assessment_ref)
+    LearningRepository(connection, workspace_id).validate_test_submitted(event_id, assessment_ref, attempt_id)
+
+
+def read_learning_event(connection: sqlite3.Connection, workspace_id: str, event_id: str) -> dm.LearningEvent:
+    """Typed read port for module-owned exposure references, without claiming eligibility."""
+    guard_subject_access(connection, workspace_id)
+    return LearningRepository(connection, workspace_id).read_learning_event(event_id)

@@ -1,0 +1,294 @@
+"""Assessment policies and immutable ungraded attempts, not a grading implementation."""
+
+import base64
+from collections import Counter
+from collections.abc import Iterator
+from contextlib import contextmanager
+import hashlib
+import hmac
+import secrets
+import sqlite3
+import time
+
+from pydantic import TypeAdapter
+
+from packages.contracts import domain_models as dm
+from packages.contracts.canonical import canonical_bytes, sha256_bytes, strict_json
+
+from ..assessment_dto import (
+    AssessmentAttemptCreate, AssessmentPreflight, AssessmentSummary, AttemptResponses, AttemptSnapshot,
+    GradingReadiness, PageAssessment, PriorSeen, PriorSeenQuestion, QuestionKindCount,
+)
+from ..infrastructure.assessment_repository import AssessmentRecord, AssessmentRepository, invalid_snapshot
+from ..infrastructure.content_repository import reference
+from ..infrastructure.database import Database
+from ..infrastructure.idempotency import execute_idempotent
+from ..infrastructure.security import SessionIdentity
+from .assessment_content import AssessmentContent
+from .errors import ApiError
+from .learning import record_test_submitted, validate_test_submitted
+from .policy import Policy
+from .practice_history import PracticeHistory
+
+
+class AssessmentCursor(dm.StrictModel):
+    context: dm.Sha256
+    position: dm.Id
+    revision: dm.Revision
+    expires: int
+
+
+def invalid() -> ApiError:
+    return ApiError(422, "SCHEMA_INVALID", "测验请求或精确分配无效。")
+
+
+class AssessmentService:
+    def __init__(self, database: Database):
+        self.database = database
+        self._cursor_key = secrets.token_bytes(32)
+
+    @contextmanager
+    def _access(self, identity: SessionIdentity) -> Iterator[tuple[AssessmentContent, AssessmentRepository, Policy]]:
+        try:
+            with self.database.transaction() as connection:
+                yield AssessmentContent(connection, identity.workspace_id), AssessmentRepository(connection, identity.workspace_id), Policy(connection, identity.workspace_id)
+        except sqlite3.Error:
+            raise ApiError(503, "ASSESSMENT_STORAGE_UNAVAILABLE", "测验存储暂不可用，请保留未确认的本机作答。", True) from None
+
+    def _position(self, context: str, cursor: str | None) -> tuple[str, int]:
+        if cursor is None:
+            return "", 0
+        try:
+            if type(cursor) is not str or not 1 <= len(cursor) <= 1024:
+                raise invalid()
+            decoded = base64.b64decode(cursor + "=" * (-len(cursor) % 4), altchars=b"-_", validate=True)
+            raw, signature = decoded[:-32], decoded[-32:]
+            if not hmac.compare_digest(signature, hmac.new(self._cursor_key, raw, hashlib.sha256).digest()):
+                raise invalid()
+            parsed = AssessmentCursor.model_validate(strict_json(raw))
+            if parsed.context != context or parsed.expires < time.time():
+                raise invalid()
+            return parsed.position, parsed.revision
+        except (TypeError, ValueError):
+            raise invalid() from None
+
+    def _cursor(self, context: str, ref: dm.ContentRef) -> str:
+        payload = canonical_bytes(AssessmentCursor(context=context, position=ref.id, revision=ref.revision, expires=int(time.time()) + 3600))
+        return base64.urlsafe_b64encode(payload + hmac.new(self._cursor_key, payload, hashlib.sha256).digest()).decode().rstrip("=")
+
+    @staticmethod
+    def _prior(content: AssessmentContent, repository: AssessmentRepository, questions: tuple[dm.QuestionPublic, ...]) -> PriorSeen:
+        facts = PracticeHistory(repository.connection, repository.workspace_id).seen(questions)
+        seen_groups: set[str] = set()
+        unknown = False
+        for identifier in repository.history_ids():
+            try:
+                old = repository.load(identifier)
+                blueprint = content.blueprint(old.assessment_ref)
+                previous = content.questions(blueprint)
+                if list(blueprint.question_refs) != old.question_refs or [reference(question) for question in previous] != old.question_refs:
+                    raise invalid_snapshot()
+                seen_groups.update(question.exposure_group for question in previous)
+            except ApiError:
+                unknown = True
+        by_ref = {(item.question_ref.id, item.question_ref.revision, item.question_ref.sha256): item for item in facts}
+        result = []
+        for question in questions:
+            ref = reference(question)
+            fact = by_ref.get((ref.id, ref.revision, ref.sha256))
+            if fact is None:
+                raise invalid_snapshot()
+            reasons = list(fact.reason_codes)
+            state = fact.state
+            if question.exposure_group in seen_groups:
+                state = "seen"
+                reasons.append("ASSESSMENT_PREVIOUS_ALLOCATION")
+            elif unknown and state != "seen":
+                state = "unknown"
+                reasons.append("ASSESSMENT_HISTORY_INVALID")
+            result.append(PriorSeenQuestion(question_ref=ref, state=state, reason_codes=sorted(set(reasons))))
+        return PriorSeen(status="unknown" if any(item.state == "unknown" for item in result) else "known", questions=result)
+
+    def _preflight(self, content: AssessmentContent, repository: AssessmentRepository, blueprint: dm.AssessmentBlueprint) -> AssessmentPreflight:
+        checked = content.preflight(blueprint)
+        questions = content.questions(blueprint)
+        statuses = Counter(checked.review_statuses)
+        if len(checked.review_statuses) != len(questions) or set(statuses) - {"approved", "draft", "needs_review", "missing", "damaged"}:
+            raise invalid_snapshot()
+        unavailable = bool(statuses["missing"] or statuses["damaged"])
+        unreviewed = bool(statuses["draft"] or statuses["needs_review"])
+        reasons = []
+        if unreviewed:
+            reasons.append("ANSWER_UNREVIEWED")
+        if statuses["missing"]:
+            reasons.append("ANSWER_MISSING")
+        if statuses["damaged"]:
+            reasons.append("ANSWER_DAMAGED")
+        blockers = list(checked.reason_codes) if not checked.startable else []
+        if blueprint.time_limit_seconds is not None:
+            blockers.append("TIMED_ASSESSMENT_UNAVAILABLE")
+        if unavailable and not blockers:
+            blockers.append("ANSWER_BINDING_UNAVAILABLE")
+        return AssessmentPreflight(course_refs=list(content.course_witnesses(checked.concept_refs)),
+            question_kinds=[QuestionKindCount(kind=kind, count=count) for kind, count in sorted(Counter(question.kind for question in questions).items())],
+            target_concept_refs=list(checked.concept_refs),
+            grading=GradingReadiness(status="unavailable" if unavailable else "unreviewed" if unreviewed else "reviewed",
+                approved_count=statuses["approved"], draft_count=statuses["draft"], needs_review_count=statuses["needs_review"],
+                missing_count=statuses["missing"], damaged_count=statuses["damaged"], reason_codes=reasons),
+            prior_seen=self._prior(content, repository, questions), startable=not blockers, start_block_reason_codes=sorted(set(blockers)))
+
+    def list_assessments(self, identity: SessionIdentity, course_id: str | None = None, limit: int = 20, cursor: str | None = None) -> PageAssessment:
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise invalid()
+        try:
+            if course_id is not None:
+                TypeAdapter(dm.Id).validate_python(course_id)
+        except ValueError:
+            raise invalid() from None
+        with self._access(identity) as (content, repository, policy):
+            policy.check("subject_read")
+            candidates = []
+            for blueprint in content.catalog():
+                preflight = self._preflight(content, repository, blueprint)
+                if course_id is not None and not any(ref.id == course_id for ref in preflight.course_refs):
+                    continue
+                candidates.append((blueprint, preflight))
+            context = sha256_bytes(canonical_bytes([identity.workspace_id, course_id, limit,
+                [[reference(blueprint).model_dump(mode="json"), [ref.model_dump(mode="json") for ref in preflight.course_refs]] for blueprint, preflight in candidates]]))
+            position = self._position(context, cursor)
+            remaining = [(blueprint, preflight) for blueprint, preflight in candidates if (blueprint.id, blueprint.revision) > position]
+            items = []
+            for blueprint, preflight in remaining[:limit]:
+                recent, truncated = repository.recent(reference(blueprint))
+                items.append(AssessmentSummary(ref=reference(blueprint), title=blueprint.title, question_count=len(blueprint.question_refs),
+                    allowed_modes=blueprint.allowed_modes, time_limit_seconds=blueprint.time_limit_seconds, preflight=preflight,
+                    recent_attempts=recent, recent_attempts_truncated=truncated))
+            return PageAssessment(items=items, next_cursor=self._cursor(context, items[-1].ref) if len(remaining) > limit else None)
+
+    @staticmethod
+    def _view(content: AssessmentContent, repository: AssessmentRepository, record: AssessmentRecord) -> AttemptSnapshot:
+        blueprint = content.blueprint(record.assessment_ref)
+        questions = content.questions(blueprint)
+        if list(blueprint.question_refs) != record.question_refs or [reference(question) for question in questions] != record.question_refs:
+            raise invalid_snapshot()
+        if record.submission is not None:
+            repository.validate_outbox(record)
+            if record.submission_event_id is None:
+                raise invalid_snapshot()
+            validate_test_submitted(repository.connection, repository.workspace_id, record.submission_event_id, record.assessment_ref, record.id)
+        return AttemptSnapshot(id=record.id, workspace_id=record.workspace_id, assessment_ref=record.assessment_ref,
+            status=record.status, policy=record.policy, questions=list(questions), revision=record.revision,
+            created_at=record.assignment.created_at, deadline_at=record.assignment.deadline_at, submitted_at=record.submitted_at,
+            preflight=record.assignment.preflight, grading_status="not_graded")
+
+    def _receipt(self, content: AssessmentContent, repository: AssessmentRepository, route: str, key: str | None,
+                 result: dict[str, object], target: str | None, *, fresh: bool) -> AttemptSnapshot:
+        try:
+            receipt = AttemptSnapshot.model_validate(result)
+            record = repository.load(target if target is not None else receipt.id)
+            actual = self._view(content, repository, record)
+            historical = {"revision", "status", "submitted_at"}
+            if (receipt.model_dump(exclude=historical) != actual.model_dump(exclude=historical)
+                    or receipt.revision > actual.revision
+                    or (receipt.submitted_at is not None and receipt.submitted_at != actual.submitted_at)):
+                raise invalid_snapshot()
+            if fresh:
+                repository.seal_receipt(route, key, record, result)
+            return receipt
+        except (TypeError, ValueError, KeyError):
+            raise invalid_snapshot() from None
+
+    def create_attempt(self, identity: SessionIdentity, id: str, request: AssessmentAttemptCreate, key: str | None) -> AttemptSnapshot:
+        if request.assessment_ref.id != id:
+            raise invalid()
+        route = f"POST /assessments/{id}/attempts"
+        with self._access(identity) as (content, repository, policy):
+            replay_id = repository.replay_target(route, key)
+            policy.check("attempt_write", attempt_id=replay_id) if replay_id is not None else policy.check("subject_read")
+            if replay_id is not None:
+                self._view(content, repository, repository.load(replay_id))
+            def operation():
+                blueprint = content.blueprint(request.assessment_ref)
+                if request.mode not in blueprint.allowed_modes:
+                    raise ApiError(409, "ASSESSMENT_MODE_UNAVAILABLE", "该测验不允许所选模式。")
+                if blueprint.time_limit_seconds is not None:
+                    raise ApiError(409, "TIMED_ASSESSMENT_UNAVAILABLE", "计时测验尚未启用服务端截止任务，请选择无时限测验。")
+                policy.start_exclusion(request.mode)
+                bundle = content.question_bundle(blueprint)
+                preflight = self._preflight(content, repository, blueprint)
+                if not preflight.startable:
+                    raise ApiError(409, "ASSESSMENT_NOT_STARTABLE", "测验缺少可固定的完整答案版本，尚不能开始。")
+                snapshot = dm.PolicySnapshot(mode=request.mode, tutor_scope="academic" if request.mode == "assisted" else "operation_help_only",
+                    allow_web=False, allow_materials=request.mode != "independent")
+                record = repository.create(reference(blueprint), snapshot, list(blueprint.question_refs), list(bundle.private_pins), preflight)
+                return self._view(content, repository, record).model_dump(mode="json")
+            result = execute_idempotent(repository.connection, actor=identity.workspace_id, route=route, key=key,
+                                        payload=request.model_dump(mode="json"), operation=operation)
+            return self._receipt(content, repository, route, key, result, replay_id, fresh=replay_id is None)
+
+    def get_attempt(self, identity: SessionIdentity, id: str) -> AttemptSnapshot:
+        with self._access(identity) as (content, repository, policy):
+            policy.check("attempt_read", attempt_id=id)
+            return self._view(content, repository, repository.load(id))
+
+    def get_responses(self, identity: SessionIdentity, id: str) -> AttemptResponses:
+        with self._access(identity) as (content, repository, policy):
+            policy.check("attempt_read", attempt_id=id)
+            record = repository.load(id)
+            self._view(content, repository, record)
+            return AttemptResponses(revision=record.revision, responses=record.responses, saved_at=record.saved_at)
+
+    def save_responses(self, identity: SessionIdentity, id: str, request: dm.ResponsesWrite, key: str | None) -> AttemptSnapshot:
+        with self._access(identity) as (content, repository, policy):
+            policy.check("attempt_write", attempt_id=id)
+            route = f"PUT /attempts/{id}/responses"
+            replay_id = repository.replay_target(route, key)
+            if replay_id is not None and replay_id != id:
+                raise invalid_snapshot()
+            record = repository.load(id)
+            self._view(content, repository, record)
+            def operation():
+                repository.expect_active(record, request.expected_revision)
+                ids = [response.question_id for response in request.responses]
+                if len(ids) != len(set(ids)) or not set(ids) <= {ref.id for ref in record.question_refs}:
+                    raise invalid()
+                saved = repository.save(record, request.responses)
+                return self._view(content, repository, saved).model_dump(mode="json")
+            result = execute_idempotent(repository.connection, actor=identity.workspace_id, route=route, key=key,
+                                        payload=request.model_dump(mode="json"), operation=operation)
+            return self._receipt(content, repository, route, key, result, id, fresh=replay_id is None)
+
+    def submit(self, identity: SessionIdentity, id: str, request: dm.AttemptSubmit, key: str | None) -> AttemptSnapshot:
+        with self._access(identity) as (content, repository, policy):
+            policy.check("attempt_write", attempt_id=id)
+            route = f"POST /attempts/{id}/submit"
+            replay_id = repository.replay_target(route, key)
+            if replay_id is not None and replay_id != id:
+                raise invalid_snapshot()
+            record = repository.load(id)
+            self._view(content, repository, record)
+            def operation():
+                repository.expect_active(record, request.expected_revision)
+                submitted = repository.submit(record)
+                event_id = record_test_submitted(repository.connection, identity.workspace_id, record.assessment_ref, record.id)
+                complete = repository.link_submission(submitted, event_id)
+                return self._view(content, repository, complete).model_dump(mode="json")
+            result = execute_idempotent(repository.connection, actor=identity.workspace_id, route=route, key=key,
+                                        payload=request.model_dump(mode="json"), operation=operation)
+            return self._receipt(content, repository, route, key, result, id, fresh=replay_id is None)
+
+    def abandon(self, identity: SessionIdentity, id: str, request: dm.AttemptSubmit, key: str | None) -> AttemptSnapshot:
+        with self._access(identity) as (content, repository, policy):
+            policy.check("attempt_write", attempt_id=id)
+            route = f"POST /attempts/{id}/abandon"
+            replay_id = repository.replay_target(route, key)
+            if replay_id is not None and replay_id != id:
+                raise invalid_snapshot()
+            record = repository.load(id)
+            self._view(content, repository, record)
+            def operation():
+                repository.expect_active(record, request.expected_revision)
+                return self._view(content, repository, repository.abandon(record)).model_dump(mode="json")
+            result = execute_idempotent(repository.connection, actor=identity.workspace_id, route=route, key=key,
+                                        payload=request.model_dump(mode="json"), operation=operation)
+            return self._receipt(content, repository, route, key, result, id, fresh=replay_id is None)

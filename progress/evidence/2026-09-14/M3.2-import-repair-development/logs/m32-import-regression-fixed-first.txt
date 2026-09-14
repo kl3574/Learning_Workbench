@@ -1,0 +1,64 @@
+
+> @learning-workbench/web@0.1.0 test:e2e
+> playwright test --config ../../tests/e2e/playwright.config.ts document-imports.spec.ts imports.spec.ts --grep real DOCX safe text|author package requires explicit role|deferred author preview --output=<temporary>/m32-import-regression-fixed-first
+
+[WebServer] INFO:     Started server process [<pid>]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on <test-origin> (Press CTRL+C to quit)
+[WebServer] (node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 3 tests using 1 worker
+
+(node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘  1 ../../tests/e2e/document-imports.spec.ts:127:1 › real DOCX safe text stays readable for learner while original bytes require an explicit author role (8.0s)
+(node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  2 ../../tests/e2e/imports.spec.ts:254:1 › author package requires explicit role change and clears the private preview after returning to learner (3.1s)
+
+  ✓  3 ../../tests/e2e/imports.spec.ts:379:1 › deferred author preview and original responses cannot restore content after the role is lowered (3.4s)
+
+
+  1) ../../tests/e2e/document-imports.spec.ts:127:1 › real DOCX safe text stays readable for learner while original bytes require an explicit author role
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('dialog', { name: '导入', exact: true }).getByText('操作角色：作者')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('dialog', { name: '导入', exact: true }).getByText('操作角色：作者') with timeout 5000ms
+      - waiting for getByRole('dialog', { name: '导入', exact: true }).getByText('操作角色：作者')
+
+
+      172 |     // Reproduce both transition windows without changing any parser response:
+      173 |     // old preview before role acknowledgement, then no options during refresh.
+    > 174 |     await expect(dialog.getByText('操作角色：作者')).toBeVisible()
+          |                                               ^
+      175 |     await expect(dialog.getByText('预览已就绪，等待确认', { exact: true })).toBeVisible()
+      176 |     expect(roleReady).toBe(false)
+      177 |     releaseRole()
+        at <worktree>/tests/e2e/document-imports.spec.ts:174:47
+
+    Error: response.json: Test ended.
+
+      56 |   const changed = await response
+      57 |   expect(changed.status()).toBe(200)
+    > 58 |   expect((await changed.json()).role).toBe(role)
+         |                         ^
+      59 |   await expect(dialog.getByText(role === 'learner' ? '操作角色：学习者' : '操作角色：作者')).toBeVisible()
+      60 |   // The previous role can still display "preview ready" while its POST is in
+      61 |   // flight. Wait for that role's refresh to finish before snapshotting options.
+        at changeRole (<worktree>/tests/e2e/document-imports.spec.ts:58:25)
+
+    Error Context: ../../../m32-import-regression-fixed-first/document-imports-real-DOCX-54907-ire-an-explicit-author-role/error-context.md
+
+  1 failed
+    ../../tests/e2e/document-imports.spec.ts:127:1 › real DOCX safe text stays readable for learner while original bytes require an explicit author role
+  2 passed (17.0s)

@@ -7,9 +7,9 @@ export function readLocal(key: string): string | null { try { return localStorag
 export function writeLocal(key: string, value: string): boolean { try { localStorage.setItem(key, value); return true } catch { return false } }
 export function removeLocal(key: string): boolean { try { localStorage.removeItem(key); return true } catch { return false } }
 export const pendingKey = (workspace: string) => `${prefix}.${workspace}.pending-ui.${clientId}.v1`
-export type PendingSnapshot = { key: string; session: Session; base: Session | null }
-export function decodePending(text: string | null): { session: Session; base: Session | null } | null {
-  try { const value = JSON.parse(text ?? 'null'); const session = value?.session ?? value; if (!session || !Number.isInteger(session.revision) || !Array.isArray(session.tabs)) return null; const base = value?.base; return { session, base: base && Number.isInteger(base.revision) && Array.isArray(base.tabs) ? base : null } } catch { return null }
+export type PendingSnapshot = { key: string; session: Session; base: Session | null; etag: string | null }
+export function decodePending(text: string | null): { session: Session; base: Session | null; etag: string | null } | null {
+  try { const value = JSON.parse(text ?? 'null'); const session = value?.session ?? value; if (!session || !Number.isInteger(session.revision) || !Array.isArray(session.tabs)) return null; const base = value?.base; return { session, base: base && Number.isInteger(base.revision) && Array.isArray(base.tabs) ? base : null, etag: typeof value?.etag === 'string' ? value.etag : null } } catch { return null }
 }
 export function pendingSnapshots(workspace: string): PendingSnapshot[] {
   const snapshots: PendingSnapshot[] = []

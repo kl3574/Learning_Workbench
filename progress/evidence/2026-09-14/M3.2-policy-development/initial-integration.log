@@ -1,0 +1,1344 @@
+EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE                                      [100%]
+==================================== ERRORS ====================================
+_ ERROR at setup of test_real_author_import_creates_only_public_session_and_freezes_five_private_versions _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_real_author_import_create0')
+
+    @pytest.fixture
+    def storage(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / "data"))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_practice_sessions.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_old_question_and_solution_versions_remain_exact_after_new_content_and_answers _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_old_question_and_solution0')
+
+    @pytest.fixture
+    def storage(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / "data"))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_practice_sessions.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_missing_solution_is_frozen_unavailable_even_when_one_is_published_later _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_missing_solution_is_froze0')
+
+    @pytest.fixture
+    def storage(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / "data"))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_practice_sessions.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+__ ERROR at setup of test_full_response_snapshot_cas_replay_clear_and_restart __
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_full_response_snapshot_ca0')
+
+    @pytest.fixture
+    def storage(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / "data"))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_practice_sessions.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_response_snapshot_rejects_duplicate_and_unassigned_questions_without_mutation[duplicate] _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_response_snapshot_rejects0')
+
+    @pytest.fixture
+    def storage(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / "data"))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_practice_sessions.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_response_snapshot_rejects_duplicate_and_unassigned_questions_without_mutation[unassigned] _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_response_snapshot_rejects1')
+
+    @pytest.fixture
+    def storage(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / "data"))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_practice_sessions.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_two_real_connections_compete_for_same_response_revision_without_silent_overwrite _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_two_real_connections_comp0')
+
+    @pytest.fixture
+    def storage(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / "data"))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_practice_sessions.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_submit_freezes_saved_attempt_with_null_scores_and_no_solution_even_after_later_help _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_submit_freezes_saved_atte0')
+
+    @pytest.fixture
+    def storage(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / "data"))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_practice_sessions.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+___ ERROR at setup of test_empty_attempt_submission_is_needs_review_not_zero ___
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_empty_attempt_submission_0')
+
+    @pytest.fixture
+    def storage(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / "data"))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_practice_sessions.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_all_five_question_kinds_get_versioned_public_rules_without_private_lookup _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_all_five_question_kinds_g0')
+
+    @pytest.fixture
+    def storage(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / "data"))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_practice_sessions.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_explicit_solution_is_guarded_deduplicated_and_displays_unapproved_review_state _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_explicit_solution_is_guar0')
+
+    @pytest.fixture
+    def storage(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / "data"))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_practice_sessions.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_transaction_fault_rolls_back_all_practice_and_learning_side_effects[save] _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_transaction_fault_rolls_b0')
+
+    @pytest.fixture
+    def storage(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / "data"))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_practice_sessions.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_transaction_fault_rolls_back_all_practice_and_learning_side_effects[hint] _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_transaction_fault_rolls_b1')
+
+    @pytest.fixture
+    def storage(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / "data"))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_practice_sessions.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_transaction_fault_rolls_back_all_practice_and_learning_side_effects[solution] _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_transaction_fault_rolls_b2')
+
+    @pytest.fixture
+    def storage(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / "data"))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_practice_sessions.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_transaction_fault_rolls_back_all_practice_and_learning_side_effects[submit] _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_transaction_fault_rolls_b3')
+
+    @pytest.fixture
+    def storage(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / "data"))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_practice_sessions.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_active_independent_guard_precedes_all_queries_writes_and_private_replay[learner] _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_active_independent_guard_0')
+
+    @pytest.fixture
+    def storage(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / "data"))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_practice_sessions.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_active_independent_guard_precedes_all_queries_writes_and_private_replay[author] _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_active_independent_guard_1')
+
+    @pytest.fixture
+    def storage(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / "data"))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_practice_sessions.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_private_hash_corruption_never_falls_back_to_latest_or_leaks_into_public_session _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_private_hash_corruption_n0')
+
+    @pytest.fixture
+    def storage(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / "data"))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_practice_sessions.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+______ ERROR at setup of test_workspace_boundary_and_exact_practice_hash _______
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_workspace_boundary_and_ex0')
+
+    @pytest.fixture
+    def storage(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / "data"))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_practice_sessions.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_current_set_pagination_and_precise_historical_course_lesson_membership _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_current_set_pagination_an0')
+
+    @pytest.fixture
+    def storage(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / "data"))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_practice_sessions.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_history_set_pages_preserve_same_id_distinct_revisions_and_frozen_lesson_parents _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_history_set_pages_preserv0')
+
+    @pytest.fixture
+    def storage(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / "data"))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_practice_sessions.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_sql_guards_preserve_frozen_assignments_and_submissions _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_sql_guards_preserve_froze0')
+
+    @pytest.fixture
+    def storage(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / "data"))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_practice_sessions.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_legacy_incomplete_session_binding_is_explicitly_unavailable_instead_of_rebound _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_legacy_incomplete_session0')
+
+    @pytest.fixture
+    def storage(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / "data"))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_practice_sessions.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_real_http_bootstrap_and_reader_to_practice_roundtrip_without_private_preload _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_real_http_bootstrap_and_r0')
+
+    @pytest.fixture
+    def storage(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / "data"))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_practice_sessions.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_actual_submit_preserves_progress_and_records_exactly_one_native_event _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_actual_submit_preserves_p0')
+
+    @pytest.fixture
+    def assessment_learning_state(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / 'data'))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_assessment_learning_port.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_port_rejects_no_transaction_and_unsubmitted_attempt_without_events _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_port_rejects_no_transacti0')
+
+    @pytest.fixture
+    def assessment_learning_state(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / 'data'))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_assessment_learning_port.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_learning_failure_rolls_back_actual_submission_and_its_request _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_learning_failure_rolls_ba0')
+
+    @pytest.fixture
+    def assessment_learning_state(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / 'data'))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_assessment_learning_port.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_read_port_rejects_corrupt_event_payload_without_rewriting_history[workspace_id-workspace_other] _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_read_port_rejects_corrupt0')
+
+    @pytest.fixture
+    def assessment_learning_state(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / 'data'))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_assessment_learning_port.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_read_port_rejects_corrupt_event_payload_without_rewriting_history[event_id-event_wrong] _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_read_port_rejects_corrupt1')
+
+    @pytest.fixture
+    def assessment_learning_state(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / 'data'))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_assessment_learning_port.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_read_port_rejects_corrupt_event_payload_without_rewriting_history[actor-learner] _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_read_port_rejects_corrupt2')
+
+    @pytest.fixture
+    def assessment_learning_state(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / 'data'))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_assessment_learning_port.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_read_port_rejects_corrupt_event_payload_without_rewriting_history[origin-user_supplied_import] _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_read_port_rejects_corrupt3')
+
+    @pytest.fixture
+    def assessment_learning_state(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / 'data'))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_assessment_learning_port.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_read_port_rejects_corrupt_event_payload_without_rewriting_history[kind-grade_finalized] _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_read_port_rejects_corrupt4')
+
+    @pytest.fixture
+    def assessment_learning_state(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / 'data'))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_assessment_learning_port.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_read_port_rejects_corrupt_event_payload_without_rewriting_history[attempt_id-attempt_other] _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_read_port_rejects_corrupt5')
+
+    @pytest.fixture
+    def assessment_learning_state(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / 'data'))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_assessment_learning_port.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_read_port_rejects_corrupt_event_payload_without_rewriting_history[occurred_at-2020-01-01T00:00:00Z] _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_read_port_rejects_corrupt6')
+
+    @pytest.fixture
+    def assessment_learning_state(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / 'data'))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_assessment_learning_port.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+_ ERROR at setup of test_new_active_independent_blocks_old_event_replay_validation _
+
+tmp_path = PosixPath('<TEMP_TEST_ROOT>/pytest-123/test_new_active_independent_bl0')
+
+    @pytest.fixture
+    def assessment_learning_state(tmp_path):
+        database = Database(Settings(data_dir=tmp_path / 'data'))
+>       workspace = database.initialize()
+                    ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_assessment_learning_port.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>
+
+    def initialize(self) -> str:
+        self.settings.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.settings.data_dir, 0o700)
+        if not self.path.exists():
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            os.close(descriptor)
+        os.chmod(self.path, 0o600)
+        with self.transaction() as connection:
+            pending = self.pending_migrations(connection)
+            has_tables = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' LIMIT 1").fetchone()
+            if pending and has_tables:
+                # A separate reader snapshots committed WAL while this writer lock excludes mutation.
+                self.online_backup()
+            for path in pending:
+                statement = ""
+                for line in path.read_text(encoding="utf-8").splitlines(keepends=True):
+                    statement += line
+                    if sqlite3.complete_statement(statement):
+>                       connection.execute(statement)
+E                       sqlite3.OperationalError: Cannot add a UNIQUE column
+
+services/api/app/infrastructure/database.py:122: OperationalError
+=============================== warnings summary ===============================
+../..<PROJECT_ROOT>/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <PROJECT_ROOT>/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../..<PROJECT_ROOT>/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <PROJECT_ROOT>/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+ERROR tests/integration/test_practice_sessions.py::test_real_author_import_creates_only_public_session_and_freezes_five_private_versions
+ERROR tests/integration/test_practice_sessions.py::test_old_question_and_solution_versions_remain_exact_after_new_content_and_answers
+ERROR tests/integration/test_practice_sessions.py::test_missing_solution_is_frozen_unavailable_even_when_one_is_published_later
+ERROR tests/integration/test_practice_sessions.py::test_full_response_snapshot_cas_replay_clear_and_restart
+ERROR tests/integration/test_practice_sessions.py::test_response_snapshot_rejects_duplicate_and_unassigned_questions_without_mutation[duplicate]
+ERROR tests/integration/test_practice_sessions.py::test_response_snapshot_rejects_duplicate_and_unassigned_questions_without_mutation[unassigned]
+ERROR tests/integration/test_practice_sessions.py::test_two_real_connections_compete_for_same_response_revision_without_silent_overwrite
+ERROR tests/integration/test_practice_sessions.py::test_submit_freezes_saved_attempt_with_null_scores_and_no_solution_even_after_later_help
+ERROR tests/integration/test_practice_sessions.py::test_empty_attempt_submission_is_needs_review_not_zero
+ERROR tests/integration/test_practice_sessions.py::test_all_five_question_kinds_get_versioned_public_rules_without_private_lookup
+ERROR tests/integration/test_practice_sessions.py::test_explicit_solution_is_guarded_deduplicated_and_displays_unapproved_review_state
+ERROR tests/integration/test_practice_sessions.py::test_transaction_fault_rolls_back_all_practice_and_learning_side_effects[save]
+ERROR tests/integration/test_practice_sessions.py::test_transaction_fault_rolls_back_all_practice_and_learning_side_effects[hint]
+ERROR tests/integration/test_practice_sessions.py::test_transaction_fault_rolls_back_all_practice_and_learning_side_effects[solution]
+ERROR tests/integration/test_practice_sessions.py::test_transaction_fault_rolls_back_all_practice_and_learning_side_effects[submit]
+ERROR tests/integration/test_practice_sessions.py::test_active_independent_guard_precedes_all_queries_writes_and_private_replay[learner]
+ERROR tests/integration/test_practice_sessions.py::test_active_independent_guard_precedes_all_queries_writes_and_private_replay[author]
+ERROR tests/integration/test_practice_sessions.py::test_private_hash_corruption_never_falls_back_to_latest_or_leaks_into_public_session
+ERROR tests/integration/test_practice_sessions.py::test_workspace_boundary_and_exact_practice_hash
+ERROR tests/integration/test_practice_sessions.py::test_current_set_pagination_and_precise_historical_course_lesson_membership
+ERROR tests/integration/test_practice_sessions.py::test_history_set_pages_preserve_same_id_distinct_revisions_and_frozen_lesson_parents
+ERROR tests/integration/test_practice_sessions.py::test_sql_guards_preserve_frozen_assignments_and_submissions
+ERROR tests/integration/test_practice_sessions.py::test_legacy_incomplete_session_binding_is_explicitly_unavailable_instead_of_rebound
+ERROR tests/integration/test_practice_sessions.py::test_real_http_bootstrap_and_reader_to_practice_roundtrip_without_private_preload
+ERROR tests/integration/test_assessment_learning_port.py::test_actual_submit_preserves_progress_and_records_exactly_one_native_event
+ERROR tests/integration/test_assessment_learning_port.py::test_port_rejects_no_transaction_and_unsubmitted_attempt_without_events
+ERROR tests/integration/test_assessment_learning_port.py::test_learning_failure_rolls_back_actual_submission_and_its_request
+ERROR tests/integration/test_assessment_learning_port.py::test_read_port_rejects_corrupt_event_payload_without_rewriting_history[workspace_id-workspace_other]
+ERROR tests/integration/test_assessment_learning_port.py::test_read_port_rejects_corrupt_event_payload_without_rewriting_history[event_id-event_wrong]
+ERROR tests/integration/test_assessment_learning_port.py::test_read_port_rejects_corrupt_event_payload_without_rewriting_history[actor-learner]
+ERROR tests/integration/test_assessment_learning_port.py::test_read_port_rejects_corrupt_event_payload_without_rewriting_history[origin-user_supplied_import]
+ERROR tests/integration/test_assessment_learning_port.py::test_read_port_rejects_corrupt_event_payload_without_rewriting_history[kind-grade_finalized]
+ERROR tests/integration/test_assessment_learning_port.py::test_read_port_rejects_corrupt_event_payload_without_rewriting_history[attempt_id-attempt_other]
+ERROR tests/integration/test_assessment_learning_port.py::test_read_port_rejects_corrupt_event_payload_without_rewriting_history[occurred_at-2020-01-01T00:00:00Z]
+ERROR tests/integration/test_assessment_learning_port.py::test_new_active_independent_blocks_old_event_replay_validation
+2 warnings, 35 errors in 0.66s

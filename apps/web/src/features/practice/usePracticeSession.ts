@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { request } from '../../api/client'
+import { getSessionGeneration, request, subscribeSessionAccess } from '../../api/client'
 import type { ResponseDraft } from '../../../../../packages/contracts/generated/types'
 import type { PracticeHint, PracticeSession, PracticeSolution } from '../../../../../packages/contracts/generated/api-types'
 import { sameRef } from '../reader/target'
@@ -28,6 +28,7 @@ export function usePracticeSession(workspace: string, target: PracticeTarget & {
   const editing = useRef(false), writing = useRef(false)
   const pendingAction = useRef<{ fingerprint: string; key: string } | null>(null)
   const pending = useRef<{ revision: number; responses: ResponseDraft[]; key: string } | null>(null)
+  useEffect(() => subscribeSessionAccess(() => { setHints({}); setSolutions({}) }), [])
   const key = practiceKey(target.session_id)
   const stored = journal.records[key]
   const localConflicts = stored?.conflicts ?? []
@@ -129,19 +130,24 @@ export function usePracticeSession(workspace: string, target: PracticeTarget & {
   const mutate = async (kind: 'submit' | 'hint' | 'solution', questionId?: string, level?: 1 | 2 | 3) => {
     const base = baseline.current
     if (!active.current || !base || !commandReady || base.status === 'abandoned' || kind === 'submit' && base.status !== 'active') return
-    setBusy(true); setError(''); const owner = epoch.current
+    setBusy(true); setError(''); const owner = epoch.current, access = getSessionGeneration()
     try {
+      let receivedHint: PracticeHint | null = null, receivedSolution: PracticeSolution | null = null
       const fingerprint = JSON.stringify([base.id, base.revision, kind, questionId, level])
       if (pendingAction.current?.fingerprint !== fingerprint) pendingAction.current = { fingerprint, key: crypto.randomUUID() }
       const headers = { 'Idempotency-Key': pendingAction.current.key }
       if (kind === 'submit') await request('POST /api/v1/practice/sessions/{id}/submit', { expected_revision: base.revision }, headers, { path: { id: base.id } })
-      else if (kind === 'hint' && questionId && level) { const hint = await request('POST /api/v1/practice/sessions/{id}/hints', { question_id: questionId, expected_revision: base.revision, level }, headers, { path: { id: base.id } }); if (active.current && owner === epoch.current) setHints(old => ({ ...old, [questionId]: hint })) }
-      else if (kind === 'solution' && questionId) { const solution = await request('POST /api/v1/practice/sessions/{id}/solutions', { question_id: questionId, expected_revision: base.revision }, headers, { path: { id: base.id } }); if (active.current && owner === epoch.current) setSolutions(old => ({ ...old, [questionId]: solution })) }
+      else if (kind === 'hint' && questionId && level) { const hint = await request('POST /api/v1/practice/sessions/{id}/hints', { question_id: questionId, expected_revision: base.revision, level }, headers, { path: { id: base.id } }); receivedHint = hint }
+      else if (kind === 'solution' && questionId) { const solution = await request('POST /api/v1/practice/sessions/{id}/solutions', { question_id: questionId, expected_revision: base.revision }, headers, { path: { id: base.id } }); receivedSolution = solution }
       const remote = await read()
-      if (active.current && owner === epoch.current) { show(remote); pendingAction.current = null }
+      if (active.current && owner === epoch.current) {
+        show(remote); pendingAction.current = null
+        if (access !== getSessionGeneration()) { setHints({}); setSolutions({}); setError('访问策略已变化，旧帮助响应已收起；请按当前策略重新操作。') }
+        else { if (receivedHint && questionId) setHints(old => ({ ...old, [questionId]: receivedHint })); if (receivedSolution && questionId) setSolutions(old => ({ ...old, [questionId]: receivedSolution })) }
+      }
     } catch (reason) {
       if (!active.current || owner !== epoch.current) return
-      setError(`操作未确认完成：${message(reason)}。请重新读取状态后再明确操作。`)
+      setHints({}); setSolutions({}); setError(`操作未确认完成：${message(reason)}。请重新读取状态后再明确操作。`)
       try { const remote = await read(); if (active.current && owner === epoch.current) reconcile(remote) } catch { if (active.current && owner === epoch.current) setState('offline') }
     } finally { if (active.current && owner === epoch.current) setBusy(false) }
   }

@@ -1,0 +1,130 @@
+FFFFFF                                                                   [100%]
+=================================== FAILURES ===================================
+_ test_active_independent_keeps_metadata_roundtrip_private_selection_and_restart[learner] _
+
+prepared = (<services.api.app.infrastructure.database.Database object at 0x7be42e2a3620>, SessionIdentity(id='session_workbench_t...a9a2fea56e1ddab8'), exact_quote='本材料是原创软件验收样例', prefix='软件验收前文', suffix='软件验收后文', start_codepoint=0, end_codepoint=12))
+role = 'learner'
+
+    @pytest.mark.parametrize("role", ["learner", "author"])
+    def test_active_independent_keeps_metadata_roundtrip_private_selection_and_restart(prepared, role):
+        database, identity, fixture, assessment, selected = prepared
+        with TestClient(create_app(database.settings), base_url=database.settings.origin) as client:
+            headers = login(client, database)
+            if role == "author":
+                assert client.post("/api/v1/session/role", json={"role": role}, headers={**headers, "Idempotency-Key": "author"}).status_code == 200
+            full = client.get("/api/v1/workbench/session")
+            assert full.status_code == 200 and full.json()["tabs"][0]["context"]["selection"] is not None
+            attempt = start(prepared)
+            with database.connect() as connection:
+                before = tuple(connection.execute("SELECT revision,session_json,updated_at FROM workbench_sessions WHERE workspace_id=?", (identity.workspace_id,)).fetchone())
+            redacted = client.get("/api/v1/workbench/session")
+>           assert redacted.status_code == 200
+E           assert 409 == 200
+E            +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/integration/test_workbench_assessment_policy.py:64: AssertionError
+_ test_active_independent_keeps_metadata_roundtrip_private_selection_and_restart[author] _
+
+prepared = (<services.api.app.infrastructure.database.Database object at 0x7be42de25e50>, SessionIdentity(id='session_workbench_t...a9a2fea56e1ddab8'), exact_quote='本材料是原创软件验收样例', prefix='软件验收前文', suffix='软件验收后文', start_codepoint=0, end_codepoint=12))
+role = 'author'
+
+    @pytest.mark.parametrize("role", ["learner", "author"])
+    def test_active_independent_keeps_metadata_roundtrip_private_selection_and_restart(prepared, role):
+        database, identity, fixture, assessment, selected = prepared
+        with TestClient(create_app(database.settings), base_url=database.settings.origin) as client:
+            headers = login(client, database)
+            if role == "author":
+                assert client.post("/api/v1/session/role", json={"role": role}, headers={**headers, "Idempotency-Key": "author"}).status_code == 200
+            full = client.get("/api/v1/workbench/session")
+            assert full.status_code == 200 and full.json()["tabs"][0]["context"]["selection"] is not None
+            attempt = start(prepared)
+            with database.connect() as connection:
+                before = tuple(connection.execute("SELECT revision,session_json,updated_at FROM workbench_sessions WHERE workspace_id=?", (identity.workspace_id,)).fetchone())
+            redacted = client.get("/api/v1/workbench/session")
+>           assert redacted.status_code == 200
+E           assert 409 == 200
+E            +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/integration/test_workbench_assessment_policy.py:64: AssertionError
+___ test_late_redacted_put_cannot_clear_selection_after_policy_changes[full] ___
+
+prepared = (<services.api.app.infrastructure.database.Database object at 0x7be42c5f8d40>, SessionIdentity(id='session_workbench_t...a9a2fea56e1ddab8'), exact_quote='本材料是原创软件验收样例', prefix='软件验收前文', suffix='软件验收后文', start_codepoint=0, end_codepoint=12))
+next_state = 'full'
+
+    @pytest.mark.parametrize("next_state", ["full", "another_active"])
+    def test_late_redacted_put_cannot_clear_selection_after_policy_changes(prepared, next_state):
+        database, identity, _, assessment, selected = prepared
+        with TestClient(create_app(database.settings), base_url=database.settings.origin) as client:
+            headers = login(client, database)
+            attempt = start(prepared)
+            baseline = client.get("/api/v1/workbench/session")
+>           assert baseline.status_code == 200
+E           assert 409 == 200
+E            +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/integration/test_workbench_assessment_policy.py:99: AssertionError
+_ test_late_redacted_put_cannot_clear_selection_after_policy_changes[another_active] _
+
+prepared = (<services.api.app.infrastructure.database.Database object at 0x7be42c50ae40>, SessionIdentity(id='session_workbench_t...a9a2fea56e1ddab8'), exact_quote='本材料是原创软件验收样例', prefix='软件验收前文', suffix='软件验收后文', start_codepoint=0, end_codepoint=12))
+next_state = 'another_active'
+
+    @pytest.mark.parametrize("next_state", ["full", "another_active"])
+    def test_late_redacted_put_cannot_clear_selection_after_policy_changes(prepared, next_state):
+        database, identity, _, assessment, selected = prepared
+        with TestClient(create_app(database.settings), base_url=database.settings.origin) as client:
+            headers = login(client, database)
+            attempt = start(prepared)
+            baseline = client.get("/api/v1/workbench/session")
+>           assert baseline.status_code == 200
+E           assert 409 == 200
+E            +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/integration/test_workbench_assessment_policy.py:99: AssertionError
+_ test_legacy_missing_policy_token_rejects_ambiguous_clear_but_fresh_full_token_allows_explicit_clear _
+
+prepared = (<services.api.app.infrastructure.database.Database object at 0x7be42dfc48c0>, SessionIdentity(id='session_workbench_t...a9a2fea56e1ddab8'), exact_quote='本材料是原创软件验收样例', prefix='软件验收前文', suffix='软件验收后文', start_codepoint=0, end_codepoint=12))
+
+    def test_legacy_missing_policy_token_rejects_ambiguous_clear_but_fresh_full_token_allows_explicit_clear(prepared):
+        database, identity, _, assessment, _ = prepared
+        with TestClient(create_app(database.settings), base_url=database.settings.origin) as client:
+            headers = login(client, database)
+            attempt = start(prepared)
+            baseline = client.get("/api/v1/workbench/session")
+>           assert baseline.status_code == 200
+E           assert 409 == 200
+E            +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/integration/test_workbench_assessment_policy.py:119: AssertionError
+_ test_changed_context_never_inherits_old_selection_and_other_workspace_stays_separate _
+
+prepared = (<services.api.app.infrastructure.database.Database object at 0x7be42c55e360>, SessionIdentity(id='session_workbench_t...a9a2fea56e1ddab8'), exact_quote='本材料是原创软件验收样例', prefix='软件验收前文', suffix='软件验收后文', start_codepoint=0, end_codepoint=12))
+
+    def test_changed_context_never_inherits_old_selection_and_other_workspace_stays_separate(prepared):
+        database, identity, fixture, _, selected = prepared
+        with TestClient(create_app(database.settings), base_url=database.settings.origin) as client:
+            headers = login(client, database)
+            start(prepared)
+            baseline = client.get("/api/v1/workbench/session")
+>           assert baseline.status_code == 200
+E           assert 409 == 200
+E            +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/integration/test_workbench_assessment_policy.py:134: AssertionError
+=============================== warnings summary ===============================
+../..<runtime-venv>/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <runtime-venv>/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../..<runtime-venv>/lib/python3.12/site-packages/starlette/testclient.py:53
+  <runtime-venv>/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_workbench_assessment_policy.py::test_active_independent_keeps_metadata_roundtrip_private_selection_and_restart[learner]
+FAILED tests/integration/test_workbench_assessment_policy.py::test_active_independent_keeps_metadata_roundtrip_private_selection_and_restart[author]
+FAILED tests/integration/test_workbench_assessment_policy.py::test_late_redacted_put_cannot_clear_selection_after_policy_changes[full]
+FAILED tests/integration/test_workbench_assessment_policy.py::test_late_redacted_put_cannot_clear_selection_after_policy_changes[another_active]
+FAILED tests/integration/test_workbench_assessment_policy.py::test_legacy_missing_policy_token_rejects_ambiguous_clear_but_fresh_full_token_allows_explicit_clear
+FAILED tests/integration/test_workbench_assessment_policy.py::test_changed_context_never_inherits_old_selection_and_other_workspace_stays_separate
+6 failed, 2 warnings in 2.08s
