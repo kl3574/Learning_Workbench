@@ -1,0 +1,207 @@
+{
+  "schema_version": 1,
+  "review_id": "M2.1-independent-review-frozen-concept-dependencies",
+  "status": "PASS_NARROW_RETEST",
+  "sole_spec": {
+    "path": "PRODUCT_DESIGN.md",
+    "sections": [
+      "9.1",
+      "20.1"
+    ]
+  },
+  "scope": "Independent rerun of the one observed concept-version drift failure; this does not accept the whole M2.1 milestone or M2.",
+  "historical_failure": {
+    "status": "FAIL_OBSERVED_BEFORE_FIX",
+    "method": "Inline Python against a fresh temporary native SQLite database, synthetic objects only",
+    "sequence": [
+      "Publish A1 with prerequisite ID B, B1 without prerequisites, and course1 with an exact A1 ContentRef.",
+      "Verify the persisted A1 concept dependency is B1.",
+      "Publish A2 without prerequisites and B2 with prerequisite ID A in one transaction.",
+      "Read course1 successfully, then try publishing course2 with the same exact content references."
+    ],
+    "stdout": "original_a1_dependency [('concept_b_probe', 1)]\nold_course_readable True\nrepublish_old_exact_refs 422 SCHEMA_INVALID\n",
+    "cause": "An already published owner resolved prerequisite IDs against current versions; course closure mixed A1 with B2 and rejected a synthetic cycle instead of preserving A1 to B1.",
+    "source_sha256": null,
+    "source_hash_limitation": "The original failing inline run did not record a source digest; a historical source hash is not reconstructed or asserted."
+  },
+  "fix_observed": {
+    "repository": "services/api/app/infrastructure/content_repository.py",
+    "service": "services/api/app/application/content.py",
+    "behavior": "Published owners load the exact concept revision recorded in object_dependencies; only new candidates resolve current concepts. Course closure follows each selected owner frozen dependency."
+  },
+  "rerun": {
+    "working_directory": ".",
+    "command": [
+      ".venv/bin/python",
+      "-B",
+      "progress/evidence/2026-09-14/M2.1-independent-review-probe.py"
+    ],
+    "probe": "progress/evidence/2026-09-14/M2.1-independent-review-probe.py",
+    "exit_code": 0,
+    "stdout": {
+      "concept_current_revisions": {
+        "concept_a_probe": 2,
+        "concept_b_probe": 2
+      },
+      "course1_concept_dependencies": [
+        [
+          "concept_a_probe",
+          1
+        ],
+        [
+          "concept_b_probe",
+          1
+        ]
+      ],
+      "course2_concept_dependencies": [
+        [
+          "concept_a_probe",
+          1
+        ],
+        [
+          "concept_b_probe",
+          1
+        ]
+      ],
+      "course_concept_edges": [
+        [
+          1,
+          "concept_b_probe",
+          "concept_a_probe"
+        ],
+        [
+          2,
+          "concept_b_probe",
+          "concept_a_probe"
+        ]
+      ],
+      "data": "Synthetic objects in a fresh temporary native SQLite workspace, deleted after the run",
+      "executed_at_utc": "2026-09-14T10:17:51.510483Z",
+      "foreign_key_check": [],
+      "old_course_and_body_readable": true,
+      "original_a1_dependency": [
+        [
+          "concept_b_probe",
+          1
+        ]
+      ],
+      "python_version": "3.12.13",
+      "republish_old_exact_refs": "accepted",
+      "scope": "Only the frozen concept dependency regression; not M2.1 or M2 acceptance",
+      "source_hash_algorithm": "SHA-256 of each listed relative path's exact file bytes",
+      "source_sha256": {
+        "PRODUCT_DESIGN.md": "ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c",
+        "migrations/0001_baseline.sql": "d887f94890669642e9a3c421109efac1373ebc100858ea885d34882ba7c921a2",
+        "packages/contracts/canonical.py": "01958e5165fdb08c0433b2db003be44211879b96ab75eca3710aa3d3a014ccac",
+        "packages/contracts/domain_models.py": "5b8676e955bc1f58c662f14cf3a3965e6417f857324090b6481add41ac0993e1",
+        "packages/contracts/validation.py": "39f718995106505b3f0c31d3c9454d1e5216957f74d8d52c5e2abd4f2b2ab30a",
+        "progress/evidence/2026-09-14/M2.1-independent-review-probe.py": "f51d273d55d7bfb84783c48ebe57e01749763e06b40e13559c0ce88f7d106bd1",
+        "services/api/app/application/content.py": "990801efce2808d58670afb6c0824af1ab152433325cb847c8785290cfbaa75c",
+        "services/api/app/content_dto.py": "d65130b0e0e6439a1b691afe5bc70e214cb26416012d28dc71d21023ebdb7a59",
+        "services/api/app/infrastructure/blobs.py": "c51c0406948c21241e7d93e3944b72aba4c04f3d07d6571f7be13553ca939ba7",
+        "services/api/app/infrastructure/config.py": "bf74a0391eabd66fbb8fad9123debab381113c4321d5ab42d60e1c68df9d677e",
+        "services/api/app/infrastructure/content_repository.py": "ac0c8d97667714c03dd0c845b05c3503f3341ca2bd3c2bcde093ac4f6c0acc36",
+        "services/api/app/infrastructure/database.py": "44375a9bd4a3be1982de7b38bfa1c4a682e4b09e5526e4d7a0fb3cea4bf85cad",
+        "services/api/app/infrastructure/security.py": "2c11c523b57febf5ac0505c6f70466d4fd7ce4f93285c0e5e3abec0e2bc466ec"
+      },
+      "source_unchanged_during_run": true,
+      "sqlite_version": "3.53.1",
+      "status": "PASS"
+    },
+    "stderr": ""
+  },
+  "remaining_scope": "HTTP authentication, private blob reuse, concurrent guard behavior, fault injection, import UI, notes, providers and broader milestone acceptance are outside this rerun.",
+  "initial_probe_run_before_lint_correction": {
+    "working_directory": ".",
+    "command": [
+      ".venv/bin/python",
+      "-B",
+      "progress/evidence/2026-09-14/M2.1-independent-review-probe.py"
+    ],
+    "probe": "progress/evidence/2026-09-14/M2.1-independent-review-probe.py",
+    "exit_code": 0,
+    "stdout": {
+      "concept_current_revisions": {
+        "concept_a_probe": 2,
+        "concept_b_probe": 2
+      },
+      "course1_concept_dependencies": [
+        [
+          "concept_a_probe",
+          1
+        ],
+        [
+          "concept_b_probe",
+          1
+        ]
+      ],
+      "course2_concept_dependencies": [
+        [
+          "concept_a_probe",
+          1
+        ],
+        [
+          "concept_b_probe",
+          1
+        ]
+      ],
+      "course_concept_edges": [
+        [
+          1,
+          "concept_b_probe",
+          "concept_a_probe"
+        ],
+        [
+          2,
+          "concept_b_probe",
+          "concept_a_probe"
+        ]
+      ],
+      "data": "Synthetic objects in a fresh temporary native SQLite workspace, deleted after the run",
+      "executed_at_utc": "2026-09-14T10:17:15.337884Z",
+      "foreign_key_check": [],
+      "old_course_and_body_readable": true,
+      "original_a1_dependency": [
+        [
+          "concept_b_probe",
+          1
+        ]
+      ],
+      "python_version": "3.12.13",
+      "republish_old_exact_refs": "accepted",
+      "scope": "Only the frozen concept dependency regression; not M2.1 or M2 acceptance",
+      "source_hash_algorithm": "SHA-256 of each listed relative path's exact file bytes",
+      "source_sha256": {
+        "PRODUCT_DESIGN.md": "ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c",
+        "migrations/0001_baseline.sql": "d887f94890669642e9a3c421109efac1373ebc100858ea885d34882ba7c921a2",
+        "packages/contracts/canonical.py": "01958e5165fdb08c0433b2db003be44211879b96ab75eca3710aa3d3a014ccac",
+        "packages/contracts/domain_models.py": "5b8676e955bc1f58c662f14cf3a3965e6417f857324090b6481add41ac0993e1",
+        "packages/contracts/validation.py": "39f718995106505b3f0c31d3c9454d1e5216957f74d8d52c5e2abd4f2b2ab30a",
+        "progress/evidence/2026-09-14/M2.1-independent-review-probe.py": "e9c6b2463957da90178dcec33679b58afeb7333dca232d8a27e45e28279323a5",
+        "services/api/app/application/content.py": "990801efce2808d58670afb6c0824af1ab152433325cb847c8785290cfbaa75c",
+        "services/api/app/content_dto.py": "d65130b0e0e6439a1b691afe5bc70e214cb26416012d28dc71d21023ebdb7a59",
+        "services/api/app/infrastructure/blobs.py": "c51c0406948c21241e7d93e3944b72aba4c04f3d07d6571f7be13553ca939ba7",
+        "services/api/app/infrastructure/config.py": "bf74a0391eabd66fbb8fad9123debab381113c4321d5ab42d60e1c68df9d677e",
+        "services/api/app/infrastructure/content_repository.py": "ac0c8d97667714c03dd0c845b05c3503f3341ca2bd3c2bcde093ac4f6c0acc36",
+        "services/api/app/infrastructure/database.py": "44375a9bd4a3be1982de7b38bfa1c4a682e4b09e5526e4d7a0fb3cea4bf85cad",
+        "services/api/app/infrastructure/security.py": "2c11c523b57febf5ac0505c6f70466d4fd7ce4f93285c0e5e3abec0e2bc466ec"
+      },
+      "source_unchanged_during_run": true,
+      "sqlite_version": "3.53.1",
+      "status": "PASS"
+    },
+    "stderr": ""
+  },
+  "probe_lint_correction": {
+    "original_result": "Parent full-repository lint caught five E402 import-order findings in the standalone evidence probe; parent retains the first lint failure receipt.",
+    "change": "Added explicit noqa E402 annotations with a repository-path bootstrap explanation, following existing standalone scripts. No product source was changed.",
+    "focused_lint_command": [
+      ".venv/bin/ruff",
+      "check",
+      "progress/evidence/2026-09-14/M2.1-independent-review-probe.py"
+    ],
+    "focused_lint_exit_code": 0,
+    "focused_lint_stdout": "All checks passed!\n",
+    "full_repository_lint": "Parent rerun pending; this probe records only its focused lint result."
+  }
+}
