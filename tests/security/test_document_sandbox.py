@@ -161,3 +161,35 @@ def test_abrupt_api_death_kills_daemon_reaper_and_parser(tmp_path):
                 pass
         receive.close()
         parent.close()
+
+
+def test_real_dynamic_extension_dependencies_keep_loader_sonames(tmp_path, monkeypatch):
+    """uv's built-in modules must not conceal missing setup-python shared-library aliases."""
+    import importlib.util
+    import types
+
+    original_find = importlib.util.find_spec
+    spec = original_find("_bz2")
+    assert spec is not None
+    if spec.origin in {None, "built-in", "frozen"}:
+        # A trusted system CPython supplies a real shared extension on uv runtimes.
+        probe = subprocess.run(["/usr/bin/python3", "-I", "-S", "-c",
+                                "import importlib.util;print(importlib.util.find_spec('_bz2').origin)"],
+                               capture_output=True, text=True, check=True, timeout=5)
+        extension = Path(probe.stdout.strip()).resolve(strict=True)
+    else:
+        extension = Path(spec.origin).resolve(strict=True)
+    assert extension.is_file() and extension.suffix == ".so"
+    monkeypatch.setattr(sandbox.importlib.util, "find_spec",
+                        lambda name: types.SimpleNamespace(origin=str(extension)) if name == "_bz2" else original_find(name))
+    real_mounts = sandbox._runtime_mounts
+    real_mounts.cache_clear()
+    try:
+        # This executes the actual ldd discovery and actual loader in the sandbox;
+        # only the extension's trusted discovery location differs on uv CPython.
+        mounts = real_mounts()
+        monkeypatch.setattr(sandbox, "_runtime_mounts", lambda: (*mounts, (extension, "/runtime/test-bz2.so")))
+        output = run_program(tmp_path, "import ctypes,os\ntry:\n ctypes.CDLL('/runtime/test-bz2.so',mode=os.RTLD_LAZY)\n print('LOADED')\nexcept OSError as error:print(str(error))\n")
+        assert output == b"LOADED\n"
+    finally:
+        real_mounts.cache_clear()

@@ -113,7 +113,7 @@ def _runtime_mounts() -> tuple[tuple[Path, str], ...]:
     executable = _regular(Path(sys.executable))
     stdlib = Path(sysconfig.get_path("stdlib")).resolve(strict=True)
     mounts: list[tuple[Path, str]] = [(executable, "/runtime/bin/python3.12"), (stdlib, "/runtime/lib/python3.12")]
-    libraries: set[Path] = set()
+    libraries: dict[str, Path] = {}
     # uv's standalone build has built-in extensions; setup-python uses .so files.
     binaries = [executable]
     for name in ("_io", "_json", "_struct", "_datetime", "_bisect", "_heapq", "_random", "_sha2", "_hashlib",
@@ -129,18 +129,31 @@ def _runtime_mounts() -> tuple[tuple[Path, str], ...]:
                                 env={"PATH": "/usr/bin:/bin", "LANG": "C"})
         if output.returncode != 0 or b"not found" in output.stdout:
             raise DocumentSandboxError("EXTRACTION_ENVIRONMENT_UNAVAILABLE")
-        for value in re.findall(rb"(/[^\s()]+)", output.stdout):
-            libraries.add(_regular(Path(os.fsdecode(value))))
-    names: dict[str, Path] = {}
-    for library in sorted(libraries):
-        if library.name in names and names[library.name] != library:
-            raise DocumentSandboxError("EXTRACTION_ENVIRONMENT_UNAVAILABLE")
-        names[library.name] = library
-        mounts.append((library, f"/runtime/lib/{library.name}"))
+        for line in output.stdout.splitlines():
+            fields = line.split(b"=>", 1)
+            match = re.search(rb"(/[^\s()]+)", fields[-1])
+            if match is None:
+                continue  # linux-vdso has no backing file.
+            original = Path(os.fsdecode(match[1]))
+            library = _regular(original)
+            # Resolve the trusted source without losing the ELF loader's SONAME.
+            # e.g. libbz2.so.1.0 resolves to libbz2.so.1.0.4 on Ubuntu.
+            aliases = {original.name}
+            if len(fields) == 2:
+                aliases.add(os.fsdecode(fields[0].strip()))
+            for alias in aliases:
+                if (not alias or alias in {".", ".."} or Path(alias).name != alias
+                        or any(character.isspace() for character in alias)):
+                    raise DocumentSandboxError("EXTRACTION_ENVIRONMENT_UNAVAILABLE")
+                if alias in libraries and libraries[alias] != library:
+                    raise DocumentSandboxError("EXTRACTION_ENVIRONMENT_UNAVAILABLE")
+                libraries[alias] = library
+    for alias, library in sorted(libraries.items()):
+        mounts.append((library, f"/runtime/lib/{alias}"))
     # The dynamic linker path is embedded in the ELF interpreter.
-    for alias in (Path("/lib64/ld-linux-x86-64.so.2"), Path("/lib/ld-linux-aarch64.so.1")):
-        if alias.is_file():
-            mounts.append((_regular(alias), str(alias)))
+    for loader_path in (Path("/lib64/ld-linux-x86-64.so.2"), Path("/lib/ld-linux-aarch64.so.1")):
+        if loader_path.is_file():
+            mounts.append((_regular(loader_path), str(loader_path)))
     for package in ("pypdf", "defusedxml"):
         spec = importlib.util.find_spec(package)
         if spec is None or spec.origin is None:
