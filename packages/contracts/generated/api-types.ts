@@ -2,6 +2,23 @@
 // spec_sha256: ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c
 // JSON Schema is the type source; runtime semantic checks remain required.
 
+export type AssessmentBlueprint = {
+  "schema_version"?: "3.0.0";
+  "id": string;
+  "revision": number;
+  "entity"?: "assessment";
+  "title": string;
+  "question_refs": Array<ContentRef>;
+  "allowed_modes": Array<"independent" | "assisted" | "open_book">;
+  "time_limit_seconds"?: (number | null);
+};
+
+export type BlockDraftPayload = {
+  "metadata": ContentBlock;
+  "body_markdown": string;
+  "source_id": string;
+};
+
 export type BootstrapRequest = {
   "one_time_code": string;
 };
@@ -10,6 +27,28 @@ export type BootstrapResponse = {
   "workspace_id": string;
   "csrf_token": string;
   "expires_at": string;
+};
+
+export type CandidateSummary = {
+  "course_title": string;
+  "lesson_count": number;
+  "block_count": number;
+  "unresolved_refs": Array<string>;
+};
+
+export type Choice = {
+  "id": string;
+  "text_markdown": string;
+};
+
+export type Concept = {
+  "schema_version"?: "3.0.0";
+  "id": string;
+  "revision": number;
+  "entity"?: "concept";
+  "title": string;
+  "prerequisite_ids"?: Array<string>;
+  "skill_dimensions"?: Array<"recall" | "explain" | "compute" | "derive" | "transfer">;
 };
 
 export type ContentBlock = {
@@ -62,6 +101,15 @@ export type CourseSummary = {
   "review_state"?: "unreviewed";
 };
 
+export type DownloadArtifact = {
+  "artifact_id": string;
+  "filename": string;
+  "size": number;
+  "sha256": string;
+  "media_type": string;
+  "download_path": string;
+};
+
 export type EmptyRequest = Record<string, never>;
 
 export type ErrorDetail = {
@@ -79,6 +127,92 @@ export type ErrorEnvelope = {
 export type HealthResponse = {
   "status"?: "ok";
   "build_version"?: string;
+};
+
+export type ImportCancelRequest = {
+  "expected_input_sha256": string;
+};
+
+export type ImportCancelResponse = {
+  "id": string;
+  "status"?: "cancelled";
+};
+
+export type ImportCommitRequest = {
+  "expected_input_sha256": string;
+  "accepted_warning_codes": Array<string>;
+  "id_mapping": Array<ImportIdMapping>;
+};
+
+export type ImportCommitResponse = {
+  "course_refs": Array<ContentRef>;
+  "migration_receipt_id": string;
+};
+
+export type ImportDraftSnapshot = {
+  "id": string;
+  "kind": "course" | "lesson" | "block" | "concept" | "route" | "question" | "practice_set" | "assessment" | "note";
+  "revision": number;
+  "base_ref": (ContentRef | null);
+  "state": "draft" | "in_review" | "approved" | "needs_changes" | "published" | "cancelled";
+  "candidate_sha256": string;
+  "payload": (BlockDraftPayload | Course | Lesson | Concept | Route | QuestionPublic | PracticeSet | AssessmentBlueprint | Note);
+  "warnings": Array<Warning>;
+};
+
+export type ImportIdMapping = {
+  "old_id": string;
+  "new_id": string;
+};
+
+export type ImportPreview = {
+  "id": string;
+  "status": "staged" | "parsing" | "preview_ready" | "committed" | "cancelled" | "failed";
+  "input_sha256": string;
+  "warnings": Array<Warning>;
+  "candidate_summary": CandidateSummary;
+  "preview_refs": Array<string>;
+};
+
+export type ImportStaged = {
+  "import_id": string;
+  "job": JobRef;
+  "input_sha256": string;
+};
+
+export type ImportUpload = {
+  "file": Blob;
+  "kind": "auto" | "markdown" | "text" | "html" | "pdf" | "docx" | "learnpack";
+  "target_course_id"?: (string | null);
+};
+
+export type JobCancelRequest = {
+  "expected_revision": number;
+};
+
+export type JobProgress = {
+  "completed": number;
+  "total": (number | null);
+  "label": string;
+};
+
+export type JobRef = {
+  "id": string;
+  "status": "queued" | "running" | "awaiting_approval" | "completed" | "failed" | "cancelled";
+};
+
+export type JobSnapshot = {
+  "id": string;
+  "workspace_id": string;
+  "kind": string;
+  "status": "queued" | "running" | "awaiting_approval" | "completed" | "failed" | "cancelled";
+  "revision": number;
+  "created_at": string;
+  "updated_at": string;
+  "progress": JobProgress;
+  "result_refs": Array<ContentRef>;
+  "warnings": Array<Warning>;
+  "error": (ErrorDetail | null);
 };
 
 export type Lesson = {
@@ -103,6 +237,17 @@ export type MutationAck = {
   "applied": boolean;
 };
 
+export type Note = {
+  "schema_version"?: "3.0.0";
+  "id": string;
+  "revision": number;
+  "entity"?: "note";
+  "workspace_id": string;
+  "anchor": Selection;
+  "markdown": string;
+  "anchor_state"?: "exact" | "stale" | "unresolved";
+};
+
 export type PageCourse = {
   "items": Array<CourseSummary>;
   "next_cursor": (string | null);
@@ -111,6 +256,17 @@ export type PageCourse = {
 export type PageRevision = {
   "items": Array<RevisionSummary>;
   "next_cursor": (string | null);
+};
+
+export type PracticeSet = {
+  "schema_version"?: "3.0.0";
+  "id": string;
+  "revision": number;
+  "entity"?: "practice_set";
+  "title": string;
+  "lesson_ref": ContentRef;
+  "question_refs": Array<ContentRef>;
+  "feedback_policy"?: "on_submit_or_reveal";
 };
 
 export type PreferencesPatch = {
@@ -123,6 +279,21 @@ export type PreferencesPatch = {
 export type PreferencesRequest = {
   "expected_revision": number;
   "preferences": PreferencesPatch;
+};
+
+export type QuestionPublic = {
+  "schema_version"?: "3.0.0";
+  "id": string;
+  "revision": number;
+  "entity"?: "question";
+  "kind": "single_choice" | "text_blank" | "numeric" | "expression" | "calculation";
+  "stem_markdown": string;
+  "choices"?: Array<Choice>;
+  "concept_ids": Array<string>;
+  "skill": "recall" | "explain" | "compute" | "derive" | "transfer";
+  "exposure_group": string;
+  "max_score"?: number;
+  "input_instructions": string;
 };
 
 export type ReadinessResponse = {
@@ -142,6 +313,24 @@ export type RevisionSummary = {
 
 export type RoleRequest = {
   "role": "learner" | "author";
+};
+
+export type Route = {
+  "schema_version"?: "3.0.0";
+  "id": string;
+  "revision": number;
+  "entity"?: "route";
+  "title": string;
+  "goal": string;
+  "steps": Array<RouteStep>;
+};
+
+export type RouteStep = {
+  "id": string;
+  "title": string;
+  "target": ContentRef;
+  "requires_steps"?: Array<string>;
+  "completion_rule": "manual" | "read" | "practice_submitted" | "assessment_submitted";
 };
 
 export type SavedTab = {
@@ -167,12 +356,30 @@ export type SessionResponse = {
   "active_independent_attempt_id": (string | null);
 };
 
+export type SourceResponse = {
+  "id": string;
+  "media_type": string;
+  "size": number;
+  "sha256": string;
+  "rights": string;
+  "parser_version": (string | null);
+  "warnings": Array<Warning>;
+  "artifact": DownloadArtifact;
+};
+
 export type ViewContext = {
   "view_kind": "route" | "lesson" | "worked_example" | "practice" | "assessment_help" | "assessment_review" | "authoring";
   "active_ref": ContentRef;
   "attached_refs"?: Array<ContentRef>;
   "selection"?: (Selection | null);
   "attempt_id"?: (string | null);
+};
+
+export type Warning = {
+  "code": string;
+  "message": string;
+  "locator"?: (string | null);
+  "severity": "info" | "warning" | "error";
 };
 
 export type WorkbenchSaveRequest = {

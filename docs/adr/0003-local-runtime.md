@@ -8,7 +8,7 @@
 
 `services/api/app/main.py` 只组装应用。`interfaces/` 负责 Host/Origin、HTTP、严格 DTO、安全 cookie 和脱敏错误；`application/` 按 Session、Workspace、Workbench、Runtime 分开实现用例；`infrastructure/` 提供 SQLite、迁移和本机凭证适配。Workspace 通过 `LayoutReader` 读取 Workbench 布局，不跨模块写 UI session 表。原 `config`、`database`、`security` 导入保留稳定 facade，供 launcher 和备份脚本使用。领域模型仅从规范提取，未手改。
 
-当前仅注册 `/health`、本机会话 bootstrap/read/role/logout、readiness、workspace/preferences、workbench/session 的实际处理器。未注册导入、评分、模型或队列的假成功接口。没有运行中的可靠 worker，所以 `worker_ready=false`。提供商配置仅本地查询元数据，不联网、不验证密钥，也不表示真实提供商已经通过验收。
+M0 时仅注册 `/health`、本机会话 bootstrap/read/role/logout、readiness、workspace/preferences、workbench/session 的实际处理器，当时没有运行中的 worker，`worker_ready=false`。M2.1 增加真实内容读取，M2.2 增加导入与进程解析任务；readiness 现依据实际 worker 线程存活状态报告。具体范围分别见 ADR 0005、0006。提供商配置仍仅本地查询元数据，不联网、不验证密钥，也不表示真实提供商已经通过验收。
 
 正文 20.4 要求 readiness 报告提供商是否配置，附录 A 的字段表省略此项。按正文与附录的共同约束补充布尔字段 `providers_configured`；其余字段保持附录名称。这是缺失的机器投影补全，不改变产品需求。
 
@@ -60,4 +60,4 @@ uv run --frozen ruff check services/api tests/security tests/integration tests/u
 
 测试使用临时真实 SQLite 文件，覆盖 Host/Origin/CSRF、并发一次性 bootstrap、过期/撤销、严格字段/脱敏、角色幂等、workspace guard、跨应用重启、Workbench CAS、迁移哈希/回滚、WAL 一致性在线备份和目标连接关闭。具体数量和最终命令输出以 `progress/` 的本次回执为准。HTTPX/Starlette 测试客户端有上游弃用告警，实际执行成功不等于没有告警。
 
-未运行：真实 worker 领取/租约、提供商连接、付费调用、完整备份恢复、评分隔离闭环。它们不因本次基础设施测试通过而标为完成；后续任务需追加真实业务和独立验收。
+M0 当时未运行：真实 worker 领取/租约、提供商连接、付费调用、完整备份恢复、评分隔离闭环。后续导入 worker 的测试见 M2.2 单独回执；其他项目仍须相应业务和独立验收，不能由基础设施测试替代。

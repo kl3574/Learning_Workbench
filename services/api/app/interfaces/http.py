@@ -1,6 +1,6 @@
 """Strict HTTP projections of implemented application ports."""
 
-from typing import Annotated
+from typing import Annotated, Callable
 
 from fastapi import APIRouter, Depends, Header, Request, Response, Security
 from fastapi.security import APIKeyCookie
@@ -50,13 +50,13 @@ def verify_write(request: Request, origin: Annotated[str, Header(alias="Origin")
     check_csrf(request, request.state.identity)
 
 
-def create_router(settings: Settings, database: Database) -> APIRouter:
+def create_router(settings: Settings, database: Database, worker_ready: Callable[[], bool] | None = None) -> APIRouter:
     router = APIRouter(dependencies=[Depends(reject_query_fields)])
     protected = APIRouter(prefix="/api/v1", dependencies=[Depends(current_identity)])
     workbench_service = WorkbenchService(database)
     workspace_service = WorkspaceService(database, workbench_service)
     session_service = SessionService(database)
-    runtime_service = RuntimeService(database)
+    runtime_service = RuntimeService(database, worker_ready)
 
     @router.get("/health", response_model=HealthResponse, tags=["runtime"])
     def health() -> HealthResponse:
