@@ -1,0 +1,100 @@
+{
+  "schema": "M2.3-browser-role-race-review-v1",
+  "scope": "Only document-imports.spec.ts; real upload, parser worker, role POST and candidate GETs; no full-suite acceptance claim.",
+  "head": "4b4f98ff84b01627cf386f433dfe8975ae3fdbde",
+  "cause": "The helper accepted the old-role preview_ready DOM, then role acknowledgement cleared that projection before evaluateAll snapshot of options. The zero-length snapshot was mistaken for absent parsed content.",
+  "red_observation": {
+    "exact_error": "No actual candidate contained the expected original marker: DOCX paragraph alpha",
+    "role": "learner",
+    "DOM_selector_count": 0,
+    "real_GET_imports_status": 200,
+    "real_preview_refs_count": 7,
+    "after_refresh_original_paragraph_recovered": true
+  },
+  "barriers": "The test gates only delivery of the actual POST role response and the subsequent GET imports refresh. route.fetch executes the real role mutation; responses are never synthesized and parsing is not mocked.",
+  "fix": "Await the actual successful role response, matching rendered role, end of its refresh and a nonempty selector before snapshotting options; retain explicit intermediate-window assertions and original source permission/hash/commit checks.",
+  "runs": [
+    {
+      "command": "bash scripts/node.sh npm --prefix apps/web run test:e2e -- document-imports.spec.ts -g 'real DOCX safe text' --output=/tmp/m23-docx-role-baseline-results",
+      "result": "1 passed (5.2s)",
+      "exit_code": 0
+    },
+    {
+      "command": "bash scripts/node.sh npm --prefix apps/web run test:e2e -- document-imports.spec.ts -g 'real DOCX safe text' --output=/tmp/m23-docx-role-red-results",
+      "result": "1 failed; same original marker error; candidate recovered after real refresh",
+      "exit_code": 1
+    },
+    {
+      "command": "bash scripts/node.sh npm --prefix apps/web run test:e2e -- document-imports.spec.ts -g 'real DOCX safe text' --output=/tmp/m23-docx-role-green-results",
+      "result": "1 passed (5.4s)",
+      "exit_code": 0
+    },
+    {
+      "command": "bash scripts/node.sh npm --prefix apps/web run test:e2e -- document-imports.spec.ts --output=/tmp/m23-document-role-regression-results",
+      "result": "5 passed (15.1s)",
+      "exit_code": 0
+    },
+    {
+      "command": "bash scripts/node.sh npm --prefix apps/web run lint",
+      "result": "tsc --noEmit --noUnusedLocals --noUnusedParameters, exit 0 observed via tool",
+      "exit_code": 0
+    }
+  ],
+  "sources": {
+    "path": "tests/e2e/document-imports.spec.ts",
+    "before_sha256": "43b9f403c023f6f26e42330c20fdcd11244032c493ed68d73b279a4fd483c109",
+    "red_probe_path": "/tmp/m23-document-imports.role-race-red.ts",
+    "red_probe_sha256": "e83a35e7c89574a9d3008c14a98865619af4696bbc938255779f1f499251bcbc",
+    "after_sha256": "d03c026377e535a65f970da21c5ea074faca3ddeefa5d5d97536773ca8f89168"
+  },
+  "product_hook": {
+    "path": "apps/web/src/features/imports/useImportWorkflow.ts",
+    "sha256": "3ccf7204fb812c673ec8bb32863bae9ec6510ceb9db22e06ec9ab12ba3ac3d4d",
+    "unchanged_from_head": true
+  },
+  "log_sha256": {
+    "/tmp/m23-ci-browser-4b4f98f.log": "6d7fd8b227da2770b9cf6953c26b52236e8c18f308e61586ea27c042e81e9ec9",
+    "/tmp/m23-docx-role-baseline.log": "1b0254e416c4563dd7fc5ef18c290795ccb5e46994d460077d3f11f2c15992c0",
+    "/tmp/m23-docx-role-red.log": "90b8f17a181ec7a5a9c3c62d0b73c8403de0752306af60358c064e0480a27779",
+    "/tmp/m23-docx-role-green.log": "81ee69f5d9736ac89bf24003eb517362c2393c671fddf7ac8910e08023ce055b",
+    "/tmp/m23-document-role-regression.log": "7fa5abf1c0bbcab61c602d03bb7bbeaeb2b6db85a1dab6ba0b57644d99a74293"
+  },
+  "production_files_modified": [],
+  "no_retries_or_timeout_increase": true,
+  "recorded_at": "2026-09-14T12:55:02.915050+00:00",
+  "final_implementation_commit": "c7bcd6c8e511e2fe31e3739da9718f276fbfc0cd",
+  "logs": {
+    "/tmp/m23-ci-browser-4b4f98f.log": {
+      "public_path": "progress/evidence/2026-09-14/M2.3-ci-browser-4b4f98f.log",
+      "raw_sha256": "6d7fd8b227da2770b9cf6953c26b52236e8c18f308e61586ea27c042e81e9ec9",
+      "public_sha256": "99b99496edff8fff8257a2226bed73c7caa3deee43a31193fd5aab2c6fc0ee49",
+      "sanitization": "ANSI removed; repo and user-home prefixes masked; synthetic fixture and failure text preserved"
+    },
+    "/tmp/m23-docx-role-baseline.log": {
+      "public_path": "progress/evidence/2026-09-14/M2.3-docx-role-baseline.log",
+      "raw_sha256": "1b0254e416c4563dd7fc5ef18c290795ccb5e46994d460077d3f11f2c15992c0",
+      "public_sha256": "1b0254e416c4563dd7fc5ef18c290795ccb5e46994d460077d3f11f2c15992c0",
+      "sanitization": "ANSI removed; repo and user-home prefixes masked; synthetic fixture and failure text preserved"
+    },
+    "/tmp/m23-docx-role-red.log": {
+      "public_path": "progress/evidence/2026-09-14/M2.3-docx-role-red.log",
+      "raw_sha256": "90b8f17a181ec7a5a9c3c62d0b73c8403de0752306af60358c064e0480a27779",
+      "public_sha256": "7e89b96629025f89eb2f59538d6eb3887f749e0726b0cd05d7acfe44c75bb3e3",
+      "sanitization": "ANSI removed; repo and user-home prefixes masked; synthetic fixture and failure text preserved"
+    },
+    "/tmp/m23-docx-role-green.log": {
+      "public_path": "progress/evidence/2026-09-14/M2.3-docx-role-green.log",
+      "raw_sha256": "81ee69f5d9736ac89bf24003eb517362c2393c671fddf7ac8910e08023ce055b",
+      "public_sha256": "81ee69f5d9736ac89bf24003eb517362c2393c671fddf7ac8910e08023ce055b",
+      "sanitization": "ANSI removed; repo and user-home prefixes masked; synthetic fixture and failure text preserved"
+    },
+    "/tmp/m23-document-role-regression.log": {
+      "public_path": "progress/evidence/2026-09-14/M2.3-document-role-regression.log",
+      "raw_sha256": "7fa5abf1c0bbcab61c602d03bb7bbeaeb2b6db85a1dab6ba0b57644d99a74293",
+      "public_sha256": "7fa5abf1c0bbcab61c602d03bb7bbeaeb2b6db85a1dab6ba0b57644d99a74293",
+      "sanitization": "ANSI removed; repo and user-home prefixes masked; synthetic fixture and failure text preserved"
+    }
+  },
+  "full_native_receipt": "M2.3-role-native.json",
+  "full_ci_receipt": "M2.3-ci-c7bcd6c.json"
+}
