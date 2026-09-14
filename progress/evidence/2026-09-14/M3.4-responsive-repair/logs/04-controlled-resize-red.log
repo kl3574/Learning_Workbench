@@ -1,0 +1,41 @@
+
+Running 1 test using 1 worker
+
+(node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 ../m34-submit-viewport-probe/controlled-resize.spec.ts:47:1 › real unreviewed independent assessment saves five types and submits without fabricated grades or answer calls (11.4s)
+
+
+  1) ../m34-submit-viewport-probe/controlled-resize.spec.ts:47:1 › real unreviewed independent assessment saves five types and submits without fabricated grades or answer calls 
+
+    Error: expect(locator).toBeInViewport() failed
+
+    Locator:  locator('.practice-submit > p')
+    Expected: in viewport
+    Received: viewport ratio 0
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toBeInViewport" locator('.practice-submit > p') with timeout 5000ms
+      - waiting for locator('.practice-submit > p')
+        13 × locator resolved to <p>已提交，作答已冻结。评分与人工复核使用独立版本。测试作答不可修改；本机候选单独保留。</p>
+           - unexpected value "viewport ratio 0"
+
+
+      102 |   await page.locator('.practice-submit').scrollIntoViewIfNeeded()
+      103 |   await page.evaluate(() => (window as unknown as { __submitViewport: { sample: (reason: string) => void } }).__submitViewport.sample('after-section-scroll'))
+    > 104 |   await page.evaluate(() => { (window as unknown as { __resizeGate: { release: () => void } }).__resizeGate.release() }); try { await expect(page.locator('.practice-submit > p')).toBeInViewport() } finally {
+          |                                                                                                                                                                                    ^
+      105 |     const observed = await page.evaluate(() => { const value = (window as unknown as { __submitViewport: { sample: (reason: string) => void; stop: () => void; ledger: unknown[] } }).__submitViewport; value.sample('after-original-assertion'); value.stop(); return value.ledger })
+      106 |     writeFileSync(info.outputPath('geometry-ledger.json'), JSON.stringify(observed, null, 2)); await page.screenshot({ path: info.outputPath('actual-390-at-assertion.png') })
+      107 |   }
+        at <probe>/controlled-resize.spec.ts:104:180
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m34-submit-viewport-probe/controlled-resize/controlled-resize-real-unr-ab06f-ated-grades-or-answer-calls/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m34-submit-viewport-probe/controlled-resize/controlled-resize-real-unr-ab06f-ated-grades-or-answer-calls/error-context.md
+
+  1 failed
+    ../m34-submit-viewport-probe/controlled-resize.spec.ts:47:1 › real unreviewed independent assessment saves five types and submits without fabricated grades or answer calls 

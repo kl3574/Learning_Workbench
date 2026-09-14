@@ -1,0 +1,138 @@
+"""Deterministic two-stage eligibility, independent of score correctness and storage."""
+
+from math import isfinite
+
+from pydantic import BaseModel, TypeAdapter
+
+from packages.contracts import domain_models as dm
+
+from .eligibility_models import (
+    ELIGIBILITY_VERSION, AssessmentMode, EligibilityBindingError, EligibilityDecision,
+    EligibilityReason, Freshness, Independence, ItemPrerequisites, QualificationBasis,
+)
+
+__all__ = [
+    "ELIGIBILITY_VERSION", "EligibilityBindingError", "EligibilityDecision", "EligibilityReason",
+    "ItemPrerequisites", "finalize_eligibility", "prerequisite_reasons", "validate_prerequisites", "evidence_reason",
+]
+
+
+def _reject_undeclared(value: object) -> None:
+    """model_copy/update bypasses Pydantic validation, including extra='forbid'."""
+    if isinstance(value, BaseModel):
+        if set(value.__dict__) - set(type(value).model_fields):
+            raise EligibilityBindingError()
+        for child in value.__dict__.values():
+            _reject_undeclared(child)
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            _reject_undeclared(child)
+    elif isinstance(value, dict):
+        for child in value.values():
+            _reject_undeclared(child)
+
+
+def validate_prerequisites(value: ItemPrerequisites) -> ItemPrerequisites:
+    """Rebuild a strict detached copy; do not grant eligibility before a grade."""
+    try:
+        if not isinstance(value, ItemPrerequisites):
+            raise EligibilityBindingError()
+        _reject_undeclared(value)
+        return ItemPrerequisites.model_validate(value.model_dump(mode="python", warnings=False))
+    except (ValueError, TypeError, KeyError):
+        raise EligibilityBindingError() from None
+
+
+def _context(mode: AssessmentMode, basis: QualificationBasis) -> None:
+    try:
+        TypeAdapter(AssessmentMode).validate_python(mode, strict=True)
+        TypeAdapter(QualificationBasis).validate_python(basis, strict=True)
+    except (ValueError, TypeError):
+        raise EligibilityBindingError() from None
+
+
+def _reasons(value: ItemPrerequisites, mode: AssessmentMode, basis: QualificationBasis) -> list[EligibilityReason]:
+    reasons: list[EligibilityReason] = []
+    if basis == "history_not_frozen":
+        reasons.append("HISTORY_PREREQUISITES_NOT_FROZEN")
+    if mode == "open_book":
+        reasons.append("MODE_OPEN_BOOK")
+    elif mode == "assisted":
+        reasons.append("MODE_ASSISTED")
+    if not value.source_trusted:
+        reasons.append("SOURCE_NOT_TRUSTED")
+    if value.answer_review_status != "approved":
+        reasons.append("ANSWER_UNREVIEWED")
+    if not value.mapping_complete:
+        reasons.append("CONCEPT_MAPPING_UNRESOLVED")
+    if value.prior_seen == "seen":
+        reasons.append("PREVIOUSLY_SEEN")
+    elif value.prior_seen == "unknown":
+        reasons.append("PRIOR_SEEN_UNKNOWN")
+    if value.pre_submission_help_state == "present" or value.in_attempt_help_state == "present":
+        reasons.append("HELP_BEFORE_SUBMIT")
+    if value.pre_submission_help_state == "unknown" or value.in_attempt_help_state == "unknown":
+        reasons.append("HELP_HISTORY_UNKNOWN")
+    return sorted(reasons)
+
+
+def prerequisite_reasons(*, prerequisites: ItemPrerequisites, mode: AssessmentMode,
+                         basis: QualificationBasis) -> list[EligibilityReason]:
+    """Non-score exclusions only; an empty list is not a finalized eligible grade."""
+    value = validate_prerequisites(prerequisites)
+    _context(mode, basis)
+    return _reasons(value, mode, basis)
+
+
+def finalize_eligibility(*, prerequisites: ItemPrerequisites, grade: dm.ItemGrade,
+                        mode: AssessmentMode, basis: QualificationBasis) -> EligibilityDecision:
+    value = validate_prerequisites(prerequisites)
+    _context(mode, basis)
+    try:
+        if not isinstance(grade, dm.ItemGrade):
+            raise EligibilityBindingError()
+        _reject_undeclared(grade)
+        checked = dm.ItemGrade.model_validate(grade.model_dump(mode="python", warnings=False))
+        if checked.question_ref != value.question_ref or checked.max_score != value.max_score:
+            raise EligibilityBindingError()
+        normalized = None if checked.score is None else checked.score / checked.max_score
+        if normalized is not None and (not isfinite(normalized) or checked.score and normalized == 0):
+            raise EligibilityBindingError()
+    except (ValueError, TypeError, KeyError, ZeroDivisionError):
+        raise EligibilityBindingError() from None
+
+    reasons = _reasons(value, mode, basis)
+    if checked.status == "needs_review":
+        reasons.append("GRADE_UNRESOLVED")
+
+    independence: Independence = "unknown"
+    if mode == "assisted":
+        independence = "assisted"  # Declared capability, never proof a tool was used.
+    elif mode == "independent" and value.source_trusted:
+        if value.in_attempt_help_state == "present":
+            independence = "assisted"
+        elif value.in_attempt_help_state == "none":
+            independence = "independent"
+
+    # Prior novelty is the original start snapshot, not the current history that
+    # already contains this attempt or post-submit review of its own answers.
+    freshness: Freshness = "unknown"
+    if value.source_trusted:
+        if value.prior_seen == "seen":
+            freshness = "repeated"
+        elif value.prior_seen == "unseen":
+            freshness = "novel"
+
+    return EligibilityDecision(question_ref=value.question_ref, concept_refs=value.concept_refs,
+        skill=value.skill, eligible=not reasons, reason_codes=sorted(reasons), normalized_score=normalized,
+        independence=independence, freshness=freshness)
+
+
+def evidence_reason(decision: EligibilityDecision) -> str:
+    """Stable safe representation for the unchanged core Evidence.reason string."""
+    try:
+        _reject_undeclared(decision)
+        checked = EligibilityDecision.model_validate(decision.model_dump(mode="python", warnings=False))
+    except (ValueError, TypeError, KeyError, AttributeError):
+        raise EligibilityBindingError() from None
+    return ";".join(sorted(checked.reason_codes)) if checked.reason_codes else "ELIGIBLE_INDEPENDENT_NOVEL"

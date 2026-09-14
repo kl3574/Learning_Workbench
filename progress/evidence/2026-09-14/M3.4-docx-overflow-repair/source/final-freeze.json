@@ -1,0 +1,37 @@
+{
+  "scope": "Only CSS direct-grid children and two added native assertions; source bytes stable across actual green native checks and lint/typecheck. Parent exact gate is separate.",
+  "owned_source_sha256": {
+    "apps/web/src/style.css": "58eee0dc7ce4ddc6c98408bb8337691a92576f683a8083ef55404dd78ffd6217",
+    "tests/e2e/responsive-layout.spec.ts": "26b3e902de8b638f78174a5c28c9219a18f7a8c5fcc78619a4aa702ba0778d87"
+  },
+  "old_document_test_unchanged": true,
+  "commands": [
+    {
+      "command": "bash scripts/node.sh npm --prefix apps/web run lint",
+      "exit_code": 0,
+      "raw_log": "fixed-lint.log"
+    },
+    {
+      "command": "bash scripts/node.sh apps/web/node_modules/.bin/tsc -p /tmp/m34-native-types.tsconfig.json",
+      "exit_code": 0,
+      "raw_log": "fixed-targeted-native-types.log",
+      "scope": "Targeted strict native types with root temporary official Playwright declaration binding, not all native tests."
+    },
+    {
+      "command": "bash scripts/node.sh apps/web/node_modules/.bin/playwright test --config=<probe>/responsive-green.config.mts",
+      "exit_code": 0,
+      "result": "1 passed, 5.8s"
+    },
+    {
+      "command": "bash scripts/node.sh apps/web/node_modules/.bin/playwright test --config=<probe>/original-fixed.config.mts",
+      "exit_code": 0,
+      "result": "1 passed, 5.9s"
+    }
+  ],
+  "ports_after": "ss showed no listeners on 8765/5173 after native completion",
+  "limits": [
+    "The exact63 full run had no temporal ledger. Controlled live geometry demonstrates this regression mechanism; do not infer full timing of the original run.",
+    "The earlier47 viewport issue remains a separate controlled diagnosis.",
+    "Shared bootstrap helper repair and its provenance are parent/backend owned; not included in this agent owned-file freeze."
+  ]
+}

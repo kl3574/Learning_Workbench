@@ -1,0 +1,302 @@
+"""One durable SQLite import worker with renewable ownership and isolated parsing."""
+
+from dataclasses import dataclass
+import multiprocessing
+import os
+from multiprocessing.connection import Connection
+import sqlite3
+import threading
+import time
+from typing import Any
+
+from packages.contracts import domain_models as dm
+from packages.contracts.canonical import metadata_sha256
+from packages.contracts.validation import ENTITY_MODELS
+
+from ..application.errors import ApiError
+from ..application.evidence import EvidenceRecovery
+from ..application.grading import GradingWorker
+from ..application.imports import ImportService, safe_filename
+from .content_repository import damaged
+from .database import Database, utc_now
+from .document_sandbox import bind_parent_lifetime
+from .import_repository import ImportRepository, identifier, json_object, json_text
+from .security import expires_after, guard_subject_access
+
+
+@dataclass(frozen=True)
+class ImportLease:
+    import_id: str
+    workspace_id: str
+    job_id: str
+    owner: str
+    revision: int
+
+
+def _parse_process(connection: Connection, data: bytes, options: dict[str, Any], expected_parent: int) -> None:
+    """Only trusted local parser code executes; input content never executes as code."""
+    try:
+        bind_parent_lifetime(expected_parent)
+        from ..application.import_parsing import ImportParsingError, parse_import
+        try:
+            result = parse_import(data, **options)
+        except ImportParsingError as error:
+            connection.send(("error", {"code": error.code, "warnings": [warning.model_dump(mode="json") for warning in getattr(error, "warnings", ())]}))
+        else:
+            connection.send(("result", result))
+    except ApiError as error:
+        connection.send(("error", error.code))
+    except BaseException:
+        connection.send(("error", "IMPORT_PARSE_FAILED"))
+    finally:
+        connection.close()
+
+
+class _ParseFailure(ApiError):
+    def __init__(self, code: str, warnings: tuple[dm.Warning, ...]):
+        super().__init__(422, code, "原件解析未通过，请查看格式与安全限制。")
+        self.warnings = warnings
+
+
+class _Stopped(Exception):
+    pass
+
+
+class ImportWorker:
+    def __init__(self, database: Database):
+        self.database = database
+        self.service = ImportService(database)
+        self._stop = threading.Event()
+        self.grading = GradingWorker(database, stopping=self._stop.is_set)
+        self.evidence_recovery = EvidenceRecovery(database, stopping=self._stop.is_set)
+        self._thread: threading.Thread | None = None
+        self._lock = threading.Lock()
+        self.parse_timeout_seconds = 60.0
+        self.lease_seconds = 90
+
+    def start(self) -> None:
+        if self.is_alive():
+            return
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._loop, name="learning-import-worker", daemon=True)
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=5)
+
+    def is_alive(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    def _loop(self) -> None:
+        while not self._stop.is_set():
+            try:
+                worked = self.run_once()
+            except (ApiError, sqlite3.Error):
+                worked = False
+            if not worked:
+                self._stop.wait(0.25)
+
+    def claim(self) -> ImportLease | None:
+        with self.database.transaction() as connection:
+            now = utc_now()
+            row = connection.execute(
+                "SELECT i.id AS import_id,j.* FROM jobs j JOIN ingestion_imports i ON i.job_id=j.id "
+                "WHERE j.kind='import' AND j.cancel_requested=0 AND "
+                "(j.status='queued' OR (j.status='running' AND j.lease_until<=?)) "
+                "AND (j.next_retry_at IS NULL OR j.next_retry_at<=?) AND NOT EXISTS "
+                "(SELECT 1 FROM attempts a WHERE a.workspace_id=j.workspace_id AND a.mode='independent' AND a.status='active') "
+                "ORDER BY j.created_at,j.id LIMIT 1", (now, now),
+            ).fetchone()
+            if row is None:
+                return None
+            guard_subject_access(connection, row["workspace_id"])
+            owner = identifier("lease")
+            changed = connection.execute(
+                "UPDATE jobs SET status='running',revision=revision+1,lease_owner=?,lease_until=?,retry_count=retry_count+?,updated_at=? "
+                "WHERE id=? AND revision=?", (owner, expires_after(self.lease_seconds), int(row["status"] == "running"), now, row["id"], row["revision"]),
+            )
+            if changed.rowcount != 1:
+                return None
+            connection.execute("UPDATE ingestion_imports SET status='parsing' WHERE id=?", (row["import_id"],))
+            repository = ImportRepository(connection, row["workspace_id"])
+            repository.event(row["id"], "running", {"status": "running", "revision": row["revision"] + 1})
+            connection.execute("UPDATE outbox SET delivered_at=? WHERE event_type='import.queued' AND json_extract(payload_json,'$.job_id')=? AND delivered_at IS NULL", (now, row["id"]))
+            return ImportLease(row["import_id"], row["workspace_id"], row["id"], owner, row["revision"] + 1)
+
+    @staticmethod
+    def _owned(row: sqlite3.Row, lease: ImportLease) -> bool:
+        return (row["job_status"] == "running" and row["status"] == "parsing" and row["lease_owner"] == lease.owner
+                and row["job_revision"] == lease.revision and row["lease_until"] > utc_now())
+
+    def _input(self, lease: ImportLease) -> tuple[bytes, dict[str, Any]]:
+        with self.database.transaction() as connection:
+            guard_subject_access(connection, lease.workspace_id)
+            repository = ImportRepository(connection, lease.workspace_id)
+            row = repository.load(lease.import_id)
+            if not self._owned(row, lease):
+                raise _Stopped()
+            info = repository.blob(row["blob_sha256"])
+            if info.sha256 != row["input_sha256"]:
+                raise damaged()
+            data = self.service.frozen_store(row).read(info.sha256, expected_size=info.size)
+            options = json_object(row["input_json"])
+            kind = options["kind"]
+            if options.get("archive_detected"):
+                if kind not in {"auto", "learnpack", "docx"}:
+                    raise ApiError(422, "IMPORT_FORMAT_MISMATCH", "归档原件不能按纯文本解析或公开。")
+                if kind == "auto":
+                    kind = "docx" if options["filename"].lower().endswith(".docx") else "learnpack"
+            return data, {"kind": kind, "filename": options["filename"], "source_id": row["source_id"], "budgets": self.service.frozen_budgets(row)}
+
+    def _parse(self, lease: ImportLease, data: bytes, options: dict[str, Any]) -> Any:
+        context = multiprocessing.get_context("spawn")
+        parent, child = context.Pipe(duplex=False)
+        process = context.Process(target=_parse_process, args=(child, data, options, os.getpid()), daemon=True)
+        deadline = time.monotonic() + self.parse_timeout_seconds
+        process.start()
+        child.close()
+        last_check = time.monotonic()
+        try:
+            while time.monotonic() < deadline:
+                if parent.poll(0.1):
+                    kind, result = parent.recv()
+                    if kind == "result":
+                        return result
+                    if isinstance(result, dict):
+                        raise _ParseFailure(result["code"], tuple(dm.Warning.model_validate(value) for value in result.get("warnings", [])))
+                    raise ApiError(422, result, "原件解析未通过，请查看格式与安全限制。")
+                if self._stop.is_set():
+                    raise _Stopped()
+                if not process.is_alive():
+                    raise ApiError(422, "IMPORT_PARSE_FAILED", "解析进程未返回完整结果。")
+                if time.monotonic() - last_check > 0.5:
+                    with self.database.connect() as connection:
+                        guard_subject_access(connection, lease.workspace_id)
+                        row = ImportRepository(connection, lease.workspace_id).load(lease.import_id)
+                        if not self._owned(row, lease):
+                            raise _Stopped()
+                    last_check = time.monotonic()
+            raise ApiError(422, "IMPORT_PARSE_TIMEOUT", "原件解析超过 60 秒预算，未导入任何正式内容。")
+        finally:
+            if process.is_alive():
+                process.terminate()
+            process.join(timeout=2)
+            if process.is_alive():
+                process.kill()
+                process.join(timeout=2)
+            parent.close()
+            process.close()
+
+    def complete_preview(self, lease: ImportLease, parsed: Any) -> bool:
+        with self.database.transaction() as connection:
+            guard_subject_access(connection, lease.workspace_id)
+            repository = ImportRepository(connection, lease.workspace_id)
+            row = repository.load(lease.import_id)
+            if not self._owned(row, lease):
+                return False
+            blob_store = self.service.frozen_store(row)
+            objects = [ENTITY_MODELS[value.entity].model_validate(value.model_dump(mode="python")) for value in parsed.objects]
+            solutions = [dm.SolutionPrivate.model_validate(value.model_dump(mode="python")) for value in parsed.solutions]
+            warnings = list(parsed.warnings)
+            warnings.append(dm.Warning(code="IMPORT_REVIEW_UNVERIFIED", message="确认解析结果不会认证材料的数学正确性或来源权利。", severity="warning"))
+            collisions = [value.id for value in objects if connection.execute("SELECT 1 FROM objects WHERE id=?", (value.id,)).fetchone()]
+            if collisions:
+                warnings.append(dm.Warning(code="IMPORT_ID_COLLISION", message="存在已有 ID；确认时必须显式映射，不能覆盖。", severity="warning"))
+            private = bool(solutions) or getattr(parsed, "package_profile", None) == "author"
+            if private:
+                warnings.append(dm.Warning(code="IMPORT_PRIVATE_ANSWERS", message="作者包原件与私有答案仅作者可访问；导入答案仍需审核。", severity="warning"))
+            body_hashes = {}
+            for path, data in parsed.bodies.items():
+                info = blob_store.write(data)
+                repository.add_blob(info)
+                body_hashes[path] = info.sha256
+            preview = {"version": 1, "objects": [value.model_dump(mode="json") for value in objects],
+                       "solutions": [value.model_dump(mode="json") for value in solutions], "bodies": body_hashes,
+                       "warnings": [value.model_dump(mode="json") for value in warnings], "parser_version": parsed.parser_version,
+                       "draft_ids": [], "unresolved_refs": []}
+            for value in sorted(objects, key=lambda item: item.entity != "block"):
+                draft_id = identifier("draft")
+                connection.execute(
+                    "INSERT INTO drafts(id,workspace_id,kind,revision,candidate_json,candidate_sha256,status,updated_at) VALUES(?,?,?,?,?,?,'draft',?)",
+                    (draft_id, lease.workspace_id, value.entity, 1, json_text({"import_id": lease.import_id, "metadata": value.model_dump(mode="json")}), metadata_sha256(value), utc_now()),
+                )
+                preview["draft_ids"].append(draft_id)
+            metadata = json_object(row["source_metadata"])
+            preview_visibility = "author_private" if private else "learner"
+            original_visibility = getattr(parsed, "original_visibility", None) or preview_visibility
+            staged_options = json_object(row["input_json"])
+            if staged_options["kind"] == "docx" or (staged_options["kind"] == "auto" and staged_options["filename"].lower().endswith(".docx")):
+                original_visibility = "author_private"
+            metadata.update({"visibility": original_visibility, "preview_visibility": preview_visibility, "visibility_verified": True,
+                             "warnings": preview["warnings"], "symbols": [value.model_dump(mode="json") for value in getattr(parsed, "symbols", ())],
+                             "citations": [value.model_dump(mode="json") for value in getattr(parsed, "citations", ())],
+                             "untrusted_quality_receipt": None, "assets": {}})
+            for asset in parsed.assets:
+                info = blob_store.write(asset.data)
+                artifact_id = repository.artifact(info=info, filename=safe_filename(asset.path), media_type=asset.media_type,
+                                                 visibility=asset.visibility, profile="import_asset", job_id=lease.job_id)
+                metadata["assets"][asset.path] = {"artifact_id": artifact_id, "sha256": info.sha256, "size": info.size}
+            if parsed.quality_receipt is not None:
+                info = blob_store.write(parsed.quality_receipt)
+                artifact_id = repository.artifact(info=info, filename="untrusted-quality-receipt.json", media_type="application/json",
+                                                 visibility=metadata["visibility"], profile="untrusted_quality_receipt", job_id=lease.job_id)
+                metadata["untrusted_quality_receipt"] = {"artifact_id": artifact_id, "sha256": info.sha256, "size": info.size}
+            connection.execute("UPDATE sources SET metadata_json=?,parser_version=? WHERE id=? AND workspace_id=?",
+                               (json_text(metadata), parsed.parser_version, row["source_id"], lease.workspace_id))
+            connection.execute("UPDATE artifacts SET visibility=? WHERE id=? AND workspace_id=?",
+                               (metadata["visibility"], metadata["artifact_id"], lease.workspace_id))
+            connection.execute("UPDATE ingestion_imports SET preview_json=? WHERE id=?", (json_text(preview), lease.import_id))
+            repository.transition(row, job_status="awaiting_approval", import_status="preview_ready", lease_owner=lease.owner)
+            return True
+
+    def fail(self, lease: ImportLease, error: ApiError) -> None:
+        with self.database.transaction() as connection:
+            guard_subject_access(connection, lease.workspace_id)
+            repository = ImportRepository(connection, lease.workspace_id)
+            row = repository.load(lease.import_id)
+            if not self._owned(row, lease):
+                return
+            warning = dm.Warning(code=error.code, message="解析失败；原件保留，未改动正式课程。", severity="error")
+            preview = self.service._preview_data(row)
+            diagnostics = getattr(error, "warnings", ())
+            preview["warnings"] = [value.model_dump(mode="json") for value in diagnostics] + [warning.model_dump(mode="json")]
+            if diagnostics:
+                metadata = json_object(row["source_metadata"])
+                metadata["safe_failure_diagnostics"] = [value.model_dump(mode="json") for value in diagnostics]
+                connection.execute("UPDATE sources SET metadata_json=? WHERE id=? AND workspace_id=?",
+                                   (json_text(metadata), row["source_id"], lease.workspace_id))
+            connection.execute("UPDATE ingestion_imports SET preview_json=? WHERE id=?", (json_text(preview), lease.import_id))
+            detail = dm.ErrorDetail(code=error.code, message=warning.message, request_id=identifier("request"), retryable=error.retryable)
+            repository.transition(row, job_status="failed", import_status="failed", result={"error": detail.model_dump(mode="json")}, lease_owner=lease.owner)
+
+    def run_once(self) -> bool:
+        if not self._lock.acquire(blocking=False):
+            return False
+        lease = None
+        try:
+            # A bounded recovery item does not prevent this same tick from
+            # advancing the actual grading/import queues, including after damage.
+            recovered = self.evidence_recovery.run_once()
+            if self.grading.run_once():
+                return True
+            lease = self.claim()
+            if lease is None:
+                return recovered
+            data, options = self._input(lease)
+            parsed = self._parse(lease, data, options)
+            self.complete_preview(lease, parsed)
+            return True
+        except _Stopped:
+            return True
+        except ApiError as error:
+            if lease is not None and error.code != "ASSESSMENT_ACTIVE":
+                self.fail(lease, error)
+            return True
+        except (ValueError, TypeError, KeyError, EOFError, OSError):
+            if lease is not None:
+                self.fail(lease, ApiError(422, "IMPORT_PARSE_FAILED", "解析未完成。"))
+            return True
+        finally:
+            self._lock.release()

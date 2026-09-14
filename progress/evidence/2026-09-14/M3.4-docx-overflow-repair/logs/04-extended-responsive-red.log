@@ -1,0 +1,32 @@
+
+Running 1 test using 1 worker
+
+(node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 ../m34-docx-overflow-probe/responsive-red.spec.ts:43:1 › narrow layout and submitted explanation remain visible before React resize listeners run (5.6s)
+
+
+  1) ../m34-docx-overflow-probe/responsive-red.spec.ts:43:1 › narrow layout and submitted explanation remain visible before React resize listeners run 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      68 |     await expect(page.locator('.practice-submit > p')).toBeInViewport()
+      69 |     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    > 70 |     expect(await page.locator('.workbench-grid').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true)
+         |                                                                                                          ^
+      71 |     await page.evaluate(() => window.__layoutResizeGate.release())
+      72 |     await expect(page.locator('#nav-pane')).toBeHidden()
+      73 |     await sample('after-listeners')
+        at <probe>/responsive-red.spec.ts:70:106
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m34-docx-overflow-probe/responsive-red/responsive-red-narrow-layo-98edb--React-resize-listeners-run/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m34-docx-overflow-probe/responsive-red/responsive-red-narrow-layo-98edb--React-resize-listeners-run/error-context.md
+
+  1 failed
+    ../m34-docx-overflow-probe/responsive-red.spec.ts:43:1 › narrow layout and submitted explanation remain visible before React resize listeners run 

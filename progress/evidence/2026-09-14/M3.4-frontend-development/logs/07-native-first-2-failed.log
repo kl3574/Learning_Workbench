@@ -1,0 +1,61 @@
+
+Running 2 tests using 1 worker
+
+(node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/e2e/review.spec.ts:35:1 › real history and exact material review preserve original submitted text, null scores and a selected old revision after reload (9.7s)
+(node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  2 tests/e2e/review.spec.ts:75:1 › a delayed old review response cannot restore history or academic context after another page starts a real independent attempt (16.4s)
+
+
+  1) tests/e2e/review.spec.ts:35:1 › real history and exact material review preserve original submitted text, null scores and a selected old revision after reload 
+
+    TypeError: Cannot read properties of null (reading 'course')
+
+      61 |   await settleLayout(page); await page.reload(); await expect(history.getByLabel('选择评分版本')).toHaveValue('1'); await expect(page.getByLabel('第 2 题已提交答案')).toHaveText(answer)
+      62 |   const material = page.getByRole('region', { name: '本题对应教材', exact: true }); await material.getByRole('button', { name: /r1/ }).first().click()
+    > 63 |   const link = new URL(page.url()); const target = JSON.parse(link.searchParams.get('reader')!); expect(target.course).toEqual(fixture.course); expect(target.lesson).toEqual(fixture.lesson); expect(target.block).toEqual(fixture.block)
+         |                                                                                                                ^
+      64 |   await expect(page.locator(`#block-${fixture.block.id}-r${fixture.block.revision}`)).toBeVisible()
+      65 |   const reviewTab = page.getByRole('tab', { name: /测试复盘/ }); await reviewTab.click(); await expect(history.getByLabel('选择评分版本')).toHaveValue('1')
+      66 |   await page.setViewportSize({ width: 390, height: 844 }); await history.getByRole('heading', { name: '评分版本与证据' }).scrollIntoViewIfNeeded(); expect(await page.locator('.assessment-scroll').evaluate(node => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1); await page.screenshot({ path: info.outputPath('review-history-before-390.png') })
+        at <workspace>/tests/e2e/review.spec.ts:63:112
+
+    Error Context: ../../../../..<native-round-01>/review-real-history-and-ex-756c0-d-old-revision-after-reload/error-context.md
+
+  2) tests/e2e/review.spec.ts:75:1 › a delayed old review response cannot restore history or academic context after another page starts a real independent attempt 
+
+    TimeoutError: locator.click: Timeout 10000ms exceeded.
+    Call log:
+      - waiting for getByRole('button', { name: '重新读取评分结果', exact: true })
+        - locator resolved to <button disabled>重新读取评分结果</button>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not enabled
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not enabled
+        - retrying click action
+          - waiting 100ms
+        19 × waiting for element to be visible, enabled and stable
+           - element is not enabled
+         - retrying click action
+           - waiting 500ms
+
+
+      78 |   const routePattern = `**/api/v1/attempts/${attempt.id}/result`
+      79 |   await page.route(routePattern, async route => { const response = await route.fetch(); captured(); await gate; await route.fulfill({ response }) })
+    > 80 |   await page.getByRole('button', { name: '重新读取评分结果', exact: true }).click(); await ready
+         |                                                                     ^
+      81 |   const other = await page.context().newPage()
+      82 |   try {
+      83 |     await other.goto(`${new URL(page.url()).origin}/?assessment=${encodeURIComponent(JSON.stringify({ assessment_ref: fixture.assessment, course_ref: fixture.course }))}`)
+        at <workspace>/tests/e2e/review.spec.ts:80:69
+
+    Error Context: ../../../../..<native-round-01>/review-a-delayed-old-revie-e1a43--a-real-independent-attempt/error-context.md
+
+  2 failed
+    tests/e2e/review.spec.ts:35:1 › real history and exact material review preserve original submitted text, null scores and a selected old revision after reload 
+    tests/e2e/review.spec.ts:75:1 › a delayed old review response cannot restore history or academic context after another page starts a real independent attempt 

@@ -1,0 +1,57 @@
+--- committed/tests/e2e/imports-policy.spec.ts
++++ probe/controlled-green.spec.ts
+@@ -1,7 +1,9 @@
+-import { expect, test as base } from '../../apps/web/node_modules/@playwright/test/index.mjs'
+-import type { AttemptSnapshot } from '../../packages/contracts/generated/api-types'
+-import { originalAssessmentPackage, importAssessmentPackage } from './assessmentTestData'
+-import { RestartRuntime } from './restartRuntime'
++import { writeFileSync } from 'node:fs'
++const observations: object[] = []
++import { expect, test as base } from '/tmp/m33-import-recovery-review-3cf2c34/apps/web/node_modules/@playwright/test/index.mjs'
++import type { AttemptSnapshot } from '/tmp/m33-import-recovery-review-3cf2c34/packages/contracts/generated/api-types'
++import { originalAssessmentPackage, importAssessmentPackage } from '/tmp/m33-import-recovery-review-3cf2c34/tests/e2e/assessmentTestData'
++import { RestartRuntime } from '/tmp/m33-import-recovery-review-3cf2c34/tests/e2e/restartRuntime'
+ 
+ const test = base.extend<{ runtime: RestartRuntime }>({
+   runtime: async ({}, use) => { const runtime = await RestartRuntime.start(); try { await use(runtime) } finally { await runtime.close() } },
+@@ -58,6 +60,8 @@
+   await testPage.close()
+ })
+ 
++test.afterEach(() => { writeFileSync('/tmp/m33-import-recovery-probe/controlled-green-ledger.json', JSON.stringify(observations,null,2)+'\n') })
++
+ test('a reselected failed original survives a role-policy pause in memory while decoded text must be checked again', async ({ page }) => {
+   const bytes = Buffer.from([0xc4, 0xe3, 0xba, 0xc3])
+   await page.getByRole('button', { name: '导入', exact: true }).click()
+@@ -69,7 +73,31 @@
+   const staged = await staging; expect(staged.status()).toBe(202)
+   const receipt: { import_id: string } = await staged.json()
+   await expect(dialog.getByRole('heading', { name: '选择原件编码并在本机预览', exact: true })).toBeVisible()
++  // Probe transport gate: preserve actual response bytes, delay only the first two cold session reads.
++  let gated = 0
++  const started = Date.now()
++  await page.exposeFunction('recordImportClick', (value: object) => observations.push({ event: 'click', elapsedMs: Date.now()-started, ...value }))
++  await page.addInitScript(() => {
++    document.addEventListener('click', event => {
++      const button = (event.target as Element | null)?.closest('button')
++      if (button?.textContent?.trim() !== '导入') return
++      setTimeout(() => {
++        const report = (window as unknown as { recordImportClick: (value: object) => void }).recordImportClick
++        report({ dialogCount: document.querySelectorAll('dialog[open]').length, policyUnknown: [...document.querySelectorAll('h1')].some(node => node.textContent === '正在核验测试访问策略'), recoveryIds: Object.keys(localStorage).filter(key=>key.startsWith('learning-workbench.import-id.v1:')).length })
++      }, 0)
++    })
++  })
++  await page.route('**/api/v1/session', async route => {
++    if (route.request().method() !== 'GET' || gated >= 2) return route.continue()
++    const ordinal = ++gated
++    const response = await route.fetch()
++    observations.push({event:'held_actual_session',ordinal,status:response.status(),elapsedMs:Date.now()-started})
++    await new Promise(resolve=>setTimeout(resolve,1000))
++    await route.fulfill({response})
++    observations.push({event:'released_actual_session',ordinal,elapsedMs:Date.now()-started})
++  })
+   await page.reload()
++  await expect(page.getByRole('heading', { name: '当前教材目录', exact: true })).toBeVisible()
+   await page.getByRole('button', { name: '导入', exact: true }).click()
+   dialog = page.getByRole('dialog', { name: '导入', exact: true })
+   await dialog.getByRole('button', { name: `恢复 ${receipt.import_id}`, exact: true }).click()

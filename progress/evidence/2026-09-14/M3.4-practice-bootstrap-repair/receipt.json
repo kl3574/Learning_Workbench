@@ -1,0 +1,140 @@
+{
+  "kind": "M3.4 bootstrap fixture reset race diagnosis and authorized helper repair",
+  "finished_at_utc": "2026-09-14T19:18:22.419177+00:00",
+  "original_code_sha": "63e47868371c64619d579f3be908125dfa86731f",
+  "norm": "Live PRODUCT_DESIGN.md only; no M4.1 work",
+  "result": "CAUSE_REPRODUCED_AND_HELPER_FIXED_FOCUSED_TESTS_PASSED",
+  "original_failures": {
+    "local_full_native": {
+      "passed": 65,
+      "failed": 2,
+      "practice_failure": "practice.spec.ts:87 -> helpers.ts:20, saved text missing after helper reset and reload",
+      "original_context_sha256": "47b69d641058988e0f07b5fc0d0848757dcebfb4dcb0ee33afdd49026b8e19ba",
+      "exact_context_locators": {
+        "yaml_begins_line": 28,
+        "base17_remote18_row_line": 50,
+        "old_reading469_row_line": 86,
+        "old_course_nativepracticeall_line": 95,
+        "conflict_status_line": 237
+      }
+    },
+    "github": {
+      "job_id": 104111493726,
+      "passed": 66,
+      "failed": 1,
+      "failure": "practice.spec.ts:87 -> helpers.ts:20",
+      "raw_log_sha256": "b9500f4c2b39c8df8de6d46bdfb4f1f7c592a4fd650e88442a9a28a77129e05f",
+      "scope": "Read only the existing raw job log; no CI rerun or CI artifact/DOM inspection by this reviewer."
+    }
+  },
+  "mechanism": {
+    "controlled_facts": [
+      "Old UI was restored with a real submitted synthetic practice and saved scroll offset 1506.",
+      "The unmodified application received a real server Workbench r2. The helper reset through real HTTP produced r3 with empty tabs.",
+      "The helper cleared localStorage while the old React document was still alive.",
+      "A previously fetched real Practice GET was delivered after cache clearing; during a controlled 200ms delay of the reload document, the old Practice scroll restoration fired.",
+      "The observed Storage.setItem stack was Shell onScroll -> useWorkbench.set -> writeLocal, storing old revision/base2, two tabs and offset1506 after storage-clear.",
+      "The new document then received real remote revision3 with no tabs and correctly displayed the retained old candidate as a three-way conflict."
+    ],
+    "interpretation": "The test helper reset an active application out of band while its asynchronous view restoration could still write local pending state. The application CAS/recovery guard correctly kept the conflicting candidate, so waiting longer for saved was not a valid repair.",
+    "original_run_limit": "Original local and CI failures lack this event ledger. The original local snapshot has the matching old-base/new-reset conflict, but the controlled trace is not asserted to reconstruct the original millisecond ordering uniquely."
+  },
+  "controlled_runs": [
+    {
+      "name": "original reset while app mounted",
+      "exit_code": 1,
+      "failed": 1,
+      "passed": 0,
+      "log": "logs/controlled-red.log",
+      "source": "probes/controlled-red.spec.ts.txt",
+      "ledger": "ledgers/controlled-red.json",
+      "timeline_ms": {
+        "clear": 4707,
+        "release_real_practice_get": 4710,
+        "reload_navigation_started": 4717,
+        "old_pending_write": 4751,
+        "new_document_released": 4918,
+        "new_remote_read": 5101
+      },
+      "unchanged_assertion": "Original saved text visible, timeout 5000ms"
+    },
+    {
+      "name": "preliminary same-origin neutral test document",
+      "exit_code": 0,
+      "passed": 1,
+      "duration": "6.2s",
+      "log": "experiments/unapplied-neutral/log.log",
+      "scope": "Preliminary experiment only; its intercepted neutral HTML is not the applied repair."
+    },
+    {
+      "name": "real same-origin API health JSON document",
+      "exit_code": 0,
+      "passed": 1,
+      "duration": "6.7s",
+      "log": "logs/controlled-health-green.log",
+      "source": "probes/controlled-health-green.spec.ts.txt",
+      "ledger": "ledgers/controlled-health-green.json",
+      "observed": "Real /health 200 application/json unmounted old application before cache clearing; zero subsequent old-pending writes in ledger; actual remote r3 empty and original saved assertion passes."
+    }
+  ],
+  "applied_fix": {
+    "path": "tests/e2e/helpers.ts",
+    "before_sha256": "86a0681ae27ee4208433c3672d0f5ece7c92bfa7741b9e427126335a49a61eae",
+    "after_sha256": "305529bebec7c9ca3f869a07dd2b789beda80547ec9e967e01f4b975c6606e22",
+    "details": "After the original native bootstrap+saved+origin assertions, navigate to real same-origin /health and require 200 JSON. Perform the original real GET session/GET Workbench/PUT CAS reset/localStorage.clear in that non-application document. Navigate back to / and retain the original five-second saved assertion.",
+    "scope": "Only this helper file was edited. No application code, authentication/authorization, CAS, test timeout, retry, private data or old test assertions were changed. No extra product endpoint or fake health response was introduced.",
+    "diff": "fixture/helpers-fix.diff.log"
+  },
+  "source_provenance": {
+    "controlled_exact_sources_before": {
+      "PRODUCT_DESIGN.md": "ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c",
+      "tests/e2e/helpers.ts": "86a0681ae27ee4208433c3672d0f5ece7c92bfa7741b9e427126335a49a61eae",
+      "tests/e2e/practice.spec.ts": "8611c95dd68687d8a8d8277d108e984a8f3b01414521c97695e807c84af3071b",
+      "tests/e2e/restartRuntime.ts": "f45757408a834ae36d2714c679226f645142fa635913ca130329eb5f30c21ad8",
+      "tests/e2e/practiceTestData.ts": "9d9535bc90242fbab8188f8c6d7f3dc9469edfbeed8bc6d7c4216142959d3604",
+      "apps/web/src/workbench/useWorkbench.ts": "175dabe63ad7e428d8a845dbde52fea993d81490ea30f970a55e20359d91c2a8",
+      "apps/web/src/workbench/uiCache.ts": "372b91e32d1acbea2753812b7e15dee50b64cb3d5eec49cc2dd52ac1d515ae97",
+      "apps/web/src/workbench/Shell.tsx": "ffad4dc67bb8718579ead19cad704d0286405ec960ba98f270db6f12232e9382",
+      "apps/web/src/api/client.ts": "1e39413dcd63ac19bdcd802f2550632365cf8bb70bd83805ed63b13f3bf4e49b",
+      "apps/web/src/features/practice/PracticeView.tsx": "3860f116048f483d24791f36785be19155170ac4206dfe16ab94b6ade6828b45"
+    },
+    "controlled_exact_sources_after": {
+      "PRODUCT_DESIGN.md": "ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c",
+      "tests/e2e/helpers.ts": "86a0681ae27ee4208433c3672d0f5ece7c92bfa7741b9e427126335a49a61eae",
+      "tests/e2e/practice.spec.ts": "8611c95dd68687d8a8d8277d108e984a8f3b01414521c97695e807c84af3071b",
+      "tests/e2e/restartRuntime.ts": "f45757408a834ae36d2714c679226f645142fa635913ca130329eb5f30c21ad8",
+      "tests/e2e/practiceTestData.ts": "9d9535bc90242fbab8188f8c6d7f3dc9469edfbeed8bc6d7c4216142959d3604",
+      "apps/web/src/workbench/useWorkbench.ts": "175dabe63ad7e428d8a845dbde52fea993d81490ea30f970a55e20359d91c2a8",
+      "apps/web/src/workbench/uiCache.ts": "372b91e32d1acbea2753812b7e15dee50b64cb3d5eec49cc2dd52ac1d515ae97",
+      "apps/web/src/workbench/Shell.tsx": "ffad4dc67bb8718579ead19cad704d0286405ec960ba98f270db6f12232e9382",
+      "apps/web/src/api/client.ts": "1e39413dcd63ac19bdcd802f2550632365cf8bb70bd83805ed63b13f3bf4e49b",
+      "apps/web/src/features/practice/PracticeView.tsx": "3860f116048f483d24791f36785be19155170ac4206dfe16ab94b6ade6828b45"
+    },
+    "all_ten_unchanged": true,
+    "focused_original_test_boundary": "Focused original pair ran in active development checkout after helper edit, with original practice.spec and original Playwright config, a new synthetic DB and real fixed-port servers. This is not the final exact full gate; unrelated frontend CSS development was independently owned."
+  },
+  "cleanup": {
+    "observed_at": "2026-09-14T19:16:52.695604+00:00",
+    "owned_playwright_command_exited": true,
+    "ports_not_listening": {
+      "8765": true,
+      "5173": true
+    },
+    "all_released": true
+  },
+  "scope_limits": [
+    "No raw DOM/error-context document, screenshots, database, browser profile, source upload, cookies, bootstrap capability, CSRF value or complete auth/session payload is included.",
+    "The controlled trace supports the helper reset race but does not uniquely reconstruct the original local or CI millisecond ordering. CI retains its original failure; no rerun was performed.",
+    "The neutral HTML experiment is unapplied. Final fix uses actual same-origin /health 200 JSON and preserves original 5000ms saved assertion.",
+    "Original pair result is a focused active-development check, not the final full-stage exact gate.",
+    "Published probe path substitutions are documented transformations; executed raw source hashes are retained. No post-publication test execution is claimed."
+  ],
+  "artifact_names": {
+    "controlled_red_log": "logs/controlled-red.log",
+    "controlled_red_ledger": "ledgers/controlled-red.json",
+    "health_green_log": "logs/controlled-health-green.log",
+    "health_green_ledger": "ledgers/controlled-health-green.json",
+    "applied_diff": "fixture/helpers-fix.diff.log",
+    "pair_green_log": "logs/original-practice-pair-green.log"
+  }
+}

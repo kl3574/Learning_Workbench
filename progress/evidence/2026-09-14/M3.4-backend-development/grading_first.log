@@ -1,0 +1,66 @@
+..................F.....                                                 [100%]
+=================================== FAILURES ===================================
+_ test_http_failed_regrade_retains_real_previous_grade_without_private_answers_and_can_recover[failed] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7d074fef6d80>, SessionIdentity(id='session_assessment_...ted'], time_limit_seconds=None)), <services.api.app.application.assessment.AssessmentService object at 0x7d074fd2c8f0>)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7d0755485ac0>
+terminal = 'failed'
+
+    @pytest.mark.parametrize("terminal", ["failed", "cancelled"])
+    def test_http_failed_regrade_retains_real_previous_grade_without_private_answers_and_can_recover(storage, monkeypatch, terminal):
+        database, learner, fixture, assessment = storage
+        attempt = submitted(storage)
+        service = GradingService(database)
+        worker = GradingWorker(database)
+        assert worker.run_once()
+        author = real_author(database)
+        service.regrade(author, attempt.id, review_request(fixture), "first-manual")
+        assert worker.run_once()
+        old = service.result(learner, attempt.id)
+        assert isinstance(old, AssessmentGradingResult) and old.grading_revision == 2 and old.status == "graded"
+        old_public = old.model_dump(mode="json")
+        for item in old_public["items"]:
+            item["solution_markdown"] = None
+        old_public["solution_reviews"] = []
+        with database.connect() as connection:
+            old_raw = connection.execute("SELECT result_json FROM grades WHERE attempt_id=? AND grading_revision=2", (attempt.id,)).fetchone()[0]
+        queued = service.regrade(author, attempt.id, review_request(fixture, revision=2, count=1), "second-manual")
+        if terminal == "cancelled":
+            current = service.job(author, queued.id)
+            service.cancel(author, queued.id, JobCancelRequest(expected_revision=current.revision), "cancel-second")
+        else:
+            def failure(lease):
+                raise ValueError("Synthetic failure before a later grading revision exists")
+            with monkeypatch.context() as patch:
+                patch.setattr(worker, "compute", failure)
+                assert worker.run_once()
+        # Real login + actual HTTP projection, with no background worker racing this controlled terminal.
+        token, connected = consume_bootstrap(database, issue_bootstrap_code(database))
+        client = TestClient(create_app(database.settings), base_url="http://127.0.0.1:8765")
+        client.cookies.set("learning_session", token)
+        response = client.get(f"/api/v1/attempts/{attempt.id}/result")
+        assert response.status_code == 202
+        pending = response.json()
+        assert pending["id"] == queued.id and pending["status"] == terminal
+>       assert pending["last_completed_result"] == old_public
+E       AssertionError: assert {'attempt_id'...'graded', ...} == {'attempt_id'...'graded', ...}
+E         
+E         Omitting 11 identical items, use -vv to show
+E         Differing items:
+E         {'current_review_policy': {'tutor_scope': 'operation_help_only', 'allow_materials': True, 'allow_web': False}} != {'current_review_policy': {'tutor_scope': 'academic', 'allow_materials': True, 'allow_web': False}}
+E         Use -v to get more diff
+
+tests/integration/test_assessment_grading.py:409: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <REPO>/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <REPO>/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_assessment_grading.py::test_http_failed_regrade_retains_real_previous_grade_without_private_answers_and_can_recover[failed]
+1 failed, 23 passed, 2 warnings in 9.23s

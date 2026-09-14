@@ -1,0 +1,32 @@
+
+Running 2 tests using 1 worker
+
+(node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/e2e/review.spec.ts:35:1 › real history and exact material review preserve original submitted text, null scores and a selected old revision after reload (20.1s)
+(node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  2 tests/e2e/review.spec.ts:76:1 › a delayed old review response cannot restore history or academic context after another page starts a real independent attempt (7.2s)
+
+
+  1) tests/e2e/review.spec.ts:35:1 › real history and exact material review preserve original submitted text, null scores and a selected old revision after reload 
+
+    TimeoutError: locator.click: Timeout 10000ms exceeded.
+    Call log:
+      - waiting for getByRole('dialog', { name: 'Agent 助教', exact: true }).getByRole('button', { name: '关闭 Agent 助教', exact: true })
+
+
+      66 |   const reviewTab = page.getByRole('tab', { name: /测试复盘/ }); await reviewTab.click(); await expect(history.getByLabel('选择评分版本')).toHaveValue('1')
+      67 |   await page.setViewportSize({ width: 390, height: 844 }); await history.getByRole('heading', { name: '评分版本与证据' }).evaluate(node => node.scrollIntoView({ block: 'start' })); expect(await page.locator('.assessment-scroll').evaluate(node => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1); await page.screenshot({ path: info.outputPath('review-history-after-390.png') })
+    > 68 |   await page.getByRole('button', { name: '切换 Agent 栏', exact: true }).click(); const drawer = page.getByRole('dialog', { name: 'Agent 助教', exact: true }); await expect(drawer).toContainText('当前测试复盘上下文'); await expect(drawer).toContainText('评分版本 1：待复核'); await expect(drawer).toContainText('此版本没有当前获准的反馈正文'); await expect(drawer.getByRole('button', { name: '发送 ↑' })).toBeDisabled(); await drawer.getByRole('button', { name: '关闭 Agent 助教', exact: true }).click()
+         |                                                                                                                                                                                                                                                                                                                                                                                                                                                                       ^
+      69 |   const evidence: PageEvidence = await page.request.get('/api/v1/learning/evidence?limit=100').then(response => response.json())
+      70 |   const latestIds = final.history[1].items.flatMap(item => item.evidence_ids)
+      71 |   expect(evidence.items.map(item => item.id).sort()).toEqual([...latestIds].sort()); expect(evidence.items.every(item => !item.eligible)).toBe(true); expect(evidence.items.some(item => item.score === 1)).toBe(true)
+        at <workspace>/tests/e2e/review.spec.ts:68:455
+
+    Error Context: ../../../../..<native-round-02>/review-real-history-and-ex-756c0-d-old-revision-after-reload/error-context.md
+
+  1 failed
+    tests/e2e/review.spec.ts:35:1 › real history and exact material review preserve original submitted text, null scores and a selected old revision after reload 
+  1 passed (27.8s)

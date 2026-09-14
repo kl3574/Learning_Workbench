@@ -1,0 +1,40 @@
+--- controlled-red-source.spec.ts.txt
++++ controlled-health-green-source.spec.ts.txt
+@@ -44,14 +44,19 @@
+       Storage.prototype.clear=function(){const result=clear.call(this);if(this===localStorage)emit({kind:'storage-clear'});return result}
+     })
+     await page.route('**/api/v1/practice/sessions/*',async route=>{
+-      if(route.request().method()==='GET'&&!held){held=true;const response=await route.fetch();mark('held-real-practice-response',{status:response.status()});await gate;await route.fulfill({response});mark('released-real-practice-response');return}
++      if(route.request().method()==='GET'&&!held){held=true;const response=await route.fetch();mark('held-real-practice-response',{status:response.status()});await gate;try { await route.fulfill({response});mark('released-real-practice-response') } catch { mark('old-document-request-aborted') };return}
+       await route.continue()
+     })
+     await page.route('**/',async route=>{if(cleared&&route.request().isNavigationRequest()){mark('reload-document-start');await new Promise(r=>setTimeout(r,200));mark('reload-document-release')}await route.continue()})
+     page.on('response',async r=>{const p=new URL(r.url()).pathname;if(p==='/api/v1/workbench/session'){try{const s=await r.json();mark('workbench-response',{method:r.request().method(),status:r.status(),revision:s.revision,tabs:s.tabs?.length,error:s.error?.code})}catch{}}})
+     await runtime.authenticateOnly(page)
+     mark('initial-saved')
+-    // Original helpers.ts:11-20 reset/clear/reload logic; only origin/bootstrap uses this isolated runtime.
++    // Real same-origin API health JSON unloads the old app before its out-of-band reset.
++    const health = await page.goto(`${runtime.origin}/health`)
++    expect(health?.status()).toBe(200)
++    expect(health?.headers()['content-type']).toContain('application/json')
++    mark('old-app-unmounted-by-health',{status:health?.status(),contentType:health?.headers()['content-type']})
++    // Original helper real reset and local cache clear follow unchanged.
+     await page.evaluate(async()=>{
+       const auth=await(await fetch('/api/v1/session')).json()
+       const current=await(await fetch('/api/v1/workbench/session')).json()
+@@ -61,12 +66,12 @@
+       localStorage.clear()
+     })
+     mark('reset-clear-returned')
+-    await page.reload()
++    await page.goto(`${runtime.origin}/`)
+     await expect(page.getByText('✓ UI 会话已保存')).toBeVisible()
+   } finally {
+     release()
+-    writeFileSync('<EVIDENCE_DIR>/controlled-ledger.json',JSON.stringify(ledger,null,2)+'\n')
++    writeFileSync('<EVIDENCE_DIR>/controlled-health-green-ledger.json',JSON.stringify(ledger,null,2)+'\n')
+     await browser?.close();await runtime.close()
+-    writeFileSync('<EVIDENCE_DIR>/cleanup.json',JSON.stringify({closed:true,owned_runtime:true,closed_at:new Date().toISOString()}))
++    writeFileSync('<EVIDENCE_DIR>/health-green-cleanup.json',JSON.stringify({closed:true,owned_runtime:true,closed_at:new Date().toISOString()}))
+   }
+ })
