@@ -8,6 +8,10 @@ export async function bootstrap(page: Page) {
   await page.goto(`/#bootstrap=${code}`)
   await expect(page.getByText('✓ UI 会话已保存')).toBeVisible()
   await expect(page).toHaveURL('http://127.0.0.1:5173/')
+  // Unload the old Shell before resetting its server session and browser cache.
+  const health = await page.goto('/health')
+  expect(health?.status()).toBe(200)
+  expect(health?.headers()['content-type']).toContain('application/json')
   await page.evaluate(async () => {
     const auth = await (await fetch('/api/v1/session')).json()
     const current = await (await fetch('/api/v1/workbench/session')).json()
@@ -16,7 +20,7 @@ export async function bootstrap(page: Page) {
     if (!response.ok) throw new Error(`Reset failed ${response.status}`)
     localStorage.clear()
   })
-  await page.reload()
+  await page.goto('/')
   await expect(page.getByText('✓ UI 会话已保存')).toBeVisible()
 }
 export async function openSyntheticLesson(page: Page) {

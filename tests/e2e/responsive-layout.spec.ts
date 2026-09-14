@@ -66,6 +66,8 @@ test('narrow layout and submitted explanation remain visible before React resize
     await page.locator('.practice-submit').scrollIntoViewIfNeeded()
     await sample('section-scrolled-before-listeners')
     await expect(page.locator('.practice-submit > p')).toBeInViewport()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    expect(await page.locator('.workbench-grid').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true)
     await page.evaluate(() => window.__layoutResizeGate.release())
     await expect(page.locator('#nav-pane')).toBeHidden()
     await sample('after-listeners')
