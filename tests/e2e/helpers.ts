@@ -24,6 +24,7 @@ export async function bootstrap(page: Page) {
   await expect(page.getByText('✓ UI 会话已保存')).toBeVisible()
 }
 export async function openSyntheticLesson(page: Page) {
+  await page.getByRole('navigation', { name: '学习主导航' }).getByRole('button', { name: '教材' }).click()
   await page.getByRole('button', { name: '浏览合成示例课程' }).click()
   await page.getByRole('navigation', { name: '学习主导航' }).getByRole('button', { name: '教材' }).click()
   await page.getByRole('button', { name: '打开示例小节' }).click()

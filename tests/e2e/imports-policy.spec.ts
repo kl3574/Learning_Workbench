@@ -70,7 +70,7 @@ test('a reselected failed original survives a role-policy pause in memory while 
   const receipt: { import_id: string } = await staged.json()
   await expect(dialog.getByRole('heading', { name: '选择原件编码并在本机预览', exact: true })).toBeVisible()
   await page.reload()
-  await expect(page.getByRole('region', { name: '当前教材目录', exact: true })).toBeVisible()
+  await expect(page.getByRole('region', { name: '学习路线目录', exact: true })).toBeVisible()
   await page.getByRole('button', { name: '导入', exact: true }).click()
   dialog = page.getByRole('dialog', { name: '导入', exact: true })
   await dialog.getByRole('button', { name: `恢复 ${receipt.import_id}`, exact: true }).click()

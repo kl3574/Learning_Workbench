@@ -6,7 +6,7 @@ test('empty workspace, native bootstrap, four fixed navigation and truthful auxi
   await bootstrap(page)
   const labels = await page.getByRole('navigation', { name: '学习主导航' }).getByRole('button').allTextContents()
   expect(labels.map(text => text.replace(/[↗▤✎☑]/g, '').replace(/含例题|含解答/g, '').trim())).toEqual(['学习路线', '教材', '习题', '测试题'])
-  await expect(page.getByRole('heading', { name: '从一个学习目标开始' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '从学习目标开始', exact: true })).toBeVisible()
   await expect(page.getByText('未配置模型')).toBeVisible()
   for (const name of ['教材', '习题', '测试题', '学习路线']) {
     await page.getByRole('navigation', { name: '学习主导航' }).getByRole('button', { name, exact: false }).click()
@@ -331,8 +331,10 @@ test('first unsent-draft conflict shows original, local and stored text before a
 
 test('route directory stays honestly empty and continue reading restores the exact last lesson', async ({ page }) => {
   await bootstrap(page)
+  await page.getByRole('navigation', { name: '学习主导航' }).getByRole('button', { name: '教材' }).click()
   await page.getByRole('button', { name: '浏览合成示例课程' }).click()
-  await expect(page.getByText('尚无正式学习路线', { exact: true })).toBeVisible()
+  await page.getByRole('navigation', { name: '学习主导航' }).getByRole('button', { name: '学习路线', exact: true }).click()
+  await expect(page.getByRole('region', { name: '学习路线目录', exact: true }).getByText('尚无正式学习路线。', { exact: true })).toBeVisible()
   await expect(page.getByRole('navigation', { name: '上下文目录' })).toHaveCount(0)
   await page.getByRole('navigation', { name: '学习主导航' }).getByRole('button', { name: '教材' }).click()
   await page.getByRole('button', { name: '打开示例小节' }).click()
