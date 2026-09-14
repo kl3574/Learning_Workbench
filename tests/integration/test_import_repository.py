@@ -9,6 +9,8 @@ import json
 import pytest
 
 from packages.contracts import domain_models as dm
+from packages.contracts.budgets import ImportBudgets
+from packages.contracts.validation import ENTITY_MODELS, parse_manifest
 from packages.contracts.canonical import canonical_bytes, metadata_sha256, sha256_bytes
 from services.api.app.application.errors import ApiError
 from services.api.app.application.import_parsing import parse_import
@@ -325,7 +327,7 @@ def synthetic_tree(revision=1):
     return [block, lesson, course], {block.body_path: body}
 
 
-def package_bytes(objects, bodies, *, symbols=(), asset=None):
+def package_bytes(objects, bodies, *, symbols=(), asset=None, budgets=ImportBudgets()):
     root = max((value for value in objects if isinstance(value, dm.Course)), key=lambda value: value.revision)
     payloads = {f"metadata/{value.entity}_{value.id}_{value.revision}.json": canonical_bytes(value) for value in objects if value != root}
     payloads["course.json"] = canonical_bytes(root)
@@ -335,10 +337,10 @@ def package_bytes(objects, bodies, *, symbols=(), asset=None):
     payloads.update(bodies)
     if asset is not None:
         payloads["assets/synthetic.txt"] = asset
-    manifest = dm.Manifest(package_id="package_custom", profile="learner", created_at="2026-09-14T00:00:00Z", files=[
-        dm.FileEntry(path=path, size=len(data), sha256=sha256_bytes(data), media_type="text/plain" if path.endswith(".txt") else "text/markdown" if path.endswith(".md") else "application/json", visibility="learner")
+    manifest = parse_manifest({"package_id": "package_custom", "profile": "learner", "created_at": "2026-09-14T00:00:00Z", "files": [
+        dm.FileEntry(path=path, size=len(data), sha256=sha256_bytes(data), media_type="text/plain" if path.endswith(".txt") else "text/markdown" if path.endswith(".md") else "application/json", visibility="learner").model_dump(mode="python")
         for path, data in payloads.items()
-    ])
+    ]}, budgets=budgets)
     output = BytesIO()
     with ZipFile(output, "w", compression=ZIP_STORED) as archive:
         archive.writestr("manifest.json", canonical_bytes(manifest))
@@ -612,3 +614,52 @@ def test_symbol_course_scope_is_rebound_to_actual_target_course(imports):
         scope = metadata["symbols"][0]["scope"]
         assert scope == target.id and connection.execute("SELECT 1 FROM objects WHERE id=?", (scope,)).fetchone()
     assert result.course_refs[0].id == scope
+
+
+def test_expanded_package_budget_accepts_complete_mapping_above_two_thousand_objects(tmp_path):
+    database = Database(Settings(data_dir=tmp_path / "large_mapping_data", max_package_files=3000))
+    workspace = database.initialize()
+    identity = SessionIdentity("session_large_mapping", workspace, "learner", "synthetic", "2099-01-01T00:00:00Z")
+    service = ImportService(database)
+    worker = ImportWorker(database)
+    values, bodies = synthetic_tree()
+    concepts = [dm.Concept(id=f"concept_bulk_{number}", revision=1, title=f"Synthetic concept {number}") for number in range(2001)]
+    values[-1] = values[-1].model_copy(update={"concept_refs": [reference(value) for value in concepts]})
+    originals = [*values, *concepts]
+    raw = package_bytes(originals, bodies, budgets=database.settings.import_budgets)
+    staged = service.stage(identity, data=raw, filename="large-mapping.learnpack.zip", kind="learnpack", key="large_stage")
+    try:
+        assert worker.run_once()
+        preview = service.preview(identity, staged.import_id)
+        assert preview.status == "preview_ready" and len(preview.preview_refs) == 2004
+        mappings = [ImportIdMapping(old_id=value.id, new_id=f"mapped_{value.id}") for value in originals]
+        request = decision(staged, preview, mappings)
+        assert len(request.id_mapping) == 2004
+        result = service.commit(identity, staged.import_id, request, "large_commit")
+        assert service.commit(identity, staged.import_id, request, "large_commit") == result
+        assert len(result.course_refs) == 1 and result.course_refs[0].id == "mapped_course_custom"
+        course = service.content.read(workspace, "course", result.course_refs[0].id, 1)
+        assert reference(course) == result.course_refs[0]
+        assert len(course.concept_refs) == 2001 and all(ref.id.startswith("mapped_concept_bulk_") for ref in course.concept_refs)
+        lesson = service.content.read(workspace, "lesson", "mapped_lesson_custom", 1)
+        block = service.content.read(workspace, "block", "mapped_block_custom", 1)
+        assert lesson.block_refs == [reference(block)]
+        assert service.content.body(workspace, block.id, 1) == (bodies[block.body_path], block.body_sha256)
+        with database.connect() as connection:
+            rows = connection.execute("SELECT o.id,o.kind,o.current_revision,r.revision,r.metadata_json,r.sha256 FROM objects o JOIN revisions r ON r.object_id=o.id WHERE o.workspace_id=?", (workspace,)).fetchall()
+            assert len(rows) == 2004
+            assert {row["id"] for row in rows} == {value.new_id for value in mappings}
+            assert not {row["id"] for row in rows}.intersection(value.id for value in originals)
+            stored_refs = {}
+            for row in rows:
+                model = ENTITY_MODELS[row["kind"]].model_validate_json(row["metadata_json"])
+                assert row["revision"] == row["current_revision"] == model.revision == 1
+                assert model.id == row["id"] and metadata_sha256(model) == row["sha256"]
+                stored_refs[model.id] = reference(model)
+            assert all(stored_refs[ref.id] == ref for ref in course.concept_refs + course.lesson_refs)
+            assert connection.execute("SELECT COUNT(*) FROM job_events WHERE job_id=? AND type IN ('completed','failed','cancelled')", (staged.job.id,)).fetchone()[0] == 1
+            assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+        snapshot = service.job(identity, staged.job.id)
+        assert snapshot.status == "completed" and snapshot.result_refs == result.course_refs
+    finally:
+        worker.stop()

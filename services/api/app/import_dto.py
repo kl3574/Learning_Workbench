@@ -47,8 +47,8 @@ class ImportIdMapping(dm.StrictModel):
 
 class ImportCommitRequest(dm.StrictModel):
     expected_input_sha256: dm.Sha256
-    accepted_warning_codes: list[str] = Field(max_length=2000)
-    id_mapping: list[ImportIdMapping] = Field(max_length=2000)
+    accepted_warning_codes: list[str]
+    id_mapping: list[ImportIdMapping]
 
     @model_validator(mode="after")
     def unique_decisions(self) -> "ImportCommitRequest":
