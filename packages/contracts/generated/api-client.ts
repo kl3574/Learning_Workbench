@@ -1,6 +1,6 @@
 // Generated from PRODUCT_DESIGN.md v3.0.0 and actual runtime OpenAPI; do not edit.
 // spec_sha256: ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c
-import type { BlockReadResponse, BootstrapRequest, BootstrapResponse, ContentRef, Course, DirectorySearchResponse, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobSnapshot, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, OutlineResponse, PageCourse, PageNote, PageRevision, PreferencesRequest, ReadinessResponse, RoleRequest, SessionResponse, SourceResponse, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
+import type { BlockReadResponse, BootstrapRequest, BootstrapResponse, ContentRef, Course, DirectorySearchResponse, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobSnapshot, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, OutlineResponse, PageCourse, PageNote, PagePracticeSet, PageRevision, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ReadinessResponse, ResponsesWrite, RoleRequest, SessionResponse, SourceResponse, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
 
 export interface ApiEndpointMap {
   "GET /api/v1/artifacts/{id}/download": { request: undefined; response: Blob; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
@@ -26,6 +26,13 @@ export interface ApiEndpointMap {
   "PATCH /api/v1/notes/{id}": { request: Note; response: ContentRef; headers: { "Idempotency-Key": string; "If-Match"?: (string | null) }; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/objects/{id}/current": { request: undefined; response: ContentRef; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/objects/{id}/revisions": { request: undefined; response: PageRevision; headers: null; parameters: { path: { "id": string }; query?: { "cursor"?: (string | null); "limit"?: number } }; parametersRequired: true };
+  "POST /api/v1/practice/sessions": { request: PracticeSessionCreate; response: PracticeSessionCreated; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
+  "GET /api/v1/practice/sessions/{id}": { request: undefined; response: PracticeSession; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
+  "POST /api/v1/practice/sessions/{id}/hints": { request: PracticeHintRequest; response: PracticeHint; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
+  "PUT /api/v1/practice/sessions/{id}/responses": { request: ResponsesWrite; response: PracticeResponsesSaved; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
+  "POST /api/v1/practice/sessions/{id}/solutions": { request: PracticeSolutionRequest; response: PracticeSolution; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
+  "POST /api/v1/practice/sessions/{id}/submit": { request: PracticeSubmitRequest; response: PracticeSubmitted; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
+  "GET /api/v1/practice/sets": { request: undefined; response: PagePracticeSet; headers: null; parameters: { query?: { "course_id"?: (string | null); "cursor"?: (string | null); "lesson_id"?: (string | null); "limit"?: number } }; parametersRequired: false };
   "GET /api/v1/readiness": { request: undefined; response: ReadinessResponse; headers: null; parameters: Record<string, never>; parametersRequired: false };
   "GET /api/v1/session": { request: undefined; response: SessionResponse; headers: null; parameters: Record<string, never>; parametersRequired: false };
   "POST /api/v1/session/bootstrap": { request: BootstrapRequest; response: BootstrapResponse; headers: null; parameters: Record<string, never>; parametersRequired: false };
@@ -467,6 +474,122 @@ export const API_ENDPOINTS = {
     "queryParameters": [
       {
         "name": "cursor",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      }
+    ]
+  },
+  "POST /api/v1/practice/sessions": {
+    "method": "POST",
+    "path": "/api/v1/practice/sessions",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
+    "queryParameters": []
+  },
+  "GET /api/v1/practice/sessions/{id}": {
+    "method": "GET",
+    "path": "/api/v1/practice/sessions/{id}",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
+  "POST /api/v1/practice/sessions/{id}/hints": {
+    "method": "POST",
+    "path": "/api/v1/practice/sessions/{id}/hints",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
+  "PUT /api/v1/practice/sessions/{id}/responses": {
+    "method": "PUT",
+    "path": "/api/v1/practice/sessions/{id}/responses",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
+  "POST /api/v1/practice/sessions/{id}/solutions": {
+    "method": "POST",
+    "path": "/api/v1/practice/sessions/{id}/solutions",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
+  "POST /api/v1/practice/sessions/{id}/submit": {
+    "method": "POST",
+    "path": "/api/v1/practice/sessions/{id}/submit",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
+  "GET /api/v1/practice/sets": {
+    "method": "GET",
+    "path": "/api/v1/practice/sets",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
+    "queryParameters": [
+      {
+        "name": "course_id",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "name": "cursor",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "name": "lesson_id",
         "required": false,
         "type": "string"
       },

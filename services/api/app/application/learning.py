@@ -134,3 +134,33 @@ def record_note_created(connection: sqlite3.Connection, workspace_id: str, ref: 
     if ref.entity != "note":
         raise ApiError(422, "SCHEMA_INVALID", "笔记事件必须引用笔记修订。")
     return LearningRepository(connection, workspace_id).note_created(ref)
+
+
+def record_practice_event(connection: sqlite3.Connection, workspace_id: str,
+                          kind: Literal["hint_revealed", "solution_revealed", "practice_submitted"],
+                          ref: dm.ContentRef, practice_session_id: str) -> str:
+    """Trusted Practice application port; no public event or grade-writing API."""
+    if not connection.in_transaction:
+        raise ApiError(409, "TRANSACTION_REQUIRED", "练习事件需要有效事务。")
+    expected_entity = {"hint_revealed": "question", "solution_revealed": "question", "practice_submitted": "practice_set"}
+    if kind not in expected_entity or ref.entity != expected_entity[kind]:
+        raise ApiError(422, "SCHEMA_INVALID", "练习事件类型与引用不匹配。")
+    content = ContentRepository(connection, workspace_id)
+    content.require_workspace()
+    guard_subject_access(connection, workspace_id)
+    validated_ref(content, ref)
+    return LearningRepository(connection, workspace_id).practice_event(kind, ref, practice_session_id)
+
+
+def validate_practice_event(connection: sqlite3.Connection, workspace_id: str, event_id: str,
+                            kind: Literal["hint_revealed", "solution_revealed", "practice_submitted"],
+                            ref: dm.ContentRef, practice_session_id: str) -> None:
+    """Read-only verification port for an immutable Practice-to-Learning binding."""
+    expected_entity = {"hint_revealed": "question", "solution_revealed": "question", "practice_submitted": "practice_set"}
+    if kind not in expected_entity or ref.entity != expected_entity[kind]:
+        raise ApiError(409, "PRACTICE_SNAPSHOT_INVALID", "练习事件类型与引用不匹配。")
+    content = ContentRepository(connection, workspace_id)
+    content.require_workspace()
+    guard_subject_access(connection, workspace_id)
+    validated_ref(content, ref)
+    LearningRepository(connection, workspace_id).validate_practice_event(event_id, kind, ref, practice_session_id)

@@ -16,6 +16,7 @@ from .interfaces.content_http import create_content_router
 from .interfaces.http import create_router
 from .interfaces.import_http import create_import_router
 from .interfaces.learning_http import create_learning_router
+from .interfaces.practice_http import create_practice_router
 from .infrastructure.import_worker import ImportWorker
 
 
@@ -51,6 +52,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(create_content_router(database))
     application.include_router(create_import_router(settings, import_service))
     application.include_router(create_learning_router(database))
+    application.include_router(create_practice_router(database))
     if settings.static_dir.is_dir():
         application.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="workbench")
     return application

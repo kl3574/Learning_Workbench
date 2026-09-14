@@ -228,6 +228,15 @@ export type ImportUpload = {
   "target_course_id"?: (string | null);
 };
 
+export type ItemGrade = {
+  "question_ref": ContentRef;
+  "score"?: (number | null);
+  "max_score": number;
+  "status": "graded" | "needs_review";
+  "feedback_markdown": string;
+  "solution_markdown"?: (string | null);
+};
+
 export type JobCancelRequest = {
   "expected_revision": number;
 };
@@ -348,9 +357,73 @@ export type PageNote = {
   "next_cursor": (string | null);
 };
 
+export type PagePracticeSet = {
+  "items": Array<PracticeSetSummary>;
+  "next_cursor": (string | null);
+};
+
 export type PageRevision = {
   "items": Array<RevisionSummary>;
   "next_cursor": (string | null);
+};
+
+export type PracticeAssistance = {
+  "question_id": string;
+  "highest_hint_level": 0 | 1 | 2 | 3;
+  "solution_revealed": boolean;
+};
+
+export type PracticeHint = {
+  "markdown": string;
+  "exposure_event_id": string;
+  "revision": number;
+  "level": 1 | 2 | 3;
+  "rule_version": string;
+  "source": "rules";
+};
+
+export type PracticeHintRequest = {
+  "question_id": string;
+  "expected_revision": number;
+  "level": 1 | 2 | 3;
+};
+
+export type PracticeResponsesSaved = {
+  "id": string;
+  "revision": number;
+  "saved_at": string;
+};
+
+export type PracticeSession = {
+  "id": string;
+  "revision": number;
+  "practice_ref": ContentRef;
+  "lesson_ref": ContentRef;
+  "questions": Array<QuestionPublic>;
+  "responses": Array<ResponseDraft>;
+  "status": "active" | "submitted" | "abandoned";
+  "exposure_event_ids": Array<string>;
+  "assisted": boolean;
+  "assistance": Array<PracticeAssistance>;
+  "results": (Array<ItemGrade> | null);
+};
+
+export type PracticeSessionCreate = {
+  "practice_ref": ContentRef;
+};
+
+export type PracticeSessionCreated = {
+  "id": string;
+  "revision": number;
+  "practice_ref": ContentRef;
+  "lesson_ref": ContentRef;
+  "questions": Array<QuestionPublic>;
+  "responses": Array<ResponseDraft>;
+  "status": "active";
+  "exposure_event_ids": Array<string>;
+  "assisted": boolean;
+  "assistance": Array<PracticeAssistance>;
+  "results": (Array<ItemGrade> | null);
 };
 
 export type PracticeSet = {
@@ -362,6 +435,39 @@ export type PracticeSet = {
   "lesson_ref": ContentRef;
   "question_refs": Array<ContentRef>;
   "feedback_policy"?: "on_submit_or_reveal";
+};
+
+export type PracticeSetSummary = {
+  "ref": ContentRef;
+  "title": string;
+  "lesson_ref": ContentRef;
+  "question_count": number;
+};
+
+export type PracticeSolution = {
+  "solution_markdown": string;
+  "exposure_event_id": string;
+  "revision": number;
+  "review_status": "draft" | "needs_review" | "approved";
+};
+
+export type PracticeSolutionRequest = {
+  "question_id": string;
+  "expected_revision": number;
+};
+
+export type PracticeSubmitRequest = {
+  "expected_revision": number;
+};
+
+export type PracticeSubmitted = {
+  "id": string;
+  "revision": number;
+  "results": Array<ItemGrade>;
+  "evidence_label": "practice";
+  "exposure_event_ids": Array<string>;
+  "assisted": boolean;
+  "assistance": Array<PracticeAssistance>;
 };
 
 export type PreferencesPatch = {
@@ -418,6 +524,17 @@ export type ResolvedCitation = {
   "citation": Citation;
   "source": ProvenanceSource;
   "original_access": "allowed" | "author_required" | "unavailable";
+};
+
+export type ResponseDraft = {
+  "question_id": string;
+  "answer": string;
+  "steps_markdown"?: string;
+};
+
+export type ResponsesWrite = {
+  "expected_revision": number;
+  "responses": Array<ResponseDraft>;
 };
 
 export type RetainedOriginal = {
