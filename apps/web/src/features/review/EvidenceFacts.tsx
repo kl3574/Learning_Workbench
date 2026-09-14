@@ -1,0 +1,7 @@
+import type { GradeHistoryEntry, GradeHistoryItem } from '../../../../../packages/contracts/generated/api-types'
+import { eligibilityReasons } from './reviewModel'
+const independence = { independent: '本次独立完成', assisted: '本次允许辅助', unknown: '本次独立性未确认' }
+const freshness = { novel: '历史记录支持此前未见', repeated: '历史记录显示此前见过', unknown: '此前是否见过尚未确认' }
+export function EvidenceFacts({ item, entry }: { item: GradeHistoryItem; entry: GradeHistoryEntry }) {
+  return <section className="evidence-facts" aria-label="本题证据资格"><h3>{item.eligible ? '纳入独立测试证据' : '保留记录 · 不纳入独立测试证据'}</h3><p>{independence[item.independence]}；{freshness[item.freshness]}。两者分别判断，分数不代表掌握概率。</p>{item.reason_codes.length > 0 && <ul>{item.reason_codes.map(code => <li key={code}>{eligibilityReasons[code]}</li>)}</ul>}<p>{entry.qualification_basis === 'submission_frozen' ? '资格条件在本次提交时冻结。' : '这是历史成绩补记，不能补造交卷时的资格条件。'}资格记录时间：<time dateTime={entry.qualification_recorded_at}>{entry.qualification_recorded_at}</time>。</p><details data-view-key={`evidence-${entry.grading_revision}-${item.question_ref.id}`}><summary data-focus-key={`evidence-${item.question_ref.id}`}>核对精确概念与证据记录</summary>{item.concept_refs.length ? item.concept_refs.map(ref => <p key={`${ref.id}:${ref.revision}`}><code>{ref.id} · r{ref.revision}<br />SHA-256 {ref.sha256}</code></p>) : <p>尚无可核验的精确概念引用。</p>}{item.evidence_ids.length ? <ul>{item.evidence_ids.map(id => <li key={id}><code>{id}</code></li>)}</ul> : <p>本题没有可展示的证据记录，不创建占位记录。</p>}<p>这里保留原始修订依赖，不据新版本出现推测知识已失效。</p></details></section>
+}

@@ -100,6 +100,16 @@
       "AssessmentGradingJob": {
         "additionalProperties": false,
         "properties": {
+          "current_review_policy": {
+            "$ref": "#/components/schemas/CurrentReviewPolicy"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/GradeHistoryEntry"
+            },
+            "title": "History",
+            "type": "array"
+          },
           "id": {
             "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
             "title": "Id",
@@ -131,7 +141,9 @@
         "required": [
           "id",
           "status",
-          "last_completed_result"
+          "last_completed_result",
+          "history",
+          "current_review_policy"
         ],
         "title": "AssessmentGradingJob",
         "type": "object"
@@ -144,8 +156,14 @@
             "title": "Attempt Id",
             "type": "string"
           },
+          "current_review_policy": {
+            "$ref": "#/components/schemas/CurrentReviewPolicy"
+          },
           "eligibility_status": {
-            "const": "not_evaluated",
+            "enum": [
+              "not_evaluated",
+              "evaluated"
+            ],
             "title": "Eligibility Status",
             "type": "string"
           },
@@ -163,6 +181,13 @@
             "title": "Grading Rules Version",
             "type": "string"
           },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/GradeHistoryEntry"
+            },
+            "title": "History",
+            "type": "array"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/ItemGrade"
@@ -175,6 +200,13 @@
               "$ref": "#/components/schemas/ManualReviewReceipt"
             },
             "title": "Manual Reviews",
+            "type": "array"
+          },
+          "review_materials": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionReviewMaterials"
+            },
+            "title": "Review Materials",
             "type": "array"
           },
           "solution_reviews": {
@@ -202,7 +234,10 @@
           "finalized_at",
           "manual_reviews",
           "solution_reviews",
-          "eligibility_status"
+          "eligibility_status",
+          "history",
+          "current_review_policy",
+          "review_materials"
         ],
         "title": "AssessmentGradingResult",
         "type": "object"
@@ -1123,6 +1158,35 @@
         "title": "CourseSummary",
         "type": "object"
       },
+      "CurrentReviewPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "allow_materials": {
+            "title": "Allow Materials",
+            "type": "boolean"
+          },
+          "allow_web": {
+            "const": false,
+            "title": "Allow Web",
+            "type": "boolean"
+          },
+          "tutor_scope": {
+            "enum": [
+              "operation_help_only",
+              "academic"
+            ],
+            "title": "Tutor Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tutor_scope",
+          "allow_materials",
+          "allow_web"
+        ],
+        "title": "CurrentReviewPolicy",
+        "type": "object"
+      },
       "DirectoryAncestor": {
         "additionalProperties": false,
         "properties": {
@@ -1289,6 +1353,253 @@
           "error"
         ],
         "title": "ErrorEnvelope",
+        "type": "object"
+      },
+      "Evidence": {
+        "additionalProperties": false,
+        "properties": {
+          "concept_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Concept Id",
+            "type": "string"
+          },
+          "eligible": {
+            "title": "Eligible",
+            "type": "boolean"
+          },
+          "event_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "freshness": {
+            "enum": [
+              "novel",
+              "repeated",
+              "unknown"
+            ],
+            "title": "Freshness",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "independence": {
+            "enum": [
+              "independent",
+              "assisted",
+              "unknown"
+            ],
+            "title": "Independence",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "skill": {
+            "enum": [
+              "recall",
+              "explain",
+              "compute",
+              "derive",
+              "transfer"
+            ],
+            "title": "Skill",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "event_id",
+          "concept_id",
+          "skill",
+          "eligible",
+          "reason",
+          "independence",
+          "freshness"
+        ],
+        "title": "Evidence",
+        "type": "object"
+      },
+      "GradeHistoryEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "finalized_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Finalized At",
+            "type": "string"
+          },
+          "grading_revision": {
+            "minimum": 1.0,
+            "title": "Grading Revision",
+            "type": "integer"
+          },
+          "grading_rules_version": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Grading Rules Version",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/GradeHistoryItem"
+            },
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "qualification_basis": {
+            "enum": [
+              "submission_frozen",
+              "history_not_frozen"
+            ],
+            "title": "Qualification Basis",
+            "type": "string"
+          },
+          "qualification_recorded_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Qualification Recorded At",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "graded",
+              "needs_review"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "grading_revision",
+          "grading_rules_version",
+          "status",
+          "finalized_at",
+          "qualification_basis",
+          "qualification_recorded_at",
+          "items"
+        ],
+        "title": "GradeHistoryEntry",
+        "type": "object"
+      },
+      "GradeHistoryItem": {
+        "additionalProperties": false,
+        "properties": {
+          "concept_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ContentRef"
+            },
+            "title": "Concept Refs",
+            "type": "array"
+          },
+          "eligible": {
+            "title": "Eligible",
+            "type": "boolean"
+          },
+          "evidence_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "freshness": {
+            "enum": [
+              "novel",
+              "repeated",
+              "unknown"
+            ],
+            "title": "Freshness",
+            "type": "string"
+          },
+          "independence": {
+            "enum": [
+              "independent",
+              "assisted",
+              "unknown"
+            ],
+            "title": "Independence",
+            "type": "string"
+          },
+          "max_score": {
+            "exclusiveMinimum": 0.0,
+            "title": "Max Score",
+            "type": "number"
+          },
+          "question_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "reason_codes": {
+            "items": {
+              "enum": [
+                "MODE_OPEN_BOOK",
+                "MODE_ASSISTED",
+                "HELP_BEFORE_SUBMIT",
+                "ANSWER_UNREVIEWED",
+                "GRADE_UNRESOLVED",
+                "CONCEPT_MAPPING_UNRESOLVED",
+                "PREVIOUSLY_SEEN",
+                "PRIOR_SEEN_UNKNOWN",
+                "HELP_HISTORY_UNKNOWN",
+                "SOURCE_NOT_TRUSTED",
+                "HISTORY_PREREQUISITES_NOT_FROZEN"
+              ],
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "status": {
+            "enum": [
+              "graded",
+              "needs_review"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question_ref",
+          "score",
+          "max_score",
+          "status",
+          "concept_refs",
+          "eligible",
+          "reason_codes",
+          "evidence_ids",
+          "independence",
+          "freshness"
+        ],
+        "title": "GradeHistoryItem",
         "type": "object"
       },
       "GradingReadiness": {
@@ -2454,6 +2765,35 @@
         "title": "PageCourse",
         "type": "object"
       },
+      "PageEvidence": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "PageEvidence",
+        "type": "object"
+      },
       "PageNote": {
         "additionalProperties": false,
         "properties": {
@@ -3426,6 +3766,27 @@
         "title": "QuestionPublic",
         "type": "object"
       },
+      "QuestionReviewMaterials": {
+        "additionalProperties": false,
+        "properties": {
+          "materials": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewMaterial"
+            },
+            "title": "Materials",
+            "type": "array"
+          },
+          "question_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          }
+        },
+        "required": [
+          "question_ref",
+          "materials"
+        ],
+        "title": "QuestionReviewMaterials",
+        "type": "object"
+      },
       "ReadinessResponse": {
         "additionalProperties": false,
         "properties": {
@@ -3736,6 +4097,40 @@
           "original_access"
         ],
         "title": "RetainedOriginal",
+        "type": "object"
+      },
+      "ReviewMaterial": {
+        "additionalProperties": false,
+        "properties": {
+          "block_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "concept_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ContentRef"
+            },
+            "title": "Concept Refs",
+            "type": "array"
+          },
+          "course_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "lesson_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "course_ref",
+          "lesson_ref",
+          "block_ref",
+          "title",
+          "concept_refs"
+        ],
+        "title": "ReviewMaterial",
         "type": "object"
       },
       "RevisionSummary": {
@@ -8516,6 +8911,223 @@
           }
         ],
         "summary": "Action",
+        "tags": [
+          "learning"
+        ]
+      }
+    },
+    "/api/v1/learning/evidence": {
+      "get": {
+        "operationId": "evidence_page_api_v1_learning_evidence_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "concept_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Concept Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "skill",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "recall",
+                    "explain",
+                    "compute",
+                    "derive",
+                    "transfer"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Skill"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1024,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageEvidence"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "428": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Required"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Evidence Page",
         "tags": [
           "learning"
         ]

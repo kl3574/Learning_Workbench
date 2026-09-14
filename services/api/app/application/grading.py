@@ -7,7 +7,7 @@ from typing import Literal
 from packages.contracts import domain_models as dm
 from packages.contracts.canonical import canonical_bytes, metadata_sha256
 
-from ..assessment_dto import AssessmentGradingJob, AssessmentGradingResult, RegradeRequest, ReleasedSolutionReview
+from ..assessment_dto import AssessmentGradingJob, AssessmentGradingResult, CurrentReviewPolicy, GradeHistoryEntry, QuestionReviewMaterials, RegradeRequest, ReleasedSolutionReview
 from ..import_dto import JobCancelRequest, JobSnapshot
 from ..infrastructure.assessment_repository import AssessmentRecord, AssessmentRepository, invalid_snapshot
 from ..infrastructure.database import Database, utc_now
@@ -19,6 +19,7 @@ from .errors import ApiError
 from .grading_rules import GradingBindingError, RULES_VERSION, grade_item
 from .learning import validate_test_submitted
 from .policy import Policy
+from .question_qualification import review_materials
 
 
 def checked_submission(connection: sqlite3.Connection, record: AssessmentRecord) -> None:
@@ -28,30 +29,49 @@ def checked_submission(connection: sqlite3.Connection, record: AssessmentRecord)
     validate_test_submitted(connection, record.workspace_id, record.submission_event_id, record.assessment_ref, record.id)
 
 
+def current_review_policy(connection: sqlite3.Connection, record: AssessmentRecord) -> CurrentReviewPolicy:
+    policy = Policy(connection, record.workspace_id)
+    policy.check("attempt_read", attempt_id=record.id)
+    policy.check("subject_read")
+    scope: Literal["operation_help_only", "academic"] = "academic"
+    for ref in record.question_refs:
+        try:
+            policy.check("practice_hint", question_ref=ref)
+        except ApiError as error:
+            if error.code != "ASSESSMENT_ANSWER_PROTECTED":
+                raise
+            scope = "operation_help_only"
+    return CurrentReviewPolicy(tutor_scope=scope, allow_materials=True, allow_web=False)
+
+
 class GradingService:
     def __init__(self, database: Database):
         self.database = database
 
     def result(self, identity: SessionIdentity, identifier: str) -> AssessmentGradingResult | AssessmentGradingJob:
+        from .evidence import checked_submission_basis, history
         with self.database.transaction() as connection:
             Policy(connection, identity.workspace_id).check("attempt_read", attempt_id=identifier)
             repo = GradingRepository(connection, identity.workspace_id)
             record = repo.attempts.load(identifier)
             checked_submission(connection, record)
+            checked_submission_basis(connection, identity.workspace_id, identifier)
+            entries = history(connection, identity.workspace_id, identifier)
             job = repo.latest_job(identifier)
             if job is None:
                 raise ApiError(503, "GRADING_RECOVERY_PENDING", "评分任务正在从持久提交恢复，请稍后重试。", True)
             grade = repo.load_grade(record)
             if job["status"] != "completed":
-                previous = self._project(connection, repo, record, grade, release=False) if grade is not None else None
-                return AssessmentGradingJob(id=job["id"], status=job["status"], last_completed_result=previous)
+                previous = self._project(connection, repo, record, grade, entries, release=False) if grade is not None else None
+                return AssessmentGradingJob(id=job["id"], status=job["status"], last_completed_result=previous, history=entries,
+                    current_review_policy=current_review_policy(connection, record))
             if grade is None:
                 raise invalid_snapshot()
-            return self._project(connection, repo, record, grade, release=record.policy.mode != "independent" or grade[0].status == "graded")
+            return self._project(connection, repo, record, grade, entries, release=record.policy.mode != "independent" or grade[0].status == "graded")
 
     @staticmethod
     def _project(connection: sqlite3.Connection, repo: GradingRepository, record: AssessmentRecord,
-                 grade: tuple[dm.GradingResult, GradeAudit], *, release: bool) -> AssessmentGradingResult:
+                 grade: tuple[dm.GradingResult, GradeAudit], entries: list[GradeHistoryEntry], *, release: bool) -> AssessmentGradingResult:
         value, audit = grade
         content = AssessmentContent(connection, record.workspace_id)
         reviews = [repo.review(review_id, record)[1] for review_id in audit.review_ids]
@@ -66,15 +86,20 @@ class GradingService:
             else:
                 items.append(item)
         return AssessmentGradingResult(**value.model_dump(exclude={"items"}), items=items, manual_reviews=reviews,
-            solution_reviews=solution_reviews, eligibility_status="not_evaluated")
+            solution_reviews=solution_reviews, eligibility_status="evaluated", history=entries,
+            current_review_policy=current_review_policy(connection, record),
+            review_materials=[QuestionReviewMaterials(question_ref=ref, materials=review_materials(connection, record.workspace_id, ref,
+                record.assignment.preflight.course_refs)) for ref in record.question_refs])
 
     def regrade(self, identity: SessionIdentity, identifier: str, request: RegradeRequest, key: str | None) -> dm.JobRef:
+        from .evidence import checked_submission_basis
         with self.database.transaction() as connection:
             policy = Policy(connection, identity.workspace_id)
             policy.check("attempt_write", attempt_id=identifier)
             repo = GradingRepository(connection, identity.workspace_id)
             record = repo.attempts.load(identifier)
             checked_submission(connection, record)
+            checked_submission_basis(connection, identity.workspace_id, identifier)
             # Recheck actual session and role even before an idempotent receipt can be read.
             if identity.role != "author" or connection.execute("SELECT 1 FROM local_sessions WHERE id=? AND workspace_id=? AND role='author' AND revoked_at IS NULL AND expires_at>?", (identity.id, identity.workspace_id, utc_now())).fetchone() is None:
                 raise ApiError(403, "HUMAN_AUTHOR_REQUIRED", "人工复核需要当前有效作者会话明确确认。")
@@ -187,6 +212,7 @@ class GradingWorker:
             return None
 
     def compute(self, lease: GradingLease) -> tuple[dm.GradingResult, GradeAudit]:
+        from .evidence import checked_submission_basis
         if self.stopping():
             raise GradingStopped()
         with self.database.connect() as connection:
@@ -197,6 +223,7 @@ class GradingWorker:
             value = repo.input(row)
             record = repo.attempts.load(value.attempt_id)
             checked_submission(connection, record)
+            checked_submission_basis(connection, lease.workspace_id, record.id)
             content = AssessmentContent(connection, lease.workspace_id)
             questions = content.questions(content.blueprint(record.assessment_ref))
             responses = {item.question_id: item for item in record.responses}
@@ -229,6 +256,7 @@ class GradingWorker:
             return result, GradeAudit(job_id=lease.job_id, input=value, rules_version=version, traces=traces, review_ids=review_ids, result_sha256=metadata_sha256(result))
 
     def finish(self, lease: GradingLease, result: dm.GradingResult, audit: GradeAudit) -> bool:
+        from .evidence import checked_submission_basis, record_grade_finalized
         if self.stopping():
             return False
         with self.database.transaction() as connection:
@@ -239,6 +267,7 @@ class GradingWorker:
             value = repo.input(row)
             record = repo.attempts.load(value.attempt_id)
             checked_submission(connection, record)
+            checked_submission_basis(connection, lease.workspace_id, record.id)
             if (audit.input != value or audit.job_id != lease.job_id or audit.result_sha256 != metadata_sha256(result)
                     or result.attempt_id != record.id or result.grading_revision != value.grading_revision
                     or [item.question_ref for item in result.items] != record.question_refs or repo.latest_revision(record.id) != value.base_grading_revision):
@@ -248,6 +277,7 @@ class GradingWorker:
                 (record.id, result.grading_revision, metadata_sha256(result), canonical_bytes(audit).decode(), metadata_sha256(audit), lease.job_id))
             connection.execute("UPDATE attempts SET status=?,revision=revision+1 WHERE id=? AND workspace_id=? AND status='grading'", (result.status, record.id, lease.workspace_id))
             repo.terminal(row, "completed", {"grading_revision": result.grading_revision, "result_sha256": metadata_sha256(result)})
+            record_grade_finalized(connection, lease.workspace_id, record.id, result.grading_revision)
             return True
 
     def fail(self, lease: GradingLease) -> None:

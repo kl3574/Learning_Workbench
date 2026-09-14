@@ -22,6 +22,8 @@ export type AssessmentGradingJob = {
   "id": string;
   "status": "queued" | "running" | "awaiting_approval" | "completed" | "failed" | "cancelled";
   "last_completed_result": (AssessmentGradingResult | null);
+  "history": Array<GradeHistoryEntry>;
+  "current_review_policy": CurrentReviewPolicy;
 };
 
 export type AssessmentGradingResult = {
@@ -33,7 +35,10 @@ export type AssessmentGradingResult = {
   "finalized_at": string;
   "manual_reviews": Array<ManualReviewReceipt>;
   "solution_reviews": Array<ReleasedSolutionReview>;
-  "eligibility_status": "not_evaluated";
+  "eligibility_status": "not_evaluated" | "evaluated";
+  "history": Array<GradeHistoryEntry>;
+  "current_review_policy": CurrentReviewPolicy;
+  "review_materials": Array<QuestionReviewMaterials>;
 };
 
 export type AssessmentPreflight = {
@@ -198,6 +203,12 @@ export type CourseSummary = {
   "review_state"?: "unreviewed";
 };
 
+export type CurrentReviewPolicy = {
+  "tutor_scope": "operation_help_only" | "academic";
+  "allow_materials": boolean;
+  "allow_web": false;
+};
+
 export type DirectoryAncestor = {
   "id": string;
   "title": string;
@@ -234,6 +245,41 @@ export type ErrorDetail = {
 
 export type ErrorEnvelope = {
   "error": ErrorDetail;
+};
+
+export type Evidence = {
+  "id": string;
+  "event_id": string;
+  "concept_id": string;
+  "skill": "recall" | "explain" | "compute" | "derive" | "transfer";
+  "eligible": boolean;
+  "reason": string;
+  "score"?: (number | null);
+  "independence": "independent" | "assisted" | "unknown";
+  "freshness": "novel" | "repeated" | "unknown";
+};
+
+export type GradeHistoryEntry = {
+  "grading_revision": number;
+  "grading_rules_version": string;
+  "status": "graded" | "needs_review";
+  "finalized_at": string;
+  "qualification_basis": "submission_frozen" | "history_not_frozen";
+  "qualification_recorded_at": string;
+  "items": Array<GradeHistoryItem>;
+};
+
+export type GradeHistoryItem = {
+  "question_ref": ContentRef;
+  "score": (number | null);
+  "max_score": number;
+  "status": "graded" | "needs_review";
+  "concept_refs": Array<ContentRef>;
+  "eligible": boolean;
+  "reason_codes": Array<"MODE_OPEN_BOOK" | "MODE_ASSISTED" | "HELP_BEFORE_SUBMIT" | "ANSWER_UNREVIEWED" | "GRADE_UNRESOLVED" | "CONCEPT_MAPPING_UNRESOLVED" | "PREVIOUSLY_SEEN" | "PRIOR_SEEN_UNKNOWN" | "HELP_HISTORY_UNKNOWN" | "SOURCE_NOT_TRUSTED" | "HISTORY_PREREQUISITES_NOT_FROZEN">;
+  "evidence_ids": Array<string>;
+  "independence": "independent" | "assisted" | "unknown";
+  "freshness": "novel" | "repeated" | "unknown";
 };
 
 export type GradingReadiness = {
@@ -447,6 +493,11 @@ export type PageCourse = {
   "next_cursor": (string | null);
 };
 
+export type PageEvidence = {
+  "items": Array<Evidence>;
+  "next_cursor": (string | null);
+};
+
 export type PageNote = {
   "items": Array<Note>;
   "next_cursor": (string | null);
@@ -626,6 +677,11 @@ export type QuestionPublic = {
   "input_instructions": string;
 };
 
+export type QuestionReviewMaterials = {
+  "question_ref": ContentRef;
+  "materials": Array<ReviewMaterial>;
+};
+
 export type ReadinessResponse = {
   "database_ready": boolean;
   "worker_ready": boolean;
@@ -686,6 +742,14 @@ export type ResponsesWrite = {
 export type RetainedOriginal = {
   "source": ProvenanceSource;
   "original_access": "allowed" | "author_required" | "unavailable";
+};
+
+export type ReviewMaterial = {
+  "course_ref": ContentRef;
+  "lesson_ref": ContentRef;
+  "block_ref": ContentRef;
+  "title": string;
+  "concept_refs": Array<ContentRef>;
 };
 
 export type RevisionSummary = {

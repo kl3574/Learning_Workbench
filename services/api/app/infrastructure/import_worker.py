@@ -14,6 +14,7 @@ from packages.contracts.canonical import metadata_sha256
 from packages.contracts.validation import ENTITY_MODELS
 
 from ..application.errors import ApiError
+from ..application.evidence import EvidenceRecovery
 from ..application.grading import GradingWorker
 from ..application.imports import ImportService, safe_filename
 from .content_repository import damaged
@@ -67,6 +68,7 @@ class ImportWorker:
         self.service = ImportService(database)
         self._stop = threading.Event()
         self.grading = GradingWorker(database, stopping=self._stop.is_set)
+        self.evidence_recovery = EvidenceRecovery(database, stopping=self._stop.is_set)
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
         self.parse_timeout_seconds = 60.0
@@ -274,11 +276,14 @@ class ImportWorker:
             return False
         lease = None
         try:
+            # A bounded recovery item does not prevent this same tick from
+            # advancing the actual grading/import queues, including after damage.
+            recovered = self.evidence_recovery.run_once()
             if self.grading.run_once():
                 return True
             lease = self.claim()
             if lease is None:
-                return False
+                return recovered
             data, options = self._input(lease)
             parsed = self._parse(lease, data, options)
             self.complete_preview(lease, parsed)

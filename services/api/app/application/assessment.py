@@ -266,6 +266,7 @@ class AssessmentService:
             return self._receipt(content, repository, route, key, result, id, fresh=replay_id is None)
 
     def submit(self, identity: SessionIdentity, id: str, request: dm.AttemptSubmit, key: str | None) -> AttemptSnapshot:
+        from .evidence import checked_submission_basis, freeze_submission_prerequisites
         with self._access(identity) as (content, repository, policy):
             policy.check("attempt_write", attempt_id=id)
             route = f"POST /attempts/{id}/submit"
@@ -274,11 +275,14 @@ class AssessmentService:
                 raise invalid_snapshot()
             record = repository.load(id)
             self._view(content, repository, record)
+            if record.submission is not None:
+                checked_submission_basis(repository.connection, identity.workspace_id, id)
             def operation():
                 repository.expect_active(record, request.expected_revision)
                 submitted = repository.submit(record)
                 event_id = record_test_submitted(repository.connection, identity.workspace_id, record.assessment_ref, record.id)
                 complete = repository.link_submission(submitted, event_id)
+                freeze_submission_prerequisites(repository.connection, identity.workspace_id, id)
                 GradingRepository(repository.connection, identity.workspace_id).enqueue(complete, base_revision=0)
                 return self._view(content, repository, complete).model_dump(mode="json")
             result = execute_idempotent(repository.connection, actor=identity.workspace_id, route=route, key=key,

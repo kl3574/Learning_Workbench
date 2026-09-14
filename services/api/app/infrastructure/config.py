@@ -24,6 +24,7 @@ class Settings:
     static_dir: Path = REPOSITORY_ROOT / "apps/web/dist"
     session_seconds: int = 43200
     bootstrap_seconds: int = 120
+    max_grading_history_response_bytes: int = 16 * 1024 * 1024
     max_request_bytes: int = 2_097_152
     max_upload_bytes: int = 50 * 1024 * 1024
     max_block_characters: int = 400_000
@@ -38,6 +39,8 @@ class Settings:
             raise ValueError("Invalid local port.")
         if type(self.max_upload_bytes) is not int or self.max_upload_bytes <= 0:
             raise ValueError("Upload budget must be a positive integer.")
+        if type(self.max_grading_history_response_bytes) is not int or self.max_grading_history_response_bytes <= 0:
+            raise ValueError("Grading history response budget must be a positive integer.")
         self.import_budgets  # Validate every explicit budget before opening a database or accepting uploads.
         if self.data_dir.resolve().is_relative_to(REPOSITORY_ROOT):
             raise ValueError("Application data must be outside the source repository.")
@@ -85,6 +88,7 @@ class Settings:
             host=os.environ.get("LEARNING_HOST", "127.0.0.1"),
             port=int(os.environ.get("LEARNING_PORT", "8765")),
             ui_origin=os.environ.get("LEARNING_UI_ORIGIN") or None,
+            max_grading_history_response_bytes=int(os.environ.get("LEARNING_MAX_GRADING_HISTORY_RESPONSE_BYTES", 16 * 1024 * 1024)),
             max_upload_bytes=int(os.environ.get("LEARNING_MAX_UPLOAD_BYTES", 50 * 1024 * 1024)),
             max_block_characters=int(os.environ.get("LEARNING_MAX_BLOCK_CHARACTERS", 400_000)),
             max_package_bytes=int(os.environ.get("LEARNING_MAX_PACKAGE_BYTES", 200 * 1024 * 1024)),

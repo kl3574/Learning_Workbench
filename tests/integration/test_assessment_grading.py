@@ -71,7 +71,10 @@ def test_real_queue_grades_unreviewed_without_zero_or_private_release_and_preser
     assert not GradingWorker(database).run_once()
     after = counts(database)
     assert after["grades"] == after["assessment_grade_audits"] == 1
-    assert after["learning_events"] == before["learning_events"] == 1 and after["evidence"] == 0
+    assert before["learning_events"] == 1 and after["learning_events"] == 2
+    assert after["evidence"] == len(fixture.questions)
+    assert actual.eligibility_status == "evaluated"
+    assert all(not item.eligible and "ANSWER_UNREVIEWED" in item.reason_codes for item in actual.history[0].items)
     assert "private_pin" not in actual.model_dump_json() and "accepted_answers" not in actual.model_dump_json()
     with database.connect() as connection:
         assert {row[0] for row in connection.execute("SELECT review_status FROM solutions")} == {"needs_review"}
@@ -96,12 +99,12 @@ def test_signed_actual_author_regrade_is_new_immutable_grade_and_does_not_approv
     assert isinstance(result, AssessmentGradingResult) and result.status == "graded" and result.grading_revision == 2
     assert all(item.score == item.max_score * .5 and item.solution_markdown for item in result.items)
     assert {item.review_status for item in result.solution_reviews} == {"needs_review"}
-    assert result.eligibility_status == "not_evaluated"
+    assert result.eligibility_status == "evaluated"
     assert len(result.manual_reviews) == 1 and result.manual_reviews[0].actor_role == "author"
     assert author.id not in result.model_dump_json()
     with database.connect() as connection:
         old = GradingRepository(connection, learner.workspace_id).load_grade(GradingRepository(connection, learner.workspace_id).attempts.load(final.id), 1)
-        assert old and old[0].model_dump() == original.model_dump(exclude={"manual_reviews", "solution_reviews", "eligibility_status"})
+        assert old and old[0].model_dump() == original.model_dump(exclude={"manual_reviews", "solution_reviews", "eligibility_status", "history", "review_materials", "current_review_policy"})
         assert connection.execute("SELECT COUNT(*) FROM grades").fetchone()[0] == 2
         assert {row[0] for row in connection.execute("SELECT review_status FROM solutions")} == {"needs_review"}
     with pytest.raises(ApiError) as conflict:
@@ -403,6 +406,11 @@ def test_http_failed_regrade_retains_real_previous_grade_without_private_answers
     assert response.status_code == 202
     pending = response.json()
     assert pending["id"] == queued.id and pending["status"] == terminal
+    # Current permission is freshly checked; it is not immutable grade metadata.
+    expected_policy = {"tutor_scope": "operation_help_only" if terminal == "failed" else "academic",
+        "allow_materials": True, "allow_web": False}
+    assert pending["current_review_policy"] == expected_policy
+    old_public["current_review_policy"] = expected_policy
     assert pending["last_completed_result"] == old_public
     assert pending["last_completed_result"]["items"][0]["score"] == .5 * fixture.questions[0].max_score
     assert pending["last_completed_result"]["manual_reviews"] == old_public["manual_reviews"]

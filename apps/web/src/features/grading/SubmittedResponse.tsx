@@ -1,0 +1,6 @@
+import { lazy, Suspense } from 'react'
+import type { ContentRef, QuestionPublic, ResponseDraft } from '../../../../../packages/contracts/generated/types'
+const Markdown = lazy(() => import('../../shared/Markdown').then(value => ({ default: value.Markdown })))
+export function SubmittedResponse({ question, questionRef, response, index }: { question: QuestionPublic; questionRef: ContentRef; response: ResponseDraft | undefined; index: number }) {
+  return <section className="submitted-response" aria-label={`第 ${index + 1} 题交卷原文`}><h2>第 {index + 1} 题 · 交卷原文</h2><p>以下题目、答案与推导步骤来自服务端冻结的提交记录。本机未同步候选在原作答标签单独保留。</p><Suspense fallback={<p role="status">正在排版冻结题目…</p>}><Markdown sourceKey={`submitted-${question.id}`}>{question.stem_markdown}</Markdown></Suspense>{question.choices?.length ? <ul>{question.choices.map(choice => <li key={choice.id}>{choice.id}：{choice.text_markdown}</li>)}</ul> : null}<h3>原始答案</h3><pre tabIndex={0} aria-label={`第 ${index + 1} 题已提交答案`}>{response?.answer || '未填写答案'}</pre><h3>原始推导步骤</h3><pre tabIndex={0} aria-label={`第 ${index + 1} 题已提交推导步骤`}>{response?.steps_markdown || '未填写推导步骤'}</pre><details data-view-key={`submitted-ref-${question.id}`}><summary data-focus-key={`submitted-ref-${question.id}`}>核对冻结题目引用</summary><code>{questionRef.id} · r{questionRef.revision}<br />SHA-256 {questionRef.sha256}</code></details></section>
+}

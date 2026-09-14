@@ -8,10 +8,12 @@ from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from packages.contracts import domain_models as dm
 
 from ..application.errors import ApiError
+from ..application.evidence import EvidenceService
+from ..application.eligibility_models import Skill
 from ..application.learning import LearningService
 from ..application.notes import NotesService
 from ..infrastructure.database import Database
-from ..learning_dto import LearningActionRequest, LearningActionResponse, LearningProgress, NoteDeleted, PageNote
+from ..learning_dto import LearningActionRequest, LearningActionResponse, LearningProgress, NoteDeleted, PageEvidence, PageNote
 from .content_http import CursorQuery, LimitQuery, query_fields
 from .http import current_identity, verify_write
 
@@ -38,6 +40,12 @@ def create_learning_router(database: Database) -> APIRouter:
                       responses={428: {"model": dm.ErrorEnvelope}})
     notes = NotesService(database)
     learning = LearningService(database)
+    evidence = EvidenceService(database)
+
+    @router.get('/learning/evidence', response_model=PageEvidence, dependencies=[Depends(query_fields('concept_id', 'skill', 'cursor', 'limit'))])
+    def evidence_page(request: Request, concept_id: IdQuery = None, skill: Annotated[Skill | None, Query()] = None,
+                      cursor: CursorQuery = None, limit: LimitQuery = 20) -> PageEvidence:
+        return evidence.page(request.state.identity.workspace_id, concept_id, skill, cursor, limit)
 
     @router.get("/notes", response_model=PageNote, dependencies=[Depends(query_fields("ref_id", "cursor", "limit"))])
     def list_notes(request: Request, ref_id: IdQuery = None, cursor: CursorQuery = None, limit: LimitQuery = 20) -> PageNote:

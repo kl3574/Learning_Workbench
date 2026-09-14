@@ -6,6 +6,9 @@ from pydantic import Field, field_validator, model_validator
 
 from packages.contracts import domain_models as dm
 
+from .application.eligibility_models import EligibilityReason
+from .application.question_qualification import ReviewMaterial
+
 QuestionKind = Literal["single_choice", "text_blank", "numeric", "expression", "calculation"]
 AttemptStatus = Literal["active", "submitted", "grading", "graded", "needs_review", "abandoned"]
 AssessmentMode = Literal["independent", "assisted", "open_book"]
@@ -193,10 +196,84 @@ class ReleasedSolutionReview(dm.StrictModel):
     review_status: Literal["approved", "draft", "needs_review"]
 
 
+class GradeHistoryItem(dm.StrictModel):
+    question_ref: dm.ContentRef
+    score: float | None = Field(ge=0)
+    max_score: float = Field(gt=0)
+    status: Literal["graded", "needs_review"]
+    concept_refs: list[dm.ContentRef]
+    eligible: bool
+    reason_codes: list[EligibilityReason]
+    evidence_ids: list[dm.Id]
+    independence: Literal["independent", "assisted", "unknown"]
+    freshness: Literal["novel", "repeated", "unknown"]
+
+    @model_validator(mode="after")
+    def checked_item(self):
+        if (self.question_ref.entity != "question" or any(ref.entity != "concept" for ref in self.concept_refs)
+                or len({(ref.id, ref.revision, ref.sha256) for ref in self.concept_refs}) != len(self.concept_refs)
+                or len(set(self.reason_codes)) != len(self.reason_codes) or len(set(self.evidence_ids)) != len(self.evidence_ids)
+                or (self.status == "needs_review") != (self.score is None)
+                or self.score is not None and self.score > self.max_score):
+            raise ValueError("history must retain exact references and real nullable grades")
+        if self.eligible and (self.status != "graded" or not self.concept_refs or self.reason_codes
+                              or self.independence != "independent" or self.freshness != "novel"):
+            raise ValueError("eligible history requires resolved independent novel evidence")
+        return self
+
+
+class GradeHistoryEntry(dm.StrictModel):
+    grading_revision: dm.Revision
+    grading_rules_version: str = Field(min_length=1, max_length=120)
+    status: Literal["graded", "needs_review"]
+    finalized_at: dm.UTC
+    qualification_basis: Literal["submission_frozen", "history_not_frozen"]
+    qualification_recorded_at: dm.UTC
+    items: list[GradeHistoryItem] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def checked_history(self):
+        if (len({item.question_ref.id for item in self.items}) != len(self.items)
+                or (self.status == "needs_review") != any(item.status == "needs_review" for item in self.items)):
+            raise ValueError("history must retain every assigned item and unresolved status")
+        if self.qualification_basis == "history_not_frozen" and any(
+                item.eligible or "HISTORY_PREREQUISITES_NOT_FROZEN" not in item.reason_codes for item in self.items):
+            raise ValueError("legacy qualification cannot be upgraded by a later grade")
+        return self
+
+
+class QuestionReviewMaterials(dm.StrictModel):
+    question_ref: dm.ContentRef
+    materials: list[ReviewMaterial]
+
+    @field_validator("question_ref")
+    @classmethod
+    def question_entity(cls, value: dm.ContentRef) -> dm.ContentRef:
+        if value.entity != "question":
+            raise ValueError("review materials must bind an exact assigned question")
+        return value
+
+
+class CurrentReviewPolicy(dm.StrictModel):
+    tutor_scope: Literal["operation_help_only", "academic"]
+    allow_materials: bool
+    allow_web: Literal[False]
+
+    @field_validator("allow_web", mode="before")
+    @classmethod
+    def no_implicit_consent(cls, value: object) -> object:
+        if type(value) is not bool:
+            raise ValueError("web consent is a strict boolean")
+        return value
+
+
 class AssessmentGradingResult(dm.GradingResult):
     manual_reviews: list[ManualReviewReceipt]
     solution_reviews: list[ReleasedSolutionReview]
-    eligibility_status: Literal["not_evaluated"]
+    eligibility_status: Literal["not_evaluated", "evaluated"]
+    history: list[GradeHistoryEntry]
+    current_review_policy: CurrentReviewPolicy
+    review_materials: list[QuestionReviewMaterials]
 
     @model_validator(mode="after")
     def complete_result(self):
@@ -207,8 +284,33 @@ class AssessmentGradingResult(dm.GradingResult):
             raise ValueError("overall grading status must preserve unresolved items")
         if [item.question_id for item in self.solution_reviews] != [item.question_ref.id for item in self.items if item.solution_markdown is not None]:
             raise ValueError("released answers must disclose their original review status")
+        revisions = [entry.grading_revision for entry in self.history]
+        if revisions != sorted(set(revisions)) or not revisions or revisions[-1] != self.grading_revision:
+            raise ValueError("result must include its complete ordered history")
+        for entry in self.history:
+            if [item.question_ref for item in entry.items] != [item.question_ref for item in self.items]:
+                raise ValueError("history belongs to another assignment")
+        latest = self.history[-1]
+        if (latest.status != self.status or latest.finalized_at != self.finalized_at
+                or latest.grading_rules_version != self.grading_rules_version
+                or [(item.score, item.max_score, item.status) for item in latest.items] != [(item.score, item.max_score, item.status) for item in self.items]
+                or [item.question_ref for item in self.review_materials] != [item.question_ref for item in self.items]):
+            raise ValueError("result history or material binding differs from current grade")
         return self
 
 
 class AssessmentGradingJob(dm.JobRef):
     last_completed_result: AssessmentGradingResult | None
+    history: list[GradeHistoryEntry]
+    current_review_policy: CurrentReviewPolicy
+
+    @model_validator(mode="after")
+    def checked_previous(self):
+        if self.last_completed_result is None:
+            if self.history:
+                raise ValueError("history requires the actual last completed result")
+        elif (self.last_completed_result.history != self.history or self.last_completed_result.current_review_policy != self.current_review_policy
+                or self.last_completed_result.solution_reviews
+                or any(item.solution_markdown is not None for item in self.last_completed_result.items)):
+            raise ValueError("pending-job history must retain the same safe previous result")
+        return self

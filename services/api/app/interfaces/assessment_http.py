@@ -1,4 +1,4 @@
-"""Seven actual ungraded assessment routes; no result or pretend-grading endpoint."""
+"""Strict assessment commands, grading history and bounded actual JSON responses."""
 
 from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import JSONResponse
@@ -7,6 +7,7 @@ from packages.contracts import domain_models as dm
 
 from ..application.assessment import AssessmentService
 from ..application.grading import GradingService
+from ..application.errors import ApiError
 from ..assessment_dto import AssessmentAttemptCreate, AttemptResponses, AttemptSnapshot, PageAssessment, AssessmentGradingJob, AssessmentGradingResult, RegradeRequest
 from ..infrastructure.database import Database
 from .content_http import CursorQuery, LimitQuery, query_fields
@@ -57,9 +58,11 @@ def create_assessment_router(database: Database) -> APIRouter:
                 responses={202: {"model": AssessmentGradingJob}}, dependencies=[Depends(query_fields())])
     def result(id: dm.Id, request: Request) -> AssessmentGradingResult | Response:
         value = grading.result(request.state.identity, id)
-        if isinstance(value, dm.JobRef):
-            return JSONResponse(value.model_dump(mode="json"), status_code=202)
-        return value
+        response = JSONResponse(value.model_dump(mode="json"), status_code=202 if isinstance(value, dm.JobRef) else 200)
+        if len(response.body) > database.settings.max_grading_history_response_bytes:
+            raise ApiError(413, "GRADING_HISTORY_RESPONSE_LIMIT", "完整评分历史超过当前响应预算；服务器记录均已保留，请显式扩大配置后重读。")
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     @router.post("/attempts/{id}/regrade", response_model=dm.JobRef, status_code=202,
                  dependencies=[Depends(verify_write), Depends(query_fields())])
