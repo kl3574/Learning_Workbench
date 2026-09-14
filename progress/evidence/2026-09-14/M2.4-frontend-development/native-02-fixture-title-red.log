@@ -1,0 +1,49 @@
+
+> @learning-workbench/web@0.1.0 test:e2e
+> playwright test --config ../../tests/e2e/playwright.config.ts reader.spec.ts
+
+[WebServer] INFO:     Started server process [306079]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+[WebServer] (node:306101) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 2 tests using 1 worker
+
+(node:306155) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 ../../tests/e2e/reader.spec.ts:30:1 › real imported directory, title search, worked-example link, long formula and frozen original download (8.0s)
+(node:306731) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  2 ../../tests/e2e/reader.spec.ts:58:1 › second repeated rendered selection preserves exact source codepoints, saves note, edits and soft deletes (3.4s)
+
+
+  1) ../../tests/e2e/reader.spec.ts:30:1 › real imported directory, title search, worked-example link, long formula and frozen original download 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('navigation', { name: '目录搜索结果' }).getByRole('link', { name: '例题：正规方程逐步推导', exact: true })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('navigation', { name: '目录搜索结果' }).getByRole('link', { name: '例题：正规方程逐步推导', exact: true }) with timeout 5000ms
+      - waiting for getByRole('navigation', { name: '目录搜索结果' }).getByRole('link', { name: '例题：正规方程逐步推导', exact: true })
+
+
+      35 |   await page.getByLabel('搜索当前目录').fill('正规方程')
+      36 |   const hits = page.getByRole('navigation', { name: '目录搜索结果' })
+    > 37 |   await expect(hits.getByRole('link', { name: '例题：正规方程逐步推导', exact: true })).toBeVisible()
+         |                                                                              ^
+      38 |   await expect(hits).toContainText('从定义到证明与例题的完整推导')
+      39 |   await hits.getByRole('link', { name: '例题：正规方程逐步推导', exact: true }).click()
+      40 |   const example = page.locator(`#block-${fixture.blocks[2].id}-r1`)
+        at <repo>/tests/e2e/reader.spec.ts:37:78
+
+    Error Context: ../../.local_data/e2e-results/reader-real-imported-direc-d5708-nd-frozen-original-download/error-context.md
+
+  1 failed
+    ../../tests/e2e/reader.spec.ts:30:1 › real imported directory, title search, worked-example link, long formula and frozen original download 
+  1 passed (14.0s)

@@ -1,0 +1,362 @@
+{
+  "scope": "M2.4 bounded independent frontend Reader/Source review; read-only repository, original PRODUCT_DESIGN.md sole normative source; not full stage/exact-repository acceptance",
+  "checkout_head": "4ba9dd749686be311b37331ad2d5fd10148da482",
+  "repo_modified_by_reviewer": false,
+  "owned_random_port_runtimes_closed": true,
+  "existing_default_services_used_or_stopped": false,
+  "findings": [
+    {
+      "id": "reader-ref-identity",
+      "initial_status": "REPRODUCED",
+      "paths": [
+        "apps/web/src/workbench/model.ts:18",
+        "apps/web/src/workbench/Shell.tsx:54"
+      ],
+      "behavior": "An existing exact lesson tab accepted a same-ID/revision bad-hash deep link by silently reusing its old context. A parent-only bad hash variant reused the old Reader while corrupting global course_ref. Initial guard repair also failed under popstate because it captured an old session.",
+      "original_receipts": [
+        "receipt.json",
+        "fixed-receipt.json",
+        "final-contract-receipt.json"
+      ],
+      "resolution": "Stable tab identity retained per section 4.3; frozen active and parent references checked atomically against latest session; explicit failure hides Reader and preserves tab IDs/context/global course_ref.",
+      "final_receipt": "final-v2-contract-receipt.json",
+      "final_status": "PASS"
+    },
+    {
+      "id": "reader-zero-scroll",
+      "initial_status": "REPRODUCED",
+      "paths": [
+        "apps/web/src/features/reader/ReaderDocument.tsx:64"
+      ],
+      "behavior": "A worked-example block tab saved scroll_offset=0 on server, but returning to the tab restored the block anchor at 1248 pixels.",
+      "original_receipts": [
+        "receipt.json"
+      ],
+      "resolution": "A separate persisted position-known flag distinguishes zero from first opening; final probe restores saved zero.",
+      "final_receipt": "final-v2-contract-receipt.json",
+      "final_status": "PASS"
+    },
+    {
+      "id": "reader-cross-page-source-role",
+      "initial_status": "REPRODUCED",
+      "paths": [
+        "apps/web/src/api/client.ts:5",
+        "apps/web/src/features/reader/SourcePanel.tsx:18"
+      ],
+      "behavior": "A page began a real authorized DOCX-original download; another page changed same-cookie session to learner. Fresh artifact access returned 403, but releasing the earlier real 200 response still triggered a native private-original download.",
+      "original_receipts": [
+        "source-receipt.json"
+      ],
+      "resolution": "Cross-page access invalidation plus a fresh guarded source/artifact check after byte verification; final same probe produces zero native downloads.",
+      "final_receipt": "source-final-v2-receipt.json",
+      "final_status": "PASS"
+    }
+  ],
+  "final_native_summary": {
+    "tests_passed": 2,
+    "tests_failed": 0,
+    "reported_duration_seconds": 10.9,
+    "raw_log": "final-v2-native.log",
+    "source_files_stable_during_each_probe": true
+  },
+  "intermediate_evidence_limits": [
+    "Original defect-probe passing status means the defects were reproduced, not product acceptance. Original command outputs were observed through tool execution, not saved as separate raw-log files.",
+    "Intermediate hash/parent-in-identity behavior tests passed but the implementation violated section 4.3; those receipts are explicitly not accepted as the final identity contract.",
+    "fixed-receipt.json and fixed-complete-receipt.json retain probe failures while implementation evolved. final-native.log retains the real stale-popstate-guard failure."
+  ],
+  "static_review_coverage": [
+    "Exact course/lesson/block ref and ETag checks; body bytes independently hash-checked; course/lesson/block membership enforced.",
+    "Reader live flags and generation ownership checked for stale async state; directory requests scope course revision and limit; empty UI has no implicit synthetic fallback.",
+    "Source download matches frozen source and artifact identity/bytes and unmount/auth epochs."
+  ],
+  "not_claimed": [
+    "Full M2.4 acceptance or complete source-tree freeze",
+    "Independent native validation of every delayed-tab race, old/new revision coexistence, focus restoration, directory keyboard sequence, or body-tampering scenario",
+    "Testing current sources after future edits"
+  ],
+  "final_reviewed_source_sha256": {
+    "apps/web/src/features/reader/target.ts": "ddd9e3197266d71249ff258f8f9fb2ac0445b1dd37aac607102a898bb7484130",
+    "apps/web/src/features/reader/contentClient.ts": "86f56cbc296803d0ae823935b4504a0f954327ae4f72e324d75f5e0096628e0c",
+    "apps/web/src/features/reader/useCourseDirectory.ts": "e2175079971d2893f361cbcdb191c1c9e1a19bc6a146b19605543884b17400fa",
+    "apps/web/src/features/reader/CourseDirectory.tsx": "e0d1da4b5a914dd49608efa08439adf2162be25762dbbf2e78e73dcc44ad0a04",
+    "apps/web/src/features/reader/ReaderDocument.tsx": "d65ccb36aabd396843890563035e5fd3bcfc481ce1d782a302a0312c98c8f408",
+    "apps/web/src/features/reader/SourcePanel.tsx": "4b3b542dc8878d9b6021f5150af7aa6b246160a573e9a5168e1a2be18f17b9ed",
+    "apps/web/src/api/client.ts": "6a350c33cb5ae33198b67f94b69c88aa651eae065c72a4aad436ec809575784e",
+    "apps/web/src/workbench/Shell.tsx": "8d89bcfa31f2e51e01ca104b87b3b7ff24b3222e9a3e8e6f657e72cab82fd6a7",
+    "apps/web/src/workbench/model.ts": "7ecbc44f99603d0832a044ba619fa93c33fd3b58d838b2d41377b8d9fb8119a3",
+    "apps/web/src/workbench/uiCache.ts": "a60e9137246da91bcbcc1b844ef1453634f41fad813991db6fa23efdb78e1f46",
+    "apps/web/src/features/reader/navigation.ts": "2c230f21d412207b361fd1886be33a02a09c77f241715c85cd2f30f1dc9040ce",
+    "apps/web/src/workbench/useWorkbench.ts": "00c2739b782e906658b3555d2cb2ef3db35340cf0c5d911f4c430416bbe90b32",
+    "apps/web/src/features/imports/ImportWorkflow.tsx": "6b68778308e6f038645abf3dc95bbc8dd17411684c197301f583d80e8717c3d4"
+  },
+  "source_changes_since_final_probe": {},
+  "artifacts": {
+    "reader-review.spec.ts.txt": {
+      "path": "reader-review.spec.ts.txt",
+      "original_filename": "reader-review.spec.ts",
+      "original_sha256": "e620a9534728eece929fe75b65a0c02ebb1b260ebae0d65185106f4cb9beee2b",
+      "public_sha256": "29b709cafe8bcca2982af66c89ba0acb2f664a8c5b430c25baf502b53e4f07bf"
+    },
+    "receipt.json": {
+      "path": "receipt.json",
+      "original_filename": "receipt.json",
+      "original_sha256": "ab89aa60535dd615f7c6584136e35f0db1e5981f95d438015378cc6694319a1d",
+      "public_sha256": "ab89aa60535dd615f7c6584136e35f0db1e5981f95d438015378cc6694319a1d"
+    },
+    "source-review.spec.ts.txt": {
+      "path": "source-review.spec.ts.txt",
+      "original_filename": "source-review.spec.ts",
+      "original_sha256": "ec61adbd5fed199afd1dd4cc6b7ad5d602f4208c6f7c542266b9f2631d0b3813",
+      "public_sha256": "85240a7424f6ebfbb2dae3a230ff6b8ceefac17685f86ceeacf9efe9db67a9b4"
+    },
+    "source-receipt.json": {
+      "path": "source-receipt.json",
+      "original_filename": "source-receipt.json",
+      "original_sha256": "5f13dfddbdf167809bf0f48272cc1b6ab3d5434918bb4f16d698d7db5983b536",
+      "public_sha256": "5f13dfddbdf167809bf0f48272cc1b6ab3d5434918bb4f16d698d7db5983b536"
+    },
+    "fixed-receipt.json": {
+      "path": "fixed-receipt.json",
+      "original_filename": "fixed-receipt.json",
+      "original_sha256": "ba0dd88dc2593329f897f51bd8f06405404353f7b06ed1123a6c2ee3dbb5b19f",
+      "public_sha256": "ba0dd88dc2593329f897f51bd8f06405404353f7b06ed1123a6c2ee3dbb5b19f"
+    },
+    "fixed-complete-receipt.json": {
+      "path": "fixed-complete-receipt.json",
+      "original_filename": "fixed-complete-receipt.json",
+      "original_sha256": "b8dc8b115fcdd7c3dfeeff69470c817049bb3b50bec36ebb6d769573b5113988",
+      "public_sha256": "b8dc8b115fcdd7c3dfeeff69470c817049bb3b50bec36ebb6d769573b5113988"
+    },
+    "reader-green-receipt.json": {
+      "path": "reader-green-receipt.json",
+      "original_filename": "reader-green-receipt.json",
+      "original_sha256": "c24ad1f563d805179ae9e584b1555624cc82a6087b0a9573d8c8aac39e5f7329",
+      "public_sha256": "c24ad1f563d805179ae9e584b1555624cc82a6087b0a9573d8c8aac39e5f7329"
+    },
+    "source-green-receipt.json": {
+      "path": "source-green-receipt.json",
+      "original_filename": "source-green-receipt.json",
+      "original_sha256": "611573b94248a3c28f7c7beceaf604b338ba4372586978c641bfd27e91308794",
+      "public_sha256": "611573b94248a3c28f7c7beceaf604b338ba4372586978c641bfd27e91308794"
+    },
+    "final-contract.spec.ts.txt": {
+      "path": "final-contract.spec.ts.txt",
+      "original_filename": "final-contract.spec.ts",
+      "original_sha256": "7217f616cc5810b2c5be3fec70a66f99e2137f0f75bb6282884497494aa449fb",
+      "public_sha256": "7ef3d1cee62c023080b91ededdfaa2092387447b90c36de5bd29f2eaea8ac616"
+    },
+    "final-contract-receipt.json": {
+      "path": "final-contract-receipt.json",
+      "original_filename": "final-contract-receipt.json",
+      "original_sha256": "e7e40dec0905e9bdca270ff81ff36ca8ec52ea7b671dc0fdef0452f7b3aad129",
+      "public_sha256": "e7e40dec0905e9bdca270ff81ff36ca8ec52ea7b671dc0fdef0452f7b3aad129"
+    },
+    "source-final-receipt.json": {
+      "path": "source-final-receipt.json",
+      "original_filename": "source-final-receipt.json",
+      "original_sha256": "611573b94248a3c28f7c7beceaf604b338ba4372586978c641bfd27e91308794",
+      "public_sha256": "611573b94248a3c28f7c7beceaf604b338ba4372586978c641bfd27e91308794"
+    },
+    "final-native.log": {
+      "path": "final-native.log",
+      "original_filename": "final-native.log",
+      "original_sha256": "4dc5a0cd06974c45e1fb436e879fc441878b735575692db2c9086a410270e93b",
+      "public_sha256": "6f7f5496fb9bff0c285c1e934ec70024204823cd9628967aafac45e1d92d0617"
+    },
+    "final-v2-contract.spec.ts.txt": {
+      "path": "final-v2-contract.spec.ts.txt",
+      "original_filename": "final-v2-contract.spec.ts",
+      "original_sha256": "1fb53c9e0488232620a13b8701c94c49a7b3417d74737bc48ea46da8568ed107",
+      "public_sha256": "8aefbcd622b3e78dc25901e67d640bbfe8057012d92b130886d537cce5eb23d3"
+    },
+    "source-final-v2.spec.ts.txt": {
+      "path": "source-final-v2.spec.ts.txt",
+      "original_filename": "source-final-v2.spec.ts",
+      "original_sha256": "41c7aa98c9c348164f7a64126a9d76479d1a63587284e7769b22c751802b9c08",
+      "public_sha256": "10ad2f0a4dfcec8ca77d52a75954859456916891516c68d00ebe84a15d886757"
+    },
+    "final-v2-contract-receipt.json": {
+      "path": "final-v2-contract-receipt.json",
+      "original_filename": "final-v2-contract-receipt.json",
+      "original_sha256": "b0cddfce73686dfafab236486c222f7f86695ed79c8084a93e4698649d50ef32",
+      "public_sha256": "b0cddfce73686dfafab236486c222f7f86695ed79c8084a93e4698649d50ef32"
+    },
+    "source-final-v2-receipt.json": {
+      "path": "source-final-v2-receipt.json",
+      "original_filename": "source-final-v2-receipt.json",
+      "original_sha256": "611573b94248a3c28f7c7beceaf604b338ba4372586978c641bfd27e91308794",
+      "public_sha256": "611573b94248a3c28f7c7beceaf604b338ba4372586978c641bfd27e91308794"
+    },
+    "final-v2-native.log": {
+      "path": "final-v2-native.log",
+      "original_filename": "final-v2-native.log",
+      "original_sha256": "8ecd1b2ea92386f87217f85afddcb2329a22db7b540c241f2270bb4c00368cad",
+      "public_sha256": "8d6cff2789e9c4a0d1089d10bba6c601f5d7b5e43ec06db7c7a8e9e345e3996d"
+    },
+    "final-v2.config.ts.txt": {
+      "path": "final-v2.config.ts.txt",
+      "original_filename": "final-v2.config.ts",
+      "original_sha256": "e19706387660aec39514d9aa35ccccb0ace40f4c66d3ead296ed2c92c45bdd5c",
+      "public_sha256": "1783891a1ed283d55c8f944fce2b9fbc3049b707ad805ff5b32a8babc2e0d996"
+    },
+    "source-final.spec.ts.txt": {
+      "path": "source-final.spec.ts.txt",
+      "original_filename": "source-final.spec.ts",
+      "original_sha256": "302602628fbd5be5395c2d30345943ec643b546cd2df64b719bbb371c7c4b3af",
+      "public_sha256": "1608077e0128be5e5ab221fe6c54c552ff2f22698f140bb284b6784539f8c5fc"
+    },
+    "final.config.ts.txt": {
+      "path": "final.config.ts.txt",
+      "original_filename": "final.config.ts",
+      "original_sha256": "a8a2c07f63156e189818d4d439ab56cde0a2f28ddbd52d36ae3b6d201bf7e1d7",
+      "public_sha256": "64eac2b0044e89734cad0a0af181b5d8bc81c9009e1a262ce1f708df34d9f9fd"
+    },
+    "green.config.ts.txt": {
+      "path": "green.config.ts.txt",
+      "original_filename": "green.config.ts",
+      "original_sha256": "6323c3151a74f03a8849b98fe55b9c3d798b8680b8f04503f179e3b485caa846",
+      "public_sha256": "1670dc1040318f5cf22acf375d6c422475bbab2d41d0029c51cd2abfb6395d6c"
+    },
+    "source-green.spec.ts.txt": {
+      "path": "source-green.spec.ts.txt",
+      "original_filename": "source-green.spec.ts",
+      "original_sha256": "9d432c371bd9bd7b8d71273ce5603e3c58deaedfad7194e612eed756ee42199d",
+      "public_sha256": "d74d819e5e10b8b635f3a19600f3d968646c55627e23d90c0968704bf2e23ab0"
+    },
+    "reader-green.spec.ts.txt": {
+      "path": "reader-green.spec.ts.txt",
+      "original_filename": "reader-green.spec.ts",
+      "original_sha256": "8ba6b63ae5dc5f6cf8b7755e8617a9e9d883f04cba198d9555c888aa7ec6146e",
+      "public_sha256": "fc0a25e6f358755150c51d149d5920c3ff425fad6e7d21f2d6569e1f44342511"
+    },
+    "fixed-complete.config.ts.txt": {
+      "path": "fixed-complete.config.ts.txt",
+      "original_filename": "fixed-complete.config.ts",
+      "original_sha256": "00db7535f697f33c529ab2f0bddf508e83198512d4bcdf14d658072297aea16d",
+      "public_sha256": "8eaf2f590ee573562d06f8c34f4750509ed2054d1553c3032407c6f668064512"
+    },
+    "reader-fixed-complete.spec.ts.txt": {
+      "path": "reader-fixed-complete.spec.ts.txt",
+      "original_filename": "reader-fixed-complete.spec.ts",
+      "original_sha256": "5902de10b0e8921ffd5ed67d1e4d021e491436191f6ee9d144f8f56942218b68",
+      "public_sha256": "98de3a3fc9ac74f42db13ee95f6db20bb9f16c5b65ecf25dd828e696381ff45c"
+    },
+    "fixed.config.ts.txt": {
+      "path": "fixed.config.ts.txt",
+      "original_filename": "fixed.config.ts",
+      "original_sha256": "965438af738f6bd9db0591d04ed612bb0ea10af34f22a36a183803d3fd5cc202",
+      "public_sha256": "0e433f18228ca68d00acf56f1ec81625713d99382739d83bd71cf8c1503c75e7"
+    },
+    "reader-fixed.spec.ts.txt": {
+      "path": "reader-fixed.spec.ts.txt",
+      "original_filename": "reader-fixed.spec.ts",
+      "original_sha256": "fd953cce44cd52301052761671542acff6eb4f17387cc55c52c1ce3cbff18c6f",
+      "public_sha256": "209c47581b80342545ef073751cbd74be2db4647e54a6db27e878378a8009128"
+    },
+    "source.config.ts.txt": {
+      "path": "source.config.ts.txt",
+      "original_filename": "source.config.ts",
+      "original_sha256": "5a4a6245a57b600145bc0fc0deac771f79d35958214c1579572fe59bb635ed94",
+      "public_sha256": "fba4c0da64b4f8af7de642da87f61d68a98916bcdcfa565d79cdde70183c394a"
+    },
+    "playwright.config.ts.txt": {
+      "path": "playwright.config.ts.txt",
+      "original_filename": "playwright.config.ts",
+      "original_sha256": "0dd24faaa6247d09172082c3b29f8a80713e5424c7941f6129c46d2abeed2983",
+      "public_sha256": "c7b06e80a8a86aadc4175040737e7a22825743ce8f543f31bd8df3a786e5001f"
+    },
+    "package.json": {
+      "path": "package.json",
+      "original_filename": "package.json",
+      "original_sha256": "a90fc33418afa2b9cbf4768524b021135b965ecdf993457505bfae3ac44a8428",
+      "public_sha256": "a90fc33418afa2b9cbf4768524b021135b965ecdf993457505bfae3ac44a8428"
+    }
+  },
+  "runs": [
+    {
+      "configuration": "playwright.config.ts.txt",
+      "exit_code": 0,
+      "observed_summary": "1 passed (5.4s)",
+      "interpretation": "Successfully reproduced bad active hash reuse and saved-zero-scroll defect; product behavior was wrong.",
+      "receipt": "receipt.json",
+      "command": "bash scripts/node.sh apps/web/node_modules/.bin/playwright test --config playwright.config.ts.txt",
+      "working_directory": "<WORKTREE>"
+    },
+    {
+      "configuration": "source.config.ts.txt",
+      "exit_code": 0,
+      "observed_summary": "1 passed (4.6s)",
+      "interpretation": "Successfully reproduced late private download after cross-page role downgrade; product behavior was wrong.",
+      "receipt": "source-receipt.json",
+      "command": "bash scripts/node.sh apps/web/node_modules/.bin/playwright test --config source.config.ts.txt",
+      "working_directory": "<WORKTREE>"
+    },
+    {
+      "configuration": "fixed.config.ts.txt",
+      "exit_code": 1,
+      "observed_summary": "1 failed (14.7s test body)",
+      "interpretation": "Child hash rejected, but parent hash alias confirmed; probe continuation timed out because corrupted global course hid directory search.",
+      "receipt": "fixed-receipt.json",
+      "command": "bash scripts/node.sh apps/web/node_modules/.bin/playwright test --config fixed.config.ts.txt",
+      "working_directory": "<WORKTREE>"
+    },
+    {
+      "configuration": "fixed-complete.config.ts.txt",
+      "exit_code": 1,
+      "observed_summary": "1 failed (19.2s test body)",
+      "interpretation": "Frontend changed before run to reject bad parent; obsolete defect expectation failed. No acceptance inferred.",
+      "receipt": "fixed-complete-receipt.json",
+      "command": "bash scripts/node.sh apps/web/node_modules/.bin/playwright test --config fixed-complete.config.ts.txt",
+      "working_directory": "<WORKTREE>"
+    },
+    {
+      "configuration": "green.config.ts.txt",
+      "exit_code": 0,
+      "observed_summary": "2 passed (11.1s)",
+      "interpretation": "Behavior repaired but intermediate expanded tab identity violated specification section 4.3; not final acceptance.",
+      "receipts": [
+        "reader-green-receipt.json",
+        "source-green-receipt.json"
+      ],
+      "command": "bash scripts/node.sh apps/web/node_modules/.bin/playwright test --config green.config.ts.txt",
+      "working_directory": "<WORKTREE>"
+    },
+    {
+      "configuration": "final.config.ts.txt",
+      "exit_code": 1,
+      "observed_summary": "1 failed, 1 passed (24.4s)",
+      "interpretation": "Stable-identity guard failed under stale popstate closure; cross-page late original blocking passed.",
+      "receipts": [
+        "final-contract-receipt.json",
+        "source-final-receipt.json"
+      ],
+      "raw_log": "final-native.log",
+      "command": "bash scripts/node.sh apps/web/node_modules/.bin/playwright test --config final.config.ts.txt",
+      "working_directory": "<WORKTREE>"
+    },
+    {
+      "configuration": "final-v2.config.ts.txt",
+      "exit_code": 0,
+      "observed_summary": "2 passed (10.9s)",
+      "interpretation": "Final same-identity context rejection, preserved session/course, zero-scroll restoration, cross-page delayed private-byte suppression passed.",
+      "receipts": [
+        "final-v2-contract-receipt.json",
+        "source-final-v2-receipt.json"
+      ],
+      "raw_log": "final-v2-native.log",
+      "command": "bash scripts/node.sh apps/web/node_modules/.bin/playwright test --config final-v2.config.ts.txt",
+      "working_directory": "<WORKTREE>"
+    }
+  ],
+  "frozen_by_reviewer": true,
+  "public_copy": {
+    "derived_from_original_review_sha256": "ebffb2231b46422d801cfddd172ce7082f342bf354a20047a39651dc9e38b2ec",
+    "derivation_manifest": "manifest.json",
+    "historical_evidence_only": true,
+    "command_paths_and_script_names_redacted": true,
+    "script_copies_use_txt_and_are_not_automatically_executable": true,
+    "original_test_source_hashes_unchanged": true,
+    "original_run_exit_codes_and_summaries_unchanged": true,
+    "this_public_copy_was_not_the_file_used_during_original_runs": true
+  }
+}

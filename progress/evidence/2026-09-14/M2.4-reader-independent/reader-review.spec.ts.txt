@@ -1,0 +1,43 @@
+import { test, expect, chromium } from '<WORKTREE>/apps/web/node_modules/@playwright/test/index.mjs'
+import { createHash } from 'node:crypto'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { RestartRuntime } from '<WORKTREE>/tests/e2e/restartRuntime'
+import { originalReaderPackage, importReaderPackage } from '<WORKTREE>/tests/e2e/readerTestData'
+const root='<WORKTREE>'
+const sources=['apps/web/src/features/reader/target.ts','apps/web/src/features/reader/contentClient.ts','apps/web/src/features/reader/useCourseDirectory.ts','apps/web/src/features/reader/CourseDirectory.tsx','apps/web/src/features/reader/ReaderDocument.tsx','apps/web/src/features/reader/SourcePanel.tsx','apps/web/src/api/client.ts','apps/web/src/workbench/Shell.tsx','apps/web/src/workbench/model.ts','apps/web/src/workbench/uiCache.ts']
+const hashes=()=>Object.fromEntries(sources.map(p=>[p,createHash('sha256').update(readFileSync(`${root}/${p}`)).digest('hex')]))
+test('independent exact-ref and zero-scroll behavioral probes',async()=>{
+ test.setTimeout(75_000)
+ const receipt:any={scope:'Independent adversarial frontend Reader probes; not complete acceptance',source_sha256_before:hashes(),findings:[]}
+ let runtime:RestartRuntime|undefined
+ try{
+  runtime=await RestartRuntime.start(); const context=await runtime.openBrowser(chromium);const page=await context.newPage();await runtime.authenticateOnly(page)
+  const fixture=originalReaderPackage('independentreader');receipt.input_sha256=createHash('sha256').update(fixture.bytes).digest('hex')
+  const {dialog}=await importReaderPackage(page,fixture);await dialog.getByRole('button',{name:'打开已导入课程',exact:true}).click();await page.getByRole('button',{name:'继续阅读 →',exact:true}).click();await expect(page.locator('.real-reader > h1')).toHaveText('从定义到证明与例题的完整推导');await expect(page.locator('.real-reader svg').first()).toBeVisible()
+  // The requested hash differs while entity/id/revision remain exact. No HTTP response is mocked.
+  const before=await (await page.request.get('/api/v1/workbench/session')).json()
+  const bad={course:fixture.course,lesson:{...fixture.lessons[0],sha256:'0'.repeat(64)}}
+  await page.evaluate(target=>{history.pushState(null,'','/?reader='+encodeURIComponent(JSON.stringify(target)));dispatchEvent(new PopStateEvent('popstate'))},bad)
+  await expect.poll(async()=>new URL(page.url()).searchParams.get('reader')).toBe(JSON.stringify(bad))
+  await page.waitForTimeout(500)
+  const after=await (await page.request.get('/api/v1/workbench/session')).json()
+  const active=after.tabs.find((tab:any)=>tab.id===after.active_tab_id)
+  receipt.findings.push({case:'same_revision_bad_hash_deep_link',requested:bad.lesson,actual:active.context.active_ref,actual_body_visible:await page.locator('.real-reader > h1').isVisible(),error_visible:await page.getByRole('heading',{name:'暂时无法打开这个对象',exact:true}).isVisible(),same_active_tab:before.active_tab_id===after.active_tab_id})
+  expect(active.context.active_ref).toEqual(fixture.lessons[0]);expect(active.context.active_ref).not.toEqual(bad.lesson)
+  // Open actual worked example, pin it, deliberately scroll to zero and switch away/back.
+  await page.getByLabel('搜索当前目录').fill('逐项计算')
+  await page.getByRole('navigation',{name:'目录搜索结果'}).getByRole('link',{name:'例题：逐项计算与边界',exact:true}).click()
+  const example=page.locator(`#block-${fixture.blocks[2].id}-r1`);await expect(example).toBeInViewport()
+  await page.getByRole('tab',{name:/例题：逐项计算与边界 · r1/}).dblclick()
+  const scroll=page.locator('.reader-scroll'); const initial=await scroll.evaluate(node=>node.scrollTop)
+  await scroll.evaluate(node=>{node.scrollTop=0;node.dispatchEvent(new Event('scroll',{bubbles:true}))})
+  await expect.poll(async()=>{const s=await (await page.request.get('/api/v1/workbench/session')).json();return s.tabs.find((tab:any)=>tab.id===s.active_tab_id).scroll_offset}).toBe(0)
+  await page.getByRole('tab',{name:/从定义到证明与例题的完整推导 · r1/}).click();await expect(page.locator('.real-reader > h1')).toBeVisible()
+  await page.getByRole('tab',{name:/例题：逐项计算与边界 · r1/}).click();await expect(example).toBeVisible();await expect(page.locator('.real-reader svg').first()).toBeVisible();await page.waitForTimeout(300)
+  const restored=await scroll.evaluate(node=>node.scrollTop)
+  receipt.findings.push({case:'block_tab_saved_zero_scroll',initial_anchor_scroll:initial,deliberate_saved_scroll:0,restored_scroll:restored,expected_restore:0})
+  expect(restored).toBeGreaterThan(0)
+  receipt.status='REPRODUCED_TWO_BEHAVIORAL_GAPS'
+ }catch(error){receipt.status='PROBE_ERROR';receipt.error=String(error);throw error}
+ finally{await runtime?.close();receipt.owned_runtime_closed=true;receipt.source_sha256_after=hashes();receipt.sources_unchanged=JSON.stringify(receipt.source_sha256_before)===JSON.stringify(receipt.source_sha256_after);writeFileSync('receipt.json',JSON.stringify(receipt,null,2)+'\n')}
+})

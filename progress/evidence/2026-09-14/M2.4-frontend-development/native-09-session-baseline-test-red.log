@@ -1,0 +1,59 @@
+
+> @learning-workbench/web@0.1.0 test:e2e
+> playwright test --config ../../tests/e2e/playwright.config.ts reader.spec.ts
+
+[WebServer] INFO:     Started server process [329950]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+[WebServer] (node:329970) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 6 tests using 1 worker
+
+(node:330023) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 ../../tests/e2e/reader.spec.ts:32:1 › real imported directory, title search, worked-example link, long formula and frozen original download (4.1s)
+  ✓  2 ../../tests/e2e/reader.spec.ts:65:1 › second repeated rendered selection preserves exact source codepoints, saves note, edits and soft deletes (3.3s)
+  ✓  3 ../../tests/e2e/reader.spec.ts:96:1 › native source keyboard selection creates exact Markdown codepoints without rendered-text guessing (3.0s)
+  ✓  4 ../../tests/e2e/reader.spec.ts:114:1 › offline local note recovery and a real concurrent server revision show three-way comparison before CAS save (3.8s)
+  ✘  5 ../../tests/e2e/reader.spec.ts:162:1 › historical course revisions stay in separate exact tabs and hash-mismatched links preserve unresolved reference (9.2s)
+(node:330654) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  6 ../../tests/e2e/reader.spec.ts:193:1 › a private original authorized before a cross-profile role decrease cannot trigger a late browser download (4.2s)
+
+
+  1) ../../tests/e2e/reader.spec.ts:162:1 › historical course revisions stay in separate exact tabs and hash-mismatched links preserve unresolved reference 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 2
+    + Received  + 2
+
+      Object {
+        "entity": "block",
+        "id": "block_nativehistory_definition",
+    -   "revision": 2,
+    -   "sha256": "aef8b861705732bef9266c73ff064e911c1a345eb3fdb0e2892472e5412228b2",
+    +   "revision": 1,
+    +   "sha256": "634fb257fa8cee0a96c6703e3067520ca3578d1e0052818850915eb46fed4612",
+      }
+
+    Call Log:
+    - Timeout 5000ms exceeded while waiting on the predicate
+
+      187 |   await expect(page.getByRole('heading', { name: '无法打开此精确链接', exact: true })).toBeVisible()
+      188 |   await expect(page.getByRole('alert')).toContainText('不一致')
+    > 189 |   await expect.poll(async () => { const value = await page.request.get('/api/v1/workbench/session').then(response => response.json()); return value.tabs.find((tab: {id:string}) => tab.id === value.active_tab_id)?.context.active_ref }).toEqual(current.blocks[0])
+          |                                                                                                                                                                                                                                            ^
+      190 | })
+      191 |
+      192 |
+        at <repo>/tests/e2e/reader.spec.ts:189:236
+
+    Error Context: ../../.local_data/e2e-results/reader-historical-course-r-ef021-eserve-unresolved-reference/error-context.md
+
+  1 failed
+    ../../tests/e2e/reader.spec.ts:162:1 › historical course revisions stay in separate exact tabs and hash-mismatched links preserve unresolved reference 
+  5 passed (30.1s)

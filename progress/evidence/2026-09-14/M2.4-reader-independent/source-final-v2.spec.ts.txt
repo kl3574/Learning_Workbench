@@ -1,0 +1,30 @@
+import { test, expect, chromium } from '<WORKTREE>/apps/web/node_modules/@playwright/test/index.mjs'
+import { createHash } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { RestartRuntime } from '<WORKTREE>/tests/e2e/restartRuntime'
+const root='<WORKTREE>'
+const sources=['apps/web/src/features/reader/SourcePanel.tsx','apps/web/src/api/client.ts','apps/web/src/features/imports/ImportWorkflow.tsx']
+const hashes=()=>Object.fromEntries(sources.map(p=>[p,createHash('sha256').update(readFileSync(`${root}/${p}`)).digest('hex')]))
+test('cross-page role transition invalidates already pending original delivery',async()=>{
+ test.setTimeout(65_000)
+ const receipt:any={scope:'One cross-page role transition and delayed real DOCX original response; no mocked permission response',source_sha256_before:hashes()};let runtime:RestartRuntime|undefined
+ let release:(()=>void)|undefined
+ try{
+  runtime=await RestartRuntime.start();const context=await runtime.openBrowser(chromium);const page=await context.newPage();await runtime.authenticateOnly(page)
+  const bytes=execFileSync(`${root}/.venv/bin/python`,['-B','-c','import sys;from tests.document_fixtures import docx_fixture;sys.stdout.buffer.write(docx_fixture())'],{cwd:root});receipt.input_sha256=createHash('sha256').update(bytes).digest('hex')
+  await page.getByRole('button',{name:'导入',exact:true}).click();const dialog=page.getByRole('dialog',{name:'导入',exact:true})
+  await dialog.getByLabel('解析格式').selectOption('docx');await dialog.getByLabel('选择导入文件').setInputFiles({name:'original-synthetic.docx',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',buffer:bytes})
+  await dialog.getByRole('button',{name:'上传并生成预览'}).click();await expect(dialog.getByText('预览已就绪，等待确认',{exact:true})).toBeVisible();for(const cb of await dialog.getByRole('checkbox',{name:/接受警告/}).all())await cb.check();await dialog.getByRole('checkbox',{name:/我已核对本次候选/}).check();await dialog.getByRole('button',{name:'确认导入当前候选'}).click();await expect(dialog.getByRole('heading',{name:'导入已提交',exact:true})).toBeVisible();await dialog.getByRole('button',{name:'打开已导入课程',exact:true}).click();await page.getByRole('button',{name:'继续阅读 →',exact:true}).click();await expect(page.locator('.real-reader')).toBeVisible()
+  const panel=page.locator('.reader-sources').first();await panel.locator('summary').click();await expect(panel.getByText('原件需要作者角色。',{exact:false})).toBeVisible();await panel.getByRole('button',{name:'切换为作者以读取原件',exact:true}).click();await expect(panel.getByRole('button',{name:'下载受控原件',exact:true})).toBeAttached();await panel.evaluate(node=>{(node as HTMLDetailsElement).open=true})
+  const second=await context.newPage();await second.goto(runtime.origin);await expect(second.getByText('✓ UI 会话已保存')).toBeVisible();await second.getByRole('button',{name:'导入',exact:true}).click();const secondDialog=second.getByRole('dialog',{name:'导入',exact:true});await expect(secondDialog.getByText('操作角色：作者')).toBeVisible()
+  let loaded!:()=>void;const responseLoaded=new Promise<void>(r=>loaded=r);const held=new Promise<void>(r=>release=r);let artifactUrl=''
+  await page.route('**/api/v1/artifacts/*/download',async route=>{artifactUrl=route.request().url();const response=await route.fetch();receipt.authorized_response_status=response.status();loaded();await held;await route.fulfill({response})})
+  const downloads:any[]=[];page.on('download',value=>downloads.push(value));await panel.getByRole('button',{name:'下载受控原件',exact:true}).click();await responseLoaded
+  const changed=second.waitForResponse(r=>r.url().endsWith('/api/v1/session/role')&&r.request().method()==='POST');await secondDialog.getByRole('button',{name:'切换为学习者角色',exact:true}).click();expect((await changed).status()).toBe(200);await expect(secondDialog.getByText('操作角色：学习者')).toBeVisible()
+  const auth=await (await page.request.get('/api/v1/session')).json();expect(auth.role).toBe('learner');receipt.role_before_release=auth.role;receipt.fresh_download_status=(await page.request.get(artifactUrl)).status();expect(receipt.fresh_download_status).toBe(403)
+  release();await expect(panel.getByRole('button',{name:'下载受控原件',exact:true})).toBeEnabled();await page.waitForTimeout(600);expect(downloads).toHaveLength(0)
+  Object.assign(receipt,{status:'PASS_CROSS_PAGE_LATE_PRIVATE_DOWNLOAD_BLOCKED',native_download_count:downloads.length})
+ }catch(error){receipt.status='PROBE_ERROR';receipt.error=String(error);throw error}
+ finally{release?.();await runtime?.close();receipt.owned_runtime_closed=true;receipt.source_sha256_after=hashes();receipt.sources_unchanged=JSON.stringify(receipt.source_sha256_before)===JSON.stringify(receipt.source_sha256_after);writeFileSync('source-final-v2-receipt.json',JSON.stringify(receipt,null,2)+'\n')}
+})

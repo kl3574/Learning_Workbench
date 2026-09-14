@@ -1,0 +1,42 @@
+{
+  "implementation_commit": "4e53ce5e73b61650f93c1ea769f3e3143031f29d",
+  "scope": "Final source delta after the frontend developer freeze; actual bounded browser reproductions followed by full exact-commit gates.",
+  "frontend_freeze_delta": [
+    {
+      "path": "apps/web/src/features/notes/NotesPanel.tsx",
+      "development_freeze_sha256": "faf99e81bac55bd44bfc6d972be689739eac2c633f3b28727f33b444dc848508",
+      "final_sha256": "6b42b071f9e89b67b00eba596708340647bb7a4e68f3912ee16d7d4d66a7a2c4"
+    }
+  ],
+  "new_regression_test": {
+    "path": "tests/e2e/notes-lifecycle.spec.ts",
+    "sha256": "e09c8fbc5e1d9e9c308cfa4b6cf1698909846699c6f0576508dd3321a2e63752"
+  },
+  "red": {
+    "command": "bash scripts/node.sh npm --prefix apps/web exec -- playwright test --config /tmp/m24-notes-lifecycle.config.ts --output=/tmp/m24-notes-lifecycle-red",
+    "exit_code": 1,
+    "result": "2 failed",
+    "production_source_sha256": "faf99e81bac55bd44bfc6d972be689739eac2c633f3b28727f33b444dc848508",
+    "test_source_sha256": "fcb2309cc3dda946c8b7c79be4845d3fd5ef3d1000cbc6f3f935dca180096797",
+    "observed_failures": [
+      "Remote PATCH re-anchored to another block returned 200; stale local PATCH returned 412; currentNote failed to find the new anchor and no conflict comparison appeared.",
+      "DELETE returned 200 and current Note disappeared; local unsynced continuation had been replaced with the old baseline and its recovery button disappeared."
+    ],
+    "evidence_boundary": "Original command output observed via execution tool, not captured as a separate raw log. Actual response JSONs preserved; full frozen regression output is in the exact-native log."
+  },
+  "development_green": {
+    "command": "bash scripts/node.sh npm --prefix apps/web exec -- playwright test --config /tmp/m24-notes-lifecycle.config.ts --output=/tmp/m24-notes-lifecycle-fixed",
+    "exit_code": 0,
+    "tests_passed": 2,
+    "reported_duration_seconds": 9.0,
+    "production_source_sha256": "6b42b071f9e89b67b00eba596708340647bb7a4e68f3912ee16d7d4d66a7a2c4",
+    "later_test_delta": "Final test additionally opens the visible anchor comparison before inspecting it; verified in the full exact-commit run."
+  },
+  "resolution": [
+    "Read a Note by stable ID across current workspace pages, independent of its old anchor.",
+    "Expose original/local/remote frozen anchor comparison beside the Markdown comparison.",
+    "Soft delete the server object while retaining dirty local continuation; archived current lookup fails visibly without discarding the local editor."
+  ],
+  "final_verification": "M2.4-exact-native.json and .log: 41 tests PASS on this exact commit, including both lifecycle regressions and actual browser/API restart.",
+  "unchanged_boundaries": "54 core models, 102 target routes, 34 actual registered routes; no automatic server replay or re-anchor."
+}

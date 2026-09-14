@@ -1,0 +1,56 @@
+import json,sys,tempfile
+from pathlib import Path
+sys.path.insert(0,'<REPO>')
+from fastapi.testclient import TestClient
+from packages.contracts import domain_models as dm
+from packages.contracts.canonical import sha256_bytes
+from services.api.app.application.content import ContentService
+from services.api.app.infrastructure.content_repository import reference
+from services.api.app.infrastructure.config import Settings
+from services.api.app.infrastructure.security import issue_bootstrap_code
+from services.api.app.main import create_app
+
+ROOT=Path('<REPO>')
+PATHS=['services/api/app/application/learning.py','services/api/app/application/notes.py','services/api/app/application/reader.py','apps/web/src/features/reader/ReaderDocument.tsx','apps/web/src/features/notes/NotesPanel.tsx']
+def hashes():return {name:sha256_bytes((ROOT/name).read_bytes()) for name in PATHS}
+def main():
+    out={'hashes_before':hashes(),'checks':[]}
+    with tempfile.TemporaryDirectory(prefix='m24-learning-note-probe-') as temp:
+        settings=Settings(data_dir=Path(temp)/'data');app=create_app(settings)
+        with TestClient(app,base_url=settings.origin) as client:
+            database=app.state.database
+            response=client.post('/api/v1/session/bootstrap',json={'one_time_code':issue_bootstrap_code(database)},headers={'Origin':settings.origin})
+            workspace=response.json()['workspace_id'];csrf=response.json()['csrf_token']
+            headers={'Origin':settings.origin,'X-CSRF-Token':csrf,'Idempotency-Key':'create-note-probe'}
+            raw=b'Original bounded synthetic block.\n'
+            block=dm.ContentBlock(id='block_old_probe',revision=1,kind='text',title='Old block',body_path='body.md',body_sha256=sha256_bytes(raw))
+            lesson=dm.Lesson(id='lesson_old_probe',revision=1,title='Old lesson',objectives=[],block_refs=[reference(block)])
+            course=dm.Course(id='course_history_probe',revision=1,title='Course one',audience='synthetic',lesson_refs=[reference(lesson)])
+            content=ContentService(database);content.publish(workspace,[block,lesson,course],{'body.md':raw})
+            note=dm.Note(id='note_probe',revision=1,workspace_id=workspace,markdown='Native synthetic note',anchor=dm.Selection(ref=reference(block),exact_quote='Original',start_codepoint=0,end_codepoint=8))
+            created=client.post('/api/v1/notes',json=note.model_dump(mode='json'),headers=headers);assert created.status_code==201
+            p=client.get('/api/v1/learning/progress').json()
+            action={'kind':'read_marked','ref':reference(lesson).model_dump(mode='json'),'expected_revision':p['revision'],'value':True}
+            marked=client.post('/api/v1/learning/actions',json=action,headers={**headers,'Idempotency-Key':'mark-probe'});assert marked.status_code==200
+            before=client.get('/api/v1/learning/progress?course_id=course_history_probe').json()
+            raw2=b'Different synthetic lesson and block.\n'
+            block2=dm.ContentBlock(id='block_new_probe',revision=1,kind='text',title='New block',body_path='new.md',body_sha256=sha256_bytes(raw2))
+            lesson2=dm.Lesson(id='lesson_new_probe',revision=1,title='New lesson',objectives=[],block_refs=[reference(block2)])
+            course2=dm.Course(id=course.id,revision=2,title='Course two',audience='synthetic',lesson_refs=[reference(lesson2)])
+            content.publish(workspace,[block2,lesson2,course2],{'new.md':raw2})
+            filtered=client.get('/api/v1/learning/progress?course_id=course_history_probe').json()
+            global_progress=client.get('/api/v1/learning/progress').json()
+            old_outline=client.get('/api/v1/courses/course_history_probe/outline?revision=1').json()
+            out['checks'].append({'name':'old_exact_course_loses_filtered_reading','status':'FAIL','before_filtered_read_count':len(before['readings']),'after_filtered_read_count':len(filtered['readings']),'global_read_count':len(global_progress['readings']),'old_outline_state':old_outline['sections'][0]['lessons'][0]['reading_state'],'old_lesson_http':client.get('/api/v1/lessons/lesson_old_probe?revision=1').status_code,'old_note_still_visible':len(client.get('/api/v1/notes?ref_id=block_old_probe').json()['items'])})
+            switched=client.post('/api/v1/session/role',json={'role':'author'},headers={**headers,'Idempotency-Key':'author-probe'});assert switched.status_code==200
+            replay=client.post('/api/v1/learning/actions',json=action,headers={**headers,'Idempotency-Key':'mark-probe'})
+            changed=client.post('/api/v1/learning/actions',json={**action,'value':False},headers={**headers,'Idempotency-Key':'mark-probe'})
+            note2=dm.Note.model_validate({**note.model_dump(),'revision':2,'markdown':'edited synthetic note'})
+            patched=client.patch('/api/v1/notes/note_probe',json=note2.model_dump(mode='json'),headers={**headers,'Idempotency-Key':'patch-probe','If-Match':created.headers['etag']})
+            deleted=client.delete('/api/v1/notes/note_probe',headers={**headers,'Idempotency-Key':'delete-probe','If-Match':patched.headers['etag']})
+            end=client.get('/api/v1/learning/progress').json()
+            with database.connect() as connection:events=[row[0] for row in connection.execute('SELECT kind FROM learning_events ORDER BY occurred_at')]
+            out['checks'].append({'name':'role_switch_idempotency_and_note_edit_delete_event_boundaries','status':'PASS','action_replay_same_receipt':replay.status_code==200 and replay.json()==marked.json(),'changed_same_key_status':changed.status_code,'patch_status':patched.status_code,'delete_status':deleted.status_code,'progress_revision_after_read_then_patch_delete':end['revision'],'events':events})
+    out['hashes_after']=hashes();out['source_stable']=out['hashes_before']==out['hashes_after'];out['cleanup']='temporary SQLite data and worker cleaned; no listening network server'
+    Path('learning-interaction-red.json').write_text(json.dumps(out,indent=2,ensure_ascii=False));print(json.dumps(out,indent=2,ensure_ascii=False))
+if __name__=='__main__':main()

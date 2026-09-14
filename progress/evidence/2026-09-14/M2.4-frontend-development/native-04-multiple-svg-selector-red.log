@@ -1,0 +1,46 @@
+
+> @learning-workbench/web@0.1.0 test:e2e
+> playwright test --config ../../tests/e2e/playwright.config.ts reader.spec.ts -g real imported
+
+[WebServer] INFO:     Started server process [310465]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+[WebServer] (node:310485) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:310538) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 ../../tests/e2e/reader.spec.ts:30:1 › real imported directory, title search, worked-example link, long formula and frozen original download (3.9s)
+
+
+  1) ../../tests/e2e/reader.spec.ts:30:1 › real imported directory, title search, worked-example link, long formula and frozen original download 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('#block-block_nativedirectory_example-r1').locator('.formula[data-tex^="v="]').locator('svg')
+    Expected: visible
+    Error: strict mode violation: locator('#block-block_nativedirectory_example-r1').locator('.formula[data-tex^="v="]').locator('svg') resolved to 2 elements:
+        1) <svg role="img" width="1.097ex" height="2.262ex" focusable="false" viewBox="0 -750 485 1000" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">…</svg> aka locator('p:nth-child(6) > .formula > span > .MathJax > svg').first()
+        2) <svg role="img" width="124.33ex" height="2.262ex" focusable="false" viewBox="0 -750 54953.8 1000" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">…</svg> aka locator('p:nth-child(6) > .formula > span > .MathJax > svg:nth-child(3)')
+
+    Call log:
+      - Expect "toBeVisible" locator('#block-block_nativedirectory_example-r1').locator('.formula[data-tex^="v="]').locator('svg') with timeout 5000ms
+      - waiting for locator('#block-block_nativedirectory_example-r1').locator('.formula[data-tex^="v="]').locator('svg')
+
+
+      45 |   const formula = example.locator('.formula[data-tex^="v="]')
+      46 |   await info.attach('actual-math-attributes', { body: JSON.stringify(await example.locator('.formula').evaluateAll(nodes => nodes.map(node => ({ tex: node.getAttribute('data-tex'), text: node.textContent })))), contentType: 'application/json' })
+    > 47 |   await expect(formula.locator('svg')).toBeVisible()
+         |                                        ^
+      48 |   expect(await formula.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true)
+      49 |   await example.getByText('来源与提取诊断', { exact: true }).click()
+      50 |   await expect(example.locator('.retained-original')).toContainText(createHash('sha256').update(fixture.bytes).digest('hex'))
+        at <repo>/tests/e2e/reader.spec.ts:47:40
+
+    Error Context: ../../.local_data/e2e-results/reader-real-imported-direc-d5708-nd-frozen-original-download/error-context.md
+
+  1 failed
+    ../../tests/e2e/reader.spec.ts:30:1 › real imported directory, title search, worked-example link, long formula and frozen original download 
