@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { decodeOriginal, encodingChoices, utf8Derivative, type TextEncoding } from './encoding'
 
-export function EncodingPreview({ originalFile, expectedHash, accessEpoch }: {
-  originalFile: File | null; expectedHash: string; accessEpoch: RefObject<number>;
+export function EncodingPreview({ originalFile, expectedHash, accessEpoch, onOriginalFile }: {
+  originalFile: File | null; expectedHash: string; accessEpoch: RefObject<number>; onOriginalFile?: (file: File | null) => void;
 }) {
   const [file, setFile] = useState(originalFile)
   const [encoding, setEncoding] = useState<TextEncoding>('utf-8')
@@ -50,7 +50,7 @@ export function EncodingPreview({ originalFile, expectedHash, accessEpoch }: {
     {!originalFile && <p className="import-warning">刷新或关闭后，浏览器不再持有原文件。请重新选择同一原始文件；只有 SHA-256 与失败记录一致才可预览。</p>}
     {file && <p>本机原始文件：{file.name}</p>}
     <div className="import-fields">
-      <label className="import-file">重新选择原始文件<input type="file" accept=".md,.markdown,.txt,.html,.htm" onChange={event => { reset(); setFile(event.target.files?.[0] ?? null) }} /></label>
+      <label className="import-file">重新选择原始文件<input type="file" accept=".md,.markdown,.txt,.html,.htm" onChange={event => { reset(); setFile(event.target.files?.[0] ?? null); onOriginalFile?.(event.target.files?.[0] ?? null) }} /></label>
       <label>原件文本编码<select value={encoding} disabled={busy} onChange={event => { reset(); setEncoding(event.target.value as TextEncoding) }}>{encodingChoices.map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></label>
     </div>
     <button type="button" disabled={!file || busy} onClick={() => void decode()}>{busy ? '正在本机严格解码…' : '严格解码并预览'}</button>

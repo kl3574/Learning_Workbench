@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type RefObject } from 'react'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex } from '@noble/hashes/utils.js'
-import { request } from '../../api/client'
+import { getSessionGeneration, request } from '../../api/client'
 import type { DraftSnapshot, SourceSnapshot } from './contracts'
 import { controlledDownloadPath } from './recovery'
 import { SourceProvenance } from './SourceProvenance'
@@ -35,21 +35,26 @@ function OriginalDownload({ source, accessEpoch }: { source: SourceSnapshot; acc
   }, [])
   const download = async () => {
     setBusy(true); setError('')
-    const epoch = accessEpoch.current
+    const epoch = accessEpoch.current, access = getSessionGeneration()
     try {
       const artifact = source.artifact
       const path = controlledDownloadPath(artifact.download_path, location.origin)
       if (path !== `/api/v1/artifacts/${artifact.artifact_id}/download`) throw new Error('原件地址与服务端文件标识不一致。')
       const blob = await request('GET /api/v1/artifacts/{id}/download', undefined, undefined, { path: { id: artifact.artifact_id } })
-      if (!mounted.current || epoch !== accessEpoch.current) return
+      if (!mounted.current || epoch !== accessEpoch.current || access !== getSessionGeneration()) return
       if (blob.size !== artifact.size || bytesToHex(sha256(new Uint8Array(await blob.arrayBuffer()))) !== artifact.sha256) throw new Error('原件字节或哈希校验失败，未生成下载文件。')
-      if (!mounted.current || epoch !== accessEpoch.current) return
+      if (!mounted.current || epoch !== accessEpoch.current || access !== getSessionGeneration()) return
+      // Other browser profiles do not share access broadcasts. Recheck the
+      // current server guard before initiating a download of earlier bytes.
+      const current = await request('GET /api/v1/sources/{id}', undefined, undefined, { path: { id: source.id } })
+      if (!mounted.current || epoch !== accessEpoch.current || access !== getSessionGeneration()) return
+      if (current.id !== source.id || current.sha256 !== source.sha256 || current.size !== source.size || current.artifact.artifact_id !== artifact.artifact_id || current.artifact.sha256 !== artifact.sha256 || current.artifact.size !== artifact.size) throw new Error('原件引用已变化，未生成下载文件。请重新读取来源。')
       const url = URL.createObjectURL(blob)
       urls.current.add(url)
       const anchor = document.createElement('a')
       anchor.href = url; anchor.download = artifact.filename; anchor.click()
       setTimeout(() => { URL.revokeObjectURL(url); urls.current.delete(url) }, 60000)
-    } catch (reason) { if (mounted.current && epoch === accessEpoch.current) setError(reason instanceof Error ? reason.message : '原件下载未完成。') }
+    } catch (reason) { if (mounted.current && epoch === accessEpoch.current && access === getSessionGeneration()) setError(reason instanceof Error ? reason.message : '原件下载未完成。') }
     finally { if (mounted.current) setBusy(false) }
   }
   return <div><div className="import-buttons"><button type="button" disabled={busy} onClick={() => void download()}>{busy ? '正在校验原件…' : '下载受控原件'}</button><small>{source.media_type} · {source.size} 字节</small></div>{error && <p role="alert" className="import-error">{error}</p>}</div>

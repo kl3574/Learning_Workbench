@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import type { CoursePage, ImportKind } from './contracts'
 
-export function UploadForm({ disabled, courses, moreCourses, onMoreCourses, submit }: {
-  disabled: boolean; courses: CoursePage['items']; moreCourses: boolean;
+export function UploadForm({ disabled, suspended = false, courses, moreCourses, onMoreCourses, submit }: {
+  disabled: boolean; suspended?: boolean; courses: CoursePage['items']; moreCourses: boolean;
   onMoreCourses: () => void; submit: (file: File, kind: ImportKind, courseId: string) => Promise<void>;
 }) {
   const [file, setFile] = useState<File | null>(null)
@@ -14,6 +14,9 @@ export function UploadForm({ disabled, courses, moreCourses, onMoreCourses, subm
     event.preventDefault()
     if (file && !disabled) void submit(file, kind, courseId)
   }
+  // Keep the selected File and input choices in memory while access is checked.
+  // No material or filename remains in the DOM during suspension.
+  if (suspended) return null
   return <form onSubmit={onSubmit}>
     <p>上传后先检查候选正文与警告，再确认入库。原件与候选会保留在本机工作区。</p>
     <div className="import-fields">
