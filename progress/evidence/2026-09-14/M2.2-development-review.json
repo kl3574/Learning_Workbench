@@ -2,8 +2,7 @@
   "task_id": "M2.2",
   "recorded_at": "2026-09-14T11:04:59.273668+00:00",
   "scope": "Development review notes, not final exact-version acceptance",
-  "source_commit": null,
-  "source_status": "uncommitted implementation under review; final receipt will bind exact commit",
+  "source_status": "Initial development snapshot was uncommitted; final source anchor and verification appear in final_source_commit/final_verification.",
   "inputs": "Only repository-generated synthetic documents and packages; no personal library content",
   "findings": [
     {
@@ -74,8 +73,15 @@
       "status": "FIXED_AND_RETESTED_ON_FINAL_SOURCE",
       "problem": "After awaiting real lazy body rendering, the narrow-screen header/close control can still be clipped while scrolling. An earlier loading-state capture obscured this remaining defect.",
       "repair": "Inspect actual nested scroll geometry and fix the dialog scroll container; test real visibility without resetting scroll position for the screenshot.",
-      "verification": "Frontend browser diagnosis in progress; existing27 functional tests alone did not prove this manual visual condition.",
+      "verification": "Native27 tests on6b41b8e passed. Three M2.2-accepted-imports-layout geometry receipts prove only the body scrolls and title/close hit points remain visible; all three final screenshots were manually inspected.",
       "diagnosis": "Native old CSS geometry reproduced simultaneous dialog/inner scrolling; fixed CSS makes only workflow body scroll, leaving dialog and inner scrollTop zero and header above the body."
+    },
+    {
+      "id": "expanded-id-mapping-hardcap",
+      "status": "FIXED_AND_RETESTED_ON_FINAL_SOURCE",
+      "problem": "Even with an explicitly expanded package budget, the commit DTO rejected more than2000 mapping rows.",
+      "repair": "Remove undocumented fixed caps on id_mapping and accepted_warning_codes; retain unique/one-to-one checks and HTTP2MiB request protection.",
+      "verification": "403 Python tests onfb2bb03 passed, including real stage/worker/commit of2004 fully mapped objects,2001 exact concept refs, every metadata hash, body chain, no old IDs, idempotent replay and unique terminal event."
     }
   ],
   "development_test_failures": [
@@ -117,6 +123,10 @@
     "Learning effectiveness",
     "Merged main delivery"
   ],
-  "final_source_commit": "6b41b8e1ffc82d6d9757f63c87d3fd80c1b55b40",
-  "final_verification": "All seven exact-version gates passed: Python402, frontend49, native27, lint/types/build/spec."
+  "final_source_commit": "fb2bb033060f8aaacb59e1a81c9826c65509f343",
+  "final_verification": "fb2bb03:403Python,lint/types/spec PASS. Frontend49/native27/build/manual visuals bound to6b41b8e and reused only after explicit unchanged-source delta review.",
+  "initial_development_snapshot": {
+    "source_commit": null,
+    "scope": "Development review notes, not final exact-version acceptance"
+  }
 }
