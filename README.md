@@ -24,7 +24,7 @@ make start
 
 工作台“导入”窗口支持 MD、TXT、HTML、learnpack 及受限 PDF/DOCX 文本提取的上传、预览、确认与取消；解析警告须明确确认，ID 冲突使用显式映射。原件保留并通过受权限控制的下载端点读取。PDF 使用真实页码定位，DOCX 使用段落/表格节点定位；图片公式、OMML 和复杂版式显示诊断，扫描件不自动 OCR。DOCX 原件需作者角色读取，安全正文预览独立处理。正式课程 Reader 的当前实现状态见进度，导入确认不代表整个学习闭环完成。可配置安全预算列在 [.env.example](.env.example)，每次导入暂存时冻结实际配置。
 
-PDF/DOCX 的 M2.3 提取需要可运行的 Linux bubblewrap、libseccomp 与 prlimit；安装依赖不会自动提升权限或改动系统安全策略。若隔离不可用，任务明确失败并保留原件，其他格式导入仍可使用。提取保真与权限选择见 [提取记录](docs/adr/0007-document-extraction.md)，实际验收状态仍以进度为准。
+PDF/DOCX 的 M2.3 提取需要可运行的 Linux bubblewrap、libseccomp 与 prlimit；所在系统还需允许bubblewrap建立受限用户/网络命名空间；项目不自动改动系统安全策略。文档CI采用已通过固定探针的官方Ubuntu26.04配置。若隔离不可用，任务明确失败并保留原件，其他格式导入仍可使用。提取保真与权限选择见 [提取记录](docs/adr/0007-document-extraction.md)，实际验收状态仍以进度为准。
 
 ## 验证与本地备份
 

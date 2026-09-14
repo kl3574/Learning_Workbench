@@ -12,6 +12,6 @@ DOCX容器可能保存不在安全文本预览中的隐藏内容、注释、修�
 
 失败任务没有候选时，现有固定ImportPreview契约没有可供发现的source_id。失败记录和原始SHA仍可回读，后台原件持久化另行验证。界面若提供重新选择并校验原文件的本机副本，必须明确标识其来源，不能宣称从服务器下载成功。
 
-Python依赖由`uv.lock`固定分发哈希。本机bubblewrap与CI的Ubuntu发行包版本分别记录；CI固定官方noble的bubblewrap 0.9.0-1ubuntu0.1与libseccomp2 2.5.5-1ubuntu3.1，不修改本机AppArmor或系统策略。环境版本显示不代表隔离成功，功能与故障测试另行判定。
+Python依赖由`uv.lock`固定分发哈希。需要文档隔离的CI作业使用官方Ubuntu26.04镜像及固定发行包：bubblewrap0.11.1-1ubuntu0.1、apparmor/libapparmor1 5.0.2-0ubuntu1~26.04.1、libseccomp2 2.6.0-2ubuntu5，使用其已有的bwrap用户命名空间配置。24.04实际探针曾报RTM_NEWADDR权限错误；相同二进制的不同执行路径对照排除了仅凭版本推断原因。26.04独立探针及64项真实安全/提取测试通过后才迁移完整作业，不关闭全局AppArmor限制，不削弱namespace/cap-drop。完整CI结果以任务回执为准。
 
-依赖来源：pypdf的[版本与BSD-3-Clause许可](https://pypi.org/project/pypdf/6.18.1/)、[文本提取与保真限制](https://pypdf.readthedocs.io/en/6.18.1/user/extract-text.html)；defusedxml的[发行版与PSFL许可](https://pypi.org/project/defusedxml/0.7.1/)、[XML保护参数](https://github.com/tiran/defusedxml/tree/v0.7.1)；[bubblewrap官方隔离模型](https://github.com/containers/bubblewrap)、[Ubuntu noble bubblewrap包](https://packages.ubuntu.com/noble/bubblewrap)、[libseccomp2包](https://packages.ubuntu.com/noble-updates/libseccomp2)。资料核验日期为2026-09-14；defusedxml在本项目Python3.12上的兼容性以实际测试为准。
+依赖来源：pypdf的[版本与BSD-3-Clause许可](https://pypi.org/project/pypdf/6.18.1/)、[文本提取与保真限制](https://pypdf.readthedocs.io/en/6.18.1/user/extract-text.html)；defusedxml的[发行版与PSFL许可](https://pypi.org/project/defusedxml/0.7.1/)、[XML保护参数](https://github.com/tiran/defusedxml/tree/v0.7.1)；[bubblewrap官方隔离模型](https://github.com/containers/bubblewrap)、[Ubuntu发行包目录](https://packages.ubuntu.com/resolute/bubblewrap)、[官方runner镜像](https://github.com/actions/runner-images)。资料核验日期为2026-09-14；defusedxml在本项目Python3.12上的兼容性以实际测试为准。
