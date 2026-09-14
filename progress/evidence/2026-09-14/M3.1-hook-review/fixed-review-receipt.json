@@ -1,0 +1,95 @@
+{
+  "status": "TARGETED_6_PASS",
+  "scope": "Actual React hooks and fake-indexeddb transactions with a controlled HTTP transport. Synthetic public sessions, including the submitted projection, were constructed through the strict backend PracticeSession DTO. This is not a native browser or full product acceptance run.",
+  "command": "PATH=<NODE_24_21>/bin:$PATH apps/web/node_modules/.bin/vitest run --config <HOOK_REVIEW>/vitest.config.ts",
+  "exit_code": 0,
+  "result": "6 passed (6), Duration 2.84s",
+  "source_before": {
+    "apps/web/src/features/practice/usePracticeSession.ts": "c729fc2679b521ace8cbf60ddef7fe37effbd1f951d73b76a828626c3b3ea919",
+    "apps/web/src/features/practice/usePracticeDrafts.ts": "29f231c1e13b0f596d137d936bc614b4f9d8aa0c266850ed7259f9aeb851dc77",
+    "apps/web/src/features/practice/practiceDrafts.ts": "9ba6fb3365fd7b856900b1fb3397383e7c4365643199a566d3f1e9e494a7e17f",
+    "apps/web/src/workbench/Shell.tsx": "6dc94da68981a6ccfbface3c51caa4df60f143dabb4b8ac02b4da3c1eedd7b56",
+    "apps/web/src/workbench/model.ts": "7ecbc44f99603d0832a044ba619fa93c33fd3b58d838b2d41377b8d9fb8119a3",
+    "apps/web/src/features/practice/PracticeView.tsx": "4a43b5215466e735912dd119fc90dd3ae5801de726ffd43afc0438468d496a13"
+  },
+  "source_after": {
+    "apps/web/src/features/practice/usePracticeSession.ts": "c729fc2679b521ace8cbf60ddef7fe37effbd1f951d73b76a828626c3b3ea919",
+    "apps/web/src/features/practice/usePracticeDrafts.ts": "29f231c1e13b0f596d137d936bc614b4f9d8aa0c266850ed7259f9aeb851dc77",
+    "apps/web/src/features/practice/practiceDrafts.ts": "9ba6fb3365fd7b856900b1fb3397383e7c4365643199a566d3f1e9e494a7e17f",
+    "apps/web/src/workbench/Shell.tsx": "6dc94da68981a6ccfbface3c51caa4df60f143dabb4b8ac02b4da3c1eedd7b56",
+    "apps/web/src/workbench/model.ts": "7ecbc44f99603d0832a044ba619fa93c33fd3b58d838b2d41377b8d9fb8119a3",
+    "apps/web/src/features/practice/PracticeView.tsx": "8805b1a7fd4c4310519124557bb9d2dd362de493ae4ca13c8fd2bbc0887281f9"
+  },
+  "tested_hook_source_stable": true,
+  "production_key_source_stable": true,
+  "all_observed_files_stable": false,
+  "unimported_ui_drift": "PracticeView.tsx changed while its integration was being finished; the hook harness does not import or execute that component. The actual Shell key and tab identity sources remained unchanged. No full UI acceptance is claimed.",
+  "production_reachability": {
+    "shell": "apps/web/src/workbench/Shell.tsx:144",
+    "key": "PracticeView key={active.id}",
+    "identity": "apps/web/src/workbench/model.ts:18",
+    "interpretation": "Production session/tab switches unmount PracticeView. Initial same-hook rerender failures describe a defensive hook reuse boundary, not an established cross-session write in the production switching path."
+  },
+  "cases": [
+    {
+      "name": "same_hook_session_identity_change",
+      "status": "PASS",
+      "scope": "defensive hook reuse boundary; original candidate is not rebound or PUT to B"
+    },
+    {
+      "name": "same_hook_identity_change_with_pending_PUT",
+      "status": "PASS",
+      "scope": "defensive hook reuse boundary; B is read and late A acknowledgement does not restore A"
+    },
+    {
+      "name": "412_preserves_local_candidate",
+      "status": "PASS",
+      "scope": "local and remote are separately displayed; local candidate remains in actual IndexedDB"
+    },
+    {
+      "name": "submitted_remote_preserves_unsent_candidate",
+      "status": "PASS",
+      "scope": "explicit keep-local retains draft in IndexedDB and never PUTs after submission"
+    },
+    {
+      "name": "keyed_unmount_pending_PUT_and_return",
+      "status": "PASS",
+      "scope": "production-lifecycle-shaped unmount/remount; A and B writes stay separate, A durable candidate and acknowledged response recover on return"
+    },
+    {
+      "name": "keyed_unmount_pending_reveal_and_return",
+      "status": "PASS",
+      "scope": "late A private reveal never appears in B; return to A reads assistance facts but does not preload solution text"
+    }
+  ],
+  "initial_review": "review-receipt.json",
+  "artifacts": [
+    {
+      "path": "recovery.test.ts",
+      "raw_sha256": "6221fe76fadd596f8db8fd28e2eea1882ecbbb1e2af012a3a40eaf89d5e0d667",
+      "published_sha256": "3586e07c3be06356480248c130d26d019a45f10e1b3a7b9391544987e656ab7a"
+    },
+    {
+      "path": "fixture.json",
+      "raw_sha256": "d6009f9236a313f72938b1ea3fc2a6a8a94b1abbfc512f90c757859b99daf4a4",
+      "published_sha256": "d6009f9236a313f72938b1ea3fc2a6a8a94b1abbfc512f90c757859b99daf4a4"
+    },
+    {
+      "path": "fixed.log",
+      "raw_sha256": "37734150619df739a6505db9b946092efba56e3bcc3acb92443bd1ab8985bd60",
+      "published_sha256": "7471c2654ed952d2fdb3cb54bd3e90cafdae6e578206bdaf9500dac3c9f7d595"
+    },
+    {
+      "path": "fixed-before.json",
+      "raw_sha256": "e8418284a5f5704adcd9720f15a9de0f7979257143ee0beca0f76f0ef849de98",
+      "published_sha256": "e8418284a5f5704adcd9720f15a9de0f7979257143ee0beca0f76f0ef849de98"
+    },
+    {
+      "path": "fixed-after.json",
+      "raw_sha256": "9b7fdcc0a9275c939ac3c600e7bd7416a58364565b0235d5b95cf5a96d2501bb",
+      "published_sha256": "9b7fdcc0a9275c939ac3c600e7bd7416a58364565b0235d5b95cf5a96d2501bb"
+    }
+  ],
+  "cleanup": "Hooks unmounted, IndexedDB closed; no listening network servers started. Only temporary experiment/evidence files changed.",
+  "publication_note": "Derived public receipt. Raw receipts remain unmodified; manifest.json binds raw and published bytes. Historical temporary harness imports use explicit path placeholders; use the permanent repository test for replay."
+}

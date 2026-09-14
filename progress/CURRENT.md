@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-14T13:53:50Z；规范 SHA-256：`ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
+更新：2026-09-14T14:48:29Z；规范 SHA-256：`ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED
-实施：IN_PROGRESS；当前任务：M3.1；下一任务：M3.2
+实施：IN_PROGRESS；当前任务：None；下一任务：M3.2
 
-M2.4精确4e53ce5全本地门禁及12CI通过，PR42待审；从最新含进度记录的M2.4 HEAD继续M3.1练习、提示与暴露，不重新初始化。
+M3.1已通过固定源码本地与GitHub门禁并进入PR43审查；从feat/M3.1-practice最新同步HEAD接续M3.2，不覆盖历史工作。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -21,8 +21,8 @@ M2.4精确4e53ce5全本地门禁及12CI通过，PR42待审；从最新含进度�
 | M2.2 MD/TXT/HTML/learnpack 导入暂存和确认 | review | [#17](https://github.com/kl3574/Learning_Workbench/issues/17) | fb2bb033060f8aaacb59e1a81c9826c65509f343 |
 | M2.3 PDFtext/DOCX 提取隔离、低保真诊断 | review | [#18](https://github.com/kl3574/Learning_Workbench/issues/18) | c7bcd6c8e511e2fe31e3739da9718f276fbfc0cd |
 | M2.4 Reader/LaTeX、例题锚点、笔记、阅读位置 | review | [#19](https://github.com/kl3574/Learning_Workbench/issues/19) | 4e53ce5e73b61650f93c1ea769f3e3143031f29d |
-| M3.1 题面/私有答案库、练习/提示/暴露记录 | ready | [#20](https://github.com/kl3574/Learning_Workbench/issues/20) | 未验证提交 |
-| M3.2 独立/辅助/开卷 policy snapshot，自动保存、并发版本 | todo | [#21](https://github.com/kl3574/Learning_Workbench/issues/21) | 未验证提交 |
+| M3.1 题面/私有答案库、练习/提示/暴露记录 | review | [#20](https://github.com/kl3574/Learning_Workbench/issues/20) | 0fc6340d33c26c9f6124ebb3d19f190709b860ad |
+| M3.2 独立/辅助/开卷 policy snapshot，自动保存、并发版本 | ready | [#21](https://github.com/kl3574/Learning_Workbench/issues/21) | 未验证提交 |
 | M3.3 单选、文本填空、数值/计算容差、人工复核 | todo | [#22](https://github.com/kl3574/Learning_Workbench/issues/22) | 未验证提交 |
 | M3.4 交卷/评分/复盘闭环，评分版本与 evidence | todo | [#23](https://github.com/kl3574/Learning_Workbench/issues/23) | 未验证提交 |
 | M4.1 学习事件、概念/技能证据、路线完成 | todo | [#24](https://github.com/kl3574/Learning_Workbench/issues/24) | 未验证提交 |
@@ -42,14 +42,14 @@ M2.4精确4e53ce5全本地门禁及12CI通过，PR42待审；从最新含进度�
 ## 验证边界
 
 - spec_checks: PASS
-- unit: PASS_M2_4_SCOPE_558_PYTHON_118_WEB
-- contract: PASS_M2_4_SCOPE
-- integration: PASS_M2_4_SCOPE
-- browser_native: PASS_41_EXACT_4e53ce5
+- unit: PASS_M3_1_SCOPE_644_PYTHON_138_WEB
+- contract: PASS_M3_1_SCOPE
+- integration: PASS_M3_1_SCOPE
+- browser_native: PASS_48_EXACT_0fc6340
 - real_provider: NOT_RUN
 - real_codex: NOT_RUN
 - learning_effectiveness: NOT_RUN
-- ci: PASS_12_EXACT_4e53ce5_M2_4_SCOPE
+- ci: PASS_12_EXACT_0fc6340_M3_1_SCOPE
 
 ## 阻塞与待决项
 

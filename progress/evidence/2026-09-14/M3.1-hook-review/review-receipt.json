@@ -1,0 +1,64 @@
+{
+  "status": "TARGETED_REVIEW_2_FAIL_2_PASS",
+  "scope": "React renderHook with the actual source modules, actual fake-indexeddb transactions, and a controlled HTTP transport using strictly constructed synthetic PracticeSession payloads; no native browser, live HTTP service, or full acceptance claim.",
+  "command": "PATH=<NODE_24_21>/bin:$PATH apps/web/node_modules/.bin/vitest run --config <HOOK_REVIEW>/vitest.config.ts",
+  "exit_code": 1,
+  "source_before": {
+    "apps/web/src/features/practice/usePracticeSession.ts": "5b842b45dae496835f0dc9fc1376072390dddd9da6afbd86394e778fd9c3cd6c",
+    "apps/web/src/features/practice/usePracticeDrafts.ts": "29f231c1e13b0f596d137d936bc614b4f9d8aa0c266850ed7259f9aeb851dc77",
+    "apps/web/src/features/practice/practiceDrafts.ts": "9ba6fb3365fd7b856900b1fb3397383e7c4365643199a566d3f1e9e494a7e17f"
+  },
+  "source_after": {
+    "apps/web/src/features/practice/usePracticeSession.ts": "b4f09f27d23b54e660095a1eaa4a24820b2eccaec51fa775dcabd9202eeb9ab2",
+    "apps/web/src/features/practice/usePracticeDrafts.ts": "29f231c1e13b0f596d137d936bc614b4f9d8aa0c266850ed7259f9aeb851dc77",
+    "apps/web/src/features/practice/practiceDrafts.ts": "9ba6fb3365fd7b856900b1fb3397383e7c4365643199a566d3f1e9e494a7e17f"
+  },
+  "source_stable": false,
+  "results": [
+    {
+      "name": "cross_session_candidate_rebound",
+      "status": "FAIL",
+      "steps": "Open session A; edit without waiting for automatic server save; rerender the same hook instance with session B of the same exact practice set.",
+      "observation": "A_ONLY_UNSENT is journaled under B, then an automatic PUT writes it to B."
+    },
+    {
+      "name": "switch_during_response_put",
+      "status": "FAIL",
+      "steps": "Start a delayed PUT for A; rerender with session B; complete the old PUT acknowledgement.",
+      "observation": "Only GET A occurs; B is never read, snapshot remains A, state remains saving."
+    },
+    {
+      "name": "stale_response_cas_conflict",
+      "status": "PASS",
+      "observation": "412 preserves local candidate in visible conflict and actual IndexedDB."
+    },
+    {
+      "name": "submitted_server_with_unsent_local_candidate",
+      "status": "PASS",
+      "observation": "Explicit keep-local after remote submitted retains the candidate in IndexedDB and does not issue PUT."
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "recovery-initial.test.ts.txt",
+      "raw_sha256": "6c255d214a687429fe21aa8b6529f3e88954eeb2e5821582261d3b45181fe473",
+      "published_sha256": "20aceb3ebec35308ae99d00a223c9c745e7ab5bc3ab814f868080dd6c49a2285"
+    },
+    {
+      "path": "fixture-initial.json",
+      "raw_sha256": "630f59b164e1cc575bfb23c04aca009b88e31784dc80ef1bac21ffea9600b8e1",
+      "published_sha256": "630f59b164e1cc575bfb23c04aca009b88e31784dc80ef1bac21ffea9600b8e1"
+    },
+    {
+      "path": "initial.log",
+      "raw_sha256": "f1ab6dcd97bcb98c7945512d2252809972d365073da06351724872aed0a947d0",
+      "published_sha256": "641c031fb55c2dba7e219078407b45f7c1c17d2e26277e0a9e01397205d9fb45"
+    }
+  ],
+  "cleanup": "All React hooks unmounted and the IndexedDB store closed; no network servers were started. Temporary evidence remains for replay.",
+  "production_reachability": "Initial two failures used same-hook rerender A-to-B. Production Shell keys PracticeView by active.id, whose tab identity includes the practice session ID; that normal switch unmounts the old hook. Do not interpret the experiment as a confirmed production cross-session write.",
+  "publication_note": "Derived public receipt. Raw receipts remain unmodified; manifest.json binds raw and published bytes. Historical temporary harness imports use explicit path placeholders; use the permanent repository test for replay.",
+  "scope_correction": "The initial active sessions were strict public DTO fixtures, but its submitted control only changed status/revision and retained results=null, which is not a valid submitted DTO. That initial control is historical diagnostic evidence only. The later fixed run and permanent test use all five strict needs_review result records with null scores and null solution text.",
+  "current_source_failure_claim": false,
+  "source_drift_warning": "The source changed during the initial run. These failures cannot be assigned to one immutable source SHA or treated as failures of the current hook."
+}
