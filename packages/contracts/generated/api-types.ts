@@ -49,10 +49,10 @@ export type MutationAck = {
 };
 
 export type PreferencesPatch = {
-  "language"?: (string | null);
-  "reader_font_size"?: (number | null);
-  "default_learning_minutes"?: (number | null);
-  "auto_attach_current_lesson"?: (boolean | null);
+  "language"?: string;
+  "reader_font_size"?: number;
+  "default_learning_minutes"?: number;
+  "auto_attach_current_lesson"?: boolean;
 };
 
 export type PreferencesRequest = {

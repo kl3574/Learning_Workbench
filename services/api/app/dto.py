@@ -1,8 +1,8 @@
 """Strict implemented inline HTTP DTOs from PRODUCT_DESIGN Appendix A."""
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from packages.contracts.domain_models import Id, Revision, StrictModel, UTC, WorkbenchSession
 
@@ -56,7 +56,21 @@ class WorkspacePreferences(StrictModel):
     auto_attach_current_lesson: bool = True
 
 
+def non_nullable_present_properties(schema: dict[str, Any]) -> None:
+    """Omission is allowed; the patch validator rejects an explicit null value."""
+    for property_schema in schema.get("properties", {}).values():
+        choices = property_schema.pop("anyOf", None)
+        if choices:
+            concrete = [choice for choice in choices if choice.get("type") != "null"]
+            if len(concrete) != 1:
+                raise ValueError("Preference property schema must have one non-null type")
+            property_schema.update(concrete[0])
+        if property_schema.get("default") is None:
+            property_schema.pop("default", None)
+
+
 class PreferencesPatch(StrictModel):
+    model_config = ConfigDict(json_schema_extra=non_nullable_present_properties)
     language: str | None = Field(default=None, min_length=1, max_length=40)
     reader_font_size: int | None = Field(default=None, ge=14, le=28)
     default_learning_minutes: int | None = Field(default=None, ge=1, le=600)
