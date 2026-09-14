@@ -1,0 +1,107 @@
+{
+  "$comment": "Generated; do not edit.",
+  "$defs": {
+    "FileEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "media_type": {
+          "title": "Media Type",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size": {
+          "maximum": 209715200,
+          "minimum": 0,
+          "title": "Size",
+          "type": "integer"
+        },
+        "visibility": {
+          "enum": [
+            "learner",
+            "author_private"
+          ],
+          "title": "Visibility",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "size",
+        "sha256",
+        "media_type",
+        "visibility"
+      ],
+      "title": "FileEntry",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "created_at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+      "title": "Created At",
+      "type": "string"
+    },
+    "files": {
+      "items": {
+        "$ref": "#/$defs/FileEntry"
+      },
+      "maxItems": 2000,
+      "minItems": 1,
+      "title": "Files",
+      "type": "array"
+    },
+    "format": {
+      "const": "learning-package",
+      "default": "learning-package",
+      "title": "Format",
+      "type": "string"
+    },
+    "package_id": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+      "title": "Package Id",
+      "type": "string"
+    },
+    "profile": {
+      "enum": [
+        "learner",
+        "author"
+      ],
+      "title": "Profile",
+      "type": "string"
+    },
+    "root_course": {
+      "default": "course.json",
+      "title": "Root Course",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "3.0.0",
+      "default": "3.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "package_id",
+    "profile",
+    "created_at",
+    "files"
+  ],
+  "title": "Manifest",
+  "type": "object",
+  "x-source-spec": {
+    "source": "PRODUCT_DESIGN.md",
+    "spec_sha256": "ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c",
+    "spec_version": "3.0.0"
+  }
+}

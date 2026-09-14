@@ -2,18 +2,18 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-14T09:01:20Z；规范 SHA-256：`ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
+更新：2026-09-14T09:26:13Z；规范 SHA-256：`ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED
-实施：IN_PROGRESS；当前任务：M0.1；下一任务：M0.2
+实施：IN_PROGRESS；当前任务：None；下一任务：M1.1
 
-完成M0工具链/安全API/规范检查，运行可复核基线并提交实施PR。
+按PR #37的已验证本地基线推进M1；修复独立审阅发现的问题并完成原生浏览器验收。main仍只有规范与治理记录。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
-| M0.1 空工程、依赖锁、启动脚本、lint/typecheck/test/CI | in_progress | [#10](https://github.com/kl3574/Learning_Workbench/issues/10) | 未验证提交 |
-| M0.2 迁入目标模型，生成 schema/client，API 错误、CSRF/host/幂等接口 | todo | [#11](https://github.com/kl3574/Learning_Workbench/issues/11) | 未验证提交 |
-| M0.3 需求追踪与 ADR，内容哈希规范、迁移机制 | todo | [#12](https://github.com/kl3574/Learning_Workbench/issues/12) | 未验证提交 |
+| M0.1 空工程、依赖锁、启动脚本、lint/typecheck/test/CI | review | [#10](https://github.com/kl3574/Learning_Workbench/issues/10) | 401e0819b61f33ee918dbe0d739b686c413d7366 |
+| M0.2 迁入目标模型，生成 schema/client，API 错误、CSRF/host/幂等接口 | review | [#11](https://github.com/kl3574/Learning_Workbench/issues/11) | 401e0819b61f33ee918dbe0d739b686c413d7366 |
+| M0.3 需求追踪与 ADR，内容哈希规范、迁移机制 | review | [#12](https://github.com/kl3574/Learning_Workbench/issues/12) | 401e0819b61f33ee918dbe0d739b686c413d7366 |
 | M1.1 课程内页式三栏 Shell、紧凑四入口、上下文目录、状态条、标签 | todo | [#13](https://github.com/kl3574/Learning_Workbench/issues/13) | 未验证提交 |
 | M1.2 可访问分隔条、折叠、焦点、快捷键、命令面板 | todo | [#14](https://github.com/kl3574/Learning_Workbench/issues/14) | 未验证提交 |
 | M1.3 ViewContext/ContextBridge、按对象保存草稿与会话 | todo | [#15](https://github.com/kl3574/Learning_Workbench/issues/15) | 未验证提交 |
@@ -41,14 +41,15 @@
 
 ## 验证边界
 
-- spec_checks: NOT_RUN
-- unit: NOT_RUN
-- contract: NOT_RUN
-- integration: NOT_RUN
+- spec_checks: PASS
+- unit: PASS
+- contract: PASS
+- integration: PASS
 - browser_native: NOT_RUN
 - real_provider: NOT_RUN
 - real_codex: NOT_RUN
 - learning_effectiveness: NOT_RUN
+- ci: PASS
 
 ## 阻塞与待决项
 

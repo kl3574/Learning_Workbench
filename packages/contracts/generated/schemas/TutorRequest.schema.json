@@ -1,0 +1,213 @@
+{
+  "$comment": "Generated; do not edit.",
+  "$defs": {
+    "ContentRef": {
+      "additionalProperties": false,
+      "properties": {
+        "entity": {
+          "enum": [
+            "course",
+            "lesson",
+            "block",
+            "concept",
+            "route",
+            "question",
+            "practice_set",
+            "assessment",
+            "note"
+          ],
+          "title": "Entity",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entity",
+        "id",
+        "revision",
+        "sha256"
+      ],
+      "title": "ContentRef",
+      "type": "object"
+    },
+    "Selection": {
+      "additionalProperties": false,
+      "properties": {
+        "end_codepoint": {
+          "minimum": 0,
+          "title": "End Codepoint",
+          "type": "integer"
+        },
+        "exact_quote": {
+          "maxLength": 12000,
+          "title": "Exact Quote",
+          "type": "string"
+        },
+        "prefix": {
+          "default": "",
+          "title": "Prefix",
+          "type": "string"
+        },
+        "ref": {
+          "$ref": "#/$defs/ContentRef"
+        },
+        "start_codepoint": {
+          "minimum": 0,
+          "title": "Start Codepoint",
+          "type": "integer"
+        },
+        "suffix": {
+          "default": "",
+          "title": "Suffix",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ref",
+        "exact_quote",
+        "start_codepoint",
+        "end_codepoint"
+      ],
+      "title": "Selection",
+      "type": "object"
+    },
+    "ViewContext": {
+      "additionalProperties": false,
+      "properties": {
+        "active_ref": {
+          "$ref": "#/$defs/ContentRef"
+        },
+        "attached_refs": {
+          "items": {
+            "$ref": "#/$defs/ContentRef"
+          },
+          "maxItems": 8,
+          "title": "Attached Refs",
+          "type": "array"
+        },
+        "attempt_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attempt Id"
+        },
+        "selection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Selection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "view_kind": {
+          "enum": [
+            "route",
+            "lesson",
+            "worked_example",
+            "practice",
+            "assessment_help",
+            "assessment_review",
+            "authoring"
+          ],
+          "title": "View Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "view_kind",
+        "active_ref"
+      ],
+      "title": "ViewContext",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "consent_id": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Consent Id"
+    },
+    "context": {
+      "$ref": "#/$defs/ViewContext"
+    },
+    "intent": {
+      "enum": [
+        "explain",
+        "hint",
+        "derive",
+        "research"
+      ],
+      "title": "Intent",
+      "type": "string"
+    },
+    "message": {
+      "maxLength": 8000,
+      "minLength": 1,
+      "title": "Message",
+      "type": "string"
+    },
+    "thread_id": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+      "title": "Thread Id",
+      "type": "string"
+    },
+    "web_search": {
+      "default": false,
+      "title": "Web Search",
+      "type": "boolean"
+    },
+    "workspace_id": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "thread_id",
+    "workspace_id",
+    "message",
+    "intent",
+    "context"
+  ],
+  "title": "TutorRequest",
+  "type": "object",
+  "x-source-spec": {
+    "source": "PRODUCT_DESIGN.md",
+    "spec_sha256": "ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c",
+    "spec_version": "3.0.0"
+  }
+}
