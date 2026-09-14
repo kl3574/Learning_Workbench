@@ -41,6 +41,8 @@ jobs:
           bwrap --version
       - run: uv run --frozen ruff check .
       - run: uv run --frozen mypy
+      - name: Probe fixed synthetic document runtime
+        run: uv run --frozen python scripts/probe_document_sandbox.py
       - run: uv run --frozen pytest tests/unit tests/security
   frontend:
     runs-on: ubuntu-24.04
