@@ -12,7 +12,7 @@ import subprocess
 import zipfile
 from pathlib import PurePosixPath
 
-ALLOWED_ROOTS = {"PRODUCT_DESIGN.md", "README.md", "AGENTS.md", "Makefile", ".gitignore", ".env.example",
+ALLOWED_ROOTS = {"PRODUCT_DESIGN.md", "README.md", "AGENTS.md", "Makefile", ".gitignore", ".gitattributes", ".env.example",
                  ".python-version", ".node-version", "pyproject.toml", "uv.lock", "apps", "services", "packages",
                  "migrations", "scripts", "tests", "fixtures", "progress", "docs", ".github"}
 SUSPECT = [rb"gh[pousr]_[A-Za-z0-9]{30,}", rb"github_pat_[A-Za-z0-9_]{40,}",
