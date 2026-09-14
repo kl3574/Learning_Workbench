@@ -1,0 +1,261 @@
+{
+  "record_type": "independent_read_only_m1_recovery_fix_verification",
+  "recorded_at_utc": "2026-09-14T09:50:47.921913+00:00",
+  "scope": "Targeted recovery checks only: memory-only UI after quota and PUT failure, changed remote baseline, explicit local adoption using server CAS.",
+  "overall_status": "PASS_TARGETED_RECOVERY",
+  "test_summary": {
+    "passed_checks": 3,
+    "failed_checks": 0,
+    "runner_exit_code": 0
+  },
+  "source_identity": {
+    "kind": "working_tree_files_pinned_by_sha256",
+    "implementation_commit": null,
+    "unchanged_during_test": true,
+    "changed_sources": [],
+    "sha256_before": {
+      "apps/web/src/workbench/useWorkbench.ts": "00c2739b782e906658b3555d2cb2ef3db35340cf0c5d911f4c430416bbe90b32",
+      "apps/web/src/workbench/uiCache.ts": "1a07a042ac68ba0699bd365ee392e8f9418bfbac3f3fe67427e0823a30f5ede0",
+      "apps/web/src/workbench/ConflictComparison.tsx": "eaf72075f9d2c99297845b406aefc2409d1091e06fa948560baad7c1ed1d8a5d",
+      "apps/web/src/workbench/Shell.tsx": "f9e0c7200f01eae19fca9416b1ef519720f0e056f679dfef725404b984f412d9",
+      "apps/web/src/workbench/model.ts": "7ecbc44f99603d0832a044ba619fa93c33fd3b58d838b2d41377b8d9fb8119a3",
+      "apps/web/src/api/client.ts": "d83f1009ee7b3e5603c2bf57aec9eea6a8b63a56f91a3383fa4b75c8c0fd412a",
+      "services/api/app/application/workbench.py": "0475431f08632ac9f2f8ab4d610c86dc7d082330a1c9a508252ebbfc1be4277a",
+      "services/api/app/dto.py": "27840a1992f04867ae56af50712adbfd3adf0518abf313fba49945e6e8f257a0",
+      "packages/contracts/domain_models.py": "5b8676e955bc1f58c662f14cf3a3965e6417f857324090b6481add41ac0993e1"
+    },
+    "sha256_after": {
+      "apps/web/src/workbench/useWorkbench.ts": "00c2739b782e906658b3555d2cb2ef3db35340cf0c5d911f4c430416bbe90b32",
+      "apps/web/src/workbench/uiCache.ts": "1a07a042ac68ba0699bd365ee392e8f9418bfbac3f3fe67427e0823a30f5ede0",
+      "apps/web/src/workbench/ConflictComparison.tsx": "eaf72075f9d2c99297845b406aefc2409d1091e06fa948560baad7c1ed1d8a5d",
+      "apps/web/src/workbench/Shell.tsx": "f9e0c7200f01eae19fca9416b1ef519720f0e056f679dfef725404b984f412d9",
+      "apps/web/src/workbench/model.ts": "7ecbc44f99603d0832a044ba619fa93c33fd3b58d838b2d41377b8d9fb8119a3",
+      "apps/web/src/api/client.ts": "d83f1009ee7b3e5603c2bf57aec9eea6a8b63a56f91a3383fa4b75c8c0fd412a",
+      "services/api/app/application/workbench.py": "0475431f08632ac9f2f8ab4d610c86dc7d082330a1c9a508252ebbfc1be4277a",
+      "services/api/app/dto.py": "27840a1992f04867ae56af50712adbfd3adf0518abf313fba49945e6e8f257a0",
+      "packages/contracts/domain_models.py": "5b8676e955bc1f58c662f14cf3a3965e6417f857324090b6481add41ac0993e1"
+    }
+  },
+  "environment": {
+    "platform": "Linux desktop",
+    "browser": "Google Chrome headless through project Playwright",
+    "browser_version": "153.0.8010.36",
+    "node_version": "24.21.0",
+    "api_origin": "http://127.0.0.1:8877",
+    "ui_origin": "http://127.0.0.1:5184",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "data": "Fresh temporary SQLite workspace outside the repository; no personal library accessed.",
+    "api_command": "python -m uvicorn services.api.app.main:create_app --factory --host 127.0.0.1 --port 8877 --no-access-log",
+    "ui_command": "bash scripts/node.sh npm --prefix apps/web run dev -- --port 5184",
+    "review_command": "bash scripts/node.sh node <isolated-review-script>",
+    "environment_overrides": {
+      "LEARNING_HOST": "127.0.0.1",
+      "LEARNING_PORT": "8877",
+      "LEARNING_UI_ORIGIN": "http://127.0.0.1:5184",
+      "LEARNING_DATA_DIR": "<isolated-temporary-data-directory>"
+    },
+    "existing_services_8765_5173": "Not used or modified."
+  },
+  "scenario_steps": {
+    "memory_only_same_base_normal_reconnect": [
+      "Bootstrap a new browser context and reset the temporary workspace to an acknowledged empty session.",
+      "Inject QuotaExceededError for pending-ui cache writes and abort the first workbench PUT.",
+      "Collapse navigation and verify it remains unsaved while the server keeps its original layout.",
+      "Remove only the PUT fault, retain the cache fault, and click the ordinary retry-connection button.",
+      "Observe a real second PUT using the original expected revision, then confirm server readback and saved status."
+    ],
+    "memory_only_changed_base_requires_accurate_three_way_choice": [
+      "Start with two authenticated browser pages sharing the same temporary workspace baseline.",
+      "In page A inject the cache and PUT faults, then collapse navigation.",
+      "In page B successfully collapse Agent, advancing the actual server revision.",
+      "Remove page A PUT failure and click ordinary retry.",
+      "Read the rendered base/local/remote table and verify no replacement PUT occurs before an explicit choice."
+    ],
+    "explicit_local_adoption_uses_latest_remote_revision_cas": [
+      "From the displayed three-way comparison choose the explicit adopt-local-and-save action.",
+      "Inspect the actual PUT expected_revision and snapshot revision.",
+      "Read back the server revision and layout, and verify the comparison closes only after the successful save."
+    ]
+  },
+  "checks": [
+    {
+      "id": "memory_only_same_base_normal_reconnect",
+      "status": "PASS",
+      "baseline": {
+        "revision": 2,
+        "nav": false,
+        "agent": false
+      },
+      "after_failed_save": {
+        "ui": {
+          "nav": true,
+          "agent": false,
+          "green": false
+        },
+        "server": {
+          "revision": 2,
+          "nav": false,
+          "agent": false
+        },
+        "put_count": 1
+      },
+      "after_normal_reconnect": {
+        "ui": {
+          "nav": true,
+          "agent": false,
+          "green": true
+        },
+        "server": {
+          "revision": 3,
+          "nav": true,
+          "agent": false
+        },
+        "put_count": 2
+      },
+      "observed_puts": [
+        {
+          "expected_revision": 2,
+          "snapshot_revision": 2,
+          "nav": true,
+          "agent": false
+        },
+        {
+          "expected_revision": 2,
+          "snapshot_revision": 2,
+          "nav": true,
+          "agent": false
+        }
+      ]
+    },
+    {
+      "id": "memory_only_changed_base_requires_accurate_three_way_choice",
+      "status": "PASS",
+      "baseline": {
+        "revision": 4,
+        "nav": false,
+        "agent": false
+      },
+      "competing_remote": {
+        "revision": 5,
+        "nav": false,
+        "agent": true
+      },
+      "awaiting_explicit_choice": {
+        "ui": {
+          "nav": true,
+          "agent": false,
+          "green": false
+        },
+        "server": {
+          "revision": 5,
+          "nav": false,
+          "agent": true
+        },
+        "put_count": 1,
+        "table": [
+          [
+            "项目",
+            "原基准（版本 4）",
+            "本地待同步",
+            "服务端（版本 5）"
+          ],
+          [
+            "课程",
+            "未选择课程",
+            "未选择课程",
+            "未选择课程"
+          ],
+          [
+            "当前入口",
+            "学习路线",
+            "学习路线",
+            "学习路线"
+          ],
+          [
+            "导航栏",
+            "展开，300 像素",
+            "已折叠",
+            "展开，300 像素"
+          ],
+          [
+            "Agent 栏",
+            "展开，368 像素",
+            "展开，368 像素",
+            "已折叠"
+          ],
+          [
+            "打开的内容",
+            "没有打开的内容",
+            "没有打开的内容",
+            "没有打开的内容"
+          ],
+          [
+            "目录位置",
+            "距顶部 0 像素，展开 0 项",
+            "距顶部 0 像素，展开 0 项",
+            "距顶部 0 像素，展开 0 项"
+          ],
+          [
+            "阅读位置",
+            "没有当前内容",
+            "没有当前内容",
+            "没有当前内容"
+          ]
+        ]
+      },
+      "accurate_base_local_remote_columns": true
+    },
+    {
+      "id": "explicit_local_adoption_uses_latest_remote_revision_cas",
+      "status": "PASS",
+      "after_choice": {
+        "ui": {
+          "nav": true,
+          "agent": false,
+          "green": true
+        },
+        "server": {
+          "revision": 6,
+          "nav": true,
+          "agent": false
+        },
+        "put_count": 2,
+        "comparison_visible": false
+      },
+      "observed_puts": [
+        {
+          "expected_revision": 4,
+          "snapshot_revision": 4,
+          "nav": true,
+          "agent": false
+        },
+        {
+          "expected_revision": 5,
+          "snapshot_revision": 5,
+          "nav": true,
+          "agent": false
+        }
+      ]
+    }
+  ],
+  "prior_failure_evidence": "progress/evidence/2026-09-14/M1-independent-failure-review.json",
+  "cleanup": {
+    "status": "COMPLETE",
+    "api_listener_8877_stopped": true,
+    "vite_listener_5184_stopped": true,
+    "temporary_workspace_removed": true,
+    "temporary_harness_removed": true,
+    "source_code_changed_by_reviewer": false,
+    "specification_changed_by_reviewer": false,
+    "progress_state_changed_by_reviewer": false
+  },
+  "evidence_limits": [
+    "This validates only the named recovery behaviors, not complete M1 acceptance.",
+    "Source identity is the recorded working-tree file hashes; this run is not pinned to an implementation commit.",
+    "No screenshots, real providers, worker tasks, personal content or M2-M7 acceptance were exercised.",
+    "Credentials were used only in memory and are absent from the evidence. Temporary absolute paths are omitted."
+  ]
+}

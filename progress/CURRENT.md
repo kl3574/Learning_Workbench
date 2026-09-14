@@ -2,21 +2,21 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-14T09:26:13Z；规范 SHA-256：`ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
+更新：2026-09-14T09:58:07Z；规范 SHA-256：`ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED
-实施：IN_PROGRESS；当前任务：None；下一任务：M1.1
+实施：IN_PROGRESS；当前任务：None；下一任务：M2.1
 
-按PR #37的已验证本地基线推进M1；修复独立审阅发现的问题并完成原生浏览器验收。main仍只有规范与治理记录。
+M0 PR #37及M1 PR #38已完成对应代码验收，待审查合并。继续M2.1；另一次分支CI的依赖镜像失败保留并重试，不混同已通过的PR CI。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
 | M0.1 空工程、依赖锁、启动脚本、lint/typecheck/test/CI | review | [#10](https://github.com/kl3574/Learning_Workbench/issues/10) | 401e0819b61f33ee918dbe0d739b686c413d7366 |
 | M0.2 迁入目标模型，生成 schema/client，API 错误、CSRF/host/幂等接口 | review | [#11](https://github.com/kl3574/Learning_Workbench/issues/11) | 401e0819b61f33ee918dbe0d739b686c413d7366 |
 | M0.3 需求追踪与 ADR，内容哈希规范、迁移机制 | review | [#12](https://github.com/kl3574/Learning_Workbench/issues/12) | 401e0819b61f33ee918dbe0d739b686c413d7366 |
-| M1.1 课程内页式三栏 Shell、紧凑四入口、上下文目录、状态条、标签 | todo | [#13](https://github.com/kl3574/Learning_Workbench/issues/13) | 未验证提交 |
-| M1.2 可访问分隔条、折叠、焦点、快捷键、命令面板 | todo | [#14](https://github.com/kl3574/Learning_Workbench/issues/14) | 未验证提交 |
-| M1.3 ViewContext/ContextBridge、按对象保存草稿与会话 | todo | [#15](https://github.com/kl3574/Learning_Workbench/issues/15) | 未验证提交 |
+| M1.1 课程内页式三栏 Shell、紧凑四入口、上下文目录、状态条、标签 | review | [#13](https://github.com/kl3574/Learning_Workbench/issues/13) | 1c5963d058e56fc36eec378ee3a7f67d665f2307 |
+| M1.2 可访问分隔条、折叠、焦点、快捷键、命令面板 | review | [#14](https://github.com/kl3574/Learning_Workbench/issues/14) | 1c5963d058e56fc36eec378ee3a7f67d665f2307 |
+| M1.3 ViewContext/ContextBridge、按对象保存草稿与会话 | review | [#15](https://github.com/kl3574/Learning_Workbench/issues/15) | 1c5963d058e56fc36eec378ee3a7f67d665f2307 |
 | M2.1 SQLite/blob、精确版本、原子文件、对象读取 | todo | [#16](https://github.com/kl3574/Learning_Workbench/issues/16) | 未验证提交 |
 | M2.2 MD/TXT/HTML/learnpack 导入暂存和确认 | todo | [#17](https://github.com/kl3574/Learning_Workbench/issues/17) | 未验证提交 |
 | M2.3 PDFtext/DOCX 提取隔离、低保真诊断 | todo | [#18](https://github.com/kl3574/Learning_Workbench/issues/18) | 未验证提交 |
@@ -45,11 +45,11 @@
 - unit: PASS
 - contract: PASS
 - integration: PASS
-- browser_native: NOT_RUN
+- browser_native: PASS_M1_SCOPE
 - real_provider: NOT_RUN
 - real_codex: NOT_RUN
 - learning_effectiveness: NOT_RUN
-- ci: PASS
+- ci: PASS_M1_PR_RUN
 
 ## 阻塞与待决项
 
