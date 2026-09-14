@@ -1,0 +1,47 @@
+{
+  "captured_at": "2026-09-14T17:28:47.625450+00:00",
+  "purpose": "M3.3 bounded recovery fix after independent frontend review; no new route or M3.4 history claim.",
+  "prior_backend_package_manifest_sha256": "2993884dd5db1aab4ac9e7b8651b7912622d74d41fdc16397fd2ecb6f2cbb5ae",
+  "contract_change": "GET attempt/result 202 uses strict AssessmentGradingJob extending JobRef with required last_completed_result: AssessmentGradingResult|null. Job status is unchanged. Prior scores/feedback/signatures/rules are real and verified; old standard solution bodies are always omitted from this recovery projection.",
+  "tests": {
+    "backend_grading_module": {
+      "command": "uv run --frozen pytest tests/integration/test_assessment_grading.py -q",
+      "exit_code": 0,
+      "passed": 20,
+      "seconds": 6.81
+    },
+    "final_two_real_http": {
+      "command": "uv run --frozen pytest tests/integration/test_assessment_grading.py::test_http_failed_regrade_retains_real_previous_grade_without_private_answers_and_can_recover -q",
+      "exit_code": 0,
+      "passed": 2,
+      "seconds": 1.29,
+      "coverage": "Existing grade2 + accepted failed/cancelled regrade -> 202 returns exact old score and signature without private solution; actual other independent guard remains 409; real author HTTP new command produces grade3; grade2 raw JSON unchanged."
+    },
+    "frontend_independent": {
+      "final_green_exit_code": 0,
+      "passed": 2,
+      "total_ms": 521,
+      "confirmed_original_component_control_exit_code": 1,
+      "failed": 2,
+      "control_seconds": 2.5,
+      "qualification": "Original immediate assertions could run before journal.ready. Both original early-failure logs are kept but are not alone a sufficient eventual-failure proof. Stronger negative control uses exact original component bytes (SHA matched) with current recorded supporting modules and a legitimate new-contract baseline, waits 1000ms for unchanged button predicate, and still fails. Fixed component succeeds with the same waiting predicate and separately asserts the real prior 0.5/2 score is labeled previous rather than current.",
+      "not_claimed": "No byte-identical full-old-checkout rerun; API fixture necessarily changed to the new strict protocol. No native browser claim for React/fake-IDB probes."
+    },
+    "static": {
+      "mypy": "3 production sources PASS",
+      "contract_check": "65 artifacts PASS",
+      "ruff": "Initial unused test import failed; only that import removed; final PASS"
+    }
+  },
+  "source_binding": {
+    "frontend_before_after_green_unchanged": true,
+    "backend_hashes_match": true
+  },
+  "replay_hint": "The published probes use @review pointing to apps/web/src in a caller-selected checked checkout. Use jsdom, actual React and fake-indexeddb. For the old-component negative control, load the included byte-identical AssessmentResult-original.tsx at the production AssessmentResult module ID without modifying that checkout. A source manifest records exact supporting modules; this is controlled frontend evidence, not an old full-checkout acceptance.",
+  "raw_originals_unchanged": true,
+  "limits": [
+    "Only bounded backend/recovery evidence; root exact-commit full gates and native evidence remain separate.",
+    "No production source, progress or Git changed during packaging.",
+    "Publication inspection is bounded and supplements manual synthetic-provenance review."
+  ]
+}

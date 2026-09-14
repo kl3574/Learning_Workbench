@@ -1,11 +1,13 @@
 """Seven actual ungraded assessment routes; no result or pretend-grading endpoint."""
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
+from fastapi.responses import JSONResponse
 
 from packages.contracts import domain_models as dm
 
 from ..application.assessment import AssessmentService
-from ..assessment_dto import AssessmentAttemptCreate, AttemptResponses, AttemptSnapshot, PageAssessment
+from ..application.grading import GradingService
+from ..assessment_dto import AssessmentAttemptCreate, AttemptResponses, AttemptSnapshot, PageAssessment, AssessmentGradingJob, AssessmentGradingResult, RegradeRequest
 from ..infrastructure.database import Database
 from .content_http import CursorQuery, LimitQuery, query_fields
 from .http import current_identity, verify_write
@@ -16,6 +18,7 @@ def create_assessment_router(database: Database) -> APIRouter:
     router = APIRouter(prefix="/api/v1", tags=["assessment"],
                        dependencies=[Depends(current_identity), Depends(unique_headers), Depends(private_response)])
     service = AssessmentService(database)
+    grading = GradingService(database)
 
     @router.get("/assessments", response_model=PageAssessment,
                 dependencies=[Depends(query_fields("course_id", "limit", "cursor"))])
@@ -49,5 +52,18 @@ def create_assessment_router(database: Database) -> APIRouter:
                  dependencies=[Depends(verify_write), Depends(query_fields())])
     def abandon(id: dm.Id, body: dm.AttemptSubmit, request: Request, key: Key) -> AttemptSnapshot:
         return service.abandon(request.state.identity, id, body, key)
+
+    @router.get("/attempts/{id}/result", response_model=AssessmentGradingResult,
+                responses={202: {"model": AssessmentGradingJob}}, dependencies=[Depends(query_fields())])
+    def result(id: dm.Id, request: Request) -> AssessmentGradingResult | Response:
+        value = grading.result(request.state.identity, id)
+        if isinstance(value, dm.JobRef):
+            return JSONResponse(value.model_dump(mode="json"), status_code=202)
+        return value
+
+    @router.post("/attempts/{id}/regrade", response_model=dm.JobRef, status_code=202,
+                 dependencies=[Depends(verify_write), Depends(query_fields())])
+    def regrade(id: dm.Id, body: RegradeRequest, request: Request, key: Key) -> dm.JobRef:
+        return grading.regrade(request.state.identity, id, body, key)
 
     return router

@@ -1,0 +1,30 @@
+{
+  "kind": "M3.3-Practice-bounded-independent-static-review",
+  "sources": {
+    "services/api/app/application/practice_grading.py": "ddb4d144c91b88cb326e0d8285856fc5d62c4b594a274d702b59172fd380139c",
+    "services/api/app/application/practice.py": "0c81f01905f1adad59c610618563c6425b751859797360aea81d55ba7b52f1cd",
+    "services/api/app/infrastructure/practice_repository.py": "38e4c30d8002eea7e410a33cb9301d29d2c12d5ad02485061c3265bb46b7549f",
+    "migrations/0006_practice_grading_audit.sql": "11941ab61fb2f61b8b94a42b99b694d2580572e41acc663d064f9873fbfa4401",
+    "tests/integration/test_practice_grading.py": "96892add5cbcfb436f373a41af07e850275b8dd3cf8e266b5520187d90efb901"
+  },
+  "tests_run": false,
+  "new_findings": [],
+  "verified_by_reading": [
+    "StoredSubmission retains original field shape; 0006 adds separate audit table rather than mutating historical submission bytes",
+    "Frozen missing Solution stays missing/null without latest lookup; present solution is loaded using frozen revision/hash",
+    "Submit grade, Learning practice event, submission/outbox, private audit and idempotency execute within existing transaction; post-write/replay load validates audit and returns historical submit snapshot rather than current assistance",
+    "Audit read compares workspace/session/practice/ordered question refs/private pins/submission hash/results/max scores/response hashes/outbox ID and payload; prior not_graded_m3_1 outbox path only permits all unresolved legacy results",
+    "M3.3 Practice result never releases solution_markdown or upgrades to independent evidence; private trace and audit stay outside public DTO"
+  ],
+  "limits": [
+    "Only the five named files were reviewed; no independent integration tests run and no global security/approval claim",
+    "Existing root 88-test result is not counted as this review execution",
+    "Semantic integrity is guarded by canonical hashes and referenced immutable rows; this review does not claim protection against an administrator rewriting every related record and hash"
+  ],
+  "_publication": {
+    "source": "local raw evidence identified by manifest.json",
+    "embedded_source_hashes": "Original reviewed source bytes; unchanged by redaction.",
+    "embedded_artifact_hashes": "raw_* identifies original bytes; published_* identifies this package derivative.",
+    "argv_note": "Local evidence paths use public relative .py.txt names; original actual pytest files had .py suffix."
+  }
+}

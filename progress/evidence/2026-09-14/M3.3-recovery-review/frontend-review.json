@@ -1,0 +1,41 @@
+{
+  "scope": "Read-only bounded M3.3 frontend seam review; eight production grading modules plus AssessmentView, shared real journal, and session transport (11 production files). Existing unit and native tests read as coverage evidence, not rerun. CSS inventoried only.",
+  "findings": [
+    {
+      "severity": "blocking_recovery",
+      "summary": "Existing grading_revision>0 plus newly accepted regrade job failed/cancelled makes fresh-page explicit author recovery unavailable.",
+      "source": "apps/web/src/features/grading/AssessmentResult.tsx",
+      "cause": "GET result returns terminal JobRef and no previous grading baseline; fallback is explicitly suppressed unless grading_revision is zero; Review begin has no baseline and remains disabled.",
+      "provenance": "Real React AssessmentResult/AssessmentReview/hooks plus real DraftStore/journal over fake-indexeddb; controlled HTTP replies match the current backend response contract. Not a native browser or actual HTTP test.",
+      "test_file": "recovery.test.tsx",
+      "exit_code": 1,
+      "cases_failed": 2,
+      "duration_ms": 101,
+      "raw_log": "recovery-red.log",
+      "raw_log_sha256": "3177805f038c724fc79f6bbf5102f781e5365efbc7198d1e35cb363e3b7fc681",
+      "source_sha256": "4e921e3753a61427fd310acb995f2b0b77783cd8a4f946d983ff233d13f38d1c",
+      "affected_statuses": [
+        "failed",
+        "cancelled"
+      ],
+      "existing_coverage_gap": "Existing native lost-response test fails the regrade POST before an accepted job; it does not cover accepted job failure/cancellation after an old grade exists."
+    }
+  ],
+  "other_boundaries": "No additional demonstrated residual issue in this bounded read. Result hook hides old identity/access synchronously and checks exact refs/max score; POST acknowledgements retain original command/epoch/value checks and suppress access-changed callbacks; journal CAS preserves conflicts; terminal/unknown scores are not coerced into zeros. This is not an exhaustive proof.",
+  "production_render_boundary": "Shell keys AssessmentView by stable tab.id; distinct tabs remount. Artificial same-hook cross-tab rerenders were not asserted to be production reachable.",
+  "changed_during_red": [],
+  "reviewed_modules": [
+    "apps/web/src/features/grading/useGradingResult.ts",
+    "apps/web/src/features/grading/useGradingReview.ts",
+    "apps/web/src/features/grading/reviewDrafts.ts",
+    "apps/web/src/features/grading/AssessmentResult.tsx",
+    "apps/web/src/features/grading/AssessmentReview.tsx",
+    "apps/web/src/features/grading/ReviewComparison.tsx",
+    "apps/web/src/features/grading/gradingModel.ts",
+    "apps/web/src/features/grading/GradingSummary.tsx",
+    "apps/web/src/features/assessment/AssessmentView.tsx",
+    "apps/web/src/shared/createResponseDraftJournal.ts",
+    "apps/web/src/api/client.ts"
+  ],
+  "state": "Root authorized repair after these preserved red observations; no reviewed frontend file edited by reviewer."
+}

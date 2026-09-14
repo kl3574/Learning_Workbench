@@ -27,7 +27,7 @@ export function useAssessmentAttempt(workspace: string, target: AssessmentTarget
   }
   try { if (stored) storedEnvelope = validEnvelope(decodeAssessmentEnvelope(stored.text, workspace)) } catch (reason) { recoveryError = message(reason) }
   const needsRecovery = !claimed && !!storedEnvelope && assessmentDirty(storedEnvelope)
-  const draft = (base: AttemptRead, values: ResponseDraft[]): AssessmentEnvelope => ({ version: 1, workspace_id: workspace, attempt_id: base.snapshot.id, assessment_ref: base.snapshot.assessment_ref, course_ref: target.course_ref ?? null, policy: base.snapshot.policy, base_revision: base.snapshot.revision, base_status: base.snapshot.status as AssessmentEnvelope['base_status'], base_responses: normalizeResponses(base.responses), candidate_responses: normalizeResponses(values) })
+  const draft = (base: AttemptRead, values: ResponseDraft[]): AssessmentEnvelope => ({ version: 1, workspace_id: workspace, attempt_id: base.snapshot.id, assessment_ref: base.snapshot.assessment_ref, course_ref: target.course_ref ?? null, policy: base.snapshot.policy, base_revision: base.snapshot.revision, base_status: base.snapshot.status, base_responses: normalizeResponses(base.responses), candidate_responses: normalizeResponses(values) })
   const persist = (value: AssessmentEnvelope) => { envelope.current = value; journalRef.current.save(value) }
   const show = (remote: AttemptRead, values = remote.responses, keep = false) => {
     baseline.current = remote; setData(remote); candidate.current = normalizeResponses(values); setResponses(candidate.current)
@@ -44,12 +44,15 @@ export function useAssessmentAttempt(workspace: string, target: AssessmentTarget
     if (remote.snapshot.status === 'active' && (revision === remote.snapshot.revision && baseResponses && sameResponses(baseResponses, remote.responses) || pending.current && sameResponses(pending.current.responses, remote.responses))) { show(remote, candidate.current, true); pending.current = null; return }
     setData(remote); setConflict({ base: baseResponses ?? null, local: candidate.current, remote }); setState('conflict')
   }
-  const retry = async () => {
+  const retry = async (background = false) => {
     if (writing.current) return
-    const owner = epoch.current; setBusy(true); setError('')
+    const owner = epoch.current
+    // A passive grading refresh must not disable a local recovery button midway
+    // through a pointer gesture. Explicit reads and write commands retain busy.
+    if (!background) { setBusy(true); setError('') }
     try { const remote = await readAttempt(workspace, target); if (active.current && owner === epoch.current) reconcile(remote) }
     catch (reason) { if (active.current && owner === epoch.current) { setError(message(reason)); setState('offline') } }
-    finally { if (active.current && owner === epoch.current) setBusy(false) }
+    finally { if (!background && active.current && owner === epoch.current) setBusy(false) }
   }
   useEffect(() => {
     active.current = true; ++epoch.current; baseline.current = null; candidate.current = []; editing.current = false; writing.current = false; pending.current = null; pendingAction.current = null; envelope.current = null
@@ -132,7 +135,7 @@ export function useAssessmentAttempt(workspace: string, target: AssessmentTarget
     } finally { if (active.current && owner === epoch.current) setBusy(false) }
   }
   return { snapshot: data?.snapshot ?? null, serverResponses: data?.responses ?? [], responses, state, error, busy, conflict, stored, storedEnvelope, localConflicts, needsRecovery, commandReady, abandonReady,
-    update, save, retry, restore, resolveLocal, resolveServer, submit: () => transition('submit'), abandon: () => transition('abandon'),
+    update, save, retry, refreshGrading: () => retry(true), restore, resolveLocal, resolveServer, submit: () => transition('submit'), abandon: () => transition('abandon'),
     localReady: journal.ready, localError: recoveryError || journal.error, localSaving: journal.saving, dirty: editing.current || needsRecovery || localConflicts.length > 0, safe: !journal.unsafe,
     retryLocal: () => { if (envelope.current) journal.save(envelope.current) },
   }

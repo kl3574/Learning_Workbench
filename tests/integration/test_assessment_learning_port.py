@@ -64,7 +64,7 @@ def test_actual_submit_preserves_progress_and_records_exactly_one_native_event(a
     saved = service.save_responses(identity, created.id, dm.ResponsesWrite(expected_revision=created.revision,
         responses=[dm.ResponseDraft(question_id=fixture.questions[0].id, answer='choice_five', steps_markdown='原创作答')]), 'save')
     submitted = service.submit(identity, created.id, dm.AttemptSubmit(expected_revision=saved.revision), 'submit')
-    assert submitted.status == 'submitted' and submitted.grading_status == 'not_graded'
+    assert submitted.status == 'submitted' and submitted.grading_status == 'pending'
     after = learning.progress(identity.workspace_id)
     assert after.revision == before.revision + 1
     assert (after.bookmarks, after.readings, after.route_steps) == (before.bookmarks, before.readings, before.route_steps)
@@ -144,6 +144,13 @@ def test_new_active_independent_blocks_old_event_replay_validation(assessment_le
     database, identity, fixture, service = assessment_learning_state
     first = create(assessment_learning_state)
     service.submit(identity, first.id, dm.AttemptSubmit(expected_revision=first.revision), 'submit')
+    # Finish the actual queued subject job before starting another independent
+    # attempt; the original M3.2 test predated the real grading worker.
+    worker = ImportWorker(database)
+    try:
+        assert worker.run_once()
+    finally:
+        worker.stop()
     with database.connect() as connection:
         event_id = connection.execute("SELECT event_id FROM learning_events WHERE kind='test_submitted'").fetchone()[0]
     create(assessment_learning_state, 'second-independent')

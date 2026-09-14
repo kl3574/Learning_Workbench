@@ -1,0 +1,59 @@
+{
+  "observed_at": "2026-09-14T17:51:10.907411+00:00",
+  "review": "read-only permanent pointer red and minimal passive grading refresh diff",
+  "base_head": "25e3b18e852f1910d2e791206257b78ca8297c9c",
+  "current_sources": {
+    "apps/web/src/features/assessment/useAssessmentAttempt.ts": "dcd64f7e3e5ec18857a6b587a2d609e39a43054875bb9527d68b2bf868d2d63d",
+    "apps/web/src/features/assessment/AssessmentView.tsx": "7fe2b3cbbadbb0deb0483829a4d3c2fd47ab5006e32e8caadf096633faf5f2b7",
+    "apps/web/src/features/assessment/AssessmentRecovery.tsx": "813fcf9eb0b45c60f5f9987e4baa689d80dad1bbad56d9c4f847dbe7268c82de",
+    "apps/web/src/features/assessment/assessmentClient.ts": "c6f9910cc21600dc6c4f7bb40903570c3c9559ecf3bcaf4d73398d029a949e91",
+    "apps/web/src/features/grading/useGradingResult.ts": "db179899e287240a53fc3af9979744a703ad4f16d2855f8e269af74b354c11d4",
+    "tests/e2e/assessments.spec.ts": "4bdde8c2bd67d3d100469807c0c771f76cffdbd66d4d711dcf19e38725c8c7bb"
+  },
+  "raw_files": {
+    "permanent-red-pointer.json": "61d3d4ccea95de73772f8c860e0f37ae51753e31c8ec8fe33da8fef36fca3dec",
+    "permanent-red-second.log": "09552cb060d00f55de8a99dd34e35bad71c9b3d0f498e4f37deee90d92c81800",
+    "permanent-red-second-report.json": "4364ee9071acb11bb1339353afca4c6d5bc8d908a3454c15eca1e851b84e2e4e"
+  },
+  "pointer_attachment": {
+    "pointerdown": true,
+    "pointerup": true,
+    "clicks": 0,
+    "disabledBeforePointerUp": true
+  },
+  "attachment_verified_against_original_playwright_report": true,
+  "red": {
+    "failed": 1,
+    "seconds": 14.8,
+    "failure": "original 5 second server three-way-comparison heading assertion"
+  },
+  "production_delta": [
+    "AssessmentResult.changed now calls session.refreshGrading().",
+    "refreshGrading invokes retry(true); background branch does not set or clear busy and does not clear an existing error at read start.",
+    "Foreground retry default remains false. Actual failed reads still report an error."
+  ],
+  "preserved_by_diff": [
+    "workspace/target validation and owner epoch/unmount checks",
+    "consistent GET attempt/responses revision validation and exact parent refs",
+    "reconcile uses current candidate refs at completion rather than captured stale edits",
+    "local CAS journal, explicit restore and three-way conflict resolution",
+    "server PUT expected_revision and same-command Idempotency-Key reuse",
+    "active-only responses updates/saves; submitted/graded/needs_review remains immutable",
+    "foreground busy and explicit action guards"
+  ],
+  "test_delta_review": [
+    "The actual worker is awaited to needs_review before freezing the terminal revision; it does not compare final revision against an earlier submit revision that legitimately changes.",
+    "Held routes forward actual response bodies, not fake grades.",
+    "Pointerdown releases a real grading result; subsequent passive attempt read remains held through pointerup.",
+    "The observed target button.disabled is read before actual page.mouse.up; attachment proves pointerdown/up occurred with zero activation under old source.",
+    "Original server response equality and terminal read-only candidate expectations remain."
+  ],
+  "conclusion": "No blocking issue found in this bounded diff. Direct pointer evidence now supports the disabled-button missed-activation explanation; not a claimed whole-stage verification.",
+  "acceptance_remaining": [
+    "frontend same-byte permanent targeted GREEN",
+    "relevant unit/type/lint checks",
+    "root exact-source full native and required gates"
+  ],
+  "reviewer_ran_tests": false,
+  "reviewer_changed_repo": false
+}

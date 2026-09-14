@@ -1,7 +1,7 @@
 import { expect, test as base, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
 import { RestartRuntime } from './restartRuntime'
 import { importAssessmentPackage, originalAssessmentPackage, type AssessmentPackage } from './assessmentTestData'
-import type { AttemptSnapshot, AttemptResponses } from '../../packages/contracts/generated/api-types'
+import type { AssessmentGradingResult, AttemptSnapshot, AttemptResponses } from '../../packages/contracts/generated/api-types'
 const test = base.extend<{ runtime: RestartRuntime }>({
   runtime: async ({}, use) => { const runtime = await RestartRuntime.start(); try { await use(runtime) } finally { await runtime.close() } },
   page: async ({ runtime, playwright }, use) => { const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]; await runtime.authenticateOnly(page); await use(page) },
@@ -39,9 +39,9 @@ async function snapshot(page: Page, id: string): Promise<AttemptSnapshot> { cons
 async function responses(page: Page, id: string): Promise<AttemptResponses> { const response = await page.request.get(`/api/v1/attempts/${id}/responses`); expect(response.status()).toBe(200); return response.json() }
 
 test('real unreviewed independent assessment saves five types and submits without fabricated grades or answer calls', async ({ page }, info) => {
-  const errors: string[] = [], answers: string[] = []
+  const errors: string[] = [], answers: string[] = [], resultReads: string[] = []
   page.on('pageerror', error => errors.push(error.message))
-  page.on('request', request => { if (/\/(solutions|result|grades)(?:\?|$)/.test(request.url())) answers.push(request.url()) })
+  page.on('request', request => { if (/\/(solutions|grades)(?:\?|$)/.test(request.url())) answers.push(request.url()); if (/\/result(?:\?|$)/.test(request.url())) resultReads.push(request.url()) })
   const { attempt, fixture } = await start(page, 'nativeassessmentall')
   expect(attempt.preflight.grading.needs_review_count).toBe(5); expect(attempt.grading_status).toBe('not_graded'); expect(attempt.deadline_at).toBeNull()
   expect(attempt.policy).toMatchObject({ mode: 'independent', tutor_scope: 'operation_help_only', allow_web: false, allow_materials: false })
@@ -63,13 +63,18 @@ test('real unreviewed independent assessment saves five types and submits withou
   await question(page, 1)
   await expect(page.locator('.practice-stem svg').first()).toBeVisible()
   await page.screenshot({ path: info.outputPath('assessment-independent-active-1440.png') })
+  expect(resultReads).toEqual([])
   await page.getByRole('button', { name: '提交本次测试', exact: true }).click()
   const sending = page.waitForResponse(value => value.url().endsWith(`/attempts/${attempt.id}/submit`))
   await page.getByRole('dialog', { name: '确认提交测试', exact: true }).getByRole('button', { name: '确认提交已保存作答', exact: true }).click()
   expect((await sending).status()).toBe(202)
   await expect(page.getByRole('heading', { name: '测试结束状态', exact: true })).toBeVisible()
+  await expect.poll(async () => (await snapshot(page, attempt.id)).status).toBe('needs_review')
   const ended = await snapshot(page, attempt.id)
-  expect(ended.status).toBe('submitted'); expect(ended.grading_status).toBe('not_graded'); expect(ended.submitted_at).not.toBeNull()
+  expect(ended.grading_status).toBe('needs_review'); expect(ended.submitted_at).not.toBeNull()
+  const resultResponse = await page.request.get(`/api/v1/attempts/${attempt.id}/result`); expect(resultResponse.status()).toBe(200)
+  const result: AssessmentGradingResult = await resultResponse.json()
+  expect(result.status).toBe('needs_review'); expect(result.items).toHaveLength(5); expect(result.items.every(item => item.score === null && item.solution_markdown == null)).toBe(true)
   expect((await responses(page, attempt.id)).responses).toEqual(before.responses)
   await expect(page.getByRole('radio', { name: '5', exact: true })).toBeDisabled()
   expect(answers).toEqual([])
@@ -138,6 +143,7 @@ test('missing private binding visibly blocks start instead of fabricating a usab
 })
 
 test('two pages preserve independent local CAS candidates; a later submitted snapshot never accepts restored edits', async ({ page }, info) => {
+  let releaseResult = () => {}, releaseRefresh = () => {}
   const { attempt } = await start(page, 'nativeassessmentlocal', 'assisted')
   await question(page, 2); await page.getByLabel('第 2 题答案', { exact: true }).fill('本机测试共同基准'); await saved(page)
   const before = await responses(page, attempt.id), pattern = `**/api/v1/attempts/${attempt.id}/responses`
@@ -184,10 +190,52 @@ test('two pages preserve independent local CAS candidates; a later submitted sna
     const current = await snapshot(page, attempt.id)
     const receipt = await page.request.post(`/api/v1/attempts/${attempt.id}/submit`, { headers: { Origin: new URL(page.url()).origin, 'X-CSRF-Token': token.csrf_token, 'Idempotency-Key': crypto.randomUUID() }, data: { expected_revision: current.revision } })
     expect(receipt.status()).toBe(202)
-    const ended: AttemptSnapshot = await receipt.json()
-    await page.goto(href)
-    await page.getByRole('button', { name: '恢复这份本机测试作答', exact: true }).click()
+    expect((await receipt.json() as AttemptSnapshot).status).toBe('submitted')
+    // Grading legitimately advances Attempt.revision after submit. Pin the real
+    // completed worker state before checking that restoring drafts cannot edit it.
+    await expect.poll(async () => (await snapshot(page, attempt.id)).status).toBe('needs_review')
+    const ended = await snapshot(page, attempt.id)
+    let resultCaptured = () => {}, refreshStarted = () => {}, resultReleased = false
+    const resultReady = new Promise<void>(resolve => { resultCaptured = resolve })
+    const resultRelease = new Promise<void>(resolve => { releaseResult = resolve })
+    const refreshReady = new Promise<void>(resolve => { refreshStarted = resolve })
+    const refreshRelease = new Promise<void>(resolve => { releaseRefresh = resolve })
+    await page.route(`**/api/v1/attempts/${attempt.id}/result`, async route => {
+      const actual = await route.fetch(); expect(actual.status()).toBe(200)
+      if (!resultReleased) { resultCaptured(); await resultRelease }
+      await route.fulfill({ response: actual })
+    })
+    await page.route(`**/api/v1/attempts/${attempt.id}`, async route => {
+      const actual = await route.fetch()
+      if (resultReleased) { refreshStarted(); await refreshRelease }
+      await route.fulfill({ response: actual })
+    })
+    await page.exposeFunction('releaseAssessmentResult', () => { resultReleased = true; releaseResult() })
+    await page.goto(href); await resultReady
+    const restoring = page.getByRole('button', { name: '恢复这份本机测试作答', exact: true })
+    await expect(restoring).toBeEnabled()
+    await restoring.scrollIntoViewIfNeeded()
+    await restoring.evaluate(button => {
+      const probe = { pointerdown: false, pointerup: false, clicks: 0 }
+      Object.assign(window, { assessmentPointerProbe: probe })
+      button.addEventListener('pointerdown', () => { probe.pointerdown = true; void (window as unknown as { releaseAssessmentResult: () => Promise<void> }).releaseAssessmentResult() }, { once: true })
+      document.addEventListener('pointerup', () => { probe.pointerup = true }, { once: true, capture: true })
+      button.addEventListener('click', () => { probe.clicks++ })
+    })
+    // Release a genuine result during an ordinary pointer gesture, and hold its
+    // passive refresh until pointerup. No response body or parsed grade is mocked.
+    const bounds = (await restoring.boundingBox())!
+    expect(await restoring.evaluate(button => { const box = button.getBoundingClientRect(); return button.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)) })).toBe(true)
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+    await page.mouse.down(); await refreshReady
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())))
+    const disabledBeforePointerUp = await restoring.evaluate(button => (button as HTMLButtonElement).disabled)
+    await page.mouse.up()
+    const pointer = await page.evaluate(() => (window as unknown as { assessmentPointerProbe: { pointerdown: boolean; pointerup: boolean; clicks: number } }).assessmentPointerProbe)
+    releaseRefresh()
+    await info.attach('grading-refresh-pointer', { body: JSON.stringify({ ...pointer, disabledBeforePointerUp }), contentType: 'application/json' })
     await expect(page.getByRole('heading', { name: '服务端测试作答冲突 · 三方比较', exact: true })).toBeVisible()
+    expect({ ...pointer, disabledBeforePointerUp }).toEqual({ pointerdown: true, pointerup: true, clicks: 1, disabledBeforePointerUp: false })
     await page.getByRole('button', { name: '保留本页作答并采用新基准', exact: true }).click()
     await expect(page.getByLabel('第 2 题答案', { exact: true })).toHaveValue('A测试本机候选 🧠')
     await expect(page.getByLabel('第 2 题答案', { exact: true })).toBeDisabled()
@@ -197,7 +245,7 @@ test('two pages preserve independent local CAS candidates; a later submitted sna
     expect((await snapshot(page, attempt.id)).revision).toBe(ended.revision)
     await page.getByRole('heading', { name: '服务端测试作答冲突 · 三方比较', exact: true }).scrollIntoViewIfNeeded()
     await page.screenshot({ path: info.outputPath('assessment-terminal-local-candidate-1440.png') })
-  } finally { await second.close() }
+  } finally { releaseResult(); releaseRefresh(); await second.close() }
 })
 
 test('late redacted Workbench save uses its original ETag and retains hidden selection after explicit three-way choice', async ({ page }) => {
@@ -240,7 +288,7 @@ test('late redacted Workbench save uses its original ETag and retains hidden sel
     const retained: import('../../packages/contracts/generated/types').WorkbenchSession = await page.request.get('/api/v1/workbench/session').then(value => value.json())
     expect(retained.nav_collapsed).toBe(true)
     expect(retained.tabs.find(tab => tab.id === readerTab.id)?.context.selection).toEqual(readerTab.context.selection)
-    expect((await snapshot(page, attempt.id)).status).toBe('submitted')
+    expect(['submitted', 'grading', 'needs_review']).toContain((await snapshot(page, attempt.id)).status)
   } finally { release?.() }
 })
 

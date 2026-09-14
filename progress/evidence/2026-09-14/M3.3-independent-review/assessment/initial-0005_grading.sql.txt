@@ -1,0 +1,12 @@
+-- Immutable grading history and durable, lease-owned grading jobs.
+CREATE TABLE assessment_grade_jobs(job_id TEXT PRIMARY KEY REFERENCES jobs(id),attempt_id TEXT NOT NULL REFERENCES attempts(id),sequence INTEGER NOT NULL CHECK(sequence>0),grading_revision INTEGER NOT NULL CHECK(grading_revision>0),base_grading_revision INTEGER NOT NULL CHECK(base_grading_revision>=0),UNIQUE(attempt_id,sequence));
+CREATE TABLE grading_signing_keys(workspace_id TEXT PRIMARY KEY REFERENCES workspace(id),secret BLOB NOT NULL CHECK(length(secret)=32));
+CREATE TABLE assessment_manual_reviews(id TEXT PRIMARY KEY,workspace_id TEXT NOT NULL REFERENCES workspace(id),attempt_id TEXT NOT NULL REFERENCES attempts(id),payload_json TEXT NOT NULL CHECK(json_valid(payload_json)),payload_sha256 TEXT NOT NULL CHECK(length(payload_sha256)=64),signature TEXT NOT NULL CHECK(length(signature)=64));
+CREATE TRIGGER assessment_manual_review_no_update BEFORE UPDATE ON assessment_manual_reviews BEGIN SELECT RAISE(ABORT,'manual review immutable'); END;
+CREATE TRIGGER assessment_manual_review_no_delete BEFORE DELETE ON assessment_manual_reviews BEGIN SELECT RAISE(ABORT,'manual review immutable'); END;
+CREATE TABLE assessment_grade_audits(attempt_id TEXT NOT NULL,grading_revision INTEGER NOT NULL,result_sha256 TEXT NOT NULL CHECK(length(result_sha256)=64),private_json TEXT NOT NULL CHECK(json_valid(private_json)),private_sha256 TEXT NOT NULL CHECK(length(private_sha256)=64),job_id TEXT NOT NULL UNIQUE REFERENCES jobs(id),PRIMARY KEY(attempt_id,grading_revision),FOREIGN KEY(attempt_id,grading_revision) REFERENCES grades(attempt_id,grading_revision));
+CREATE TRIGGER assessment_grade_audit_no_update BEFORE UPDATE ON assessment_grade_audits BEGIN SELECT RAISE(ABORT,'grading audit immutable'); END;
+CREATE TRIGGER assessment_grade_audit_no_delete BEFORE DELETE ON assessment_grade_audits BEGIN SELECT RAISE(ABORT,'grading audit immutable'); END;
+CREATE TRIGGER grading_no_delete BEFORE DELETE ON grades BEGIN SELECT RAISE(ABORT,'grading history immutable'); END;
+CREATE TRIGGER grade_job_no_update BEFORE UPDATE ON assessment_grade_jobs BEGIN SELECT RAISE(ABORT,'grading allocation immutable'); END;
+CREATE TRIGGER grade_job_no_delete BEFORE DELETE ON assessment_grade_jobs BEGIN SELECT RAISE(ABORT,'grading allocation immutable'); END;

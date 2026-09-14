@@ -97,6 +97,116 @@
         "title": "AssessmentBlueprint",
         "type": "object"
       },
+      "AssessmentGradingJob": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_completed_result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssessmentGradingResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "awaiting_approval",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "last_completed_result"
+        ],
+        "title": "AssessmentGradingJob",
+        "type": "object"
+      },
+      "AssessmentGradingResult": {
+        "additionalProperties": false,
+        "properties": {
+          "attempt_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Attempt Id",
+            "type": "string"
+          },
+          "eligibility_status": {
+            "const": "not_evaluated",
+            "title": "Eligibility Status",
+            "type": "string"
+          },
+          "finalized_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Finalized At",
+            "type": "string"
+          },
+          "grading_revision": {
+            "minimum": 1.0,
+            "title": "Grading Revision",
+            "type": "integer"
+          },
+          "grading_rules_version": {
+            "title": "Grading Rules Version",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ItemGrade"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "manual_reviews": {
+            "items": {
+              "$ref": "#/components/schemas/ManualReviewReceipt"
+            },
+            "title": "Manual Reviews",
+            "type": "array"
+          },
+          "solution_reviews": {
+            "items": {
+              "$ref": "#/components/schemas/ReleasedSolutionReview"
+            },
+            "title": "Solution Reviews",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "graded",
+              "needs_review"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "attempt_id",
+          "grading_revision",
+          "grading_rules_version",
+          "status",
+          "items",
+          "finalized_at",
+          "manual_reviews",
+          "solution_reviews",
+          "eligibility_status"
+        ],
+        "title": "AssessmentGradingResult",
+        "type": "object"
+      },
       "AssessmentPreflight": {
         "additionalProperties": false,
         "properties": {
@@ -282,8 +392,21 @@
             ],
             "title": "Deadline At"
           },
+          "grading_revision": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Grading Revision",
+            "type": "integer"
+          },
           "grading_status": {
-            "const": "not_graded",
+            "enum": [
+              "not_graded",
+              "pending",
+              "graded",
+              "needs_review",
+              "failed",
+              "cancelled"
+            ],
             "title": "Grading Status",
             "type": "string"
           },
@@ -1986,6 +2109,59 @@
         "title": "LogoutResponse",
         "type": "object"
       },
+      "ManualReviewReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_role": {
+            "const": "author",
+            "title": "Actor Role",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "question_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "title": "Question Ids",
+            "type": "array"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "signature": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Signature",
+            "type": "string"
+          },
+          "signature_algorithm": {
+            "const": "hmac-sha256-v1",
+            "title": "Signature Algorithm",
+            "type": "string"
+          },
+          "signed_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Signed At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "actor_role",
+          "signed_at",
+          "reason",
+          "question_ids",
+          "signature",
+          "signature_algorithm"
+        ],
+        "title": "ManualReviewReceipt",
+        "type": "object"
+      },
       "MutationAck": {
         "additionalProperties": false,
         "properties": {
@@ -3376,6 +3552,90 @@
           "submitted_at"
         ],
         "title": "RecentAttempt",
+        "type": "object"
+      },
+      "RegradeItemReview": {
+        "additionalProperties": false,
+        "properties": {
+          "feedback_markdown": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Feedback Markdown",
+            "type": "string"
+          },
+          "question_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "score": {
+            "minimum": 0.0,
+            "title": "Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "question_id",
+          "score",
+          "feedback_markdown"
+        ],
+        "title": "RegradeItemReview",
+        "type": "object"
+      },
+      "RegradeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_grading_revision": {
+            "minimum": 0.0,
+            "title": "Expected Grading Revision",
+            "type": "integer"
+          },
+          "item_reviews": {
+            "items": {
+              "$ref": "#/components/schemas/RegradeItemReview"
+            },
+            "minItems": 1,
+            "title": "Item Reviews",
+            "type": "array"
+          },
+          "reason": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_grading_revision",
+          "reason",
+          "item_reviews"
+        ],
+        "title": "RegradeRequest",
+        "type": "object"
+      },
+      "ReleasedSolutionReview": {
+        "additionalProperties": false,
+        "properties": {
+          "question_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "review_status": {
+            "enum": [
+              "approved",
+              "draft",
+              "needs_review"
+            ],
+            "title": "Review Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question_id",
+          "review_status"
+        ],
+        "title": "ReleasedSolutionReview",
         "type": "object"
       },
       "ResolvedCitation": {
@@ -5012,6 +5272,191 @@
         ]
       }
     },
+    "/api/v1/attempts/{id}/regrade": {
+      "post": {
+        "operationId": "regrade_api_v1_attempts__id__regrade_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "title": "Origin",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegradeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRef"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Regrade",
+        "tags": [
+          "assessment"
+        ]
+      }
+    },
     "/api/v1/attempts/{id}/responses": {
       "get": {
         "operationId": "responses_api_v1_attempts__id__responses_get",
@@ -5338,6 +5783,164 @@
           }
         ],
         "summary": "Save",
+        "tags": [
+          "assessment"
+        ]
+      }
+    },
+    "/api/v1/attempts/{id}/result": {
+      "get": {
+        "operationId": "result_api_v1_attempts__id__result_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssessmentGradingResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssessmentGradingJob"
+                }
+              }
+            },
+            "description": "Accepted"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Result",
         "tags": [
           "assessment"
         ]

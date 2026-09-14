@@ -1,0 +1,31 @@
+# M3.3 frontend development evidence
+
+This package records development checks, not the final exact-source full browser gate or CI acceptance. PRODUCT_DESIGN.md is the sole product specification. All displayed course/questions and author entries are original software-test material; the UI author action is not an expert approval of reference content or proof of learning. Normal imported solutions remain needs_review.
+
+## Verified scope
+
+- Initial frontend freeze: 25 specified files, aggregate `9d45e3362f1849e25eb61a62854976ef3305484aca5b2b139a8326e9544775ad`. Full frontend 199 tests / 28 files passed. Lint and build passed with the large-chunk warning retained.
+- Native development rounds: first 3 passed (22.8s); second 5 passed (37.3s), covering the three new grading paths plus two existing assessment boundaries; final 1 passed (9.6s) after wording, layout and local-baseline checks. These are repeated/overlapping cases, not nine unique tests. First-run source was not captured before the run. Second run has 23 specified files unchanged before/after. Final run has 25 specified files unchanged between final-before and initial freeze. They do not bind every backend/dependency byte.
+- Real native paths use isolated browser/API/SQLite runtimes, original uploaded needs-review packages, actual worker grading, explicit author review, true 412 across profiles, and offline local recovery. No imported content is silently upgraded to approved.
+- A later independent review found accepted regrade failed/cancelled recovery blocked when an older completed grade existed. The new strict 202 last_completed_result projection preserves genuine prior scores and labels them as the last completed result, while retaining the latest failed/cancelled job. It does not mark that latest job successful or release old private solutions.
+- Recovery changes: four production files plus one new permanent test. New focused checks: 8 passed; all frontend: 201 / 29 files passed (2.99s); lint/build passed. The two new tests use real IndexedDB transactions and controlled typed HTTP, not a real worker. The final recovery manifest was captured after these checks; no missing before-capture is fabricated. Parent-owned independent probes and genuine worker recovery native are recorded separately by the parent, not claimed as this package's native run.
+- New recovery aggregate: `995a6e73f1521183fe936799f5596ab41ef6be0c2e384ce0f770e150655d7db2`. No full native run after this change by this agent. Final full-gate evidence must use its own fixed source.
+
+## Development failures retained
+
+- The first draft decoder run had 2 failed / 11 passed because a bare random UUID can violate the core leading-letter ID rule. Commands were given the explicit review_command_ prefix; subsequent focused checks passed.
+- TypeScript found isWellFormed absent from the configured library target, an optional grading revision, a wrong ErrorDetail details fixture, and a temporal-dead-zone identity shadow. The identity bug produced 3 failed / 27 passed before correction, followed by 30 passed. These diagnostics are retained as distinct observations.
+- The new recovery component test first had 2 failed / 6 passed because JSDOM lacks native dialog.showModal; a further harness attempt had a failed suite with 6 passed / 2 skipped because close is absent too. Explicit test-only modal-method shims fixed the harness. Its first lint run also rejected a Playwright-only exact query option. Production Dialog was not changed for these test errors.
+- No failure log here has a DOM dump or test-source attachment. Failure logs are intentional whitelist extracts of command/count/error/call-site lines; full originals stay at their original private temporary paths. Each raw and derivative hash is recorded.
+
+## Commands and binding
+
+Unit/type/lint/build logs retain their actual npm script and command output. The launcher was `bash scripts/node.sh npm --prefix apps/web run <script>`, with test filters shown by Vitest. Native configurations are captured as sanitized text. The full original native CLI invocation was not captured in the runner log, so this package does not invent it; the logs identify each executed native case and duration. The second configuration names two files but its actual five-case selection is bounded by the runner log, not all cases in those files. Config output/absolute import paths are redacted and these text copies are evidence, not executable replacement configurations.
+
+Source aggregate algorithm: SHA256 of the concatenation, sorted by relative path, of `path + NUL + lowercase_file_SHA256 + newline`. Initial and recovery manifests remain separate. Screenshot source binding is restricted to the relevant round above; none of these screenshots proves the later recovery extension visually.
+
+## Visual review and publication boundary
+
+All six original PNGs were opened with view_image and inspected. First-round images expose the genuine Workbench policy-ETag conflict comparison occupying most of the viewport; this was not hidden by weakening server policy. Later native steps explicitly choose the preserved local layout after three-way comparison. The second 390px capture still shows excessive inherited heading spacing and the reason field at the bottom edge. Scoped heading spacing and concise product copy were then applied. The final 390px view shows the review title, reason, selected question, score and feedback without horizontal overflow. The final 1440px view shows version 2, total 1/5, real rule version, per-item feedback and eligibility still unevaluated. The final screenshot status bar says UI saving after scrolling; it is not a screenshot-level acknowledgement of saved UI state.
+
+No private browser profiles, SQLite files, bootstrap values, tokens, environment files or DOM snapshots are included. Images are byte-identical original synthetic UI captures. Machine scanning is a bounded supplement to manual provenance review, not a universal detector of personal information. Runtime PIDs and personal workspace paths in text are redacted. The raw original files remain unchanged. Index/inspection metadata list all package file hashes except their own self-referential hash; a final package hash receipt is delivered separately.

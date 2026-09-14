@@ -1,0 +1,49 @@
+{
+  "scope": "Two controlled React/jsdom recovery cases using real ReviewJournal/DraftStore over fake-indexeddb; HTTP transport replies controlled, not native browser or live HTTP. Separate backend HTTP cases use real login/SQLite.",
+  "original_red": {
+    "file": "recovery-red.log",
+    "exit_code": 1,
+    "cases": 2,
+    "qualification": "Original immediate assertion waited for storage-available label, which is not a journal.ready proof. Preserve it but do not alone treat it as a sufficient eventual-recovery failure proof."
+  },
+  "first_new_contract_probe": {
+    "file": "recovery-green.log",
+    "exit_code": 1,
+    "cases": 2,
+    "reason": "Same immediate assertion preceded IDB readiness; fixed harness waits for the unchanged enabled-button predicate."
+  },
+  "confirmed_original_component_control": {
+    "file": "original-component-confirmed-red.log",
+    "exit_code": 1,
+    "cases": 2,
+    "component": "AssessmentResult-original.tsx",
+    "component_sha256": "4e921e3753a61427fd310acb995f2b0b77783cd8a4f946d983ff233d13f38d1c",
+    "matches_original_component_byte_hash": true,
+    "scope": "Vite test-only load override of exact original AssessmentResult bytes, with current explicitly recorded support modules and valid new 202 fixture. Not an exact checkout of all previous frontend sources. Waits for the same enabled-button predicate for 1000 ms and still fails both cases. Demonstrates original parent component cannot expose recovery even with a real prior baseline supplied."
+  },
+  "green": {
+    "file": "recovery-green-final.log",
+    "exit_code": 0,
+    "cases": 2,
+    "duration_ms": 521,
+    "fixture_change": "202 value now contains strict last_completed_result with actual bounded-fixture graded score 0.5/2 and original feedback; previous API had no such field. Original test file is not claimed byte-identical to new-contract green.",
+    "assertions": [
+      "Both failed and cancelled jobs remain visible as their true terminal state.",
+      "The previous genuine score is displayed under last-completed, not current, result.",
+      "The original author explicit-review button eventually becomes enabled after the actual local journal becomes ready."
+    ]
+  },
+  "source_changes_during_green": [],
+  "logs_sha256": {
+    "recovery-red.log": "3177805f038c724fc79f6bbf5102f781e5365efbc7198d1e35cb363e3b7fc681",
+    "recovery-green.log": "a0c6ec7c3a842e3b1b1deec61906e65d662f1efb856d859f93c107280354d8f2",
+    "recovery-green-final.log": "b4986c7481ec9cc9474c80e9081b2d568f2628f01d8477c4f4f4f9b603ec810d",
+    "original-component-confirmed-red.log": "35c6423cef765b4b41ffd6c4418c9f1a4490f2d65546b313cf160ebc18b780eb"
+  },
+  "probes_sha256": {
+    "recovery.test.tsx": "f11331bafaccf980e78d9052c41b162eb94e80ad151799005fbf2d66ad2ed48f",
+    "recovery-green.test.tsx": "3a36a543c8bbe97ab084c0722917831eeccb5c9a8233aba81be9650059223adf",
+    "recovery-green-wait.test.tsx": "011590128c844550d85c72e6191b4ea42fb6a22657c6f47074f51b4c8d82adcf",
+    "original-component-control.test.tsx": "dda9454ab9cc1edf7210b62d227746eaa1d79ff28bf54eb231c9d49c11aefc90"
+  }
+}

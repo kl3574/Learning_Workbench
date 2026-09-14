@@ -179,7 +179,7 @@ def test_submit_and_abandon_compete_once_and_never_reactivate(storage):
     assert counts(database)["grades"] == counts(database)["evidence"] == 0
 
 
-def test_submit_receipt_snapshot_event_and_one_outbox_are_atomic_without_jobs(storage):
+def test_submit_receipt_snapshot_event_outbox_and_one_real_job_are_atomic(storage):
     database, identity, fixture, service = storage
     first = start(storage)
     saved = service.save_responses(identity, first.id, dm.ResponsesWrite(expected_revision=1,
@@ -197,7 +197,7 @@ def test_submit_receipt_snapshot_event_and_one_outbox_are_atomic_without_jobs(st
         assert payload["actor"] == "server" and payload["origin"] == "native" and payload["attempt_id"] == first.id
         assert payload["ref"] == reference(fixture.assessment).model_dump(mode="json")
         assert connection.execute("SELECT COUNT(*) FROM outbox WHERE event_type='assessment.grading.requested'").fetchone()[0] == 1
-    assert counts(database)["jobs"] == before["jobs"]
+    assert counts(database)["jobs"] == before["jobs"] + 1
     assert counts(database)["grades"] == counts(database)["evidence"] == 0
     assert service.get_responses(identity, first.id).responses[0].answer == "我的最后作答"
 
@@ -301,11 +301,11 @@ def test_pending_independent_protects_previously_cached_practice_solution(storag
     attempt = start(storage)
     error_code("ASSESSMENT_ACTIVE", lambda: practice.solution(identity, session.id, request, "private-answer"))
     submitted = service.submit(identity, attempt.id, dm.AttemptSubmit(expected_revision=1), "submit")
-    assert submitted.grading_status == "not_graded"
+    assert submitted.grading_status == "pending"
     error_code("ASSESSMENT_ANSWER_PROTECTED", lambda: practice.solution(identity, session.id, request, "private-answer"))
 
 
-def test_true_seven_http_routes_create_save_read_submit_abandon_no_grading_stub(storage):
+def test_original_seven_http_routes_preserve_snapshots_with_real_queued_grading(storage):
     database, _, fixture, _ = storage
     application = create_app(database.settings)
     with TestClient(application) as client:
@@ -328,7 +328,13 @@ def test_true_seven_http_routes_create_save_read_submit_abandon_no_grading_stub(
         submitted = client.post(f"/api/v1/attempts/{attempt_id}/submit", json={"expected_revision": 2}, headers={**headers, "Idempotency-Key": "http-submit"})
         assert submitted.status_code == 202 and submitted.json()["status"] == "submitted"
         assert client.get(f"/api/v1/attempts/{attempt_id}/responses").json()["responses"][0]["answer"] == "我的 HTTP 作答"
-        assert client.get(f"/api/v1/attempts/{attempt_id}/result").status_code == 404
+        result = client.get(f"/api/v1/attempts/{attempt_id}/result")
+        assert result.status_code in {200, 202}
+        if result.status_code == 202:
+            assert result.json()["status"] in {"queued", "running"}
+        else:
+            assert result.json()["status"] == "needs_review"
+            assert all(item["score"] is None for item in result.json()["items"])
         another = client.post(f"/api/v1/assessments/{fixture.assessment.id}/attempts",
             json={"assessment_ref": reference(fixture.assessment).model_dump(mode="json"), "mode": "open_book"}, headers={**headers, "Idempotency-Key": "http-second"})
         abandoned = client.post(f"/api/v1/attempts/{another.json()['id']}/abandon", json={"expected_revision": 1}, headers={**headers, "Idempotency-Key": "http-abandon"})

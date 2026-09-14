@@ -1,0 +1,55 @@
+"""One bounded normal API/application flow after an already resolved grade."""
+
+from packages.contracts import domain_models as dm
+from packages.contracts.canonical import canonical_bytes
+from services.api.app.application.grading import GradingService, GradingWorker
+from services.api.app.assessment_dto import RegradeRequest, RegradeItemReview
+from services.api.app.import_dto import JobCancelRequest
+from services.api.app.infrastructure.grading_repository import GradingRepository
+from tests.integration.test_assessment_grading import storage, submitted, real_author, review_request
+
+__all__ = ["storage"]
+
+
+def test_cancel_after_computed_regrade_preserves_prior_grade_and_new_explicit_review_recovers(storage):
+    database, learner, fixture, _ = storage
+    final = submitted(storage)
+    worker = GradingWorker(database)
+    service = GradingService(database)
+    assert worker.run_once()
+    author = real_author(database)
+    service.regrade(author, final.id, review_request(fixture), "first-review")
+    assert worker.run_once()
+    original = service.result(learner, final.id)
+    assert original.status == "graded" and original.grading_revision == 2
+    original_score = original.items[0].score
+    request = RegradeRequest(expected_grading_revision=2, reason="Second explicit synthetic human review",
+        item_reviews=[RegradeItemReview(question_id=fixture.questions[0].id, score=0.0, feedback_markdown="Synthetic partial reassessment")])
+    cancelled_job = service.regrade(author, final.id, request, "cancelled-review")
+    lease = worker.claim()
+    assert lease and lease.job_id == cancelled_job.id
+    pending_result, pending_audit = worker.compute(lease)
+    snapshot = service.job(learner, lease.job_id)
+    cancelled = service.cancel(learner, lease.job_id, JobCancelRequest(expected_revision=snapshot.revision), "cancel-review")
+    assert cancelled.status == "cancelled"
+    assert not worker.finish(lease, pending_result, pending_audit)
+    with database.connect() as connection:
+        repo = GradingRepository(connection, learner.workspace_id)
+        record = repo.attempts.load(final.id)
+        old = repo.load_grade(record, 2)
+        assert old and old[0].items[0].score == original_score
+        stored = canonical_bytes(old[0])
+        assert connection.execute("SELECT COUNT(*) FROM grades WHERE attempt_id=?", (final.id,)).fetchone()[0] == 2
+    # Replaying a previously queued acknowledgement is historical, not a new job.
+    assert service.regrade(author, final.id, request, "cancelled-review") == cancelled_job
+    recovery = service.regrade(author, final.id, request, "replacement-review")
+    assert recovery.id != cancelled_job.id
+    assert worker.run_once()
+    current = service.result(learner, final.id)
+    assert current.grading_revision == 3 and current.status == "graded" and current.items[0].score == 0
+    assert len(current.manual_reviews) == 2  # The cancelled job's review is not applied.
+    with database.connect() as connection:
+        repo = GradingRepository(connection, learner.workspace_id)
+        assert canonical_bytes(repo.load_grade(repo.attempts.load(final.id), 2)[0]) == stored
+        assert connection.execute("SELECT COUNT(*) FROM grades WHERE attempt_id=?", (final.id,)).fetchone()[0] == 3
+        assert connection.execute("SELECT COUNT(*) FROM job_events WHERE job_id=? AND type IN ('completed','cancelled','failed')", (cancelled_job.id,)).fetchone()[0] == 1

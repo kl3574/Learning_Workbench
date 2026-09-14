@@ -130,16 +130,17 @@ class AssessmentAttemptCreate(dm.AttemptCreate):
 
 class AttemptSnapshot(dm.AttemptPublic):
     preflight: AssessmentPreflight
-    grading_status: Literal["not_graded"]
+    grading_revision: int = Field(default=0, ge=0)
+    grading_status: Literal["not_graded", "pending", "graded", "needs_review", "failed", "cancelled"]
 
     @model_validator(mode="after")
     def frozen_public_facts(self):
-        if self.assessment_ref.entity != "assessment" or self.status not in {"active", "submitted", "abandoned"}:
-            raise ValueError("M3.2 has no completed grading or grading worker projection")
+        if self.assessment_ref.entity != "assessment":
+            raise ValueError("assessment projection must retain its exact blueprint")
         ids = [question.id for question in self.questions]
         if len(ids) != len(set(ids)) or ids != [item.question_ref.id for item in self.preflight.prior_seen.questions]:
             raise ValueError("public preflight must match ordered assigned questions")
-        if self.status == "submitted" and self.submitted_at is None or self.status != "submitted" and self.submitted_at is not None:
+        if (self.status not in {"active", "abandoned"}) != (self.submitted_at is not None):
             raise ValueError("submission timestamp must match state")
         return self
 
@@ -155,3 +156,59 @@ class AttemptResponses(dm.StrictModel):
         if len(ids) != len(set(ids)):
             raise ValueError("responses must uniquely identify assigned questions")
         return self
+
+
+class RegradeItemReview(dm.StrictModel):
+    question_id: dm.Id
+    score: float = Field(ge=0)
+    feedback_markdown: str = Field(min_length=1, max_length=20000)
+
+
+class RegradeRequest(dm.StrictModel):
+    expected_grading_revision: int = Field(ge=0)
+    reason: str = Field(min_length=1, max_length=4000)
+    item_reviews: list[RegradeItemReview] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def unique_items(self):
+        if len({item.question_id for item in self.item_reviews}) != len(self.item_reviews):
+            raise ValueError("manual review items must be unique")
+        if not self.reason.strip() or any(not item.feedback_markdown.strip() for item in self.item_reviews):
+            raise ValueError("human review requires a nonblank reason and feedback")
+        return self
+
+
+class ManualReviewReceipt(dm.StrictModel):
+    id: dm.Id
+    actor_role: Literal["author"]
+    signed_at: dm.UTC
+    reason: str
+    question_ids: list[dm.Id]
+    signature: dm.Sha256
+    signature_algorithm: Literal["hmac-sha256-v1"]
+
+
+class ReleasedSolutionReview(dm.StrictModel):
+    question_id: dm.Id
+    review_status: Literal["approved", "draft", "needs_review"]
+
+
+class AssessmentGradingResult(dm.GradingResult):
+    manual_reviews: list[ManualReviewReceipt]
+    solution_reviews: list[ReleasedSolutionReview]
+    eligibility_status: Literal["not_evaluated"]
+
+    @model_validator(mode="after")
+    def complete_result(self):
+        ids = [item.question_ref.id for item in self.items]
+        if not ids or len(set(ids)) != len(ids) or any(item.question_ref.entity != "question" for item in self.items):
+            raise ValueError("result must retain every unique exact question")
+        if (self.status == "needs_review") != any(item.status == "needs_review" for item in self.items):
+            raise ValueError("overall grading status must preserve unresolved items")
+        if [item.question_id for item in self.solution_reviews] != [item.question_ref.id for item in self.items if item.solution_markdown is not None]:
+            raise ValueError("released answers must disclose their original review status")
+        return self
+
+
+class AssessmentGradingJob(dm.JobRef):
+    last_completed_result: AssessmentGradingResult | None
