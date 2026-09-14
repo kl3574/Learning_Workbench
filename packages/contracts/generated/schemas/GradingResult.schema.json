@@ -1,0 +1,159 @@
+{
+  "$comment": "Generated; do not edit.",
+  "$defs": {
+    "ContentRef": {
+      "additionalProperties": false,
+      "properties": {
+        "entity": {
+          "enum": [
+            "course",
+            "lesson",
+            "block",
+            "concept",
+            "route",
+            "question",
+            "practice_set",
+            "assessment",
+            "note"
+          ],
+          "title": "Entity",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entity",
+        "id",
+        "revision",
+        "sha256"
+      ],
+      "title": "ContentRef",
+      "type": "object"
+    },
+    "ItemGrade": {
+      "additionalProperties": false,
+      "properties": {
+        "feedback_markdown": {
+          "title": "Feedback Markdown",
+          "type": "string"
+        },
+        "max_score": {
+          "exclusiveMinimum": 0,
+          "title": "Max Score",
+          "type": "number"
+        },
+        "question_ref": {
+          "$ref": "#/$defs/ContentRef"
+        },
+        "score": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Score"
+        },
+        "solution_markdown": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Solution Markdown"
+        },
+        "status": {
+          "enum": [
+            "graded",
+            "needs_review"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "question_ref",
+        "max_score",
+        "status",
+        "feedback_markdown"
+      ],
+      "title": "ItemGrade",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "attempt_id": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "finalized_at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+      "title": "Finalized At",
+      "type": "string"
+    },
+    "grading_revision": {
+      "minimum": 1,
+      "title": "Grading Revision",
+      "type": "integer"
+    },
+    "grading_rules_version": {
+      "title": "Grading Rules Version",
+      "type": "string"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/ItemGrade"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "status": {
+      "enum": [
+        "graded",
+        "needs_review"
+      ],
+      "title": "Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "attempt_id",
+    "grading_revision",
+    "grading_rules_version",
+    "status",
+    "items",
+    "finalized_at"
+  ],
+  "title": "GradingResult",
+  "type": "object",
+  "x-source-spec": {
+    "source": "PRODUCT_DESIGN.md",
+    "spec_sha256": "ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c",
+    "spec_version": "3.0.0"
+  }
+}

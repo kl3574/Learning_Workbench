@@ -1,0 +1,46 @@
+[project]
+name = "learning-workbench"
+version = "0.1.0"
+description = "Local-first learning workbench, built from PRODUCT_DESIGN.md"
+requires-python = "==3.12.*"
+dependencies = [
+  "fastapi==0.141.1",
+  "pydantic==2.13.5",
+  "uvicorn==0.53.0",
+]
+
+[dependency-groups]
+dev = [
+  "pytest==9.1.1",
+  "httpx==0.28.1",
+  "ruff==0.16.7",
+  "mypy==2.3.1",
+  "jsonschema==4.26.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "packages/contracts", "scripts"]
+addopts = "-ra"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+extend-exclude = ["packages/contracts/domain_models.py", "scripts/extract_spec.py", "scripts/generate_fixtures.py"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["services/api"]
+check_untyped_defs = true
+ignore_missing_imports = false
+follow_imports = "normal"
+
+[[tool.mypy.overrides]]
+module = ["packages.contracts.domain_models", "domain_models"]
+ignore_errors = true

@@ -1,0 +1,111 @@
+{
+  "$comment": "Generated; do not edit.",
+  "$defs": {
+    "SelfAssessment": {
+      "additionalProperties": false,
+      "properties": {
+        "concept_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Concept Id",
+          "type": "string"
+        },
+        "level": {
+          "enum": [
+            "not_learned",
+            "encountered",
+            "independent_use"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "origin": {
+          "const": "self_report",
+          "default": "self_report",
+          "title": "Origin",
+          "type": "string"
+        },
+        "updated_at": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "concept_id",
+        "level",
+        "updated_at"
+      ],
+      "title": "SelfAssessment",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "goal_concept_ids": {
+      "items": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+        "type": "string"
+      },
+      "title": "Goal Concept Ids",
+      "type": "array"
+    },
+    "goals": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Goals",
+      "type": "array"
+    },
+    "language": {
+      "default": "zh-CN",
+      "title": "Language",
+      "type": "string"
+    },
+    "preferred_difficulty": {
+      "default": "beginner",
+      "enum": [
+        "beginner",
+        "intermediate",
+        "advanced"
+      ],
+      "title": "Preferred Difficulty",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "self_assessments": {
+      "items": {
+        "$ref": "#/$defs/SelfAssessment"
+      },
+      "title": "Self Assessments",
+      "type": "array"
+    },
+    "weekly_minutes": {
+      "default": 120,
+      "maximum": 10080,
+      "minimum": 1,
+      "title": "Weekly Minutes",
+      "type": "integer"
+    },
+    "workspace_id": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workspace_id",
+    "revision"
+  ],
+  "title": "LearnerProfile",
+  "type": "object",
+  "x-source-spec": {
+    "source": "PRODUCT_DESIGN.md",
+    "spec_sha256": "ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c",
+    "spec_version": "3.0.0"
+  }
+}

@@ -1,0 +1,124 @@
+{
+  "$comment": "Generated; do not edit.",
+  "$defs": {
+    "ContentRef": {
+      "additionalProperties": false,
+      "properties": {
+        "entity": {
+          "enum": [
+            "course",
+            "lesson",
+            "block",
+            "concept",
+            "route",
+            "question",
+            "practice_set",
+            "assessment",
+            "note"
+          ],
+          "title": "Entity",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entity",
+        "id",
+        "revision",
+        "sha256"
+      ],
+      "title": "ContentRef",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "consent_id": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+      "title": "Consent Id",
+      "type": "string"
+    },
+    "objectives": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Objectives",
+      "type": "array"
+    },
+    "output_kind": {
+      "enum": [
+        "lesson",
+        "worked_example",
+        "practice_set",
+        "assessment"
+      ],
+      "title": "Output Kind",
+      "type": "string"
+    },
+    "prerequisites": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Prerequisites",
+      "type": "array"
+    },
+    "proof_policy": {
+      "enum": [
+        "full",
+        "declared_dependencies"
+      ],
+      "title": "Proof Policy",
+      "type": "string"
+    },
+    "provider_id": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+      "title": "Provider Id",
+      "type": "string"
+    },
+    "source_refs": {
+      "items": {
+        "$ref": "#/$defs/ContentRef"
+      },
+      "title": "Source Refs",
+      "type": "array"
+    },
+    "topic": {
+      "maxLength": 400000,
+      "minLength": 1,
+      "title": "Topic",
+      "type": "string"
+    }
+  },
+  "required": [
+    "topic",
+    "prerequisites",
+    "objectives",
+    "proof_policy",
+    "output_kind",
+    "source_refs",
+    "provider_id",
+    "consent_id"
+  ],
+  "title": "AuthoringRequest",
+  "type": "object",
+  "x-source-spec": {
+    "source": "PRODUCT_DESIGN.md",
+    "spec_sha256": "ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c",
+    "spec_version": "3.0.0"
+  }
+}

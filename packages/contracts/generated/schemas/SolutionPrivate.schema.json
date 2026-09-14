@@ -1,0 +1,157 @@
+{
+  "$comment": "Generated; do not edit.",
+  "$defs": {
+    "ContentRef": {
+      "additionalProperties": false,
+      "properties": {
+        "entity": {
+          "enum": [
+            "course",
+            "lesson",
+            "block",
+            "concept",
+            "route",
+            "question",
+            "practice_set",
+            "assessment",
+            "note"
+          ],
+          "title": "Entity",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entity",
+        "id",
+        "revision",
+        "sha256"
+      ],
+      "title": "ContentRef",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "absolute_tolerance": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Absolute Tolerance",
+      "type": "number"
+    },
+    "accepted_answers": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Accepted Answers",
+      "type": "array"
+    },
+    "domain_assumptions": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Domain Assumptions",
+      "type": "array"
+    },
+    "grading_kind": {
+      "enum": [
+        "choice_exact",
+        "text_normalized",
+        "numeric_tolerance",
+        "symbolic_review",
+        "rubric_review"
+      ],
+      "title": "Grading Kind",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "question_ref": {
+      "$ref": "#/$defs/ContentRef"
+    },
+    "relative_tolerance": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Relative Tolerance",
+      "type": "number"
+    },
+    "review_status": {
+      "enum": [
+        "draft",
+        "needs_review",
+        "approved"
+      ],
+      "title": "Review Status",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "rubric_markdown": {
+      "default": "",
+      "title": "Rubric Markdown",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "3.0.0",
+      "default": "3.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "solution_markdown": {
+      "maxLength": 400000,
+      "minLength": 1,
+      "title": "Solution Markdown",
+      "type": "string"
+    },
+    "unit": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Unit"
+    }
+  },
+  "required": [
+    "id",
+    "revision",
+    "question_ref",
+    "grading_kind",
+    "accepted_answers",
+    "solution_markdown",
+    "review_status"
+  ],
+  "title": "SolutionPrivate",
+  "type": "object",
+  "x-source-spec": {
+    "source": "PRODUCT_DESIGN.md",
+    "spec_sha256": "ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c",
+    "spec_version": "3.0.0"
+  }
+}

@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-14T09:01:20Z；规范 SHA-256：`ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
+更新：2026-09-14T09:15:24Z；规范 SHA-256：`ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED
 实施：IN_PROGRESS；当前任务：M0.1；下一任务：M0.2
 
-完成M0工具链/安全API/规范检查，运行可复核基线并提交实施PR。
+M0本地基线复验并提交PR；M1真实截图已发现窄屏空白/公式字体问题，修复及浏览器验收继续。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -41,10 +41,10 @@
 
 ## 验证边界
 
-- spec_checks: NOT_RUN
-- unit: NOT_RUN
-- contract: NOT_RUN
-- integration: NOT_RUN
+- spec_checks: PASS
+- unit: PASS
+- contract: PASS
+- integration: PASS
 - browser_native: NOT_RUN
 - real_provider: NOT_RUN
 - real_codex: NOT_RUN
