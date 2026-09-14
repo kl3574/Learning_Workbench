@@ -1,0 +1,12 @@
+from pathlib import Path
+import subprocess, os, tempfile, json, datetime, hashlib
+out=Path('<EVIDENCE_DIR>')
+root=Path('<REPO>')
+data=tempfile.mkdtemp(prefix='m34-bootstrap-practice-regression-')
+env=dict(os.environ,LEARNING_E2E_DATA_DIR=data)
+cmd=['bash','scripts/node.sh','apps/web/node_modules/.bin/playwright','test','--config=tests/e2e/playwright.config.ts','practice.spec.ts','--grep','five real question kinds|offline recovery keeps','--output=<EVIDENCE_DIR>/original-pair-results']
+start=datetime.datetime.now(datetime.timezone.utc).isoformat()
+with (out/'original-practice-pair.log').open('w') as log: result=subprocess.run(cmd,cwd=root,env=env,stdout=log,stderr=subprocess.STDOUT)
+r={'command':cmd,'started_at':start,'finished_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'exit_code':result.returncode,'runtime':'Original Playwright webServer config and unchanged original practice test pair; unique synthetic temporary database, exclusive authorized ports 8765/5173','test_sha256':hashlib.sha256((root/'tests/e2e/practice.spec.ts').read_bytes()).hexdigest(),'helper_sha256':hashlib.sha256((root/'tests/e2e/helpers.ts').read_bytes()).hexdigest(),'raw_log_sha256':hashlib.sha256((out/'original-practice-pair.log').read_bytes()).hexdigest()}
+(out/'original-practice-pair-receipt.json').write_text(json.dumps(r,ensure_ascii=False,indent=2)+'\n')
+raise SystemExit(result.returncode)

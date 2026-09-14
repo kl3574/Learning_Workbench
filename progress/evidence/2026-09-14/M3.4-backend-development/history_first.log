@@ -1,0 +1,107 @@
+.......................FF.F.....                                         [100%]
+=================================== FAILURES ===================================
+_ test_http_full_history_limit_counts_actual_utf8_bytes_and_never_deletes_old_grades[False] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x75f589ec80b0>, SessionIdentity(id='session_assessment_...ted'], time_limit_seconds=None)), <services.api.app.application.assessment.AssessmentService object at 0x75f589021970>)
+pending = False
+
+    @pytest.mark.parametrize("pending", [False, True])
+    def test_http_full_history_limit_counts_actual_utf8_bytes_and_never_deletes_old_grades(storage, pending):
+        database, identity, fixture, _ = storage
+        final = submitted(storage)
+        worker = GradingWorker(database)
+        service = GradingService(database)
+        assert worker.run_once()
+        author = real_author(database)
+        request = review_request(fixture)
+        request = request.model_copy(update={"item_reviews": [item.model_copy(update={
+            "feedback_markdown": "真实人工反馈，中文与 🧠 保留。"}) for item in request.item_reviews]})
+        service.regrade(author, final.id, request, "human-first")
+        assert worker.run_once()
+        if pending:
+            service.regrade(author, final.id, review_request(fixture, revision=2), "human-next")
+        endpoint = f"/api/v1/attempts/{final.id}/result"
+>       raw = immutable_rows(database)
+              ^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_assessment_review_history.py:129: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+database = <services.api.app.infrastructure.database.Database object at 0x75f589ec80b0>
+
+    def immutable_rows(database):
+        with database.connect() as connection:
+>           return [tuple(row) for row in connection.execute(
+                "SELECT attempt_id,grading_revision,result_json,sha256 FROM grades ORDER BY attempt_id,grading_revision")]
+E           sqlite3.OperationalError: no such column: sha256
+
+tests/integration/test_assessment_review_history.py:32: OperationalError
+_ test_http_full_history_limit_counts_actual_utf8_bytes_and_never_deletes_old_grades[True] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x75f589ee9190>, SessionIdentity(id='session_assessment_...ted'], time_limit_seconds=None)), <services.api.app.application.assessment.AssessmentService object at 0x75f589ed38c0>)
+pending = True
+
+    @pytest.mark.parametrize("pending", [False, True])
+    def test_http_full_history_limit_counts_actual_utf8_bytes_and_never_deletes_old_grades(storage, pending):
+        database, identity, fixture, _ = storage
+        final = submitted(storage)
+        worker = GradingWorker(database)
+        service = GradingService(database)
+        assert worker.run_once()
+        author = real_author(database)
+        request = review_request(fixture)
+        request = request.model_copy(update={"item_reviews": [item.model_copy(update={
+            "feedback_markdown": "真实人工反馈，中文与 🧠 保留。"}) for item in request.item_reviews]})
+        service.regrade(author, final.id, request, "human-first")
+        assert worker.run_once()
+        if pending:
+            service.regrade(author, final.id, review_request(fixture, revision=2), "human-next")
+        endpoint = f"/api/v1/attempts/{final.id}/result"
+>       raw = immutable_rows(database)
+              ^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_assessment_review_history.py:129: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+database = <services.api.app.infrastructure.database.Database object at 0x75f589ee9190>
+
+    def immutable_rows(database):
+        with database.connect() as connection:
+>           return [tuple(row) for row in connection.execute(
+                "SELECT attempt_id,grading_revision,result_json,sha256 FROM grades ORDER BY attempt_id,grading_revision")]
+E           sqlite3.OperationalError: no such column: sha256
+
+tests/integration/test_assessment_review_history.py:32: OperationalError
+_ test_actual_current_review_permission_and_exact_materials_not_frozen_mode_guess[open_book-operation_help_only] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x75f589df18e0>, SessionIdentity(id='session_assessment_...ted'], time_limit_seconds=None)), <services.api.app.application.assessment.AssessmentService object at 0x75f589466ae0>)
+mode = 'open_book', scope = 'operation_help_only'
+
+    @pytest.mark.parametrize("mode,scope", [("independent", "operation_help_only"), ("open_book", "operation_help_only"), ("assisted", "academic")])
+    def test_actual_current_review_permission_and_exact_materials_not_frozen_mode_guess(storage, mode, scope):
+        database, identity, fixture, _ = storage
+        final = submitted(storage, mode=mode)
+        service = GradingService(database)
+        pending = service.result(identity, final.id)
+>       assert pending.current_review_policy.tutor_scope == scope
+E       AssertionError: assert 'academic' == 'operation_help_only'
+E         
+E         - operation_help_only
+E         + academic
+
+tests/integration/test_assessment_review_history.py:155: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <REPO>/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <REPO>/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_assessment_review_history.py::test_http_full_history_limit_counts_actual_utf8_bytes_and_never_deletes_old_grades[False]
+FAILED tests/integration/test_assessment_review_history.py::test_http_full_history_limit_counts_actual_utf8_bytes_and_never_deletes_old_grades[True]
+FAILED tests/integration/test_assessment_review_history.py::test_actual_current_review_permission_and_exact_materials_not_frozen_mode_guess[open_book-operation_help_only]
+3 failed, 29 passed, 2 warnings in 12.19s

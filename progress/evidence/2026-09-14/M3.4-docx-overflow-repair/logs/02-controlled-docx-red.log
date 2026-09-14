@@ -1,0 +1,39 @@
+[WebServer] INFO:     Started server process [<pid>]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:56121 (Press CTRL+C to quit)
+[WebServer] (node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘  1 ../m34-docx-overflow-probe/controlled.spec.ts:133:1 › real DOCX safe text stays readable for learner while original bytes require an explicit author role (3.6s)
+
+
+  1) ../m34-docx-overflow-probe/controlled.spec.ts:133:1 › real DOCX safe text stays readable for learner while original bytes require an explicit author role 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      214 |     await dialog.getByLabel('选择预览候选').focus();await sample('after-select-focus')
+      215 |     await page.keyboard.press('Tab');await sample('after-tab')
+    > 216 |     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+          |                                                                                           ^
+      217 |   } finally {
+      218 |     await page.evaluate(() => {
+      219 |       const state=(window as unknown as {__docxObserver:{sample:(r:string)=>void}}).__docxObserver
+        at <probe>/controlled.spec.ts:216:91
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m34-docx-overflow-probe/controlled/controlled-real-DOCX-safe--17d29-ire-an-explicit-author-role/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m34-docx-overflow-probe/controlled/controlled-real-DOCX-safe--17d29-ire-an-explicit-author-role/error-context.md
+
+  1 failed
+    ../m34-docx-overflow-probe/controlled.spec.ts:133:1 › real DOCX safe text stays readable for learner while original bytes require an explicit author role 

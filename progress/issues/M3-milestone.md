@@ -27,10 +27,11 @@ spec_sha256: `ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
 经审查/合并后才关闭任务；当前清单不表示已经验收。
 
 <!-- engineering_progress:start -->
-当前实际状态：`in_progress`
+当前实际状态：`review`
 规范：`3.0.0` / `ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
 当前需求关联：
 验证代码：`NOT_RUN`
 验证：`NOT_RUN`
+审查 PR：https://github.com/kl3574/Learning_Workbench/pull/46
 下一动作：按子任务依赖推进。
 <!-- engineering_progress:end -->

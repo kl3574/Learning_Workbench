@@ -2,7 +2,12 @@
 
 from typing import Literal
 
-from packages.contracts.domain_models import ContentRef, Id, Note, Revision, StrictModel, UTC
+from packages.contracts.domain_models import ContentRef, Evidence, Id, Note, Revision, StrictModel, UTC
+
+
+class PageEvidence(StrictModel):
+    items: list[Evidence]
+    next_cursor: str | None
 
 
 class PageNote(StrictModel):

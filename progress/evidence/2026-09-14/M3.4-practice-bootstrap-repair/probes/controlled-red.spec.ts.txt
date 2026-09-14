@@ -1,0 +1,72 @@
+import { expect, test } from '<EXACT_REPO>/apps/web/node_modules/@playwright/test/index.mjs'
+import { RestartRuntime } from '<EXACT_REPO>/tests/e2e/restartRuntime'
+import { importPracticePackage, originalPracticePackage } from '<EXACT_REPO>/tests/e2e/practiceTestData'
+import { writeFileSync } from 'node:fs'
+
+test('original active-document reset reload retains old-layout conflict under delayed real practice read', async ({ playwright }) => {
+  const runtime = await RestartRuntime.start()
+  const ledger: unknown[] = [], at = Date.now()
+  const mark = (kind: string, data: unknown = null) => ledger.push({ ms: Date.now()-at, kind, data })
+  let release: () => void = () => {}, browser: Awaited<ReturnType<typeof playwright.chromium.launch>> | undefined
+  try {
+    const seedContext = await runtime.openBrowser(playwright.chromium), seed = seedContext.pages()[0]
+    await runtime.authenticateOnly(seed)
+    const fixture = originalPracticePackage('bootstrapreview')
+    const imported = await importPracticePackage(seed, fixture)
+    await imported.dialog.getByRole('button',{name:'关闭导入',exact:true}).click()
+    await seed.goto(`${runtime.origin}/?reader=${encodeURIComponent(JSON.stringify({course:fixture.course,lesson:fixture.lesson}))}`)
+    await expect(seed.locator('.real-reader > h1')).toBeVisible()
+    await seed.getByRole('button',{name:'本节习题',exact:true}).click()
+    await seed.getByRole('dialog',{name:'本节习题',exact:true}).getByRole('button',{name:/五类参考练习/}).click()
+    await seed.getByRole('button',{name:'开始此练习',exact:true}).click()
+    await expect(seed.getByText('服务端作答已保存',{exact:true})).toBeVisible()
+    await seed.getByRole('button',{name:'提交本次练习',exact:true}).click()
+    await expect(seed.getByRole('heading',{name:'提交结果',exact:true})).toBeVisible()
+    await seed.locator('.practice-submit').scrollIntoViewIfNeeded()
+    await expect.poll(async () => {
+      const s = await seed.request.get('/api/v1/workbench/session').then(r=>r.json())
+      return s.tabs.find((t:any)=>t.id===s.active_tab_id)?.scroll_offset ?? 0
+    }).toBeGreaterThan(100)
+    mark('seed-session',await seed.request.get('/api/v1/workbench/session').then(r=>r.json()).then(s=>({revision:s.revision,tabs:s.tabs.length,offset:s.tabs.find((t:any)=>t.id===s.active_tab_id)?.scroll_offset})))
+    await runtime.closeBrowser()
+    browser = await playwright.chromium.launch({headless:true,executablePath:'/usr/bin/google-chrome'})
+    const context = await browser.newContext({baseURL:runtime.origin,viewport:{width:1440,height:900}}), page=await context.newPage()
+    let cleared=false, held=false
+    const gate = new Promise<void>(r=>release=r)
+    await page.exposeBinding('__observeBootstrap',(_,event)=>{mark('browser',event);if(event.kind==='storage-clear'){cleared=true;release()}})
+    await page.addInitScript(() => {
+      const emit=(data:unknown)=>{void (window as any).__observeBootstrap(data)}
+      const put=Storage.prototype.setItem, clear=Storage.prototype.clear
+      Storage.prototype.setItem=function(key,value){
+        if(this===localStorage&&key.includes('.pending-ui.')){try{const v=JSON.parse(value);emit({kind:'pending-write',revision:v.session?.revision,base:v.base?.revision,navigation:v.session?.navigation,tabs:v.session?.tabs?.length,offset:v.session?.tabs?.find((t:any)=>t.id===v.session?.active_tab_id)?.scroll_offset,stack:new Error().stack?.split('\n').slice(1,5).map(x=>x.replace(/http:\/\/127\.0\.0\.1:\d+/g,'<ORIGIN>'))})}catch{}}
+        return put.call(this,key,value)
+      }
+      Storage.prototype.clear=function(){const result=clear.call(this);if(this===localStorage)emit({kind:'storage-clear'});return result}
+    })
+    await page.route('**/api/v1/practice/sessions/*',async route=>{
+      if(route.request().method()==='GET'&&!held){held=true;const response=await route.fetch();mark('held-real-practice-response',{status:response.status()});await gate;await route.fulfill({response});mark('released-real-practice-response');return}
+      await route.continue()
+    })
+    await page.route('**/',async route=>{if(cleared&&route.request().isNavigationRequest()){mark('reload-document-start');await new Promise(r=>setTimeout(r,200));mark('reload-document-release')}await route.continue()})
+    page.on('response',async r=>{const p=new URL(r.url()).pathname;if(p==='/api/v1/workbench/session'){try{const s=await r.json();mark('workbench-response',{method:r.request().method(),status:r.status(),revision:s.revision,tabs:s.tabs?.length,error:s.error?.code})}catch{}}})
+    await runtime.authenticateOnly(page)
+    mark('initial-saved')
+    // Original helpers.ts:11-20 reset/clear/reload logic; only origin/bootstrap uses this isolated runtime.
+    await page.evaluate(async()=>{
+      const auth=await(await fetch('/api/v1/session')).json()
+      const current=await(await fetch('/api/v1/workbench/session')).json()
+      const session={revision:current.revision,course_ref:null,navigation:'route',tabs:[],active_tab_id:null,expanded_keys:[],directory_scroll:0,nav_width:300,agent_width:368,nav_collapsed:false,agent_collapsed:false}
+      const response=await fetch('/api/v1/workbench/session',{method:'PUT',headers:{'Content-Type':'application/json','X-CSRF-Token':auth.csrf_token},body:JSON.stringify({expected_revision:current.revision,session})})
+      if(!response.ok)throw new Error(`Reset failed ${response.status}`)
+      localStorage.clear()
+    })
+    mark('reset-clear-returned')
+    await page.reload()
+    await expect(page.getByText('✓ UI 会话已保存')).toBeVisible()
+  } finally {
+    release()
+    writeFileSync('<EVIDENCE_DIR>/controlled-ledger.json',JSON.stringify(ledger,null,2)+'\n')
+    await browser?.close();await runtime.close()
+    writeFileSync('<EVIDENCE_DIR>/cleanup.json',JSON.stringify({closed:true,owned_runtime:true,closed_at:new Date().toISOString()}))
+  }
+})

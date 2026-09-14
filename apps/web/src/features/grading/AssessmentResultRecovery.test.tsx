@@ -17,7 +17,8 @@ afterAll(() => { vi.restoreAllMocks(); Reflect.deleteProperty(HTMLDialogElement.
 test.each(['failed', 'cancelled'] as const)('a %s regrade retains the real previous score and allows a new explicit command with its grading revision', async status => {
   const id = `attempt_${status}`, previous = gradingResult(id)
   previous.status = 'graded'; previous.items[0] = { ...previous.items[0], status: 'graded', score: 0.5, feedback_markdown: '上一版冻结的合成复核依据' }
-  const pending: AssessmentGradingJob = { id: 'job_original', status, last_completed_result: previous }
+  previous.history[0].status = 'graded'; previous.history[0].items[0].status = 'graded'; previous.history[0].items[0].score = 0.5
+  const pending: AssessmentGradingJob = { id: 'job_original', status, last_completed_result: previous, history: previous.history, current_review_policy: previous.current_review_policy }
   const commands: RegradeRequest[] = []
   transport.mockImplementation(async (route: string, body: unknown) => {
     if (route.endsWith('/session')) return { workspace_id: 'workspace_original', role: 'author' }

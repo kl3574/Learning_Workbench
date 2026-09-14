@@ -1,0 +1,46 @@
+
+Running 2 tests using 1 worker
+
+(node:649914) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/e2e/grading-recovery.spec.ts:57:1 › a real failed regrade survives reload and can recover from the last actual grade without losing the old submission (7.0s)
+  ✘  2 tests/e2e/grading-restart.spec.ts:50:1 › real browser and API restarts preserve the submitted answers, signed review and both grading revisions (6.8s)
+
+
+  1) tests/e2e/grading-restart.spec.ts:50:1 › real browser and API restarts preserve the submitted answers, signed review and both grading revisions 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('原创软件测试答复；不表示真实学习效果。', { exact: true })
+    Expected: visible
+    Error: strict mode violation: getByText('原创软件测试答复；不表示真实学习效果。', { exact: true }) resolved to 2 elements:
+        1) <pre tabindex="0" aria-label="第 2 题已提交推导步骤">原创软件测试答复；不表示真实学习效果。</pre> aka getByLabel('第 2 题已提交推导步骤')
+        2) <p>原创软件测试答复；不表示真实学习效果。</p> aka getByRole('complementary', { name: 'Agent 助教' }).getByText('原创软件测试答复；不表示真实学习效果。')
+
+    Call log:
+      - Expect "toBeVisible" getByText('原创软件测试答复；不表示真实学习效果。', { exact: true }) with timeout 5000ms
+      - waiting for getByText('原创软件测试答复；不表示真实学习效果。', { exact: true })
+
+
+      132 |     await page.getByLabel('选择评分版本', { exact: true }).selectOption('1')
+      133 |     await page.getByRole('navigation', { name: '本次测试题目', exact: true }).getByRole('button', { name: /^第 2 题/ }).click()
+    > 134 |     await expect(page.getByText('原创软件测试答复；不表示真实学习效果。', { exact: true })).toBeVisible()
+          |                                                                          ^
+      135 |     await expect(page.getByLabel('选择评分版本', { exact: true })).toHaveValue('1')
+      136 |     const reviewUrl = page.url()
+      137 |     const database = runtime.databaseIdentity(), connection = firstBrowser.browser()
+        at <REPO>/tests/e2e/grading-restart.spec.ts:134:74
+
+    Error Context: ../../../../../tmp/m34-root-native-first/grading-restart-real-brows-e57f5--and-both-grading-revisions/error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../../../tmp/m34-root-native-first/grading-restart-real-brows-e57f5--and-both-grading-revisions/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../../../tmp/m34-root-native-first/grading-restart-real-brows-e57f5--and-both-grading-revisions/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    tests/e2e/grading-restart.spec.ts:50:1 › real browser and API restarts preserve the submitted answers, signed review and both grading revisions 
+  1 passed (14.2s)

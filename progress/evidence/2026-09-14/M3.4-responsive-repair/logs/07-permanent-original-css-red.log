@@ -1,0 +1,55 @@
+
+Running 1 test using 1 worker
+
+(node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/e2e/responsive-layout.spec.ts:43:1 › narrow layout and submitted explanation remain visible before React resize listeners run (9.4s)
+
+
+  1) tests/e2e/responsive-layout.spec.ts:43:1 › narrow layout and submitted explanation remain visible before React resize listeners run 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 390
+    Received: 0
+
+      63 |     await expect.poll(() => page.evaluate(() => (window as ObservedWindow).__layoutResizeGate.pending)).toBeGreaterThan(0)
+      64 |     await sample('narrow-before-listeners')
+    > 65 |     expect.soft(observations.at(-1)!.geometry.scroll.width).toBe(390)
+         |                                                             ^
+      66 |     await page.locator('.practice-submit').scrollIntoViewIfNeeded()
+      67 |     await sample('section-scrolled-before-listeners')
+      68 |     await expect(page.locator('.practice-submit > p')).toBeInViewport()
+        at <workspace>/tests/e2e/responsive-layout.spec.ts:65:61
+
+    Error: expect(locator).toBeInViewport() failed
+
+    Locator:  locator('.practice-submit > p')
+    Expected: in viewport
+    Received: viewport ratio 0
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toBeInViewport" locator('.practice-submit > p') with timeout 5000ms
+      - waiting for locator('.practice-submit > p')
+        14 × locator resolved to <p>已提交，作答已冻结。评分与人工复核使用独立版本。测试作答不可修改；本机候选单独保留。</p>
+           - unexpected value "viewport ratio 0"
+
+
+      70 |     await expect(page.locator('#nav-pane')).toBeHidden()
+      71 |     await sample('after-listeners')
+    > 72 |     await expect(page.locator('.practice-submit > p')).toBeInViewport()
+         |                                                        ^
+      73 |     expect(await page.locator('.assessment-scroll').evaluate(node => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1)
+      74 |   } finally {
+      75 |     await page.evaluate(() => (window as ObservedWindow).__layoutResizeGate.release())
+        at <workspace>/tests/e2e/responsive-layout.spec.ts:72:56
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../..<probe>/permanent-red-corrected/responsive-layout-narrow-l-bcc59--React-resize-listeners-run/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../..<probe>/permanent-red-corrected/responsive-layout-narrow-l-bcc59--React-resize-listeners-run/error-context.md
+
+  1 failed
+    tests/e2e/responsive-layout.spec.ts:43:1 › narrow layout and submitted explanation remain visible before React resize listeners run 

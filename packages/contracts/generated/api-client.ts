@@ -1,6 +1,6 @@
 // Generated from PRODUCT_DESIGN.md v3.0.0 and actual runtime OpenAPI; do not edit.
 // spec_sha256: ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c
-import type { AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, BlockReadResponse, BootstrapRequest, BootstrapResponse, ContentRef, Course, DirectorySearchResponse, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, OutlineResponse, PageAssessment, PageCourse, PageNote, PagePracticeSet, PageRevision, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ReadinessResponse, RegradeRequest, ResponsesWrite, RoleRequest, SessionResponse, SourceResponse, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
+import type { AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, BlockReadResponse, BootstrapRequest, BootstrapResponse, ContentRef, Course, DirectorySearchResponse, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, OutlineResponse, PageAssessment, PageCourse, PageEvidence, PageNote, PagePracticeSet, PageRevision, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ReadinessResponse, RegradeRequest, ResponsesWrite, RoleRequest, SessionResponse, SourceResponse, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
 
 export interface ApiEndpointMap {
   "GET /api/v1/artifacts/{id}/download": { request: undefined; response: Blob; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
@@ -27,6 +27,7 @@ export interface ApiEndpointMap {
   "GET /api/v1/jobs/{id}": { request: undefined; response: JobSnapshot; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
   "POST /api/v1/jobs/{id}/cancel": { request: JobCancelRequest; response: JobSnapshot; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
   "POST /api/v1/learning/actions": { request: LearningActionRequest; response: LearningActionResponse; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
+  "GET /api/v1/learning/evidence": { request: undefined; response: PageEvidence; headers: null; parameters: { query?: { "concept_id"?: (string | null); "cursor"?: (string | null); "limit"?: number; "skill"?: ("recall" | "explain" | "compute" | "derive" | "transfer" | null) } }; parametersRequired: false };
   "GET /api/v1/learning/progress": { request: undefined; response: LearningProgress; headers: null; parameters: { query?: { "course_id"?: (string | null) } }; parametersRequired: false };
   "GET /api/v1/lessons/{id}": { request: undefined; response: Lesson; headers: null; parameters: { path: { "id": string }; query: { "revision": number } }; parametersRequired: true };
   "GET /api/v1/notes": { request: undefined; response: PageNote; headers: null; parameters: { query?: { "cursor"?: (string | null); "limit"?: number; "ref_id"?: (string | null) } }; parametersRequired: false };
@@ -495,6 +496,38 @@ export const API_ENDPOINTS = {
     "multipartFields": [],
     "pathParameters": [],
     "queryParameters": []
+  },
+  "GET /api/v1/learning/evidence": {
+    "method": "GET",
+    "path": "/api/v1/learning/evidence",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
+    "queryParameters": [
+      {
+        "name": "concept_id",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "name": "cursor",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      },
+      {
+        "name": "skill",
+        "required": false,
+        "type": "string"
+      }
+    ]
   },
   "GET /api/v1/learning/progress": {
     "method": "GET",

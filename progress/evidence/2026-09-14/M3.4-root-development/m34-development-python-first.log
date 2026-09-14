@@ -1,0 +1,42 @@
+.F...................................................................... [  7%]
+........................................................................ [ 15%]
+........................................................................ [ 23%]
+........................................................................ [ 30%]
+........................................................................ [ 38%]
+........................................................................ [ 46%]
+........................................................................ [ 53%]
+........................................................................ [ 61%]
+........................................................................ [ 69%]
+........................................................................ [ 76%]
+........................................................................ [ 84%]
+........................................................................ [ 92%]
+........................................................................ [100%]
+=================================== FAILURES ===================================
+_____ test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec _____
+
+    def test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec():
+        application = create_app()
+        api = application.openapi()
+        runtime = {(method, context.path) for context in iter_route_contexts(application.routes)
+                   if isinstance(context.original_route, APIRoute) for method in context.methods}
+        projection = {(method.upper(), path) for path, methods in api["paths"].items() for method in methods if method in HTTP_METHODS}
+        assert runtime == projection
+        assert projection <= SPEC_ROUTES
+>       assert len(projection) == 50
+E       AssertionError: assert 51 == 50
+E        +  where 51 = len({('DELETE', '/api/v1/notes/{id}'), ('GET', '/api/v1/artifacts/{id}/download'), ('GET', '/api/v1/assessments'), ('GET', '/api/v1/attempts/{id}'), ('GET', '/api/v1/attempts/{id}/responses'), ('GET', '/api/v1/attempts/{id}/result'), ...})
+
+tests/contract/test_api_projection.py:34: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <REPO>/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <REPO>/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/contract/test_api_projection.py::test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec
+1 failed, 935 passed, 2 warnings in 136.40s (0:02:16)

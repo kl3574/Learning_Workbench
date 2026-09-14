@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { expect, test, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
-import type { AssessmentGradingResult, AttemptSnapshot, RegradeRequest } from '../../packages/contracts/generated/api-types'
+import type { AssessmentGradingResult, AttemptSnapshot, PageEvidence, RegradeRequest } from '../../packages/contracts/generated/api-types'
 import { originalAssessmentPackage, importAssessmentPackage } from './assessmentTestData'
 import { RestartRuntime } from './restartRuntime'
 
@@ -110,12 +110,30 @@ test('real browser and API restarts preserve the submitted answers, signed revie
     expect(secondGrade.manual_reviews[0].signature).toMatch(/^[0-9a-f]{64}$/)
     // Manual assessment scoring does not approve the standard answer content.
     expect(secondGrade.solution_reviews.every(item => item.review_status === 'needs_review')).toBe(true)
-    expect(secondGrade.eligibility_status).toBe('not_evaluated')
+    expect(secondGrade.eligibility_status).toBe('evaluated')
+    expect(secondGrade.history.map(value => value.grading_revision)).toEqual([1, 2])
+    expect(secondGrade.history.every(value => value.items.every(item => !item.eligible && item.reason_codes.includes('ANSWER_UNREVIEWED')))).toBe(true)
+    const evidenceResponse = await page.request.get('/api/v1/learning/evidence')
+    expect(evidenceResponse.status()).toBe(200)
+    const evidence: PageEvidence = await evidenceResponse.json()
+    expect(evidence.items).toHaveLength(fixture.questions.length)
+    expect(new Set(evidence.items.map(item => item.id))).toEqual(new Set(secondGrade.history[1].items.flatMap(item => item.evidence_ids)))
+    expect(evidence.items.every(item => !item.eligible)).toBe(true)
     const history = immutableHistory(runtime, created.id)
     expect(history.map(item => item.revision)).toEqual([1, 2])
     expect(history[0]).toEqual(beforeHistory[0])
     const submitted = await (await page.request.get(`/api/v1/attempts/${created.id}`)).json()
     const frozenResponses = await (await page.request.get(`/api/v1/attempts/${created.id}/responses`)).json()
+    // Explicitly choose an older real version in a separate review tab. This
+    // persists a UI choice; the original server submission remains immutable.
+    await page.getByRole('button', { name: '打开本次测试复盘', exact: true }).click()
+    await expect(page.getByRole('heading', { name: '本次测试复盘', exact: true })).toBeVisible()
+    await expect(page.getByLabel('选择评分版本', { exact: true })).toHaveValue('2')
+    await page.getByLabel('选择评分版本', { exact: true }).selectOption('1')
+    await page.getByRole('navigation', { name: '本次测试题目', exact: true }).getByRole('button', { name: /^第 2 题/ }).click()
+    await expect(page.getByLabel('第 2 题已提交推导步骤', { exact: true })).toHaveText('原创软件测试答复；不表示真实学习效果。')
+    await expect(page.getByLabel('选择评分版本', { exact: true })).toHaveValue('1')
+    const reviewUrl = page.url()
     const database = runtime.databaseIdentity(), connection = firstBrowser.browser()
     await runtime.closeBrowser()
     expect(connection?.isConnected()).toBe(false)
@@ -124,8 +142,13 @@ test('real browser and API restarts preserve the submitted answers, signed revie
     const restoredBrowser = await runtime.openBrowser(playwright.chromium), restored = restoredBrowser.pages()[0]
     restored.on('pageerror', error => errors.push(error.message))
     await runtime.authenticateOnly(restored)
+    await restored.goto(reviewUrl)
+    await expect(restored.getByRole('heading', { name: '本次测试复盘', exact: true })).toBeVisible()
+    await expect(restored.getByLabel('选择评分版本', { exact: true })).toHaveValue('1')
+    await expect(restored.getByLabel('第 2 题已提交推导步骤', { exact: true })).toHaveText('原创软件测试答复；不表示真实学习效果。')
     const readback = await finalized(restored, created.id, 2)
     expect(readback).toEqual(secondGrade)
+    expect(await (await restored.request.get('/api/v1/learning/evidence')).json()).toEqual(evidence)
     expect(await (await restored.request.get(`/api/v1/attempts/${created.id}`)).json()).toEqual(submitted)
     expect(await (await restored.request.get(`/api/v1/attempts/${created.id}/responses`)).json()).toEqual(frozenResponses)
     await becomeAuthor(restored, runtime.origin, 'restored-author')
@@ -140,7 +163,8 @@ test('real browser and API restarts preserve the submitted answers, signed revie
       distinct_api_processes: new Set(runtime.generations).size, grading_history: history,
       unknown_initial_scores_preserved: true, first_revision_unchanged: true, signed_review_unchanged: true,
       repeated_review_returned_original_job: true, submitted_responses_unchanged: true,
-      actual_human_math_approval: 'NOT_RUN', learning_evidence_eligibility: 'not_evaluated', runtime_errors: errors,
+      actual_human_math_approval: 'NOT_RUN', learning_evidence_eligibility: 'evaluated_all_unreviewed_excluded',
+      full_history_and_current_evidence_unchanged: true, selected_historical_review_restored: 1, runtime_errors: errors,
     }, null, 2))
   } finally { await runtime.close() }
 })

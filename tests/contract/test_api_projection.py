@@ -31,8 +31,8 @@ def test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec():
     projection = {(method.upper(), path) for path, methods in api["paths"].items() for method in methods if method in HTTP_METHODS}
     assert runtime == projection
     assert projection <= SPEC_ROUTES
-    assert len(projection) == 50
-    assert len(SPEC_ROUTES - projection) == 52
+    assert len(projection) == 51
+    assert len(SPEC_ROUTES - projection) == 51
 
 
 OPERATIONS = [(path, method, operation) for path, methods in create_app().openapi()["paths"].items()

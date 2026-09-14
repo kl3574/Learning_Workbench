@@ -1,0 +1,47 @@
+..........F.....                                                         [100%]
+=================================== FAILURES ===================================
+_ test_corrupt_legacy_grade_is_quarantined_without_starving_valid_grade_or_safe_import _
+
+tmp_path = PosixPath('/tmp/pytest-of-lkx/pytest-170/test_corrupt_legacy_grade_is_q0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x74f61370f8c0>
+
+    def test_corrupt_legacy_grade_is_quarantined_without_starving_valid_grade_or_safe_import(tmp_path, monkeypatch):
+        storage, old, _, active, _, _ = legacy_storage(tmp_path, monkeypatch)
+        database, identity, _, assessment = storage
+        with database.transaction() as connection:
+            connection.execute("UPDATE outbox SET payload_json='{}' WHERE event_type='assessment.grading.requested' AND json_extract(payload_json,'$.attempt_id')=?", (old.id,))
+        valid = assessment.submit(identity, active.id, dm.AttemptSubmit(expected_revision=1), 'new-valid')
+        ingestion = ImportService(database)
+>       staged = ingestion.stage(identity, data=b'# Safe original text\n\nRetained.', filename='valid.txt', kind='txt', key='safe-import')
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_learning_evidence.py:335: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.application.imports.ImportService object at 0x74f612b41d30>
+identity = SessionIdentity(id='session_legacy_fixture', workspace_id='workspace_e81221d0efa94c47874ce92eccf75dcd', role='learner', csrf_token='unused', expires_at='2099-01-01T00:00:00Z')
+data = b'# Safe original text\n\nRetained.', filename = 'valid.txt'
+kind = 'txt', target_course_id = None, key = 'safe-import'
+
+    def stage(self, identity: SessionIdentity, *, data: bytes, filename: str, kind: str,
+              target_course_id: str | None = None, key: str | None) -> ImportStaged:
+        if type(data) is not bytes or not data or len(data) > self.database.settings.max_upload_bytes:
+            raise ApiError(413, "IMPORT_SIZE_INVALID", "原件必须非空且不超过配置的大小预算。")
+        if kind not in {"auto", "markdown", "text", "html", "pdf", "docx", "learnpack"}:
+>           raise invalid()
+E           services.api.app.application.errors.ApiError: (422, 'SCHEMA_INVALID', '导入请求或存储格式无效。')
+
+services/api/app/application/imports.py:91: ApiError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <REPO>/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <REPO>/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_learning_evidence.py::test_corrupt_legacy_grade_is_quarantined_without_starving_valid_grade_or_safe_import
+1 failed, 15 passed, 2 warnings in 6.37s

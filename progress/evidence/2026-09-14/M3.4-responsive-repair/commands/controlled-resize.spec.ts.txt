@@ -1,0 +1,112 @@
+import { writeFileSync } from 'node:fs'
+import { expect, test as base, type Page } from '<exact-checkout>/apps/web/node_modules/@playwright/test/index.mjs'
+import { RestartRuntime } from '<exact-checkout>/tests/e2e/restartRuntime.ts'
+import { importAssessmentPackage, originalAssessmentPackage, type AssessmentPackage } from '<exact-checkout>/tests/e2e/assessmentTestData.ts'
+import type { AssessmentGradingResult, AttemptSnapshot, AttemptResponses } from '<exact-checkout>/packages/contracts/generated/api-types.ts'
+const test = base.extend<{ runtime: RestartRuntime }>({
+  runtime: async ({}, use) => { const runtime = await RestartRuntime.start(); try { await use(runtime) } finally { await runtime.close() } },
+  page: async ({ runtime, playwright }, use) => { const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]; await page.addInitScript(() => {
+    const add = window.addEventListener.bind(window), remove = window.removeEventListener.bind(window), wrappers = new WeakMap<EventListenerOrEventListenerObject, EventListener>(); const pending: (() => void)[] = []
+    const gate = { hold: false, release: () => { gate.hold = false; for (const run of pending.splice(0)) run() } }; (window as unknown as { __resizeGate: typeof gate }).__resizeGate = gate
+    window.addEventListener = ((type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions) => { if (type !== 'resize' || !listener) return add(type, listener, options); const wrapper: EventListener = event => { const run = () => typeof listener === 'function' ? listener.call(window, event) : listener.handleEvent(event); if (gate.hold) pending.push(run); else run() }; wrappers.set(listener, wrapper); return add(type, wrapper, options) }) as typeof window.addEventListener
+    window.removeEventListener = ((type: string, listener: EventListenerOrEventListenerObject, options?: boolean | EventListenerOptions) => remove(type, wrappers.get(listener) ?? listener, options)) as typeof window.removeEventListener
+  }); await runtime.authenticateOnly(page); await use(page) },
+})
+async function preview(page: Page, prefix: string, profile: AssessmentPackage['profile'] = 'author') {
+  const fixture = originalAssessmentPackage(prefix, profile)
+  const imported = await importAssessmentPackage(page, fixture)
+  await imported.dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
+  await page.goto(`${new URL(page.url()).origin}/?reader=${encodeURIComponent(JSON.stringify({ course: fixture.course, lesson: fixture.lesson }))}`)
+  await expect(page.locator('.real-reader > h1')).toBeVisible()
+  await page.getByRole('navigation', { name: '学习主导航', exact: true }).getByRole('button', { name: '测试题', exact: true }).click()
+  const entry = page.locator('.assessment-directory details').first()
+  await entry.locator('summary').click()
+  await entry.getByRole('button', { name: /^查看测试范围：/ }).click()
+  await expect(page.getByRole('heading', { name: '范围与内容状态', exact: true })).toBeVisible()
+  return fixture
+}
+async function start(page: Page, prefix: string, mode: 'independent' | 'open_book' | 'assisted' = 'independent') {
+  const fixture = await preview(page, prefix)
+  return begin(page, fixture, mode)
+}
+async function begin(page: Page, fixture: AssessmentPackage, mode: 'independent' | 'open_book' | 'assisted' = 'independent') {
+  await page.getByRole('radio', { name: { independent: '独立测试', open_book: '开卷测试', assisted: '辅助测试' }[mode], exact: true }).check()
+  await page.getByRole('checkbox', { name: '我已核对内容状态与模式，确认开始未评分测试', exact: true }).check()
+  const creating = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith(`/assessments/${fixture.assessment.id}/attempts`))
+  await page.getByRole('button', { name: '明确开始本次测试', exact: true }).click()
+  const response = await creating; expect(response.status()).toBe(201)
+  const attempt: AttemptSnapshot = await response.json()
+  await saved(page)
+  return { fixture, attempt }
+}
+async function saved(page: Page) { await expect(page.getByText('服务端作答已保存', { exact: true })).toBeVisible(); await expect(page.getByText('本机草稿存储可用', { exact: true })).toBeVisible() }
+async function question(page: Page, index: number) { await page.getByRole('navigation', { name: '本次测试题目', exact: true }).getByRole('button', { name: new RegExp(`^第 ${index} 题`) }).click() }
+async function snapshot(page: Page, id: string): Promise<AttemptSnapshot> { const response = await page.request.get(`/api/v1/attempts/${id}`); expect(response.status()).toBe(200); return response.json() }
+async function responses(page: Page, id: string): Promise<AttemptResponses> { const response = await page.request.get(`/api/v1/attempts/${id}/responses`); expect(response.status()).toBe(200); return response.json() }
+
+test('real unreviewed independent assessment saves five types and submits without fabricated grades or answer calls', async ({ page }, info) => {
+  const errors: string[] = [], answers: string[] = [], resultReads: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  page.on('request', request => { if (/\/(solutions|grades)(?:\?|$)/.test(request.url())) answers.push(request.url()); if (/\/result(?:\?|$)/.test(request.url())) resultReads.push(request.url()) })
+  const { attempt, fixture } = await start(page, 'nativeassessmentall')
+  expect(attempt.preflight.grading.needs_review_count).toBe(5); expect(attempt.grading_status).toBe('not_graded'); expect(attempt.deadline_at).toBeNull()
+  expect(attempt.policy).toMatchObject({ mode: 'independent', tutor_scope: 'operation_help_only', allow_web: false, allow_materials: false })
+  await expect(page.getByRole('heading', { name: 'Agent · 固定操作帮助', exact: true })).toBeVisible()
+  await expect(page.getByLabel('问题草稿', { exact: true })).toHaveCount(0)
+  await page.getByRole('radio', { name: '4', exact: true }).focus()
+  await page.keyboard.press('ArrowDown')
+  await expect(page.getByRole('radio', { name: '5', exact: true })).toBeChecked()
+  for (const [index, answer] of [[2, '测试加法'], [3, '0.5 m'], [4, '2+3=5'], [5, 'x+x']] as const) {
+    await question(page, index); await page.getByLabel(`第 ${index} 题答案`, { exact: true }).fill(answer)
+    await page.getByLabel(`第 ${index} 题推导步骤`, { exact: true }).fill(`测试合成步骤 ${index} 🧠 é`)
+  }
+  await saved(page)
+  const before = await responses(page, attempt.id)
+  expect(before.responses.map(item => item.question_id).sort()).toEqual(fixture.questions.map(ref => ref.id).sort())
+  await page.reload(); await saved(page)
+  await expect(page.getByLabel('第 5 题答案', { exact: true })).toHaveValue('x+x')
+  await expect(page.getByLabel('第 5 题推导步骤', { exact: true })).toBeFocused()
+  await question(page, 1)
+  await expect(page.locator('.practice-stem svg').first()).toBeVisible()
+  await page.screenshot({ path: info.outputPath('assessment-independent-active-1440.png') })
+  expect(resultReads).toEqual([])
+  await page.getByRole('button', { name: '提交本次测试', exact: true }).click()
+  const sending = page.waitForResponse(value => value.url().endsWith(`/attempts/${attempt.id}/submit`))
+  await page.getByRole('dialog', { name: '确认提交测试', exact: true }).getByRole('button', { name: '确认提交已保存作答', exact: true }).click()
+  expect((await sending).status()).toBe(202)
+  await expect(page.getByRole('heading', { name: '测试结束状态', exact: true })).toBeVisible()
+  await expect.poll(async () => (await snapshot(page, attempt.id)).status).toBe('needs_review')
+  const ended = await snapshot(page, attempt.id)
+  expect(ended.grading_status).toBe('needs_review'); expect(ended.submitted_at).not.toBeNull()
+  const resultResponse = await page.request.get(`/api/v1/attempts/${attempt.id}/result`); expect(resultResponse.status()).toBe(200)
+  const result: AssessmentGradingResult = await resultResponse.json()
+  expect(result.status).toBe('needs_review'); expect(result.items).toHaveLength(5); expect(result.items.every(item => item.score === null && item.solution_markdown == null)).toBe(true)
+  expect((await responses(page, attempt.id)).responses).toEqual(before.responses)
+  await expect(page.getByRole('radio', { name: '5', exact: true })).toBeDisabled()
+  expect(answers).toEqual([])
+  await page.evaluate(() => {
+    const ledger: unknown[] = [], ids = new WeakMap<Element, number>(); let nextId = 1, frame = 0
+    const rect = (element: Element | null) => { if (!element) return null; if (!ids.has(element)) ids.set(element, nextId++); const r = element.getBoundingClientRect(), style = getComputedStyle(element); return { node: ids.get(element), x: r.x, y: r.y, width: r.width, height: r.height, bottom: r.bottom, overflowY: style.overflowY, display: style.display, position: style.position, marginTop: style.marginTop, scrollHeight: element.scrollHeight, clientHeight: element.clientHeight, scrollTop: element.scrollTop } }
+    const sample = (reason: string) => ledger.push({ reason, time: performance.now(), viewport: [innerWidth, innerHeight], documentScrollTop: document.documentElement.scrollTop, scroll: rect(document.querySelector('.assessment-scroll')), section: rect(document.querySelector('.practice-submit')), paragraph: rect(document.querySelector('.practice-submit > p')), heading: rect(document.querySelector('.practice-submit > h2')), main: rect(document.querySelector('.reader-main')), grading: rect(document.querySelector('.assessment-result')), currentGrading: document.querySelector('.grading-summary > h2')?.textContent ?? null, activeElement: document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.tagName })
+    const state = { ledger, sample, stop: () => {} }; (window as unknown as { __submitViewport: typeof state }).__submitViewport = state
+    const observer = new MutationObserver(() => sample('mutation')); observer.observe(document.querySelector('.assessment-content')!, { childList: true, subtree: true, attributes: true })
+    const intersection = new IntersectionObserver(values => ledger.push({ reason: 'intersection', time: performance.now(), ratios: values.map(value => ({ node: ids.get(value.target), ratio: value.intersectionRatio, intersecting: value.isIntersecting })) }), { threshold: [0, 0.001, 0.5, 1] }); intersection.observe(document.querySelector('.practice-submit > p')!)
+    const scrolling = () => sample('scroll'); document.querySelector('.assessment-scroll')!.addEventListener('scroll', scrolling)
+    const focus = () => sample('focus'); document.addEventListener('focusin', focus)
+    const resized = () => sample('resize'); window.addEventListener('resize', resized)
+    let stopped = false; const tick = () => { if (stopped || frame++ > 450) return; sample('raf'); requestAnimationFrame(tick) }; requestAnimationFrame(tick)
+    state.stop = () => { stopped = true; observer.disconnect(); intersection.disconnect(); document.querySelector('.assessment-scroll')?.removeEventListener('scroll', scrolling); document.removeEventListener('focusin', focus); window.removeEventListener('resize', resized) }; sample('before-viewport')
+  })
+  await page.evaluate(() => { (window as unknown as { __resizeGate: { hold: boolean } }).__resizeGate.hold = true }); await page.setViewportSize({ width: 390, height: 844 })
+  await page.evaluate(() => (window as unknown as { __submitViewport: { sample: (reason: string) => void } }).__submitViewport.sample('after-viewport-before-scroll'))
+  await page.locator('.practice-submit').scrollIntoViewIfNeeded()
+  await page.evaluate(() => (window as unknown as { __submitViewport: { sample: (reason: string) => void } }).__submitViewport.sample('after-section-scroll'))
+  await page.evaluate(() => { (window as unknown as { __resizeGate: { release: () => void } }).__resizeGate.release() }); try { await expect(page.locator('.practice-submit > p')).toBeInViewport() } finally {
+    const observed = await page.evaluate(() => { const value = (window as unknown as { __submitViewport: { sample: (reason: string) => void; stop: () => void; ledger: unknown[] } }).__submitViewport; value.sample('after-original-assertion'); value.stop(); return value.ledger })
+    writeFileSync(info.outputPath('geometry-ledger.json'), JSON.stringify(observed, null, 2)); await page.screenshot({ path: info.outputPath('actual-390-at-assertion.png') })
+  }
+  expect(await page.locator('.assessment-scroll').evaluate(node => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+  await page.screenshot({ path: info.outputPath('assessment-submitted-390.png') })
+  expect(errors).toEqual([])
+})

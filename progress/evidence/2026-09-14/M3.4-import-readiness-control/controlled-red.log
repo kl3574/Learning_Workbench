@@ -1,0 +1,28 @@
+
+Running 1 test using 1 worker
+
+(node:655692) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 ../m33-import-recovery-probe/controlled-red.spec.ts:65:1 › a reselected failed original survives a role-policy pause in memory while decoded text must be checked again (13.6s)
+
+
+  1) ../m33-import-recovery-probe/controlled-red.spec.ts:65:1 › a reselected failed original survives a role-policy pause in memory while decoded text must be checked again 
+
+    TimeoutError: locator.click: Timeout 10000ms exceeded.
+    Call log:
+      - waiting for getByRole('dialog', { name: '导入', exact: true }).getByRole('button', { name: '恢复 import_82cb681ae11248fa8312369e1a1417d2', exact: true })
+
+
+      100 |   await page.getByRole('button', { name: '导入', exact: true }).click()
+      101 |   dialog = page.getByRole('dialog', { name: '导入', exact: true })
+    > 102 |   await dialog.getByRole('button', { name: `恢复 ${receipt.import_id}`, exact: true }).click()
+          |                                                                                      ^
+      103 |   await expect(dialog.getByRole('button', { name: '严格解码并预览', exact: true })).toBeDisabled()
+      104 |   await dialog.getByLabel('重新选择原始文件').setInputFiles({ name: 'reselected-original.txt', mimeType: 'text/plain', buffer: bytes })
+      105 |   await dialog.getByLabel('原件文本编码').selectOption('gb18030')
+        at /tmp/m33-import-recovery-probe/controlled-red.spec.ts:102:86
+
+    Error Context: ../m33-import-recovery-probe/controlled-red-results/controlled-red-a-reselecte-5d9f5--text-must-be-checked-again/error-context.md
+
+  1 failed
+    ../m33-import-recovery-probe/controlled-red.spec.ts:65:1 › a reselected failed original survives a role-policy pause in memory while decoded text must be checked again 
