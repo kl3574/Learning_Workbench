@@ -2,7 +2,7 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-14T10:20:36Z；规范 SHA-256：`ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
+更新：2026-09-14T10:25:16Z；规范 SHA-256：`ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED
 实施：IN_PROGRESS；当前任务：None；下一任务：M2.2
@@ -49,7 +49,7 @@ M0、M1、M2.1已本地验证并待PR审查。接续M2.2：导入暂存、预览
 - real_provider: NOT_RUN
 - real_codex: NOT_RUN
 - learning_effectiveness: NOT_RUN
-- ci: NOT_RUN_M2_1_YET
+- ci: PASS_M2_1_PR_HEAD_844636c
 
 ## 阻塞与待决项
 
