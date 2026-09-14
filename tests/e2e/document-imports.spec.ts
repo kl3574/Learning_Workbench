@@ -34,6 +34,8 @@ async function candidate(page: Page, containing: string) {
   const dialog = dialogFor(page)
   await expect(dialog.getByText('预览已就绪，等待确认', { exact: true })).toBeVisible()
   const selector = dialog.getByLabel('选择预览候选')
+  await expect(selector).toBeVisible()
+  await expect(selector.locator('option').first()).toBeAttached()
   const ids = await selector.locator('option').evaluateAll(options => options.map(option => (option as HTMLOptionElement).value))
   for (const id of ids) {
     const response = await page.request.get(`/api/v1/drafts/${id}`)
@@ -46,6 +48,21 @@ async function candidate(page: Page, containing: string) {
     return value as DraftSnapshot & { payload: Extract<DraftSnapshot['payload'], { metadata: unknown }> }
   }
   throw new Error(`No actual candidate contained the expected original marker: ${containing}`)
+}
+async function changeRole(page: Page, role: 'learner' | 'author') {
+  const dialog = dialogFor(page)
+  const response = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith('/api/v1/session/role'))
+  await dialog.getByRole('button', { name: role === 'learner' ? '切换为学习者角色' : '切换为作者角色', exact: true }).click()
+  const changed = await response
+  expect(changed.status()).toBe(200)
+  expect((await changed.json()).role).toBe(role)
+  await expect(dialog.getByText(role === 'learner' ? '操作角色：学习者' : '操作角色：作者')).toBeVisible()
+  // The previous role can still display "preview ready" while its POST is in
+  // flight. Wait for that role's refresh to finish before snapshotting options.
+  await expect(dialog.getByRole('button', { name: role === 'learner' ? '切换为作者角色' : '切换为学习者角色', exact: true })).toBeEnabled()
+  await expect(dialog.getByText('预览已就绪，等待确认', { exact: true })).toBeVisible()
+  await expect(dialog.getByLabel('选择预览候选')).toBeVisible()
+  await expect(dialog.getByLabel('选择预览候选').locator('option').first()).toBeAttached()
 }
 async function downloadBytes(download: Download) {
   const stream = await download.createReadStream()
@@ -131,13 +148,44 @@ test('real DOCX safe text stays readable for learner while original bytes requir
   expect(externalRequests).toEqual([])
   await acceptWarnings(page)
   await expect(dialog.getByRole('button', { name: '确认导入当前候选' })).toBeEnabled()
-  await dialog.getByRole('button', { name: '切换为作者角色', exact: true }).click()
-  await expect(dialog.getByText('操作角色：作者')).toBeVisible()
+  await changeRole(page, 'author')
   await candidate(page, 'DOCX paragraph alpha')
   const download = page.waitForEvent('download')
   await dialog.getByRole('button', { name: '下载受控原件' }).click()
   expect(await downloadBytes(await download)).toEqual(bytes)
-  await dialog.getByRole('button', { name: '切换为学习者角色', exact: true }).click()
+  let releaseRole!: () => void
+  let releaseRefresh!: () => void
+  let roleReached!: () => void
+  const roleReply = new Promise<void>(resolve => { releaseRole = resolve })
+  const refreshReply = new Promise<void>(resolve => { releaseRefresh = resolve })
+  const roleOnServer = new Promise<void>(resolve => { roleReached = resolve })
+  await page.route('**/api/v1/session/role', async route => {
+    const response = await route.fetch()
+    roleReached(); await roleReply
+    await route.fulfill({ response })
+  })
+  await page.route(`**/api/v1/imports/${staged.import_id}`, async route => { await refreshReply; await route.continue() })
+  let roleReady = false
+  const switching = changeRole(page, 'learner').then(() => { roleReady = true })
+  try {
+    await roleOnServer
+    // Reproduce both transition windows without changing any parser response:
+    // old preview before role acknowledgement, then no options during refresh.
+    await expect(dialog.getByText('操作角色：作者')).toBeVisible()
+    await expect(dialog.getByText('预览已就绪，等待确认', { exact: true })).toBeVisible()
+    expect(roleReady).toBe(false)
+    releaseRole()
+    await expect(dialog.getByText('操作角色：学习者')).toBeVisible()
+    await expect(dialog.getByLabel('选择预览候选')).toHaveCount(0)
+    const actual = await page.request.get(`/api/v1/imports/${staged.import_id}`)
+    expect(actual.status()).toBe(200)
+    expect((await actual.json()).preview_refs).toEqual(preview.preview_refs)
+    expect(roleReady).toBe(false)
+  }
+  finally { releaseRole(); releaseRefresh() }
+  await switching
+  await page.unrouteAll({ behavior: 'wait' })
+  await expect(dialog.getByLabel('选择预览候选').locator('option')).toHaveCount(preview.preview_refs.length)
   await candidate(page, 'DOCX paragraph alpha')
   await expect(dialog.getByRole('button', { name: '下载受控原件' })).toHaveCount(0)
   await page.setViewportSize({ width: 390, height: 844 })
