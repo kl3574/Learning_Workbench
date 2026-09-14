@@ -1,0 +1,32 @@
+.....................................................F.................. [ 83%]
+..............                                                           [100%]
+=================================== FAILURES ===================================
+__ test_invalid_numeric_inputs_are_retained_but_not_executed_or_scored[0x10] ___
+
+answer = '0x10'
+
+    @pytest.mark.parametrize("answer", ["NaN", "sNaN", "Infinity", "-Infinity", "1e1001", "1e-1001", "1e999999999",
+        "__import__('os').system('false')", "sqrt(2)", "1/2", "2+2", "1,000", "0x10", "١", "1\n2"])
+    def test_invalid_numeric_inputs_are_retained_but_not_executed_or_scored(answer):
+        value = grade_item(**inputs(answer=answer))
+>       assert_review(value, "input_invalid_numeric", invalid=True)
+
+tests/unit/test_grading_rules.py:117: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+value = RuleDecision(item_grade=ItemGrade(question_ref=ContentRef(entity='question', id='question_rule_synthetic', revision=1,... base-unit comparison', normalized_answer=None, normalized_accepted=[], numeric=None, steps_assessment='not_assessed'))
+code = 'input_invalid_numeric', invalid = True
+
+    def assert_review(value, code, *, invalid=False):
+        assert value.item_grade.status == "needs_review"
+        assert value.item_grade.score is None
+>       assert value.private_trace.reason_codes == [code]
+E       AssertionError: assert ['unit_unsupported'] == ['input_invalid_numeric']
+E         
+E         At index 0 diff: 'unit_unsupported' != 'input_invalid_numeric'
+E         Use -v to get more diff
+
+tests/unit/test_grading_rules.py:40: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_grading_rules.py::test_invalid_numeric_inputs_are_retained_but_not_executed_or_scored[0x10]
+1 failed, 85 passed in 0.13s

@@ -1,0 +1,146 @@
+import { execFileSync } from 'node:child_process'
+import { writeFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { expect, test, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
+import type { AssessmentGradingResult, AttemptSnapshot, RegradeRequest } from '../../packages/contracts/generated/api-types'
+import { originalAssessmentPackage, importAssessmentPackage } from './assessmentTestData'
+import { RestartRuntime } from './restartRuntime'
+
+const root = resolve(import.meta.dirname, '../..')
+
+async function mutationHeaders(page: Page, origin: string, key: string) {
+  const current = await page.request.get('/api/v1/session')
+  expect(current.status()).toBe(200)
+  const session = await current.json()
+  return { Origin: origin, 'X-CSRF-Token': session.csrf_token as string, 'Idempotency-Key': key }
+}
+
+async function becomeAuthor(page: Page, origin: string, key: string) {
+  const response = await page.request.post('/api/v1/session/role', {
+    headers: await mutationHeaders(page, origin, key), data: { role: 'author' },
+  })
+  expect(response.status()).toBe(200)
+}
+
+async function finalized(page: Page, id: string, revision: number): Promise<AssessmentGradingResult> {
+  let result: AssessmentGradingResult | undefined
+  await expect.poll(async () => {
+    const response = await page.request.get(`/api/v1/attempts/${id}/result`)
+    if (response.status() === 202) return 0
+    expect(response.status()).toBe(200)
+    result = await response.json()
+    return result!.grading_revision
+  }, { message: 'Wait for the actual persisted grading worker result' }).toBe(revision)
+  return result!
+}
+
+/** Read only hashes/counts of this harness-owned synthetic DB; never change content approval. */
+function immutableHistory(runtime: RestartRuntime, id: string) {
+  const script = [
+    'import hashlib,json,sqlite3,sys',
+    'from pathlib import Path',
+    'd=sqlite3.connect(Path(sys.argv[1]).as_uri()+"?mode=ro",uri=True)',
+    'rows=d.execute("SELECT grading_revision,result_json FROM grades WHERE attempt_id=? ORDER BY grading_revision",(sys.argv[2],)).fetchall()',
+    'print(json.dumps([{"revision":r[0],"sha256":hashlib.sha256(r[1].encode()).hexdigest()} for r in rows]))',
+  ].join('\n')
+  return JSON.parse(execFileSync(`${root}/.venv/bin/python`, ['-B', '-c', script,
+    resolve(runtime.data, 'workspace.sqlite3'), id], { cwd: root, encoding: 'utf8' })) as { revision: number; sha256: string }[]
+}
+
+test('real browser and API restarts preserve the submitted answers, signed review and both grading revisions', async ({ playwright }, info) => {
+  test.setTimeout(150_000)
+  const runtime = await RestartRuntime.start(), fixture = originalAssessmentPackage('gradingrestart')
+  const errors: string[] = []
+  try {
+    const firstBrowser = await runtime.openBrowser(playwright.chromium), page = firstBrowser.pages()[0]
+    page.on('pageerror', error => errors.push(error.message))
+    await runtime.authenticateOnly(page)
+    const imported = await importAssessmentPackage(page, fixture)
+    await imported.dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
+    const target = { assessment_ref: fixture.assessment, course_ref: fixture.course }
+    await page.goto(`${runtime.origin}/?assessment=${encodeURIComponent(JSON.stringify(target))}`)
+    await page.getByRole('radio', { name: '独立测试', exact: true }).check()
+    await page.getByRole('checkbox', { name: '我已核对内容状态与模式，确认开始未评分测试', exact: true }).check()
+    const creating = page.waitForResponse(response => response.request().method() === 'POST'
+      && response.url().endsWith(`/api/v1/assessments/${fixture.assessment.id}/attempts`))
+    await page.getByRole('button', { name: '明确开始本次测试', exact: true }).click()
+    const createResponse = await creating
+    expect(createResponse.status()).toBe(201)
+    const created: AttemptSnapshot = await createResponse.json()
+    await expect(page.getByRole('heading', { name: '本次测试作答', exact: true })).toBeVisible()
+    await page.getByRole('navigation', { name: '本次测试题目', exact: true }).getByRole('button', { name: /^第 2 题/ }).click()
+    await page.getByLabel('第 2 题答案', { exact: true }).fill('加法交换律')
+    await page.getByLabel('第 2 题推导步骤', { exact: true }).fill('原创软件测试答复；不表示真实学习效果。')
+    await expect.poll(async () => {
+      const response = await page.request.get(`/api/v1/attempts/${created.id}/responses`)
+      return (await response.json()).responses.find((item: { question_id: string }) => item.question_id === fixture.questions[1].id)?.answer
+    }).toBe('加法交换律')
+    await expect(page.getByText('服务端作答已保存', { exact: true })).toBeVisible()
+    const submitting = page.waitForResponse(response => response.request().method() === 'POST'
+      && response.url().endsWith(`/api/v1/attempts/${created.id}/submit`))
+    await page.getByRole('button', { name: '提交本次测试', exact: true }).click()
+    await page.getByRole('dialog', { name: '确认提交测试', exact: true }).getByRole('button', { name: '确认提交已保存作答', exact: true }).click()
+    expect((await submitting).status()).toBe(202)
+    const firstGrade = await finalized(page, created.id, 1)
+    expect(firstGrade.status).toBe('needs_review')
+    expect(firstGrade.items).toHaveLength(fixture.questions.length)
+    expect(firstGrade.items.every(item => item.score === null && item.solution_markdown === null)).toBe(true)
+    expect(firstGrade.manual_reviews).toEqual([])
+    const beforeHistory = immutableHistory(runtime, created.id)
+    expect(beforeHistory.map(item => item.revision)).toEqual([1])
+
+    // Exercise the actual authenticated HTTP author-review operation. These
+    // synthetic assigned scores test persistence, never human math correctness.
+    await becomeAuthor(page, runtime.origin, 'grading-author')
+    const body: RegradeRequest = {
+      expected_grading_revision: 1,
+      reason: '原创合成工程验收：显式作者复核操作与版本持久化，不宣称真实内容审核。',
+      item_reviews: fixture.questions.map((question, index) => ({ question_id: question.id,
+        score: index === 1 ? 1 : 0, feedback_markdown: `合成复核第 ${index + 1} 项：仅验证签名操作与评分版本。` })),
+    }
+    const path = `/api/v1/attempts/${created.id}/regrade`
+    const reviewed = await page.request.post(path, { headers: await mutationHeaders(page, runtime.origin, 'signed-synthetic-review'), data: body })
+    expect(reviewed.status()).toBe(202)
+    const jobReceipt = await reviewed.json()
+    const secondGrade = await finalized(page, created.id, 2)
+    expect(secondGrade.status).toBe('graded')
+    expect(secondGrade.items.map(item => item.score)).toEqual([0, 1, 0, 0, 0])
+    expect(secondGrade.manual_reviews).toHaveLength(1)
+    expect(secondGrade.manual_reviews[0].signature_algorithm).toBe('hmac-sha256-v1')
+    expect(secondGrade.manual_reviews[0].signature).toMatch(/^[0-9a-f]{64}$/)
+    // Manual assessment scoring does not approve the standard answer content.
+    expect(secondGrade.solution_reviews.every(item => item.review_status === 'needs_review')).toBe(true)
+    expect(secondGrade.eligibility_status).toBe('not_evaluated')
+    const history = immutableHistory(runtime, created.id)
+    expect(history.map(item => item.revision)).toEqual([1, 2])
+    expect(history[0]).toEqual(beforeHistory[0])
+    const submitted = await (await page.request.get(`/api/v1/attempts/${created.id}`)).json()
+    const frozenResponses = await (await page.request.get(`/api/v1/attempts/${created.id}/responses`)).json()
+    const database = runtime.databaseIdentity(), connection = firstBrowser.browser()
+    await runtime.closeBrowser()
+    expect(connection?.isConnected()).toBe(false)
+    await runtime.restartApiAfterBrowserClosed()
+    expect(runtime.databaseIdentity()).toEqual(database)
+    const restoredBrowser = await runtime.openBrowser(playwright.chromium), restored = restoredBrowser.pages()[0]
+    restored.on('pageerror', error => errors.push(error.message))
+    await runtime.authenticateOnly(restored)
+    const readback = await finalized(restored, created.id, 2)
+    expect(readback).toEqual(secondGrade)
+    expect(await (await restored.request.get(`/api/v1/attempts/${created.id}`)).json()).toEqual(submitted)
+    expect(await (await restored.request.get(`/api/v1/attempts/${created.id}/responses`)).json()).toEqual(frozenResponses)
+    await becomeAuthor(restored, runtime.origin, 'restored-author')
+    const replay = await restored.request.post(path, { headers: await mutationHeaders(restored, runtime.origin, 'signed-synthetic-review'), data: body })
+    expect(replay.status()).toBe(202)
+    expect(await replay.json()).toEqual(jobReceipt)
+    expect(immutableHistory(runtime, created.id)).toEqual(history)
+    expect(errors).toEqual([])
+    writeFileSync(info.outputPath('actual-grading-restart.json'), JSON.stringify({
+      scope: 'Actual imported original needs_review content, UI submit, real worker, explicitly authenticated synthetic author HTTP review and real Chrome/API restart. No content approvals injected.',
+      attempt_id: created.id, same_database_inode: runtime.databaseIdentity().inode === database.inode,
+      distinct_api_processes: new Set(runtime.generations).size, grading_history: history,
+      unknown_initial_scores_preserved: true, first_revision_unchanged: true, signed_review_unchanged: true,
+      repeated_review_returned_original_job: true, submitted_responses_unchanged: true,
+      actual_human_math_approval: 'NOT_RUN', learning_evidence_eligibility: 'not_evaluated', runtime_errors: errors,
+    }, null, 2))
+  } finally { await runtime.close() }
+})

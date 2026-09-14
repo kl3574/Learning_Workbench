@@ -1,0 +1,28 @@
+
+Running 1 test using 1 worker
+
+(node:<runtime-pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/e2e/grading-recovery.spec.ts:57:1 › a real failed regrade survives reload and can recover from the last actual grade without losing the old submission (16.1s)
+
+
+  1) tests/e2e/grading-recovery.spec.ts:57:1 › a real failed regrade survives reload and can recover from the last actual grade without losing the old submission 
+
+    TimeoutError: locator.click: Timeout 10000ms exceeded.
+    Call log:
+      - waiting for getByRole('button', { name: '恢复复核候选 1', exact: true })
+
+
+      102 |     expect(pendingBody.status).toBe('failed')
+      103 |     expect(pendingBody.last_completed_result).toEqual(original)
+    > 104 |     await page.getByRole('button', { name: '恢复复核候选 1', exact: true }).click()
+          |                                                                       ^
+      105 |     await expect(page.getByRole('button', { name: '按当前评分新建复核草稿', exact: true })).toBeEnabled()
+      106 |     await page.getByRole('button', { name: '按当前评分新建复核草稿', exact: true }).click()
+      107 |     await expect(page.getByLabel('人工复核理由', { exact: true })).toBeVisible()
+        at <workspace>/tests/e2e/grading-recovery.spec.ts:104:71
+
+    Error Context: ../../../../../tmp/m33-native-recovery/grading-recovery-a-real-fa-8007b-t-losing-the-old-submission/error-context.md
+
+  1 failed
+    tests/e2e/grading-recovery.spec.ts:57:1 › a real failed regrade survives reload and can recover from the last actual grade without losing the old submission 

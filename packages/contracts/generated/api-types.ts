@@ -18,6 +18,24 @@ export type AssessmentBlueprint = {
   "time_limit_seconds"?: (number | null);
 };
 
+export type AssessmentGradingJob = {
+  "id": string;
+  "status": "queued" | "running" | "awaiting_approval" | "completed" | "failed" | "cancelled";
+  "last_completed_result": (AssessmentGradingResult | null);
+};
+
+export type AssessmentGradingResult = {
+  "attempt_id": string;
+  "grading_revision": number;
+  "grading_rules_version": string;
+  "status": "graded" | "needs_review";
+  "items": Array<ItemGrade>;
+  "finalized_at": string;
+  "manual_reviews": Array<ManualReviewReceipt>;
+  "solution_reviews": Array<ReleasedSolutionReview>;
+  "eligibility_status": "not_evaluated";
+};
+
 export type AssessmentPreflight = {
   "course_refs": Array<ContentRef>;
   "question_kinds": Array<QuestionKindCount>;
@@ -57,7 +75,8 @@ export type AttemptSnapshot = {
   "deadline_at"?: (string | null);
   "submitted_at"?: (string | null);
   "preflight": AssessmentPreflight;
-  "grading_status": "not_graded";
+  "grading_revision"?: number;
+  "grading_status": "not_graded" | "pending" | "graded" | "needs_review" | "failed" | "cancelled";
 };
 
 export type AttemptSubmit = {
@@ -362,6 +381,16 @@ export type LogoutResponse = {
   "logged_out"?: true;
 };
 
+export type ManualReviewReceipt = {
+  "id": string;
+  "actor_role": "author";
+  "signed_at": string;
+  "reason": string;
+  "question_ids": Array<string>;
+  "signature": string;
+  "signature_algorithm": "hmac-sha256-v1";
+};
+
 export type MutationAck = {
   "id": string;
   "revision": number;
@@ -618,6 +647,23 @@ export type RecentAttempt = {
   "mode": "independent" | "assisted" | "open_book";
   "created_at": string;
   "submitted_at": (string | null);
+};
+
+export type RegradeItemReview = {
+  "question_id": string;
+  "score": number;
+  "feedback_markdown": string;
+};
+
+export type RegradeRequest = {
+  "expected_grading_revision": number;
+  "reason": string;
+  "item_reviews": Array<RegradeItemReview>;
+};
+
+export type ReleasedSolutionReview = {
+  "question_id": string;
+  "review_status": "approved" | "draft" | "needs_review";
 };
 
 export type ResolvedCitation = {

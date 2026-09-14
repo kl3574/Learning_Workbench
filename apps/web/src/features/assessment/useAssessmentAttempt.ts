@@ -27,7 +27,7 @@ export function useAssessmentAttempt(workspace: string, target: AssessmentTarget
   }
   try { if (stored) storedEnvelope = validEnvelope(decodeAssessmentEnvelope(stored.text, workspace)) } catch (reason) { recoveryError = message(reason) }
   const needsRecovery = !claimed && !!storedEnvelope && assessmentDirty(storedEnvelope)
-  const draft = (base: AttemptRead, values: ResponseDraft[]): AssessmentEnvelope => ({ version: 1, workspace_id: workspace, attempt_id: base.snapshot.id, assessment_ref: base.snapshot.assessment_ref, course_ref: target.course_ref ?? null, policy: base.snapshot.policy, base_revision: base.snapshot.revision, base_status: base.snapshot.status as AssessmentEnvelope['base_status'], base_responses: normalizeResponses(base.responses), candidate_responses: normalizeResponses(values) })
+  const draft = (base: AttemptRead, values: ResponseDraft[]): AssessmentEnvelope => ({ version: 1, workspace_id: workspace, attempt_id: base.snapshot.id, assessment_ref: base.snapshot.assessment_ref, course_ref: target.course_ref ?? null, policy: base.snapshot.policy, base_revision: base.snapshot.revision, base_status: base.snapshot.status, base_responses: normalizeResponses(base.responses), candidate_responses: normalizeResponses(values) })
   const persist = (value: AssessmentEnvelope) => { envelope.current = value; journalRef.current.save(value) }
   const show = (remote: AttemptRead, values = remote.responses, keep = false) => {
     baseline.current = remote; setData(remote); candidate.current = normalizeResponses(values); setResponses(candidate.current)

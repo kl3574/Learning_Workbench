@@ -1,0 +1,213 @@
+"""Pure, bounded rules derived from PRODUCT_DESIGN.md 13.1/13.2/20.2.
+
+The caller owns authorization, submission integrity, human-review provenance and
+evidence eligibility. This function neither releases answers nor records events.
+"""
+
+from dataclasses import dataclass
+from decimal import Decimal, DecimalException, Inexact, Rounded, localcontext
+import re
+import unicodedata
+
+from packages.contracts import domain_models as dm
+from packages.contracts.canonical import metadata_sha256
+
+from .assessment_content import FrozenAnswer
+from .grading_rule_models import (
+    RULES_V1, RULES_VERSION, GradingBindingError, NumericComparison, NumericTrace,
+    Outcome, PrivateGradeTrace, ReasonCode, RuleDecision, RuleSet,
+)
+
+__all__ = ["grade_item", "RULES_V1", "RULES_VERSION", "SUPPORTED_UNITS", "RuleSet", "RuleDecision", "PrivateGradeTrace", "GradingBindingError"]
+
+MAX_NUMBER_CHARACTERS = 4000
+MAX_EXPONENT = 1000
+MAX_ACCEPTED_ANSWERS = 1000
+MAX_ACCEPTED_CHARACTERS = 400000
+DECIMAL_PRECISION = 20000
+NUMBER = r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?"
+NUMERIC_INPUT = re.compile(rf"({NUMBER})(?:[ \t]*([A-Za-z%][A-Za-z0-9²³%^/\-]*))?", re.ASCII)
+NUMERIC_LITERAL = re.compile(NUMBER, re.ASCII)
+
+
+@dataclass(frozen=True)
+class Unit:
+    dimension: str
+    base: str
+    factor: Decimal
+
+
+# Deliberately finite and case-sensitive. Compound and offset units are not guessed.
+UNITS = {
+    "m": Unit("length", "m", Decimal("1")),
+    "cm": Unit("length", "m", Decimal("0.01")),
+    "mm": Unit("length", "m", Decimal("0.001")),
+    "km": Unit("length", "m", Decimal("1000")),
+    "s": Unit("time", "s", Decimal("1")),
+    "ms": Unit("time", "s", Decimal("0.001")),
+    "us": Unit("time", "s", Decimal("0.000001")),
+    "min": Unit("time", "s", Decimal("60")),
+    "h": Unit("time", "s", Decimal("3600")),
+    "kg": Unit("mass", "kg", Decimal("1")),
+    "g": Unit("mass", "kg", Decimal("0.001")),
+    "mg": Unit("mass", "kg", Decimal("0.000001")),
+    "L": Unit("volume", "L", Decimal("1")),
+    "mL": Unit("volume", "L", Decimal("0.001")),
+    "m/s": Unit("speed", "m/s", Decimal("1")),
+    "cm/s": Unit("speed", "m/s", Decimal("0.01")),
+    "m²": Unit("area", "m²", Decimal("1")),
+    "m^2": Unit("area", "m²", Decimal("1")),
+    "cm²": Unit("area", "m²", Decimal("0.0001")),
+    "cm^2": Unit("area", "m²", Decimal("0.0001")),
+    "mm²": Unit("area", "m²", Decimal("0.000001")),
+    "mm^2": Unit("area", "m²", Decimal("0.000001")),
+}
+SUPPORTED_UNITS = tuple(UNITS)
+
+
+def _decimal(value: str) -> Decimal:
+    if not value or len(value) > MAX_NUMBER_CHARACTERS or not NUMERIC_LITERAL.fullmatch(value):
+        raise ValueError("invalid numeric literal")
+    exponent = re.split("[eE]", value)[-1] if "e" in value.lower() else "0"
+    unsigned = exponent.lstrip("+-").lstrip("0")
+    if len(unsigned) > 4 or abs(int(exponent)) > MAX_EXPONENT:
+        raise ValueError("numeric exponent outside budget")
+    result = Decimal(value)
+    if not result.is_finite():
+        raise ValueError("non-finite value")
+    return result
+
+
+def _normalize(value: str) -> str:
+    return unicodedata.normalize("NFC", value).strip()
+
+
+def _trusted_inputs(question_ref: dm.ContentRef, question: dm.QuestionPublic, pin: FrozenAnswer,
+                    solution: dm.SolutionPrivate, response: dm.ResponseDraft | None
+                    ) -> tuple[dm.ContentRef, dm.QuestionPublic, FrozenAnswer, dm.SolutionPrivate, dm.ResponseDraft | None]:
+    try:
+        # Revalidate copies: Pydantic model_copy/model_construct do not themselves validate.
+        question_ref = dm.ContentRef.model_validate(question_ref.model_dump(mode="python"))
+        question = dm.QuestionPublic.model_validate(question.model_dump(mode="python"))
+        pin = FrozenAnswer.model_validate(pin.model_dump(mode="python"))
+        solution = dm.SolutionPrivate.model_validate(solution.model_dump(mode="python"))
+        response = dm.ResponseDraft.model_validate(response.model_dump(mode="python")) if response is not None else None
+        if (question_ref.entity != "question" or question_ref.id != question.id
+                or question_ref.revision != question.revision or question_ref.sha256 != metadata_sha256(question)
+                or pin.question_ref != question_ref or solution.question_ref != question_ref
+                or pin.solution_revision != solution.revision or pin.sha256 != metadata_sha256(solution)
+                or pin.review_status != solution.review_status
+                or response is not None and response.question_id != question.id):
+            raise GradingBindingError()
+    except (ValueError, TypeError, AttributeError):
+        raise GradingBindingError() from None
+    return question_ref, question, pin, solution, response
+
+
+def grade_item(*, question_ref: dm.ContentRef, question: dm.QuestionPublic, pin: FrozenAnswer,
+               solution: dm.SolutionPrivate, response: dm.ResponseDraft | None,
+               rules: RuleSet = RULES_V1) -> RuleDecision:
+    """Return an ItemGrade and private audit trace, with no I/O or evidence claims.
+
+    Approved is a required trusted-input fact, not an approval created here.
+    Numeric answers are decimal literals, optionally followed by a known unit.
+    A bare number uses the solution's declared target unit; the UI must declare it.
+    """
+    if rules != RULES_V1:
+        raise ValueError("Unsupported deterministic grading rules version")
+    question_ref, question, pin, solution, response = _trusted_inputs(question_ref, question, pin, solution, response)
+    base = PrivateGradeTrace(question_ref=question_ref, private_pin=pin, response=response,
+                             outcome="needs_review", reason_codes=[])
+
+    def result(outcome: Outcome, reason: ReasonCode, feedback: str, *, trace: PrivateGradeTrace = base) -> RuleDecision:
+        resolved = outcome in {"correct", "incorrect", "unanswered"}
+        score = question.max_score if outcome == "correct" else 0.0 if resolved else None
+        suffix = " 仅核对最终数值，计算步骤未评分。" if question.kind == "calculation" and resolved else ""
+        private = PrivateGradeTrace.model_validate({**trace.model_dump(mode="python"), "outcome": outcome, "reason_codes": [reason]})
+        return RuleDecision(item_grade=dm.ItemGrade(question_ref=question_ref, score=score, max_score=question.max_score,
+            status="graded" if resolved else "needs_review", feedback_markdown=feedback + suffix, solution_markdown=None),
+            private_trace=private)
+
+    if solution.review_status != "approved":
+        return result("needs_review", "answer_unreviewed", "标准答案尚未审核，未进行正常评分；请人工复核。")
+    if solution.grading_kind in {"symbolic_review", "rubric_review"}:
+        return result("needs_review", "manual_review_required", "符号、推导或 rubric 判定需要人工复核，当前没有自动得分。",
+                      trace=base.model_copy(update={"steps_assessment": "review_required"}))
+    kinds = {"single_choice": "choice_exact", "text_blank": "text_normalized", "numeric": "numeric_tolerance", "calculation": "numeric_tolerance"}
+    if kinds.get(question.kind) != solution.grading_kind:
+        return result("needs_review", "grading_kind_mismatch", "题型与自动评分规则不匹配，需要人工复核。")
+    if len(solution.accepted_answers) > MAX_ACCEPTED_ANSWERS or sum(map(len, solution.accepted_answers)) > MAX_ACCEPTED_CHARACTERS:
+        return result("needs_review", "standard_answer_limit", "标准答案集合超过当前评分资源上限，未部分评分。")
+
+    answer = response.answer if response is not None else ""
+    if solution.grading_kind == "choice_exact":
+        choices = {choice.id for choice in question.choices}
+        if not set(solution.accepted_answers) <= choices:
+            return result("needs_review", "standard_answer_invalid", "标准选项不属于冻结题面，需要人工复核。")
+        if not answer.strip():
+            return result("unanswered", "unanswered", "未提交该题答案，按已声明的客观题规则计零分。")
+        if answer not in choices:
+            return result("invalid_input", "invalid_choice", "所提交的值不是本题的选项 ID，未自动判分。")
+        matched = answer in solution.accepted_answers
+        return result("correct" if matched else "incorrect", "choice_match" if matched else "choice_mismatch",
+                      "选项 ID 匹配。" if matched else "选项 ID 不匹配。")
+
+    if solution.grading_kind == "text_normalized":
+        accepted = [_normalize(value) for value in solution.accepted_answers]
+        normalized = _normalize(answer)
+        trace = base.model_copy(update={"normalized_answer": normalized, "normalized_accepted": accepted})
+        if any(not value for value in accepted):
+            return result("needs_review", "standard_answer_invalid", "文本标准答案含空项，需人工复核。", trace=trace)
+        if not normalized:
+            return result("unanswered", "unanswered", "未提交该题答案，按已声明的客观题规则计零分。", trace=trace)
+        matched = normalized in accepted
+        return result("correct" if matched else "incorrect", "text_match" if matched else "text_mismatch",
+                      "按声明的文本规范化规则匹配。" if matched else "按声明的文本规范化规则不匹配。", trace=trace)
+
+    try:
+        expected = tuple(_decimal(value.strip()) for value in solution.accepted_answers)
+    except (ValueError, DecimalException):
+        return result("needs_review", "standard_answer_invalid", "数值标准答案不满足有限十进制及资源限制，需要人工复核。")
+    target = UNITS.get(solution.unit) if solution.unit is not None else None
+    if solution.unit is not None and target is None:
+        return result("needs_review", "unit_unsupported", "标准答案使用当前未支持的单位，需要人工复核。")
+    if not answer.strip():
+        return result("unanswered", "unanswered", "未提交该题答案，按已声明的客观题规则计零分。")
+    matched_input = None if re.match(r"[+-]?0[xXbBoO]", answer.strip()) else NUMERIC_INPUT.fullmatch(answer.strip())
+    if matched_input is None:
+        return result("invalid_input", "input_invalid_numeric", "输入须为有限十进制或科学计数法数值及声明单位；不执行代码或表达式。")
+    literal, supplied = matched_input.groups()
+    try:
+        parsed = _decimal(literal)
+    except (ValueError, DecimalException):
+        return result("invalid_input", "input_invalid_numeric", "数值超出有限十进制解析或资源限制，未自动判分。")
+    user_unit = UNITS.get(supplied) if supplied is not None else target
+    if supplied is not None and user_unit is None:
+        return result("invalid_input", "unit_unsupported", "输入单位当前未支持，未猜测单位含义。")
+    if (target is None) != (user_unit is None) or target is not None and user_unit is not None and target.dimension != user_unit.dimension:
+        return result("invalid_input", "unit_incompatible", "输入单位与题目声明的量纲不一致，未自动判分。")
+    user_factor = user_unit.factor if user_unit else Decimal(1)
+    target_factor = target.factor if target else Decimal(1)
+    atol, rtol = Decimal(str(solution.absolute_tolerance)), Decimal(str(solution.relative_tolerance))
+    try:
+        with localcontext() as context:
+            context.prec, context.Emax, context.Emin = DECIMAL_PRECISION, 20000, -20000
+            context.traps[Inexact] = True
+            context.traps[Rounded] = True
+            user_base = parsed * user_factor
+            comparisons = []
+            for standard in expected:
+                standard_base = standard * target_factor
+                difference = abs(user_base - standard_base)
+                threshold = atol * target_factor + rtol * abs(standard_base)
+                comparisons.append(NumericComparison(expected=str(standard), expected_in_base_unit=str(standard_base),
+                    absolute_difference=str(difference), allowed_difference=str(threshold), matched=difference <= threshold))
+            numeric = NumericTrace(parsed_user=str(parsed), user_in_base_unit=str(user_base), supplied_unit=supplied,
+                target_unit=solution.unit, comparison_unit=target.base if target else None, user_to_base_factor=str(user_factor),
+                target_to_base_factor=str(target_factor), absolute_tolerance=str(atol), relative_tolerance=str(rtol),
+                comparisons=comparisons)
+    except DecimalException:
+        return result("needs_review", "numeric_precision_limit", "比较超出当前可保证的精度范围，未使用舍入结果判分。")
+    matched = any(value.matched for value in numeric.comparisons)
+    return result("correct" if matched else "incorrect", "numeric_match" if matched else "numeric_mismatch",
+                  "最终数值在声明容差内。" if matched else "最终数值不在声明容差内。", trace=base.model_copy(update={"numeric": numeric}))

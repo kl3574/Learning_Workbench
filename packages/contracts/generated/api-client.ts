@@ -1,6 +1,6 @@
 // Generated from PRODUCT_DESIGN.md v3.0.0 and actual runtime OpenAPI; do not edit.
 // spec_sha256: ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c
-import type { AssessmentAttemptCreate, AttemptResponses, AttemptSnapshot, AttemptSubmit, BlockReadResponse, BootstrapRequest, BootstrapResponse, ContentRef, Course, DirectorySearchResponse, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobSnapshot, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, OutlineResponse, PageAssessment, PageCourse, PageNote, PagePracticeSet, PageRevision, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ReadinessResponse, ResponsesWrite, RoleRequest, SessionResponse, SourceResponse, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
+import type { AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, BlockReadResponse, BootstrapRequest, BootstrapResponse, ContentRef, Course, DirectorySearchResponse, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, OutlineResponse, PageAssessment, PageCourse, PageNote, PagePracticeSet, PageRevision, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ReadinessResponse, RegradeRequest, ResponsesWrite, RoleRequest, SessionResponse, SourceResponse, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
 
 export interface ApiEndpointMap {
   "GET /api/v1/artifacts/{id}/download": { request: undefined; response: Blob; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
@@ -8,8 +8,10 @@ export interface ApiEndpointMap {
   "POST /api/v1/assessments/{id}/attempts": { request: AssessmentAttemptCreate; response: AttemptSnapshot; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/attempts/{id}": { request: undefined; response: AttemptSnapshot; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
   "POST /api/v1/attempts/{id}/abandon": { request: AttemptSubmit; response: AttemptSnapshot; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
+  "POST /api/v1/attempts/{id}/regrade": { request: RegradeRequest; response: JobRef; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/attempts/{id}/responses": { request: undefined; response: AttemptResponses; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
   "PUT /api/v1/attempts/{id}/responses": { request: ResponsesWrite; response: AttemptSnapshot; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
+  "GET /api/v1/attempts/{id}/result": { request: undefined; response: AssessmentGradingResult | AssessmentGradingJob; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
   "POST /api/v1/attempts/{id}/submit": { request: AttemptSubmit; response: AttemptSnapshot; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/blocks/{id}": { request: undefined; response: BlockReadResponse; headers: null; parameters: { path: { "id": string }; query: { "include_provenance"?: boolean; "revision": number } }; parametersRequired: true };
   "GET /api/v1/blocks/{id}/body": { request: undefined; response: string; headers: null; parameters: { path: { "id": string }; query: { "revision": number } }; parametersRequired: true };
@@ -141,6 +143,21 @@ export const API_ENDPOINTS = {
     ],
     "queryParameters": []
   },
+  "POST /api/v1/attempts/{id}/regrade": {
+    "method": "POST",
+    "path": "/api/v1/attempts/{id}/regrade",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
   "GET /api/v1/attempts/{id}/responses": {
     "method": "GET",
     "path": "/api/v1/attempts/{id}/responses",
@@ -159,6 +176,21 @@ export const API_ENDPOINTS = {
   "PUT /api/v1/attempts/{id}/responses": {
     "method": "PUT",
     "path": "/api/v1/attempts/{id}/responses",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
+  "GET /api/v1/attempts/{id}/result": {
+    "method": "GET",
+    "path": "/api/v1/attempts/{id}/result",
     "responseKind": "json",
     "requestKind": "json",
     "multipartFields": [],

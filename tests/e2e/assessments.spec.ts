@@ -1,7 +1,7 @@
 import { expect, test as base, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
 import { RestartRuntime } from './restartRuntime'
 import { importAssessmentPackage, originalAssessmentPackage, type AssessmentPackage } from './assessmentTestData'
-import type { AttemptSnapshot, AttemptResponses } from '../../packages/contracts/generated/api-types'
+import type { AssessmentGradingResult, AttemptSnapshot, AttemptResponses } from '../../packages/contracts/generated/api-types'
 const test = base.extend<{ runtime: RestartRuntime }>({
   runtime: async ({}, use) => { const runtime = await RestartRuntime.start(); try { await use(runtime) } finally { await runtime.close() } },
   page: async ({ runtime, playwright }, use) => { const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]; await runtime.authenticateOnly(page); await use(page) },
@@ -39,9 +39,9 @@ async function snapshot(page: Page, id: string): Promise<AttemptSnapshot> { cons
 async function responses(page: Page, id: string): Promise<AttemptResponses> { const response = await page.request.get(`/api/v1/attempts/${id}/responses`); expect(response.status()).toBe(200); return response.json() }
 
 test('real unreviewed independent assessment saves five types and submits without fabricated grades or answer calls', async ({ page }, info) => {
-  const errors: string[] = [], answers: string[] = []
+  const errors: string[] = [], answers: string[] = [], resultReads: string[] = []
   page.on('pageerror', error => errors.push(error.message))
-  page.on('request', request => { if (/\/(solutions|result|grades)(?:\?|$)/.test(request.url())) answers.push(request.url()) })
+  page.on('request', request => { if (/\/(solutions|grades)(?:\?|$)/.test(request.url())) answers.push(request.url()); if (/\/result(?:\?|$)/.test(request.url())) resultReads.push(request.url()) })
   const { attempt, fixture } = await start(page, 'nativeassessmentall')
   expect(attempt.preflight.grading.needs_review_count).toBe(5); expect(attempt.grading_status).toBe('not_graded'); expect(attempt.deadline_at).toBeNull()
   expect(attempt.policy).toMatchObject({ mode: 'independent', tutor_scope: 'operation_help_only', allow_web: false, allow_materials: false })
@@ -63,13 +63,18 @@ test('real unreviewed independent assessment saves five types and submits withou
   await question(page, 1)
   await expect(page.locator('.practice-stem svg').first()).toBeVisible()
   await page.screenshot({ path: info.outputPath('assessment-independent-active-1440.png') })
+  expect(resultReads).toEqual([])
   await page.getByRole('button', { name: '提交本次测试', exact: true }).click()
   const sending = page.waitForResponse(value => value.url().endsWith(`/attempts/${attempt.id}/submit`))
   await page.getByRole('dialog', { name: '确认提交测试', exact: true }).getByRole('button', { name: '确认提交已保存作答', exact: true }).click()
   expect((await sending).status()).toBe(202)
   await expect(page.getByRole('heading', { name: '测试结束状态', exact: true })).toBeVisible()
+  await expect.poll(async () => (await snapshot(page, attempt.id)).status).toBe('needs_review')
   const ended = await snapshot(page, attempt.id)
-  expect(ended.status).toBe('submitted'); expect(ended.grading_status).toBe('not_graded'); expect(ended.submitted_at).not.toBeNull()
+  expect(ended.grading_status).toBe('needs_review'); expect(ended.submitted_at).not.toBeNull()
+  const resultResponse = await page.request.get(`/api/v1/attempts/${attempt.id}/result`); expect(resultResponse.status()).toBe(200)
+  const result: AssessmentGradingResult = await resultResponse.json()
+  expect(result.status).toBe('needs_review'); expect(result.items).toHaveLength(5); expect(result.items.every(item => item.score === null && item.solution_markdown == null)).toBe(true)
   expect((await responses(page, attempt.id)).responses).toEqual(before.responses)
   await expect(page.getByRole('radio', { name: '5', exact: true })).toBeDisabled()
   expect(answers).toEqual([])
@@ -240,7 +245,7 @@ test('late redacted Workbench save uses its original ETag and retains hidden sel
     const retained: import('../../packages/contracts/generated/types').WorkbenchSession = await page.request.get('/api/v1/workbench/session').then(value => value.json())
     expect(retained.nav_collapsed).toBe(true)
     expect(retained.tabs.find(tab => tab.id === readerTab.id)?.context.selection).toEqual(readerTab.context.selection)
-    expect((await snapshot(page, attempt.id)).status).toBe('submitted')
+    expect(['submitted', 'grading', 'needs_review']).toContain((await snapshot(page, attempt.id)).status)
   } finally { release?.() }
 })
 

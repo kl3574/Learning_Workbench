@@ -1,4 +1,4 @@
-"""Guarded practice commands; M3.1 records attempts without pretending to grade."""
+"""Guarded practice commands with frozen deterministic grades and private audit."""
 
 import base64
 from collections.abc import Iterator
@@ -12,7 +12,7 @@ import time
 from pydantic import TypeAdapter
 
 from packages.contracts import domain_models as dm
-from packages.contracts.canonical import canonical_bytes, sha256_bytes, strict_json
+from packages.contracts.canonical import canonical_bytes, metadata_sha256, sha256_bytes, strict_json
 
 from ..infrastructure.content_repository import damaged, reference
 from ..infrastructure.database import Database, utc_now
@@ -28,6 +28,7 @@ from .errors import ApiError
 from .policy import Policy
 from .learning import record_practice_event
 from .practice_content import PracticeContent
+from .practice_grading import build_audit, grade_practice, persist_audit, validate_audit
 
 HINT_RULE_VERSION = "public-input-guidance-1.0.0"
 
@@ -155,6 +156,7 @@ class PracticeService:
             raise invalid_snapshot()
         questions = content.questions(practice)
         repository.exposure_facts(record, questions)
+        validate_audit(repository, record, questions)
         return record, questions
 
     @staticmethod
@@ -216,19 +218,32 @@ class PracticeService:
             def operation():
                 repository.expect(record, request.expected_revision, active=True)
                 events, assistance = repository.exposure_facts(record, questions)
-                results = [dm.ItemGrade(question_ref=ref, score=None, max_score=question.max_score, status="needs_review",
-                    feedback_markdown="本次作答已保存为练习记录，尚未执行评分，需要后续审查；无分数不等于零分。", solution_markdown=None)
-                    for ref, question in zip(record.question_refs, questions, strict=True)]
+                entries = grade_practice(content, record, questions)
+                results = [entry.result for entry in entries]
                 snapshot = StoredSubmission(revision=record.revision + 1, submitted_at=utc_now(), responses=record.responses,
                     results=results, exposure_event_ids=events, assisted=bool(events), assistance=assistance)
+                audit = build_audit(identity.workspace_id, record, snapshot, entries)
                 record_practice_event(repository.connection, identity.workspace_id, "practice_submitted", record.practice_ref, id)
-                repository.submit(record, snapshot)
+                outbox_id = repository.submit(record, snapshot, grading_rules_version=audit.grading_rules_version,
+                                              grading_audit_sha256=metadata_sha256(audit))
+                persist_audit(repository, audit, outbox_id, snapshot.submitted_at)
                 return PracticeSubmitted(id=id, revision=snapshot.revision, results=results, evidence_label="practice",
                     exposure_event_ids=events, assisted=bool(events), assistance=assistance).model_dump(mode="json")
 
             result = execute_idempotent(repository.connection, actor=identity.workspace_id, route=f"POST /practice/sessions/{id}/submit",
                 key=key, payload=request.model_dump(mode="json"), operation=operation)
-            return PracticeSubmitted.model_validate(result)
+            current, current_questions = self._load(content, repository, id)
+            snapshot = current.submission
+            if snapshot is None:
+                raise invalid_snapshot()
+            expected = PracticeSubmitted(id=id, revision=snapshot.revision, results=snapshot.results, evidence_label="practice",
+                exposure_event_ids=snapshot.exposure_event_ids, assisted=snapshot.assisted, assistance=snapshot.assistance)
+            try:
+                if PracticeSubmitted.model_validate(result) != expected:
+                    raise invalid_snapshot()
+            except (ValueError, TypeError):
+                raise invalid_snapshot() from None
+            return expected
 
     def hint(self, identity: SessionIdentity, id: str, request: PracticeHintRequest, key: str | None) -> PracticeHint:
         with self._access(identity) as (content, repository):

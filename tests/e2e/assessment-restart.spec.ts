@@ -187,9 +187,17 @@ test('actual browser and API restarts retain independent drafts and keep old sol
     await restored.getByRole('button', { name: '提交本次测试', exact: true }).click()
     await restored.getByRole('dialog', { name: '确认提交测试', exact: true }).getByRole('button', { name: '确认提交已保存作答', exact: true }).click()
     expect((await submitting).status()).toBe(202)
+    // Wait for the real M3.3 worker to finalize this unreviewed fixture before
+    // taking the restart baseline. Submitted answers stay frozen throughout.
+    await expect.poll(async () => (await attempt(restored, created.id)).status).toBe('needs_review')
     const submitted = await attempt(restored, created.id)
-    expect(submitted.status).toBe('submitted')
-    expect(submitted.grading_status).toBe('not_graded')
+    expect(submitted.status).toBe('needs_review')
+    expect(submitted.grading_status).toBe('needs_review')
+    expect(submitted.grading_revision).toBe(1)
+    expect(submitted.questions).toEqual(before.questions)
+    expect(submitted.policy).toEqual(before.policy)
+    const submittedResponses = await responses(restored, created.id)
+    expect(submittedResponses.responses.find(item => item.question_id === fixture.questions[1].id)?.answer).toBe(localAnswer)
     expect((await reveal(restored, await csrf(restored))).status()).toBe(409)
     await runtime.closeBrowser()
     await runtime.restartApiAfterBrowserClosed()
@@ -197,6 +205,7 @@ test('actual browser and API restarts retain independent drafts and keep old sol
     observe(finalPage)
     await runtime.authenticateOnly(finalPage)
     expect(await attempt(finalPage, created.id)).toEqual(submitted)
+    expect(await responses(finalPage, created.id)).toEqual(submittedResponses)
     const finalAuth = await csrf(finalPage)
     const switching = await finalPage.request.post('/api/v1/session/role', { headers: { Origin: runtime.origin, 'X-CSRF-Token': finalAuth, 'Idempotency-Key': 'pending-author-role' }, data: { role: 'author' } })
     expect(switching.status()).toBe(200)
@@ -210,6 +219,7 @@ test('actual browser and API restarts retain independent drafts and keep old sol
       attempt_id: created.id, assessment_ref: fixture.assessment, context: contextBefore,
       original_policy: created.policy, unchanged_active_snapshot_after_restart: true, restored_unsynced_question_index: 2,
       submitted_snapshot_unchanged_after_second_restart: true, grading_status: submitted.grading_status,
+      actual_completed_grading_revision: submitted.grading_revision,
       cached_solution_denied_active_and_submitted: true, author_role_does_not_release_pending_answer: true,
       ordinary_material_read_resumes_after_submit: true, automatic_solution_requests: automaticSolutions, runtime_errors: errors,
     }, null, 2))

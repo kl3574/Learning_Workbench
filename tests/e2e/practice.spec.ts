@@ -67,7 +67,7 @@ test('five real question kinds save and refresh; hints and solutions require exp
   expect(reveals).toEqual(['POST'])
   await expect(page.getByRole('heading', { name: '参考解答 · 需审查', exact: true })).toHaveCount(0)
   const submitting = page.waitForResponse(value => value.url().endsWith(`/practice/sessions/${id}/submit`))
-  await page.getByRole('button', { name: '提交本次练习（暂不评分）', exact: true }).click()
+  await page.getByRole('button', { name: '提交本次练习', exact: true }).click()
   expect((await submitting).status()).toBe(200)
   await expect(page.getByRole('heading', { name: '提交结果', exact: true })).toBeVisible()
   const submitted = await read(page, id)

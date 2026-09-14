@@ -1,0 +1,23 @@
+E702 Multiple statements on one line (semicolon)
+   --> tests/unit/test_grading_rules.py:186:65
+    |
+184 |     assert not {"private_pin", "numeric", "accepted_answers", "response"} & public.keys()
+185 |     assert "42" not in public["feedback_markdown"]
+186 |     tampered = strict_json(canonical_bytes(value.private_trace)); tampered["unrecognized"] = True
+    |                                                                 ^
+187 |     with pytest.raises(ValidationError):
+188 |         PrivateGradeTrace.model_validate(tampered)
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/unit/test_grading_rules.py:189:33
+    |
+187 |     with pytest.raises(ValidationError):
+188 |         PrivateGradeTrace.model_validate(tampered)
+189 |     tampered.pop("unrecognized"); tampered["reason_codes"] = ["untrusted arbitrary content"]
+    |                                 ^
+190 |     with pytest.raises(ValidationError):
+191 |         PrivateGradeTrace.model_validate(tampered)
+    |
+
+Found 2 errors.

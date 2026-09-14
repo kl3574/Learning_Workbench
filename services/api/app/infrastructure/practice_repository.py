@@ -178,16 +178,21 @@ class PracticeRepository:
             (record.id, question.id, kind, level, exposure_id, canonical_bytes(help).decode(), metadata_sha256(help)))
         return self.bump(record)
 
-    def submit(self, record: PracticeRecord, snapshot: StoredSubmission) -> None:
+    def submit(self, record: PracticeRecord, snapshot: StoredSubmission, *,
+               grading_rules_version: str = "not_graded_m3_1", grading_audit_sha256: str | None = None) -> str:
         result = self.connection.execute(
             "UPDATE practice_sessions SET status='submitted',revision=?,submission_json=?,submission_sha256=? WHERE id=? AND workspace_id=? AND revision=? AND status='active'",
             (snapshot.revision, canonical_bytes(snapshot).decode(), metadata_sha256(snapshot), record.id, self.workspace_id, record.revision),
         )
         if result.rowcount != 1:
             raise ApiError(412, "REVISION_CONFLICT", "练习已更新，请读取最新会话后重试。")
-        self.connection.execute("INSERT INTO outbox(id,event_type,payload_json) VALUES(?,?,?)", (
-            f"outbox_{uuid4().hex}", "practice.submitted",
-            canonical_bytes({"workspace_id": self.workspace_id, "practice_session_id": record.id,
-                             "practice_ref": record.practice_ref.model_dump(mode="json"), "revision": snapshot.revision,
-                             "status": "needs_review", "grading_rules_version": "not_graded_m3_1"}).decode(),
-        ))
+        payload = {"workspace_id": self.workspace_id, "practice_session_id": record.id,
+                   "practice_ref": record.practice_ref.model_dump(mode="json"), "revision": snapshot.revision,
+                   "status": "graded" if all(item.status == "graded" for item in snapshot.results) else "needs_review",
+                   "grading_rules_version": grading_rules_version}
+        if grading_audit_sha256 is not None:
+            payload.update(grading_audit_sha256=grading_audit_sha256, submission_sha256=metadata_sha256(snapshot))
+        outbox_id = f"outbox_{uuid4().hex}"
+        self.connection.execute("INSERT INTO outbox(id,event_type,payload_json) VALUES(?,?,?)",
+                               (outbox_id, "practice.submitted", canonical_bytes(payload).decode()))
+        return outbox_id
