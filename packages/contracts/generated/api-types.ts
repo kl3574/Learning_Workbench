@@ -12,11 +12,54 @@ export type BootstrapResponse = {
   "expires_at": string;
 };
 
+export type ContentBlock = {
+  "schema_version"?: "3.0.0";
+  "id": string;
+  "revision": number;
+  "entity"?: "block";
+  "kind": "orientation" | "definition" | "theorem" | "proof" | "intuition" | "worked_example" | "boundary" | "summary" | "text" | "code" | "figure";
+  "title": string;
+  "body_path": string;
+  "body_sha256": string;
+  "concepts"?: Array<string>;
+  "citations"?: Array<string>;
+  "depends_on"?: Array<ContentRef>;
+};
+
 export type ContentRef = {
   "entity": "course" | "lesson" | "block" | "concept" | "route" | "question" | "practice_set" | "assessment" | "note";
   "id": string;
   "revision": number;
   "sha256": string;
+};
+
+export type Course = {
+  "schema_version"?: "3.0.0";
+  "id": string;
+  "revision": number;
+  "entity"?: "course";
+  "title": string;
+  "language"?: string;
+  "audience": string;
+  "lesson_refs": Array<ContentRef>;
+  "concept_refs"?: Array<ContentRef>;
+  "sections"?: Array<CourseSection>;
+  "objectives"?: Array<string>;
+  "difficulty"?: "beginner" | "intermediate" | "advanced";
+};
+
+export type CourseSection = {
+  "id": string;
+  "title": string;
+  "lesson_ids": Array<string>;
+};
+
+export type CourseSummary = {
+  "ref": ContentRef;
+  "title": string;
+  "language": string;
+  "lesson_count": number;
+  "review_state"?: "unreviewed";
 };
 
 export type EmptyRequest = Record<string, never>;
@@ -38,6 +81,18 @@ export type HealthResponse = {
   "build_version"?: string;
 };
 
+export type Lesson = {
+  "schema_version"?: "3.0.0";
+  "id": string;
+  "revision": number;
+  "entity"?: "lesson";
+  "title": string;
+  "objectives": Array<string>;
+  "prerequisite_ids"?: Array<string>;
+  "block_refs": Array<ContentRef>;
+  "proof_policy"?: "full" | "declared_dependencies";
+};
+
 export type LogoutResponse = {
   "logged_out"?: true;
 };
@@ -46,6 +101,16 @@ export type MutationAck = {
   "id": string;
   "revision": number;
   "applied": boolean;
+};
+
+export type PageCourse = {
+  "items": Array<CourseSummary>;
+  "next_cursor": (string | null);
+};
+
+export type PageRevision = {
+  "items": Array<RevisionSummary>;
+  "next_cursor": (string | null);
 };
 
 export type PreferencesPatch = {
@@ -66,6 +131,13 @@ export type ReadinessResponse = {
   "data_schema_version": string;
   "migrations_pending": boolean;
   "providers_configured": boolean;
+};
+
+export type RevisionSummary = {
+  "ref": ContentRef;
+  "created_at": string;
+  "review_state"?: "unreviewed";
+  "lifecycle": "active" | "archived";
 };
 
 export type RoleRequest = {

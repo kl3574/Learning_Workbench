@@ -6,6 +6,7 @@ by generation, and transport-level unknown JSON is never used as a business DTO.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from scripts.schema_types import generate_types, typescript_type
@@ -26,6 +27,165 @@ def json_schema(content: dict[str, Any]) -> dict[str, Any]:
     return content["application/json"]["schema"]
 
 
+def parameter_contract(parameter: dict[str, Any]) -> dict[str, Any]:
+    """Only explicitly supported scalar URL/header serialization is admitted."""
+    location = parameter.get("in")
+    if location not in {"path", "query", "header"} or "schema" not in parameter:
+        raise ValueError("Unsupported parameter location or content encoding")
+    style = "form" if location == "query" else "simple"
+    if parameter.get("style", style) != style or parameter.get("allowReserved", False):
+        raise ValueError("Unsupported parameter serialization style")
+    schema = parameter["schema"]
+    options = schema.get("anyOf", [schema])
+    non_null = [option for option in options if option.get("type") != "null"]
+    nullable = len(non_null) != len(options)
+    if len(non_null) != 1 or non_null[0].get("type") not in {"string", "integer", "number", "boolean"}:
+        raise ValueError("Only scalar path/query/header parameters have a generated binding")
+    scalar = non_null[0]
+    required = parameter.get("required", False)
+    if location == "path" and (not required or nullable):
+        raise ValueError("Path parameters must be required and non-null")
+    if required and nullable:
+        raise ValueError("Required nullable parameters need an explicit null serialization")
+    return {"name": parameter["name"], "required": required, "type": scalar["type"],
+            "typescript": typescript_type(schema),
+            **{name: scalar[name] for name in ("minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum")
+               if name in scalar}}
+
+
+def operation_parameters(path: str, path_item: dict, operation: dict) -> dict[str, list[dict[str, Any]]]:
+    # OpenAPI allows operation parameters to override a path-level declaration.
+    merged = {}
+    for owner in (path_item, operation):
+        seen = set()
+        for parameter in owner.get("parameters", []):
+            if "$ref" in parameter:
+                raise ValueError("Referenced parameters need explicit resolution")
+            key = (parameter["in"], parameter["name"])
+            if key in seen:
+                raise ValueError("Duplicate parameter declaration")
+            seen.add(key)
+            merged[key] = parameter
+    result: dict[str, list[dict[str, Any]]] = {"path": [], "query": [], "header": []}
+    for (location, name), parameter in sorted(merged.items()):
+        contract = parameter_contract(parameter)
+        if location == "header" and name.lower() in TRANSPORT_HEADERS:
+            continue
+        result[location].append(contract)
+    if set(re.findall(r"\{([^{}]+)\}", path)) != {item["name"] for item in result["path"]}:
+        raise ValueError("Path template and required path parameters disagree")
+    return result
+
+
+def parameter_type(parameters: list[dict[str, Any]]) -> str:
+    return "{ " + "; ".join(
+        f"{json.dumps(item['name'])}{'' if item['required'] else '?'}: {item['typescript']}"
+        for item in parameters
+    ) + " }"
+
+
+def response_contract(operation: dict) -> tuple[list[str], str, set[str]]:
+    response_types: list[str] = []
+    kinds: set[str] = set()
+    models = set()
+    for status, response in operation["responses"].items():
+        if not str(status).startswith("2"):
+            continue
+        content = response.get("content")
+        if not content:
+            response_types.append("undefined")
+            kinds.add("json")
+        elif set(content) == {"text/markdown"}:
+            if content["text/markdown"].get("schema", {}).get("type") != "string":
+                raise ValueError("Markdown responses require an explicit string schema")
+            response_types.append("string")
+            kinds.add("text")
+        else:
+            model = typescript_type(json_schema(content))
+            response_types.append(model)
+            models.add(model)
+            kinds.add("json")
+    if not response_types:
+        raise ValueError("Runtime operation has no declared successful response")
+    if len(kinds) != 1:
+        raise ValueError("Mixed successful response transports need a status-aware adapter")
+    return list(dict.fromkeys(response_types)), kinds.pop(), models
+
+
+CLIENT_RUNTIME = '''export type EndpointKey = keyof ApiEndpointMap;
+export type ApiRequest<K extends EndpointKey> = ApiEndpointMap[K]['request'];
+export type ApiResponse<K extends EndpointKey> = ApiEndpointMap[K]['response'];
+export type ApiParameters<K extends EndpointKey> = ApiEndpointMap[K]['parameters'];
+export type ApiHeaders<K extends EndpointKey> = ApiEndpointMap[K]['headers'] extends null
+  ? undefined : ApiEndpointMap[K]['headers'];
+export type ApiArgs<K extends EndpointKey> = ApiEndpointMap[K]['parametersRequired'] extends true
+  ? [body: ApiRequest<K>, headers: ApiHeaders<K>, parameters: ApiParameters<K>]
+  : ApiEndpointMap[K]['headers'] extends null
+    ? [body: ApiRequest<K>, headers?: undefined, parameters?: ApiParameters<K>]
+    : [body: ApiRequest<K>, headers: ApiHeaders<K>, parameters?: ApiParameters<K>];
+
+export type ResponseKind = 'json' | 'text';
+// The caller owns same-origin session/CSRF and HTTP error handling.
+// Raw transport data is unknown; endpoint results always use generated DTOs.
+export type ApiTransport = (path: string, init: RequestInit, responseKind?: ResponseKind) => Promise<unknown>;
+export type JsonTransport = ApiTransport;
+type Scalar = string | number | boolean | null | undefined;
+type UrlParameters = { path?: Record<string, Scalar>; query?: Record<string, Scalar> };
+type Parameter = {
+  name: string; required: boolean; type: 'string' | 'integer' | 'number' | 'boolean';
+  minimum?: number; maximum?: number; exclusiveMinimum?: number; exclusiveMaximum?: number;
+};
+type Endpoint = {
+  method: string; path: string; responseKind: ResponseKind;
+  pathParameters: readonly Parameter[]; queryParameters: readonly Parameter[];
+};
+
+function parameterValue(parameter: Parameter, value: Scalar): string | undefined {
+  if (value === undefined || value === null) {
+    if (parameter.required) throw new TypeError(`Missing required parameter: ${parameter.name}`);
+    return undefined;
+  }
+  const expected = parameter.type === 'integer' ? 'number' : parameter.type;
+  if (typeof value !== expected) throw new TypeError(`Invalid parameter type: ${parameter.name}`);
+  if (typeof value === 'number' && (!Number.isFinite(value)
+      || (parameter.type === 'integer' && !Number.isSafeInteger(value))
+      || (parameter.minimum !== undefined && value < parameter.minimum)
+      || (parameter.maximum !== undefined && value > parameter.maximum)
+      || (parameter.exclusiveMinimum !== undefined && value <= parameter.exclusiveMinimum)
+      || (parameter.exclusiveMaximum !== undefined && value >= parameter.exclusiveMaximum))) {
+    throw new TypeError(`Invalid numeric parameter: ${parameter.name}`);
+  }
+  return String(value);
+}
+
+function parameterEntries(definitions: readonly Parameter[], values: Record<string, Scalar> = {}): [string, string][] {
+  const allowed = new Set(definitions.map(parameter => parameter.name));
+  for (const name of Object.keys(values)) {
+    if (!allowed.has(name)) throw new TypeError(`Undeclared parameter: ${name}`);
+  }
+  return definitions.flatMap(parameter => {
+    const value = parameterValue(parameter, Object.hasOwn(values, parameter.name) ? values[parameter.name] : undefined);
+    return value === undefined ? [] : [[parameter.name, value] as [string, string]];
+  });
+}
+
+export function createApiClient(transport: ApiTransport) {
+  return function request<K extends EndpointKey>(operation: K, ...args: ApiArgs<K>): Promise<ApiResponse<K>> {
+    const endpoint: Endpoint = API_ENDPOINTS[operation];
+    const parameters = (args[2] ?? {}) as UrlParameters;
+    const paths = new Map(parameterEntries(endpoint.pathParameters, parameters.path));
+    const path = endpoint.path.replace(/\\{([^{}]+)\\}/g, (_match, name: string) => encodeURIComponent(paths.get(name)!));
+    const query = new URLSearchParams(parameterEntries(endpoint.queryParameters, parameters.query)).toString();
+    return transport(path + (query ? `?${query}` : ''), {
+      method: endpoint.method,
+      ...(args[0] !== undefined ? { body: JSON.stringify(args[0]) } : {}),
+      ...(args[1] ? { headers: args[1] as Record<string, string> } : {}),
+    }, endpoint.responseKind) as Promise<ApiResponse<K>>;
+  };
+}
+'''
+
+
 def api_artifacts(openapi: dict, catalog: dict, provenance: dict[str, str]) -> dict[str, str | dict]:
     schemas = openapi["components"]["schemas"]
     declared = {(route["method"], route["path"]) for route in catalog["routes"]}
@@ -42,50 +202,33 @@ def api_artifacts(openapi: dict, catalog: dict, provenance: dict[str, str]) -> d
             if "requestBody" in operation:
                 request_type = typescript_type(json_schema(operation["requestBody"]["content"]))
                 models_needed.add(request_type)
-            response_types = []
-            for status, response in operation["responses"].items():
-                if status.startswith("2"):
-                    response_types.append(typescript_type(json_schema(response["content"])) if "content" in response else "undefined")
-            if not response_types:
-                raise ValueError("Runtime operation has no declared successful response")
-            models_needed.update(response_types)
-            headers = {}
-            for parameter in operation.get("parameters", []):
-                if parameter["in"] != "header":
-                    raise ValueError("Path/query parameters need an explicit generated binding")
-                if parameter["name"].lower() not in TRANSPORT_HEADERS:
-                    headers[parameter["name"]] = {"required": parameter.get("required", False),
-                                                   "type": typescript_type(parameter["schema"])}
-            header_type = "null" if not headers else "{ " + "; ".join(
-                f"{json.dumps(name)}{'' if value['required'] else '?'}: {value['type']}" for name, value in headers.items()
-            ) + " }"
+            response_types, response_kind, response_models = response_contract(operation)
+            models_needed.update(response_models)
+            parameters = operation_parameters(path, methods, operation)
+            header_type = parameter_type(parameters["header"]) if parameters["header"] else "null"
+            parameter_fields = []
+            for location in ("path", "query"):
+                if parameters[location]:
+                    required = any(item["required"] for item in parameters[location])
+                    parameter_fields.append(f"{location}{'' if required else '?'}: {parameter_type(parameters[location])}")
+            params_type = "{ " + "; ".join(parameter_fields) + " }" if parameter_fields else "Record<string, never>"
+            required_params = any(item["required"] for location in ("path", "query") for item in parameters[location])
             key = method.upper() + " " + path
-            endpoints[key] = {"method": method.upper(), "path": path}
-            entries.append(f"  {json.dumps(key)}: {{ request: {request_type}; response: {' | '.join(response_types)}; headers: {header_type} }};")
+            endpoints[key] = {"method": method.upper(), "path": path, "responseKind": response_kind,
+                              **{location + "Parameters": [{name: value for name, value in item.items() if name != "typescript"}
+                                                            for item in parameters[location]] for location in ("path", "query")}}
+            entries.append(f"  {json.dumps(key)}: {{ request: {request_type}; response: {' | '.join(response_types)}; "
+                           f"headers: {header_type}; parameters: {params_type}; parametersRequired: {str(required_params).lower()} }};")
     if models_needed - {"undefined"} - set(schemas):
         raise ValueError("Endpoint request/response requires a named strict DTO")
     types = generate_types(schemas, provenance)
     binding = [f"// Generated from PRODUCT_DESIGN.md v{provenance['spec_version']} and actual runtime OpenAPI; do not edit.",
                f"// spec_sha256: {provenance['spec_sha256']}",
-               "import type { " + ", ".join(sorted(models_needed - {"undefined"})) + ' } from "./api-types";', "",
+               ("import type { " + ", ".join(sorted(models_needed - {"undefined"})) + ' } from "./api-types";')
+               if models_needed - {"undefined"} else "", "",
                "export interface ApiEndpointMap {", *entries, "}", "",
                "export const API_ENDPOINTS = " + json.dumps(endpoints, ensure_ascii=False, indent=2) + " as const;", "",
-               "export type EndpointKey = keyof ApiEndpointMap;",
-               "export type ApiRequest<K extends EndpointKey> = ApiEndpointMap[K]['request'];",
-               "export type ApiResponse<K extends EndpointKey> = ApiEndpointMap[K]['response'];",
-               "type Args<K extends EndpointKey> = ApiEndpointMap[K]['headers'] extends null",
-               "  ? [body: ApiRequest<K>] : [body: ApiRequest<K>, headers: NonNullable<ApiEndpointMap[K]['headers']>];", "",
-               "// The caller owns same-origin session/CSRF and HTTP error handling.",
-               "export type JsonTransport = (path: string, init: RequestInit) => Promise<unknown>;",
-               "export function createApiClient(transport: JsonTransport) {",
-               "  return function request<K extends EndpointKey>(operation: K, ...args: Args<K>): Promise<ApiResponse<K>> {",
-               "    const endpoint = API_ENDPOINTS[operation];",
-               "    return transport(endpoint.path, {",
-               "      method: endpoint.method,",
-               "      ...(args[0] !== undefined ? { body: JSON.stringify(args[0]) } : {}),",
-               "      ...(args[1] ? { headers: args[1] as Record<string, string> } : {}),",
-               "    }) as Promise<ApiResponse<K>>;",
-               "  };", "}", ""]
+               CLIENT_RUNTIME]
     registered = set(endpoints)
     coverage = {**provenance, "scope": "runtime_registration_and_schema_projection_only",
                 "registered_operations": sorted(registered),

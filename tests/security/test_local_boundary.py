@@ -202,8 +202,8 @@ def test_payload_budget_and_unimplemented_routes(runtime):
     application, client, settings = runtime
     headers = login(application, client, settings)
     assert client.post("/api/v1/session/logout", content=b"x" * (settings.max_request_bytes + 1), headers=headers).status_code == 413
-    assert client.get("/api/v1/courses").status_code == 404
-    assert "/api/v1/courses" not in application.openapi()["paths"]
+    assert client.get("/api/v1/notes").status_code == 404
+    assert "/api/v1/notes" not in application.openapi()["paths"]
 
 
 @pytest.mark.parametrize("host", ["0.0.0.0", "192.168.1.2", "example.com", "::"])
