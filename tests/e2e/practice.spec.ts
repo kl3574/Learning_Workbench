@@ -180,6 +180,13 @@ test('two pages keep their durable local candidates and closing an unsynced prac
     await expect(comparison).toContainText('A保留在本机的候选')
     await expect(comparison).toContainText('B保留在本机的候选')
     expect(await read(page, id)).toEqual(before)
+    // A live peer must retain its own unsynced branch. Make the peer's
+    // durable retention and close explicit before choosing with one writer.
+    await expect(second.getByText('本机草稿存储可用', { exact: true })).toBeVisible()
+    await second.locator('.object-tab.active .tab-close').click()
+    await second.getByRole('dialog', { name: '保留未同步作答', exact: true }).getByRole('button', { name: '保留本机作答并关闭', exact: true }).click()
+    await expect(second.locator('.practice-content')).toHaveCount(0)
+    await second.close()
     const choice = page.locator('.practice-recovery details').filter({ hasText: 'A保留在本机的候选' }).first()
     await choice.getByRole('button', { name: /采用本机候选/ }).click()
     await expect(page.getByRole('heading', { name: '本机作答草稿冲突', exact: true })).toHaveCount(0)

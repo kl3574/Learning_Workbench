@@ -1,0 +1,73 @@
+FFF....                                                                  [100%]
+=================================== FAILURES ===================================
+______ test_create_replay_cannot_redirect_old_key_to_other_active_attempt ______
+
+state = (<services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>, SessionIdentity(id='session_assessment_...ted'], time_limit_seconds=None)), <services.api.app.application.assessment.AssessmentService object at <RUNTIME_ADDRESS>>)
+
+    def test_create_replay_cannot_redirect_old_key_to_other_active_attempt(state):
+        database, identity, fixture, service = state
+        first = create(state, 'first')
+        service.abandon(identity, first.id, dm.AttemptSubmit(expected_revision=1), 'abandon-first')
+        current = create(state, 'second')
+        with database.transaction() as connection:
+            connection.execute('UPDATE idempotency SET result_json=? WHERE actor=? AND route=? AND key=?',
+                (canonical_bytes(current).decode(), identity.workspace_id, f'POST /assessments/{fixture.assessment.id}/attempts', 'first'))
+        before = count_effects(database)
+>       with pytest.raises(ApiError):
+             ^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ApiError
+
+tests/integration/test_assessment_independent_review.py:38: Failed
+_ test_create_replay_rejects_cached_public_question_or_ref_not_matching_frozen_assignment[stem] _
+
+state = (<services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>, SessionIdentity(id='session_assessment_...ted'], time_limit_seconds=None)), <services.api.app.application.assessment.AssessmentService object at <RUNTIME_ADDRESS>>)
+field = 'stem'
+
+    @pytest.mark.parametrize('field', ['stem', 'frozen_ref'])
+    def test_create_replay_rejects_cached_public_question_or_ref_not_matching_frozen_assignment(state, field):
+        database, identity, fixture, service = state
+        current = create(state, 'create')
+        with database.transaction() as connection:
+            row = connection.execute('SELECT result_json FROM idempotency WHERE actor=? AND key=?', (identity.workspace_id, 'create')).fetchone()
+            damaged = json.loads(row['result_json'])
+            if field == 'stem':
+                damaged['questions'][0]['stem_markdown'] = 'Synthetic unrelated cached question text; not the frozen allocation.'
+            else:
+                damaged['preflight']['prior_seen']['questions'][0]['question_ref']['sha256'] = '0' * 64
+            connection.execute('UPDATE idempotency SET result_json=? WHERE actor=? AND key=?',
+                (canonical_bytes(damaged).decode(), identity.workspace_id, 'create'))
+        before = count_effects(database)
+>       with pytest.raises(ApiError):
+             ^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ApiError
+
+tests/integration/test_assessment_independent_review.py:58: Failed
+_ test_create_replay_rejects_cached_public_question_or_ref_not_matching_frozen_assignment[frozen_ref] _
+
+state = (<services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>, SessionIdentity(id='session_assessment_...ted'], time_limit_seconds=None)), <services.api.app.application.assessment.AssessmentService object at <RUNTIME_ADDRESS>>)
+field = 'frozen_ref'
+
+    @pytest.mark.parametrize('field', ['stem', 'frozen_ref'])
+    def test_create_replay_rejects_cached_public_question_or_ref_not_matching_frozen_assignment(state, field):
+        database, identity, fixture, service = state
+        current = create(state, 'create')
+        with database.transaction() as connection:
+            row = connection.execute('SELECT result_json FROM idempotency WHERE actor=? AND key=?', (identity.workspace_id, 'create')).fetchone()
+            damaged = json.loads(row['result_json'])
+            if field == 'stem':
+                damaged['questions'][0]['stem_markdown'] = 'Synthetic unrelated cached question text; not the frozen allocation.'
+            else:
+                damaged['preflight']['prior_seen']['questions'][0]['question_ref']['sha256'] = '0' * 64
+            connection.execute('UPDATE idempotency SET result_json=? WHERE actor=? AND key=?',
+                (canonical_bytes(damaged).decode(), identity.workspace_id, 'create'))
+        before = count_effects(database)
+>       with pytest.raises(ApiError):
+             ^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ApiError
+
+tests/integration/test_assessment_independent_review.py:58: Failed
+=========================== short test summary info ============================
+FAILED tests/integration/test_assessment_independent_review.py::test_create_replay_cannot_redirect_old_key_to_other_active_attempt
+FAILED tests/integration/test_assessment_independent_review.py::test_create_replay_rejects_cached_public_question_or_ref_not_matching_frozen_assignment[stem]
+FAILED tests/integration/test_assessment_independent_review.py::test_create_replay_rejects_cached_public_question_or_ref_not_matching_frozen_assignment[frozen_ref]
+3 failed, 4 passed in 1.96s

@@ -1,0 +1,142 @@
+{
+  "phase": "M3.2 in progress",
+  "scope": "Actual bounded SQLite/import/HTTP development and static checks; excludes browser acceptance, CI, grading, and whole-phase completion.",
+  "results": [
+    {
+      "path": "initial-tests.log",
+      "raw_sha256": "ac028c74d50f3b95a04b2b02e41a71e96fdca1c92786bf4357dfe406d762e3a5",
+      "published_sha256": "3e40d357552b3a5bc7cc3df30ac7a04d3c910a325fcf5f5f57e2ac17caeb7153",
+      "exit_code": 0,
+      "command": "uv run --frozen pytest tests/integration/test_assessment_attempts.py -q",
+      "scope": "17 passed; earlier development test inventory"
+    },
+    {
+      "path": "expanded-tests.log",
+      "raw_sha256": "e5bac7fe21fbbe5f8dccbd5e77a0a19d73b5e659f8f15e3495a1a3ab80c9e2fb",
+      "published_sha256": "8dd5aa3dc4770a21fdf5cdd5d134a00b1f16b0ee6ec9b7ab5b74f3ae404eb85f",
+      "exit_code": 1,
+      "command": "uv run --frozen pytest tests/integration/test_assessment_attempts.py -q",
+      "scope": "26 passed / 1 failed; test fixture omitted required Concept.revision; retained historical failure"
+    },
+    {
+      "path": "course-fixture-fixed.log",
+      "raw_sha256": "985c3d0eb79dbe97f1d73d5332b7933a2cf2efa47df74a37557d2cbd3fc21c3b",
+      "published_sha256": "62209e9a2df5217f64bb76287fce62c6792df6184331bc1d10d9ed3b4b798e1d",
+      "exit_code": 0,
+      "command": null,
+      "scope": "one repaired actual course fixture regression; original command was not separately recorded, raw historical output retained; not a complete suite"
+    },
+    {
+      "path": "final-tests.log",
+      "raw_sha256": "7701de855cacf65d8117fc94fc42a462208c10cac07a3c08a4e165a51054c13f",
+      "published_sha256": "76e8b89eba7cab8a13bf28506fcf15dbae879599ccd47f060dcf7d4e8f094057",
+      "exit_code": 0,
+      "command": "uv run --frozen pytest tests/integration/test_assessment_attempts.py -q",
+      "scope": "29 passed at pre-receipt-binding implementation; never a claim about later fixes"
+    },
+    {
+      "path": "final-lint.log",
+      "raw_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "published_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "exit_code": 0,
+      "command": "see pre-binding-receipt.json",
+      "scope": "earlier frozen development lint"
+    },
+    {
+      "path": "final-types.log",
+      "raw_sha256": "e317872697c2cbfdefa321527a6efe73290dff3a390b0fa8723b87092eccba6a",
+      "published_sha256": "e317872697c2cbfdefa321527a6efe73290dff3a390b0fa8723b87092eccba6a",
+      "exit_code": 0,
+      "command": "see pre-binding-receipt.json",
+      "scope": "earlier frozen development mypy"
+    },
+    {
+      "path": "final-generated.log",
+      "raw_sha256": "c38daefb598f16754c39d564c83ba98116480e6ce751975185b13438db4e3298",
+      "published_sha256": "c38daefb598f16754c39d564c83ba98116480e6ce751975185b13438db4e3298",
+      "exit_code": 0,
+      "command": "uv run --frozen python scripts/generate_contracts.py --check",
+      "scope": "earlier generated contract check"
+    },
+    {
+      "path": "receipt-binding-green-initial.log",
+      "raw_sha256": "7e737205f252eb8b71579d7fce1066d88c05b70992ecb1b8cdea943fb0530a39",
+      "published_sha256": "90cf0ebc7feda91bbca18cdbde59c8accfe5127b333a3b44817b6c7e682a7cdb",
+      "exit_code": 0,
+      "command": "uv run --frozen pytest tests/integration/test_assessment_attempts.py tests/integration/test_assessment_independent_review.py tests/integration/test_assessment_learning_port.py tests/integration/test_workbench_assessment_policy.py -q",
+      "scope": "60 passed / 17.84s: 36 assessment + 7 independent + 11 Learning + 6 Workbench; final extra atomic test not yet in file at this run"
+    },
+    {
+      "path": "receipt-binding-atomic-green.log",
+      "raw_sha256": "3fd2505c20ebd43d8ea96c8968e7b70a5b631caa0e2abbfdb8d9cf4986611407",
+      "published_sha256": "554f5b45e103e0d1c6deb8b4386717c82b81284c47f8bc2feecb0c2dc46f1196",
+      "exit_code": 0,
+      "command": "uv run --frozen pytest tests/integration/test_assessment_attempts.py::test_receipt_sealing_failure_rolls_back_submission_event_and_outbox_together -q",
+      "scope": "1 passed / 0.50s; separately executed final new receipt-sealing rollback test"
+    },
+    {
+      "path": "receipt-binding-lint.log",
+      "raw_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "published_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "exit_code": 0,
+      "command": "uv run --frozen ruff check services/api/app/assessment_dto.py services/api/app/application/assessment.py services/api/app/infrastructure/assessment_repository.py services/api/app/interfaces/assessment_http.py services/api/app/application/workbench.py services/api/app/interfaces/http.py tests/integration/test_assessment_attempts.py tests/integration/test_workbench_assessment_policy.py",
+      "scope": "8 owned source/test files pass"
+    },
+    {
+      "path": "receipt-binding-types.log",
+      "raw_sha256": "ab35ee42183d4d6d3ba483825ab037d18a5a15622d03be01d82220b1564851ff",
+      "published_sha256": "ab35ee42183d4d6d3ba483825ab037d18a5a15622d03be01d82220b1564851ff",
+      "exit_code": 0,
+      "command": "uv run --frozen mypy services/api/app/assessment_dto.py services/api/app/application/assessment.py services/api/app/infrastructure/assessment_repository.py services/api/app/interfaces/assessment_http.py services/api/app/application/workbench.py services/api/app/interfaces/http.py",
+      "scope": "6 production sources pass"
+    },
+    {
+      "path": "receipt-binding-generated.log",
+      "raw_sha256": "c38daefb598f16754c39d564c83ba98116480e6ce751975185b13438db4e3298",
+      "published_sha256": "c38daefb598f16754c39d564c83ba98116480e6ce751975185b13438db4e3298",
+      "exit_code": 0,
+      "command": "uv run --frozen python scripts/generate_contracts.py --check",
+      "scope": "65 generated artifacts match"
+    },
+    {
+      "path": "pre-binding-receipt.json",
+      "raw_sha256": "18bf26405c9568e0acd95a6fb515dd60d1489597390e3861e3f2484c5c7fb79f",
+      "published_sha256": "18bf26405c9568e0acd95a6fb515dd60d1489597390e3861e3f2484c5c7fb79f",
+      "exit_code": 0,
+      "command": "source before/after capture documented by this receipt",
+      "scope": "29-test earlier implementation source hashes, explicitly superseded"
+    },
+    {
+      "path": "workbench-red.log",
+      "raw_sha256": "9ce8532d0c45a8add08358b81d80b867973e3674d7eadb2599ae2b67e2a34856",
+      "published_sha256": "cefb93509100a3cba9b8675a65383c37373d821f9b8a86efeb5af4b834ee7409",
+      "exit_code": 1,
+      "command": "uv run --frozen pytest tests/integration/test_workbench_assessment_policy.py -q",
+      "scope": "6 failed / 2.08s, real independent attempt rejected Workbench reads"
+    },
+    {
+      "path": "workbench-green.log",
+      "raw_sha256": "9f70e4754cc6453ef9441b1221787c81722c0c279d399711ce122d41f2d132cb",
+      "published_sha256": "9e3b29a172bb7fdd8a2e756aeadc5e3af5803a8814bb42bcaec9166e4c2b15b8",
+      "exit_code": 0,
+      "command": "uv run --frozen pytest tests/integration/test_workbench_assessment_policy.py tests/integration/test_workbench_persistence.py tests/security/test_local_boundary.py -q",
+      "scope": "54 passed / 5.33s; new 6 and existing 48, before separate receipt-binding migration change"
+    },
+    {
+      "path": "source-manifest.json",
+      "raw_sha256": "668da228988f8b1e7715f575fbb69b92dd0474159c1a2342d19fa25871851a60",
+      "published_sha256": "668da228988f8b1e7715f575fbb69b92dd0474159c1a2342d19fa25871851a60",
+      "scope": "Post-run source state; production fixed, test file includes separately-run atomic regression."
+    }
+  ],
+  "redaction": "Only known developer checkout/runtime absolute path replaced with fixed placeholders; original logs retained privately. No credentials or private documents used.",
+  "independent_review": "Original independent 3-fail/4-pass and final unchanged 7-pass probes are packaged separately by the independent reviewer; no original failure overwritten.",
+  "source_provenance": "pre-binding-receipt.json provides earlier 29-test run before/after hashes. source-manifest.json is collected after the later runs; no unrecorded before-hash is claimed.",
+  "behavior": [
+    "Workbench GET and acknowledgments redact all selection text while a validated independent attempt is active; persisted selection is preserved for identical tab context.",
+    "Workbench ETag binds workspace/revision/full-or-independent basis; full-to-active may save, stale active-to-full or active-to-other rejects 412; legacy ambiguous null clear requires fresh full basis.",
+    "Assessment cached receipts bind actual idempotency instance timestamp/request hash to immutable allocation and canonical response hash; expired row deletion removes binding before key reuse.",
+    "Cached historical revision/status remains replayable where policy permits; immutable frozen public fields must match the verified allocation.",
+    "Submission, native Learning event, grading request outbox, idempotency response and receipt seal commit atomically; injected final seal failure rolls all back."
+  ]
+}

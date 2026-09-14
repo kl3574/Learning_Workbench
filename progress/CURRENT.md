@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-14T14:48:29Z；规范 SHA-256：`ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
+更新：2026-09-14T15:49:03Z；规范 SHA-256：`ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED
-实施：IN_PROGRESS；当前任务：None；下一任务：M3.2
+实施：IN_PROGRESS；当前任务：M3.2；下一任务：M3.3
 
-M3.1已通过固定源码本地与GitHub门禁并进入PR43审查；从feat/M3.1-practice最新同步HEAD接续M3.2，不覆盖历史工作。
+冻结M3.2实际源码并执行完整门禁和GitHub CI。保留所有开发失败/修复及独立审查证据；未将待验收工作标完成，随后接续M3.3评分。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -22,7 +22,7 @@ M3.1已通过固定源码本地与GitHub门禁并进入PR43审查；从feat/M3.1
 | M2.3 PDFtext/DOCX 提取隔离、低保真诊断 | review | [#18](https://github.com/kl3574/Learning_Workbench/issues/18) | c7bcd6c8e511e2fe31e3739da9718f276fbfc0cd |
 | M2.4 Reader/LaTeX、例题锚点、笔记、阅读位置 | review | [#19](https://github.com/kl3574/Learning_Workbench/issues/19) | 4e53ce5e73b61650f93c1ea769f3e3143031f29d |
 | M3.1 题面/私有答案库、练习/提示/暴露记录 | review | [#20](https://github.com/kl3574/Learning_Workbench/issues/20) | 0fc6340d33c26c9f6124ebb3d19f190709b860ad |
-| M3.2 独立/辅助/开卷 policy snapshot，自动保存、并发版本 | ready | [#21](https://github.com/kl3574/Learning_Workbench/issues/21) | 未验证提交 |
+| M3.2 独立/辅助/开卷 policy snapshot，自动保存、并发版本 | in_progress | [#21](https://github.com/kl3574/Learning_Workbench/issues/21) | 未验证提交 |
 | M3.3 单选、文本填空、数值/计算容差、人工复核 | todo | [#22](https://github.com/kl3574/Learning_Workbench/issues/22) | 未验证提交 |
 | M3.4 交卷/评分/复盘闭环，评分版本与 evidence | todo | [#23](https://github.com/kl3574/Learning_Workbench/issues/23) | 未验证提交 |
 | M4.1 学习事件、概念/技能证据、路线完成 | todo | [#24](https://github.com/kl3574/Learning_Workbench/issues/24) | 未验证提交 |

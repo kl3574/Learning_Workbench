@@ -124,6 +124,14 @@ class ProvenanceRepository:
         if manifest.get('version') != 1 or manifest.get('sha256') != source.sha256 or manifest.get('size') != source.size:
             return 'unavailable'
         if artifact['visibility'] == 'author_private':
+            from ..application.policy import Policy
+
+            try:
+                Policy(self.connection, self.workspace_id).check('private_artifact')
+            except ApiError:
+                # Preserve the safe citation while accurately withholding the
+                # opaque original that the download port would also reject.
+                return 'unavailable'
             return 'allowed' if identity.role == 'author' else 'author_required'
         return 'allowed' if artifact['visibility'] == 'learner' else 'unavailable'
 

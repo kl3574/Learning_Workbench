@@ -1,0 +1,41 @@
+
+Running 2 tests using 1 worker
+
+(node:435681) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/e2e/assessment-restart.spec.ts:43:1 › same assessment instance rejects forged course and assessment hashes while its independent policy remains active (9.4s)
+(node:436030) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  2 tests/e2e/assessment-restart.spec.ts:111:1 › actual browser and API restarts retain independent drafts and keep old solution receipts protected after submission (10.4s)
+
+
+  1) tests/e2e/assessment-restart.spec.ts:43:1 › same assessment instance rejects forged course and assessment hashes while its independent policy remains active 
+
+    Error: expect(locator).toBeEnabled() failed
+
+    Locator:  getByRole('button', { name: '为当前选文记笔记', exact: true })
+    Expected: enabled
+    Received: disabled
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toBeEnabled" getByRole('button', { name: '为当前选文记笔记', exact: true }) with timeout 5000ms
+      - waiting for getByRole('button', { name: '为当前选文记笔记', exact: true })
+        14 × locator resolved to <button disabled>为当前选文记笔记</button>
+           - unexpected value "disabled"
+
+
+      55 |     await page.keyboard.press('Control+Home')
+      56 |     await page.keyboard.press('Shift+End')
+    > 57 |     await expect(page.getByRole('button', { name: '为当前选文记笔记', exact: true })).toBeEnabled()
+         |                                                                               ^
+      58 |     await expect.poll(async () => {
+      59 |       const current = await workbench(page)
+      60 |       return current.tabs.find(tab => tab.id === current.active_tab_id)?.context.selection?.exact_quote
+        at <DEVELOPMENT_CHECKOUT>/tests/e2e/assessment-restart.spec.ts:57:79
+
+    Error Context: ../m32-restart-development-second/assessment-restart-same-as-4fd7a-ndent-policy-remains-active/error-context.md
+
+  1 failed
+    tests/e2e/assessment-restart.spec.ts:43:1 › same assessment instance rejects forged course and assessment hashes while its independent policy remains active 
+  1 passed (20.4s)

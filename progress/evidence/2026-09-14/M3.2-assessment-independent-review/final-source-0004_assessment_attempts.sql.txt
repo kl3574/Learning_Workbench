@@ -1,0 +1,33 @@
+-- Preserve baseline attempt rows; incomplete old bindings fail closed on read.
+ALTER TABLE attempts ADD COLUMN assessment_sha256 TEXT CHECK(assessment_sha256 IS NULL OR length(assessment_sha256)=64);
+ALTER TABLE attempts ADD COLUMN snapshot_sha256 TEXT CHECK(snapshot_sha256 IS NULL OR length(snapshot_sha256)=64);
+ALTER TABLE attempts ADD COLUMN preflight_json TEXT CHECK(preflight_json IS NULL OR json_valid(preflight_json));
+ALTER TABLE attempts ADD COLUMN preflight_sha256 TEXT CHECK(preflight_sha256 IS NULL OR length(preflight_sha256)=64);
+ALTER TABLE attempts ADD COLUMN responses_saved_at TEXT;
+ALTER TABLE attempts ADD COLUMN submission_json TEXT CHECK(submission_json IS NULL OR json_valid(submission_json));
+ALTER TABLE attempts ADD COLUMN submission_sha256 TEXT CHECK(submission_sha256 IS NULL OR length(submission_sha256)=64);
+ALTER TABLE attempts ADD COLUMN submission_event_id TEXT REFERENCES learning_events(event_id);
+ALTER TABLE attempts ADD COLUMN grading_outbox_id TEXT REFERENCES outbox(id);
+CREATE UNIQUE INDEX assessment_unique_grading_request ON attempts(grading_outbox_id) WHERE grading_outbox_id IS NOT NULL;
+CREATE INDEX assessment_attempt_workspace ON attempts(workspace_id,assessment_id,assessment_revision,created_at,id);
+CREATE TRIGGER immutable_assessment_assignment BEFORE UPDATE OF id,workspace_id,assessment_id,assessment_revision,assessment_sha256,snapshot_sha256,preflight_json,preflight_sha256,created_at ON attempts WHEN OLD.id IS NOT NEW.id OR OLD.workspace_id IS NOT NEW.workspace_id OR OLD.assessment_id IS NOT NEW.assessment_id OR OLD.assessment_revision IS NOT NEW.assessment_revision OR OLD.assessment_sha256 IS NOT NEW.assessment_sha256 OR OLD.snapshot_sha256 IS NOT NEW.snapshot_sha256 OR OLD.preflight_json IS NOT NEW.preflight_json OR OLD.preflight_sha256 IS NOT NEW.preflight_sha256 OR OLD.created_at IS NOT NEW.created_at BEGIN SELECT RAISE(ABORT,'assessment assignment immutable'); END;
+CREATE TRIGGER immutable_assessment_submission BEFORE UPDATE OF submission_json,submission_sha256,submit_reason ON attempts WHEN OLD.submission_json IS NOT NULL AND (OLD.submission_json IS NOT NEW.submission_json OR OLD.submission_sha256 IS NOT NEW.submission_sha256 OR OLD.submit_reason IS NOT NEW.submit_reason) BEGIN SELECT RAISE(ABORT,'assessment submission immutable'); END;
+CREATE TRIGGER immutable_assessment_submission_links BEFORE UPDATE OF submission_event_id,grading_outbox_id ON attempts WHEN (OLD.submission_event_id IS NOT NULL AND OLD.submission_event_id IS NOT NEW.submission_event_id) OR (OLD.grading_outbox_id IS NOT NULL AND OLD.grading_outbox_id IS NOT NEW.grading_outbox_id) BEGIN SELECT RAISE(ABORT,'assessment submission links immutable'); END;
+CREATE TRIGGER assessment_no_reactivate BEFORE UPDATE OF status ON attempts WHEN (OLD.status<>'active' AND NEW.status='active') OR (OLD.status='abandoned' AND NEW.status<>'abandoned') OR (OLD.status<>'active' AND NEW.status='abandoned') BEGIN SELECT RAISE(ABORT,'assessment transition invalid'); END;
+CREATE TRIGGER assessment_response_delete_active BEFORE DELETE ON responses WHEN NOT EXISTS(SELECT 1 FROM attempts WHERE id=OLD.attempt_id AND status='active') BEGIN SELECT RAISE(ABORT,'attempt not active'); END;
+CREATE TRIGGER assessment_saved_at_frozen BEFORE UPDATE OF responses_saved_at ON attempts WHEN OLD.status<>'active' AND OLD.responses_saved_at IS NOT NEW.responses_saved_at BEGIN SELECT RAISE(ABORT,'submitted response timestamp immutable'); END;
+-- A receipt belongs to one live idempotency instance, not a permanent user key.
+-- Expiry deletes that instance and its binding before the same key is reused.
+CREATE TABLE assessment_receipts(
+ workspace_id TEXT NOT NULL REFERENCES workspace(id),
+ route TEXT NOT NULL,
+ key TEXT NOT NULL,
+ receipt_created_at TEXT NOT NULL,
+ request_sha256 TEXT NOT NULL CHECK(length(request_sha256)=64),
+ attempt_id TEXT NOT NULL REFERENCES attempts(id),
+ assignment_sha256 TEXT NOT NULL CHECK(length(assignment_sha256)=64),
+ result_sha256 TEXT NOT NULL CHECK(length(result_sha256)=64),
+ PRIMARY KEY(workspace_id,route,key),
+ FOREIGN KEY(workspace_id,route,key) REFERENCES idempotency(actor,route,key) ON DELETE CASCADE
+);
+CREATE TRIGGER assessment_receipt_immutable BEFORE UPDATE ON assessment_receipts BEGIN SELECT RAISE(ABORT,'assessment receipt immutable'); END;

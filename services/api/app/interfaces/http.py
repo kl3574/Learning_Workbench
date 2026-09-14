@@ -94,13 +94,18 @@ def create_router(settings: Settings, database: Database, worker_ready: Callable
     def save_preferences(body: PreferencesRequest, request: Request) -> MutationAck:
         return workspace_service.save_preferences(request.state.identity.workspace_id, body)
 
-    @protected.get("/workbench/session", response_model=WorkbenchSession, tags=["workbench"])
-    def read_workbench(request: Request) -> WorkbenchSession:
-        return workbench_service.read(request.state.identity.workspace_id)
+    @protected.get("/workbench/session", response_model=WorkbenchSession, tags=["workbench"], responses={200: {"headers": {"ETag": {"description": "Workbench revision and selection projection basis; preserve unchanged for If-Match.", "schema": {"type": "string"}}}}})
+    def read_workbench(request: Request, response: Response) -> WorkbenchSession:
+        snapshot, etag = workbench_service.read_with_policy(request.state.identity.workspace_id)
+        response.headers.update({"ETag": etag, "Cache-Control": "no-store", "Vary": "Cookie"})
+        return snapshot
 
-    @protected.put("/workbench/session", response_model=WorkbenchSession, tags=["workbench"], dependencies=[Depends(verify_write)])
-    def save_workbench(body: WorkbenchSaveRequest, request: Request) -> WorkbenchSession:
-        return workbench_service.save(request.state.identity.workspace_id, body)
+    @protected.put("/workbench/session", response_model=WorkbenchSession, tags=["workbench"], dependencies=[Depends(verify_write)], responses={200: {"headers": {"ETag": {"description": "Saved Workbench revision and selection projection basis.", "schema": {"type": "string"}}}}})
+    def save_workbench(body: WorkbenchSaveRequest, request: Request, response: Response,
+                       if_match: Annotated[str | None, Header(alias="If-Match", max_length=256)] = None) -> WorkbenchSession:
+        snapshot, etag = workbench_service.save_with_policy(request.state.identity.workspace_id, body, if_match)
+        response.headers.update({"ETag": etag, "Cache-Control": "no-store", "Vary": "Cookie"})
+        return snapshot
 
     router.include_router(protected)
     return router

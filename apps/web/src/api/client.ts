@@ -4,21 +4,27 @@ import type { WorkbenchSession } from '../../../../packages/contracts/generated/
 let csrf = ''
 let sessionGeneration = 0
 const roleChannel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('learning-workbench.session-access.v1')
-if (roleChannel) roleChannel.onmessage = () => { sessionGeneration++ }
+const accessListeners = new Set<() => void>()
+const changed = (broadcast = true) => { sessionGeneration++; accessListeners.forEach(listener => listener()); if (broadcast) roleChannel?.postMessage('access-changed') }
+if (roleChannel) roleChannel.onmessage = () => changed(false)
+export const subscribeSessionAccess = (listener: () => void) => { accessListeners.add(listener); return () => { accessListeners.delete(listener) } }
 export const getSessionGeneration = () => sessionGeneration
 export class ApiError extends Error {
   status: number
-  constructor(status: number, message: string) { super(message); this.status = status }
+  code?: string
+  constructor(status: number, message: string, code?: string) { super(message); this.status = status; this.code = code }
 }
 async function transport(path: string, init: RequestInit, responseKind: ResponseKind = 'json', metadata?: (etag: string | null) => void) {
-  if (init.method === 'POST' && ['/api/v1/session/role', '/api/v1/session/logout', '/api/v1/session/bootstrap'].includes(path)) { sessionGeneration++; roleChannel?.postMessage('access-changed') }
-  const response = await fetch(path, {
+  const accessMutation = init.method === 'POST' && (['/api/v1/session/role', '/api/v1/session/logout', '/api/v1/session/bootstrap'].includes(path) || /^\/api\/v1\/(?:assessments\/[^/]+\/attempts|attempts\/[^/]+\/(?:submit|abandon))$/.test(path))
+  if (accessMutation) changed()
+  let response: Response
+  try { response = await fetch(path, {
     credentials: 'same-origin', ...init,
     headers: { ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...(csrf ? { 'X-CSRF-Token': csrf } : {}), ...init.headers },
-  })
+  }) } finally { if (accessMutation) changed() }
   if (!response.ok) {
     const body = await response.json().catch(() => null)
-    throw new ApiError(response.status, body?.error?.message ?? `服务请求失败 (${response.status})`)
+    throw new ApiError(response.status, body?.error?.message ?? `服务请求失败 (${response.status})`, body?.error?.code)
   }
   metadata?.(response.headers.get('ETag'))
   return responseKind === 'text' ? response.text() : responseKind === 'blob' ? response.blob() : response.json()
@@ -42,4 +48,7 @@ export async function connectSession(): Promise<string> {
   return result.workspace_id
 }
 export const readSession = () => request('GET /api/v1/workbench/session', undefined)
-export const saveSession = (session: WorkbenchSession) => request('PUT /api/v1/workbench/session', { expected_revision: session.revision, session })
+export const saveSession = (session: WorkbenchSession) => request('PUT /api/v1/workbench/session', { expected_revision: session.revision, session }, {})
+
+export const readSessionWithMetadata = () => requestWithMetadata('GET /api/v1/workbench/session', undefined)
+export const saveSessionWithMetadata = (session: WorkbenchSession, etag: string | null) => requestWithMetadata('PUT /api/v1/workbench/session', { expected_revision: session.revision, session }, etag ? { 'If-Match': etag } : {})

@@ -1,0 +1,17 @@
+..F..........                                                            [100%]
+=================================== FAILURES ===================================
+__ test_missing_or_damaged_private_binding_never_becomes_a_partial_allocation __
+
+state = (<services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>, SessionIdentity(id='session_assessment_...ted'], time_limit_seconds=None)), <services.api.app.application.assessment.AssessmentService object at <RUNTIME_ADDRESS>>)
+
+    def test_missing_or_damaged_private_binding_never_becomes_a_partial_allocation(state):
+        database, identity, fixture, _ = state
+        with database.transaction() as connection:
+            connection.execute('DELETE FROM solutions WHERE question_id=?', (fixture.questions[0].id,))
+>           connection.execute('DROP TRIGGER immutable_solution')
+E           sqlite3.OperationalError: no such trigger: immutable_solution
+
+tests/integration/test_assessment_policy.py:84: OperationalError
+=========================== short test summary info ============================
+FAILED tests/integration/test_assessment_policy.py::test_missing_or_damaged_private_binding_never_becomes_a_partial_allocation
+1 failed, 12 passed in 3.40s

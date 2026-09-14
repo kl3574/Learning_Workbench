@@ -1,0 +1,115 @@
+{
+  "phase": "M3.2 frontend final seam review during development",
+  "authority": "PRODUCT_DESIGN.md in current M3.2 worktree; no historical design package used.",
+  "scope": "Independent bounded read-only review of Assessment attempt/preview and Workbench selection/restore seams; two temporary controlled React probes. No production/test repository changes and no full-suite/native rerun.",
+  "source_before": {
+    "apps/web/src/workbench/useWorkbench.ts": "75c6e0fc3716ce8442edbf73d186ced6b792ce01fe930bbe0bdffeb3be1d2e71",
+    "apps/web/src/workbench/selectionMerge.ts": "2711b92ad079323e78a34771b90d388421a52814180c9be01a45a64e0da7115b",
+    "apps/web/src/features/assessment/useAssessmentAttempt.ts": "976d32c69903a4a8d3564f07795e75c492f50889c389ce739f5855b3cc759a5f",
+    "apps/web/src/features/assessment/AssessmentPreview.tsx": "6ac539eae4480294311b55ea396da76556b13979259b36bdf83dae69a188a555",
+    "apps/web/src/workbench/Shell.tsx": "e473609f8a5029f4440c7e55ba8c7ab7553920afddbfd8bc69cd3074eaea22e1"
+  },
+  "source_after": {
+    "apps/web/src/workbench/useWorkbench.ts": "75c6e0fc3716ce8442edbf73d186ced6b792ce01fe930bbe0bdffeb3be1d2e71",
+    "apps/web/src/workbench/selectionMerge.ts": "2711b92ad079323e78a34771b90d388421a52814180c9be01a45a64e0da7115b",
+    "apps/web/src/features/assessment/useAssessmentAttempt.ts": "976d32c69903a4a8d3564f07795e75c492f50889c389ce739f5855b3cc759a5f",
+    "apps/web/src/features/assessment/AssessmentPreview.tsx": "6ac539eae4480294311b55ea396da76556b13979259b36bdf83dae69a188a555",
+    "apps/web/src/workbench/Shell.tsx": "e473609f8a5029f4440c7e55ba8c7ab7553920afddbfd8bc69cd3074eaea22e1"
+  },
+  "sources_unchanged": true,
+  "findings": [
+    {
+      "id": "WB_RESTORE_LATE_OVERWRITE",
+      "severity": "P1",
+      "source": "apps/web/src/workbench/useWorkbench.ts",
+      "symbol": "restorePending",
+      "lines": [
+        114,
+        124
+      ],
+      "production_entry": "Shell.tsx recoverable snapshot button remains enabled while directory splitter and layout controls can call set().",
+      "steps": [
+        "Start with saved nav_width=300.",
+        "Choose another-window pending snapshot nav_width=320; hold the metadata GET.",
+        "Change current nav_width to 340 while GET is pending.",
+        "Release unchanged server GET."
+      ],
+      "observed": {
+        "live_nav_width": 320,
+        "local_pending_nav_width": 320,
+        "expected_newer_edit": 340,
+        "server_PUT_count": 0
+      },
+      "impact": "The edit made after the restore click is removed from both live state and its durable pending UI record without comparison.",
+      "minimal_fix": "Capture editing version and operation owner before awaiting; if a newer set or operation occurred, keep live/pending candidate and require a fresh explicit comparison before applying the older restore."
+    },
+    {
+      "id": "WB_USE_SERVER_LATE_OVERWRITE",
+      "severity": "P1",
+      "source": "apps/web/src/workbench/useWorkbench.ts",
+      "symbol": "reconnect(useServer=true)",
+      "lines": [
+        31,
+        76
+      ],
+      "production_entry": "Shell.tsx error/conflict controls invoke reconnect(true), while the editable layout remains mounted.",
+      "steps": [
+        "Start with saved nav_width=300.",
+        "Explicitly choose the server session; hold metadata GET.",
+        "Change current nav_width to 340 while GET is pending.",
+        "Release server GET containing nav_width=300."
+      ],
+      "observed": {
+        "live_nav_width": 300,
+        "local_pending_record": null,
+        "save_state": "saved",
+        "expected_newer_edit": 340,
+        "server_PUT_count": 0
+      },
+      "impact": "An explicit choice made earlier is applied to later edits: the new pending UI is deleted and status becomes saved although no PUT persisted it.",
+      "minimal_fix": "Bind the explicit discard to the editing version present at click time; late reads must not discard later edits or reset their saved version. Keep candidate and expose a renewed comparison."
+    }
+  ],
+  "reproduction": {
+    "command": "PATH=<locked Node 24.21.0 bin>:$PATH apps/web/node_modules/.bin/vitest run --config <temporary probe>/vitest.config.mts",
+    "exit_code": 1,
+    "tests_failed": 2,
+    "tests_passed": 0,
+    "duration_ms": 485,
+    "boundary": "Real React hook, React Query and jsdom localStorage; deferred metadata API adapter and unrelated object-draft hook mocked. No SQLite, real HTTP or native browser in this probe; no production rerender A-to-B assumption required.",
+    "files": {
+      "restore.test.tsx": "e0194e843dcf67b2b8a0fc4a555cf14bc358c4dec21c13c754ffa5723e2d37a1",
+      "vitest.config.mts": "07f7839097c435360250214ddd485795e6d1e6e8692c4bf01f324c71d93aee6f",
+      "red.log": "a5bb6a3ab10de968cb766a1982c36d0efd463651676729a3cd8a1552b0ba7bbd",
+      "two-boundaries-red.log": "109d0900d5f423ef2aa7ef642bc6deab5082a061b2480b550622851682c46204",
+      "source-before.json": "665efc28a0c8d5695cd08caf56bc05df508065e23d101d45e4d864f9550854d2",
+      "source-after.json": "665efc28a0c8d5695cd08caf56bc05df508065e23d101d45e4d864f9550854d2"
+    },
+    "location": "m32-workbench-seam-probe directory under the temporary root; originals retained"
+  },
+  "no_additional_findings_in_limited_static_review": [
+    "AssessmentPreview and useAssessmentAttempt reject callback updates after unmount or target/workspace epoch change. Shell keys the actual preview/view by tab identity; artificial hook reuse is not asserted as a production defect.",
+    "Create retry retains a local command key until acknowledgement; save retries reuse revision/body key; submit/abandon recovery rereads actual server state and does not automatically resubmit.",
+    "Attempt two-read client compares snapshot and responses revision, retries at most four times, checks workspace/precise parent and assigned questions.",
+    "412/409 save handling retains current candidate and opens a base/local/remote comparison. Restore into terminal snapshot keeps candidate separate, and update/save/transition check active status.",
+    "Selection merge only restores unchanged null selections for matching tab context/precise references and does not treat deliberate full-view clear as untouched."
+  ],
+  "existing_test_scope_read_without_rerun": {
+    "unit_definitions": [
+      "assessmentClient.test.ts: four revision-race/workspace/parent/assignment cases",
+      "assessmentDrafts.test.ts: envelope scope/policy/terminal/Unicode cases",
+      "selectionMerge.test.ts: three hidden-selection/changed-context/explicit-clear cases"
+    ],
+    "native_definitions": [
+      "assessments.spec.ts: actual five question types, mode policies, server/local CAS, terminal local candidate preservation, delayed projected Workbench PUT, late Practice solution response",
+      "assessment-restart.spec.ts: exact target identity, actual browser/API restart, unsynced answer recovery, submitted private-answer protection"
+    ],
+    "status": "Definitions inspected; this review does not claim new pass counts for them. Root separately reported its two real restart cases passed on the current migration. The two newly reproduced waiting-for-GET layout edits are not asserted in inspected existing tests.",
+    "not_tested_here": [
+      "native browser reproduction of these two races",
+      "Assessment in-flight unmount retry permutations beyond static owner checks",
+      "full-phase or exact-commit acceptance"
+    ]
+  },
+  "handoff": "Both concrete findings and raw temporary probe paths sent to root and the sole frontend owner. No source modified by this review."
+}

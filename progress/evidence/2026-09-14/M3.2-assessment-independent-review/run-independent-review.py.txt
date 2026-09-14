@@ -1,0 +1,27 @@
+"""Bounded repeatable assessment review runner; arguments are repository and evidence directory."""
+from pathlib import Path
+from hashlib import sha256
+import json
+import subprocess
+import sys
+
+root, folder = map(Path, sys.argv[1:3])
+paths = ['services/api/app/application/assessment.py', 'services/api/app/infrastructure/assessment_repository.py',
+    'services/api/app/assessment_dto.py', 'services/api/app/interfaces/assessment_http.py',
+    'migrations/0004_assessment_attempts.sql', 'tests/integration/test_assessment_independent_review.py']
+def snapshot():
+    return {path: sha256((root/path).read_bytes()).hexdigest() for path in paths}
+before = snapshot()
+command = ['uv', 'run', '--frozen', 'pytest', 'tests/integration/test_assessment_independent_review.py', '-q']
+with (folder/'green.log').open('w') as output:
+    result = subprocess.run(command,cwd=root,stdout=output,stderr=subprocess.STDOUT,check=False)
+after = snapshot()
+for path in paths:
+    (folder/('final-source-'+Path(path).name+'.txt')).write_bytes((root/path).read_bytes())
+receipt = {'command':' '.join(command),'exit_code':result.returncode,'log':'green.log',
+    'raw_log_sha256':sha256((folder/'green.log').read_bytes()).hexdigest(),
+    'source_before':before,'source_after':after,'reviewed_sources_unchanged_during_run':before==after,
+    'scope':'Six listed source/test files were checked before and after this bounded review. Shared fixtures and dependencies remain development state; no whole-branch exact-source acceptance claim.'}
+(folder/'green-run-receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
+print(json.dumps({'exit_code':result.returncode,'sources_unchanged':before==after,'log_sha256':receipt['raw_log_sha256']}))
+sys.exit(result.returncode)

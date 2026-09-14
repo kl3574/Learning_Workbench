@@ -1,0 +1,33 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_____ test_cached_private_cancel_receipt_rechecks_later_answer_protection ______
+
+state = (<services.api.app.infrastructure.database.Database object at <RUNTIME_ADDRESS>>, SessionIdentity(id='session_assessment_...ted'], time_limit_seconds=None)), <services.api.app.application.assessment.AssessmentService object at <RUNTIME_ADDRESS>>)
+
+    def test_cached_private_cancel_receipt_rechecks_later_answer_protection(state):
+        database, identity, fixture, assessment = state
+        importer = ImportService(database)
+        author = replace(identity, role='author')
+        staged = importer.stage(author, data=fixture.archive, filename='cached-private.learnpack.zip', kind='learnpack', key='cached-source')
+        worker = ImportWorker(database)
+        try:
+            assert worker.run_once()
+            before = importer.job(author, staged.job.id)
+            request = JobCancelRequest(expected_revision=before.revision)
+            cancelled = importer.cancel_job(author, staged.job.id, request, 'cached-cancel')
+            assert cancelled.warnings
+            attempt = start(state)
+            assessment.submit(identity, attempt.id, dm.AttemptSubmit(expected_revision=1), 'submit')
+            replay = importer.cancel_job(author, staged.job.id, request, 'cached-cancel')
+>           assert replay.status == 'cancelled' and replay.warnings == [] and replay.result_refs == []
+E           AssertionError: assert ('cancelled' == 'cancelled'
+E             
+E               cancelled and [Warning(code...ty='warning')] == []
+E             
+E             Left contains 3 more items, first extra item: Warning(code='IMPORT_REVIEW_UNVERIFIED', message='确认解析结果不会认证材料的数学正确性或来源权利。', locator=None, severity='warning')
+E             Use -v to get more diff)
+
+tests/integration/test_assessment_policy.py:287: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/test_assessment_policy.py::test_cached_private_cancel_receipt_rechecks_later_answer_protection
+1 failed in 0.68s

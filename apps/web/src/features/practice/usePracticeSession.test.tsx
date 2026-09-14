@@ -8,7 +8,7 @@ import type { PracticeTarget } from './target'
 // Real React lifecycle and DraftStore transactions over fake-indexeddb; HTTP is
 // controlled here. These are not browser, API, or SQLite acceptance tests.
 const transport = vi.hoisted(() => ({ call: vi.fn() }))
-vi.mock('../../api/client', () => ({ request: (...args: unknown[]) => transport.call(...args) }))
+vi.mock('../../api/client', () => ({ request: (...args: unknown[]) => transport.call(...args), getSessionGeneration: () => 0, subscribeSessionAccess: () => () => {} }))
 
 // Public golden data produced by tests.practice_fixtures.practice_fixture and
 // the strict backend PracticeSession DTO. No private solution enters a session.

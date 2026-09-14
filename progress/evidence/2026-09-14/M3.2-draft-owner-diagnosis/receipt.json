@@ -1,0 +1,75 @@
+{
+  "scope": "Read-only causal diagnosis of the two-page assessment native test conflict expectation. Actual React hook and actual DraftStore transaction code; fake-indexeddb supplies an in-process IndexedDB implementation. Separate journal factories model independent page-memory owners. No real HTTP/native browser in this probe.",
+  "source_before": {
+    "apps/web/src/shared/createResponseDraftJournal.ts": "24111c29bee2e19d33f59184d0e92da9ea609539eacd4c339d363190ef920f75",
+    "apps/web/src/workbench/DraftStore.ts": "dcbdf2d89d81e485335ee2167ddc48c20482dd1183b90c9bcfa2f3cb5402796b",
+    "apps/web/src/features/assessment/assessmentDrafts.ts": "24d1e66e6363df8227372af922158a82a73bc13275af43a8d38fcad5b26a6bdf",
+    "tests/e2e/assessments.spec.ts": "d255a6b8b2ae44d5dcbe451891a2a25039f93f2757470c45d544ac09826781e3"
+  },
+  "source_after": {
+    "apps/web/src/shared/createResponseDraftJournal.ts": "24111c29bee2e19d33f59184d0e92da9ea609539eacd4c339d363190ef920f75",
+    "apps/web/src/workbench/DraftStore.ts": "dcbdf2d89d81e485335ee2167ddc48c20482dd1183b90c9bcfa2f3cb5402796b",
+    "apps/web/src/features/assessment/assessmentDrafts.ts": "24d1e66e6363df8227372af922158a82a73bc13275af43a8d38fcad5b26a6bdf",
+    "tests/e2e/assessments.spec.ts": "d255a6b8b2ae44d5dcbe451891a2a25039f93f2757470c45d544ac09826781e3"
+  },
+  "source_before_after_equal": true,
+  "original_native_failure": {
+    "log": "m32-assessment-native-final.log",
+    "result": "6 passed / 1 failed",
+    "test": "two pages preserve independent local CAS candidates; a later submitted snapshot never accepts restored edits",
+    "failure": "Expected local-conflict heading count 0 while page B remained open with dirty candidate B."
+  },
+  "controlled_probe": {
+    "test": "live dirty owner B republishes its removed candidate; closing durable B first allows single-owner resolution",
+    "command": "apps/web/node_modules/.bin/vitest run --config <temporary probe>/vitest.config.mts",
+    "exit_code": 0,
+    "passed": 1,
+    "failed": 0,
+    "reported_duration_ms": 627,
+    "steps": [
+      "Mount A with its own page-memory journal and DraftStore; save dirty candidate A and await durability.",
+      "Mount B with a different page-memory journal and DraftStore connected to the same IDB database; save dirty candidate B and await durability.",
+      "Observe A display both candidate texts.",
+      "A explicitly resolves to its displayed candidate while B remains mounted.",
+      "Observe A transaction has removed B; then B journal invokes the actual store.save with expectedRevision=0 and the preserved candidate B reappears.",
+      "Await both queues settled and B unsafe=false; unmount and close B.",
+      "A resolves again as the only active writer."
+    ],
+    "asserted_observations": {
+      "A_resolution_initially_excludes_B": true,
+      "B_automatically_requeues_candidate_with_expected_revision_zero": true,
+      "B_safe_before_close": true,
+      "A_UI_conflicts_after_B_closed_then_resolution": 0,
+      "durable_distinct_candidate_values_after_B_closed": [
+        "A unsynced"
+      ]
+    },
+    "later_output_capture_attempt": {
+      "command_suffix": "--silent=false",
+      "exit_code": 0,
+      "passed": 1,
+      "reported_duration_ms": 629,
+      "note": "Same unchanged probe rerun solely to request console trace; runner emitted summary only. Assertions in retained source verify the causal sequence; no extra trace output claimed."
+    }
+  },
+  "conclusion": "The revived B candidate is intentional preservation by a still-active dirty owner, not evidence that A failed to commit its explicit resolution. The native expectation of persistent zero conflicts while B still owns B is invalid.",
+  "recommended_native_sequence": "After both candidates are visibly durable, explicitly close the safe B page, then choose A with one active writer and assert the resolved state. Keep the later terminal-snapshot protections intact. Do not weaken remember/enqueue preservation.",
+  "production_cause": {
+    "file": "apps/web/src/shared/createResponseDraftJournal.ts",
+    "function": "refresh storage subscription",
+    "behavior": "A missing stored dirty branch is remembered in page memory; once pending is zero, its absent candidate is enqueued using fixed expectedRevision=0 to preserve it as a conflict."
+  },
+  "limitations": [
+    "Uses a minimal synthetic journal envelope decoder to isolate ownership/CAS; strict assessment envelope validation is outside this probe.",
+    "Does not independently rerun the seven native cases or imply their eventual all-pass result."
+  ],
+  "artifacts": {
+    "owners.test.tsx": "3d55505eec2bd682fe113abd413245d50d1cb2d4a771a446a7d4c8e74874ce7b",
+    "vitest.config.mts": "3ea52a3b94578ac7fcab0f002e7e1a1d7119b9ba1b1652c2074482860c9045e8",
+    "owners.log": "199f46a1f2fc0b653ab2dcb1858535c206a38850fa6b370ba1ba5a42946eec1d",
+    "owners-observed.log": "065135d310ea75c70e98c231b55e55ec2dc073aa4c9d660579fe5728eb95c8cd",
+    "source-before.json": "2d68a20cab2e6335e4496658c43e8215526bdbc163a3790fb9f94ea9d96a756d",
+    "source-after.json": "2d68a20cab2e6335e4496658c43e8215526bdbc163a3790fb9f94ea9d96a756d"
+  },
+  "changes": "No repository source, test, Git or progress modifications. Original native failure and all temporary probe inputs/output retained."
+}
