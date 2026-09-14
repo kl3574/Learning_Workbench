@@ -2,6 +2,8 @@
 
 from typing import Literal
 
+from pydantic import Field
+
 from packages.contracts.domain_models import ContentRef, Evidence, Id, Note, Revision, StrictModel, UTC
 
 
@@ -30,6 +32,12 @@ class RouteStepState(StrictModel):
     route_ref: ContentRef
     step_id: Id
     completed: bool
+    completion_origin: Literal['none', 'manual', 'read', 'practice_submitted', 'assessment_submitted'] = 'none'
+    manual_override: bool | None = None
+    completed_at: UTC | None = None
+    updated_at: UTC | None = None
+    source_event_ids: list[Id] = Field(default_factory=list)
+    unmet_requires_steps: list[Id] = Field(default_factory=list)
 
 
 class BookmarkState(StrictModel):

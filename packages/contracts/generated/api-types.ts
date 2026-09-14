@@ -153,6 +153,57 @@ export type Concept = {
   "skill_dimensions"?: Array<"recall" | "explain" | "compute" | "derive" | "transfer">;
 };
 
+export type ConceptState = {
+  "concept_id": string;
+  "concept_ref": ContentRef;
+  "title": string;
+  "skill": "recall" | "explain" | "compute" | "derive" | "transfer";
+  "evidence_state": "none" | "preliminary" | "needs_support" | "consistent";
+  "independent_count": number;
+  "assisted_count": number;
+  "stale_count": number;
+  "repeated_count": number;
+  "unknown_count": number;
+  "null_count": number;
+  "pending_review_count": number;
+  "self_report": (SelfAssessment | null);
+  "evidence_ids": Array<string>;
+  "state_input_evidence_ids": Array<string>;
+  "sources": Array<ConceptStateSource>;
+  "practice_submission_count": number;
+  "hint_count": number;
+  "solution_count": number;
+  "practice_submission_sources": Array<SubmissionActivity>;
+  "hint_sources": Array<PracticeHelpActivity>;
+  "solution_sources": Array<PracticeHelpActivity>;
+  "rule_version"?: "learning-state-v1";
+};
+
+export type ConceptStateResponse = {
+  "items": Array<ConceptState>;
+  "course_refs": Array<ContentRef>;
+  "concepts": Array<ScopedConcept>;
+  "rule_version"?: "learning-state-v1";
+  "calibration"?: "uncalibrated";
+  "evidence_count_unit"?: "question_attempts";
+  "practice_submission_count_unit"?: "sessions";
+  "help_count_unit"?: "events";
+};
+
+export type ConceptStateSource = {
+  "evidence": Evidence;
+  "question_ref": ContentRef;
+  "concept_ref": ContentRef;
+  "assessment_ref": ContentRef;
+  "attempt_id": string;
+  "grading_revision": number;
+  "submitted_at": string;
+  "exposure_group": string;
+  "qualification_basis": "submission_frozen" | "history_not_frozen";
+  "reason_codes": Array<"MODE_OPEN_BOOK" | "MODE_ASSISTED" | "HELP_BEFORE_SUBMIT" | "ANSWER_UNREVIEWED" | "GRADE_UNRESOLVED" | "CONCEPT_MAPPING_UNRESOLVED" | "PREVIOUSLY_SEEN" | "PRIOR_SEEN_UNKNOWN" | "HELP_HISTORY_UNKNOWN" | "SOURCE_NOT_TRUSTED" | "HISTORY_PREREQUISITES_NOT_FROZEN">;
+  "applicability": EvidenceApplicability;
+};
+
 export type ContentBlock = {
   "schema_version"?: "3.0.0";
   "id": string;
@@ -257,6 +308,13 @@ export type Evidence = {
   "score"?: (number | null);
   "independence": "independent" | "assisted" | "unknown";
   "freshness": "novel" | "repeated" | "unknown";
+};
+
+export type EvidenceApplicability = {
+  "status": "usable" | "pending_review" | "confirmed_stale";
+  "reason_codes": Array<string>;
+  "checked_refs": Array<ContentRef>;
+  "check_scope"?: "exact_semantic_dependencies";
 };
 
 export type GradeHistoryEntry = {
@@ -392,6 +450,17 @@ export type JobSnapshot = {
   "error": (ErrorDetail | null);
 };
 
+export type LearnerProfile = {
+  "workspace_id": string;
+  "revision": number;
+  "goals"?: Array<string>;
+  "goal_concept_ids"?: Array<string>;
+  "weekly_minutes"?: number;
+  "language"?: string;
+  "preferred_difficulty"?: "beginner" | "intermediate" | "advanced";
+  "self_assessments"?: Array<SelfAssessment>;
+};
+
 export type LearningActionRequest = {
   "kind": "read_marked" | "bookmark_set";
   "ref": ContentRef;
@@ -513,6 +582,13 @@ export type PageRevision = {
   "next_cursor": (string | null);
 };
 
+export type PageRoute = {
+  "items": Array<Route>;
+  "item_refs": Array<ContentRef>;
+  "targets": Array<RouteTargetBinding>;
+  "next_cursor": (string | null);
+};
+
 export type PolicySnapshot = {
   "policy_version"?: "1.0.0";
   "mode": "independent" | "assisted" | "open_book";
@@ -526,6 +602,15 @@ export type PracticeAssistance = {
   "question_id": string;
   "highest_hint_level": 0 | 1 | 2 | 3;
   "solution_revealed": boolean;
+};
+
+export type PracticeHelpActivity = {
+  "practice_session_id": string;
+  "practice_set_ref": ContentRef;
+  "question_ref": ContentRef;
+  "event_id": string;
+  "occurred_at": string;
+  "kind": "hint_revealed" | "solution_revealed";
 };
 
 export type PracticeHint = {
@@ -646,6 +731,16 @@ export type PriorSeenQuestion = {
   "question_ref": ContentRef;
   "state": "unseen" | "seen" | "unknown";
   "reason_codes": Array<string>;
+};
+
+export type ProfileWrite = {
+  "expected_revision": number;
+  "goals": Array<string>;
+  "goal_concept_ids": Array<string>;
+  "weekly_minutes": number;
+  "language": string;
+  "preferred_difficulty": "beginner" | "intermediate" | "advanced";
+  "self_assessments": Array<SelfAssessmentWrite>;
 };
 
 export type ProvenanceSource = {
@@ -773,6 +868,33 @@ export type Route = {
   "steps": Array<RouteStep>;
 };
 
+export type RouteAssessmentOption = {
+  "kind": "assessment";
+  "assessment_ref": ContentRef;
+  "course_ref": (ContentRef | null);
+};
+
+export type RouteCompletionRequest = {
+  "route_revision": number;
+  "expected_progress_revision": number;
+  "completed": boolean;
+  "origin": "manual";
+};
+
+export type RoutePracticeOption = {
+  "kind": "practice";
+  "course_ref": ContentRef;
+  "lesson_ref": ContentRef;
+  "practice_ref": ContentRef;
+};
+
+export type RouteReaderOption = {
+  "kind": "reader";
+  "course_ref": ContentRef;
+  "lesson_ref": ContentRef;
+  "block_ref": (ContentRef | null);
+};
+
 export type RouteStep = {
   "id": string;
   "title": string;
@@ -785,6 +907,20 @@ export type RouteStepState = {
   "route_ref": ContentRef;
   "step_id": string;
   "completed": boolean;
+  "completion_origin"?: "none" | "manual" | "read" | "practice_submitted" | "assessment_submitted";
+  "manual_override"?: (boolean | null);
+  "completed_at"?: (string | null);
+  "updated_at"?: (string | null);
+  "source_event_ids"?: Array<string>;
+  "unmet_requires_steps"?: Array<string>;
+};
+
+export type RouteTargetBinding = {
+  "route_ref": ContentRef;
+  "step_id": string;
+  "target_ref": ContentRef;
+  "navigation_options": Array<(RouteReaderOption | RoutePracticeOption | RouteAssessmentOption)>;
+  "unresolved_reason": ("NO_EXACT_COURSE_PARENT" | null);
 };
 
 export type SavedTab = {
@@ -794,6 +930,12 @@ export type SavedTab = {
   "scroll_offset"?: number;
 };
 
+export type ScopedConcept = {
+  "ref": ContentRef;
+  "title": string;
+  "skill_dimensions": Array<"recall" | "explain" | "compute" | "derive" | "transfer">;
+};
+
 export type Selection = {
   "ref": ContentRef;
   "exact_quote": string;
@@ -801,6 +943,18 @@ export type Selection = {
   "suffix"?: string;
   "start_codepoint": number;
   "end_codepoint": number;
+};
+
+export type SelfAssessment = {
+  "concept_id": string;
+  "level": "not_learned" | "encountered" | "independent_use";
+  "origin"?: "self_report";
+  "updated_at": string;
+};
+
+export type SelfAssessmentWrite = {
+  "concept_id": string;
+  "level": "not_learned" | "encountered" | "independent_use";
 };
 
 export type SessionResponse = {
@@ -819,6 +973,14 @@ export type SourceResponse = {
   "parser_version": (string | null);
   "warnings": Array<Warning>;
   "artifact": DownloadArtifact;
+};
+
+export type SubmissionActivity = {
+  "target_ref": ContentRef;
+  "source_id": string;
+  "event_id": string;
+  "submitted_at": string;
+  "question_refs": Array<ContentRef>;
 };
 
 export type ViewContext = {

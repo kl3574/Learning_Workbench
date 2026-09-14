@@ -1,0 +1,6 @@
+import { expect, test } from 'vitest'
+import { emptySession, tabIdentity } from '../../workbench/model'
+import { openRoute, readRouteTarget, routeContext, routeHref } from './target'
+const ref = { entity: 'route' as const, id: 'route_original', revision: 1, sha256: 'a'.repeat(64) }
+test('route full reference roundtrips, older and newer revisions coexist, same-identity different hash rejects without mutation', () => { expect(readRouteTarget(new URL(routeHref(ref), 'http://local').search)).toEqual(ref); const initial = openRoute(emptySession(), ref, true, () => false).session; const newer = openRoute(initial, { ...ref, revision: 2, sha256: 'b'.repeat(64) }, true, () => false).session; expect(newer.tabs).toHaveLength(2); expect(tabIdentity(routeContext(ref))).toBe(tabIdentity(routeContext({ ...ref, sha256: 'c'.repeat(64) }))); const result = openRoute(newer, { ...ref, sha256: 'c'.repeat(64) }, true, () => false); expect(result.kind).toBe('conflict'); expect(result.session).toBe(newer) })
+test('route links reject missing hashes, non-route objects and extra transport fields', () => { for (const value of [{ ...ref, sha256: '' }, { ...ref, entity: 'lesson' }, { ...ref, course_id: 'guessed_course' }]) expect(() => readRouteTarget(`?route=${encodeURIComponent(JSON.stringify(value))}`)).toThrow() })

@@ -67,51 +67,34 @@ class LearningService:
             raise ApiError(503, "LEARNING_STORAGE_UNAVAILABLE", "学习记录存储暂不可用。", True) from None
 
     def progress(self, workspace_id: str, course_id: str | None = None) -> LearningProgress:
+        from .content_learning_access import target_in_course_scope
+        from .route_progress import route_step_projection
+
         with self._access(workspace_id) as (content, learning):
             result = learning.progress()
             for ref in [*(item.ref for item in result.readings), *(item.ref for item in result.bookmarks)]:
                 validated_ref(content, ref)
-            for step in result.route_steps:
-                validated_ref(content, step.route_ref)
+            routes = route_step_projection(content.connection, workspace_id)
             if course_id is None:
-                return result
+                return LearningProgress(revision=result.revision, readings=result.readings,
+                    bookmarks=result.bookmarks, route_steps=routes)
+            # The Content-owned port preserves exact members of every historical
+            # course version, including precise Practice/Assessment membership.
+            def includes(ref: dm.ContentRef) -> bool:
+                return target_in_course_scope(content.connection, workspace_id, ref, course_id)
             course = content.current(course_id).value
             if not isinstance(course, dm.Course):
-                raise ApiError(404, "REFERENCE_MISSING", "指定课程不存在或不可访问。")
-            # course_id has no revision selector: preserve the precise members of
-            # every published course revision, without admitting unrelated versions
-            # merely because their entity and id happen to match a former member.
-            members: set[tuple[str, str, int, str]] = set()
-            revisions = content.connection.execute(
-                "SELECT r.revision FROM revisions r JOIN objects o ON o.id=r.object_id "
-                "WHERE o.workspace_id=? AND o.id=? AND o.kind='course' ORDER BY r.revision",
-                (workspace_id, course_id),
-            ).fetchall()
-            for row in revisions:
-                historical_course = content.load("course", course_id, row["revision"]).value
-                if not isinstance(historical_course, dm.Course):
+                raise ApiError(404, 'REFERENCE_MISSING', '指定课程不存在或不可访问。')
+            scoped = []
+            for state in routes:
+                route = content.load('route', state.route_ref.id, state.route_ref.revision).value
+                if not isinstance(route, dm.Route):
                     raise damaged()
-                members.add(ref_key(reference(historical_course)))
-                for ref in [*historical_course.lesson_refs, *historical_course.concept_refs]:
-                    validated_ref(content, ref)
-                    if ref_key(ref) in members:
-                        continue
-                    members.add(ref_key(ref))
-                    if ref.entity == "lesson":
-                        lesson = content.load(ref.entity, ref.id, ref.revision).value
-                        if not isinstance(lesson, dm.Lesson):
-                            raise damaged()
-                        for block in lesson.block_refs:
-                            validated_ref(content, block)
-                            members.add(ref_key(block))
-            routes = []
-            for step in result.route_steps:
-                route = content.load("route", step.route_ref.id, step.route_ref.revision).value
-                if isinstance(route, dm.Route) and any(ref_key(item.target) in members and item.id == step.step_id for item in route.steps):
-                    routes.append(step)
+                if any(step.id == state.step_id and includes(step.target) for step in route.steps):
+                    scoped.append(state)
             return LearningProgress(revision=result.revision,
-                readings=[item for item in result.readings if ref_key(item.ref) in members],
-                bookmarks=[item for item in result.bookmarks if ref_key(item.ref) in members], route_steps=routes)
+                readings=[item for item in result.readings if includes(item.ref)],
+                bookmarks=[item for item in result.bookmarks if includes(item.ref)], route_steps=scoped)
 
     def action(self, identity: SessionIdentity, request: LearningActionRequest, key: str | None) -> LearningActionResponse:
         with self._access(identity.workspace_id) as (content, learning):
@@ -202,3 +185,29 @@ def read_learning_event(connection: sqlite3.Connection, workspace_id: str, event
     """Typed read port for module-owned exposure references, without claiming eligibility."""
     guard_subject_access(connection, workspace_id)
     return LearningRepository(connection, workspace_id).read_learning_event(event_id)
+
+
+def checked_action_revisions(connection: sqlite3.Connection, workspace_id: str) -> dict[str, int]:
+    """Learning-owned original progress bindings, for transaction-scoped projections."""
+    if not connection.in_transaction:
+        raise ApiError(409, 'TRANSACTION_REQUIRED', '学习动作来源需要同一事务的进度记录。')
+    guard_subject_access(connection, workspace_id)
+    ContentRepository(connection, workspace_id).require_workspace()
+    return LearningRepository(connection, workspace_id).action_revisions()
+
+
+def practice_submission_event(connection: sqlite3.Connection, workspace_id: str,
+                              practice_ref: dm.ContentRef, session_id: str) -> dm.LearningEvent:
+    """Learning-owned lookup for the original single Practice submission event."""
+    if not connection.in_transaction:
+        raise ApiError(409, 'TRANSACTION_REQUIRED', '练习提交来源需要同一事务的学习记录。')
+    guard_subject_access(connection, workspace_id)
+    rows = connection.execute("SELECT event_id FROM learning_events WHERE workspace_id=? AND kind='practice_submitted' "
+        "AND json_extract(payload_json,'$.attempt_id')=?", (workspace_id, session_id)).fetchall()
+    if len(rows) != 1:
+        raise ApiError(409, 'PRACTICE_SNAPSHOT_INVALID', '练习提交缺少唯一原生学习事件。')
+    event_id = rows[0]['event_id']
+    validate_practice_event(connection, workspace_id, event_id, 'practice_submitted', practice_ref, session_id)
+    if event_id not in checked_action_revisions(connection, workspace_id):
+        raise ApiError(409, 'LEARNING_ACTION_HISTORY_INVALID', '练习提交缺少原始学习进度回执。')
+    return read_learning_event(connection, workspace_id, event_id)

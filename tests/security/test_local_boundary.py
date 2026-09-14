@@ -202,8 +202,10 @@ def test_payload_budget_and_unimplemented_routes(runtime):
     application, client, settings = runtime
     headers = login(application, client, settings)
     assert client.post("/api/v1/session/logout", content=b"x" * (settings.max_request_bytes + 1), headers=headers).status_code == 413
-    assert client.get("/api/v1/routes").status_code == 404
-    assert "/api/v1/routes" not in application.openapi()["paths"]
+    # M4.1 now implements routes. A later provider endpoint still must not be
+    # installed as a success stub or silently fall through to the SPA.
+    assert client.get("/api/v1/providers/capabilities").status_code == 404
+    assert "/api/v1/providers/capabilities" not in application.openapi()["paths"]
 
 
 @pytest.mark.parametrize("host", ["0.0.0.0", "192.168.1.2", "example.com", "::"])

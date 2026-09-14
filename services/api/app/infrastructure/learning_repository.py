@@ -25,6 +25,19 @@ class StoredUserAction(dm.StrictModel):
     occurred_at: dm.UTC
 
 
+class StoredRouteCompletionAction(dm.StrictModel):
+    event_id: dm.Id
+    workspace_id: dm.Id
+    actor: Literal['learner'] = 'learner'
+    origin: Literal['native'] = 'native'
+    kind: Literal['route_step_completion_set'] = 'route_step_completion_set'
+    route_ref: dm.ContentRef
+    step_id: dm.Id
+    completed: bool
+    completion_origin: Literal['manual'] = 'manual'
+    occurred_at: dm.UTC
+
+
 def ref_key(ref: dm.ContentRef) -> tuple[str, str, int, str]:
     return ref.entity, ref.id, ref.revision, ref.sha256
 
@@ -45,15 +58,54 @@ class LearningRepository:
             for identities in [[ref_key(item.ref) for item in value.readings], [ref_key(item.ref) for item in value.bookmarks]]:
                 if len(identities) != len(set(identities)):
                     raise ValueError("duplicate projection ref")
+            route_keys = [(ref_key(item.route_ref), item.step_id) for item in value.route_steps]
+            if len(route_keys) != len(set(route_keys)):
+                raise ValueError('duplicate route step projection')
             return value
         except (ValueError, TypeError, ValidationError):
             raise ApiError(409, "LEARNING_PROJECTION_INVALID", "学习记录完整性校验失败。") from None
 
-    def append(self, event: StoredUserAction | dm.LearningEvent) -> None:
+    def append(self, event: StoredUserAction | StoredRouteCompletionAction | dm.LearningEvent) -> None:
         self.connection.execute(
             "INSERT INTO learning_events(event_id,workspace_id,kind,origin,payload_json,occurred_at) VALUES(?,?,?,?,?,?)",
             (event.event_id, self.workspace_id, event.kind, event.origin, canonical_bytes(event).decode(), event.occurred_at),
         )
+
+    def action_revisions(self) -> dict[str, int]:
+        """Check original event order against every persisted progress receipt.
+
+        All actual progress mutations append their event and one outbox record
+        in the same transaction. Delivery changes the outbox acknowledgement,
+        never its original event/revision association. This is an integrity
+        check of those records, not protection against coordinated database edits.
+        """
+        try:
+            progress = self.progress()
+            rows = self.connection.execute(
+                "SELECT e.event_id,e.workspace_id,e.rowid AS event_order,o.payload_json AS outbox_payload "
+                "FROM outbox o LEFT JOIN learning_events e ON e.event_id=json_extract(o.payload_json,'$.event_id') "
+                "WHERE o.event_type='learning.action_recorded' AND "
+                "(e.workspace_id=? OR json_extract(o.payload_json,'$.workspace_id')=?) ORDER BY e.rowid,o.id",
+                (self.workspace_id, self.workspace_id)).fetchall()
+            if len(rows) != progress.revision - 1:
+                raise ValueError('progress receipt history is not complete')
+            revisions: dict[str, int] = {}
+            for revision, row in enumerate(rows, start=2):
+                payload = strict_json(row['outbox_payload'])
+                if (row['event_id'] is None or row['workspace_id'] != self.workspace_id or row['event_id'] in revisions
+                        or not isinstance(payload, dict) or set(payload) != {'workspace_id', 'event_id', 'progress_revision'}
+                        or payload['workspace_id'] != self.workspace_id or payload['event_id'] != row['event_id']
+                        or type(payload['progress_revision']) is not int or payload['progress_revision'] != revision
+                        or canonical_bytes(payload).decode() != row['outbox_payload']):
+                    raise ValueError('original progress receipt order or identity mismatch')
+                revisions[row['event_id']] = revision
+            current = self.connection.execute('SELECT last_event_id FROM learning_progress WHERE workspace_id=?',
+                                              (self.workspace_id,)).fetchone()
+            if (None if current is None else current['last_event_id']) != (rows[-1]['event_id'] if rows else None):
+                raise ValueError('last progress event does not match its original receipt')
+            return revisions
+        except (ValueError, TypeError, KeyError):
+            raise ApiError(409, 'LEARNING_ACTION_HISTORY_INVALID', '原生学习动作及进度无法通过来源校验。') from None
 
     def save(self, previous: LearningProgress, updated: LearningProgress, event_id: str) -> None:
         self.connection.execute(
