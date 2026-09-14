@@ -1,0 +1,33 @@
+"""Practice-owned verified submissions/help; allocations alone are not submissions."""
+
+import sqlite3
+
+from ..infrastructure.practice_repository import PracticeRepository, invalid_snapshot
+from .learning import read_learning_event
+from .learning_state_models import PracticeHelpActivity, PracticeParticipation, SubmissionActivity
+from .policy import Policy
+from .practice import PracticeService
+from .practice_content import PracticeContent
+
+
+def practice_participation(connection: sqlite3.Connection, workspace_id: str) -> PracticeParticipation:
+    from .learning import practice_submission_event
+    content = PracticeContent(connection, workspace_id)
+    content.public.require_workspace()
+    Policy(connection, workspace_id).check('subject_read')
+    repository = PracticeRepository(connection, workspace_id)
+    output = PracticeParticipation()
+    for row in connection.execute('SELECT id FROM practice_sessions WHERE workspace_id=? ORDER BY id', (workspace_id,)):
+        record, questions = PracticeService._load(content, repository, row['id'])
+        event_ids, _ = repository.exposure_facts(record, questions)
+        for identifier in event_ids:
+            event = read_learning_event(connection, workspace_id, identifier)
+            if event.kind not in {'hint_revealed', 'solution_revealed'}:
+                raise invalid_snapshot()
+            output.help.append(PracticeHelpActivity(practice_session_id=record.id, practice_set_ref=record.practice_ref,
+                question_ref=event.ref, event_id=event.event_id, occurred_at=event.occurred_at, kind=event.kind))
+        if record.submission is not None:
+            event = practice_submission_event(connection, workspace_id, record.practice_ref, record.id)
+            output.submissions.append(SubmissionActivity(target_ref=record.practice_ref, source_id=record.id,
+                event_id=event.event_id, submitted_at=record.submission.submitted_at, question_refs=record.question_refs))
+    return output

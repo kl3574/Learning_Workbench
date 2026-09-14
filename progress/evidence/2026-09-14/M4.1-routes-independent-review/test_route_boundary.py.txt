@@ -1,0 +1,57 @@
+"""Independent synthetic native SQLite cases; no user records or network data."""
+
+import pytest
+
+from packages.contracts import domain_models as dm
+from packages.contracts.canonical import canonical_bytes
+from services.api.app.application.assessment_activity_access import assessment_submissions
+from services.api.app.application.content_learning_access import evidence_applicability
+from services.api.app.application.errors import ApiError
+from services.api.app.application.routes import RouteService
+from services.api.app.infrastructure.content_repository import reference
+from tests.integration.test_assessment_attempts import start, storage as assessment_storage
+from tests.integration.test_learning_content_scope import storage as scope_storage
+from tests.integration.test_routes_commands import route_for, storage
+
+
+def test_prefix_digit_route_id_is_not_lost_in_real_pagination(storage):
+    database, workspace, identity, objects, _ = storage
+    service = RouteService(database)
+    expected = []
+    for identifier in ['route_a', 'route_a0', 'route_b']:
+        route = dm.Route.model_validate({**route_for(objects).model_dump(), 'id': identifier})
+        expected.append(service.create(identity, route, 'create_' + identifier))
+    found, cursor = [], None
+    for _ in range(4):
+        page = service.list(workspace, limit=1, cursor=cursor)
+        found.extend(page.item_refs)
+        cursor = page.next_cursor
+        if cursor is None:
+            break
+    assert found == expected
+
+
+def test_unknown_hash_for_same_dependency_invalidation_is_not_declared_usable(scope_storage):
+    database, workspace, fixture = scope_storage
+    wrong = reference(fixture.concept).model_copy(update={'sha256': '0' * 64})
+    with database.transaction() as connection:
+        payload = {'workspace_id': workspace, 'old_ref': wrong.model_dump(mode='json'),
+                   'affected_ids': [fixture.concept.id]}
+        connection.execute('INSERT INTO outbox(id,event_type,payload_json) VALUES(?,?,?)',
+            ('outbox_independent_fault', 'content.dependencies_invalidated', canonical_bytes(payload).decode()))
+        result = evidence_applicability(connection, workspace, reference(fixture.questions[0]), reference(fixture.concept))
+    assert result.status == 'pending_review'
+    assert 'CONTENT_CHANGE_SCOPE_UNKNOWN' in result.reason_codes
+
+
+def test_submitted_row_missing_snapshot_does_not_disappear_from_participation(assessment_storage):
+    database, identity, _, assessment = assessment_storage
+    attempt = start(assessment_storage)
+    assessment.submit(identity, attempt.id, dm.AttemptSubmit(expected_revision=1), 'submit')
+    with database.transaction() as connection:
+        assert len(assessment_submissions(connection, identity.workspace_id)) == 1
+        # Deliberately corrupted test-owned SQLite, not an API-authorized mutation.
+        connection.execute('DROP TRIGGER immutable_assessment_submission')
+        connection.execute('UPDATE attempts SET submission_json=NULL WHERE id=?', (attempt.id,))
+    with database.transaction() as connection, pytest.raises(ApiError):
+        assessment_submissions(connection, identity.workspace_id)

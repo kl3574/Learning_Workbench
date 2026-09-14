@@ -1,0 +1,155 @@
+"""One synthetic learnpack import; no direct writes to formal content tables."""
+
+from hashlib import sha256
+import json
+from pathlib import Path
+import sys
+from tempfile import TemporaryDirectory
+
+ROOT = Path.cwd()
+sys.path.insert(0, str(ROOT))
+
+from packages.contracts import domain_models as dm
+from packages.contracts.canonical import metadata_sha256
+from services.api.app.application.import_parsing import parse_import
+from services.api.app.application.imports import ImportService
+from services.api.app.application.routes import RouteService
+from services.api.app.config import Settings
+from services.api.app.database import Database
+from services.api.app.import_dto import ImportCommitRequest
+from services.api.app.infrastructure.content_repository import reference
+from services.api.app.infrastructure.import_worker import ImportWorker
+from services.api.app.infrastructure.security import SessionIdentity
+from tests.integration.test_import_repository import package_bytes, synthetic_tree
+
+OUT = Path(__file__).resolve().parent
+SOURCE_PATHS = [
+    'PRODUCT_DESIGN.md',
+    'packages/contracts/domain_models.py',
+    'packages/contracts/validation.py',
+    'services/api/app/application/import_parsing.py',
+    'services/api/app/application/import_parse_package.py',
+    'services/api/app/application/imports.py',
+    'services/api/app/application/content.py',
+    'services/api/app/application/routes.py',
+    'services/api/app/application/content_learning_access.py',
+    'services/api/app/infrastructure/import_worker.py',
+    'services/api/app/infrastructure/import_repository.py',
+    'services/api/app/infrastructure/content_repository.py',
+    'services/api/app/route_dto.py',
+    'tests/integration/test_import_repository.py',
+    'tests/unit/test_import_parsing.py',
+]
+
+
+def hashes():
+    return {path: sha256((ROOT / path).read_bytes()).hexdigest() for path in SOURCE_PATHS}
+
+
+def counts(database):
+    with database.connect() as connection:
+        return {table: connection.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0]
+                for table in ['objects', 'revisions', 'learning_events', 'evidence']}
+
+
+def main():
+    before = hashes()
+    (OUT / 'source-before.json').write_text(json.dumps(before, indent=2) + '\n')
+    fixture_inventory = {}
+    for profile in ['learner', 'author']:
+        path = ROOT / f'fixtures/synthetic/course-{profile}.learnpack.zip'
+        data = path.read_bytes()
+        parsed = parse_import(data, kind='learnpack', filename=path.name, source_id='source_route_inventory')
+        fixture_inventory[path.name] = {
+            'sha256': sha256(data).hexdigest(),
+            'object_count': len(parsed.objects),
+            'route_count': sum(isinstance(value, dm.Route) for value in parsed.objects),
+        }
+
+    objects, bodies = synthetic_tree()
+    route = dm.Route(
+        id='route_import_trace', revision=1, title='Synthetic imported route',
+        goal='Trace exact imported references, not learning mastery',
+        steps=[
+            dm.RouteStep(id='step_block', title='Read exact block',
+                         target=reference(objects[0]), completion_rule='read'),
+            dm.RouteStep(id='step_lesson', title='Mark exact lesson manually',
+                         target=reference(objects[1]), completion_rule='manual',
+                         requires_steps=['step_block']),
+        ],
+    )
+    raw = package_bytes([*objects, route], bodies)
+    (OUT / 'synthetic-route.learnpack.zip').write_bytes(raw)
+
+    with TemporaryDirectory(prefix='m41-route-import-trace-data-') as data_dir:
+        database = Database(Settings(data_dir=Path(data_dir)))
+        workspace = database.initialize()
+        identity = SessionIdentity('session_synthetic', workspace, 'learner', '<TEST_CSRF_01>', '2099-01-01T00:00:00Z')
+        service = ImportService(database)
+        worker = ImportWorker(database)
+        try:
+            staged = service.stage(identity, data=raw, filename='synthetic-route.learnpack.zip', kind='learnpack', key='route-stage')
+            staged_counts = counts(database)
+            assert staged_counts['objects'] == staged_counts['revisions'] == 0
+            assert service.job(identity, staged.job.id).status == 'queued'
+            assert worker.run_once() is True
+            preview = service.preview(identity, staged.import_id)
+            assert preview.status == 'preview_ready'
+            draft_routes = [service.draft(identity, value) for value in preview.preview_refs
+                            if service.draft(identity, value).kind == 'route']
+            assert len(draft_routes) == 1 and draft_routes[0].payload == route
+            preview_counts = counts(database)
+            assert preview_counts['objects'] == preview_counts['revisions'] == 0
+            request = ImportCommitRequest(
+                expected_input_sha256=staged.input_sha256,
+                accepted_warning_codes=sorted({w.code for w in preview.warnings if w.severity == 'warning'}),
+                id_mapping=[],
+            )
+            result = service.commit(identity, staged.import_id, request, 'route-confirm')
+            assert service.preview(identity, staged.import_id).status == 'committed'
+            assert service.commit(identity, staged.import_id, request, 'route-confirm') == result
+            assert service.job(identity, staged.job.id).status == 'completed'
+            published_counts = counts(database)
+            assert published_counts == {'objects': 4, 'revisions': 4, 'learning_events': 0, 'evidence': 0}
+            stored = service.content.read(workspace, 'route', route.id, route.revision)
+            assert stored == route and metadata_sha256(stored) == reference(route).sha256
+            for step in stored.steps:
+                target = service.content.read(workspace, step.target.entity, step.target.id, step.target.revision)
+                assert reference(target) == step.target
+            restarted = Database(database.settings)
+            restarted.initialize()
+            page = RouteService(restarted).list(workspace)
+            assert page.items == [route] and page.item_refs == [reference(route)]
+            assert [(binding.step_id, binding.target_ref) for binding in page.targets] == [(step.id, step.target) for step in route.steps]
+            assert all(binding.navigation_options and binding.unresolved_reason is None for binding in page.targets)
+            assert counts(database) == published_counts
+            facts = {
+                'result': 'PASS',
+                'scope': 'One real synthetic ImportService stage/worker/preview/commit, exact route and dependencies readback plus restarted RouteService list; not a whole M4.1 gate.',
+                'existing_fixture_inventory': fixture_inventory,
+                'input_sha256': sha256(raw).hexdigest(),
+                'route_ref': reference(route).model_dump(mode='json'),
+                'steps': [{'step_id': step.id, 'target_ref': step.target.model_dump(mode='json'), 'requires_steps': step.requires_steps} for step in route.steps],
+                'accepted_warning_codes': request.accepted_warning_codes,
+                'staged_counts': staged_counts,
+                'preview_counts': preview_counts,
+                'published_counts': published_counts,
+                'navigation_option_counts': [len(binding.navigation_options) for binding in page.targets],
+                'same_key_commit_replay': 'PASS',
+                'temporary_database_removed': True,
+                'direct_formal_content_inserts': False,
+            }
+        finally:
+            worker.stop()
+
+    after = hashes()
+    assert before == after, 'Observed relevant source changed during probe'
+    (OUT / 'source-after.json').write_text(json.dumps(after, indent=2) + '\n')
+    facts['sources_before_after_stable'] = True
+    facts['probe_sha256'] = sha256(Path(__file__).read_bytes()).hexdigest()
+    (OUT / 'receipt.json').write_text(json.dumps(facts, indent=2, ensure_ascii=False) + '\n')
+    print(json.dumps(facts, indent=2, ensure_ascii=False))
+
+
+if __name__ == '__main__':
+    main()

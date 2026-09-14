@@ -1,0 +1,71 @@
+{
+  "observed_at": "2026-09-14T20:09:08.203705+00:00",
+  "scope": "Read-only independent bounded Profile/Concept M4.1 review, not full suite or milestone acceptance",
+  "source_before": {
+    "services/api/app/application/profile.py": "3c43b11897b55a5b1cc5e876b67165d8350023832f441ddbf65c41403efbb901",
+    "services/api/app/application/concept_states.py": "c9b64da095c533d6f12f8ab8ea2322a83228fbe19aa09cd89c205f0dc794c4d6",
+    "services/api/app/application/concept_state_rules.py": "21e2cdb5d26473b42b960db4d449669b3e209ec6636b5b89de0f3c4aa5608d17",
+    "services/api/app/infrastructure/profile_repository.py": "4ebe3bc58cfa8e41a3f59443e3f10f58278fb6f45d75e04e3e538c5cbd179b73",
+    "services/api/app/profile_dto.py": "bbcc3e9faa8e35639192613f0c4cb5078c5cc60ce851b9ba7a965acb57df3ae4",
+    "services/api/app/concept_state_dto.py": "db1e5c0005a60f4ab35c46575ebaa776764919ea5f5e81025e7b30592fd14339",
+    "migrations/0008_learner_profile_history.sql": "2e2fd4284889a405d4577121474f3292c8eeb70bcd6afa88f83b01a35fdeab05",
+    "tests/integration/test_learner_profile.py": "42e794f51df45779c1d93b84c3db97cee1699762d9997ba15396de8fdbf23960",
+    "tests/integration/test_concept_states.py": "b8e9aecc207d27cb3392c0d6406739da05ca4f477b99857a841488a11f70751e",
+    "tests/unit/test_concept_state_rules.py": "7e094e7e80cd51126a6fdaf95a6ab9ef8c237c6f8f78162bc3155a3f97671c07"
+  },
+  "source_after": {
+    "services/api/app/application/profile.py": "3c43b11897b55a5b1cc5e876b67165d8350023832f441ddbf65c41403efbb901",
+    "services/api/app/application/concept_states.py": "c9b64da095c533d6f12f8ab8ea2322a83228fbe19aa09cd89c205f0dc794c4d6",
+    "services/api/app/application/concept_state_rules.py": "21e2cdb5d26473b42b960db4d449669b3e209ec6636b5b89de0f3c4aa5608d17",
+    "services/api/app/infrastructure/profile_repository.py": "4ebe3bc58cfa8e41a3f59443e3f10f58278fb6f45d75e04e3e538c5cbd179b73",
+    "services/api/app/profile_dto.py": "bbcc3e9faa8e35639192613f0c4cb5078c5cc60ce851b9ba7a965acb57df3ae4",
+    "services/api/app/concept_state_dto.py": "db1e5c0005a60f4ab35c46575ebaa776764919ea5f5e81025e7b30592fd14339",
+    "migrations/0008_learner_profile_history.sql": "2e2fd4284889a405d4577121474f3292c8eeb70bcd6afa88f83b01a35fdeab05",
+    "tests/integration/test_learner_profile.py": "42e794f51df45779c1d93b84c3db97cee1699762d9997ba15396de8fdbf23960",
+    "tests/integration/test_concept_states.py": "b8e9aecc207d27cb3392c0d6406739da05ca4f477b99857a841488a11f70751e",
+    "tests/unit/test_concept_state_rules.py": "7e094e7e80cd51126a6fdaf95a6ab9ef8c237c6f8f78162bc3155a3f97671c07"
+  },
+  "source_stable": true,
+  "normative_source": {
+    "path": "PRODUCT_DESIGN.md",
+    "sha256": "ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c",
+    "lines": [
+      33,
+      644,
+      646,
+      656,
+      907,
+      1047,
+      1177,
+      1178
+    ]
+  },
+  "engineering_decision": "docs/adr/0013-learning-state-profile-and-routes.md",
+  "findings": [],
+  "observed_checks": [
+    "Profile reads actual current and all historical rows before cached return; immutable native receipt checked against command instance and frozen profile.",
+    "CAS and expired-key reuse implemented; legacy bytes held separately without claiming pre-existing checksum.",
+    "Concept service checks complete successful evidence history before filtering; grouping only threshold inputs, not raw source retention.",
+    "Independent usable qualified input separated from assisted/repeated/unknown/null/pending sources; self-reports do not enter rule inputs.",
+    "Practice participation uses actual exact target mappings and separate session/event units; old graded sources retain original submitted_at."
+  ],
+  "executed": {
+    "command": "PYTHONPATH=. uv run --frozen pytest -q ./test_projection_boundaries.py",
+    "exit_code": 0,
+    "passed": 2,
+    "failed": 0,
+    "seconds": 0.64,
+    "script_sha256": "68c124b7309ce7d0d45b6b951f8a2a3c6f7011937b12c76481ecb06ba299e52c",
+    "log_sha256": "64189a9edeb267271d772afe11ad3b5f1bb39a18e374b30717f7b9d67a97f5e0",
+    "cases": [
+      "A damaged old profile hash is rejected both on current read and latest successful receipt replay.",
+      "Actual regrade worker failure retains exact prior ConceptState response, original submission time/source identities, grade1 and Evidence histories without new counts."
+    ]
+  },
+  "limitations": [
+    "No browser/default-port tests.",
+    "No new full suite or actual-user educational validity assessment.",
+    "Existing authored tests were read, not counted as independently executed.",
+    "No production/source/test/Git mutations; scripts/logs/snapshots only private temporary directory."
+  ]
+}

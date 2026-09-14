@@ -1,0 +1,74 @@
+[WebServer] INFO:     Started server process [<PID>]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+[WebServer] (node:<PID>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 2 tests using 1 worker
+
+(node:<PID>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 ../m41-practice-readonly-diagnosis/native-cache-control/practice-restart.spec.ts:21:1 › same practice tab identity rejects changed frozen parent or child hashes and preserves the original session (9.4s)
+(node:<PID>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  2 ../m41-practice-readonly-diagnosis/native-cache-control/practice.spec.ts:27:1 › five real question kinds save and refresh; hints and solutions require explicit exposure; submit is ungraded (6.8s)
+
+
+  1) ../m41-practice-readonly-diagnosis/native-cache-control/practice-restart.spec.ts:21:1 › same practice tab identity rejects changed frozen parent or child hashes and preserves the original session 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('heading', { name: '无法打开此精确链接', exact: true })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('heading', { name: '无法打开此精确链接', exact: true }) with timeout 5000ms
+      - waiting for getByRole('heading', { name: '无法打开此精确链接', exact: true })
+
+
+      49 |     ]) {
+      50 |       await page.goto(`${runtime.origin}/?practice=${encodeURIComponent(JSON.stringify(altered))}`)
+    > 51 |       await expect(page.getByRole('heading', { name: '无法打开此精确链接', exact: true })).toBeVisible()
+         |                                                                                   ^
+      52 |       const rejected = await workbench(page)
+      53 |       expect(rejected.course_ref).toEqual(before.course_ref)
+      54 |       expect(rejected.active_tab_id).toBe(active.id)
+        at <DIAGNOSTIC_ROOT>/native-cache-control/practice-restart.spec.ts:51:83
+
+    Error Context: ../m41-practice-readonly-diagnosis/native-cache-control/results/practice-restart-same-prac-c1139-serves-the-original-session/error-context.md
+
+  2) ../m41-practice-readonly-diagnosis/native-cache-control/practice.spec.ts:27:1 › five real question kinds save and refresh; hints and solutions require explicit exposure; submit is ungraded 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('✓ UI 会话已保存')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByText('✓ UI 会话已保存') with timeout 5000ms
+      - waiting for getByText('✓ UI 会话已保存')
+
+
+       at ../../learning-workbench-m41-final-exact/tests/e2e/helpers.ts:24
+
+      22 |   })
+      23 |   await page.goto('/')
+    > 24 |   await expect(page.getByText('✓ UI 会话已保存')).toBeVisible()
+         |                                              ^
+      25 | }
+      26 | export async function openSyntheticLesson(page: Page) {
+      27 |   await page.getByRole('button', { name: '浏览合成示例课程' }).click()
+        at bootstrap (<EXACT_REPO>/tests/e2e/helpers.ts:24:46)
+        at openSession (<DIAGNOSTIC_ROOT>/native-cache-control/practice.spec.ts:7:3)
+        at <DIAGNOSTIC_ROOT>/native-cache-control/practice.spec.ts:32:27
+
+    Error Context: ../m41-practice-readonly-diagnosis/native-cache-control/results/practice-five-real-questio-1ef20-exposure-submit-is-ungraded/error-context.md
+
+  2 failed
+    ../m41-practice-readonly-diagnosis/native-cache-control/practice-restart.spec.ts:21:1 › same practice tab identity rejects changed frozen parent or child hashes and preserves the original session 
+    ../m41-practice-readonly-diagnosis/native-cache-control/practice.spec.ts:27:1 › five real question kinds save and refresh; hints and solutions require explicit exposure; submit is ungraded 

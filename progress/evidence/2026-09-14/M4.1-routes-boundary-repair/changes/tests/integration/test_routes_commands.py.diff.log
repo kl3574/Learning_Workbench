@@ -1,0 +1,23 @@
+--- before/tests/integration/test_routes_commands.py
++++ after/tests/integration/test_routes_commands.py
+@@ -199,3 +199,20 @@
+     with database.transaction() as connection:
+         connection.execute('DROP TRIGGER synthetic_route_fail')
+     assert service.update(identity, original.id, candidate, first.sha256, 'update') == reference(candidate)
++
++
++def test_prefix_and_digit_route_ids_preserve_sql_order_across_pages(storage):
++    database, workspace, identity, objects, _ = storage
++    service = RouteService(database)
++    expected = []
++    for identifier in ['route_a', 'route_a0', 'route_b']:
++        route = dm.Route.model_validate({**route_for(objects).model_dump(), 'id': identifier})
++        expected.append(service.create(identity, route, 'create_' + identifier))
++    found, cursor = [], None
++    for _ in range(4):
++        page = service.list(workspace, limit=1, cursor=cursor)
++        found.extend(page.item_refs)
++        cursor = page.next_cursor
++        if cursor is None:
++            break
++    assert found == expected

@@ -1,0 +1,26 @@
+import 'fake-indexeddb/auto'
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
+import { afterEach, expect, test, vi } from 'vitest'
+import type { LearnerProfile } from '<repository>/packages/contracts/generated/types'
+import { useProfile } from '<repository>/apps/web/src/features/learning/useProfile'
+import { profileDraftKey, profileStore } from '<repository>/apps/web/src/features/learning/profileDrafts'
+
+afterEach(cleanup)
+const base = (workspace: string): LearnerProfile => ({ workspace_id: workspace, revision: 1, goals: [], goal_concept_ids: [], weekly_minutes: 120, language: 'zh-CN', preferred_difficulty: 'beginner', self_assessments: [] })
+
+test('two pages entering an unchanged profile cannot leave a permanent unselectable conflict', async () => {
+  const workspace = 'workspace_clean_branches', profile = base(workspace)
+  const port = { read: vi.fn(async () => structuredClone(profile)), save: vi.fn() }
+  const a = renderHook(() => useProfile(workspace, false, port))
+  const b = renderHook(() => useProfile(workspace, false, port))
+  await waitFor(() => { expect(a.result.current.safe).toBe(true); expect(b.result.current.safe).toBe(true); expect(a.result.current.remote).not.toBeNull(); expect(b.result.current.remote).not.toBeNull() })
+  act(() => { a.result.current.begin(); b.result.current.begin() })
+  await waitFor(() => { expect(a.result.current.safe).toBe(true); expect(b.result.current.safe).toBe(true) })
+  const disk = (await profileStore.load(workspace))[profileDraftKey]
+  expect(disk).toBeDefined()
+  // A clean baseline may be ignored or offered as an explicit recoverable choice;
+  // it must not disable edit with no selectable candidate and no dirty user data.
+  expect(a.result.current.conflicts.length === 0 || a.result.current.candidates.length > 0).toBe(true)
+  act(() => a.result.current.edit({ ...a.result.current.fields!, goals: ['Original branch input'] }))
+  expect(a.result.current.fields?.goals).toEqual(['Original branch input'])
+})

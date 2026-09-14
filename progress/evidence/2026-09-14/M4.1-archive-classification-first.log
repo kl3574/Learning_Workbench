@@ -1,0 +1,310 @@
+F401 [*] `tests.integration.test_notes_learning.storage` imported but unused
+  --> progress/evidence/2026-09-14/M4.1-learning-independent-review/test_source_integrity.py:13:51
+   |
+11 | from services.api.app.infrastructure.content_repository import reference
+12 | from services.api.app.practice_dto import PracticeSessionCreate, PracticeSubmitRequest
+13 | from tests.integration.test_notes_learning import storage
+   |                                                   ^^^^^^^
+14 | from tests.integration.test_assessment_attempts import storage as assessment_storage
+   |
+help: Remove unused import: `tests.integration.test_notes_learning.storage`
+   |
+12 | from services.api.app.practice_dto import PracticeSessionCreate, PracticeSubmitRequest
+   - from tests.integration.test_notes_learning import storage
+13 | from tests.integration.test_assessment_attempts import storage as assessment_storage
+   |
+
+F401 [*] `tests.integration.test_assessment_attempts.storage` imported but unused
+  --> progress/evidence/2026-09-14/M4.1-learning-independent-review/test_source_integrity.py:14:67
+   |
+12 | from services.api.app.practice_dto import PracticeSessionCreate, PracticeSubmitRequest
+13 | from tests.integration.test_notes_learning import storage
+14 | from tests.integration.test_assessment_attempts import storage as assessment_storage
+   |                                                                   ^^^^^^^^^^^^^^^^^^
+help: Remove unused import: `tests.integration.test_assessment_attempts.storage`
+   |
+13 | from tests.integration.test_notes_learning import storage
+   - from tests.integration.test_assessment_attempts import storage as assessment_storage
+14 |
+   |
+
+F811 Redefinition of unused `storage` from line 13
+  --> progress/evidence/2026-09-14/M4.1-learning-independent-review/test_source_integrity.py:17:69
+   |
+17 | def test_original_manual_revision_binding_not_hidden_by_later_false(storage):
+   |                                                                     ^^^^^^^ `storage` redefined here
+18 |     database, workspace, _, objects, _ = storage
+19 |     route = dm.Route(id='route_review', revision=1, title='Source history review', goal='No grade', steps=[dm.RouteStep(id='step_revie…
+   |
+  ::: progress/evidence/2026-09-14/M4.1-learning-independent-review/test_source_integrity.py:13:51
+   |
+11 | from services.api.app.infrastructure.content_repository import reference
+12 | from services.api.app.practice_dto import PracticeSessionCreate, PracticeSubmitRequest
+13 | from tests.integration.test_notes_learning import storage
+   |                                                   ------- previous definition of `storage` here
+14 | from tests.integration.test_assessment_attempts import storage as assessment_storage
+   |
+help: Remove definition: `storage`
+
+F811 Redefinition of unused `assessment_storage` from line 14
+  --> progress/evidence/2026-09-14/M4.1-learning-independent-review/test_source_integrity.py:35:71
+   |
+35 | def test_practice_submission_without_own_learning_outbox_not_admitted(assessment_storage):
+   |                                                                       ^^^^^^^^^^^^^^^^^^ `assessment_storage` redefined here
+36 |     database, identity, fixture, _ = assessment_storage
+37 |     service = PracticeService(database)
+   |
+  ::: progress/evidence/2026-09-14/M4.1-learning-independent-review/test_source_integrity.py:14:67
+   |
+12 | from services.api.app.practice_dto import PracticeSessionCreate, PracticeSubmitRequest
+13 | from tests.integration.test_notes_learning import storage
+14 | from tests.integration.test_assessment_attempts import storage as assessment_storage
+   |                                                                   ------------------ previous definition of `assessment_storage` here
+help: Remove definition: `assessment_storage`
+
+F811 Redefinition of unused `storage` from line 13
+  --> progress/evidence/2026-09-14/M4.1-learning-independent-review/test_source_integrity.py:50:66
+   |
+50 | def test_manual_false_replay_does_not_change_older_original_time(storage):
+   |                                                                  ^^^^^^^ `storage` redefined here
+51 |     database, workspace, _, objects, _ = storage
+52 |     route = dm.Route(id='route_time_control', revision=1, title='Original times', goal='No grade', steps=[dm.RouteStep(id='step_review…
+   |
+  ::: progress/evidence/2026-09-14/M4.1-learning-independent-review/test_source_integrity.py:13:51
+   |
+11 | from services.api.app.infrastructure.content_repository import reference
+12 | from services.api.app.practice_dto import PracticeSessionCreate, PracticeSubmitRequest
+13 | from tests.integration.test_notes_learning import storage
+   |                                                   ------- previous definition of `storage` here
+14 | from tests.integration.test_assessment_attempts import storage as assessment_storage
+   |
+help: Remove definition: `storage`
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-14/M4.1-learning-independent-review/write_receipt.py:6:59
+  |
+4 | import json
+5 | root=Path('.')
+6 | before=json.loads((root/'source-before.json').read_text());after=json.loads((root/'source-after.json').read_text())
+  |                                                           ^
+7 | report={'observed_at':datetime.now(timezone.utc).isoformat(),'review_scope':'Independent read-only M4.1 Learning and route completion r…
+8 | (root/'review-receipt.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
+  |
+
+F401 [*] `tests.integration.test_learning_evidence.storage` imported but unused
+ --> progress/evidence/2026-09-14/M4.1-practice-help-action-repair/provenance/test_help_action_binding.py:9:54
+  |
+7 | from services.api.app.infrastructure.content_repository import reference
+8 | from services.api.app.practice_dto import PracticeHintRequest, PracticeSessionCreate, PracticeSolutionRequest
+9 | from tests.integration.test_learning_evidence import storage
+  |                                                      ^^^^^^^
+help: Remove unused import: `tests.integration.test_learning_evidence.storage`
+  |
+8 | from services.api.app.practice_dto import PracticeHintRequest, PracticeSessionCreate, PracticeSolutionRequest
+  - from tests.integration.test_learning_evidence import storage
+9 |
+  |
+
+F811 Redefinition of unused `storage` from line 9
+  --> progress/evidence/2026-09-14/M4.1-practice-help-action-repair/provenance/test_help_action_binding.py:13:71
+   |
+12 | @pytest.mark.parametrize('kind', ['hint', 'solution'])
+13 | def test_unsubmitted_help_missing_learning_action_receipt_is_rejected(storage, kind):
+   |                                                                       ^^^^^^^ `storage` redefined here
+14 |     database, identity, fixture, _ = storage
+15 |     practice = PracticeService(database)
+   |
+  ::: progress/evidence/2026-09-14/M4.1-practice-help-action-repair/provenance/test_help_action_binding.py:9:54
+   |
+ 7 | from services.api.app.infrastructure.content_repository import reference
+ 8 | from services.api.app.practice_dto import PracticeHintRequest, PracticeSessionCreate, PracticeSolutionRequest
+ 9 | from tests.integration.test_learning_evidence import storage
+   |                                                      ------- previous definition of `storage` here
+help: Remove definition: `storage`
+
+F401 [*] `tests.integration.test_learner_profile.profile_store` imported but unused
+ --> progress/evidence/2026-09-14/M4.1-profile-concept-independent-review/test_projection_boundaries.py:6:52
+  |
+4 | from services.api.app.application.concept_states import ConceptStateService
+5 | from services.api.app.application.grading import GradingService, GradingWorker
+6 | from tests.integration.test_learner_profile import profile_store, request
+  |                                                    ^^^^^^^^^^^^^
+7 | from tests.integration.test_learning_evidence import storage, submit, raw_history
+8 | from tests.integration.test_assessment_grading import real_author, review_request
+  |
+help: Remove unused import: `tests.integration.test_learner_profile.profile_store`
+  |
+5 | from services.api.app.application.grading import GradingService, GradingWorker
+  - from tests.integration.test_learner_profile import profile_store, request
+6 + from tests.integration.test_learner_profile import request
+7 | from tests.integration.test_learning_evidence import storage, submit, raw_history
+  |
+
+F401 [*] `tests.integration.test_learning_evidence.storage` imported but unused
+ --> progress/evidence/2026-09-14/M4.1-profile-concept-independent-review/test_projection_boundaries.py:7:54
+  |
+5 | from services.api.app.application.grading import GradingService, GradingWorker
+6 | from tests.integration.test_learner_profile import profile_store, request
+7 | from tests.integration.test_learning_evidence import storage, submit, raw_history
+  |                                                      ^^^^^^^
+8 | from tests.integration.test_assessment_grading import real_author, review_request
+  |
+help: Remove unused import: `tests.integration.test_learning_evidence.storage`
+  |
+6 | from tests.integration.test_learner_profile import profile_store, request
+  - from tests.integration.test_learning_evidence import storage, submit, raw_history
+7 + from tests.integration.test_learning_evidence import submit, raw_history
+8 | from tests.integration.test_assessment_grading import real_author, review_request
+  |
+
+F811 Redefinition of unused `profile_store` from line 6
+  --> progress/evidence/2026-09-14/M4.1-profile-concept-independent-review/test_projection_boundaries.py:11:79
+   |
+11 | def test_corrupt_old_profile_version_blocks_current_and_latest_command_replay(profile_store):
+   |                                                                               ^^^^^^^^^^^^^ `profile_store` redefined here
+12 |     database, identity, service = profile_store
+13 |     service.save(identity, request(), 'first')
+   |
+  ::: progress/evidence/2026-09-14/M4.1-profile-concept-independent-review/test_projection_boundaries.py:6:52
+   |
+ 4 | from services.api.app.application.concept_states import ConceptStateService
+ 5 | from services.api.app.application.grading import GradingService, GradingWorker
+ 6 | from tests.integration.test_learner_profile import profile_store, request
+   |                                                    ------------- previous definition of `profile_store` here
+ 7 | from tests.integration.test_learning_evidence import storage, submit, raw_history
+ 8 | from tests.integration.test_assessment_grading import real_author, review_request
+   |
+help: Remove definition: `profile_store`
+
+E701 Multiple statements on one line (colon)
+  --> progress/evidence/2026-09-14/M4.1-profile-concept-independent-review/test_projection_boundaries.py:20:49
+   |
+18 |         connection.execute('UPDATE learner_profile_history SET profile_sha256=? WHERE workspace_id=? AND revision=2', ('0' * 64, ident…
+19 |     for read in [lambda:service.read(identity.workspace_id), lambda:service.save(identity, second, 'second')]:
+20 |         with pytest.raises(ApiError) as rejected:read()
+   |                                                 ^
+21 |         assert rejected.value.code == 'PROFILE_INTEGRITY_INVALID'
+   |
+
+F811 Redefinition of unused `storage` from line 7
+  --> progress/evidence/2026-09-14/M4.1-profile-concept-independent-review/test_projection_boundaries.py:24:90
+   |
+24 | def test_failed_regrade_retains_same_concept_sources_original_time_and_no_fake_new_count(storage):
+   |                                                                                          ^^^^^^^ `storage` redefined here
+25 |     database, identity, fixture, _ = storage
+26 |     attempt = submit(storage)
+   |
+  ::: progress/evidence/2026-09-14/M4.1-profile-concept-independent-review/test_projection_boundaries.py:7:54
+   |
+ 5 | from services.api.app.application.grading import GradingService, GradingWorker
+ 6 | from tests.integration.test_learner_profile import profile_store, request
+ 7 | from tests.integration.test_learning_evidence import storage, submit, raw_history
+   |                                                      ------- previous definition of `storage` here
+ 8 | from tests.integration.test_assessment_grading import real_author, review_request
+   |
+help: Remove definition: `storage`
+
+F401 [*] `tests.integration.test_assessment_attempts.storage` imported but unused
+  --> progress/evidence/2026-09-14/M4.1-routes-independent-review/test_route_boundary.py:12:74
+   |
+10 | from services.api.app.application.routes import RouteService
+11 | from services.api.app.infrastructure.content_repository import reference
+12 | from tests.integration.test_assessment_attempts import start, storage as assessment_storage
+   |                                                                          ^^^^^^^^^^^^^^^^^^
+13 | from tests.integration.test_learning_content_scope import storage as scope_storage
+14 | from tests.integration.test_routes_commands import route_for, storage
+   |
+help: Remove unused import: `tests.integration.test_assessment_attempts.storage`
+   |
+11 | from services.api.app.infrastructure.content_repository import reference
+   - from tests.integration.test_assessment_attempts import start, storage as assessment_storage
+12 + from tests.integration.test_assessment_attempts import start
+13 | from tests.integration.test_learning_content_scope import storage as scope_storage
+   |
+
+F401 [*] `tests.integration.test_learning_content_scope.storage` imported but unused
+  --> progress/evidence/2026-09-14/M4.1-routes-independent-review/test_route_boundary.py:13:70
+   |
+11 | from services.api.app.infrastructure.content_repository import reference
+12 | from tests.integration.test_assessment_attempts import start, storage as assessment_storage
+13 | from tests.integration.test_learning_content_scope import storage as scope_storage
+   |                                                                      ^^^^^^^^^^^^^
+14 | from tests.integration.test_routes_commands import route_for, storage
+   |
+help: Remove unused import: `tests.integration.test_learning_content_scope.storage`
+   |
+12 | from tests.integration.test_assessment_attempts import start, storage as assessment_storage
+   - from tests.integration.test_learning_content_scope import storage as scope_storage
+13 | from tests.integration.test_routes_commands import route_for, storage
+   |
+
+F401 [*] `tests.integration.test_routes_commands.storage` imported but unused
+  --> progress/evidence/2026-09-14/M4.1-routes-independent-review/test_route_boundary.py:14:63
+   |
+12 | from tests.integration.test_assessment_attempts import start, storage as assessment_storage
+13 | from tests.integration.test_learning_content_scope import storage as scope_storage
+14 | from tests.integration.test_routes_commands import route_for, storage
+   |                                                               ^^^^^^^
+help: Remove unused import: `tests.integration.test_routes_commands.storage`
+   |
+13 | from tests.integration.test_learning_content_scope import storage as scope_storage
+   - from tests.integration.test_routes_commands import route_for, storage
+14 + from tests.integration.test_routes_commands import route_for
+15 |
+   |
+
+F811 Redefinition of unused `storage` from line 14
+  --> progress/evidence/2026-09-14/M4.1-routes-independent-review/test_route_boundary.py:17:63
+   |
+17 | def test_prefix_digit_route_id_is_not_lost_in_real_pagination(storage):
+   |                                                               ^^^^^^^ `storage` redefined here
+18 |     database, workspace, identity, objects, _ = storage
+19 |     service = RouteService(database)
+   |
+  ::: progress/evidence/2026-09-14/M4.1-routes-independent-review/test_route_boundary.py:14:63
+   |
+12 | from tests.integration.test_assessment_attempts import start, storage as assessment_storage
+13 | from tests.integration.test_learning_content_scope import storage as scope_storage
+14 | from tests.integration.test_routes_commands import route_for, storage
+   |                                                               ------- previous definition of `storage` here
+help: Remove definition: `storage`
+
+F811 Redefinition of unused `scope_storage` from line 13
+  --> progress/evidence/2026-09-14/M4.1-routes-independent-review/test_route_boundary.py:34:79
+   |
+34 | def test_unknown_hash_for_same_dependency_invalidation_is_not_declared_usable(scope_storage):
+   |                                                                               ^^^^^^^^^^^^^ `scope_storage` redefined here
+35 |     database, workspace, fixture = scope_storage
+36 |     wrong = reference(fixture.concept).model_copy(update={'sha256': '0' * 64})
+   |
+  ::: progress/evidence/2026-09-14/M4.1-routes-independent-review/test_route_boundary.py:13:70
+   |
+11 | from services.api.app.infrastructure.content_repository import reference
+12 | from tests.integration.test_assessment_attempts import start, storage as assessment_storage
+13 | from tests.integration.test_learning_content_scope import storage as scope_storage
+   |                                                                      ------------- previous definition of `scope_storage` here
+14 | from tests.integration.test_routes_commands import route_for, storage
+   |
+help: Remove definition: `scope_storage`
+
+F811 Redefinition of unused `assessment_storage` from line 12
+  --> progress/evidence/2026-09-14/M4.1-routes-independent-review/test_route_boundary.py:47:79
+   |
+47 | def test_submitted_row_missing_snapshot_does_not_disappear_from_participation(assessment_storage):
+   |                                                                               ^^^^^^^^^^^^^^^^^^ `assessment_storage` redefined here
+48 |     database, identity, _, assessment = assessment_storage
+49 |     attempt = start(assessment_storage)
+   |
+  ::: progress/evidence/2026-09-14/M4.1-routes-independent-review/test_route_boundary.py:12:74
+   |
+10 | from services.api.app.application.routes import RouteService
+11 | from services.api.app.infrastructure.content_repository import reference
+12 | from tests.integration.test_assessment_attempts import start, storage as assessment_storage
+   |                                                                          ------------------ previous definition of `assessment_storage` here
+13 | from tests.integration.test_learning_content_scope import storage as scope_storage
+14 | from tests.integration.test_routes_commands import route_for, storage
+   |
+help: Remove definition: `assessment_storage`
+
+Found 19 errors.
+[*] 8 fixable with the `--fix` option.

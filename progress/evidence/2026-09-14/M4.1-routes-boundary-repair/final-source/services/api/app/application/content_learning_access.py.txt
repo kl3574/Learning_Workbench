@@ -1,0 +1,195 @@
+"""Content-owned exact learning scopes, navigation and conservative applicability."""
+
+from collections.abc import Sequence
+import sqlite3
+
+from packages.contracts import domain_models as dm
+from packages.contracts.canonical import strict_json
+from packages.contracts.validation import PublishedModel, validate_route
+
+from ..infrastructure.content_repository import damaged, missing, reference
+from .assessment_content import AssessmentContent
+from .errors import ApiError
+from .learning_state_models import ContentLearningScope, EvidenceApplicability, ScopedConcept
+from .policy import Policy
+from .question_qualification import question_qualification_facts
+
+
+def _access(connection: sqlite3.Connection, workspace_id: str) -> AssessmentContent:
+    content = AssessmentContent(connection, workspace_id)
+    content.public.require_workspace()
+    Policy(connection, workspace_id).check('subject_read')
+    return content
+
+
+def _values(content: AssessmentContent, entity: str, identifier: str | None = None) -> list[PublishedModel]:
+    return [content.public.decode(row).value for row in content.connection.execute(
+        'SELECT r.*,o.kind,o.lifecycle FROM revisions r JOIN objects o ON o.id=r.object_id '
+        'WHERE o.workspace_id=? AND o.kind=? AND (? IS NULL OR o.id=?) ORDER BY o.id,r.revision',
+        (content.workspace_id, entity, identifier, identifier))]
+
+
+def _courses(content: AssessmentContent, refs: Sequence[dm.ContentRef]) -> list[dm.Course]:
+    output = []
+    for ref in refs:
+        course = content.exact(ref)
+        if not isinstance(course, dm.Course):
+            raise damaged()
+        for concept in course.concept_refs:
+            if not isinstance(content.exact(concept), dm.Concept):
+                raise damaged()
+        for lesson in course.lesson_refs:
+            if not isinstance(content.exact(lesson), dm.Lesson):
+                raise damaged()
+        output.append(course)
+    return output
+
+
+def learning_scope(connection: sqlite3.Connection, workspace_id: str,
+                   course_id: str | None = None) -> ContentLearningScope:
+    content = _access(connection, workspace_id)
+    courses = [value for value in _values(content, 'course', course_id) if isinstance(value, dm.Course)]
+    if course_id is not None and not courses:
+        raise missing()
+    course_refs = [reference(value) for value in courses]
+    _courses(content, course_refs)
+    if course_id is None:
+        concepts = [value for value in _values(content, 'concept') if isinstance(value, dm.Concept)]
+    else:
+        concepts = []
+        for course in courses:
+            for ref in course.concept_refs:
+                concept = content.exact(ref)
+                if not isinstance(concept, dm.Concept):
+                    raise damaged()
+                concepts.append(concept)
+    unique = {(value.id, value.revision): value for value in concepts}
+    return ContentLearningScope(course_refs=course_refs, concepts=[ScopedConcept(ref=reference(value),
+        title=value.title, skill_dimensions=value.skill_dimensions) for _, value in sorted(unique.items())])
+
+
+def route_values(connection: sqlite3.Connection, workspace_id: str) -> list[dm.Route]:
+    content = _access(connection, workspace_id)
+    values = []
+    for value in _values(content, 'route'):
+        if not isinstance(value, dm.Route):
+            raise damaged()
+        try:
+            validate_route(value)
+        except ValueError:
+            raise damaged() from None
+        for step in value.steps:
+            content.exact(step.target)
+        values.append(value)
+    return values
+
+
+def participation_in_scope(connection: sqlite3.Connection, workspace_id: str,
+                           target_ref: dm.ContentRef, course_refs: Sequence[dm.ContentRef]) -> bool:
+    content = _access(connection, workspace_id)
+    target = content.exact(target_ref)
+    courses = _courses(content, course_refs)
+    if isinstance(target, dm.PracticeSet):
+        if not isinstance(content.exact(target.lesson_ref), dm.Lesson):
+            raise damaged()
+        for ref in target.question_refs:
+            if not isinstance(content.exact(ref), dm.QuestionPublic):
+                raise damaged()
+        return any(target.lesson_ref in course.lesson_refs for course in courses)
+    if isinstance(target, dm.AssessmentBlueprint):
+        concepts = content.concepts(content.questions(target))
+        required = {ref.model_dump_json() for ref in concepts}
+        return bool(required) and any(required <= {ref.model_dump_json() for ref in course.concept_refs} for course in courses)
+    raise damaged()
+
+
+def target_in_course_scope(connection: sqlite3.Connection, workspace_id: str,
+                           target_ref: dm.ContentRef, course_id: str) -> bool:
+    content = _access(connection, workspace_id)
+    scope = learning_scope(connection, workspace_id, course_id)
+    if target_ref.entity == 'note':
+        from ..infrastructure.content_repository import ContentRepository
+        note = ContentRepository(connection, workspace_id, allow_notes=True).load('note', target_ref.id, target_ref.revision).value
+        if reference(note) != target_ref:
+            raise damaged()
+        return False
+    target = content.exact(target_ref)
+    if isinstance(target, (dm.PracticeSet, dm.AssessmentBlueprint)):
+        return participation_in_scope(connection, workspace_id, target_ref, scope.course_refs)
+    for course in _courses(content, scope.course_refs):
+        if target_ref == reference(course) or target_ref in course.concept_refs or target_ref in course.lesson_refs:
+            return True
+        for ref in course.lesson_refs:
+            lesson = content.exact(ref)
+            if not isinstance(lesson, dm.Lesson):
+                raise damaged()
+            if target_ref in lesson.block_refs:
+                return True
+    return False
+
+
+def _semantic_closure(content: AssessmentContent, question_ref: dm.ContentRef,
+                      concept_ref: dm.ContentRef) -> list[dm.ContentRef]:
+    question = content.exact(question_ref)
+    if not isinstance(question, dm.QuestionPublic) or concept_ref.entity != 'concept':
+        raise damaged()
+    facts = question_qualification_facts(content.connection, content.workspace_id, question_ref)
+    if not facts.mapping_valid or concept_ref not in facts.concept_refs:
+        raise damaged()
+    refs = {question_ref.model_dump_json(): question_ref}
+    queue = list(facts.concept_refs)
+    while queue:
+        ref = queue.pop()
+        identity = ref.model_dump_json()
+        if identity in refs:
+            continue
+        value = content.exact(ref)
+        if not isinstance(value, dm.Concept):
+            raise damaged()
+        refs[identity] = ref
+        queue.extend(reference(content.public.concept_dependency(value, identifier)) for identifier in value.prerequisite_ids)
+    return sorted(refs.values(), key=lambda ref: (ref.entity, ref.id, ref.revision, ref.sha256))
+
+
+def evidence_applicability(connection: sqlite3.Connection, workspace_id: str,
+                           question_ref: dm.ContentRef, concept_ref: dm.ContentRef) -> EvidenceApplicability:
+    content = _access(connection, workspace_id)
+    refs = _semantic_closure(content, question_ref, concept_ref)
+    reasons = set()
+    for ref in refs:
+        current = content.public.current(ref.id)
+        if reference(current.value) != ref:
+            reasons.add('SEMANTIC_DEPENDENCY_REVISION_CHANGED')
+        if current.lifecycle != 'active':
+            reasons.add('SEMANTIC_DEPENDENCY_NOT_ACTIVE')
+    identities = {ref.model_dump_json() for ref in refs}
+    ids = {ref.id for ref in refs}
+    for row in connection.execute("SELECT payload_json FROM outbox WHERE event_type='content.dependencies_invalidated' AND delivered_at IS NULL"):
+        try:
+            payload = strict_json(row['payload_json'])
+        except (ValueError, TypeError):
+            reasons.add('CONTENT_CHANGE_SCOPE_UNKNOWN')
+            continue
+        if not isinstance(payload, dict):
+            reasons.add('CONTENT_CHANGE_SCOPE_UNKNOWN')
+            continue
+        owner = payload.get('workspace_id')
+        if not isinstance(owner, str) or not owner:
+            reasons.add('CONTENT_CHANGE_SCOPE_UNKNOWN')
+            continue
+        if owner != workspace_id:
+            continue
+        old = None
+        try:
+            old = dm.ContentRef.model_validate(payload.get('old_ref'))
+            content.exact(old)
+        except (ValueError, ApiError):
+            affected = payload.get('affected_ids')
+            if (old is not None and old.id in ids or not isinstance(affected, list)
+                    or any(not isinstance(identifier, str) or not identifier for identifier in affected)
+                    or any(identifier in ids for identifier in affected)):
+                reasons.add('CONTENT_CHANGE_SCOPE_UNKNOWN')
+            continue
+        if old.model_dump_json() in identities:
+            reasons.add('EXACT_CONTENT_CHANGE_PENDING')
+    return EvidenceApplicability(status='pending_review' if reasons else 'usable', reason_codes=sorted(reasons), checked_refs=refs)

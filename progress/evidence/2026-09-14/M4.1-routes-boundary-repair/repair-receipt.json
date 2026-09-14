@@ -1,0 +1,52 @@
+{
+  "observed_at": "2026-09-14T20:10:06.127538+00:00",
+  "status": "FOCUSED_REPAIR_CHECKS_PASS_NOT_ACCEPTANCE",
+  "prior_development_manifest_sha256": "239f8cc9536fb9d04d2ac93f733a33e64aa46d7578c23b5dac2b410cd259771f",
+  "prior_source_hashes": {
+    "services/api/app/application/routes.py": "d798bb6693fb828d72d2658e97db6fe2bbab8a5822d1de671a7ef8b17bb4cfcb",
+    "services/api/app/application/content_learning_access.py": "777f459b976a2bd3d93b0bdc038537bbe51d3d49cbf4862c749a61bcb2990396",
+    "services/api/app/application/practice_activity_access.py": "5a82796467fc4d0ff63b5fa9534c7c4fa4ab947030543f5b7be8e10b0524c57c",
+    "services/api/app/application/assessment_activity_access.py": "fc79cd257c96cf9c209e029f87eac320619d55fe2f47d33168dacc93be7e8ed7",
+    "services/api/app/route_dto.py": "7a1c0d907a0aaea93de23f004c318fa757b090f09059ef8bffc91c88ba592bb3",
+    "services/api/app/interfaces/route_http.py": "59897b0f58e4f05a4473bd5af1d97966445ba938ecf902eaafb467415fb40c0e",
+    "tests/integration/test_routes_commands.py": "22f10cf398b8448206866617740e1491e1c9816c8e25e8a5ebb5f20c9b6978bf",
+    "tests/integration/test_learning_content_scope.py": "fc58a3a4253554ace0a9656412ec30ffe34eee8d568847473ebd5e6341974d55",
+    "tests/integration/test_learning_activity_access.py": "94b0048dc82dcbe767efea11bedc8a5db70bd4cb0da1ff516412cfa542605c47"
+  },
+  "final_source_hashes": {
+    "services/api/app/application/routes.py": "d344ef55da83faae2d882be1c112d7af8f9fab654c524b62d7681b8817e26f78",
+    "services/api/app/application/content_learning_access.py": "41f44d110f1c6cd875299af22724d370ce99fdbbac827c335122dbf643128744",
+    "services/api/app/application/practice_activity_access.py": "5a82796467fc4d0ff63b5fa9534c7c4fa4ab947030543f5b7be8e10b0524c57c",
+    "services/api/app/application/assessment_activity_access.py": "88e1eb4839bf7c976f768e0c10de126d78acc2e4cd0dba186f22576d486395a6",
+    "services/api/app/route_dto.py": "7a1c0d907a0aaea93de23f004c318fa757b090f09059ef8bffc91c88ba592bb3",
+    "services/api/app/interfaces/route_http.py": "59897b0f58e4f05a4473bd5af1d97966445ba938ecf902eaafb467415fb40c0e",
+    "tests/integration/test_routes_commands.py": "2e1d628f3f5d20520e9314bfc6c6e28116590666d701b70f6d286efc78975dd0",
+    "tests/integration/test_learning_content_scope.py": "9655da7583c2f13ae1b319fc696cfa62ba2a55fb48e2a6b0bcd9cfbf78abb156",
+    "tests/integration/test_learning_activity_access.py": "5d549b2b8684cc6256cdd89ffce92b1252b334d9f547222d5691be6cd6d7944a"
+  },
+  "findings_fixed": [
+    "Route pagination now compares exact (id,revision) tuples matching SQLite ordering, so valid prefix IDs are not skipped.",
+    "Content invalidation old_ref now verifies real metadata; malformed same-ID SHA with related or empty affected_ids is pending review, not usable.",
+    "Assessment activity validates every repository allocation before checking whether it has a submission. Corrupt submitted rows cannot be silently omitted."
+  ],
+  "validation": [
+    {
+      "command": "uv run --frozen pytest -q tests/integration/test_routes_commands.py tests/integration/test_learning_content_scope.py tests/integration/test_learning_activity_access.py",
+      "exit_code": 0,
+      "passed": 32,
+      "seconds": 2.75,
+      "scope": "Earlier 28 new cases plus four permanent repairs; no full gate."
+    },
+    {
+      "command": "uv run --frozen ruff check three changed production files and three changed test files",
+      "exit_code": 0
+    },
+    {
+      "command": "uv run --frozen mypy three changed production files",
+      "exit_code": 0
+    }
+  ],
+  "source_provenance": "Final post-run hashes; independent reviewer separately captures before/after hashes and unchanged original probes. This receipt does not claim exact commit tests.",
+  "original_independent_red": "Three original probes and exact red snapshots retained by independent reviewer separately; this package does not replace that record.",
+  "no_source_change_during_packaging": true
+}

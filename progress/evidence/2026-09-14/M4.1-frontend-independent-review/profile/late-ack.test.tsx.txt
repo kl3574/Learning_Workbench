@@ -1,0 +1,38 @@
+import 'fake-indexeddb/auto'
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
+import { afterEach, expect, test, vi } from 'vitest'
+import type { LearnerProfile } from '<repository>/packages/contracts/generated/types'
+import { useProfile } from '<repository>/apps/web/src/features/learning/useProfile'
+import { profileDraftKey, profileStore, type ProfileEnvelope } from '<repository>/apps/web/src/features/learning/profileDrafts'
+
+afterEach(cleanup)
+test('a late acknowledged old command cannot erase a newer durable profile candidate after policy resume', async () => {
+  const workspace = 'workspace_profile_late_ack'
+  let server: LearnerProfile = { workspace_id: workspace, revision: 1, goals: [], goal_concept_ids: [], weekly_minutes: 120, language: 'zh-CN', preferred_difficulty: 'beginner', self_assessments: [] }
+  let acknowledge!: (value: LearnerProfile) => void
+  const port = { read: vi.fn(async () => structuredClone(server)), save: vi.fn(async (value: ProfileEnvelope) => {
+    server = { ...server, ...value.fields, revision: 2, weekly_minutes: Number(value.fields.weekly_minutes), self_assessments: [] }
+    return new Promise<LearnerProfile>(resolve => { acknowledge = resolve })
+  }) }
+  const view = renderHook(({ paused }) => useProfile(workspace, paused, port), { initialProps: { paused: false } })
+  await waitFor(() => { expect(view.result.current.safe).toBe(true); expect(view.result.current.remote?.revision).toBe(1) })
+  act(() => view.result.current.begin())
+  act(() => view.result.current.edit({ ...view.result.current.fields!, goals: ['Original command A'] }))
+  await waitFor(() => expect(view.result.current.safe).toBe(true))
+  let saving!: Promise<void>
+  act(() => { saving = view.result.current.save() })
+  await waitFor(() => expect(port.save).toHaveBeenCalledTimes(1))
+  view.rerender({ paused: true }); view.rerender({ paused: false })
+  await waitFor(() => { expect(view.result.current.busy).toBe(false); expect(view.result.current.remote?.revision).toBe(2) })
+  act(() => view.result.current.edit({ ...view.result.current.fields!, goals: ['Newer durable candidate B'] }))
+  await waitFor(() => expect(view.result.current.safe).toBe(true))
+  act(() => view.result.current.rebase(true))
+  await waitFor(() => expect(view.result.current.safe).toBe(true))
+  const candidate = JSON.stringify(view.result.current.editor)
+  expect((await profileStore.load(workspace))[profileDraftKey].text).toBe(candidate)
+  await act(async () => { acknowledge(structuredClone(server)); await saving })
+  await waitFor(() => expect(view.result.current.safe).toBe(true))
+  expect(view.result.current.fields?.goals).toEqual(['Newer durable candidate B'])
+  const disk = (await profileStore.load(workspace))[profileDraftKey]
+  expect([disk.text, ...disk.conflicts.map(item => item.text)]).toContain(candidate)
+})

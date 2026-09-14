@@ -1,0 +1,67 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/routes/RouteEditor.test.tsx
+
+
+ RUN  v5.0.0 <repository>/apps/web
+
+ ❯ src/features/routes/RouteEditor.test.tsx (2 tests | 2 failed) 2288ms
+   × a route command in flight through an access change can recover its actual receipt after policy resumes 1191ms
+   × policy resume allows another route edit without a late old receipt replacing its durable command 1096ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/routes/RouteEditor.test.tsx > a route command in flight through an access change can recover its actual receipt after policy resumes
+AssertionError: expected false to be true // Object.is equality
+
+[Attached DOM omitted from public log; original retained locally.]
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/features/routes/RouteEditor.test.tsx:28:130
+     26|   await waitFor(() => {
+     27|     const retry = screen.queryByRole('button', { name: '保存路线新修订' }), o…
+     28|     expect((retry instanceof HTMLButtonElement && !retry.disabled) || …
+       |                                                                                                                                  ^
+     29|   })
+     30| })
+ ❯ runWithExpensiveErrorDiagnosticsDisabled node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/features/routes/RouteEditor.test.tsx > policy resume allows another route edit without a late old receipt replacing its durable command
+AssertionError: expected true to be false // Object.is equality
+
+[Attached DOM omitted from public log; original retained locally.]
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/features/routes/RouteEditor.test.tsx:43:93
+     41|   fireEvent.click(screen.getByRole('button', { name: '保存路线新修订' })); aw…
+     42|   act(() => { access.value++; access.listeners.forEach(listener => lis…
+     43|   await waitFor(() => expect(screen.getByLabelText('路线学习目标').closest('…
+       |                                                                                             ^
+     44|   fireEvent.change(screen.getByLabelText('路线学习目标'), { target: { value:…
+     45|   const { routeStore } = await import('./routeDrafts')
+ ❯ runWithExpensiveErrorDiagnosticsDisabled node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  04:24:00
+   Duration  2.69s (tests 88%, environment 7%, transform 3%, import 2%)
+

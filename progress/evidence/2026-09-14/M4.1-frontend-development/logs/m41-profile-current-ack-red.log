@@ -1,0 +1,37 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/learning/useProfile.test.tsx
+
+
+ RUN  v5.0.0 <repository>/apps/web
+
+ ❯ src/features/learning/useProfile.test.tsx (8 tests | 1 failed) 1324ms
+   × a delayed acknowledgement of the still-current profile command remains usable after policy resumes 262ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/learning/useProfile.test.tsx > a delayed acknowledgement of the still-current profile command remains usable after policy resumes
+AssertionError: expected undefined to be 2 // Object.is equality
+
+- Expected:
+2
+
++ Received:
+undefined
+
+ ❯ src/features/learning/useProfile.test.tsx:149:62
+    147|   await act(async () => { release(); await saving })
+    148|   await waitFor(() => expect(view.result.current.safe).toBe(true))
+    149|   expect(view.result.current.editor?.acknowledged?.revision).toBe(2)
+       |                                                              ^
+    150|   expect(view.result.current.changed).toBe(false)
+    151|   expect((await profileStore.load(workspace))[profileDraftKey].text).t…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 passed (8)
+   Start at  04:25:59
+   Duration  1.71s (tests 81%, environment 12%, transform 4%, import 3%)
+

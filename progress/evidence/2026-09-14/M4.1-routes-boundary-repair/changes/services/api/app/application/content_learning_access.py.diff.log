@@ -1,0 +1,27 @@
+--- before/services/api/app/application/content_learning_access.py
++++ after/services/api/app/application/content_learning_access.py
+@@ -9,6 +9,7 @@
+ 
+ from ..infrastructure.content_repository import damaged, missing, reference
+ from .assessment_content import AssessmentContent
++from .errors import ApiError
+ from .learning_state_models import ContentLearningScope, EvidenceApplicability, ScopedConcept
+ from .policy import Policy
+ from .question_qualification import question_qualification_facts
+@@ -178,11 +179,14 @@
+             continue
+         if owner != workspace_id:
+             continue
++        old = None
+         try:
+             old = dm.ContentRef.model_validate(payload.get('old_ref'))
+-        except ValueError:
++            content.exact(old)
++        except (ValueError, ApiError):
+             affected = payload.get('affected_ids')
+-            if (not isinstance(affected, list) or any(not isinstance(identifier, str) or not identifier for identifier in affected)
++            if (old is not None and old.id in ids or not isinstance(affected, list)
++                    or any(not isinstance(identifier, str) or not identifier for identifier in affected)
+                     or any(identifier in ids for identifier in affected)):
+                 reasons.add('CONTENT_CHANGE_SCOPE_UNKNOWN')
+             continue

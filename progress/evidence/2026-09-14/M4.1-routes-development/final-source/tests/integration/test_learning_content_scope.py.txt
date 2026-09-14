@@ -1,0 +1,129 @@
+"""Historical exact membership and forward semantic applicability on real SQLite."""
+
+import pytest
+
+from packages.contracts import domain_models as dm
+from packages.contracts.canonical import canonical_bytes
+from services.api.app.application.content import ContentService
+from services.api.app.application.content_learning_access import evidence_applicability, learning_scope, participation_in_scope, target_in_course_scope
+from services.api.app.application.errors import ApiError
+from services.api.app.infrastructure.content_repository import reference
+from services.api.app.infrastructure.database import Database
+from services.api.app.infrastructure.config import Settings
+from tests.assessment_fixtures import assessment_fixture
+
+
+@pytest.fixture
+def storage(tmp_path):
+    database = Database(Settings(data_dir=tmp_path / 'data'))
+    workspace = database.initialize()
+    fixture = assessment_fixture('scope')
+    ContentService(database).publish(workspace, fixture.public_objects, fixture.bodies)
+    return database, workspace, fixture
+
+
+def test_scope_keeps_all_actual_concept_revisions_and_excludes_unreferenced_same_id(storage):
+    database, workspace, fixture = storage
+    service = ContentService(database)
+    second = assessment_fixture('scope', revision=2)
+    service.publish(workspace, [value for value in second.public_objects if value.entity != 'course'], second.bodies)
+    standalone = dm.Concept(id='concept_standalone', revision=1, title='Standalone concept', skill_dimensions=['transfer'])
+    service.publish(workspace, [standalone], {})
+    with database.transaction() as connection:
+        all_scope = learning_scope(connection, workspace)
+        course_scope = learning_scope(connection, workspace, fixture.course.id)
+        assert [(item.ref.id, item.ref.revision) for item in all_scope.concepts] == [('concept_scope', 1), ('concept_scope', 2), ('concept_standalone', 1)]
+        assert [item.ref for item in course_scope.concepts] == [reference(fixture.concept)]
+        for value in [fixture.course, fixture.lesson, fixture.block, fixture.concept, fixture.practice, fixture.assessment]:
+            assert target_in_course_scope(connection, workspace, reference(value), fixture.course.id)
+        for value in [second.lesson, second.block, second.concept, second.practice, second.assessment, standalone]:
+            assert not target_in_course_scope(connection, workspace, reference(value), fixture.course.id)
+    service.publish(workspace, [second.course], {})
+    with database.transaction() as connection:
+        assert learning_scope(connection, workspace, fixture.course.id).course_refs == [reference(fixture.course), reference(second.course)]
+        assert target_in_course_scope(connection, workspace, reference(second.block), fixture.course.id)
+        for missing in ['course_absent', fixture.lesson.id]:
+            with pytest.raises(ApiError) as rejected:
+                learning_scope(connection, workspace, missing)
+            assert rejected.value.status == 404
+
+
+def test_assessment_never_unions_concepts_across_course_revisions(storage):
+    database, workspace, fixture = storage
+    other = dm.Concept(id='concept_second', revision=1, title='Different exact concept', skill_dimensions=['recall'])
+    q = dm.QuestionPublic.model_validate({**fixture.questions[0].model_dump(), 'id': 'question_two_concepts', 'concept_ids': [fixture.concept.id, other.id]})
+    assessment = dm.AssessmentBlueprint.model_validate({**fixture.assessment.model_dump(), 'id': 'assessment_two_concepts', 'question_refs': [reference(q)]})
+    course2 = dm.Course.model_validate({**fixture.course.model_dump(), 'revision': 2, 'concept_refs': [reference(other)]})
+    ContentService(database).publish(workspace, [other, q, assessment, course2], {})
+    with database.transaction() as connection:
+        refs = learning_scope(connection, workspace, fixture.course.id).course_refs
+        assert not participation_in_scope(connection, workspace, reference(assessment), refs)
+        assert participation_in_scope(connection, workspace, reference(fixture.practice), refs)
+    course3 = dm.Course.model_validate({**course2.model_dump(), 'revision': 3, 'concept_refs': [reference(fixture.concept), reference(other)]})
+    ContentService(database).publish(workspace, [course3], {})
+    with database.transaction() as connection:
+        assert participation_in_scope(connection, workspace, reference(assessment), learning_scope(connection, workspace, fixture.course.id).course_refs)
+
+
+def test_unrelated_container_changes_do_not_invalidate_exact_question_semantics(storage):
+    database, workspace, fixture = storage
+    with database.transaction() as connection:
+        first = evidence_applicability(connection, workspace, reference(fixture.questions[0]), reference(fixture.concept))
+    assert first.status == 'usable'
+    updated_course = dm.Course.model_validate({**fixture.course.model_dump(), 'revision': 2, 'title': 'New container title'})
+    ContentService(database).publish(workspace, [updated_course], {})
+    with database.transaction() as connection:
+        second = evidence_applicability(connection, workspace, reference(fixture.questions[0]), reference(fixture.concept))
+    assert second == first and {ref.entity for ref in second.checked_refs} == {'question', 'concept'}
+    concept2 = dm.Concept.model_validate({**fixture.concept.model_dump(), 'revision': 2, 'title': 'Changed semantics'})
+    ContentService(database).publish(workspace, [concept2], {})
+    with database.transaction() as connection:
+        changed = evidence_applicability(connection, workspace, reference(fixture.questions[0]), reference(fixture.concept))
+    assert changed.status == 'pending_review' and 'SEMANTIC_DEPENDENCY_REVISION_CHANGED' in changed.reason_codes
+    assert changed.status != 'confirmed_stale'
+
+
+@pytest.mark.parametrize('intent,expected', [
+    ({'affected_ids': ['concept_scope']}, 'pending_review'),
+    ({'workspace_id': 42, 'affected_ids': []}, 'pending_review'),
+    ({'workspace_id': 'workspace_other', 'affected_ids': ['concept_scope']}, 'usable'),
+    ({'workspace_id': 'same', 'affected_ids': ['concept_scope']}, 'pending_review'),
+    ({'workspace_id': 'same', 'affected_ids': ['concept_unrelated']}, 'usable'),
+])
+def test_unknown_change_scope_is_pending_not_confirmed_stale(storage, intent, expected):
+    database, workspace, fixture = storage
+    if intent.get('workspace_id') == 'same':
+        intent = {**intent, 'workspace_id': workspace}
+    with database.transaction() as connection:
+        connection.execute('INSERT INTO outbox(id,event_type,payload_json) VALUES(?,?,?)', ('outbox_controlled', 'content.dependencies_invalidated', canonical_bytes(intent).decode()))
+        result = evidence_applicability(connection, workspace, reference(fixture.questions[0]), reference(fixture.concept))
+    assert result.status == expected
+    assert 'confirmed_stale' != result.status
+
+
+def test_concept_prerequisite_is_in_exact_forward_closure_and_damaged_hash_fails_closed(storage):
+    database, workspace, fixture = storage
+    prerequisite = dm.Concept(id='concept_required', revision=1, title='Prerequisite', skill_dimensions=['recall'])
+    concept = dm.Concept.model_validate({**fixture.concept.model_dump(), 'revision': 2, 'prerequisite_ids': [prerequisite.id]})
+    question = dm.QuestionPublic.model_validate({**fixture.questions[0].model_dump(), 'revision': 2})
+    ContentService(database).publish(workspace, [prerequisite, concept, question], {})
+    with database.transaction() as connection:
+        result = evidence_applicability(connection, workspace, reference(question), reference(concept))
+    assert result.status == 'usable' and reference(prerequisite) in result.checked_refs
+    next_prerequisite = dm.Concept.model_validate({**prerequisite.model_dump(), 'revision': 2})
+    ContentService(database).publish(workspace, [next_prerequisite], {})
+    with database.transaction() as connection:
+        result = evidence_applicability(connection, workspace, reference(question), reference(concept))
+        assert result.status == 'pending_review'
+        with pytest.raises(ApiError):
+            evidence_applicability(connection, workspace, dm.ContentRef.model_validate({**reference(question).model_dump(), 'sha256': '0' * 64}), reference(concept))
+
+
+@pytest.mark.parametrize('raw', ['{"workspace_id":"same","workspace_id":"same"}', '[]', '{"workspace_id":null}', '{"workspace_id":"same","affected_ids":[42]}'])
+def test_malformed_invalidation_intent_never_returns_usable(storage, raw):
+    database, workspace, fixture = storage
+    raw = raw.replace('"same"', '"' + workspace + '"')
+    with database.transaction() as connection:
+        connection.execute('INSERT INTO outbox(id,event_type,payload_json) VALUES(?,?,?)', ('outbox_malformed', 'content.dependencies_invalidated', raw))
+        result = evidence_applicability(connection, workspace, reference(fixture.questions[0]), reference(fixture.concept))
+    assert result.status == 'pending_review' and result.reason_codes == ['CONTENT_CHANGE_SCOPE_UNKNOWN']

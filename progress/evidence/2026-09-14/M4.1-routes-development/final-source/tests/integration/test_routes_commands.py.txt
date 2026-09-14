@@ -1,0 +1,201 @@
+"""Actual authenticated route commands, immutable content and native manual receipts."""
+
+from dataclasses import replace
+
+from fastapi.testclient import TestClient
+import pytest
+
+from packages.contracts import domain_models as dm
+from services.api.app.application.content import ContentService
+from services.api.app.application.errors import ApiError
+from services.api.app.application.routes import RouteService
+from services.api.app.infrastructure.content_repository import reference
+from services.api.app.infrastructure.database import Database, utc_now
+from services.api.app.infrastructure.security import issue_bootstrap_code
+from services.api.app.interfaces.route_http import create_route_router
+from services.api.app.route_dto import RouteCompletionRequest
+from tests.integration.test_notes_learning import count, http_app, storage
+
+__all__ = ['storage']
+
+
+def route_for(objects, revision=1):
+    return dm.Route(id='route_commands', revision=revision, title='Actual route', goal='Participation, not mastery', steps=[
+        dm.RouteStep(id='step_first', title='Manual marker', target=reference(objects[0]), completion_rule='manual'),
+        dm.RouteStep(id='step_second', title='Read lesson', target=reference(objects[1]), completion_rule='read', requires_steps=['step_first']),
+    ])
+
+
+@pytest.fixture
+def http(storage):
+    database, *_ = storage
+    app = http_app(database)
+    app.include_router(create_route_router(database))
+    with TestClient(app, base_url=database.settings.origin) as client:
+        auth = client.post('/api/v1/session/bootstrap', json={'one_time_code': issue_bootstrap_code(database)}, headers={'Origin': database.settings.origin})
+        assert auth.status_code == 200
+        yield client, {'Origin': database.settings.origin, 'X-CSRF-Token': auth.json()['csrf_token'], 'Idempotency-Key': 'create-route'}, storage
+
+
+def test_http_create_update_history_strong_cas_pagination_and_restart(http):
+    client, headers, (database, workspace, _, objects, _) = http
+    original = route_for(objects)
+    created = client.post('/api/v1/routes', json=original.model_dump(mode='json'), headers=headers)
+    assert created.status_code == 201 and created.json() == reference(original).model_dump(mode='json')
+    assert client.post('/api/v1/routes', json=original.model_dump(mode='json'), headers=headers).json() == created.json()
+    updated = route_for(objects, 2)
+    payload = updated.model_dump(mode='json')
+    assert client.put('/api/v1/routes/route_commands', json=payload, headers=headers).status_code == 428
+    assert client.put('/api/v1/routes/route_commands', json=payload, headers={**headers, 'If-Match': 'W/' + created.headers['etag']}).status_code == 422
+    change = {**headers, 'Idempotency-Key': 'update-route', 'If-Match': created.headers['etag']}
+    saved = client.put('/api/v1/routes/route_commands', json=payload, headers=change)
+    assert saved.status_code == 200 and saved.json() == reference(updated).model_dump(mode='json')
+    assert client.put('/api/v1/routes/route_commands', json=payload, headers=change).json() == saved.json()
+    assert client.put('/api/v1/routes/route_commands', json=payload, headers={**change, 'Idempotency-Key': 'stale'}).status_code == 412
+    page = client.get('/api/v1/routes?limit=1').json()
+    assert page['items'] == [original.model_dump(mode='json')] and page['next_cursor']
+    next_page = client.get('/api/v1/routes', params={'limit': 1, 'cursor': page['next_cursor']}).json()
+    assert next_page['item_refs'] == [saved.json()] and next_page['next_cursor'] is None
+    assert client.get('/api/v1/routes', params={'limit': 2, 'cursor': page['next_cursor']}).status_code == 422
+    restarted = Database(database.settings)
+    restarted.initialize()
+    before = {table: count(database, table) for table in ['revisions', 'learning_events', 'learning_progress', 'outbox', 'evidence']}
+    restored = RouteService(restarted).list(workspace)
+    assert restored.items == [original, updated]
+    assert before == {table: count(database, table) for table in before}
+    assert count(database, 'evidence') == count(database, 'learning_events') == 0
+
+
+def test_exact_multiple_parent_navigation_and_explicit_orphan(http):
+    client, headers, (database, workspace, _, objects, _) = http
+    second_parent = dm.Course.model_validate({**objects[2].model_dump(), 'id': 'course_other_parent'})
+    orphan = dm.Lesson(id='lesson_orphan', revision=1, title='No fabricated parent', objectives=[], block_refs=[reference(objects[0])])
+    ContentService(database).publish(workspace, [second_parent, orphan], {})
+    value = route_for(objects)
+    value.steps.append(dm.RouteStep(id='step_orphan', title='Choose no guessed course', target=reference(orphan), completion_rule='read'))
+    assert client.post('/api/v1/routes', json=value.model_dump(mode='json'), headers=headers).status_code == 201
+    targets = client.get('/api/v1/routes').json()['targets']
+    for target in targets[:2]:
+        assert {option['course_ref']['id'] for option in target['navigation_options']} == {objects[2].id, second_parent.id}
+        assert target['unresolved_reason'] is None
+    assert targets[2]['navigation_options'] == [] and targets[2]['unresolved_reason'] == 'NO_EXACT_COURSE_PARENT'
+
+
+@pytest.mark.parametrize('mutation', ['cycle', 'wrong_rule', 'bad_hash', 'next_revision'])
+def test_invalid_route_never_publishes_or_records_progress(http, mutation):
+    client, headers, (database, _, _, objects, _) = http
+    value = route_for(objects).model_dump(mode='json')
+    if mutation == 'cycle':
+        value['steps'][0]['requires_steps'] = ['step_second']
+    elif mutation == 'wrong_rule':
+        value['steps'][0]['completion_rule'] = 'assessment_submitted'
+    elif mutation == 'bad_hash':
+        value['steps'][0]['target']['sha256'] = '0' * 64
+    else:
+        value['revision'] = 2
+    before = {table: count(database, table) for table in ['revisions', 'learning_events', 'outbox', 'idempotency']}
+    assert client.post('/api/v1/routes', json=value, headers=headers).status_code == (409 if mutation == 'bad_hash' else 422)
+    assert before == {table: count(database, table) for table in before}
+
+
+def test_manual_receipt_replay_after_false_does_not_restore_true(http):
+    client, headers, (database, _, _, objects, _) = http
+    value = route_for(objects)
+    assert client.post('/api/v1/routes', json=value.model_dump(mode='json'), headers=headers).status_code == 201
+    url = '/api/v1/routes/route_commands/steps/step_second/complete'
+    request = {'route_revision': 1, 'expected_progress_revision': 1, 'completed': True, 'origin': 'manual'}
+    first_headers = {**headers, 'Idempotency-Key': 'manual-true'}
+    first = client.post(url, json=request, headers=first_headers)
+    assert first.status_code == 200
+    second = client.post(url, json={**request, 'expected_progress_revision': 2, 'completed': False}, headers={**headers, 'Idempotency-Key': 'manual-false'})
+    assert second.status_code == 200
+    before = count(database, 'learning_events')
+    assert client.post(url, json=request, headers=first_headers).json() == first.json()
+    progress = client.get('/api/v1/learning/progress').json()
+    target = next(step for step in progress['route_steps'] if step['step_id'] == 'step_second')
+    assert target['completed'] is False and target['manual_override'] is False
+    assert target['source_event_ids'] == [second.json()['event_id']]
+    assert target['unmet_requires_steps'] == ['step_first']
+    assert count(database, 'learning_events') == before and count(database, 'evidence') == 0
+
+
+@pytest.mark.parametrize('part', ['event', 'outbox'])
+def test_completion_replay_rejects_damaged_original_binding(storage, part):
+    database, _, identity, objects, _ = storage
+    service = RouteService(database)
+    value = route_for(objects)
+    service.create(identity, value, 'create')
+    request = RouteCompletionRequest(route_revision=1, expected_progress_revision=1, completed=True, origin='manual')
+    result = service.complete(identity, value.id, 'step_first', request, 'complete')
+    with database.transaction() as connection:
+        if part == 'event':
+            connection.execute('DROP TRIGGER event_no_update')
+            connection.execute("UPDATE learning_events SET origin='user_supplied_import' WHERE event_id=?", (result.event_id,))
+        else:
+            connection.execute("DELETE FROM outbox WHERE json_extract(payload_json,'$.event_id')=?", (result.event_id,))
+    with pytest.raises(ApiError) as rejected:
+        service.complete(identity, value.id, 'step_first', request, 'complete')
+    assert rejected.value.code == 'LEARNING_ACTION_HISTORY_INVALID'
+
+
+def test_workspace_and_active_independent_policy_apply_before_cached_route_receipt(storage):
+    database, workspace, identity, objects, _ = storage
+    service = RouteService(database)
+    route = route_for(objects)
+    service.create(identity, route, 'create')
+    with database.transaction() as connection:
+        connection.execute('INSERT INTO workspace(id,title,created_at) VALUES(?,?,?)', ('workspace_other', 'Synthetic other workspace', utc_now()))
+    assert service.list('workspace_other').items == []
+    with pytest.raises(ApiError) as denied:
+        service.create(replace(identity, workspace_id='workspace_other'), route, 'create')
+    assert denied.value.status == 404
+    from tests.assessment_fixtures import assessment_fixture
+    from tests.integration.test_assessment_attempts import import_fixture, start
+    from services.api.app.application.assessment import AssessmentService
+    fixture = assessment_fixture('routeguard')
+    import_fixture(database, identity, fixture, 'guard-source')
+    start((database, identity, fixture, AssessmentService(database)))
+    for actor in [identity, replace(identity, role='author')]:
+        with pytest.raises(ApiError) as blocked:
+            service.create(actor, route, 'create')
+        assert blocked.value.status == 409
+    with pytest.raises(ApiError):
+        service.list(workspace)
+
+
+def test_concurrent_route_updates_have_one_cas_winner_and_replay_retains_old_revision(storage):
+    from concurrent.futures import ThreadPoolExecutor
+    database, workspace, identity, objects, _ = storage
+    service = RouteService(database)
+    original = route_for(objects)
+    first = service.create(identity, original, 'create')
+    def update(index):
+        candidate = dm.Route.model_validate({**original.model_dump(), 'revision': 2, 'title': f'Writer {index}'})
+        try:
+            return service.update(identity, original.id, candidate, first.sha256, f'writer-{index}')
+        except ApiError as error:
+            return error.status
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        outcomes = list(pool.map(update, [1, 2]))
+    assert outcomes.count(412) == 1
+    assert len(service.list(workspace).items) == 2
+    assert service.create(identity, original, 'create') == first
+
+
+def test_route_publication_outbox_failure_rolls_back_content_and_receipt(storage):
+    database, workspace, identity, objects, _ = storage
+    service = RouteService(database)
+    original = route_for(objects)
+    first = service.create(identity, original, 'create')
+    candidate = route_for(objects, 2)
+    before = {table: count(database, table) for table in ['revisions', 'objects', 'outbox', 'idempotency']}
+    with database.transaction() as connection:
+        connection.execute("CREATE TRIGGER synthetic_route_fail BEFORE INSERT ON outbox WHEN NEW.event_type='content.dependencies_invalidated' BEGIN SELECT RAISE(ABORT,'synthetic rollback'); END")
+    with pytest.raises(ApiError) as rejected:
+        service.update(identity, original.id, candidate, first.sha256, 'update')
+    assert rejected.value.status == 503
+    assert before == {table: count(database, table) for table in before}
+    assert service.list(workspace).item_refs == [first]
+    with database.transaction() as connection:
+        connection.execute('DROP TRIGGER synthetic_route_fail')
+    assert service.update(identity, original.id, candidate, first.sha256, 'update') == reference(candidate)

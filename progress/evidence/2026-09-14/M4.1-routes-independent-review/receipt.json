@@ -1,0 +1,134 @@
+{
+  "kind": "Bounded independent M4.1 Route/Content/Activity review",
+  "completed_at": "2026-09-14T20:09:26Z",
+  "sole_product_spec": {
+    "path": "PRODUCT_DESIGN.md",
+    "sha256": "ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c",
+    "sections": [
+      "R-05",
+      "7 module ownership",
+      "13.2 evidence eligibility",
+      "15.1 immutable revisions",
+      "Appendix A routes API",
+      "Appendix B Route/RouteStep"
+    ]
+  },
+  "read_scope": [
+    "services/api/app/application/routes.py",
+    "services/api/app/application/content_learning_access.py",
+    "services/api/app/application/practice_activity_access.py",
+    "services/api/app/application/assessment_activity_access.py",
+    "services/api/app/route_dto.py",
+    "services/api/app/interfaces/route_http.py",
+    "tests/integration/test_routes_commands.py",
+    "tests/integration/test_learning_content_scope.py",
+    "tests/integration/test_learning_activity_access.py"
+  ],
+  "findings": [
+    {
+      "id": "ROUTE_PREFIX_CURSOR",
+      "kind": "normal supported application behavior",
+      "before": "Creating valid route IDs route_a, route_a0, route_b and paging at limit=1 omitted route_a0. Cursor compared joined id:revision strings while repository ordering used (id,revision).",
+      "location_at_red": "services/api/app/application/routes.py:88",
+      "fix": "Tuple (id, revision) comparison matches repository sort; signed cursor remains bound to workspace, filter and limit.",
+      "regression": "test_prefix_digit_route_id_is_not_lost_in_real_pagination"
+    },
+    {
+      "id": "INVALIDATION_WRONG_HASH",
+      "kind": "controlled SQLite outbox integrity fault",
+      "before": "Same workspace intent named the exact dependency ID/revision with a false metadata hash and matching affected_ids; applicability returned usable.",
+      "location_at_red": "services/api/app/application/content_learning_access.py:184",
+      "fix": "Verify exact old_ref against actual content, retain unknown/pending when a same-dependency hash cannot be established.",
+      "regression": "test_unknown_hash_for_same_dependency_invalidation_is_not_declared_usable"
+    },
+    {
+      "id": "MISSING_SUBMISSION_HIDDEN",
+      "kind": "controlled SQLite corruption, requiring test-only removal of immutable trigger",
+      "before": "A real submitted attempt retained status/event/outbox but submission_json was faulted to NULL. SQL filtering removed it before witness verification and returned no participation.",
+      "location_at_red": "services/api/app/application/assessment_activity_access.py:18",
+      "fix": "Repository validates all allocations before filtering genuine unsubmitted records.",
+      "regression": "test_submitted_row_missing_snapshot_does_not_disappear_from_participation"
+    }
+  ],
+  "results": {
+    "first_invocation": "Collection error only: external /tmp tests did not discover repository pythonpath; retained red.log exit2, no business probe executed. Retried with explicit -c pyproject.toml.",
+    "controlled_before": "3 failed, pytest exit1, 0.69s. Failures demonstrate the three named defects.",
+    "controlled_after": "3 passed, pytest exit0, 0.68s. Same probe file retained after creation.",
+    "source_changes": {
+      "services/api/app/application/routes.py": {
+        "red": "d798bb6693fb828d72d2658e97db6fe2bbab8a5822d1de671a7ef8b17bb4cfcb",
+        "green": "d344ef55da83faae2d882be1c112d7af8f9fab654c524b62d7681b8817e26f78"
+      },
+      "services/api/app/application/content_learning_access.py": {
+        "red": "777f459b976a2bd3d93b0bdc038537bbe51d3d49cbf4862c749a61bcb2990396",
+        "green": "41f44d110f1c6cd875299af22724d370ce99fdbbac827c335122dbf643128744"
+      },
+      "services/api/app/application/assessment_activity_access.py": {
+        "red": "fc79cd257c96cf9c209e029f87eac320619d55fe2f47d33168dacc93be7e8ed7",
+        "green": "88e1eb4839bf7c976f768e0c10de126d78acc2e4cd0dba186f22576d486395a6"
+      },
+      "tests/integration/test_routes_commands.py": {
+        "red": "22f10cf398b8448206866617740e1491e1c9816c8e25e8a5ebb5f20c9b6978bf",
+        "green": "2e1d628f3f5d20520e9314bfc6c6e28116590666d701b70f6d286efc78975dd0"
+      },
+      "tests/integration/test_learning_content_scope.py": {
+        "red": "fc58a3a4253554ace0a9656412ec30ffe34eee8d568847473ebd5e6341974d55",
+        "green": "9655da7583c2f13ae1b319fc696cfa62ba2a55fb48e2a6b0bcd9cfbf78abb156"
+      },
+      "tests/integration/test_learning_activity_access.py": {
+        "red": "94b0048dc82dcbe767efea11bedc8a5db70bd4cb0da1ff516412cfa542605c47",
+        "green": "5d549b2b8684cc6256cdd89ffce92b1252b334d9f547222d5691be6cd6d7944a"
+      }
+    },
+    "red_source_stable": true,
+    "green_source_stable": true
+  },
+  "static_conclusions": [
+    "Read actual exact parent-chain navigation and single-course-revision assessment witness logic; no title/ID/latest parent guesses observed.",
+    "Actual route commands hold a transaction and current subject policy check before cached receipt access. Manual progress calls remain Learning-owned; requires_steps are not default completion locks.",
+    "Activity projections emit source IDs/times/full public refs, not private solutions, pins or feedback.",
+    "Historical revisions and source validation remain separate from current applicability; no M6 completed invalidation capability is asserted."
+  ],
+  "limits": [
+    "This review did not run the owners complete test suites, browsers, CI, or arbitrary concurrency/security campaigns.",
+    "Two controlled faults are not evidence that normal HTTP APIs authorize SQL tampering.",
+    "Root Learning implementation was explicitly excluded; its independently discovered bugs are not re-reviewed here.",
+    "Early red source content was not copied; exact source SHA values and execution output are retained. Probe hash was captured at green before/after, with no edits after original creation."
+  ],
+  "artifacts": [
+    {
+      "name": "before.json",
+      "sha256": "e60a605aeffe22a573c99a6b388d5def867ded2b52b035b65fbd343f14c11549"
+    },
+    {
+      "name": "green-controlled-receipt.json",
+      "sha256": "f70972307085f5c7b7092777cde23646c1a0406871a068ad8d7b838c221841f1"
+    },
+    {
+      "name": "green-controlled.log",
+      "sha256": "81a8fd84092e5d3733d0062f7e483ae10c68f86935ebdba2ab56f14c430b2643"
+    },
+    {
+      "name": "red-controlled-receipt.json",
+      "sha256": "b079845cac30705ff439b33d3881c67aa92f880abea584a1a14473cc6d06c108"
+    },
+    {
+      "name": "red-controlled.log",
+      "sha256": "826bfa80bedf67c79433bac44f797f1f7b17689a2bfd1de1a69f49a37a618bb3"
+    },
+    {
+      "name": "red-receipt.json",
+      "sha256": "5cd04a1cb268796b93bb4a1ba87c356d385ff7ebd9adae24e146c8a6e8eb4846"
+    },
+    {
+      "name": "red.log",
+      "sha256": "8bd81fddb403a48bfb4b301fd1f8d7e6d41dbe8fe7c49d389bc73e5cb6181c63"
+    },
+    {
+      "name": "test_route_boundary.py",
+      "sha256": "c8494dde095fda5a2d5d39859ef0d89443d0770a07ec6634f437fa97007b33cc"
+    }
+  ],
+  "production_edits_by_reviewer": false,
+  "remaining_reproduced_findings": []
+}

@@ -1,0 +1,50 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/learning/useProfile.test.tsx
+
+
+ RUN  v5.0.0 <repository>/apps/web
+
+ ❯ src/features/learning/useProfile.test.tsx (6 tests | 2 failed) 907ms
+   × two pages entering an unchanged profile cannot leave a permanent unselectable conflict 109ms
+   × a late acknowledged old command cannot erase a newer durable profile candidate after policy resume 365ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/learning/useProfile.test.tsx > two pages entering an unchanged profile cannot leave a permanent unselectable conflict
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/features/learning/useProfile.test.tsx:77:93
+     75|   // A clean baseline may be ignored or offered as an explicit recover…
+     76|   // it must not disable edit with no selectable candidate and no dirt…
+     77|   expect(a.result.current.conflicts.length === 0 || a.result.current.c…
+       |                                                                                             ^
+     78|   act(() => a.result.current.edit({ ...a.result.current.fields!, goals…
+     79|   expect(a.result.current.fields?.goals).toEqual(['Original branch inp…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/features/learning/useProfile.test.tsx > a late acknowledged old command cannot erase a newer durable profile candidate after policy resume
+AssertionError: expected [ Array(1) ] to include '{"version":1,"workspace_id":"workspac…'
+ ❯ src/features/learning/useProfile.test.tsx:110:65
+    108|   expect(view.result.current.fields?.goals).toEqual(['Newer durable ca…
+    109|   const disk = (await profileStore.load(workspace))[profileDraftKey]
+    110|   expect([disk.text, ...disk.conflicts.map(item => item.text)]).toCont…
+       |                                                                 ^
+    111| })
+    112|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 4 passed (6)
+   Start at  04:16:50
+   Duration  1.30s (tests 75%, environment 16%, transform 5%, import 4%)
+

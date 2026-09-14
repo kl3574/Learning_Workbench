@@ -1,0 +1,25 @@
+"""Assessment-owned submission participation, independent of grading outcomes."""
+
+import sqlite3
+
+from ..infrastructure.content_repository import damaged, reference
+from .assessment_content import AssessmentContent
+from .assessment_evidence_access import submission_witness
+from .learning_state_models import SubmissionActivity
+from .policy import Policy
+
+
+def assessment_submissions(connection: sqlite3.Connection, workspace_id: str) -> list[SubmissionActivity]:
+    content = AssessmentContent(connection, workspace_id)
+    content.public.require_workspace()
+    Policy(connection, workspace_id).check('subject_read')
+    output = []
+    for row in connection.execute('SELECT id FROM attempts WHERE workspace_id=? AND submission_json IS NOT NULL ORDER BY id', (workspace_id,)):
+        witness = submission_witness(connection, workspace_id, row['id'])
+        blueprint = content.blueprint(witness.assessment_ref)
+        questions = content.questions(blueprint)
+        if [reference(value) for value in questions] != witness.question_refs:
+            raise damaged()
+        output.append(SubmissionActivity(target_ref=witness.assessment_ref, source_id=witness.attempt_id,
+            event_id=witness.submission_event_id, submitted_at=witness.submitted_at, question_refs=witness.question_refs))
+    return output

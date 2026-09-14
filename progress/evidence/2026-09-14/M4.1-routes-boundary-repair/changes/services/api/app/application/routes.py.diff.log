@@ -1,0 +1,30 @@
+--- before/services/api/app/application/routes.py
++++ after/services/api/app/application/routes.py
+@@ -3,6 +3,8 @@
+ from contextlib import contextmanager
+ from collections.abc import Iterator
+ import sqlite3
++
++from pydantic import TypeAdapter
+ 
+ from packages.contracts import domain_models as dm
+ from packages.contracts.validation import validate_route
+@@ -82,9 +84,17 @@
+         position = self.content._position(cursor, context, str)
+         if position is not None and not isinstance(position, str):
+             raise invalid()
++        position_key = ('', 0)
++        if position is not None:
++            try:
++                identifier, revision = position.rsplit(':', 1)
++                position_key = (TypeAdapter(dm.Id).validate_python(identifier), TypeAdapter(dm.Revision).validate_python(int(revision)))
++            except (ValueError, TypeError):
++                raise invalid() from None
+         with self._access(workspace_id) as content:
+             values = route_values(content.connection, workspace_id)
+-            candidates = [value for value in values if f'{value.id}:{value.revision:020}' > (position or '')]
++            # Match SQL ORDER BY id,revision even when one valid ID prefixes another.
++            candidates = [value for value in values if (value.id, value.revision) > position_key]
+             items = candidates[:limit]
+             refs = [reference(value) for value in items]
+             courses = learning_scope(content.connection, workspace_id).course_refs if items else []
