@@ -17,6 +17,7 @@ export type BlockDraftPayload = {
   "metadata": ContentBlock;
   "body_markdown": string;
   "source_id": string;
+  "citations"?: Array<Citation>;
 };
 
 export type BootstrapRequest = {
@@ -39,6 +40,15 @@ export type CandidateSummary = {
 export type Choice = {
   "id": string;
   "text_markdown": string;
+};
+
+export type Citation = {
+  "id": string;
+  "title": string;
+  "url"?: (string | null);
+  "locator": string;
+  "source_sha256"?: (string | null);
+  "verification": "verified" | "unverified" | "user_supplied";
 };
 
 export type Concept = {

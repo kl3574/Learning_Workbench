@@ -24,6 +24,7 @@ export function useImportWorkflow(workspaceId: string) {
   const [draftBusy, setDraftBusy] = useState(false)
   const [draftError, setDraftError] = useState('')
   const [source, setSource] = useState<SourceSnapshot | null>(null)
+  const [sourceError, setSourceError] = useState('')
   const [result, setResult] = useState<ImportCommit | null>(null)
   const [committedCourses, setCommittedCourses] = useState<Course[]>([])
   const [accepted, setAccepted] = useState<string[]>([])
@@ -94,7 +95,7 @@ export function useImportWorkflow(workspaceId: string) {
     if (mutation.current) return
     const generation = ++taskGeneration.current
     draftGeneration.current++
-    setActive(selection); setSnapshot(null); setJob(null); setDraft(null); setSource(null); setSelectedDraftId('')
+    setActive(selection); setSnapshot(null); setJob(null); setDraft(null); setSource(null); setSourceError(''); setSelectedDraftId('')
     setResult(null); setCommittedCourses([]); setAccepted([]); setMapping([]); setConfirmed(false); setError(''); setDraftError(''); setBusy(true)
     const warning = rememberImport(workspaceId, selection.importId, selection.jobId)
     if (warning) setCacheError(warning)
@@ -139,14 +140,20 @@ export function useImportWorkflow(workspaceId: string) {
 
   const loadDraft = useCallback(async (id: string) => {
     const generation = ++draftGeneration.current
-    setSelectedDraftId(id); setDraft(null); setSource(null); setDraftError(''); setDraftBusy(true)
+    setSelectedDraftId(id); setDraft(null); setSource(null); setSourceError(''); setDraftError(''); setDraftBusy(true)
     try {
       const value = await request('GET /api/v1/drafts/{id}', undefined, undefined, parameters(id))
       if (!live.current || generation !== draftGeneration.current) return
       setDraft(value)
       if ('metadata' in value.payload && 'source_id' in value.payload) {
-        const original = await request('GET /api/v1/sources/{id}', undefined, undefined, parameters(value.payload.source_id))
-        if (live.current && generation === draftGeneration.current) setSource(original)
+        try {
+          const original = await request('GET /api/v1/sources/{id}', undefined, undefined, parameters(value.payload.source_id))
+          if (live.current && generation === draftGeneration.current) setSource(original)
+        } catch (reason) {
+          // A private original is independently guarded; its safe candidate
+          // remains readable and is not mislabeled as a failed draft request.
+          if (live.current && generation === draftGeneration.current) setSourceError(message(reason))
+        }
       }
     } catch (reason) { if (live.current && generation === draftGeneration.current) setDraftError(message(reason)) }
     finally { if (live.current && generation === draftGeneration.current) setDraftBusy(false) }
@@ -168,7 +175,7 @@ export function useImportWorkflow(workspaceId: string) {
       const generation = ++taskGeneration.current
       accessEpoch.current++
       draftGeneration.current++
-      setSnapshot(null); setJob(null); setDraft(null); setSource(null); setSelectedDraftId('')
+      setSnapshot(null); setJob(null); setDraft(null); setSource(null); setSourceError(''); setSelectedDraftId('')
       setDraftError(''); setResult(null); setCommittedCourses([])
       if (active) await refresh(active, generation)
     } catch (reason) { if (live.current) setError(message(reason)) }
@@ -200,5 +207,5 @@ export function useImportWorkflow(workspaceId: string) {
     finally { mutation.current = false; if (live.current && generation === taskGeneration.current) setBusy(false) }
   }
 
-  return { auth, accessEpoch, originalFile: active ? originalFiles.current.get(active.importId) ?? null : null, connect, courses, courseCursor, loadCourses, recovery, cacheError, error, busy, active, snapshot, job, draft, source, selectedDraftId, draftBusy, draftError, result, committedCourses, accepted, setAccepted, mapping, setMapping, confirmed, setConfirmed, upload, resume, retry, loadDraft, changeRole, commit, cancel }
+  return { auth, accessEpoch, originalFile: active ? originalFiles.current.get(active.importId) ?? null : null, connect, courses, courseCursor, loadCourses, recovery, cacheError, error, busy, active, snapshot, job, draft, source, sourceError, selectedDraftId, draftBusy, draftError, result, committedCourses, accepted, setAccepted, mapping, setMapping, confirmed, setConfirmed, upload, resume, retry, loadDraft, changeRole, commit, cancel }
 }

@@ -10,8 +10,9 @@ PARSER_VERSION = "learning-import-1"
 
 
 class ImportParsingError(ValueError):
-    def __init__(self, code: str, message: str):
+    def __init__(self, code: str, message: str, *, warnings: tuple[dm.Warning, ...] = ()):
         self.code = code
+        self.warnings = warnings
         super().__init__(message)
 
 
@@ -35,6 +36,7 @@ class ParsedImport:
     assets: tuple[ParsedAsset, ...] = ()
     quality_receipt: bytes | None = None
     package_profile: Literal["learner", "author"] | None = None
+    original_visibility: Literal["learner", "author_private"] | None = None
 
 
 def warning(code: str, message: str, locator: str | None = None) -> dm.Warning:

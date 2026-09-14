@@ -1,0 +1,74 @@
+{
+  "schema": "M2.3-independent-review-v1",
+  "date": "2026-09-14",
+  "scope": "Narrow independent production-sandbox regression of a DOCX hidden-style preview leak; not an M2.3 full acceptance claim.",
+  "execution": {
+    "command": ".venv/bin/python -B - < inline Python probe",
+    "entrypoint": "services.api.app.application.import_parsing.parse_import",
+    "isolation": "Actual production document_sandbox bubblewrap/seccomp path; no parser mock or in-process fallback",
+    "repository_files_written_by_reviewer": []
+  },
+  "synthetic_fixture": {
+    "base_generator": "tests/document_fixtures.py:docx_payloads and docx_from_payloads",
+    "generator_sha256": "87fb6521fd32a1e57409760aa3e9a2163ca013af269c4f27c9c6ce80562bb86c",
+    "generator_matches_staged_version": true,
+    "zip_determinism": "docx_from_payloads uses ordered members, ZIP_STORED, fixed member timestamps 1980-01-01 00:00:00",
+    "original_probe_input_sha256": "45b08bc707bd04b5d0c11900cfae8778dfac9ea530f93b79060f7c818ca32fef",
+    "input_hash_evidence": "Reconstructed from the same deterministic original recipe and unchanged staged fixture generator; the initial console output did not print input SHA256.",
+    "bytes": 3935,
+    "reconstructed_input_is_repeatable": true,
+    "construction": [
+      "Add word/styles-hidden.bin containing a w:styles character style Secret with w:rPr/w:vanish.",
+      "Add document relationship rStyles of the official styles relationship type targeting styles-hidden.bin.",
+      "Add content-type Override for /word/styles-hidden.bin with application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml.",
+      "Change the original alpha paragraph run to use rStyle Secret and synthetic text HiddenStyleSecret42.",
+      "Call parse_import as docx, filename synthetic-hidden-style.docx, source_id source_review_hidden."
+    ],
+    "member_sha256": {
+      "[Content_Types].xml": "3066e1437a07f864e8e44be033815ff04a5a76a9bcb600a859baae5b326e5361",
+      "_rels/.rels": "db12f582bc96b5d3090ceed6194102a1f9e847a8debefcef4211bfd99e4e3682",
+      "word/document.xml": "0d0f361e0660bebc246d388673ec992b39df755210addb639ec95d0ca6fbfef0",
+      "word/_rels/document.xml.rels": "576273df47ca1e668c5240c682b925d6c02ee0a2cee4330430c69f0570392777",
+      "word/media/synthetic.png": "64d74727963f20b32fecbe91b4d8fdf610b58557e37e9933824a8ee64873cad3",
+      "word/styles-hidden.bin": "619365f8cc01b74193a91da9546f1eb8cd7e11163720a3362f954b57ed755e72"
+    }
+  },
+  "original_observation": {
+    "evidence_origin": "Exact original production-sandbox console result retained in agent transcript before the fix",
+    "source_path": "services/api/app/application/import_extract_docx.py",
+    "source_sha256_before": "f402cb390a4a36320b7fcffdb3901dac3fdfa71e4614814d0f9baae6876b9be5",
+    "source_sha256_after": "f402cb390a4a36320b7fcffdb3901dac3fdfa71e4614814d0f9baae6876b9be5",
+    "source_unchanged": true,
+    "staged_original_source_sha256": "fb2506fc02e74c682dc80e9ea750ae57e9e7ea9ba0c2f3f92e39cab577cee399",
+    "staged_source_matches_original": false,
+    "result": "returned_candidates",
+    "hidden_marker_in_body": true,
+    "original_visibility": "author_private",
+    "warning_codes": [
+      "DOCX_EXTERNAL_RESOURCE_NOT_FETCHED",
+      "DOCX_FLOATING_IMAGE",
+      "DOCX_IMAGE_NOT_TEX",
+      "DOCX_OMML_NOT_TEX",
+      "DOCX_ORIGINAL_RESTRICTED",
+      "DOCX_PART_OMITTED",
+      "DOCX_TABLE_LAYOUT_UNVERIFIED"
+    ],
+    "impact": "Hidden text was extracted into ordinary candidate body; worker sets learner preview visibility when candidates contain no private solutions."
+  },
+  "fixed_replay": {
+    "result": "rejected",
+    "code": "DOCX_HIDDEN_STYLE_UNSUPPORTED",
+    "candidate_returned": false,
+    "hidden_marker_in_warnings": false,
+    "warning_codes": [
+      "DOCX_EXTERNAL_RESOURCE_NOT_FETCHED",
+      "DOCX_HIDDEN_STYLE_UNSUPPORTED",
+      "DOCX_ORIGINAL_RESTRICTED"
+    ],
+    "source_sha256_before": "fb2506fc02e74c682dc80e9ea750ae57e9e7ea9ba0c2f3f92e39cab577cee399",
+    "source_sha256_after": "fb2506fc02e74c682dc80e9ea750ae57e9e7ea9ba0c2f3f92e39cab577cee399",
+    "source_unchanged": true,
+    "input_sha256": "45b08bc707bd04b5d0c11900cfae8778dfac9ea530f93b79060f7c818ca32fef"
+  },
+  "result": "FIX_CONFIRMED_FOR_ORIGINAL_PROBE"
+}

@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-14T11:40:39Z；规范 SHA-256：`ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
+更新：2026-09-14T12:56:01Z；规范 SHA-256：`ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED
-实施：IN_PROGRESS；当前任务：M2.2；下一任务：M2.3
+实施：IN_PROGRESS；当前任务：M2.4；下一任务：M3.1
 
-PR #40已发布；映射预算边界修复fb2bb03通过403Python及lint/types/spec，未变UI沿用6b41b8e的49单测/27浏览器/视觉证据；推送补充修复并核验CI后继续M2.3。
+M2.3精确c7bcd6c本地32浏览器与12CI均PASS，历史失败和修复已保留，PR41等待人工审查。M2.4正在独立工作树构建真实Reader、笔记与恢复流程，尚未阶段验收。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -19,8 +19,8 @@ PR #40已发布；映射预算边界修复fb2bb03通过403Python及lint/types/sp
 | M1.3 ViewContext/ContextBridge、按对象保存草稿与会话 | review | [#15](https://github.com/kl3574/Learning_Workbench/issues/15) | 1c5963d058e56fc36eec378ee3a7f67d665f2307 |
 | M2.1 SQLite/blob、精确版本、原子文件、对象读取 | review | [#16](https://github.com/kl3574/Learning_Workbench/issues/16) | f304193f95461ebc3bdc60d6661c7b80f493cb1d |
 | M2.2 MD/TXT/HTML/learnpack 导入暂存和确认 | review | [#17](https://github.com/kl3574/Learning_Workbench/issues/17) | fb2bb033060f8aaacb59e1a81c9826c65509f343 |
-| M2.3 PDFtext/DOCX 提取隔离、低保真诊断 | todo | [#18](https://github.com/kl3574/Learning_Workbench/issues/18) | 未验证提交 |
-| M2.4 Reader/LaTeX、例题锚点、笔记、阅读位置 | todo | [#19](https://github.com/kl3574/Learning_Workbench/issues/19) | 未验证提交 |
+| M2.3 PDFtext/DOCX 提取隔离、低保真诊断 | review | [#18](https://github.com/kl3574/Learning_Workbench/issues/18) | c7bcd6c8e511e2fe31e3739da9718f276fbfc0cd |
+| M2.4 Reader/LaTeX、例题锚点、笔记、阅读位置 | in_progress | [#19](https://github.com/kl3574/Learning_Workbench/issues/19) | 未验证提交 |
 | M3.1 题面/私有答案库、练习/提示/暴露记录 | todo | [#20](https://github.com/kl3574/Learning_Workbench/issues/20) | 未验证提交 |
 | M3.2 独立/辅助/开卷 policy snapshot，自动保存、并发版本 | todo | [#21](https://github.com/kl3574/Learning_Workbench/issues/21) | 未验证提交 |
 | M3.3 单选、文本填空、数值/计算容差、人工复核 | todo | [#22](https://github.com/kl3574/Learning_Workbench/issues/22) | 未验证提交 |
@@ -42,14 +42,14 @@ PR #40已发布；映射预算边界修复fb2bb03通过403Python及lint/types/sp
 ## 验证边界
 
 - spec_checks: PASS
-- unit: PASS_THROUGH_M2_2_SCOPE
-- contract: PASS_THROUGH_M2_2_SCOPE
-- integration: PASS_THROUGH_M2_2_SCOPE
-- browser_native: PASS_27_ON_6b41b8e_UNCHANGED_UI
+- unit: PASS_M2_3_SCOPE_479_PYTHON
+- contract: PASS_M2_3_SCOPE
+- integration: PASS_M2_3_SCOPE
+- browser_native: PASS_32_EXACT_c7bcd6c
 - real_provider: NOT_RUN
 - real_codex: NOT_RUN
 - learning_effectiveness: NOT_RUN
-- ci: PR40_PREVIOUS_HEAD_39dc3f1_12_SUCCESS_MAPPING_FIX_PENDING
+- ci: PASS_12_EXACT_c7bcd6c_M2_3_SCOPE
 
 ## 阻塞与待决项
 

@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 import multiprocessing
+import os
 from multiprocessing.connection import Connection
 import sqlite3
 import threading
@@ -16,6 +17,7 @@ from ..application.errors import ApiError
 from ..application.imports import ImportService, safe_filename
 from .content_repository import damaged
 from .database import Database, utc_now
+from .document_sandbox import bind_parent_lifetime
 from .import_repository import ImportRepository, identifier, json_object, json_text
 from .security import expires_after, guard_subject_access
 
@@ -29,14 +31,15 @@ class ImportLease:
     revision: int
 
 
-def _parse_process(connection: Connection, data: bytes, options: dict[str, Any]) -> None:
+def _parse_process(connection: Connection, data: bytes, options: dict[str, Any], expected_parent: int) -> None:
     """Only trusted local parser code executes; input content never executes as code."""
     try:
+        bind_parent_lifetime(expected_parent)
         from ..application.import_parsing import ImportParsingError, parse_import
         try:
             result = parse_import(data, **options)
         except ImportParsingError as error:
-            connection.send(("error", error.code))
+            connection.send(("error", {"code": error.code, "warnings": [warning.model_dump(mode="json") for warning in getattr(error, "warnings", ())]}))
         else:
             connection.send(("result", result))
     except ApiError as error:
@@ -45,6 +48,12 @@ def _parse_process(connection: Connection, data: bytes, options: dict[str, Any])
         connection.send(("error", "IMPORT_PARSE_FAILED"))
     finally:
         connection.close()
+
+
+class _ParseFailure(ApiError):
+    def __init__(self, code: str, warnings: tuple[dm.Warning, ...]):
+        super().__init__(422, code, "原件解析未通过，请查看格式与安全限制。")
+        self.warnings = warnings
 
 
 class _Stopped(Exception):
@@ -140,7 +149,7 @@ class ImportWorker:
     def _parse(self, lease: ImportLease, data: bytes, options: dict[str, Any]) -> Any:
         context = multiprocessing.get_context("spawn")
         parent, child = context.Pipe(duplex=False)
-        process = context.Process(target=_parse_process, args=(child, data, options), daemon=True)
+        process = context.Process(target=_parse_process, args=(child, data, options, os.getpid()), daemon=True)
         deadline = time.monotonic() + self.parse_timeout_seconds
         process.start()
         child.close()
@@ -151,6 +160,8 @@ class ImportWorker:
                     kind, result = parent.recv()
                     if kind == "result":
                         return result
+                    if isinstance(result, dict):
+                        raise _ParseFailure(result["code"], tuple(dm.Warning.model_validate(value) for value in result.get("warnings", [])))
                     raise ApiError(422, result, "原件解析未通过，请查看格式与安全限制。")
                 if self._stop.is_set():
                     raise _Stopped()
@@ -209,7 +220,12 @@ class ImportWorker:
                 )
                 preview["draft_ids"].append(draft_id)
             metadata = json_object(row["source_metadata"])
-            metadata.update({"visibility": "author_private" if private else "learner", "visibility_verified": True,
+            preview_visibility = "author_private" if private else "learner"
+            original_visibility = getattr(parsed, "original_visibility", None) or preview_visibility
+            staged_options = json_object(row["input_json"])
+            if staged_options["kind"] == "docx" or (staged_options["kind"] == "auto" and staged_options["filename"].lower().endswith(".docx")):
+                original_visibility = "author_private"
+            metadata.update({"visibility": original_visibility, "preview_visibility": preview_visibility, "visibility_verified": True,
                              "warnings": preview["warnings"], "symbols": [value.model_dump(mode="json") for value in getattr(parsed, "symbols", ())],
                              "citations": [value.model_dump(mode="json") for value in getattr(parsed, "citations", ())],
                              "untrusted_quality_receipt": None, "assets": {}})
@@ -240,7 +256,13 @@ class ImportWorker:
                 return
             warning = dm.Warning(code=error.code, message="解析失败；原件保留，未改动正式课程。", severity="error")
             preview = self.service._preview_data(row)
-            preview["warnings"] = [warning.model_dump(mode="json")]
+            diagnostics = getattr(error, "warnings", ())
+            preview["warnings"] = [value.model_dump(mode="json") for value in diagnostics] + [warning.model_dump(mode="json")]
+            if diagnostics:
+                metadata = json_object(row["source_metadata"])
+                metadata["safe_failure_diagnostics"] = [value.model_dump(mode="json") for value in diagnostics]
+                connection.execute("UPDATE sources SET metadata_json=? WHERE id=? AND workspace_id=?",
+                                   (json_text(metadata), row["source_id"], lease.workspace_id))
             connection.execute("UPDATE ingestion_imports SET preview_json=? WHERE id=?", (json_text(preview), lease.import_id))
             detail = dm.ErrorDetail(code=error.code, message=warning.message, request_id=identifier("request"), retryable=error.retryable)
             repository.transition(row, job_status="failed", import_status="failed", result={"error": detail.model_dump(mode="json")}, lease_owner=lease.owner)

@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-09-14T12:21:19.913704+00:00",
+  "task": "M2.3 isolated document runtime SONAME audit and fix",
+  "scope": "Only document_sandbox.py and its security test changed; no policy, workflow, dependency installation, or Git mutation by reviewer.",
+  "source_sha256": {
+    "services/api/app/infrastructure/document_sandbox.py": "1cd1206190557e8893488b528f1c9a51bcec81019437d5908248a0201f7dbba2",
+    "tests/security/test_document_sandbox.py": "a6cce93fee42ffb47691fd738b030cab12f81d520275b0bb40c877802bdaf230"
+  },
+  "source_unchanged_during_receipt_replay": true,
+  "defect": {
+    "location": "services/api/app/infrastructure/document_sandbox.py:_runtime_mounts",
+    "before": "Resolved library paths were mounted with final filesystem names; ELF-requested SONAME aliases were lost.",
+    "trigger": "uv standalone Python uses built-in modules; shared-module Python needs libbz2.so.1.0 even when its trusted source resolves to libbz2.so.1.0.4.",
+    "fix": "Map both ldd SONAME and original path basename to the validated resolved file under /runtime/lib; reject alias collisions and invalid names."
+  },
+  "original_red_test": {
+    "command": "uv run --frozen pytest -q tests/security/test_document_sandbox.py -k real_dynamic_extension",
+    "status": "FAILED",
+    "passed": 0,
+    "failed": 1,
+    "deselected": 14,
+    "evidence_origin": "Observed tool execution output; no standalone original raw pytest log file was saved.",
+    "pytest_display": "assert b'libbz2.so.1...r directory\\n' == b'LOADED\\n'"
+  },
+  "green_tests": [
+    {
+      "command": "uv run --frozen pytest -q tests/security/test_document_sandbox.py -k real_dynamic_extension",
+      "passed": 1,
+      "deselected": 14,
+      "seconds": 0.1
+    },
+    {
+      "command": "uv run --frozen pytest -q tests/security/test_document_sandbox.py tests/unit/test_document_extraction.py tests/integration/test_document_imports.py tests/integration/test_document_http.py",
+      "passed": 76,
+      "warnings": 2,
+      "seconds": 13.01,
+      "warning_scope": "Existing Starlette/httpx and anyio deprecation warnings."
+    }
+  ],
+  "static_checks": {
+    "ruff": "PASS for the two changed files",
+    "mypy": "PASS for document_sandbox.py"
+  },
+  "test_evidence_origin": "Counts and durations transcribed from completed tool execution output; no standalone original raw test logs were saved.",
+  "additional_current_replay": {
+    "kind": "Current frozen source plus a temporary mount projection recreating the old alias-loss behavior; this is not falsely labeled an execution of the old source revision.",
+    "stdout": {
+      "original_alias_loss_replay": "libbz2.so.1.0: cannot open shared object file: No such file or directory\n",
+      "current_source": "LOADED\n"
+    },
+    "network": "disabled by the production sandbox",
+    "temporary_entry": "Generated fixed Python code only; no user document or secret data.",
+    "method": [
+      "Resolve a trusted system CPython _bz2 shared-extension path using /usr/bin/python3 -I -S.",
+      "Use that real extension for the discovery slot only; execute actual ldd dependency discovery.",
+      "Mount the real shared extension as /runtime/test-bz2.so and execute ctypes.CDLL with RTLD_LAZY in the production namespace and seccomp sandbox.",
+      "For the old-behavior replay only, project each library destination back to its resolved final basename. The current-source run retains SONAME destinations.",
+      "Compare actual loader stdout and verify both source hashes remain unchanged."
+    ]
+  },
+  "official_sources": [
+    {
+      "url": "https://raw.githubusercontent.com/actions/python-versions/main/builders/ubuntu-python-builder.psm1",
+      "supports": "Ubuntu setup-python artifacts configure with --enable-shared; inspected official builder source."
+    },
+    {
+      "url": "https://manpages.ubuntu.com/manpages/noble/man1/bwrap.1.html",
+      "supports": "Ubuntu noble manual identifies bubblewrap 0.9.0-1ubuntu0.1."
+    },
+    {
+      "url": "https://raw.githubusercontent.com/containers/bubblewrap/v0.9.0/bubblewrap.c",
+      "supports": "Version 0.9.0 supports the required namespace/seccomp/bind-data options."
+    },
+    {
+      "url": "https://packages.ubuntu.com/noble-updates/libseccomp2",
+      "supports": "Official Ubuntu listing contains libseccomp2 2.5.5-1ubuntu3.1."
+    }
+  ],
+  "limits": [
+    "This local dynamic-loader and document test evidence does not claim the new GitHub CI image passed. New source commit and exact CI verification remain with the root agent.",
+    "The dynamic-extension loader probe validates dependency loading without invoking a mismatched system CPython module initialization API.",
+    "M2.4 DTO preparation was paused by root instruction."
+  ]
+}

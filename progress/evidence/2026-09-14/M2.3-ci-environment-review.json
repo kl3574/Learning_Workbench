@@ -1,0 +1,210 @@
+{
+  "schema_version": 1,
+  "created_at": "2026-09-14T12:36:20.273059+00:00",
+  "task": "M2.3 document sandbox CI environment diagnosis and evidence-bound runner selection",
+  "scope": "Read-only environment diagnosis and temporary synthetic experiments; authorized CI YAML edit only. No product parser/sandbox changes, system policy changes, privileged bypass, dependency installation on the host, or Git mutation by this reviewer.",
+  "product_source_commit": "d258537256e19f552a502ef3a13e1bcbc9caa913",
+  "source_sha256": {
+    "services/api/app/infrastructure/document_sandbox.py": "1cd1206190557e8893488b528f1c9a51bcec81019437d5908248a0201f7dbba2",
+    "tests/security/test_document_sandbox.py": "a6cce93fee42ffb47691fd738b030cab12f81d520275b0bb40c877802bdaf230"
+  },
+  "ubuntu_24_ci": {
+    "backend_result": {
+      "failed": 47,
+      "passed": 211,
+      "evidence_origin": "Root reported exact CI result; reviewer inspected the downloaded raw traceback at /tmp/m23-ci-backend-d258537.log."
+    },
+    "traceback_boundary": "Sandbox command construction and dependency discovery completed; _run rejected the nonzero child exit at document_sandbox.py:270.",
+    "fixed_probe_commit": "45cf2d3",
+    "fixed_probe": {
+      "exit_code": 1,
+      "stderr": "bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted\n",
+      "status": "FAIL"
+    },
+    "private_raw_probe_log": "/tmp/m23-ci-probe-45cf2d3.log",
+    "raw_log_handling": "Original logs contain runner paths and are not reproduced here; only fixed synthetic probe values are recorded.",
+    "packages": {
+      "bubblewrap": "0.9.0-1ubuntu0.1",
+      "libseccomp2": "2.5.5-1ubuntu3.1"
+    },
+    "limit": "This failure does not prove a bubblewrap version regression; the controlled identical-binary path comparison below disproves the version-only explanation."
+  },
+  "exact_actions_python_local_replay": {
+    "source_url": "https://github.com/actions/python-versions/releases/download/3.12.13-27650778726/python-3.12.13-linux-24.04-x64.tar.gz",
+    "archive_sha256": "ce7d511228f095b5ea1ad5568543388870f5964688303f9ddc24ba06c336bfba",
+    "method": "Downloaded and extracted under /tmp using tarfile data filter; did not execute setup.sh or install the runtime. Executed current production sandbox with fixed synthetic PDF and production entry. The relocated tarball required a temporary LD_LIBRARY_PATH addition solely for host ldd discovery; product source was unchanged.",
+    "replay_script": "/tmp/m23-actions-repro.py",
+    "result_file": "/tmp/m23-actions-runtime-result.json",
+    "result_sha256": "a26578ad7ec172fae51f3e3e48e11554dab8761f6be37730abf11c0493441671",
+    "result": {
+      "exit_code": 0,
+      "status": "ok",
+      "page_chunks": 2,
+      "stderr": ""
+    },
+    "limit": "Proves this exact shared Python runtime can execute the document sandbox on the local supported environment; does not prove Ubuntu 24.04 hosted permissions."
+  },
+  "controlled_executable_path_comparison": {
+    "evidence_origin": "Actual completed subprocess tool output from this review; no separate original raw log was saved for these two probes.",
+    "binary_version": "0.11.1",
+    "both_binary_sha256": "0abea81db798ebf6b4742ac0664802d97521547a353c2a0dbdc21d76cbbfd2c0",
+    "copy_path": "/tmp/m23-bwrap-noble/current-bwrap",
+    "same_arguments": [
+      "--unshare-user",
+      "--unshare-pid",
+      "--unshare-net",
+      "--ro-bind",
+      "/usr",
+      "/usr",
+      "--symlink",
+      "usr/bin",
+      "/bin",
+      "--symlink",
+      "usr/lib",
+      "/lib",
+      "--symlink",
+      "usr/lib64",
+      "/lib64",
+      "--proc",
+      "/proc",
+      "--dev",
+      "/dev",
+      "/bin/true"
+    ],
+    "profiled_path_result": {
+      "path": "/usr/bin/bwrap",
+      "exit_code": 0,
+      "stderr": ""
+    },
+    "temporary_path_result": {
+      "exit_code": 1,
+      "stderr": "bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted\n"
+    },
+    "file_privileges": "Neither executable was setuid or had file capabilities.",
+    "local_policy": {
+      "profile": "/etc/apparmor.d/bwrap-userns-restrict",
+      "package_owner": "apparmor",
+      "profile_attachment": "/usr/bin/bwrap",
+      "parent_allows": "User namespaces and capabilities for namespace setup",
+      "child_stack": "bwrap//&unpriv_bwrap (enforce)",
+      "child_CapEff": "0000000000000000",
+      "child_NoNewPrivs": 1,
+      "apparmor_restrict_unprivileged_userns": 1,
+      "unprivileged_userns_clone": 1
+    },
+    "conclusion": "Same binary bytes succeed at the existing AppArmor-profiled path and fail at an unprofiled temporary path. Profile/path authorization is material; installing a newer version at an arbitrary path is not an evidence-supported fix.",
+    "noble_package_control": {
+      "url": "https://archive.ubuntu.com/ubuntu/pool/main/b/bubblewrap/bubblewrap_0.9.0-1ubuntu0.1_amd64.deb",
+      "sha256": "1b506492bd9c7fd0cdb4f02ac822f1d3e336b0aead5113c1239baf8db5db562a",
+      "result": "Extracted without installation; temporary-path binary also returned RTM_NEWADDR EPERM. This is not a controlled version comparison because executable paths differ."
+    }
+  },
+  "upstream_source_review": {
+    "finding": "Both inspected bubblewrap versions switch to namespace setup privileges before loopback_setup. The inspected network change retries EINTR; no authorization-order correction was found.",
+    "rejected_workaround": "The upstream CI workaround in f97804f writes kernel.apparmor_restrict_unprivileged_userns=0 and invokes sysctl --system. This globally changes policy and was not executed or adopted."
+  },
+  "official_ubuntu_26_pins": {
+    "metadata_origin": "Read existing apt-cache policy/show metadata for official archive.ubuntu.com resolute/resolute-updates and security.ubuntu.com; no host apt update or install.",
+    "packages": {
+      "bubblewrap": {
+        "version": "0.11.1-1ubuntu0.1",
+        "deb_sha256": "b353088d1003adb3f760deeccfb84c47928a36c8dc102bf680efc94eb19f4408"
+      },
+      "apparmor": {
+        "version": "5.0.2-0ubuntu1~26.04.1",
+        "deb_sha256": "8621170a44534ef32ab4f7e26a5cacabb2077a5a95bcb5236c0652f118032820"
+      },
+      "libapparmor1": {
+        "version": "5.0.2-0ubuntu1~26.04.1",
+        "deb_sha256": "50570ebe581bbfeead4403571b75ee275955c6bcbd1b4bf342228772549162b9"
+      },
+      "libseccomp2": {
+        "version": "2.6.0-2ubuntu5",
+        "deb_sha256": "c5e4b198f251da0ede226fd179830bd8767482821a1773f835358f726795cb16"
+      }
+    },
+    "runner_listing": "Official actions/runner-images listed ubuntu-26.04 x64 as preview when inspected; preview status is an operational availability boundary.",
+    "python_artifact_listing": "Official actions/python-versions manifest lists Python 3.12.13 Ubuntu 26.04 x64 artifact in release 3.12.13-27650778726; actual hosted setup succeeded in the independent job."
+  },
+  "ubuntu_26_actual_ci": {
+    "recorded_at": "2026-09-14T12:33:27.698598+00:00",
+    "source_commit": "342319cffb6bdc7d3d56b2cc5c1b8273321db36b",
+    "job_id": 103974877330,
+    "url": "https://github.com/kl3574/Learning_Workbench/actions/runs/34843833810/job/103974877330",
+    "status": "completed",
+    "conclusion": "success",
+    "runner": "ubuntu-26.04",
+    "fixed_runtime_probe": "PASS",
+    "actual_tests": 64,
+    "actual_output": "64 passed in 8.09s",
+    "log": "progress/evidence/2026-09-14/M2.3-ci-environment-342319c.log",
+    "log_sha256": "9511c6446f60ce051c1ce32f783be60a7d6d18ca4248b65f460104ff4987f905",
+    "policy": "Official runner/distribution configuration; packages already installed, no global sysctl/AppArmor modification, no namespace/capability/secondary-exec relaxation.",
+    "scope": "15 real sandbox security plus49 real PDF/DOCX unit tests; this independent job does not yet prove full backend/integration/browser jobs on the selected image."
+  },
+  "ubuntu_26_log_independent_readback": {
+    "log_sha_verified": true,
+    "fixed_probe_exit_code": 0,
+    "fixed_probe_stderr": "",
+    "fixed_probe_stdout": "{\"synthetic_runtime_ready\": true}\n",
+    "security_tests": 15,
+    "document_parser_tests": 49,
+    "total_passed": 64,
+    "duration_seconds": 8.09
+  },
+  "workflow_handoff": {
+    "path": ".github/workflows/ci.yml",
+    "sha256_at_handoff": "5a55f3f5e5024e3d2a9ae1b4798926a01800ae7b3e66437eefc4f6ce9af54fe8",
+    "changes": "Moved only backend/integration/browser jobs to ubuntu-26.04 and the validated fixed official package pins plus profile existence check. Removed temporary independent probe job after its real 64-test success. Kept backend fixed synthetic probe. spec-contracts/frontend/security-publication remain ubuntu-24.04.",
+    "static_validation": "YAML parsed; all existing test/probe commands preserved; unaffected job parsed objects unchanged; no continue-on-error, skip guard, sysctl, or apparmor_parser added.",
+    "ownership": "Frozen and handed back to root. Root performs review/commit/push and exact full CI readback.",
+    "full_migrated_ci_status_at_handoff": "NOT_RUN; the independent 64-test job does not establish full backend/integration/browser success."
+  },
+  "official_sources": [
+    {
+      "url": "https://raw.githubusercontent.com/actions/python-versions/main/builders/ubuntu-python-builder.psm1",
+      "supports": "Shared CPython Ubuntu builder and hostedtoolcache runtime path."
+    },
+    {
+      "url": "https://raw.githubusercontent.com/actions/python-versions/main/versions-manifest.json",
+      "supports": "Python 3.12.13 artifacts for Ubuntu 24.04 and 26.04 x64."
+    },
+    {
+      "url": "https://raw.githubusercontent.com/containers/bubblewrap/v0.9.0/bubblewrap.c",
+      "supports": "Namespace privilege and loopback setup order in version 0.9.0."
+    },
+    {
+      "url": "https://raw.githubusercontent.com/containers/bubblewrap/v0.11.1/bubblewrap.c",
+      "supports": "Corresponding setup order in version 0.11.1."
+    },
+    {
+      "url": "https://raw.githubusercontent.com/containers/bubblewrap/v0.9.0/network.c",
+      "supports": "RTM_NEWADDR operation in the older source."
+    },
+    {
+      "url": "https://raw.githubusercontent.com/containers/bubblewrap/v0.11.1/network.c",
+      "supports": "RTM_NEWADDR operation and EINTR retry in the newer source."
+    },
+    {
+      "url": "https://github.com/containers/bubblewrap/commit/f97804f.patch",
+      "supports": "Upstream CI workaround changes global AppArmor userns sysctl; not adopted."
+    },
+    {
+      "url": "https://raw.githubusercontent.com/actions/runner-images/main/README.md",
+      "supports": "Availability and preview status of the official Ubuntu 26.04 runner label at inspection time."
+    },
+    {
+      "url": "https://raw.githubusercontent.com/actions/runner-images/main/images/ubuntu/Ubuntu2604-Readme.md",
+      "supports": "Official Ubuntu 26.04 image documentation; actual profile behavior verified by the CI probe, not inferred from this inventory."
+    },
+    {
+      "url": "https://packages.ubuntu.com/resolute-updates/amd64/apparmor",
+      "supports": "Official AppArmor 5.0.2-0ubuntu1~26.04.1 package listing."
+    }
+  ],
+  "limits": [
+    "Historical Ubuntu 24.04 failures are preserved as failures; the successful independent 26.04 job does not retroactively change them.",
+    "No global sysctl/AppArmor policy, user/network namespace, capability drop, seccomp, or secondary-exec boundary was relaxed.",
+    "No complete M2 milestone or full migrated CI success is claimed by this receipt."
+  ]
+}

@@ -1,0 +1,38 @@
+
+> @learning-workbench/web@0.1.0 test:e2e
+> playwright test --config ../../tests/e2e/playwright.config.ts document-imports.spec.ts -g real DOCX safe text --output=/tmp/m23-docx-role-red-results
+
+[WebServer] INFO:     Started server process [275552]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+[WebServer] (node:275572) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:275625) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[DEBUG-m23-role] role=learner selector_count=0 real_import_status=200 real_preview_refs=7
+[DEBUG-m23-role] after_refresh candidate_recovered=true
+  ✘  1 ../../tests/e2e/document-imports.spec.ts:111:1 › real DOCX safe text stays readable for learner while original bytes require an explicit author role (3.1s)
+
+
+  1) ../../tests/e2e/document-imports.spec.ts:111:1 › real DOCX safe text stays readable for learner while original bytes require an explicit author role 
+
+    Error: No actual candidate contained the expected original marker: DOCX paragraph alpha
+
+      47 |     return value as DraftSnapshot & { payload: Extract<DraftSnapshot['payload'], { metadata: unknown }> }
+      48 |   }
+    > 49 |   throw new Error(`No actual candidate contained the expected original marker: ${containing}`)
+         |         ^
+      50 | }
+      51 | async function downloadBytes(download: Download) {
+      52 |   const stream = await download.createReadStream()
+        at candidate (<REPO>/tests/e2e/document-imports.spec.ts:49:9)
+        at <REPO>/tests/e2e/document-imports.spec.ts:157:5
+
+    Error Context: ../../../../../../../tmp/m23-docx-role-red-results/document-imports-real-DOCX-54907-ire-an-explicit-author-role/error-context.md
+
+  1 failed
+    ../../tests/e2e/document-imports.spec.ts:111:1 › real DOCX safe text stays readable for learner while original bytes require an explicit author role 

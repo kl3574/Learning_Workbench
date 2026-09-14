@@ -1,4 +1,4 @@
-"""M2.2 parser entry point; original-file persistence belongs to ingestion."""
+"""Parser entry point; PDF/DOCX parsing requires the restricted process port."""
 
 from typing import Literal
 
@@ -69,9 +69,15 @@ def parse_import(
         raise ImportParsingError("IMPORT_INPUT_INVALID", "来源标识或文件名无效。") from None
     actual_kind = detected_kind(data, kind, filename)
     if actual_kind in {"pdf", "docx"}:
-        raise ImportParsingError(
-            "EXTRACTION_NOT_IMPLEMENTED", "PDF/DOCX 隔离提取属于 M2.3，当前未实现；原件可保留，未生成虚假正文。"
-        )
+        from ..infrastructure.document_sandbox import DocumentSandboxError, extract_document
+        from .import_extract_build import build_document, source_warnings
+
+        try:
+            document = extract_document(data, kind=actual_kind, filename=filename, source_id=source_id, budgets=budgets)
+        except DocumentSandboxError as error:
+            raise ImportParsingError(error.code, "文档隔离提取未完成；原件已保留，请查看定位诊断或修正提取环境。",
+                                     warnings=source_warnings(error.warnings, source_id)) from None
+        return build_document(data, document, filename=filename, source_id=source_id, budgets=budgets)
     if actual_kind == "learnpack":
         return parse_package(data, budgets=budgets)
     return parse_textual(data, actual_kind, filename, source_id, budgets=budgets)
