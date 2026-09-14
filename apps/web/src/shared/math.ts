@@ -15,7 +15,8 @@ const document = mathjax.document('', {
 // These packages are deliberately absent: require, autoload, html, newcommand.
 export function mathSvg(source: string, display: boolean): string {
   if (source.length > 12000 || /\\(?:require|href|url|htmlClass|htmlId|htmlStyle|includegraphics|def|gdef|newcommand|renewcommand|csname)\b/.test(source)) throw new Error('公式超出本地宏白名单或长度限制')
-  const node = document.convert(source, { display })
+  let node
+  try { node = document.convert(source, { display }) } catch { throw new Error('此公式当前无法在本地渲染') }
   const result = adaptor.outerHTML(node)
   if (result.includes('data-mjx-error')) throw new Error('MathJax 不支持此公式；原始 LaTeX 已保留')
   return result

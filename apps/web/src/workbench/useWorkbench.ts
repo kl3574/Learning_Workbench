@@ -1,56 +1,86 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { ApiError, connectSession, readSession, saveSession } from '../api/client'
+import { lastWorkspaceKey, pendingKey, readLocal, writeLocal, removeLocal, pendingSnapshots, decodePending, type PendingSnapshot } from './uiCache'
+import { useObjectDrafts } from './useObjectDrafts'
 import { emptySession, normalizeSession, type Session } from './model'
 export type SaveState = 'connecting' | 'saved' | 'saving' | 'offline' | 'conflict'
-const lastWorkspaceKey = 'learning-workbench.last-confirmed-workspace.v1'
-const pendingKey = (workspace: string) => `learning-workbench.${workspace}.pending-ui.v1`
-const draftsKey = (workspace: string) => `learning-workbench.${workspace}.unsent-drafts.v1`
-function loadDrafts(workspace: string | null): Record<string, string> { if (!workspace) return {}; try { return JSON.parse(localStorage.getItem(draftsKey(workspace)) ?? '{}') } catch { return {} } }
 export function useWorkbench() {
   const cache = useQueryClient()
   const [session, setSession] = useState<Session>(emptySession)
   const [status, setStatus] = useState<SaveState>('connecting')
   const [error, setError] = useState('')
-  const workspace = useRef<string | null>(localStorage.getItem(lastWorkspaceKey))
-  const [drafts, setDrafts] = useState(() => loadDrafts(workspace.current))
+  const [recoverable, setRecoverable] = useState<PendingSnapshot[]>([])
+  const [comparison, setComparison] = useState<{ base: Session | null; local: Session; remote: Session | null } | null>(null)
+  const workspace = useRef<string | null>(readLocal(lastWorkspaceKey))
+  const draftStore = useObjectDrafts(workspace.current)
   const live = useRef(session)
+  const baseline = useRef<Session | null>(null)
   const version = useRef(0)
   const savedVersion = useRef(0)
   const inFlight = useRef(false)
+  const pendingSafe = useRef(false)
   const connected = useRef(false)
   const set = useCallback((update: Session | ((old: Session) => Session)) => {
     const next = typeof update === 'function' ? update(live.current) : update
+    if (next === live.current) return
     live.current = next; version.current++; setSession(next)
-    if (workspace.current) localStorage.setItem(pendingKey(workspace.current), JSON.stringify(next))
+    pendingSafe.current = !!workspace.current && writeLocal(pendingKey(workspace.current), JSON.stringify({ session: next, base: baseline.current }))
+    if (!pendingSafe.current) setError("浏览器存储不可用：待同步 UI 只在当前页面内存中。请保持页面打开，等待服务端确认保存。")
     setStatus(old => old === 'conflict' ? old : connected.current ? 'saving' : 'offline')
   }, [])
   const reconnect = useCallback(async (useServer = false) => {
+    if (inFlight.current) return
+    const priorWorkspace = workspace.current
     setStatus('connecting')
     try {
       const authenticatedWorkspace = await connectSession()
-      workspace.current = authenticatedWorkspace
-      localStorage.setItem(lastWorkspaceKey, authenticatedWorkspace)
-      setDrafts(loadDrafts(authenticatedWorkspace))
       const remote = normalizeSession(await cache.fetchQuery({ queryKey: ['workbench-session'], queryFn: readSession, staleTime: 0 }))
-      connected.current = true
-      let pending: Session | null = null
-      try { pending = JSON.parse((workspace.current ? localStorage.getItem(pendingKey(workspace.current)) : null) ?? 'null') } catch { /* malformed local cache is never sent */ }
-      if (!useServer && pending && pending.revision !== remote.revision) {
-        live.current = pending; setSession(pending); setStatus('conflict'); setError('另一个窗口更新了会话。当前本地布局与标签已保留，请选择读取服务端会话；对象草稿仍保留。'); return
+      const hasUnconfirmedMemory = version.current !== savedVersion.current
+      if (!useServer && priorWorkspace && priorWorkspace !== authenticatedWorkspace && hasUnconfirmedMemory) {
+        connected.current = false
+        setComparison({ base: baseline.current, local: live.current, remote: null })
+        setStatus('conflict'); setError('工作区已变化，原工作区未保存的 UI 仍保留。明确采用服务端会话会放弃这份布局，问题草稿保留在原工作区。'); return
       }
-      const restored = !useServer && pending ? normalizeSession(pending) : remote
-      live.current = restored; setSession(restored)
-      if (useServer) workspace.current && localStorage.removeItem(pendingKey(workspace.current))
-      version.current = pending && !useServer ? 1 : 0; savedVersion.current = 0
-      setStatus(pending && !useServer ? 'saving' : 'saved'); setError('')
+      workspace.current = authenticatedWorkspace
+      writeLocal(lastWorkspaceKey, authenticatedWorkspace)
+      connected.current = true
+      setRecoverable(pendingSnapshots(authenticatedWorkspace))
+      const disk = decodePending(readLocal(pendingKey(authenticatedWorkspace)))
+      // A failed local cache may contain no candidate, or an older one. The live
+      // same-workspace draft and its original base always take priority on retry.
+      const memory = priorWorkspace === authenticatedWorkspace && hasUnconfirmedMemory
+        ? { session: live.current, base: baseline.current } : null
+      const candidate = useServer ? null : memory ?? disk
+      if (candidate) {
+        live.current = normalizeSession(candidate.session); baseline.current = candidate.base
+        setSession(live.current); version.current = 1; savedVersion.current = 0
+        pendingSafe.current = writeLocal(pendingKey(authenticatedWorkspace), JSON.stringify({ session: live.current, base: baseline.current }))
+        if (candidate.session.revision !== remote.revision) {
+          setComparison({ base: candidate.base, local: live.current, remote })
+          setStatus('conflict'); setError('服务端会话已变化。基准、本地待同步与服务端会话如下；请选择保留的版本。'); return
+        }
+        setComparison(null); setStatus('saving')
+        setError(pendingSafe.current ? '' : '浏览器缓存不可用，正在重试保存保留在内存中的 UI；服务端确认前请勿关闭页面。')
+        return
+      }
+      live.current = remote; baseline.current = remote; setSession(remote)
+      if (useServer) removeLocal(pendingKey(authenticatedWorkspace))
+      pendingSafe.current = false; version.current = 0; savedVersion.current = 0
+      setComparison(null); setStatus('saved'); setError('')
     } catch (e) {
       connected.current = false; setStatus('offline')
-      setError(e instanceof ApiError && e.status === 401 ? '尚未建立本机会话。请从 make dev 或 make start 输出的一次性启动链接打开；当前改动仅在本机浏览器暂存。' : `服务连接失败，改动保留在本机浏览器。${(e as Error).message}`)
-      try { const local = JSON.parse((workspace.current ? localStorage.getItem(pendingKey(workspace.current)) : null) ?? 'null'); if (local) { live.current = normalizeSession(local); setSession(live.current) } } catch { /* keep safe initial session */ }
+      setError(e instanceof ApiError && e.status === 401 ? '尚未建立本机会话。请从一次性启动链接打开；当前未确认 UI 保留。' : `服务连接失败，未确认改动仍保留：${(e as Error).message}`)
+      // Repeated failed reconnects must not replace newer in-memory state with
+      // an older persisted draft. Only hydrate disk during a clean cold start.
+      if (version.current === savedVersion.current && workspace.current) {
+        const disk = decodePending(readLocal(pendingKey(workspace.current)))
+        if (disk) { live.current = normalizeSession(disk.session); baseline.current = disk.base; setSession(live.current); version.current = 1; savedVersion.current = 0; pendingSafe.current = true }
+      }
     }
   }, [cache])
   useEffect(() => { void reconnect() }, [reconnect])
+  useEffect(() => { const protect = (event: BeforeUnloadEvent) => { if (version.current !== savedVersion.current && !pendingSafe.current) { event.preventDefault(); event.returnValue = '' } }; addEventListener('beforeunload', protect); return () => removeEventListener('beforeunload', protect) }, [])
   useEffect(() => {
     if (status !== 'saving') return
     const timer = setTimeout(async () => {
@@ -60,18 +90,39 @@ export function useWorkbench() {
       try {
         const saved = normalizeSession(await saveSession(live.current))
         savedVersion.current = writingVersion
+        baseline.current = saved
         const next = version.current === writingVersion ? saved : { ...live.current, revision: saved.revision }
         live.current = next; setSession(next); cache.setQueryData(['workbench-session'], saved)
-        if (version.current === writingVersion) { workspace.current && localStorage.removeItem(pendingKey(workspace.current)); setStatus('saved') }
-        else { if (workspace.current) localStorage.setItem(pendingKey(workspace.current), JSON.stringify(next)); setStatus('saving') }
-        setError('')
+        if (version.current === writingVersion) { workspace.current && removeLocal(pendingKey(workspace.current)); setStatus('saved') }
+        else { pendingSafe.current = !!workspace.current && writeLocal(pendingKey(workspace.current), JSON.stringify({ session: next, base: baseline.current })); setStatus('saving') }
+        setError(version.current !== writingVersion && !pendingSafe.current ? '浏览器缓存不可用；新的未确认 UI 仅保留在内存，请等待下一次服务端保存。' : '')
       } catch (e) {
+        if (e instanceof ApiError && e.status === 412) {
+          let remote: Session | null = null
+          try { remote = normalizeSession(await readSession()) } catch { /* explicitly unknown remote comparison */ }
+          setComparison({ base: baseline.current, local: live.current, remote })
+        }
         setStatus(e instanceof ApiError && e.status === 412 ? 'conflict' : 'offline')
         setError(e instanceof ApiError && e.status === 412 ? '会话版本冲突，本地标签、布局与草稿已保留。读取服务端会话后可继续。' : `保存失败：${(e as Error).message}。本地改动仍保留。`)
       } finally { inFlight.current = false }
     }, 350)
     return () => clearTimeout(timer)
   }, [session, status, cache])
-  const updateDraft = (id: string, text: string) => setDrafts(old => { const next = { ...old, [id]: text }; workspace.current && localStorage.setItem(draftsKey(workspace.current), JSON.stringify(next)); return next })
-  return { session, set, status, error, drafts, updateDraft, reconnect }
+  const restorePending = async (snapshot: PendingSnapshot) => {
+    let remote: Session | null = null
+    try { remote = normalizeSession(await readSession()) } catch { /* compare as unknown, never manufacture a remote baseline */ }
+    baseline.current = snapshot.base
+    set(snapshot.session)
+    setRecoverable(old => old.filter(item => item.key !== snapshot.key))
+    if (!remote || snapshot.session.revision !== remote.revision) {
+      setComparison({ base: snapshot.base, local: snapshot.session, remote })
+      setStatus('conflict'); setError('恢复了待同步 UI 原始快照。请比较已知的基准、本地和服务端状态，再明确选择保留版本。')
+    }
+  }
+  const retainLocal = () => {
+    if (!comparison?.remote || !connected.current) return
+    const chosen = { ...live.current, revision: comparison.remote.revision }
+    baseline.current = comparison.remote; set(chosen); setComparison(null); setStatus('saving'); setError('正在按您的明确选择保存本地会话。')
+  }
+  return { session, set, status, error, reconnect, comparison, retainLocal, workspaceId: workspace.current, recoverable, restorePending, ...draftStore }
 }

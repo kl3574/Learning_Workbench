@@ -1,0 +1,160 @@
+{
+  "record_type": "independent_read_only_m1_reverification",
+  "recorded_date": "2026-09-14",
+  "scope": "Reverify three previously reported M1 UI persistence issues and the memory-only reconnect boundary. No M2-M7 acceptance was performed.",
+  "overall_status": "FAIL",
+  "test_summary": {
+    "passed_checks": 4,
+    "failed_checks": 1,
+    "runner_exit_code": 0,
+    "runner_exit_code_semantics": "The external observation harness completed and emitted structured results; exit code zero does not mean all checks passed."
+  },
+  "source_identity": {
+    "kind": "working_tree_files_pinned_by_sha256",
+    "implementation_commit": null,
+    "source_unchanged_during_test": true,
+    "sha256": {
+      "apps/web/src/workbench/useWorkbench.ts": "f54447622732f3f0149353ff97f85785a3ec3444ae313389190b299c0b028ebe",
+      "apps/web/src/workbench/uiCache.ts": "1b48c3cd95f1bbb33ddcbd56de17fc479128aa5f92a1fed48f3514622de1c8ed",
+      "apps/web/src/workbench/Shell.tsx": "2a2895d867ceff21e56a054352286990d3832e202e7f7cd9411ee368a503ea11",
+      "apps/web/src/workbench/Navigation.tsx": "31301914e1b09db8b92ed5b8ba3fcafdfaeb8ae127417e89057998611435e229"
+    }
+  },
+  "environment": {
+    "platform": "Linux desktop",
+    "browser": "Installed Google Chrome, headless, controlled through project Playwright; browser version was not separately recorded.",
+    "node_version": "24.21.0",
+    "api_origin": "http://127.0.0.1:8877",
+    "ui_origin": "http://127.0.0.1:5184",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "data": "New temporary SQLite workspace outside the repository; only synthetic UI data.",
+    "api_start_command": "python -m uvicorn services.api.app.main:create_app --factory --host 127.0.0.1 --port 8877 --no-access-log",
+    "ui_start_command": "bash scripts/node.sh npm --prefix apps/web run dev -- --port 5184",
+    "review_command": "bash scripts/node.sh node <isolated-review-script>",
+    "environment_overrides": {
+      "LEARNING_DATA_DIR": "<isolated-temporary-data-directory>",
+      "LEARNING_HOST": "127.0.0.1",
+      "LEARNING_PORT": "8877",
+      "LEARNING_UI_ORIGIN": "http://127.0.0.1:5184"
+    },
+    "existing_services_8765_5173": "Not used or modified.",
+    "authentication": "Launcher-issued one-time code was captured only in process memory, passed through the browser fragment, and exchanged through the real bootstrap endpoint. No credentials were written to evidence."
+  },
+  "checks": [
+    {
+      "id": "directory_history_restore",
+      "status": "PASS",
+      "steps": [
+        "Bootstrap a fresh browser context and reset its temporary workspace to the empty UI session.",
+        "Explicitly load the synthetic course, select textbook, and expand two chapters.",
+        "Scroll the directory to 220 pixels and wait for the real server acknowledgment.",
+        "Switch to practice and back to textbook, then reload and read the persisted session."
+      ],
+      "observations": {
+        "initial_scroll_top": 220,
+        "after_entry_switch": 220,
+        "after_browser_reload": 220,
+        "server_directory_scroll": 220
+      }
+    },
+    {
+      "id": "quota_and_server_failure_initial_status",
+      "status": "PASS",
+      "steps": [
+        "Start from an acknowledged empty session.",
+        "Inject QuotaExceededError only for pending-ui localStorage writes and abort PUT requests to the workbench session endpoint.",
+        "Collapse the navigation panel and wait for the attempted save to fail.",
+        "Observe UI status, read the unchanged server session, and dispatch a cancellable beforeunload event to inspect the registered protection."
+      ],
+      "observations": {
+        "ui_nav_collapsed": true,
+        "ui_agent_collapsed": false,
+        "green_saved_visible": false,
+        "visible_error": "保存失败：Failed to fetch。本地改动仍保留。重试连接",
+        "server_nav_collapsed": false,
+        "beforeunload_default_prevented": true,
+        "put_request_count": 1
+      }
+    },
+    {
+      "id": "memory_only_snapshot_survives_normal_reconnect",
+      "status": "FAIL",
+      "severity": "P1",
+      "steps": [
+        "Continue the preceding scenario while the unsaved navigation change remains only in memory.",
+        "Remove the injected PUT failure, leaving the localStorage quota failure in place.",
+        "Click the ordinary retry-connection button without choosing to discard local changes or use the server snapshot.",
+        "Observe the UI, the server state, and the cumulative PUT request count."
+      ],
+      "observations": {
+        "before_retry_ui_nav_collapsed": true,
+        "after_retry_ui_nav_collapsed": false,
+        "after_retry_ui_agent_collapsed": false,
+        "after_retry_green_saved_visible": true,
+        "after_retry_server_nav_collapsed": false,
+        "put_requests_before_retry": 1,
+        "put_requests_after_retry": 1,
+        "unsaved_memory_change_lost": true
+      },
+      "cause_supported_by_read_only_source_review": "reconnect() selects a localStorage pending snapshot or the remote snapshot. When pending persistence failed, the unsaved live snapshot is not included in that selection and is replaced by remote data.",
+      "required_followup": "Preserve same-workspace unacknowledged live state and its base revision during normal reconnect; only an explicit server-selection action may replace it. Reverify after the implementation changes."
+    },
+    {
+      "id": "separate_offline_page_candidates_restore",
+      "status": "PASS",
+      "steps": [
+        "Open two pages in one browser context against the same acknowledged workspace.",
+        "Abort API traffic while leaving the local UI server available.",
+        "In page A collapse navigation; in page B collapse Agent.",
+        "Reload both pages while API traffic remains unavailable and inspect their restored local candidates."
+      ],
+      "observations": {
+        "pending_candidate_count_before_reload": 2,
+        "pending_candidate_count_after_reload": 2,
+        "page_a_after_reload": {
+          "nav_collapsed": true,
+          "agent_collapsed": false
+        },
+        "page_b_after_reload": {
+          "nav_collapsed": false,
+          "agent_collapsed": true
+        }
+      }
+    },
+    {
+      "id": "server_ack_cleans_only_own_candidate",
+      "status": "PASS",
+      "steps": [
+        "Continue the two-page candidate scenario and restore API availability.",
+        "Retry the connection in page A and wait for its real server acknowledgment.",
+        "Inspect remaining pending candidates and the explicit recovery UI."
+      ],
+      "observations": {
+        "other_candidate_recovery_notice_visible": true,
+        "remaining_candidate_count": 1,
+        "remaining_candidate_is_page_b": true,
+        "remaining_candidate_nav_collapsed": false,
+        "remaining_candidate_agent_collapsed": true
+      }
+    }
+  ],
+  "cleanup": {
+    "status": "COMPLETE",
+    "api_listener_8877_stopped": true,
+    "vite_listener_5184_stopped": true,
+    "temporary_workspace_removed": true,
+    "temporary_harness_removed": true,
+    "source_code_changed_by_reviewer": false,
+    "specification_changed_by_reviewer": false,
+    "progress_state_changed_by_reviewer": false
+  },
+  "evidence_limits": [
+    "This is a structured record of real controlled observations, not a claim that the complete M1 acceptance suite passed.",
+    "The tested source was identified by file hashes rather than an implementation commit.",
+    "No screenshot, provider, worker, M2-M7 business, or learning-effectiveness acceptance was performed.",
+    "Only the subsequently authorized evidence JSON was added to the repository; application source, specification and progress state were left unchanged."
+  ]
+}

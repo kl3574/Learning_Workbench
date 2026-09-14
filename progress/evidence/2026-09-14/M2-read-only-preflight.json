@@ -1,0 +1,44 @@
+{
+  "scope": "M2 read-only prerequisite inspection; M2 implementation and acceptance have not started",
+  "spec_sha256": "ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c",
+  "source_files": {
+    "migrations/0001_baseline.sql": "d887f94890669642e9a3c421109efac1373ebc100858ea885d34882ba7c921a2",
+    "scripts/api_contracts.py": "8d7804bef637058724af98fd829bc63a98e0c321372313a1e96b011fee07528b",
+    "services/api/app/interfaces/boundary.py": "b120de26ad1d0cacba24c38f4d9929fd012bd99b7cbc3f180451eb24329ab6e1",
+    "packages/contracts/domain_models.py": "5b8676e955bc1f58c662f14cf3a3965e6417f857324090b6481add41ac0993e1"
+  },
+  "findings": [
+    {
+      "topic": "storage",
+      "fact": "Baseline DDL already contains content_blobs, sources, objects, immutable revisions, dependencies, ingestion_imports and jobs. Resume by adding application services; do not recreate baseline.",
+      "next": "M2.1 atomic blob write, exact content repository, transactional references/current pointer/outbox and read routes."
+    },
+    {
+      "topic": "generated_transport",
+      "fact": "Current generated API client deliberately rejects path/query and non-JSON response operations.",
+      "next": "Extend the generator and contract tests when adding content GET routes; retain existing session call compatibility."
+    },
+    {
+      "topic": "upload_boundary",
+      "fact": "Current HTTP boundary aggregates and limits ordinary request bodies to 2 MiB.",
+      "next": "M2.2 needs a separate bounded streaming upload route with the 50 MiB original-file budget; do not raise every JSON limit."
+    },
+    {
+      "topic": "preview",
+      "fact": "Import summaries use preview IDs rather than published ContentRefs. Appendix A already declares GET drafts/{id} with kind-specific payload.",
+      "next": "Bind import preview IDs to restricted draft payloads and source artifacts; show actual proposed content before commit."
+    },
+    {
+      "topic": "field_names",
+      "fact": "Section 5.2 prose uses source_refs/concept_ids, whereas the extractable strict ContentBlock uses citations/concepts.",
+      "next": "Record the mapping to strict exchange fields, preserving source provenance and concept identity; do not add parallel editable content or silently modify the original specification."
+    },
+    {
+      "topic": "review_and_reading_status",
+      "fact": "Inline read routes include review_state and reading_state without a complete enum. Published storage status does not prove review or reading.",
+      "next": "Keep unreviewed/no-evidence states explicit; do not derive approval or learning evidence from successful import."
+    }
+  ],
+  "verification": "STATIC_INSPECTION_ONLY",
+  "m2_acceptance": "NOT_RUN"
+}
