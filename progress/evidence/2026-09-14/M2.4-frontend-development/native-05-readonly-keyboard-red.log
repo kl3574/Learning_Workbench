@@ -1,0 +1,47 @@
+
+> @learning-workbench/web@0.1.0 test:e2e
+> playwright test --config ../../tests/e2e/playwright.config.ts reader.spec.ts -g native source
+
+[WebServer] INFO:     Started server process [315123]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+[WebServer] (node:315159) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:315212) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 ../../tests/e2e/reader.spec.ts:90:1 › native source keyboard selection creates exact Markdown codepoints without rendered-text guessing (8.0s)
+
+
+  1) ../../tests/e2e/reader.spec.ts:90:1 › native source keyboard selection creates exact Markdown codepoints without rendered-text guessing 
+
+    Error: expect(locator).toBeEnabled() failed
+
+    Locator:  getByRole('button', { name: '为当前选文记笔记', exact: true })
+    Expected: enabled
+    Received: disabled
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toBeEnabled" getByRole('button', { name: '为当前选文记笔记', exact: true }) with timeout 5000ms
+      - waiting for getByRole('button', { name: '为当前选文记笔记', exact: true })
+        14 × locator resolved to <button disabled>为当前选文记笔记</button>
+           - unexpected value "disabled"
+
+
+       99 |   writeFileSync('/tmp/m24-native-textarea-diagnostic.json', JSON.stringify(await source.evaluate(node => ({ start: (node as HTMLTextAreaElement).selectionStart, end: (node as HTMLTextAreaElement).selectionEnd, selected: (node as HTMLTextAreaElement).value.slice((node as HTMLTextAreaElement).selectionStart, (node as HTMLTextAreaElement).selectionEnd), focused: document.activeElement === node, active: document.activeElement?.outerHTML, statuses: [...document.querySelectorAll('[role=status]')].map(value => value.textContent) }))))
+      100 |   await info.attach('native-textarea-selection', { body: JSON.stringify(await source.evaluate(node => ({ start: (node as HTMLTextAreaElement).selectionStart, end: (node as HTMLTextAreaElement).selectionEnd, focused: document.activeElement === node }))), contentType: 'application/json' })
+    > 101 |   await expect(page.getByRole('button', { name: '为当前选文记笔记', exact: true })).toBeEnabled()
+          |                                                                             ^
+      102 |   await page.getByRole('button', { name: '为当前选文记笔记', exact: true }).click()
+      103 |   const dialog = page.getByRole('dialog', { name: '笔记', exact: true })
+      104 |   await dialog.getByRole('button', { name: '用当前选文新建笔记', exact: true }).click()
+        at <repo>/tests/e2e/reader.spec.ts:101:77
+
+    Error Context: ../../.local_data/e2e-results/reader-native-source-keybo-03dd4-hout-rendered-text-guessing/error-context.md
+
+  1 failed
+    ../../tests/e2e/reader.spec.ts:90:1 › native source keyboard selection creates exact Markdown codepoints without rendered-text guessing 

@@ -12,7 +12,7 @@ import './imports.css'
 const statusLabels = { staged: '原件已暂存', parsing: '正在解析', preview_ready: '预览已就绪，等待确认', committed: '已确认入库', cancelled: '已取消', failed: '导入失败' }
 const jobLabels = { queued: '排队中', running: '运行中', awaiting_approval: '等待确认', completed: '任务已完成', failed: '任务失败', cancelled: '任务已取消' }
 
-export function ImportWorkflow({ workspaceId, close }: { workspaceId: string; close: () => void }) {
+export function ImportWorkflow({ workspaceId, close, openCourse }: { workspaceId: string; close: () => void; openCourse?: (ref: ContentRef) => void }) {
   const state = useImportWorkflow(workspaceId)
   const [manualId, setManualId] = useState('')
   const snapshot = state.snapshot
@@ -53,7 +53,7 @@ export function ImportWorkflow({ workspaceId, close }: { workspaceId: string; cl
       {snapshot && snapshot.status !== 'preview_ready' && snapshot.warnings.length > 0 && <ReviewWarnings warnings={snapshot.warnings} accepted={state.accepted} change={state.setAccepted} disabled />}
       {snapshot?.status === 'failed' && snapshot.warnings.some(warning => warning.code === 'ENCODING_CHOICE_REQUIRED') && <EncodingPreview key={snapshot.id} originalFile={state.originalFile} expectedHash={snapshot.input_sha256} accessEpoch={state.accessEpoch} />}
       {snapshot?.status === 'failed' && !snapshot.warnings.some(warning => warning.code === 'ENCODING_CHOICE_REQUIRED') && <FailedOriginal key={snapshot.id} originalFile={state.originalFile} expectedHash={snapshot.input_sha256} accessEpoch={state.accessEpoch} />}
-      {(snapshot?.status === 'committed' || state.result) && <div className="import-result" role="status"><h3>导入已提交</h3><p>以下为服务端返回的正式课程引用。当前阶段可查看摘要，正式阅读入口将在内容阅读阶段接入。</p>{courseRefs.length ? <ul>{courseRefs.map(ref => <li key={`${ref.id}:${ref.revision}`}><strong>{state.committedCourses.find(course => course.id === ref.id && course.revision === ref.revision)?.title ?? ref.id}</strong><br />{ref.id} · 修订 {ref.revision}<code className="import-hash">{ref.sha256}</code></li>)}</ul> : <p>服务端确认已提交；当前恢复信息没有关联任务的课程引用。已保留导入状态，不会把暂存候选当成正式引用。</p>}{state.result && <p>迁移回执：{state.result.migration_receipt_id}</p>}<button onClick={close}>完成并关闭导入</button></div>}
+      {(snapshot?.status === 'committed' || state.result) && <div className="import-result" role="status"><h3>导入已提交</h3><p>以下为服务端返回的正式课程引用，可打开精确课程目录开始阅读。</p>{courseRefs.length ? <ul>{courseRefs.map(ref => <li key={`${ref.id}:${ref.revision}`}><strong>{state.committedCourses.find(course => course.id === ref.id && course.revision === ref.revision)?.title ?? ref.id}</strong><br />{ref.id} · 修订 {ref.revision}<code className="import-hash">{ref.sha256}</code>{openCourse && <button onClick={() => openCourse(ref)}>打开已导入课程</button>}</li>)}</ul> : <p>服务端确认已提交；当前恢复信息没有关联任务的课程引用。已保留导入状态，不会把暂存候选当成正式引用。</p>}{state.result && <p>迁移回执：{state.result.migration_receipt_id}</p>}<button onClick={close}>完成并关闭导入</button></div>}
       {snapshot?.status === 'cancelled' && <p className="import-notice">服务端已取消本次导入；没有通过取消操作删除正式课程。</p>}
       {snapshot?.status === 'failed' && <div className="import-warning"><p>失败任务已经终止，原件仍保留在服务端。请修正原件后重新上传。</p><button onClick={close}>关闭并更换原件</button></div>}
       {snapshot && !['committed', 'cancelled', 'failed'].includes(snapshot.status) && <div className="import-buttons"><button disabled={state.busy || activeTest} onClick={() => void state.cancel()}>取消本次导入</button></div>}

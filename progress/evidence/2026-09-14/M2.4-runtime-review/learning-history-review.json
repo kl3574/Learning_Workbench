@@ -1,0 +1,78 @@
+{
+  "task": "M2.4 course history learning projection regression",
+  "status": "TARGETED_PASS",
+  "provenance_scope": "Mutable M2.4 worktree, per-file SHA-256 only; not an exact commit validation or full M2.4 acceptance.",
+  "changed_files": [
+    "services/api/app/application/learning.py",
+    "tests/integration/test_learning_course_history.py"
+  ],
+  "original_independent_finding": {
+    "receipt": "learning-interaction-red.json",
+    "receipt_sha256": "8aaf481bffeb467235a0a4da3342e5551d338ae7ffe5c64b55396699beffa673",
+    "probe": "learning-interaction-probe.py.txt",
+    "probe_sha256": "f5fad12bb78976b68914963c1e12052eca1afa7b833d434fce2e5be73b2b3465",
+    "finding": "Course replacement hid reading records still shown as read by the exact historical outline; role/idempotency/Note edit-delete event control passed."
+  },
+  "runs": [
+    {
+      "phase": "red",
+      "command": "uv run --frozen pytest tests/integration/test_learning_course_history.py -q --tb=short > learning-history-red.log 2>&1",
+      "exit_code": 1,
+      "result": "2 failed, 2 warnings in 0.44s",
+      "source_sha256": {
+        "services/api/app/application/learning.py": "1f528b80eeac54a3268b0d0839372c76c4468c4a8130193aa88b6faf4435ba99",
+        "tests/integration/test_learning_course_history.py": "d9196d02dc83874407c3cfd1c371797eada44a82400ff82961a756901c796037"
+      },
+      "log": "learning-history-red.log",
+      "log_sha256": "19db7a02f9c27905c8e11c89b15be83b7acf88320d806cbbb79153d28fdc05c0"
+    },
+    {
+      "phase": "green",
+      "command": "uv run --frozen pytest tests/integration/test_learning_course_history.py tests/integration/test_notes_learning.py -q --tb=short > learning-history-green.log 2>&1",
+      "exit_code": 0,
+      "result": "50 passed, 2 warnings in 2.05s",
+      "count_scope": {
+        "new_history_tests": 2,
+        "existing_notes_learning_tests": 48
+      },
+      "source_sha256": {
+        "services/api/app/application/learning.py": "30b8d060671897de841cbd7f1d3686f6a32e45e6883c4fc1cede51dbaf2cc0db",
+        "tests/integration/test_learning_course_history.py": "d9196d02dc83874407c3cfd1c371797eada44a82400ff82961a756901c796037",
+        "tests/integration/test_notes_learning.py": "d0c88daa3c117932ddbc02386ce37b5340a68165ff0e4d89b9e6c5eb5e4f2fb0"
+      },
+      "log": "learning-history-green.log",
+      "log_sha256": "abf9cd13fa8fab71e0f3e5878957b0e1faef383ebfff7c11db49fed3cc4b8c5d"
+    },
+    {
+      "phase": "lint",
+      "command": "uv run --frozen ruff check services/api/app/application/learning.py tests/integration/test_learning_course_history.py",
+      "exit_code": 0,
+      "output": "All checks passed!",
+      "source_sha256": {
+        "services/api/app/application/learning.py": "30b8d060671897de841cbd7f1d3686f6a32e45e6883c4fc1cede51dbaf2cc0db",
+        "tests/integration/test_learning_course_history.py": "d9196d02dc83874407c3cfd1c371797eada44a82400ff82961a756901c796037"
+      }
+    },
+    {
+      "phase": "types",
+      "command": "uv run --frozen mypy services/api/app/application/learning.py",
+      "exit_code": 0,
+      "output": "Success: no issues found in 1 source file",
+      "source_sha256": {
+        "services/api/app/application/learning.py": "30b8d060671897de841cbd7f1d3686f6a32e45e6883c4fc1cede51dbaf2cc0db"
+      }
+    }
+  ],
+  "verified_behavior": [
+    "Replacing all course chapters preserves exact old and new reading records under course_id; old and new outline states agree with the corresponding toolbar records.",
+    "The old block bookmark and Note remain available after course replacement.",
+    "Other-course members and a standalone same-ID block revision never referenced by any course revision are excluded.",
+    "Course scope traverses all published historical metadata through the workspace repository and validates each complete member reference; output preserves original hashes and the global progress revision."
+  ],
+  "limitations": [
+    "50 is new 2 plus existing 48, not the full Python suite or 556 tests.",
+    "No browser validation, CI claim, release, or Git mutation in this regression task."
+  ],
+  "cleanup": "TestClient lifespans exited; temporary SQLite data only; no listening network server started.",
+  "frozen": true
+}

@@ -1,0 +1,50 @@
+
+> @learning-workbench/web@0.1.0 test:e2e
+> playwright test --config ../../tests/e2e/playwright.config.ts reader.spec.ts
+
+[WebServer] INFO:     Started server process [324166]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+[WebServer] (node:324384) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 5 tests using 1 worker
+
+(node:324470) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 ../../tests/e2e/reader.spec.ts:30:1 › real imported directory, title search, worked-example link, long formula and frozen original download (4.1s)
+  ✓  2 ../../tests/e2e/reader.spec.ts:63:1 › second repeated rendered selection preserves exact source codepoints, saves note, edits and soft deletes (3.4s)
+  ✓  3 ../../tests/e2e/reader.spec.ts:94:1 › native source keyboard selection creates exact Markdown codepoints without rendered-text guessing (3.0s)
+  ✓  4 ../../tests/e2e/reader.spec.ts:112:1 › offline local note recovery and a real concurrent server revision show three-way comparison before CAS save (3.9s)
+  ✘  5 ../../tests/e2e/reader.spec.ts:160:1 › historical course revisions stay in separate exact tabs and hash-mismatched links preserve unresolved reference (9.2s)
+
+
+  1) ../../tests/e2e/reader.spec.ts:160:1 › historical course revisions stay in separate exact tabs and hash-mismatched links preserve unresolved reference 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('heading', { name: '无法打开此精确链接', exact: true })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('heading', { name: '无法打开此精确链接', exact: true }) with timeout 5000ms
+      - waiting for getByRole('heading', { name: '无法打开此精确链接', exact: true })
+
+
+      183 |   const invalid = { ...oldTarget, block: { ...oldTarget.block, sha256: 'b'.repeat(64) } }
+      184 |   await page.goto(`/?reader=${encodeURIComponent(JSON.stringify(invalid))}`)
+    > 185 |   await expect(page.getByRole('heading', { name: '无法打开此精确链接', exact: true })).toBeVisible()
+          |                                                                               ^
+      186 |   await expect(page.getByRole('alert')).toContainText('不一致')
+      187 |   await expect.poll(async () => { const value = await page.request.get('/api/v1/workbench/session').then(response => response.json()); return value.tabs.find((tab: {id:string}) => tab.id === value.active_tab_id)?.context.active_ref }).toEqual(current.blocks[0])
+      188 | })
+        at <repo>/tests/e2e/reader.spec.ts:185:79
+
+    Error Context: ../../.local_data/e2e-results/reader-historical-course-r-ef021-eserve-unresolved-reference/error-context.md
+
+  1 failed
+    ../../tests/e2e/reader.spec.ts:160:1 › historical course revisions stay in separate exact tabs and hash-mismatched links preserve unresolved reference 
+  4 passed (25.7s)

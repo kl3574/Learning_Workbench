@@ -1,0 +1,11 @@
+import { describe, expect, it } from 'vitest'
+import { decodeNoteEnvelope, noteDirty, type NoteEnvelope } from './noteDrafts'
+import type { Note } from '../../../../../packages/contracts/generated/types'
+const note: Note = { id: 'note_validation', entity: 'note', schema_version: '3.0.0', revision: 1, workspace_id: 'workspace_validation', markdown: '🧠 中文 café é', anchor_state: 'exact', anchor: { ref: { id: 'block_validation', entity: 'block', revision: 2, sha256: 'a'.repeat(64) }, start_codepoint: 3, end_codepoint: 6, exact_quote: '🧠é', prefix: '前文', suffix: '后文' } }
+// Golden hash produced by packages.contracts.canonical.metadata_sha256(dm.Note(...)).
+function envelope(): NoteEnvelope { return { version: 1, base_ref: { entity: 'note', id: note.id, revision: 1, sha256: '26bb2847299bfc9c2e808e2f1dde41daa0df8a5603cebeda6900b9dc42a4e970' }, base_note: structuredClone(note), candidate: structuredClone(note), creation_key: 'one-time-idempotency-key' } }
+describe('note draft envelope exact baseline', () => {
+  it('permits an empty unsent candidate while preserving a valid immutable baseline', () => { const value = envelope(); value.candidate.markdown = ''; const actual = decodeNoteEnvelope(JSON.stringify(value), note.workspace_id); expect(actual.base_note).toEqual(note); expect(noteDirty(actual)).toBe(true) })
+  it.each(['workspace', 'hash', 'range', 'identity', 'unknown', 'surrogate'])('rejects corrupted %s without claiming a recovered candidate', kind => { const value = envelope(); if (kind === 'workspace') value.candidate.workspace_id = 'other'; if (kind === 'hash') value.base_ref!.sha256 = 'b'.repeat(64); if (kind === 'range') value.candidate.anchor.end_codepoint++; if (kind === 'identity') value.candidate.id = 'note_other'; if (kind === 'unknown') Object.assign(value.candidate.anchor, { guessed: true }); if (kind === 'surrogate') value.candidate.markdown = '\ud800'; expect(() => decodeNoteEnvelope(JSON.stringify(value), note.workspace_id)).toThrow() })
+  it('normalizes omitted defaults before comparing immutable metadata hash', () => { const value = envelope(); delete value.base_note!.schema_version; delete value.base_note!.entity; delete value.base_note!.anchor_state; expect(decodeNoteEnvelope(JSON.stringify(value), note.workspace_id).base_note).toEqual(note) })
+})

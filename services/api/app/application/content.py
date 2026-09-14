@@ -24,6 +24,7 @@ from ..content_dto import CourseSummary, PageCourse, PageRevision, RevisionSumma
 from ..infrastructure.blobs import BlobInfo, BlobStore
 from ..infrastructure.content_repository import ContentRepository, damaged, reference
 from ..infrastructure.database import Database
+from ..infrastructure.notes_repository import mark_stale_notes
 from ..infrastructure.security import guard_subject_access
 from .errors import ApiError
 
@@ -54,12 +55,12 @@ class ContentService:
         self._cursor_key = secrets.token_bytes(32)
 
     @contextmanager
-    def _access(self, workspace_id: str) -> Iterator[ContentRepository]:
+    def _access(self, workspace_id: str, *, allow_notes: bool = False) -> Iterator[ContentRepository]:
         try:
             # Shared workspace guard and the result are read under the same writer lock
             # used by attempt transitions, so a second connection cannot start an attempt mid-read.
             with self.database.transaction() as connection:
-                repository = ContentRepository(connection, workspace_id)
+                repository = ContentRepository(connection, workspace_id, allow_notes=allow_notes)
                 repository.require_workspace()
                 guard_subject_access(connection, workspace_id)
                 yield repository
@@ -88,7 +89,7 @@ class ContentService:
 
     def current(self, workspace_id: str, id: str) -> dm.ContentRef:
         self._identity(id)
-        with self._access(workspace_id) as repository:
+        with self._access(workspace_id, allow_notes=True) as repository:
             return reference(repository.current(id).value)
 
     def _context(self, workspace_id: str, scope: str, query: str, limit: int) -> str:
@@ -146,7 +147,7 @@ class ContentService:
         self._identity(id)
         context = self._context(workspace_id, "revisions", id, limit)
         position = self._position(cursor, context, int)
-        with self._access(workspace_id) as repository:
+        with self._access(workspace_id, allow_notes=True) as repository:
             repository.object_row(id)
             rows = repository.connection.execute(
                 "SELECT r.*,o.kind,o.lifecycle FROM revisions r JOIN objects o ON o.id=r.object_id "
@@ -372,6 +373,16 @@ class ContentService:
         if any(isinstance(value, dm.Note) and value.workspace_id != workspace_id for value in values):
             raise invalid()
         repository.ensure_new(values)
+        # Capture the actual current revisions once, before publishing a batch
+        # that may itself contain multiple historical revisions of one object.
+        previous_refs = []
+        for identifier in sorted({value.id for value in values}):
+            row = connection.execute(
+                "SELECT current_revision FROM objects WHERE workspace_id=? AND id=?",
+                (workspace_id, identifier),
+            ).fetchone()
+            if row is not None and row["current_revision"] is not None:
+                previous_refs.append(reference(repository.current(identifier).value))
         try:
             _, dependencies, courses = self._closure(repository, values, budgets)
             staged = self._stage(repository, values, bodies, budgets)
@@ -390,4 +401,5 @@ class ContentService:
                 )
         for value in sorted(values, key=lambda item: (item.id, item.revision)):
             repository.advance(value)
+        mark_stale_notes(connection, workspace_id, previous_refs)
         return [reference(value) for value in values]

@@ -1,0 +1,93 @@
+import json
+import sys
+import tempfile
+from dataclasses import asdict
+from io import BytesIO
+from pathlib import Path
+from zipfile import ZipFile, ZIP_STORED
+
+sys.path.insert(0, '<REPO>')
+from packages.contracts import domain_models as dm
+from packages.contracts.canonical import canonical_bytes, sha256_bytes
+from services.api.app.infrastructure.content_repository import reference
+from services.api.app.infrastructure.import_repository import ImportRepository
+from services.api.app.infrastructure.blobs import BlobStore
+from services.api.app.infrastructure.database import Database
+from services.api.app.infrastructure.config import Settings
+from services.api.app.infrastructure.security import SessionIdentity
+from services.api.app.infrastructure.import_worker import ImportWorker
+from services.api.app.application.imports import ImportService
+from services.api.app.application.reader import ReaderService, backfill_provenance
+from services.api.app.import_dto import ImportCommitRequest, ImportIdMapping
+
+ROOT = Path('<REPO>')
+SOURCES = ['services/api/app/application/reader.py', 'services/api/app/infrastructure/provenance_repository.py', 'services/api/app/reader_dto.py']
+
+def hashes():
+    return {path: sha256_bytes((ROOT/path).read_bytes()) for path in SOURCES}
+
+def package(citation_title=None):
+    body = b'Synthetic independent provenance probe.\n'
+    block = dm.ContentBlock(id='block_probe', revision=1, kind='text', title='Synthetic content', body_path='body.md', body_sha256=sha256_bytes(body), citations=['citation_probe'] if citation_title else [])
+    lesson = dm.Lesson(id='lesson_probe', revision=1, title='Synthetic lesson', objectives=[], block_refs=[reference(block)])
+    course = dm.Course(id='course_probe', revision=1, title='Synthetic course', audience='software test', lesson_refs=[reference(lesson)])
+    citations = [dm.Citation(id='citation_probe', title=citation_title, locator='package member body.md', verification='user_supplied')] if citation_title else []
+    payloads = {'body.md':body, 'blocks/block.json':canonical_bytes(block), 'lessons/lesson.json':canonical_bytes(lesson), 'course.json':canonical_bytes(course), 'concepts.json':b'[]', 'symbols.json':b'[]', 'sources/citations.json':canonical_bytes([item.model_dump(mode="json") for item in citations])}
+    manifest = dm.Manifest(package_id='package_probe', profile='learner', created_at='2026-09-14T00:00:00Z', files=[dm.FileEntry(path=path,size=len(data),sha256=sha256_bytes(data),media_type='text/markdown' if path.endswith('.md') else 'application/json',visibility='learner') for path,data in payloads.items()])
+    payloads['manifest.json']=canonical_bytes(manifest)
+    out=BytesIO()
+    with ZipFile(out,'w',compression=ZIP_STORED) as archive:
+        for path,data in payloads.items(): archive.writestr(path,data)
+    return out.getvalue()
+
+def commit(database, identity, data, prefix):
+    service=ImportService(database); worker=ImportWorker(database)
+    try:
+        staged=service.stage(identity,data=data,filename='probe.learnpack.zip',kind='learnpack',key='stage-'+prefix)
+        assert worker.run_once()
+        preview=service.preview(identity,staged.import_id)
+        assert preview.status=='preview_ready', preview
+        mapping=[ImportIdMapping(old_id=f'{kind}_probe',new_id=f'{kind}_{prefix}') for kind in ['block','lesson','course']]
+        request=ImportCommitRequest(expected_input_sha256=staged.input_sha256,accepted_warning_codes=[warning.code for warning in preview.warnings if warning.severity=='warning'],id_mapping=mapping)
+        result=service.commit(identity,staged.import_id,request,'commit-'+prefix)
+        return staged,result,request
+    finally: worker.stop()
+
+def main():
+    report={'source_hashes_before':hashes(),'checks':[]}
+    with tempfile.TemporaryDirectory(prefix='m24-provenance-independent-') as temp:
+        db=Database(Settings(data_dir=Path(temp)/'database')); workspace=db.initialize()
+        identity=SessionIdentity('session_probe',workspace,'learner','unused','2099-01-01T00:00:00Z')
+        staged,result,_=commit(db,identity,package(),'empty')
+        view=ReaderService(db).block(identity,'block_empty',1)
+        with db.connect() as connection:
+            frozen=json.loads(connection.execute('SELECT snapshot_json FROM block_provenance WHERE block_id=?',('block_empty',)).fetchone()[0])
+        raw=ImportService(db).source(identity,frozen['source']['id'])
+        downloaded,_=ImportService(db).download(identity,raw.artifact.artifact_id)
+        report['checks'].append({'check':'citation_free_package_origin_projection','status':'FAIL','reader_fields':list(view.model_dump()),'citations':view.citations,'unresolved_citation_ids':view.unresolved_citation_ids,'frozen_source_exists':bool(frozen['source']),'source_id_in_reader':frozen['source']['id'] in view.model_dump_json(),'direct_known_source_download_hash_matches':sha256_bytes(downloaded)==staged.input_sha256})
+
+        a,ra,qa=commit(db,identity,package('Origin A'),'alpha')
+        b,rb,qb=commit(db,identity,package('Origin B'),'bravo')
+        # Simulate inconsistent legacy receipt metadata, using valid replacement
+        # bytes/hash/manifest. Do not change the original decision hash or result.
+        service=ImportService(db)
+        receipt=json.loads(service.download(identity,ra.migration_receipt_id)[0])
+        receipt['id_mapping']={item.old_id:item.new_id for item in qb.id_mapping}
+        info=BlobStore(db.settings.data_dir).write(canonical_bytes(receipt))
+        with db.transaction() as connection:
+            ImportRepository(connection,workspace).add_blob(info)
+            artifact=connection.execute('SELECT manifest_json FROM artifacts WHERE id=?',(ra.migration_receipt_id,)).fetchone()
+            manifest=json.loads(artifact[0]);manifest.update(sha256=info.sha256,size=info.size)
+            connection.execute('UPDATE artifacts SET blob_sha256=?,manifest_json=? WHERE id=?',(info.sha256,canonical_bytes(manifest).decode(),ra.migration_receipt_id))
+            connection.execute('DELETE FROM block_provenance WHERE block_id IN (?,?)',('block_alpha','block_bravo'))
+        # B cannot contribute a second recovery plan; loss of an original must
+        # not permit A's inconsistent receipt to claim B's exact publication.
+        (db.settings.data_dir/'blobs'/b.input_sha256[:2]/b.input_sha256).unlink()
+        outcome=backfill_provenance(db)
+        restored=ReaderService(db).block(identity,'block_bravo',1)
+        report['checks'].append({'check':'inconsistent_receipt_mapping_not_bound_to_original_decision','status':'FAIL' if restored.citations and restored.citations[0].citation.title=='Origin A' else 'PASS','backfill':{key:value for key,value in asdict(outcome).items() if key!='warnings'},'restored_titles':[item.citation.title for item in restored.citations],'wrong_source_A_bound_to_B':bool(restored.citations and restored.citations[0].source.sha256==a.input_sha256),'original_request_hash_retained':True,'idempotency_receipt_retained':True,'scope':'simulated inconsistent legacy artifact mapping; original source bytes and original commit decision unchanged'})
+    report['source_hashes_after']=hashes();report['source_stable']=report['source_hashes_before']==report['source_hashes_after'];report['cleanup']='temporary database and blobs removed; worker stopped'
+    Path('provenance-independent-red.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
+    print(json.dumps(report,ensure_ascii=False,indent=2))
+
+if __name__=='__main__':main()

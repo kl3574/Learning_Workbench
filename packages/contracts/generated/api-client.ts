@@ -1,13 +1,15 @@
 // Generated from PRODUCT_DESIGN.md v3.0.0 and actual runtime OpenAPI; do not edit.
 // spec_sha256: ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c
-import type { BootstrapRequest, BootstrapResponse, ContentBlock, ContentRef, Course, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobSnapshot, Lesson, LogoutResponse, MutationAck, PageCourse, PageRevision, PreferencesRequest, ReadinessResponse, RoleRequest, SessionResponse, SourceResponse, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
+import type { BlockReadResponse, BootstrapRequest, BootstrapResponse, ContentRef, Course, DirectorySearchResponse, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobSnapshot, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, OutlineResponse, PageCourse, PageNote, PageRevision, PreferencesRequest, ReadinessResponse, RoleRequest, SessionResponse, SourceResponse, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
 
 export interface ApiEndpointMap {
   "GET /api/v1/artifacts/{id}/download": { request: undefined; response: Blob; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
-  "GET /api/v1/blocks/{id}": { request: undefined; response: ContentBlock; headers: null; parameters: { path: { "id": string }; query: { "revision": number } }; parametersRequired: true };
+  "GET /api/v1/blocks/{id}": { request: undefined; response: BlockReadResponse; headers: null; parameters: { path: { "id": string }; query: { "include_provenance"?: boolean; "revision": number } }; parametersRequired: true };
   "GET /api/v1/blocks/{id}/body": { request: undefined; response: string; headers: null; parameters: { path: { "id": string }; query: { "revision": number } }; parametersRequired: true };
   "GET /api/v1/courses": { request: undefined; response: PageCourse; headers: null; parameters: { query?: { "cursor"?: (string | null); "limit"?: number; "q"?: (string | null) } }; parametersRequired: false };
   "GET /api/v1/courses/{id}": { request: undefined; response: Course; headers: null; parameters: { path: { "id": string }; query: { "revision": number } }; parametersRequired: true };
+  "GET /api/v1/courses/{id}/directory-search": { request: undefined; response: DirectorySearchResponse; headers: null; parameters: { path: { "id": string }; query: { "limit"?: number; "q": string; "revision": number } }; parametersRequired: true };
+  "GET /api/v1/courses/{id}/outline": { request: undefined; response: OutlineResponse; headers: null; parameters: { path: { "id": string }; query: { "revision": number } }; parametersRequired: true };
   "GET /api/v1/drafts/{id}": { request: undefined; response: ImportDraftSnapshot; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
   "POST /api/v1/imports": { request: ImportUpload; response: ImportStaged; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
   "GET /api/v1/imports/{id}": { request: undefined; response: ImportPreview; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
@@ -15,7 +17,13 @@ export interface ApiEndpointMap {
   "POST /api/v1/imports/{id}/commit": { request: ImportCommitRequest; response: ImportCommitResponse; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/jobs/{id}": { request: undefined; response: JobSnapshot; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
   "POST /api/v1/jobs/{id}/cancel": { request: JobCancelRequest; response: JobSnapshot; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
+  "POST /api/v1/learning/actions": { request: LearningActionRequest; response: LearningActionResponse; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
+  "GET /api/v1/learning/progress": { request: undefined; response: LearningProgress; headers: null; parameters: { query?: { "course_id"?: (string | null) } }; parametersRequired: false };
   "GET /api/v1/lessons/{id}": { request: undefined; response: Lesson; headers: null; parameters: { path: { "id": string }; query: { "revision": number } }; parametersRequired: true };
+  "GET /api/v1/notes": { request: undefined; response: PageNote; headers: null; parameters: { query?: { "cursor"?: (string | null); "limit"?: number; "ref_id"?: (string | null) } }; parametersRequired: false };
+  "POST /api/v1/notes": { request: Note; response: ContentRef; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
+  "DELETE /api/v1/notes/{id}": { request: undefined; response: NoteDeleted; headers: { "Idempotency-Key": string; "If-Match"?: (string | null) }; parameters: { path: { "id": string } }; parametersRequired: true };
+  "PATCH /api/v1/notes/{id}": { request: Note; response: ContentRef; headers: { "Idempotency-Key": string; "If-Match"?: (string | null) }; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/objects/{id}/current": { request: undefined; response: ContentRef; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/objects/{id}/revisions": { request: undefined; response: PageRevision; headers: null; parameters: { path: { "id": string }; query?: { "cursor"?: (string | null); "limit"?: number } }; parametersRequired: true };
   "GET /api/v1/readiness": { request: undefined; response: ReadinessResponse; headers: null; parameters: Record<string, never>; parametersRequired: false };
@@ -61,6 +69,11 @@ export const API_ENDPOINTS = {
       }
     ],
     "queryParameters": [
+      {
+        "name": "include_provenance",
+        "required": false,
+        "type": "boolean"
+      },
       {
         "name": "revision",
         "required": true,
@@ -121,6 +134,62 @@ export const API_ENDPOINTS = {
   "GET /api/v1/courses/{id}": {
     "method": "GET",
     "path": "/api/v1/courses/{id}",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": [
+      {
+        "name": "revision",
+        "required": true,
+        "type": "integer",
+        "minimum": 1
+      }
+    ]
+  },
+  "GET /api/v1/courses/{id}/directory-search": {
+    "method": "GET",
+    "path": "/api/v1/courses/{id}/directory-search",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": [
+      {
+        "name": "limit",
+        "required": false,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 50
+      },
+      {
+        "name": "q",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "name": "revision",
+        "required": true,
+        "type": "integer",
+        "minimum": 1
+      }
+    ]
+  },
+  "GET /api/v1/courses/{id}/outline": {
+    "method": "GET",
+    "path": "/api/v1/courses/{id}/outline",
     "responseKind": "json",
     "requestKind": "json",
     "multipartFields": [],
@@ -255,6 +324,30 @@ export const API_ENDPOINTS = {
     ],
     "queryParameters": []
   },
+  "POST /api/v1/learning/actions": {
+    "method": "POST",
+    "path": "/api/v1/learning/actions",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
+    "queryParameters": []
+  },
+  "GET /api/v1/learning/progress": {
+    "method": "GET",
+    "path": "/api/v1/learning/progress",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
+    "queryParameters": [
+      {
+        "name": "course_id",
+        "required": false,
+        "type": "string"
+      }
+    ]
+  },
   "GET /api/v1/lessons/{id}": {
     "method": "GET",
     "path": "/api/v1/lessons/{id}",
@@ -276,6 +369,72 @@ export const API_ENDPOINTS = {
         "minimum": 1
       }
     ]
+  },
+  "GET /api/v1/notes": {
+    "method": "GET",
+    "path": "/api/v1/notes",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
+    "queryParameters": [
+      {
+        "name": "cursor",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      },
+      {
+        "name": "ref_id",
+        "required": false,
+        "type": "string"
+      }
+    ]
+  },
+  "POST /api/v1/notes": {
+    "method": "POST",
+    "path": "/api/v1/notes",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
+    "queryParameters": []
+  },
+  "DELETE /api/v1/notes/{id}": {
+    "method": "DELETE",
+    "path": "/api/v1/notes/{id}",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
+  "PATCH /api/v1/notes/{id}": {
+    "method": "PATCH",
+    "path": "/api/v1/notes/{id}",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
   },
   "GET /api/v1/objects/{id}/current": {
     "method": "GET",

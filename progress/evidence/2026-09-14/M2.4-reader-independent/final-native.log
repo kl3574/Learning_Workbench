@@ -1,0 +1,40 @@
+
+Running 2 tests using 1 worker
+
+(node:[process-id]) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 final-contract.spec.ts.txt:9:1 › independent exact-ref and zero-scroll behavioral probes (18.7s)
+(node:[process-id]) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  2 source-final.spec.ts.txt:9:1 › cross-page role transition invalidates already pending original delivery (5.1s)
+
+
+  1) final-contract.spec.ts.txt:9:1 › independent exact-ref and zero-scroll behavioral probes 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('heading', { name: '无法打开此精确链接', exact: true })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('heading', { name: '无法打开此精确链接', exact: true }) with timeout 15000ms
+      - waiting for getByRole('heading', { name: '无法打开此精确链接', exact: true })
+
+
+      21 |    const bad=kind==='child'?{course:fixture.course,lesson:{...fixture.lessons[0],sha256:'0'.repeat(64)}}:{course:{...fixture.course,sha256:'0'.repeat(64)},lesson:fixture.lessons[0]}
+      22 |    await page.evaluate(target=>{history.pushState(null,'','/?reader='+encodeURIComponent(JSON.stringify(target)));dispatchEvent(new PopStateEvent('popstate'))},bad)
+    > 23 |    await expect(page.getByRole('heading',{name:'无法打开此精确链接',exact:true})).toBeVisible()
+         |                                                                          ^
+      24 |    await page.waitForTimeout(350)
+      25 |    const after=await (await page.request.get('/api/v1/workbench/session')).json();const active=after.tabs.find((tab:any)=>tab.id===after.active_tab_id)
+      26 |    expect(after.active_tab_id).toBe(before.active_tab_id);expect(after.tabs.map((t:any)=>t.id)).toEqual(before.tabs.map((t:any)=>t.id))
+        at final-contract.spec.ts.txt:23:74
+
+    Error Context: [DOM snapshot excluded from public evidence package]
+
+  1 failed
+    final-contract.spec.ts.txt:9:1 › independent exact-ref and zero-scroll behavioral probes 
+  1 passed (24.4s)

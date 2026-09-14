@@ -31,8 +31,8 @@ def test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec():
     projection = {(method.upper(), path) for path, methods in api["paths"].items() for method in methods if method in HTTP_METHODS}
     assert runtime == projection
     assert projection <= SPEC_ROUTES
-    assert len(projection) == 26
-    assert len(SPEC_ROUTES - projection) == 76
+    assert len(projection) == 34
+    assert len(SPEC_ROUTES - projection) == 68
 
 
 OPERATIONS = [(path, method, operation) for path, methods in create_app().openapi()["paths"].items()
@@ -45,11 +45,28 @@ def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, meth
     api = create_app().openapi()
     for schema in api["components"]["schemas"].values():
         Draft202012Validator.check_schema(schema)
-        assert schema["additionalProperties"] is False
+        if schema.get("type") == "object":
+            assert schema["additionalProperties"] is False
+        else:
+            # A named RootModel projects the two concrete block-read shapes.
+            # Every union branch must still be a closed named object contract.
+            assert schema["title"] == "BlockReadResponse"
+            assert {"anyOf", "title"} <= set(schema) <= {"anyOf", "title", "description"}
+            assert len(schema["anyOf"]) == 2
+            for alternative in schema["anyOf"]:
+                assert set(alternative) == {"$ref"}
+                target = api["components"]["schemas"][alternative["$ref"].rsplit("/", 1)[1]]
+                assert target["type"] == "object"
+                assert target["additionalProperties"] is False
     for code, response in operation["responses"].items():
         if int(code) >= 400:
             assert response["content"]["application/json"]["schema"]["$ref"] == "#/components/schemas/ErrorEnvelope"
-    if method != "get":
+    if method == "delete":
+        assert path == "/api/v1/notes/{id}"
+        assert "requestBody" not in operation
+        headers = {value["name"] for value in operation["parameters"] if value["in"] == "header"}
+        assert {"If-Match", "Idempotency-Key"} <= headers
+    elif method != "get":
         media = "multipart/form-data" if path == "/api/v1/imports" else "application/json"
         assert set(operation["requestBody"]["content"]) == {media}
         assert operation["requestBody"]["content"][media]["schema"]["$ref"]

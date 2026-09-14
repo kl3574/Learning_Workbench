@@ -8,6 +8,8 @@ from packages.contracts import domain_models as dm
 from packages.contracts.canonical import metadata_sha256
 
 from ..application.content import ContentService
+from ..application.reader import ReaderService
+from ..reader_dto import BlockReadResponse, DirectorySearchResponse, OutlineResponse
 from ..content_dto import PageCourse, PageRevision
 from ..database import Database
 from ..errors import ApiError
@@ -36,6 +38,7 @@ class MarkdownResponse(Response):
 def create_content_router(database: Database) -> APIRouter:
     router = APIRouter(prefix="/api/v1", tags=["content"], dependencies=[Depends(current_identity)])
     service = ContentService(database)
+    reader = ReaderService(database)
 
     def read(request: Request, response: Response, entity: dm.Entity, id: str, revision: int):
         value = service.read(request.state.identity.workspace_id, entity, id, revision)
@@ -54,9 +57,30 @@ def create_content_router(database: Database) -> APIRouter:
     def lesson(id: dm.Id, revision: RevisionQuery, request: Request, response: Response):
         return read(request, response, "lesson", id, revision)
 
-    @router.get("/blocks/{id}", response_model=dm.ContentBlock, responses={200: {"headers": ETAG_HEADERS}}, dependencies=[Depends(query_fields("revision"))])
-    def block(id: dm.Id, revision: RevisionQuery, request: Request, response: Response):
-        return read(request, response, "block", id, revision)
+    @router.get("/blocks/{id}", response_model=BlockReadResponse, responses={200: {"headers": ETAG_HEADERS}}, dependencies=[Depends(query_fields("revision", "include_provenance"))])
+    def block(id: dm.Id, revision: RevisionQuery, request: Request, response: Response,
+              include_provenance: Annotated[bool, Query()] = False):
+        # This ETag identifies metadata, not the role-dependent provenance projection.
+        # Always return the freshly guarded representation, even with If-None-Match.
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Vary"] = "Cookie"
+        if include_provenance:
+            result = reader.block(request.state.identity, id, revision)
+            response.headers["ETag"] = f'"{result.block_ref.sha256}"'
+            return BlockReadResponse(result)
+        return BlockReadResponse(read(request, response, "block", id, revision))
+
+    @router.get("/courses/{id}/outline", response_model=OutlineResponse,
+                dependencies=[Depends(query_fields("revision"))])
+    def outline(id: dm.Id, revision: RevisionQuery, request: Request) -> OutlineResponse:
+        return reader.outline(request.state.identity, id, revision)
+
+    @router.get("/courses/{id}/directory-search", response_model=DirectorySearchResponse,
+                dependencies=[Depends(query_fields("revision", "q", "limit"))])
+    def directory_search(id: dm.Id, revision: RevisionQuery, request: Request,
+                         q: Annotated[str, Query(min_length=1, max_length=2000)],
+                         limit: Annotated[int, Query(ge=1, le=50)] = 20) -> DirectorySearchResponse:
+        return reader.directory_search(request.state.identity, id, revision, q=q, limit=limit)
 
     @router.get(
         "/blocks/{id}/body", response_class=Response,
