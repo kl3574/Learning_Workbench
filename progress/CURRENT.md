@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-14T17:51:41Z；规范 SHA-256：`ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
+更新：2026-09-14T18:02:43Z；规范 SHA-256：`ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED
 实施：IN_PROGRESS；当前任务：M3.3；下一任务：M3.4
 
-两处前端代码修复评分被动回读吞恢复点击；同字节手势回归通过，重新冻结并运行完整门禁与新提交CI。
+固定452138b本地855 Python/201前端/64原生与12 CI全部通过；PR45待人工审查合并，Issue保持review。从最新同步M3.3分支接续M3.4。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -23,8 +23,8 @@
 | M2.4 Reader/LaTeX、例题锚点、笔记、阅读位置 | review | [#19](https://github.com/kl3574/Learning_Workbench/issues/19) | 4e53ce5e73b61650f93c1ea769f3e3143031f29d |
 | M3.1 题面/私有答案库、练习/提示/暴露记录 | review | [#20](https://github.com/kl3574/Learning_Workbench/issues/20) | 0fc6340d33c26c9f6124ebb3d19f190709b860ad |
 | M3.2 独立/辅助/开卷 policy snapshot，自动保存、并发版本 | review | [#21](https://github.com/kl3574/Learning_Workbench/issues/21) | 25501799321c621bec4999c6c684c6a13106771c |
-| M3.3 单选、文本填空、数值/计算容差、人工复核 | in_progress | [#22](https://github.com/kl3574/Learning_Workbench/issues/22) | 25e3b18e852f1910d2e791206257b78ca8297c9c |
-| M3.4 交卷/评分/复盘闭环，评分版本与 evidence | todo | [#23](https://github.com/kl3574/Learning_Workbench/issues/23) | 未验证提交 |
+| M3.3 单选、文本填空、数值/计算容差、人工复核 | review | [#22](https://github.com/kl3574/Learning_Workbench/issues/22) | 452138bdf70147c84108aeab382b45e6a2e42278 |
+| M3.4 交卷/评分/复盘闭环，评分版本与 evidence | ready | [#23](https://github.com/kl3574/Learning_Workbench/issues/23) | 未验证提交 |
 | M4.1 学习事件、概念/技能证据、路线完成 | todo | [#24](https://github.com/kl3574/Learning_Workbench/issues/24) | 未验证提交 |
 | M4.2 先修/补弱/复习/下一步推荐，接受/拒绝 | todo | [#25](https://github.com/kl3574/Learning_Workbench/issues/25) | 未验证提交 |
 | M5.1 ProviderPort/能力协商/外发授权/预算/脱敏 | todo | [#26](https://github.com/kl3574/Learning_Workbench/issues/26) | 未验证提交 |
@@ -41,15 +41,15 @@
 
 ## 验证边界
 
-- spec_checks: PASS
-- unit: PASS_M3_2_731_PYTHON_162_WEB_BAE4438_UNCHANGED_PRODUCTION
-- contract: PASS_M3_2_SCOPE_48_REAL_ROUTES
-- integration: PASS_M3_2_SCOPE
-- browser_native: PASS_59_EXACT_2550179
+- spec_checks: PASS_M3_3
+- unit: PASS_M3_3_855_PYTHON_201_WEB_EXACT_452138B
+- contract: PASS_M3_3_SCOPE_50_REAL_ROUTES
+- integration: PASS_M3_3_SCOPE
+- browser_native: PASS_64_EXACT_452138B
 - real_provider: NOT_RUN
 - real_codex: NOT_RUN
 - learning_effectiveness: NOT_RUN
-- ci: PASS_12_EXACT_2550179_M3_2_SOURCE
+- ci: PASS_12_EXACT_452138B_M3_3_SOURCE
 
 ## 阻塞与待决项
 
