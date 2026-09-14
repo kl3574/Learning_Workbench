@@ -1,0 +1,86 @@
+
+> @learning-workbench/web@0.1.0 test:e2e
+> playwright test --config ../../tests/e2e/playwright.config.ts document-imports.spec.ts
+
+[WebServer] INFO:     Started server process [234764]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+[WebServer] (node:234784) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 5 tests using 1 worker
+
+(node:234840) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  1 ../../tests/e2e/document-imports.spec.ts:70:1 › real two-page PDF keeps exact page citations, guarded original bytes and explicit fidelity approval (3.2s)
+
+  ✓  2 ../../tests/e2e/document-imports.spec.ts:110:1 › real DOCX safe text stays readable for learner while original bytes require an explicit author role (2.9s)
+
+  ✘  3 ../../tests/e2e/document-imports.spec.ts:152:1 › a real scanned PDF fails without invented text or OCR and its local original is checked explicitly after reload (2.1s)
+(node:235180) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✓  4 ../../tests/e2e/document-imports.spec.ts:184:3 › real encrypted.pdf extraction failure remains blocked and preserves its original hash (2.2s)
+
+  ✘  5 ../../tests/e2e/document-imports.spec.ts:184:3 › real malformed.docx extraction failure remains blocked and preserves its original hash (7.1s)
+
+
+  1) ../../tests/e2e/document-imports.spec.ts:152:1 › a real scanned PDF fails without invented text or OCR and its local original is checked explicitly after reload 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('dialog', { name: '导入', exact: true }).getByText(/PDF_NO_EXTRACTABLE_TEXT/)
+    Expected: visible
+    Error: strict mode violation: getByRole('dialog', { name: '导入', exact: true }).getByText(/PDF_NO_EXTRACTABLE_TEXT/) resolved to 2 elements:
+        1) <code>PDF_NO_EXTRACTABLE_TEXT</code> aka getByRole('listitem').filter({ hasText: '阻塞错误 · PDF_NO_EXTRACTABLE_TEXTPDF 未找到可提取文字；扫描或图片内容没有被伪造为正文，原件已保留。 · source:' }).getByRole('code')
+        2) <code>PDF_NO_EXTRACTABLE_TEXT</code> aka getByRole('listitem').filter({ hasText: '阻塞错误 · PDF_NO_EXTRACTABLE_TEXT解析失败；原件保留，未改动正式课程。此错误不能通过接受警告绕过；请修正原件后重新导入。' }).getByRole('code')
+
+    Call log:
+      - Expect "toBeVisible" getByRole('dialog', { name: '导入', exact: true }).getByText(/PDF_NO_EXTRACTABLE_TEXT/) with timeout 5000ms
+      - waiting for getByRole('dialog', { name: '导入', exact: true }).getByText(/PDF_NO_EXTRACTABLE_TEXT/)
+
+
+      157 |   const dialog = dialogFor(page)
+      158 |   await expect(dialog.getByText('导入失败', { exact: true })).toBeVisible()
+    > 159 |   await expect(dialog.getByText(/PDF_NO_EXTRACTABLE_TEXT/)).toBeVisible()
+          |                                                             ^
+      160 |   await expect(dialog.getByText(/OCR/).first()).toBeVisible()
+      161 |   await expect(dialog.getByLabel('当前候选正文')).toHaveCount(0)
+      162 |   await expect(dialog.getByRole('button', { name: '确认导入当前候选' })).toHaveCount(0)
+        at <REPO>/tests/e2e/document-imports.spec.ts:159:61
+
+    Error Context: ../../.local_data/e2e-results/document-imports-a-real-sc-b4783-ked-explicitly-after-reload/error-context.md
+
+  2) ../../tests/e2e/document-imports.spec.ts:184:3 › real malformed.docx extraction failure remains blocked and preserves its original hash 
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  getByRole('dialog', { name: '导入', exact: true }).getByRole('checkbox', { name: /接受警告/ })
+    Expected: 0
+    Received: 1
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toHaveCount" getByRole('dialog', { name: '导入', exact: true }).getByRole('checkbox', { name: /接受警告/ }) with timeout 5000ms
+      - waiting for getByRole('dialog', { name: '导入', exact: true }).getByRole('checkbox', { name: /接受警告/ })
+        14 × locator resolved to 1 element
+           - unexpected value "1"
+
+
+      191 |     await expect(dialog.getByText(/阻塞错误/).first()).toBeVisible()
+      192 |     await expect(dialog.getByRole('button', { name: '确认导入当前候选' })).toHaveCount(0)
+    > 193 |     await expect(dialog.getByRole('checkbox', { name: /接受警告/ })).toHaveCount(0)
+          |                                                                  ^
+      194 |     const failed = await page.request.get(`/api/v1/imports/${staged.import_id}`).then(response => response.json())
+      195 |     expect(failed.preview_refs).toEqual([])
+      196 |     expect(failed.input_sha256).toBe(hash(bytes))
+        at <REPO>/tests/e2e/document-imports.spec.ts:193:66
+
+    Error Context: ../../.local_data/e2e-results/document-imports-real-malf-cbdd2-preserves-its-original-hash/error-context.md
+
+  2 failed
+    ../../tests/e2e/document-imports.spec.ts:152:1 › a real scanned PDF fails without invented text or OCR and its local original is checked explicitly after reload 
+    ../../tests/e2e/document-imports.spec.ts:184:3 › real malformed.docx extraction failure remains blocked and preserves its original hash 
+  3 passed (20.1s)
