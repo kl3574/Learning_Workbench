@@ -155,6 +155,10 @@ test('safe HTML warning requires explicit acceptance and native cancel leaves co
   await expect(dialog.getByRole('checkbox', { name: /接受警告/ }).first()).toBeVisible()
   await dialog.getByRole('checkbox', { name: /我已核对本次候选/ }).check()
   await expect(dialog.getByRole('button', { name: '确认导入当前候选' })).toBeDisabled()
+  // Inspect the lazy renderer's actual body before making security assertions
+  // or capturing the narrow-screen evidence.
+  await dialog.getByRole('button', { name: '下一候选', exact: true }).click()
+  await expect(dialog.locator('.import-preview p').last()).toHaveText('保留的正文。')
   expect(await page.evaluate(() => 'import_attack' in window)).toBe(false)
   expect(await dialog.locator('script,img').count()).toBe(0)
   await dialog.getByLabel('选择预览候选').focus()
