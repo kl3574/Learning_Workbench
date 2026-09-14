@@ -1,0 +1,45 @@
+[WebServer] INFO:     Started server process [<pid>]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on <test-origin> (Press CTRL+C to quit)
+[WebServer] (node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 6 tests using 1 worker
+
+(node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 ../m32-reader-cold-probe/cold.spec.ts:7:42 › original cold-read sequence observed 3 (3.2s)
+  ✓  2 ../m32-reader-cold-probe/cold.spec.ts:7:42 › original cold-read sequence observed 4 (2.3s)
+  ✘  3 ../m32-reader-cold-probe/cold.spec.ts:7:42 › original cold-read sequence observed 5 (7.2s)
+(node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  4 ../m32-reader-cold-probe/cold.spec.ts:7:42 › original cold-read sequence observed 6 (3.2s)
+  ✓  5 ../m32-reader-cold-probe/cold.spec.ts:7:42 › original cold-read sequence observed 7 (3.2s)
+  ✓  6 ../m32-reader-cold-probe/cold.spec.ts:7:42 › original cold-read sequence observed 8 (3.1s)
+
+
+  1) ../m32-reader-cold-probe/cold.spec.ts:7:42 › original cold-read sequence observed 5 ───────────
+
+    Error: expect(received).toBeGreaterThan(expected)
+
+    Expected: > 690
+    Received:   0
+
+    Call Log:
+    - Timeout 5000ms exceeded while waiting on the predicate
+
+      35 |     await expect(page.locator('.reader-content svg').first()).toBeAttached()
+      36 |     mark('SVG-attached')
+    > 37 |     await expect.poll(() => page.locator('.reader-scroll').evaluate(element => element.scrollTop)).toBeGreaterThan(690)
+         |                                                                                                    ^
+      38 |     mark('PASS')
+      39 |   } catch (reason) {
+      40 |     mark('FAIL', reason instanceof Error ? reason.message : String(reason))
+        at <temporary>/m32-reader-cold-probe/cold.spec.ts:37:100
+
+    Error Context: ../m32-reader-cold-probe/results/cold-original-cold-read-sequence-observed-5/error-context.md
+
+  1 failed
+    ../m32-reader-cold-probe/cold.spec.ts:7:42 › original cold-read sequence observed 5 ────────────
+  5 passed (24.8s)

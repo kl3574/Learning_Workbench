@@ -1,0 +1,26 @@
+diff --git a/tests/e2e/workbench.spec.ts b/tests/e2e/workbench.spec.ts
+index 11fb5c9..701bbc4 100644
+--- a/tests/e2e/workbench.spec.ts
++++ b/tests/e2e/workbench.spec.ts
+@@ -1,5 +1,6 @@
+ import { expect, test } from '../../apps/web/node_modules/@playwright/test/index.mjs'
+ import { bootstrap, openSyntheticLesson } from './helpers'
++import type { WorkbenchSession } from '../../packages/contracts/generated/types'
+ 
+ test('empty workspace, native bootstrap, four fixed navigation and truthful auxiliary states', async ({ page }) => {
+   await bootstrap(page)
+@@ -148,6 +149,14 @@ test('cold lazy renderer restores saved reading offset after the content is read
+   await page.locator('.reader-scroll').evaluate(element => { element.scrollTop = 700 })
+   await expect(page.getByText('✓ UI 会话已保存')).toBeVisible()
+   await expect.poll(() => page.locator('.reader-scroll').evaluate(element => element.scrollTop)).toBeGreaterThan(690)
++  // The previous saved label can still be visible before the browser emits
++  // the scroll event. This scenario requires an actually persisted position.
++  await expect.poll(async () => {
++    const response = await page.request.get('/api/v1/workbench/session')
++    expect(response.status()).toBe(200)
++    const stored: WorkbenchSession = await response.json()
++    return stored.tabs.find(tab => tab.id === stored.active_tab_id)?.scroll_offset ?? 0
++  }).toBeGreaterThan(690)
+   await page.route('**/src/shared/Markdown.tsx*', async route => { await new Promise(resolve => setTimeout(resolve, 500)); await route.continue() })
+   await page.reload()
+   await expect(page.locator('.reader-content svg').first()).toBeAttached()

@@ -1,0 +1,89 @@
+
+> @learning-workbench/web@0.1.0 test:e2e
+> playwright test --config ../../tests/e2e/playwright.config.ts assessments.spec.ts --output=<temporary>/m32-assessment-native-first
+
+[WebServer] INFO:     Started server process [<pid>]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on <test-origin> (Press CTRL+C to quit)
+[WebServer] (node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 4 tests using 1 worker
+
+(node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 ../../tests/e2e/assessments.spec.ts:30:1 › real unreviewed independent assessment saves five types and submits without fabricated grades or answer calls (4.8s)
+  ✘  2 ../../tests/e2e/assessments.spec.ts:70:1 › open-book and assisted freeze actual policies; explicit abandon retains saved answers and yields no score (6.0s)
+(node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  3 ../../tests/e2e/assessments.spec.ts:89:1 › two profiles retain a real server CAS conflict with three-way comparison and reject forged same-identity parent (6.0s)
+(node:<pid>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  4 ../../tests/e2e/assessments.spec.ts:118:1 › missing private binding visibly blocks start instead of fabricating a usable test (2.6s)
+
+
+  1) ../../tests/e2e/assessments.spec.ts:70:1 › open-book and assisted freeze actual policies; explicit abandon retains saved answers and yields no score
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('dialog', { name: '导入', exact: true }).getByText('预览已就绪，等待确认', { exact: true })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('dialog', { name: '导入', exact: true }).getByText('预览已就绪，等待确认', { exact: true }) with timeout 5000ms
+      - waiting for getByRole('dialog', { name: '导入', exact: true }).getByText('预览已就绪，等待确认', { exact: true })
+
+
+       at practiceTestData.ts:36
+
+      34 |   await dialog.getByRole('button', { name: '上传并生成预览', exact: true }).click()
+      35 |   expect((await staged).status()).toBe(202)
+    > 36 |   await expect(dialog.getByText('预览已就绪，等待确认', { exact: true })).toBeVisible()
+         |                                                                 ^
+      37 |   for (const checkbox of await dialog.getByRole('checkbox', { name: /接受警告/ }).all()) await checkbox.check()
+      38 |   await dialog.getByRole('checkbox', { name: /我已核对本次候选/ }).check()
+      39 |   const committing = page.waitForResponse(response => /\/api\/v1\/imports\/[^/]+\/commit$/.test(response.url()) && response.request().method() === 'POST')
+        at importPracticePackage (<worktree>/tests/e2e/practiceTestData.ts:36:65)
+        at preview (<worktree>/tests/e2e/assessments.spec.ts:8:20)
+        at start (<worktree>/tests/e2e/assessments.spec.ts:15:19)
+        at <worktree>/tests/e2e/assessments.spec.ts:71:23
+
+    Error Context: ../../../m32-assessment-native-first/assessments-open-book-and--94d22-answers-and-yields-no-score/error-context.md
+
+  2) ../../tests/e2e/assessments.spec.ts:89:1 › two profiles retain a real server CAS conflict with three-way comparison and reject forged same-identity parent
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('dialog', { name: '导入', exact: true }).getByText('预览已就绪，等待确认', { exact: true })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('dialog', { name: '导入', exact: true }).getByText('预览已就绪，等待确认', { exact: true }) with timeout 5000ms
+      - waiting for getByRole('dialog', { name: '导入', exact: true }).getByText('预览已就绪，等待确认', { exact: true })
+
+
+       at practiceTestData.ts:36
+
+      34 |   await dialog.getByRole('button', { name: '上传并生成预览', exact: true }).click()
+      35 |   expect((await staged).status()).toBe(202)
+    > 36 |   await expect(dialog.getByText('预览已就绪，等待确认', { exact: true })).toBeVisible()
+         |                                                                 ^
+      37 |   for (const checkbox of await dialog.getByRole('checkbox', { name: /接受警告/ }).all()) await checkbox.check()
+      38 |   await dialog.getByRole('checkbox', { name: /我已核对本次候选/ }).check()
+      39 |   const committing = page.waitForResponse(response => /\/api\/v1\/imports\/[^/]+\/commit$/.test(response.url()) && response.request().method() === 'POST')
+        at importPracticePackage (<worktree>/tests/e2e/practiceTestData.ts:36:65)
+        at preview (<worktree>/tests/e2e/assessments.spec.ts:8:20)
+        at start (<worktree>/tests/e2e/assessments.spec.ts:15:19)
+        at <worktree>/tests/e2e/assessments.spec.ts:90:32
+
+    Error Context: ../../../m32-assessment-native-first/assessments-two-profiles-r-254fa-forged-same-identity-parent/error-context.md
+
+  2 failed
+    ../../tests/e2e/assessments.spec.ts:70:1 › open-book and assisted freeze actual policies; explicit abandon retains saved answers and yields no score
+    ../../tests/e2e/assessments.spec.ts:89:1 › two profiles retain a real server CAS conflict with three-way comparison and reject forged same-identity parent
+  2 passed (22.4s)
