@@ -143,6 +143,7 @@ test('missing private binding visibly blocks start instead of fabricating a usab
 })
 
 test('two pages preserve independent local CAS candidates; a later submitted snapshot never accepts restored edits', async ({ page }, info) => {
+  let releaseResult = () => {}, releaseRefresh = () => {}
   const { attempt } = await start(page, 'nativeassessmentlocal', 'assisted')
   await question(page, 2); await page.getByLabel('第 2 题答案', { exact: true }).fill('本机测试共同基准'); await saved(page)
   const before = await responses(page, attempt.id), pattern = `**/api/v1/attempts/${attempt.id}/responses`
@@ -189,10 +190,52 @@ test('two pages preserve independent local CAS candidates; a later submitted sna
     const current = await snapshot(page, attempt.id)
     const receipt = await page.request.post(`/api/v1/attempts/${attempt.id}/submit`, { headers: { Origin: new URL(page.url()).origin, 'X-CSRF-Token': token.csrf_token, 'Idempotency-Key': crypto.randomUUID() }, data: { expected_revision: current.revision } })
     expect(receipt.status()).toBe(202)
-    const ended: AttemptSnapshot = await receipt.json()
-    await page.goto(href)
-    await page.getByRole('button', { name: '恢复这份本机测试作答', exact: true }).click()
+    expect((await receipt.json() as AttemptSnapshot).status).toBe('submitted')
+    // Grading legitimately advances Attempt.revision after submit. Pin the real
+    // completed worker state before checking that restoring drafts cannot edit it.
+    await expect.poll(async () => (await snapshot(page, attempt.id)).status).toBe('needs_review')
+    const ended = await snapshot(page, attempt.id)
+    let resultCaptured = () => {}, refreshStarted = () => {}, resultReleased = false
+    const resultReady = new Promise<void>(resolve => { resultCaptured = resolve })
+    const resultRelease = new Promise<void>(resolve => { releaseResult = resolve })
+    const refreshReady = new Promise<void>(resolve => { refreshStarted = resolve })
+    const refreshRelease = new Promise<void>(resolve => { releaseRefresh = resolve })
+    await page.route(`**/api/v1/attempts/${attempt.id}/result`, async route => {
+      const actual = await route.fetch(); expect(actual.status()).toBe(200)
+      if (!resultReleased) { resultCaptured(); await resultRelease }
+      await route.fulfill({ response: actual })
+    })
+    await page.route(`**/api/v1/attempts/${attempt.id}`, async route => {
+      const actual = await route.fetch()
+      if (resultReleased) { refreshStarted(); await refreshRelease }
+      await route.fulfill({ response: actual })
+    })
+    await page.exposeFunction('releaseAssessmentResult', () => { resultReleased = true; releaseResult() })
+    await page.goto(href); await resultReady
+    const restoring = page.getByRole('button', { name: '恢复这份本机测试作答', exact: true })
+    await expect(restoring).toBeEnabled()
+    await restoring.scrollIntoViewIfNeeded()
+    await restoring.evaluate(button => {
+      const probe = { pointerdown: false, pointerup: false, clicks: 0 }
+      Object.assign(window, { assessmentPointerProbe: probe })
+      button.addEventListener('pointerdown', () => { probe.pointerdown = true; void (window as unknown as { releaseAssessmentResult: () => Promise<void> }).releaseAssessmentResult() }, { once: true })
+      document.addEventListener('pointerup', () => { probe.pointerup = true }, { once: true, capture: true })
+      button.addEventListener('click', () => { probe.clicks++ })
+    })
+    // Release a genuine result during an ordinary pointer gesture, and hold its
+    // passive refresh until pointerup. No response body or parsed grade is mocked.
+    const bounds = (await restoring.boundingBox())!
+    expect(await restoring.evaluate(button => { const box = button.getBoundingClientRect(); return button.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)) })).toBe(true)
+    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
+    await page.mouse.down(); await refreshReady
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())))
+    const disabledBeforePointerUp = await restoring.evaluate(button => (button as HTMLButtonElement).disabled)
+    await page.mouse.up()
+    const pointer = await page.evaluate(() => (window as unknown as { assessmentPointerProbe: { pointerdown: boolean; pointerup: boolean; clicks: number } }).assessmentPointerProbe)
+    releaseRefresh()
+    await info.attach('grading-refresh-pointer', { body: JSON.stringify({ ...pointer, disabledBeforePointerUp }), contentType: 'application/json' })
     await expect(page.getByRole('heading', { name: '服务端测试作答冲突 · 三方比较', exact: true })).toBeVisible()
+    expect({ ...pointer, disabledBeforePointerUp }).toEqual({ pointerdown: true, pointerup: true, clicks: 1, disabledBeforePointerUp: false })
     await page.getByRole('button', { name: '保留本页作答并采用新基准', exact: true }).click()
     await expect(page.getByLabel('第 2 题答案', { exact: true })).toHaveValue('A测试本机候选 🧠')
     await expect(page.getByLabel('第 2 题答案', { exact: true })).toBeDisabled()
@@ -202,7 +245,7 @@ test('two pages preserve independent local CAS candidates; a later submitted sna
     expect((await snapshot(page, attempt.id)).revision).toBe(ended.revision)
     await page.getByRole('heading', { name: '服务端测试作答冲突 · 三方比较', exact: true }).scrollIntoViewIfNeeded()
     await page.screenshot({ path: info.outputPath('assessment-terminal-local-candidate-1440.png') })
-  } finally { await second.close() }
+  } finally { releaseResult(); releaseRefresh(); await second.close() }
 })
 
 test('late redacted Workbench save uses its original ETag and retains hidden selection after explicit three-way choice', async ({ page }) => {

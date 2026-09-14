@@ -1,0 +1,82 @@
+{
+  "observed_at": "2026-09-14T17:46:18.844878+00:00",
+  "scope": "independent read-only audit of frontend-owned controlled browser evidence; no new tests or repo edits",
+  "source_before_after_equal": true,
+  "source_sha256": {
+    "tests/e2e/assessments.spec.ts": "4bc5e5bb80358362c6197de8dd43fe4423e9edacf6a263d776a2e60518839db7",
+    "apps/web/src/features/assessment/useAssessmentAttempt.ts": "1dcd56c8303cc3114c34daae1d0e28c9b525558f168777a132b849450697bc16",
+    "apps/web/src/features/assessment/AssessmentView.tsx": "f4e718e9598fd0e1f530a2c9e6a5b7c48502de90900a501a1102381f4869309c",
+    "apps/web/src/features/grading/useGradingResult.ts": "db179899e287240a53fc3af9979744a703ad4f16d2855f8e269af74b354c11d4",
+    "apps/web/src/workbench/Shell.tsx": "ebff9aba6b0df91c87e3578d8718a00d466be65257a911d15a3998d1ec2f4faa",
+    "apps/web/src/workbench/useWorkbench.ts": "175dabe63ad7e428d8a845dbde52fea993d81490ea30f970a55e20359d91c2a8",
+    "apps/web/src/features/assessment/useWorkspacePolicy.ts": "986216cd86cc1068af2d70b3dff8b957e4ebd8176c92244855c35a35abf46c11",
+    "apps/web/src/api/client.ts": "1e39413dcd63ac19bdcd802f2550632365cf8bb70bd83805ed63b13f3bf4e49b"
+  },
+  "raw_sha256": {
+    "controlled-red.log": "c4ee191c249f5752f17b5acf9fda3a5b6ee3d694cff5924b10975b008205bc90",
+    "controlled-red-observations.json": "520526673f2032001f09dd99c683b95bddc72e89c3c1170f9979131be27a036f",
+    "controlled.spec.ts": "a29db498881fc793ab687f5b0989969d1a412c3cd70fec505a03915302760203",
+    "observer.txt": "106b3169c58a4dbd7cfd3996c1112d5bc01bcef9c5ee155a06c2ca34ca51cbcf",
+    "source-before.json": "203331335c8bdde4176b04b5fcb0e6800f9a6c6171db92aacbb45dacc9b37e04",
+    "source-red-after.json": "203331335c8bdde4176b04b5fcb0e6800f9a6c6171db92aacbb45dacc9b37e04"
+  },
+  "controlled_result": {
+    "failed": 1,
+    "test_seconds": 14.2,
+    "assertion": "server three-way recovery comparison heading missing after controlled pointerdown release"
+  },
+  "bounded_timeline": [
+    {
+      "time": 1789407822041,
+      "kind": "release_result_on_pointerdown",
+      "relative_ms": 0
+    },
+    {
+      "time": 1789407822071,
+      "kind": "response",
+      "route": "/api/v1/attempts/attempt/result",
+      "http": 200,
+      "status": "needs_review",
+      "grading_revision": 1,
+      "relative_ms": 30
+    },
+    {
+      "time": 1789407822432,
+      "kind": "response",
+      "route": "/api/v1/attempts/attempt",
+      "http": 200,
+      "status": "needs_review",
+      "revision": 5,
+      "grading_revision": 1,
+      "relative_ms": 391
+    },
+    {
+      "time": 1789407822449,
+      "kind": "response",
+      "route": "/api/v1/attempts/attempt/responses",
+      "http": 200,
+      "revision": 5,
+      "relative_ms": 408
+    }
+  ],
+  "observed": [
+    "A pointerdown callback released a held, real HTTP grading result. The control added 150ms native click delay and delayed subsequent real attempt reads 350ms.",
+    "Real result200 was recorded 30ms after the host pointerdown-release marker.",
+    "No restore_click event was recorded by document capture; the comparison never appeared; local candidate was not deleted.",
+    "The observed assessment article stayed node2 throughout this interval; no article remount was seen."
+  ],
+  "not_directly_observed": [
+    "Recovery-button disabled transitions: the current observer disabled field refers to the question input, not that button.",
+    "Pointerup/mouseup timestamps or the internal business restore handler entry.",
+    "Which precise ordering caused the original uninstrumented exact-suite failure, or whether this is its only possible cause."
+  ],
+  "code_supported_inference": "Current useGradingResult completion callback calls session.retry; retry sets busy=true before awaited read; AssessmentRecovery button disabled uses session.busy || session.localSaving. A real result arriving during the gesture can therefore disable the button before activation. This fits no capture click and no remount but the disabled step itself is not in this ledger.",
+  "minimal_fix_review": "Make only grading-triggered passive attempt refresh avoid changing foreground busy or clearing current local-operation error. Keep guarded, consistent readAttempt and reconcile against latest candidate. Manual retry and mutations retain their ownership/busy behavior. Result callback only exists for submitted/terminal attempts; response writes must remain active-only.",
+  "acceptance_boundary": [
+    "Permanent original-real-response pointerdown control should record actual recovery-button.disabled and pointerup with a same-browser monotonic sequence, and prove capture click plus recovery comparison/retained candidate.",
+    "After terminal recovery, both candidate and original server submitted responses remain intact and no PUT can be accepted; passive later refresh must keep correct latest server status.",
+    "The separate revision3-versus5 failure needs a stable real grading-completion snapshot as test baseline; preserve its original log and do not pretend submit revision cannot change through legitimate worker transitions.",
+    "Run relevant passive-refresh ownership/unit cases and the original complete native scenario, then exact full native gate; a single targeted success is not stage acceptance.",
+    "Do not alter policy/role/exact-reference guards, suppress real API errors, auto-submit, force-click through disabled controls, or replace real grade responses with fixtures to obtain green."
+  ]
+}

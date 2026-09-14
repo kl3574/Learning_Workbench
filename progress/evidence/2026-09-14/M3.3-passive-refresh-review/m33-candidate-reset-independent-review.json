@@ -1,0 +1,44 @@
+{
+  "observed_at": "2026-09-14T17:41:26.771462+00:00",
+  "review_type": "read_only_source_and_original_failure_artifacts",
+  "head": "25e3b18e852f1910d2e791206257b78ca8297c9c",
+  "tests_run_by_reviewer": false,
+  "production_edits": false,
+  "raw_sources": {
+    "m33-exact-native-runner.log": "fc694dfdd201e217db6f7307bb9db99cd2333400019a970df3682372f1c2ed37",
+    "error-context.md": "1e36b8a600cd0be2d9d6d318da2a24bc7b76f370fbe7cbb51ef1ab7505308c39"
+  },
+  "sources": {
+    "apps/web/src/workbench/Shell.tsx": "ebff9aba6b0df91c87e3578d8718a00d466be65257a911d15a3998d1ec2f4faa",
+    "apps/web/src/workbench/useWorkbench.ts": "175dabe63ad7e428d8a845dbde52fea993d81490ea30f970a55e20359d91c2a8",
+    "apps/web/src/workbench/model.ts": "7ecbc44f99603d0832a044ba619fa93c33fd3b58d838b2d41377b8d9fb8119a3",
+    "apps/web/src/features/assessment/target.ts": "80ea719d5da685d6e79a109e8247f1d72f57ef1688b8936f02c50fe334b3795d",
+    "apps/web/src/features/assessment/useAssessmentAttempt.ts": "1dcd56c8303cc3114c34daae1d0e28c9b525558f168777a132b849450697bc16",
+    "apps/web/src/features/assessment/AssessmentView.tsx": "f4e718e9598fd0e1f530a2c9e6a5b7c48502de90900a501a1102381f4869309c",
+    "apps/web/src/features/assessment/AssessmentRecovery.tsx": "813fcf9eb0b45c60f5f9987e4baa689d80dad1bbad56d9c4f847dbe7268c82de",
+    "apps/web/src/features/assessment/useWorkspacePolicy.ts": "986216cd86cc1068af2d70b3dff8b957e4ebd8176c92244855c35a35abf46c11",
+    "apps/web/src/features/assessment/assessmentClient.ts": "c6f9910cc21600dc6c4f7bb40903570c3c9559ecf3bcaf4d73398d029a949e91",
+    "apps/web/src/features/grading/useGradingResult.ts": "db179899e287240a53fc3af9979744a703ad4f16d2855f8e269af74b354c11d4",
+    "apps/web/src/api/client.ts": "1e39413dcd63ac19bdcd802f2550632365cf8bb70bd83805ed63b13f3bf4e49b",
+    "tests/e2e/assessments.spec.ts": "4bc5e5bb80358362c6197de8dd43fe4423e9edacf6a263d776a2e60518839db7"
+  },
+  "active_differs_from_reviewed_exact": [],
+  "facts": [
+    "Native runner reports 63 passed and 1 failed; failure is missing server three-way-comparison heading after explicit recovery click at assessments.spec.ts:195.",
+    "Final error-context shows assisted needs_review attempt, real grade1, server answer still baseline, original local candidate preserved, and needsRecovery UI visible.",
+    "useAssessmentAttempt.restore sets claimed true; only initial/identity effect explicitly sets it false. Dependency is workspace plus JSON.stringify(target).",
+    "Shell key is active.id; unknown policy only hides non-assessment content; assisted assessment is not removed simply because policy.known becomes false.",
+    "Grading completed callback triggers session.retry; retry/reconcile never clears claimed. GET session/result do not increment API access generation."
+  ],
+  "bounded_conclusion": "The artifacts show a lost UI recovery selection, not lost durable draft or a server write. They do not record mounts/epochs or prove grading-policy remount as the cause. Need frontend instrumentation of hook setup/cleanup and exact target/workspace/key around the click. JSON.stringify target field-order sensitivity is a candidate only, not a reproduced cause.",
+  "suggested_observations": [
+    "Record monotonic hook instance/epoch and setup/cleanup reason with explicit scalar workspace/attempt/full-ref key.",
+    "Record only synthetic target identity order before and after Workbench save acknowledgement, plus claimed/conflict transitions; do not log answers or credentials.",
+    "Distinguish click handler entered/restore decision from post-click remount and grader callback reconcile."
+  ],
+  "limits": [
+    "No new native or controlled React probe run here.",
+    "No repo/test-source edits.",
+    "Source conclusions apply to exact source hashes listed, not any in-progress frontend fix."
+  ]
+}
