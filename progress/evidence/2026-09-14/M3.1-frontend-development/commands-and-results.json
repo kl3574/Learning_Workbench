@@ -1,0 +1,88 @@
+{
+  "stage": "M3.1",
+  "scope": "Development checks only; root exact-source full native and CI gates remain separate.",
+  "root_source_commit": "0fc6340d33c26c9f6124ebb3d19f190709b860ad",
+  "commit_relation": "The 20 frontend owned source files were independently rehashed during packaging and match the original freeze manifest. The root code commit was created after the development runs; these logs are not retroactively exact-checkout runs.",
+  "original_freeze_raw_sha256": "3d4b4cf3593b9f8528940544f63693fa0e2e206efeab80fb65c4a17feff91b82",
+  "owned_source_aggregate_sha256": "9bf719ee227da319982acde349d43458518aa9357826fd0eef4ea4f3462c37ee",
+  "additional_permanent_test": {
+    "path": "apps/web/src/features/practice/usePracticeSession.test.tsx",
+    "sha256": "ce7a689eddd35c1954078353ac87ece5bdf83c27ec56f766c7c2f2347e621155",
+    "owner": "backend agent",
+    "included_in_final_unit_run": true
+  },
+  "checks": [
+    {
+      "command": "bash scripts/node.sh npm --prefix apps/web run test",
+      "result": "138 passed in 18 files",
+      "duration_seconds": 3.0,
+      "log": "unit-138-final-development.log",
+      "scope": "After permanent test type clarification and final UI status text."
+    },
+    {
+      "command": "bash scripts/node.sh npm --prefix apps/web run test:e2e -- practice.spec.ts --output=<native-output>",
+      "result": "5 passed",
+      "duration_seconds": 36.8,
+      "log": "native-five-before-status-clarification.log",
+      "scope": "Before the final PracticeView-only display-status clarification."
+    },
+    {
+      "command": "bash scripts/node.sh npm --prefix apps/web run test:e2e -- practice.spec.ts --grep 'offline recovery|two pages' --output=<native-output>",
+      "result": "2 passed",
+      "duration_seconds": 24.8,
+      "log": "native-two-after-status-clarification.log",
+      "scope": "Affected offline and local conflict/close/recovery cases after that final text change; not a rerun of all five."
+    },
+    {
+      "command": "bash scripts/node.sh npm --prefix apps/web run lint",
+      "result": "PASS",
+      "log": "lint-typecheck-final-development.log"
+    },
+    {
+      "command": "bash scripts/node.sh npm --prefix apps/web run build",
+      "result": "PASS with large-chunk warning",
+      "log": "build-final-development.log"
+    }
+  ],
+  "three_failure_iterations": [
+    {
+      "sequence": 1,
+      "result": "1 failed, 1 interrupted, 2 did not run",
+      "evidence": [
+        "failure-01-private-import-projection.txt",
+        "failure-01-interrupted-second-case.txt",
+        "frontend-freeze.json"
+      ],
+      "cause": "The browser helper correctly switched to learner, clearing access to private import results. The test caller incorrectly waited for the private result Open Course button.",
+      "fix": "Close the import dialog and open the actual public Reader via the already verified exact course/lesson references, then use the real lesson-to-practice UI. No permission guard was relaxed.",
+      "aggregate_log_limit": "The standalone aggregate first-run terminal log was not saved. The two original error-detail files and contemporaneous freeze report are retained; no reconstructed terminal log is presented as raw."
+    },
+    {
+      "sequence": 2,
+      "result": "4 passed, 1 failed",
+      "evidence": [
+        "failure-02-workbench-ui-cas.txt",
+        "frontend-freeze.json"
+      ],
+      "cause": "Practice local draft conflict and explicit close already succeeded. The test assumed the separate Workbench layout CAS was saved despite a real second-page write.",
+      "fix": "The test explicitly compares and chooses the local Workbench UI snapshot separately before continuing, preserving the practice candidate and server snapshot assertions."
+    },
+    {
+      "sequence": 3,
+      "result": "lint/build typecheck failed",
+      "evidence": [
+        "lint-test-max-score-red.log",
+        "build-test-max-score-red.log"
+      ],
+      "cause": "The new typed lifecycle test used optional QuestionPublic.max_score for required ItemGrade.max_score.",
+      "fix": "Its owner applied the generated default 1. Final lint/build and the 138-test unit run passed afterward."
+    }
+  ],
+  "build_warning": {
+    "index_kb": 530.39,
+    "markdown_mathjax_kb": 2939.32,
+    "meaning": "Bundler chunk-size warning retained; no performance acceptance is claimed."
+  },
+  "frozen_source_changed_during_packaging": [],
+  "runtime_cleanup": "After the browser runs, ss inspection found no listeners on 8765 or 5173. No process identifiers are published."
+}

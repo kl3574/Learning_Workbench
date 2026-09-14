@@ -1,0 +1,166 @@
+{
+  "task_id": "M3.1",
+  "requirement_ids": [
+    "R-11",
+    "R-12",
+    "R-25"
+  ],
+  "spec_sha256": "ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c",
+  "implementation_commit": "0fc6340d33c26c9f6124ebb3d19f190709b860ad",
+  "status": "PASS_LOCAL_AND_EXACT_CI_REVIEW_PENDING",
+  "recorded_at": "2026-09-14T14:48:21Z",
+  "changed_paths": [
+    "README.md",
+    "apps/web/src/features/practice/LessonPracticeLinks.tsx",
+    "apps/web/src/features/practice/PracticeDirectory.tsx",
+    "apps/web/src/features/practice/PracticePreview.tsx",
+    "apps/web/src/features/practice/PracticeView.tsx",
+    "apps/web/src/features/practice/QuestionEditor.tsx",
+    "apps/web/src/features/practice/ResponseComparison.tsx",
+    "apps/web/src/features/practice/practice.css",
+    "apps/web/src/features/practice/practiceClient.ts",
+    "apps/web/src/features/practice/practiceDrafts.test.ts",
+    "apps/web/src/features/practice/practiceDrafts.ts",
+    "apps/web/src/features/practice/target.test.ts",
+    "apps/web/src/features/practice/target.ts",
+    "apps/web/src/features/practice/usePracticeDrafts.ts",
+    "apps/web/src/features/practice/usePracticeSession.test.tsx",
+    "apps/web/src/features/practice/usePracticeSession.ts",
+    "apps/web/src/features/reader/CourseDirectory.tsx",
+    "apps/web/src/features/reader/ReaderDocument.tsx",
+    "apps/web/src/features/reader/navigation.ts",
+    "apps/web/src/workbench/Shell.tsx",
+    "apps/web/src/workbench/Tutor.tsx",
+    "docs/adr/0009-practice-sessions-and-exposure.md",
+    "migrations/0003_practice_sessions.sql",
+    "packages/contracts/generated/api-client.ts",
+    "packages/contracts/generated/api-types.ts",
+    "packages/contracts/generated/openapi.json",
+    "packages/contracts/generated/runtime-route-coverage.json",
+    "services/api/app/application/learning.py",
+    "services/api/app/application/practice.py",
+    "services/api/app/application/practice_content.py",
+    "services/api/app/infrastructure/learning_repository.py",
+    "services/api/app/infrastructure/practice_repository.py",
+    "services/api/app/interfaces/practice_http.py",
+    "services/api/app/main.py",
+    "services/api/app/practice_dto.py",
+    "tests/contract/test_api_projection.py",
+    "tests/contract/test_practice_public_projection.py",
+    "tests/e2e/practice-restart.spec.ts",
+    "tests/e2e/practice.spec.ts",
+    "tests/e2e/practiceTestData.ts",
+    "tests/integration/test_practice_independent_review.py",
+    "tests/integration/test_practice_learning_port.py",
+    "tests/integration/test_practice_sessions.py",
+    "tests/practice_fixtures.py"
+  ],
+  "commands": [
+    {
+      "receipt": "progress/evidence/2026-09-14/M3.1-exact-spec.json",
+      "command": "make verify-spec",
+      "exit_code": 0
+    },
+    {
+      "receipt": "progress/evidence/2026-09-14/M3.1-exact-lint.json",
+      "command": "make lint",
+      "exit_code": 0
+    },
+    {
+      "receipt": "progress/evidence/2026-09-14/M3.1-exact-types.json",
+      "command": "make typecheck",
+      "exit_code": 0
+    },
+    {
+      "receipt": "progress/evidence/2026-09-14/M3.1-exact-python.json",
+      "command": "uv run --frozen pytest -q --tb=short",
+      "exit_code": 0
+    },
+    {
+      "receipt": "progress/evidence/2026-09-14/M3.1-exact-web-unit.json",
+      "command": "bash scripts/node.sh npm --prefix apps/web run test",
+      "exit_code": 0
+    },
+    {
+      "receipt": "progress/evidence/2026-09-14/M3.1-exact-build.json",
+      "command": "make build",
+      "exit_code": 0
+    },
+    {
+      "receipt": "progress/evidence/2026-09-14/M3.1-exact-native.json",
+      "command": "make test-e2e",
+      "exit_code": 0
+    }
+  ],
+  "test_summary": {
+    "python": "644 PASS; 2 existing deprecation warnings",
+    "web_unit": "138 PASS in 18 files",
+    "native_browser": "48 PASS in 3.0 minutes",
+    "mypy": "62 source files PASS",
+    "lint": "PASS",
+    "types": "PASS",
+    "build": "PASS; main 530.39kB and lazy MathJax 2939.32kB retain size warnings",
+    "spec": "54 core models, 65 generated artifacts, 102 target routes, 38 requirements; structural verification only",
+    "actual_registered_routes": 41,
+    "github_ci": "12 PASS at exact implementation commit"
+  },
+  "source_manifest": "progress/evidence/2026-09-14/M3.1-source-manifest.json",
+  "source_scope_sha256": "d8aec4443d0c2a86571315e04c5878a333593fc554142cb9d2c8386247292ca0",
+  "source_file_count": 343,
+  "source_matches_commit_before_and_after": true,
+  "screenshot_paths": [
+    "docs/ui/M3.1/exact/practice-local-recovery-1440.png",
+    "docs/ui/M3.1/exact/practice-real-assisted-1440.png",
+    "docs/ui/M3.1/exact/practice-real-submitted-390.png",
+    "docs/ui/M3.1/exact/practice-restored-draft-390.png"
+  ],
+  "visual_review": "docs/ui/M3.1/exact-visual-review.md",
+  "migrations": [
+    "migrations/0003_practice_sessions.sql"
+  ],
+  "security_review": [
+    "Strict public DTOs and separate private solution read port; missing-at-creation solution pins remain missing; no latest-version fallback.",
+    "Workspace/ownership and active-independent policy guards precede idempotent replay. Public reads do not create exposure.",
+    "Exposure event provenance is checked through Learning-owned transaction read port, including real event workspace, origin, kind, exact question and session.",
+    "Frozen assignment and help snapshots have integrity checks; saved responses use whole-snapshot CAS, terminal submit immutable.",
+    "All new course, question, answer and browser artifacts are original synthetic fixtures; no real runtime credential or user material is published."
+  ],
+  "review_evidence": [
+    "progress/evidence/2026-09-14/M3.1-independent-review/manifest.json",
+    "progress/evidence/2026-09-14/M3.1-hook-review/manifest.json",
+    "progress/evidence/2026-09-14/M3.1-frontend-development/manifest.json"
+  ],
+  "runtime_evidence": [
+    "progress/evidence/2026-09-14/M3.1-exact-browser/actual-practice-restart.json",
+    "progress/evidence/2026-09-14/M3.1-exact-browser/practice-frozen-navigation.json"
+  ],
+  "not_run": [
+    "Deterministic grading (M3.3)",
+    "Assessment policy and attempts (M3.2)",
+    "Real provider calls",
+    "Real Codex execution",
+    "Independent content/math approval",
+    "Learning effectiveness or user trial",
+    "Future M3.2-M7/E1 functionality"
+  ],
+  "limitations": [
+    "Submission is an ungraded practice record with needs_review/score=null, not independent evidence.",
+    "Rules-based public-input hints are not authored mathematical tutoring or LLM generation.",
+    "Historical participation must be joined with explicit help exposure for prior-seen; absence of one exposure row does not prove unseen.",
+    "Initial hook reuse failure was isolated test behavior; actual production Shell keys practice lifetimes by session. Permanent lifecycle tests use strict DTO-shaped fixtures.",
+    "Initial evidence and development tests bind their own recorded source snapshots and are not exact final-code acceptance.",
+    "Local application policy cannot constrain outside browsers/files.",
+    "PRs remain unmerged; main does not yet contain these features."
+  ],
+  "blockers": [],
+  "next_task_id": "M3.2",
+  "publication": {
+    "repository": "https://github.com/kl3574/Learning_Workbench",
+    "visibility": "PUBLIC",
+    "pull_request": "https://github.com/kl3574/Learning_Workbench/pull/43",
+    "draft": false,
+    "merged": false,
+    "head_sha_at_readback": "0fc6340d33c26c9f6124ebb3d19f190709b860ad",
+    "readback_at": "2026-09-14T14:48:21Z"
+  }
+}

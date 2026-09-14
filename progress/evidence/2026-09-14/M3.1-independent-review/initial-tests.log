@@ -1,0 +1,40 @@
+.......F                                                                 [100%]
+=================================== FAILURES ===================================
+_______ test_corrupt_exposure_event_cannot_bind_another_workspace_event ________
+
+practice_http = <REDACTED_FIXTURE_REPR: authentication field fragment and process-local object addresses>
+
+    def test_corrupt_exposure_event_cannot_bind_another_workspace_event(practice_http):
+        client, headers, database, _ = practice_http
+        session = create_session(client, headers)
+        answer = reveal(client, headers, session)
+        assert answer.status_code == 200
+        with database.transaction() as connection:
+            connection.execute("INSERT INTO workspace(id,title,created_at) VALUES('workspace_unrelated','合成其他工作区',?)", (utc_now(),))
+            row = connection.execute("SELECT * FROM learning_events WHERE event_id=?", (answer.json()["exposure_event_id"],)).fetchone()
+            event = json.loads(row["payload_json"])
+            event.update(event_id="event_unrelated_workspace", workspace_id="workspace_unrelated", attempt_id="practice_unrelated")
+            connection.execute("INSERT INTO learning_events VALUES(?,?,?,?,?,?)", (event["event_id"], event["workspace_id"], row["kind"], row["origin"], canonical_bytes(event).decode(), row["occurred_at"]))
+            # No trigger is disabled. The existing FK proves existence, not workspace
+            # or session association; the read boundary must reject this inconsistency.
+            connection.execute("UPDATE exposures SET event_id=? WHERE event_id=?", (event["event_id"], answer.json()["exposure_event_id"]))
+        restored = client.get(f"/api/v1/practice/sessions/{session['id']}")
+>       assert restored.status_code == 409, {"status": restored.status_code, "event_ids": restored.json().get("exposure_event_ids")}
+E       AssertionError: {'status': 200, 'event_ids': ['event_unrelated_workspace']}
+E       assert 200 == 409
+E        +  where 200 = <Response [200 OK]>.status_code
+
+tests/integration/test_practice_independent_review.py:171: AssertionError
+=============================== warnings summary ===============================
+<TEST_VENV>/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <TEST_VENV>/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+<TEST_VENV>/lib/python3.12/site-packages/starlette/testclient.py:53
+  <TEST_VENV>/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_practice_independent_review.py::test_corrupt_exposure_event_cannot_bind_another_workspace_event
+1 failed, 7 passed, 2 warnings in 2.75s

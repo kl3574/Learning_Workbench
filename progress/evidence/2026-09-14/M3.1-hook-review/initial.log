@@ -1,0 +1,53 @@
+
+ RUN  v5.0.0 <HOOK_REVIEW>
+
+stdout | recovery.test.ts > unsent responses from session A must not be rebound or automatically written to session B
+CROSS_SESSION_OBSERVED {"target":"practice_session_B","put_ids":["practice_session_B"],"remoteB":[{"question_id":"question_hookreview_0","answer":"A_ONLY_UNSENT","steps_markdown":""}],"localB":"{\"version\":1,\"workspace_id\":\"workspace_SYNTHETIC_REVIEW\",\"session_id\":\"practice_session_B\",\"practice_ref\":{\"entity\":\"practice_set\",\"id\":\"practice_hookreview\",\"revision\":1,\"sha256\":\"43d738cf2bf0b9f9e2f594e6c400ecb0aff8ba157d5da3742249e8ba8537cf87\"},\"base_revision\":2,\"base_responses\":[{\"question_id\":\"question_hookreview_0\",\"answer\":\"A_ONLY_UNSENT\",\"steps_markdown\":\"\"}],\"candidate_responses\":[{\"question_id\":\"question_hookreview_0\",\"answer\":\"A_ONLY_UNSENT\",\"steps_markdown\":\"\"}]}"}
+
+stdout | recovery.test.ts > switching while a response PUT is pending must eventually read the new session
+PENDING_SWITCH_OBSERVED {"gets":["practice_session_A"],"snapshot":"practice_session_A","state":"saving"}
+
+ ❯ recovery.test.ts (4 tests | 2 failed) 1994ms
+   × unsent responses from session A must not be rebound or automatically written to session B 849ms
+   × switching while a response PUT is pending must eventually read the new session 289ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  recovery.test.ts > unsent responses from session A must not be rebound or automatically written to session B
+AssertionError: expected [ { …(3) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "answer": "A_ONLY_UNSENT",
++     "question_id": "question_hookreview_0",
++     "steps_markdown": "",
++   },
++ ]
+
+ ❯ recovery.test.ts:56:47
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  recovery.test.ts > switching while a response PUT is pending must eventually read the new session
+AssertionError: expected [ 'practice_session_A' ] to include 'practice_session_B'
+ ❯ recovery.test.ts:70:15
+     68|  await act(async()=>{await new Promise(resolve=>setTimeout(resolve,150…
+     69|  console.log('PENDING_SWITCH_OBSERVED',JSON.stringify({gets,snapshot:h…
+     70|  expect(gets).toContain('practice_session_B')
+       |               ^
+     71|  expect(hook.result.current.snapshot?.id).toBe('practice_session_B')
+     72| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 passed (4)
+   Start at  22:21:38
+   Duration  2.33s (tests 88%, environment 9%, import 2%, transform 1%)
+

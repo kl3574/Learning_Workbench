@@ -6,9 +6,10 @@ function exact(context: ViewContext): string {
   const fields = (ref: ContentRef) => [ref.entity, ref.id, ref.revision, ref.sha256]
   return JSON.stringify([fields(context.active_ref), [...(context.attached_refs ?? [])].map(fields).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))])
 }
+export const sameFrozenReferences = (a: ViewContext, b: ViewContext) => exact(a) === exact(b)
 export function openReader(session: Session, target: ReaderTarget, pinned: boolean, hasDraft: (id: string) => boolean): { kind: 'opened' | 'conflict'; session: Session } {
   const context = readerContext(target)
   const existing = session.tabs.find(tab => tab.id === tabIdentity(context))
-  if (existing && exact(existing.context) !== exact(context)) return { kind: 'conflict', session }
+  if (existing && !sameFrozenReferences(existing.context, context)) return { kind: 'conflict', session }
   return { kind: 'opened', session: openTab({ ...session, course_ref: target.course, navigation: 'textbook' }, context, pinned, hasDraft) }
 }
