@@ -5,7 +5,7 @@ export class ApiError extends Error {
   status: number
   constructor(status: number, message: string) { super(message); this.status = status }
 }
-const request = createApiClient(async (path, init) => {
+export const request = createApiClient(async (path, init, responseKind = 'json') => {
   const response = await fetch(path, {
     credentials: 'same-origin', ...init,
     headers: { 'Content-Type': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}), ...init.headers },
@@ -14,7 +14,7 @@ const request = createApiClient(async (path, init) => {
     const body = await response.json().catch(() => null)
     throw new ApiError(response.status, body?.error?.message ?? `服务请求失败 (${response.status})`)
   }
-  return response.json()
+  return responseKind === 'text' ? response.text() : response.json()
 })
 export async function connectSession(): Promise<string> {
   const oneTimeCode = new URLSearchParams(location.hash.slice(1)).get('bootstrap')
