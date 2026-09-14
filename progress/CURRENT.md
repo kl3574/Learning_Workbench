@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-14T10:25:16Z；规范 SHA-256：`ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
+更新：2026-09-14T11:28:30Z；规范 SHA-256：`ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED
-实施：IN_PROGRESS；当前任务：None；下一任务：M2.2
+实施：IN_PROGRESS；当前任务：M2.2；下一任务：M2.3
 
-M0、M1、M2.1已本地验证并待PR审查。接续M2.2：导入暂存、预览、确认/取消与恶意HTML/ZIP/哈希失败测试；M2.3及以后未实施。
+固定提交全门禁及真实标题/关闭按钮可见性检查通过；发布依赖PR并回读CI。下一任务M2.3从本分支最新同步HEAD接续。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -18,7 +18,7 @@ M0、M1、M2.1已本地验证并待PR审查。接续M2.2：导入暂存、预览
 | M1.2 可访问分隔条、折叠、焦点、快捷键、命令面板 | review | [#14](https://github.com/kl3574/Learning_Workbench/issues/14) | 1c5963d058e56fc36eec378ee3a7f67d665f2307 |
 | M1.3 ViewContext/ContextBridge、按对象保存草稿与会话 | review | [#15](https://github.com/kl3574/Learning_Workbench/issues/15) | 1c5963d058e56fc36eec378ee3a7f67d665f2307 |
 | M2.1 SQLite/blob、精确版本、原子文件、对象读取 | review | [#16](https://github.com/kl3574/Learning_Workbench/issues/16) | f304193f95461ebc3bdc60d6661c7b80f493cb1d |
-| M2.2 MD/TXT/HTML/learnpack 导入暂存和确认 | todo | [#17](https://github.com/kl3574/Learning_Workbench/issues/17) | 未验证提交 |
+| M2.2 MD/TXT/HTML/learnpack 导入暂存和确认 | review | [#17](https://github.com/kl3574/Learning_Workbench/issues/17) | 6b41b8e1ffc82d6d9757f63c87d3fd80c1b55b40 |
 | M2.3 PDFtext/DOCX 提取隔离、低保真诊断 | todo | [#18](https://github.com/kl3574/Learning_Workbench/issues/18) | 未验证提交 |
 | M2.4 Reader/LaTeX、例题锚点、笔记、阅读位置 | todo | [#19](https://github.com/kl3574/Learning_Workbench/issues/19) | 未验证提交 |
 | M3.1 题面/私有答案库、练习/提示/暴露记录 | todo | [#20](https://github.com/kl3574/Learning_Workbench/issues/20) | 未验证提交 |
@@ -42,14 +42,14 @@ M0、M1、M2.1已本地验证并待PR审查。接续M2.2：导入暂存、预览
 ## 验证边界
 
 - spec_checks: PASS
-- unit: PASS_THROUGH_M2_1_SCOPE
-- contract: PASS_THROUGH_M2_1_SCOPE
-- integration: PASS_THROUGH_M2_1_SCOPE
-- browser_native: PASS_M1_REGRESSION_ON_M2_1_CODE
+- unit: PASS_THROUGH_M2_2_SCOPE
+- contract: PASS_THROUGH_M2_2_SCOPE
+- integration: PASS_THROUGH_M2_2_SCOPE
+- browser_native: PASS_27_ON_M2_2_CODE
 - real_provider: NOT_RUN
 - real_codex: NOT_RUN
 - learning_effectiveness: NOT_RUN
-- ci: PASS_M2_1_PR_HEAD_844636c
+- ci: M2_2_PENDING_PUBLICATION
 
 ## 阻塞与待决项
 

@@ -1,0 +1,122 @@
+{
+  "task_id": "M2.2",
+  "recorded_at": "2026-09-14T11:04:59.273668+00:00",
+  "scope": "Development review notes, not final exact-version acceptance",
+  "source_commit": null,
+  "source_status": "uncommitted implementation under review; final receipt will bind exact commit",
+  "inputs": "Only repository-generated synthetic documents and packages; no personal library content",
+  "findings": [
+    {
+      "id": "reference-definition-loss",
+      "status": "FIXED_AND_RETESTED_ON_FINAL_SOURCE",
+      "problem": "Splitting Markdown removed reference-style link definitions from independently rendered blocks.",
+      "repair": "Preserve the definitions used by each block, including nested blockquote and list references.",
+      "verification": "Parser unit tests render each resulting block with MarkdownIt."
+    },
+    {
+      "id": "zip-prefix-classification",
+      "status": "FIXED_AND_RETESTED_ON_FINAL_SOURCE",
+      "problem": "Signature-at-start detection could misclassify prefixed archives as learner-readable originals.",
+      "repair": "Stage detected archives privately regardless of filename or selected textual kind; reject format mismatch and unclaimed archive bytes.",
+      "verification": "Real import repository tests cover SFX prefix, misleading extension and explicit text-kind spoof."
+    },
+    {
+      "id": "concatenated-private-archive",
+      "status": "FIXED_AND_RETESTED_ON_FINAL_SOURCE",
+      "problem": "Author ZIP plus learner ZIP was accepted by standard ZIP readers as the final learner archive, exposing the earlier private original bytes.",
+      "repair": "Require complete archive envelope coverage, rejecting prefixes, concatenation, tails, gaps, comments and extra container data.",
+      "verification": "test_hidden_archive_bytes_cannot_be_treated_as_a_complete_learner_package; test_concatenated_author_then_learner_zip_remains_private_and_fails_without_partial_preview"
+    },
+    {
+      "id": "unused-deflate-private-archive",
+      "status": "FIXED_AND_RETESTED_ON_FINAL_SOURCE",
+      "problem": "An author archive hidden after a valid DEFLATE stream still fit the declared ZIP envelope. Standard ZipFile returned only the public decoded member.",
+      "repair": "Require full compressed stream consumption, eof, no unused/unconsumed bytes, matching local/central metadata and size/CRC.",
+      "verification": "test_valid_deflate_stream_cannot_hide_an_extra_author_archive"
+    },
+    {
+      "id": "budget-hardcaps",
+      "status": "FIXED_AND_RETESTED_ON_FINAL_SOURCE",
+      "problem": "Parser, publication, manifest and browser limits prevented explicit budget expansion required by section 10.1.",
+      "repair": "Five validated budgets, frozen import input, configured manifest resource fields and server-authoritative upload validation. Existing content remains readable after lowering future-import limits.",
+      "verification": "Parser budget regression, test_import_budgets.py, real HTTP 400000-character expansion and repository restart/configuration regression."
+    },
+    {
+      "id": "role-response-race",
+      "status": "FIXED_AND_RETESTED_ON_FINAL_SOURCE",
+      "problem": "A pre-switch preview response or downloaded Blob could arrive after changing to learner role.",
+      "repair": "Invalidate task/draft access generations on role change, revoke Blob URLs, and discard responses from the previous permission epoch.",
+      "verification": "Native browser holds real author preview and artifact responses, changes role, releases responses and asserts no private projection or download."
+    },
+    {
+      "id": "terminal-private-recovery",
+      "status": "FIXED_AND_RETESTED_ON_FINAL_SOURCE",
+      "problem": "A learner permitted to cancel a pending archive could receive 403 when replaying or reading the resulting cancellation.",
+      "repair": "Provide minimal terminal status without private preview data; preserve source/draft denial.",
+      "verification": "test_private_pending_cancel_and_failure_are_recoverable_without_private_preview; test_author_cancelled_private_preview_is_redacted_for_learner_but_retained_for_author"
+    },
+    {
+      "id": "append-symbol-scope",
+      "status": "FIXED_AND_RETESTED_ON_FINAL_SOURCE",
+      "problem": "Appending a package to another course left Symbol.scope referring to the unpublished source course ID.",
+      "repair": "Apply target-course mapping to the symbol scope as well as its exact definition reference.",
+      "verification": "test_symbol_course_scope_is_rebound_to_actual_target_course"
+    },
+    {
+      "id": "encoding-choice-preview",
+      "status": "FIXED_AND_RETESTED_ON_FINAL_SOURCE",
+      "problem": "The encoding error was explicit but offered no encoding-choice preview required by section20.3.",
+      "repair": "Strict local decoding of hash-verified original, explicit UTF-8 derivative download, separate import confirmation; original failed record and raw hash preserved.",
+      "verification": "encoding.test.ts and native local-encoding derivative/reimport test on final commit; original failed state/hash unchanged."
+    },
+    {
+      "id": "import-dialog-scroll-header",
+      "status": "FIXED_AND_RETESTED_ON_FINAL_SOURCE",
+      "problem": "After awaiting real lazy body rendering, the narrow-screen header/close control can still be clipped while scrolling. An earlier loading-state capture obscured this remaining defect.",
+      "repair": "Inspect actual nested scroll geometry and fix the dialog scroll container; test real visibility without resetting scroll position for the screenshot.",
+      "verification": "Frontend browser diagnosis in progress; existing27 functional tests alone did not prove this manual visual condition.",
+      "diagnosis": "Native old CSS geometry reproduced simultaneous dialog/inner scrolling; fixed CSS makes only workflow body scroll, leaving dialog and inner scrollTop zero and header above the body."
+    }
+  ],
+  "development_test_failures": [
+    {
+      "category": "test_selector",
+      "description": "First native attempt used an exact import-button label that omitted its keyboard hint; four tests failed before uploading."
+    },
+    {
+      "category": "test_selector",
+      "description": "Second native attempt expected one SVG while the candidate legitimately contained two formula SVGs; three tests passed."
+    },
+    {
+      "category": "test_fixture",
+      "description": "First author-package browser fixture attempted to serialize a list as a single Pydantic model and failed before upload."
+    },
+    {
+      "category": "test_assumption",
+      "description": "Initial HTTP assertions assumed the first block contained the paragraph/formula, but headings are independent blocks. Tests now select the relevant candidate and scan all bodies for unsafe content."
+    },
+    {
+      "category": "test_synchronization",
+      "description": "A reload test sent a keyboard shortcut before React installed its listener; now it waits for the real workspace session to be ready. Six other native cases passed in that run."
+    },
+    {
+      "category": "visual_evidence_synchronization",
+      "description": "First exact gate passed all27 browser tests, but its390px screenshot captured the lazy-body loading state. Strengthened test waits for actual paragraph before security assertions and capture. Original exact receipts remain preserved."
+    },
+    {
+      "category": "test_hit_probe",
+      "description": "The first new close-button hit test sampled1px from rounded corners, outside the actual curved button. Retained the failure and corrected sampling to center and four inset axis points; this was not evidence of actual button occlusion."
+    }
+  ],
+  "claims_not_made": [
+    "Complete platform delivery",
+    "M2.3 extraction",
+    "M2.4 Reader integration",
+    "Mathematical or source approval",
+    "Real provider or Codex execution",
+    "Learning effectiveness",
+    "Merged main delivery"
+  ],
+  "final_source_commit": "6b41b8e1ffc82d6d9757f63c87d3fd80c1b55b40",
+  "final_verification": "All seven exact-version gates passed: Python402, frontend49, native27, lint/types/build/spec."
+}
