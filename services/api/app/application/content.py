@@ -402,4 +402,6 @@ class ContentService:
         for value in sorted(values, key=lambda item: (item.id, item.revision)):
             repository.advance(value)
         mark_stale_notes(connection, workspace_id, previous_refs)
+        from .recommendations import inputs_changed
+        inputs_changed(connection, workspace_id, 'content.published')
         return [reference(value) for value in values]

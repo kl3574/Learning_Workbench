@@ -1,5 +1,5 @@
-// Generated from PRODUCT_DESIGN.md v3.0.0. DO NOT EDIT.
-// spec_sha256: ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c
+// Generated from PRODUCT_DESIGN.md v3.0.1. DO NOT EDIT.
+// spec_sha256: 397829f5267248aedfc60faf7cacbb12669966b1c1d636a909b04189e0cc09dd
 // JSON Schema is the type source; runtime semantic checks remain required.
 
 export type AssessmentAttemptCreate = {
@@ -798,6 +798,104 @@ export type RecentAttempt = {
   "mode": "independent" | "assisted" | "open_book";
   "created_at": string;
   "submitted_at": (string | null);
+};
+
+export type RecommendationActivityRef = {
+  "kind": "read_marked" | "practice_submitted" | "test_submitted";
+  "event_id": string;
+  "target_ref": ContentRef;
+  "source_id": (string | null);
+  "occurred_at": string;
+};
+
+export type RecommendationAssessmentOption = {
+  "kind": "assessment";
+  "assessment_ref": ContentRef;
+  "course_ref": (ContentRef | null);
+};
+
+export type RecommendationDecisionWrite = {
+  "decision": "accepted" | "dismissed";
+  "reason": (string | null);
+};
+
+export type RecommendationEvidenceRef = {
+  "evidence": Evidence;
+  "question_ref": ContentRef;
+  "concept_ref": ContentRef;
+  "assessment_ref": ContentRef;
+  "attempt_id": string;
+  "grading_revision": number;
+  "submitted_at": string;
+  "applicability": "usable" | "pending_review" | "confirmed_stale";
+  "grading_origin": "deterministic" | "human_review" | "unknown";
+};
+
+export type RecommendationPage = {
+  "items": Array<RecommendationView>;
+  "next_cursor": (string | null);
+  "total_hint"?: number;
+  "projection_state": "missing" | "pending_refresh" | "ready" | "stale" | "failed";
+  "warnings": Array<Warning>;
+  "snapshot_id": (string | null);
+  "generated_at": (string | null);
+  "rule_version": string;
+  "rule_parameters": RecommendationRuleParameters;
+};
+
+export type RecommendationPracticeOption = {
+  "kind": "practice";
+  "course_ref": ContentRef;
+  "lesson_ref": ContentRef;
+  "practice_ref": ContentRef;
+};
+
+export type RecommendationProfileBasis = {
+  "revision": number;
+  "goal_concept_ids": Array<string>;
+  "goals": Array<string>;
+  "self_assessments": Array<SelfAssessment>;
+};
+
+export type RecommendationReaderOption = {
+  "kind": "reader";
+  "course_ref": ContentRef;
+  "lesson_ref": ContentRef;
+  "block_ref": (ContentRef | null);
+};
+
+export type RecommendationRouteBasis = {
+  "route_ref": ContentRef;
+  "step_id": string;
+  "source_event_ids": Array<string>;
+};
+
+export type RecommendationRuleParameters = {
+  "review_after_days": number;
+  "calibration": "uncalibrated";
+};
+
+export type RecommendationView = {
+  "id": string;
+  "target_ref": ContentRef;
+  "target_title": string;
+  "action": "read" | "practice" | "test" | "review" | "inspect_source";
+  "reason_codes": Array<"prerequisite_gap" | "assessment_error" | "review_due" | "next_route_step" | "user_goal" | "read_without_practice" | "practice_without_independent">;
+  "explanation": string;
+  "evidence_refs": Array<RecommendationEvidenceRef>;
+  "activity_refs": Array<RecommendationActivityRef>;
+  "profile_basis": (RecommendationProfileBasis | null);
+  "route_basis": (RecommendationRouteBasis | null);
+  "prerequisite_gaps": Array<ContentRef>;
+  "navigation_options": Array<(RecommendationReaderOption | RecommendationPracticeOption | RecommendationAssessmentOption)>;
+  "estimated_minutes": (number | null);
+  "rule_version": string;
+  "generated_at": string;
+  "staleness": "current" | "stale";
+  "decision": "pending" | "accepted" | "dismissed";
+  "decision_revision": number;
+  "decision_sha256": string;
+  "decision_reason": (string | null);
 };
 
 export type RegradeItemReview = {

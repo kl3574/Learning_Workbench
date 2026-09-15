@@ -17,6 +17,7 @@ from ..application.errors import ApiError
 from ..application.evidence import EvidenceRecovery
 from ..application.grading import GradingWorker
 from ..application.imports import ImportService, safe_filename
+from ..application.recommendations import RecommendationWorker
 from .content_repository import damaged
 from .database import Database, utc_now
 from .document_sandbox import bind_parent_lifetime
@@ -69,6 +70,7 @@ class ImportWorker:
         self._stop = threading.Event()
         self.grading = GradingWorker(database, stopping=self._stop.is_set)
         self.evidence_recovery = EvidenceRecovery(database, stopping=self._stop.is_set)
+        self.recommendations = RecommendationWorker(database, stopping=self._stop.is_set)
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
         self.parse_timeout_seconds = 60.0
@@ -279,11 +281,14 @@ class ImportWorker:
             # A bounded recovery item does not prevent this same tick from
             # advancing the actual grading/import queues, including after damage.
             recovered = self.evidence_recovery.run_once()
+            # A bounded local recommendation refresh gets every maintenance tick,
+            # including while grading/import queues stay continuously nonempty.
+            recommended = self.recommendations.run_once()
             if self.grading.run_once():
                 return True
             lease = self.claim()
             if lease is None:
-                return recovered
+                return recovered or recommended
             data, options = self._input(lease)
             parsed = self._parse(lease, data, options)
             self.complete_preview(lease, parsed)

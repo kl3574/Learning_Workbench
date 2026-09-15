@@ -1,0 +1,535 @@
+"""Recommendation public services against native SQLite and real owner actions."""
+
+from services.api.app.infrastructure.config import Settings
+from services.api.app.infrastructure.database import Database
+import pytest
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
+import shutil
+import sqlite3
+import threading
+from packages.contracts.canonical import canonical_bytes
+
+from services.api.app.application.errors import ApiError
+from services.api.app.application.learning import LearningService
+from services.api.app.application.recommendations import RecommendationService, RecommendationWorker
+from services.api.app.application.recommendations import inputs_changed
+from services.api.app.infrastructure.content_repository import reference
+from services.api.app.learning_dto import LearningActionRequest
+from services.api.app.recommendation_dto import RecommendationDecisionWrite
+from tests.integration.test_assessment_attempts import storage
+
+__all__ = ['storage']
+
+
+def stored_rows(database):
+    # Zero-write and ownership are explicit product guarantees, independently
+    # observed across all tables rather than inferred from returned DTOs.
+    with database.connect() as connection:
+        names = [row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")]
+        return {name: sorted([tuple(row) for row in connection.execute(f'SELECT * FROM "{name}"')], key=repr)
+                for name in names}
+
+
+def test_empty_get_does_not_materialize_default_snapshot_or_register_refresh(tmp_path):
+    from services.api.app.application.recommendations import RecommendationService
+
+    database = Database(Settings(data_dir=tmp_path / 'data'))
+    workspace = database.initialize()
+    before = stored_rows(database)
+    page = RecommendationService(database).page(workspace)
+    assert page.projection_state == 'missing'
+    assert page.items == [] and page.warnings == []
+    assert page.snapshot_id is None and page.generated_at is None
+    assert page.rule_parameters.review_after_days == 3
+    assert stored_rows(database) == before
+
+
+def read_lesson(storage, value=True, key='reading'):
+    database, identity, fixture, _ = storage
+    learning = LearningService(database)
+    return learning.action(identity, LearningActionRequest(kind='read_marked', ref=reference(fixture.lesson),
+        expected_revision=learning.progress(identity.workspace_id).revision, value=value), key)
+
+
+def generated(storage):
+    database, identity, fixture, _ = storage
+    read_lesson(storage)
+    service = RecommendationService(database)
+    pending = service.page(identity.workspace_id)
+    assert pending.projection_state == 'pending_refresh'
+    assert RecommendationWorker(database).run_once()
+    page = service.page(identity.workspace_id)
+    assert page.projection_state == 'ready'
+    item = next(item for item in page.items if item.target_ref == reference(fixture.practice)
+                and item.reason_codes == ['read_without_practice'])
+    return service, item
+
+
+def test_native_snapshot_decision_correction_original_replay_and_stale_history(storage):
+    database, identity, _, _ = storage
+    service, item = generated(storage)
+    accepted = RecommendationDecisionWrite(decision='accepted', reason='actual user choice')
+    before = stored_rows(database)
+    original = service.decide(identity, item.id, accepted, 'accept-original', item.decision_sha256)
+    assert original.revision == 2 and original.applied
+    after = stored_rows(database)
+    for table, rows in before.items():
+        if not table.startswith('recommendation_') and table != 'idempotency':
+            assert after[table] == rows
+    current = service.page(identity.workspace_id, recommendation_id=item.id).items[0]
+    dismissed = RecommendationDecisionWrite(decision='dismissed', reason='explicit correction')
+    corrected = service.decide(identity, item.id, dismissed, 'correct-original', current.decision_sha256)
+    assert corrected.revision == 3 and corrected.applied
+    unchanged = stored_rows(database)
+    assert service.decide(identity, item.id, accepted, 'accept-original', item.decision_sha256) == original
+    assert stored_rows(database) == unchanged
+    with pytest.raises(ApiError) as conflict:
+        service.decide(identity, item.id, accepted, 'new-command-old-cas', item.decision_sha256)
+    assert conflict.value.status == 412
+    reopened = RecommendationService(Database(database.settings))
+    latest = reopened.page(identity.workspace_id, recommendation_id=item.id).items[0]
+    assert latest.decision == 'dismissed' and latest.decision_reason == 'explicit correction'
+    assert latest.decision_revision == 3
+    read_lesson(storage, False, 'unread')
+    assert service.decide(identity, item.id, accepted, 'accept-original', item.decision_sha256) == original
+    with pytest.raises(ApiError) as stale:
+        service.decide(identity, item.id, accepted, 'new-on-stale', latest.decision_sha256)
+    assert stale.value.code == 'RECOMMENDATION_STALE'
+    assert RecommendationWorker(database).run_once()
+    old = service.page(identity.workspace_id, recommendation_id=item.id)
+    assert old.projection_state == 'stale' and old.items[0].staleness == 'stale'
+    assert old.items[0].decision_revision == 3
+
+
+@pytest.mark.parametrize('operation', ['get', 'replay'])
+def test_changed_sql_batch_sequence_cannot_hide_behind_valid_embedded_sequence(storage, operation):
+    database, identity, _, _ = storage
+    service, item = generated(storage)
+    request = RecommendationDecisionWrite(decision='accepted', reason=None)
+    service.decide(identity, item.id, request, 'original', item.decision_sha256)
+    with database.transaction() as connection:
+        connection.execute('DROP TRIGGER recommendation_snapshots_no_update')
+        connection.execute('UPDATE recommendation_snapshots SET sequence=sequence+10 WHERE id='
+            '(SELECT snapshot_id FROM recommendation_projection_state WHERE workspace_id=?)', (identity.workspace_id,))
+    with pytest.raises(ApiError) as rejected:
+        if operation == 'get':
+            service.page(identity.workspace_id, recommendation_id=item.id)
+        else:
+            service.decide(identity, item.id, request, 'original', item.decision_sha256)
+    assert rejected.value.code == 'RECOMMENDATION_INTEGRITY_INVALID'
+
+
+@pytest.mark.parametrize('damage', ['request_hash', 'applied_flag', 'missing_receipt'])
+def test_every_native_decision_has_one_real_command_and_recomputed_request_binding(storage, damage):
+    database, identity, _, _ = storage
+    service, item = generated(storage)
+    request = RecommendationDecisionWrite(decision='accepted', reason='original reason')
+    ack = service.decide(identity, item.id, request, 'original', item.decision_sha256)
+    with database.transaction() as connection:
+        connection.execute('DROP TRIGGER recommendation_receipts_no_update')
+        connection.execute('DROP TRIGGER recommendation_receipts_no_delete')
+        if damage == 'request_hash':
+            connection.execute('UPDATE recommendation_command_receipts SET request_sha256=?', ('c' * 64,))
+        elif damage == 'applied_flag':
+            connection.execute('UPDATE recommendation_command_receipts SET result_json=?',
+                (canonical_bytes(ack.model_copy(update={'applied': False})).decode(),))
+        else:
+            connection.execute('DELETE FROM recommendation_command_receipts')
+    with pytest.raises(ApiError) as rejected:
+        service.page(identity.workspace_id)
+    assert rejected.value.code == 'RECOMMENDATION_INTEGRITY_INVALID'
+
+
+def test_stop_after_local_computation_rolls_back_startup_registration(tmp_path):
+    database = Database(Settings(data_dir=tmp_path / 'data'))
+    database.initialize()
+    before = stored_rows(database)
+    calls = 0
+
+    def stopping():
+        nonlocal calls
+        calls += 1
+        return calls > 1
+
+    assert not RecommendationWorker(database, stopping=stopping).run_once()
+    assert stored_rows(database) == before
+
+
+def test_noop_receipt_keeps_original_applied_false_and_expired_key_is_a_new_instance(storage):
+    database, identity, _, _ = storage
+    service, item = generated(storage)
+    accept = RecommendationDecisionWrite(decision='accepted', reason=None)
+    service.decide(identity, item.id, accept, 'first', item.decision_sha256)
+    current = service.page(identity.workspace_id, recommendation_id=item.id).items[0]
+    noop = service.decide(identity, item.id, accept, 'reusable', current.decision_sha256)
+    assert noop.revision == 2 and noop.applied is False
+    with database.transaction() as connection:
+        original = tuple(connection.execute('SELECT * FROM recommendation_command_receipts WHERE key=\'reusable\'').fetchone())
+        connection.execute("UPDATE idempotency SET expires_at='2000-01-01T00:00:00Z' WHERE key='reusable'")
+    dismiss = RecommendationDecisionWrite(decision='dismissed', reason='after expiry')
+    changed = service.decide(identity, item.id, dismiss, 'reusable', current.decision_sha256)
+    assert changed.revision == 3 and changed.applied
+    with database.connect() as connection:
+        rows = [tuple(row) for row in connection.execute("SELECT * FROM recommendation_command_receipts WHERE key='reusable'")]
+    assert len(rows) == 2 and original in rows
+    with pytest.raises(ApiError) as different_instance:
+        service.decide(identity, item.id, accept, 'reusable', current.decision_sha256)
+    assert different_instance.value.code == 'IDEMPOTENCY_CONFLICT'
+    assert service.decide(identity, item.id, dismiss, 'reusable', current.decision_sha256) == changed
+
+
+def test_replaced_idempotency_instance_cannot_borrow_the_original_receipt(storage):
+    database, identity, _, _ = storage
+    service, item = generated(storage)
+    request = RecommendationDecisionWrite(decision='accepted', reason=None)
+    service.decide(identity, item.id, request, 'original', item.decision_sha256)
+    with database.transaction() as connection:
+        connection.execute("UPDATE idempotency SET created_at='2026-01-01T00:00:00Z' WHERE key='original'")
+    before = stored_rows(database)
+    with pytest.raises(ApiError) as rejected:
+        service.decide(identity, item.id, request, 'original', item.decision_sha256)
+    assert rejected.value.code == 'RECOMMENDATION_INTEGRITY_INVALID'
+    assert stored_rows(database) == before
+
+
+@pytest.mark.parametrize('field', ['result_json', 'expires_at'])
+def test_current_command_integrity_is_checked_even_on_get(storage, field):
+    database, identity, _, _ = storage
+    service, item = generated(storage)
+    ack = service.decide(identity, item.id, RecommendationDecisionWrite(decision='accepted', reason=None),
+                         'original', item.decision_sha256)
+    with database.transaction() as connection:
+        if field == 'result_json':
+            connection.execute("UPDATE idempotency SET result_json=? WHERE key='original'",
+                (canonical_bytes(ack.model_copy(update={'applied': False})).decode(),))
+        else:
+            connection.execute("UPDATE idempotency SET expires_at='invalid-future' WHERE key='original'")
+    with pytest.raises(ApiError) as rejected:
+        service.page(identity.workspace_id)
+    assert rejected.value.code == 'RECOMMENDATION_INTEGRITY_INVALID'
+
+
+def test_simultaneous_decisions_allow_one_native_change_and_one_412(storage):
+    _, identity, _, _ = storage
+    service, item = generated(storage)
+
+    def decide(choice):
+        try:
+            return service.decide(identity, item.id, RecommendationDecisionWrite(decision=choice, reason=None), choice,
+                                  item.decision_sha256)
+        except ApiError as error:
+            return error
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(decide, ['accepted', 'dismissed']))
+    assert sum(not isinstance(result, ApiError) and result.applied for result in results) == 1
+    assert [result.status for result in results if isinstance(result, ApiError)] == [412]
+    assert service.page(identity.workspace_id, recommendation_id=item.id).items[0].decision_revision == 2
+
+
+def test_refresh_failure_keeps_old_batch_and_dirty_then_retries_without_duplicate_decisions(storage, monkeypatch):
+    import services.api.app.application.recommendations as recommendations
+    database, identity, _, _ = storage
+    service, item = generated(storage)
+    read_lesson(storage, False, 'unread')
+    with database.transaction() as connection:
+        connection.execute("CREATE TRIGGER injected_refresh_failure BEFORE INSERT ON recommendation_snapshots "
+                           "BEGIN SELECT RAISE(ABORT,'synthetic refresh failure'); END")
+    assert not RecommendationWorker(database).run_once()
+    failed = service.page(identity.workspace_id)
+    assert failed.projection_state == 'failed' and failed.items[0].staleness == 'stale'
+    assert any(warning.code == 'RECOMMENDATION_REFRESH_FAILED' for warning in failed.warnings)
+    assert failed.items[0].id == item.id
+    with database.transaction() as connection:
+        connection.execute('DROP TRIGGER injected_refresh_failure')
+    future = (datetime.now(UTC) + timedelta(minutes=1)).isoformat(timespec='microseconds').replace('+00:00', 'Z')
+    monkeypatch.setattr(recommendations, 'utc_now', lambda: future)
+    assert RecommendationWorker(database).run_once()
+    assert service.page(identity.workspace_id).projection_state == 'ready'
+    before = stored_rows(database)
+    assert not RecommendationWorker(database).run_once()
+    assert stored_rows(database) == before
+    assert service.page(identity.workspace_id, recommendation_id=item.id).items[0].decision == 'pending'
+
+
+def test_source_registration_skips_only_documented_pre_0009_schema_and_current_damage_fails(tmp_path):
+    migrations = tmp_path / 'migrations'
+    migrations.mkdir()
+    settings = Settings(data_dir=tmp_path / 'data')
+    for path in settings.migrations_dir.glob('*.sql'):
+        if int(path.name[:4]) < 9:
+            shutil.copyfile(path, migrations / path.name)
+    legacy = Database(replace(settings, migrations_dir=migrations))
+    workspace = legacy.initialize()
+    before = stored_rows(legacy)
+    with legacy.transaction() as connection:
+        inputs_changed(connection, workspace, 'test.legacy-recovery')
+    assert stored_rows(legacy) == before
+    current = Database(settings)
+    current.initialize()
+    with current.transaction() as connection:
+        connection.execute('DROP TABLE recommendation_projection_state')
+    with pytest.raises(sqlite3.OperationalError):
+        with current.transaction() as connection:
+            inputs_changed(connection, workspace, 'test.current-damage')
+
+
+def test_real_graded_source_becomes_due_without_get_writes_or_retiming_evidence(storage, monkeypatch):
+    import services.api.app.application.recommendations as recommendations
+    from services.api.app.application.grading import GradingWorker
+    from tests.integration.test_assessment_attempts import insert_answer
+    from tests.integration.test_learning_evidence import submit
+    database, identity, fixture, _ = storage
+    for answer in fixture.solutions:
+        # Controlled qualification setup, never a claim of expert approval.
+        insert_answer(database, answer.model_copy(update={'revision': 2, 'review_status': 'approved'}))
+    submit(storage)
+    assert GradingWorker(database).run_once()
+    assert RecommendationWorker(database).run_once()
+    service = RecommendationService(database)
+    initial = service.page(identity.workspace_id)
+    assert initial.projection_state == 'ready'
+    before = stored_rows(database)
+    future = (datetime.now(UTC) + timedelta(days=4)).isoformat(timespec='microseconds').replace('+00:00', 'Z')
+    monkeypatch.setattr(recommendations, 'utc_now', lambda: future)
+    due = service.page(identity.workspace_id)
+    assert due.projection_state == 'stale' and due.generated_at == initial.generated_at
+    assert stored_rows(database) == before
+    assert RecommendationWorker(database).run_once()
+    ready = service.page(identity.workspace_id)
+    reviews = [item for item in ready.items if item.reason_codes == ['review_due']]
+    assert ready.projection_state == 'ready' and reviews
+    assert all(source.submitted_at < initial.generated_at for item in reviews for source in item.evidence_refs)
+    assert all(item.generated_at == future for item in reviews)
+    after = stored_rows(database)
+    for table, rows in before.items():
+        if not table.startswith('recommendation_'):
+            assert after[table] == rows
+
+
+def test_same_basis_refresh_preserves_real_user_decision_and_original_generation_time(storage):
+    database, identity, fixture, _ = storage
+    service, item = generated(storage)
+    service.decide(identity, item.id, RecommendationDecisionWrite(decision='dismissed', reason='later'), 'choice', item.decision_sha256)
+    original = service.page(identity.workspace_id)
+    learning = LearningService(database)
+    learning.action(identity, LearningActionRequest(kind='bookmark_set', ref=reference(fixture.lesson),
+        expected_revision=learning.progress(identity.workspace_id).revision, value=True), 'bookmark')
+    assert service.page(identity.workspace_id).projection_state == 'pending_refresh'
+    assert RecommendationWorker(database).run_once()
+    current = service.page(identity.workspace_id)
+    assert current.snapshot_id == original.snapshot_id and current.generated_at == original.generated_at
+    assert current.items[0].decision == 'dismissed' and current.items[0].decision_revision == 2
+
+
+def test_maintenance_tick_refreshes_recommendations_while_import_queue_stays_nonempty(storage):
+    from services.api.app.application.imports import ImportService
+    from services.api.app.infrastructure.import_worker import ImportWorker
+    database, identity, fixture, _ = storage
+    read_lesson(storage)
+    imports = ImportService(database)
+    author = replace(identity, role='author')
+    first = imports.stage(author, data=fixture.archive, filename='synthetic.learnpack.zip', kind='learnpack', key='busy-one')
+    second = imports.stage(author, data=fixture.archive, filename='synthetic.learnpack.zip', kind='learnpack', key='busy-two')
+    assert ImportWorker(database).run_once()
+    assert RecommendationService(database).page(identity.workspace_id).projection_state == 'ready'
+    assert imports.job(author, first.job.id).status == 'awaiting_approval'
+    assert imports.job(author, second.job.id).status == 'queued'
+
+
+def test_old_ack_does_not_require_unrelated_new_material_to_have_a_healthy_current_basis(storage):
+    from services.api.app.application.content import ContentService
+    from tests.assessment_fixtures import assessment_fixture
+    database, identity, _, _ = storage
+    service, item = generated(storage)
+    request = RecommendationDecisionWrite(decision='accepted', reason='original')
+    original = service.decide(identity, item.id, request, 'original', item.decision_sha256)
+    other = assessment_fixture('unrelatednewmaterial')
+    ContentService(database).publish(identity.workspace_id, other.public_objects, other.bodies)
+    with database.transaction() as connection:
+        connection.execute('DROP TRIGGER revisions_no_update')
+        connection.execute('UPDATE revisions SET sha256=? WHERE object_id=?', ('0' * 64, other.course.id))
+    before = stored_rows(database)
+    assert service.decide(identity, item.id, request, 'original', item.decision_sha256) == original
+    assert stored_rows(database) == before
+
+
+def test_cancellation_arriving_during_final_actual_owner_read_prevents_publication(tmp_path, monkeypatch):
+    import services.api.app.application.recommendations as recommendations
+    database = Database(Settings(data_dir=tmp_path / 'data'))
+    database.initialize()
+    before = stored_rows(database)
+    stopped = threading.Event()
+    actual_read = recommendations.load_inputs
+    calls = 0
+
+    def read_with_cancellation(connection, workspace_id):
+        nonlocal calls
+        # Both passes still execute all real native owner reads. Only arrival of
+        # the external cancellation signal is controlled at this timing boundary.
+        result = actual_read(connection, workspace_id)
+        calls += 1
+        if calls == 2:
+            stopped.set()
+        return result
+
+    monkeypatch.setattr(recommendations, 'load_inputs', read_with_cancellation)
+    assert not RecommendationWorker(database, stopping=stopped.is_set).run_once()
+    assert stopped.is_set() and stored_rows(database) == before
+
+
+@pytest.fixture
+def paginated_storage(storage):
+    from services.api.app.application.profile import ProfileService
+    from tests.assessment_fixtures import assessment_fixture
+    from tests.integration.test_assessment_attempts import import_fixture
+    from tests.integration.test_learner_profile import request as profile_request
+    from tests.integration.test_recommendation_http import client_for
+    database, identity, fixture, _ = storage
+    other = assessment_fixture('cursorother')
+    import_fixture(database, identity, other, 'cursor-other-import')
+    ProfileService(database).save(identity,
+        profile_request(goal_concept_ids=[fixture.concept.id, other.concept.id]), 'cursor-goals')
+    assert RecommendationWorker(database).run_once()
+    client, headers = client_for(database)
+    return storage, other, client, headers
+
+
+@pytest.mark.parametrize('limit', [1, 2])
+@pytest.mark.parametrize('scoped', [False, True])
+def test_server_issued_pages_keep_complete_order_during_explicit_decision_correction(paginated_storage, limit, scoped):
+    storage, _, client, headers = paginated_storage
+    database, _, fixture, _ = storage
+    scope = {'course_id': fixture.course.id} if scoped else {}
+    before = stored_rows(database)
+    whole_response = client.get('/api/v1/recommendations', params={**scope, 'limit': 100})
+    assert whole_response.status_code == 200
+    whole = whole_response.json()
+    expected_ids = [item['id'] for item in whole['items']]
+    assert whole['projection_state'] == 'ready' and len(expected_ids) >= 3
+    assert whole['next_cursor'] is None and whole['total_hint'] == len(expected_ids)
+    first_response = client.get('/api/v1/recommendations', params={**scope, 'limit': limit})
+    assert first_response.status_code == 200
+    first = first_response.json()
+    assert len(first['items']) == limit and first['next_cursor']
+    assert stored_rows(database) == before
+
+    # Real HTTP commands alter this item's decision while the issued cursor is
+    # retained verbatim. They must not replace the immutable projection batch.
+    original = first['items'][0]
+    path = f"/api/v1/recommendations/{original['id']}/decision"
+    accepted = client.post(path, json={'decision': 'accepted', 'reason': None}, headers={**headers,
+        'Idempotency-Key': 'cursor-accept', 'If-Match': f'"{original["decision_sha256"]}"'})
+    assert accepted.status_code == 200 and accepted.json()['revision'] == 2
+    current_response = client.get('/api/v1/recommendations', params={'recommendation_id': original['id']})
+    assert current_response.status_code == 200
+    current = current_response.json()['items'][0]
+    corrected = client.post(path, json={'decision': 'dismissed', 'reason': 'Changed while paging'}, headers={**headers,
+        'Idempotency-Key': 'cursor-correct', 'If-Match': f'"{current["decision_sha256"]}"'})
+    assert corrected.status_code == 200 and corrected.json()['revision'] == 3
+    before_reads = stored_rows(database)
+
+    collected = [item['id'] for item in first['items']]
+    cursor = first['next_cursor']
+    seen_cursors = set()
+    while cursor is not None:
+        assert cursor not in seen_cursors
+        seen_cursors.add(cursor)
+        response = client.get('/api/v1/recommendations', params={**scope, 'limit': limit, 'cursor': cursor})
+        assert response.status_code == 200
+        page = response.json()
+        assert page['snapshot_id'] == whole['snapshot_id'] and page['generated_at'] == whole['generated_at']
+        assert page['projection_state'] == 'ready' and page['total_hint'] == len(expected_ids)
+        assert 1 <= len(page['items']) <= limit
+        collected.extend(item['id'] for item in page['items'])
+        assert len(collected) <= len(expected_ids)
+        cursor = page['next_cursor']
+    assert collected == expected_ids and len(set(collected)) == len(collected)
+    latest = client.get('/api/v1/recommendations', params={'recommendation_id': original['id']})
+    assert latest.status_code == 200 and latest.json()['snapshot_id'] == whole['snapshot_id']
+    item = latest.json()['items'][0]
+    assert item['decision'] == 'dismissed' and item['decision_revision'] == 3
+    assert item['decision_reason'] == 'Changed while paging'
+    assert stored_rows(database) == before_reads
+
+
+@pytest.mark.parametrize('changed', ['limit', 'course', 'signature'])
+def test_server_issued_cursor_rejects_changed_query_scope_or_signature_without_writes(paginated_storage, changed):
+    storage, _, client, _ = paginated_storage
+    database, _, fixture, _ = storage
+    first = client.get('/api/v1/recommendations', params={'limit': 1})
+    assert first.status_code == 200 and first.json()['next_cursor']
+    cursor = first.json()['next_cursor']
+    query = {'limit': 1, 'cursor': cursor}
+    if changed == 'limit':
+        query['limit'] = 2
+    elif changed == 'course':
+        query['course_id'] = fixture.course.id
+    else:
+        # Alter a significant signature byte, preserving the valid URL alphabet.
+        query['cursor'] = ('A' if cursor[0] != 'A' else 'B') + cursor[1:]
+    before = stored_rows(database)
+    rejected = client.get('/api/v1/recommendations', params=query)
+    assert rejected.status_code == 422 and rejected.json()['error']['code'] == 'CURSOR_INVALID'
+    original = client.get('/api/v1/recommendations', params={'limit': 1, 'cursor': cursor})
+    assert original.status_code == 200 and original.json()['items']
+    assert stored_rows(database) == before
+
+
+def test_server_issued_cursor_is_bound_to_actual_workspace_on_the_same_service(paginated_storage):
+    storage, _, _, _ = paginated_storage
+    database, identity, _, _ = storage
+    service = RecommendationService(database)
+    first = service.page(identity.workspace_id, limit=1)
+    assert first.next_cursor is not None
+    # Controlled native second-workspace fixture, not a claim of a public
+    # workspace-creation workflow. The same signing instance isolates scope
+    # validation from unrelated service-key changes or missing-workspace errors.
+    other_workspace = 'workspace_cursor_other'
+    with database.transaction() as connection:
+        connection.execute('INSERT INTO workspace(id,title,preferences_json,created_at) '
+            'SELECT ?,title,preferences_json,created_at FROM workspace WHERE id=?',
+            (other_workspace, identity.workspace_id))
+    before = stored_rows(database)
+    assert service.page(other_workspace).projection_state == 'missing'
+    with pytest.raises(ApiError) as rejected:
+        service.page(other_workspace, limit=1, cursor=first.next_cursor)
+    assert rejected.value.status == 422 and rejected.value.code == 'CURSOR_INVALID'
+    assert service.page(identity.workspace_id, limit=1, cursor=first.next_cursor).items
+    assert stored_rows(database) == before
+
+
+def test_server_issued_cursor_expires_after_real_refresh_and_current_policy_still_precedes_it(paginated_storage):
+    from packages.contracts import domain_models as dm
+    from services.api.app.application.profile import ProfileService
+    from tests.integration.test_assessment_attempts import start
+    from tests.integration.test_learner_profile import request as profile_request
+    storage, _, client, _ = paginated_storage
+    database, identity, _, assessment = storage
+    first = client.get('/api/v1/recommendations', params={'limit': 1})
+    assert first.status_code == 200 and first.json()['next_cursor']
+    cursor = first.json()['next_cursor']
+    ProfileService(database).save(identity, profile_request(2, goals=[], goal_concept_ids=[]), 'clear-cursor-goals')
+    assert RecommendationWorker(database).run_once()
+    refreshed = client.get('/api/v1/recommendations')
+    assert refreshed.status_code == 200 and refreshed.json()['projection_state'] == 'ready'
+    assert refreshed.json()['snapshot_id'] != first.json()['snapshot_id']
+    before = stored_rows(database)
+    expired = client.get('/api/v1/recommendations', params={'limit': 1, 'cursor': cursor})
+    assert expired.status_code == 409 and expired.json()['error']['code'] == 'CURSOR_EXPIRED'
+    assert stored_rows(database) == before
+
+    active = start(storage, key='cursor-active-policy')
+    before_policy_reads = stored_rows(database)
+    corrupted = ('A' if cursor[0] != 'A' else 'B') + cursor[1:]
+    for candidate in (cursor, corrupted):
+        denied = client.get('/api/v1/recommendations', params={'limit': 1, 'cursor': candidate})
+        assert denied.status_code == 409 and denied.json()['error']['code'] == 'ASSESSMENT_ACTIVE'
+    assert stored_rows(database) == before_policy_reads
+    assessment.abandon(identity, active.id, dm.AttemptSubmit(expected_revision=1), 'release-cursor-policy')
+    after_policy = stored_rows(database)
+    expired_again = client.get('/api/v1/recommendations', params={'limit': 1, 'cursor': cursor})
+    assert expired_again.status_code == 409 and expired_again.json()['error']['code'] == 'CURSOR_EXPIRED'
+    assert stored_rows(database) == after_policy

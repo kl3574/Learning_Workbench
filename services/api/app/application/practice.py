@@ -182,6 +182,8 @@ class PracticeService:
             def operation():
                 private_refs = content.freeze_solutions(practice.question_refs)
                 identifier = repository.create(request.practice_ref, practice.question_refs, private_refs)
+                from .recommendations import inputs_changed
+                inputs_changed(repository.connection, identity.workspace_id, 'practice.allocated')
                 return self._view(content, repository, repository.load(identifier), questions).model_dump(mode="json")
 
             result = execute_idempotent(repository.connection, actor=identity.workspace_id, route="POST /practice/sessions",

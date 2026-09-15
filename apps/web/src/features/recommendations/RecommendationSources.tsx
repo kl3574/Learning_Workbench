@@ -1,0 +1,17 @@
+import type { ContentRef, RecommendationView } from '../../../../../packages/contracts/generated/api-types'
+import { refKey } from '../reader/target'
+import { selfLabels } from '../learning/ProfileFields'
+import { skillLabels } from '../learning/conceptModel'
+export function RecommendationRef({ value }: { value: ContentRef }) { return <code className="recommendation-ref">{value.entity} · {value.id} · r{value.revision}<br />SHA-256 {value.sha256}</code> }
+const applicability = { usable: '当前适用性已核验', pending_review: '适用性待核验', confirmed_stale: '已有明确失效记录' }
+const origins = { deterministic: '确定性判分', human_review: '人工复核', unknown: '判分来源尚未确认' }
+const activities = { read_marked: '已读标记', practice_submitted: '练习提交', test_submitted: '测试提交' }
+export function RecommendationSources({ item }: { item: RecommendationView }) {
+  return <details className="recommendation-sources"><summary>核对推荐原因与真实来源</summary><p>{item.explanation}</p><p>生成时间：<time dateTime={item.generated_at}>{item.generated_at}</time> · 规则 {item.rule_version}。</p><RecommendationRef value={item.target_ref} />
+    {item.prerequisite_gaps.length > 0 && <section><h4>本项先修缺口</h4>{item.prerequisite_gaps.map(ref => <p key={refKey(ref)}><RecommendationRef value={ref} /></p>)}</section>}
+    {item.profile_basis && <section><h4>原画像依据 · 修订 {item.profile_basis.revision}</h4><p>{item.profile_basis.goals.join('；') || '没有文字目标'}</p><p>目标概念：{item.profile_basis.goal_concept_ids.join('、') || '没有概念目标'}。</p><p>修订 1 可为默认投影；不表示已保存画像。自报不增加独立证据。</p>{item.profile_basis.self_assessments.map(value => <p key={value.concept_id}>{value.concept_id}：{selfLabels[value.level]} · 用户自报 · <time dateTime={value.updated_at}>{value.updated_at}</time></p>)}</section>}
+    {item.route_basis && <section><h4>原路线依据</h4><RecommendationRef value={item.route_basis.route_ref} /><p>步骤 {item.route_basis.step_id} · 完成 / 撤销来源事件：{item.route_basis.source_event_ids.join('、') || '没有来源事件'}。</p></section>}
+    {item.activity_refs.length > 0 && <section><h4>阅读与参与记录</h4>{item.activity_refs.map(value => <details key={value.event_id}><summary>{activities[value.kind]} · {value.occurred_at}</summary><RecommendationRef value={value.target_ref} /><p>事件 {value.event_id}{value.source_id ? ` · 原作答会话 ${value.source_id}` : ''}。</p><p>此记录只证明阅读或参与，不替代独立评分。</p></details>)}</section>}
+    {item.evidence_refs.length ? <section><h4>评分证据来源</h4>{item.evidence_refs.map(source => <details key={source.evidence.id}><summary>{skillLabels[source.evidence.skill]} · 评分版本 {source.grading_revision} · {origins[source.grading_origin]}</summary><p>原提交时间：<time dateTime={source.submitted_at}>{source.submitted_at}</time>。</p><p>{applicability[source.applicability]}；{source.evidence.eligible ? '原记录符合独立证据条件' : '原记录未纳入独立证据'}；{source.evidence.reason}。</p><p>题目归一分数：{source.evidence.score == null ? '未知' : `${source.evidence.score} / 1`}；模式：{source.evidence.independence === 'independent' ? '独立' : source.evidence.independence === 'assisted' ? '允许辅助' : '未知'}；此前是否见过：{source.evidence.freshness === 'novel' ? '原记录支持此前未见' : source.evidence.freshness === 'repeated' ? '此前已见' : '未知'}。</p><dl><dt>证据 / 事件 / 作答实例</dt><dd>{source.evidence.id}<br />{source.evidence.event_id}<br />{source.attempt_id}</dd><dt>测试</dt><dd><RecommendationRef value={source.assessment_ref} /></dd><dt>题目</dt><dd><RecommendationRef value={source.question_ref} /></dd><dt>概念</dt><dd><RecommendationRef value={source.concept_ref} /></dd></dl></details>)}</section> : <p>本项没有评分证据，不能据此声称能力提升。</p>}
+  </details>
+}

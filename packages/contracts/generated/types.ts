@@ -1,5 +1,5 @@
-// Generated from PRODUCT_DESIGN.md v3.0.0. DO NOT EDIT.
-// spec_sha256: ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c
+// Generated from PRODUCT_DESIGN.md v3.0.1. DO NOT EDIT.
+// spec_sha256: 397829f5267248aedfc60faf7cacbb12669966b1c1d636a909b04189e0cc09dd
 // JSON Schema is the type source; runtime semantic checks remain required.
 
 export type ApprovalDecision = {

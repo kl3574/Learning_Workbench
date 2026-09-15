@@ -1,6 +1,6 @@
-// Generated from PRODUCT_DESIGN.md v3.0.0 and actual runtime OpenAPI; do not edit.
-// spec_sha256: ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c
-import type { AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, BlockReadResponse, BootstrapRequest, BootstrapResponse, ConceptStateResponse, ContentRef, Course, DirectorySearchResponse, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearnerProfile, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, OutlineResponse, PageAssessment, PageCourse, PageEvidence, PageNote, PagePracticeSet, PageRevision, PageRoute, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ProfileWrite, ReadinessResponse, RegradeRequest, ResponsesWrite, RoleRequest, Route, RouteCompletionRequest, SessionResponse, SourceResponse, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
+// Generated from PRODUCT_DESIGN.md v3.0.1 and actual runtime OpenAPI; do not edit.
+// spec_sha256: 397829f5267248aedfc60faf7cacbb12669966b1c1d636a909b04189e0cc09dd
+import type { AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, BlockReadResponse, BootstrapRequest, BootstrapResponse, ConceptStateResponse, ContentRef, Course, DirectorySearchResponse, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearnerProfile, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, OutlineResponse, PageAssessment, PageCourse, PageEvidence, PageNote, PagePracticeSet, PageRevision, PageRoute, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ProfileWrite, ReadinessResponse, RecommendationDecisionWrite, RecommendationPage, RegradeRequest, ResponsesWrite, RoleRequest, Route, RouteCompletionRequest, SessionResponse, SourceResponse, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
 
 export interface ApiEndpointMap {
   "GET /api/v1/artifacts/{id}/download": { request: undefined; response: Blob; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
@@ -47,6 +47,8 @@ export interface ApiEndpointMap {
   "POST /api/v1/practice/sessions/{id}/submit": { request: PracticeSubmitRequest; response: PracticeSubmitted; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/practice/sets": { request: undefined; response: PagePracticeSet; headers: null; parameters: { query?: { "course_id"?: (string | null); "cursor"?: (string | null); "lesson_id"?: (string | null); "limit"?: number } }; parametersRequired: false };
   "GET /api/v1/readiness": { request: undefined; response: ReadinessResponse; headers: null; parameters: Record<string, never>; parametersRequired: false };
+  "GET /api/v1/recommendations": { request: undefined; response: RecommendationPage; headers: null; parameters: { query?: { "course_id"?: (string | null); "cursor"?: (string | null); "limit"?: number; "recommendation_id"?: (string | null) } }; parametersRequired: false };
+  "POST /api/v1/recommendations/{id}/decision": { request: RecommendationDecisionWrite; response: MutationAck; headers: { "Idempotency-Key": string; "If-Match": string }; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/routes": { request: undefined; response: PageRoute; headers: null; parameters: { query?: { "cursor"?: (string | null); "limit"?: number } }; parametersRequired: false };
   "POST /api/v1/routes": { request: Route; response: ContentRef; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
   "PUT /api/v1/routes/{id}": { request: Route; response: ContentRef; headers: { "Idempotency-Key": string; "If-Match"?: (string | null) }; parameters: { path: { "id": string } }; parametersRequired: true };
@@ -838,6 +840,53 @@ export const API_ENDPOINTS = {
     "requestKind": "json",
     "multipartFields": [],
     "pathParameters": [],
+    "queryParameters": []
+  },
+  "GET /api/v1/recommendations": {
+    "method": "GET",
+    "path": "/api/v1/recommendations",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
+    "queryParameters": [
+      {
+        "name": "course_id",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "name": "cursor",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      },
+      {
+        "name": "recommendation_id",
+        "required": false,
+        "type": "string"
+      }
+    ]
+  },
+  "POST /api/v1/recommendations/{id}/decision": {
+    "method": "POST",
+    "path": "/api/v1/recommendations/{id}/decision",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
     "queryParameters": []
   },
   "GET /api/v1/routes": {

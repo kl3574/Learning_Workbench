@@ -120,6 +120,8 @@ def record_route_completion(connection: sqlite3.Connection, workspace_id: str, r
     learning.append(event)
     learning.save(previous, updated, event.event_id)
     _checked_manual(connection, workspace_id)
+    from .recommendations import inputs_changed
+    inputs_changed(connection, workspace_id, 'route.completion_recorded')
     return LearningActionResponse(event_id=event.event_id, progress_revision=updated.revision)
 
 

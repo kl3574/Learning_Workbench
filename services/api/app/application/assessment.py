@@ -110,7 +110,8 @@ class AssessmentService:
             result.append(PriorSeenQuestion(question_ref=ref, state=state, reason_codes=sorted(set(reasons))))
         return PriorSeen(status="unknown" if any(item.state == "unknown" for item in result) else "known", questions=result)
 
-    def _preflight(self, content: AssessmentContent, repository: AssessmentRepository, blueprint: dm.AssessmentBlueprint) -> AssessmentPreflight:
+    @staticmethod
+    def _preflight(content: AssessmentContent, repository: AssessmentRepository, blueprint: dm.AssessmentBlueprint) -> AssessmentPreflight:
         checked = content.preflight(blueprint)
         questions = content.questions(blueprint)
         statuses = Counter(checked.review_statuses)
@@ -136,7 +137,7 @@ class AssessmentService:
             grading=GradingReadiness(status="unavailable" if unavailable else "unreviewed" if unreviewed else "reviewed",
                 approved_count=statuses["approved"], draft_count=statuses["draft"], needs_review_count=statuses["needs_review"],
                 missing_count=statuses["missing"], damaged_count=statuses["damaged"], reason_codes=reasons),
-            prior_seen=self._prior(content, repository, questions), startable=not blockers, start_block_reason_codes=sorted(set(blockers)))
+            prior_seen=AssessmentService._prior(content, repository, questions), startable=not blockers, start_block_reason_codes=sorted(set(blockers)))
 
     def list_assessments(self, identity: SessionIdentity, course_id: str | None = None, limit: int = 20, cursor: str | None = None) -> PageAssessment:
         if type(limit) is not int or not 1 <= limit <= 100:
@@ -228,6 +229,8 @@ class AssessmentService:
                 snapshot = dm.PolicySnapshot(mode=request.mode, tutor_scope="academic" if request.mode == "assisted" else "operation_help_only",
                     allow_web=False, allow_materials=request.mode != "independent")
                 record = repository.create(reference(blueprint), snapshot, list(blueprint.question_refs), list(bundle.private_pins), preflight)
+                from .recommendations import inputs_changed
+                inputs_changed(repository.connection, identity.workspace_id, 'assessment.allocated')
                 return self._view(content, repository, record).model_dump(mode="json")
             result = execute_idempotent(repository.connection, actor=identity.workspace_id, route=route, key=key,
                                         payload=request.model_dump(mode="json"), operation=operation)
@@ -300,7 +303,10 @@ class AssessmentService:
             self._view(content, repository, record)
             def operation():
                 repository.expect_active(record, request.expected_revision)
-                return self._view(content, repository, repository.abandon(record)).model_dump(mode="json")
+                abandoned = repository.abandon(record)
+                from .recommendations import inputs_changed
+                inputs_changed(repository.connection, identity.workspace_id, 'assessment.abandoned')
+                return self._view(content, repository, abandoned).model_dump(mode="json")
             result = execute_idempotent(repository.connection, actor=identity.workspace_id, route=route, key=key,
                                         payload=request.model_dump(mode="json"), operation=operation)
             return self._receipt(content, repository, route, key, result, id, fresh=replay_id is None)

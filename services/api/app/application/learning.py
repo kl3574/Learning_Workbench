@@ -100,7 +100,10 @@ class LearningService:
         with self._access(identity.workspace_id) as (content, learning):
             def operation():
                 validated_ref(content, request.ref)
-                return learning.action(request).model_dump(mode="json")
+                result = learning.action(request)
+                from .recommendations import inputs_changed
+                inputs_changed(content.connection, identity.workspace_id, 'learning.action_recorded')
+                return result.model_dump(mode="json")
 
             result = execute_idempotent(content.connection, actor=identity.workspace_id, route="POST /learning/actions",
                                         key=key, payload=request.model_dump(mode="json"), operation=operation)
@@ -132,7 +135,10 @@ def record_practice_event(connection: sqlite3.Connection, workspace_id: str,
     content.require_workspace()
     guard_subject_access(connection, workspace_id)
     validated_ref(content, ref)
-    return LearningRepository(connection, workspace_id).practice_event(kind, ref, practice_session_id)
+    event_id = LearningRepository(connection, workspace_id).practice_event(kind, ref, practice_session_id)
+    from .recommendations import inputs_changed
+    inputs_changed(connection, workspace_id, f'practice.{kind}')
+    return event_id
 
 
 def validate_practice_event(connection: sqlite3.Connection, workspace_id: str, event_id: str,
@@ -163,7 +169,10 @@ def record_test_submitted(connection: sqlite3.Connection, workspace_id: str,
     if access.status != "submitted":
         raise ApiError(409, "ASSESSMENT_STATE_INVALID", "只有已持久化交卷的测验可记录提交事件。")
     validate_assessment_reference(connection, workspace_id, assessment_ref)
-    return LearningRepository(connection, workspace_id).test_submitted(assessment_ref, attempt_id)
+    event_id = LearningRepository(connection, workspace_id).test_submitted(assessment_ref, attempt_id)
+    from .recommendations import inputs_changed
+    inputs_changed(connection, workspace_id, 'assessment.submitted')
+    return event_id
 
 
 def validate_test_submitted(connection: sqlite3.Connection, workspace_id: str, event_id: str,

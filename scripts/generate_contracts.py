@@ -20,6 +20,47 @@ from scripts.schema_types import generate_types
 from scripts.api_contracts import api_artifacts, runtime_openapi
 
 
+def recommendation_ports_binding(ports: str, openapi: dict, provenance: dict[str, str]) -> str:
+    """Bind the application map only after both real recommendation routes exist."""
+    marker = 'export interface RecommendationDTOMap {'
+    if ports.count(marker) != 1:
+        raise ValueError('recommendation application map must be explicitly declared once')
+    block = ports.split(marker, 1)[1].split('}', 1)[0]
+    names = re.findall(r'\b(\w+): unknown;', block)
+    if (len(names) != len(set(names))
+            or set(names) != {'RecommendationPage', 'RecommendationDecisionWrite', 'MutationAck'}
+            or re.sub(r'\b\w+: unknown;', '', block).strip()):
+        raise ValueError('recommendation application map has unmapped or duplicate DTOs')
+    expected = {
+        ('/api/v1/recommendations', 'get'): (None, 'RecommendationPage'),
+        ('/api/v1/recommendations/{id}/decision', 'post'): ('RecommendationDecisionWrite', 'MutationAck'),
+    }
+    schemas = openapi.get('components', {}).get('schemas', {})
+    for (path, method), (request_name, response_name) in expected.items():
+        operation = openapi.get('paths', {}).get(path, {}).get(method)
+        if operation is None:
+            raise ValueError('recommendation application binding requires both registered runtime operations')
+        response = operation.get('responses', {}).get('200', {}).get('content', {}).get('application/json', {}).get('schema', {})
+        if response != {'$ref': f'#/components/schemas/{response_name}'}:
+            raise ValueError('recommendation runtime response does not bind its declared strict DTO')
+        if request_name is not None:
+            request = operation.get('requestBody', {}).get('content', {}).get('application/json', {}).get('schema', {})
+            if request != {'$ref': f'#/components/schemas/{request_name}'}:
+                raise ValueError('recommendation runtime request does not bind its declared strict DTO')
+    for name in names:
+        schema = schemas.get(name, {})
+        if schema.get('type') != 'object' or schema.get('additionalProperties') is not False:
+            raise ValueError('recommendation application DTO must be a registered closed object')
+    lines = [f"// Generated from PRODUCT_DESIGN.md v{provenance['spec_version']} and runtime OpenAPI; do not edit.",
+             f"// spec_sha256: {provenance['spec_sha256']}",
+             'import type { RecommendationDTOMap } from "../module-ports";',
+             'import type * as Api from "./api-types";', '',
+             'export interface RecommendationApplicationDTOMap extends RecommendationDTOMap {']
+    lines.extend(f'  {name}: Api.{name};' for name in names)
+    lines.append('}')
+    return '\n'.join(lines) + '\n'
+
+
 def artifacts(root: Path = ROOT) -> dict[Path, bytes]:
     spec = root / "PRODUCT_DESIGN.md"
     provenance = spec_metadata(spec)
@@ -56,7 +97,10 @@ def artifacts(root: Path = ROOT) -> dict[Path, bytes]:
     add_json("docs/requirements/traceability.json", tracking)
     catalog = route_catalog(spec)
     add_json("docs/requirements/routes.json", catalog)
-    for name, value in api_artifacts(runtime_openapi(), catalog, provenance).items():
+    openapi = runtime_openapi()
+    application_binding = recommendation_ports_binding(ports, openapi, provenance)
+    output[root / 'packages/contracts/generated/recommendation-ports-binding.ts'] = application_binding.encode()
+    for name, value in api_artifacts(openapi, catalog, provenance).items():
         target = "packages/contracts/generated/" + name
         if isinstance(value, str):
             output[root / target] = value.encode("utf-8")

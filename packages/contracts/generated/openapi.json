@@ -4493,6 +4493,620 @@
         "title": "RecentAttempt",
         "type": "object"
       },
+      "RecommendationActivityRef": {
+        "additionalProperties": false,
+        "properties": {
+          "event_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "read_marked",
+              "practice_submitted",
+              "test_submitted"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "occurred_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "target_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          }
+        },
+        "required": [
+          "kind",
+          "event_id",
+          "target_ref",
+          "source_id",
+          "occurred_at"
+        ],
+        "title": "RecommendationActivityRef",
+        "type": "object"
+      },
+      "RecommendationAssessmentOption": {
+        "additionalProperties": false,
+        "properties": {
+          "assessment_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "course_ref": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContentRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "const": "assessment",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "assessment_ref",
+          "course_ref"
+        ],
+        "title": "RecommendationAssessmentOption",
+        "type": "object"
+      },
+      "RecommendationDecisionWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "accepted",
+              "dismissed"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "decision",
+          "reason"
+        ],
+        "title": "RecommendationDecisionWrite",
+        "type": "object"
+      },
+      "RecommendationEvidenceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "applicability": {
+            "enum": [
+              "usable",
+              "pending_review",
+              "confirmed_stale"
+            ],
+            "title": "Applicability",
+            "type": "string"
+          },
+          "assessment_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "attempt_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Attempt Id",
+            "type": "string"
+          },
+          "concept_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/Evidence"
+          },
+          "grading_origin": {
+            "enum": [
+              "deterministic",
+              "human_review",
+              "unknown"
+            ],
+            "title": "Grading Origin",
+            "type": "string"
+          },
+          "grading_revision": {
+            "minimum": 1.0,
+            "title": "Grading Revision",
+            "type": "integer"
+          },
+          "question_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "submitted_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Submitted At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "evidence",
+          "question_ref",
+          "concept_ref",
+          "assessment_ref",
+          "attempt_id",
+          "grading_revision",
+          "submitted_at",
+          "applicability",
+          "grading_origin"
+        ],
+        "title": "RecommendationEvidenceRef",
+        "type": "object"
+      },
+      "RecommendationPage": {
+        "additionalProperties": false,
+        "properties": {
+          "generated_at": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RecommendationView"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "projection_state": {
+            "enum": [
+              "missing",
+              "pending_refresh",
+              "ready",
+              "stale",
+              "failed"
+            ],
+            "title": "Projection State",
+            "type": "string"
+          },
+          "rule_parameters": {
+            "$ref": "#/components/schemas/RecommendationRuleParameters"
+          },
+          "rule_version": {
+            "minLength": 1,
+            "title": "Rule Version",
+            "type": "string"
+          },
+          "snapshot_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Id"
+          },
+          "total_hint": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Total Hint",
+            "type": "integer"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/Warning"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor",
+          "projection_state",
+          "warnings",
+          "snapshot_id",
+          "generated_at",
+          "rule_version",
+          "rule_parameters"
+        ],
+        "title": "RecommendationPage",
+        "type": "object"
+      },
+      "RecommendationPracticeOption": {
+        "additionalProperties": false,
+        "properties": {
+          "course_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "kind": {
+            "const": "practice",
+            "title": "Kind",
+            "type": "string"
+          },
+          "lesson_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "practice_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          }
+        },
+        "required": [
+          "kind",
+          "course_ref",
+          "lesson_ref",
+          "practice_ref"
+        ],
+        "title": "RecommendationPracticeOption",
+        "type": "object"
+      },
+      "RecommendationProfileBasis": {
+        "additionalProperties": false,
+        "properties": {
+          "goal_concept_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "title": "Goal Concept Ids",
+            "type": "array"
+          },
+          "goals": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Goals",
+            "type": "array"
+          },
+          "revision": {
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "self_assessments": {
+            "items": {
+              "$ref": "#/components/schemas/SelfAssessment"
+            },
+            "title": "Self Assessments",
+            "type": "array"
+          }
+        },
+        "required": [
+          "revision",
+          "goal_concept_ids",
+          "goals",
+          "self_assessments"
+        ],
+        "title": "RecommendationProfileBasis",
+        "type": "object"
+      },
+      "RecommendationReaderOption": {
+        "additionalProperties": false,
+        "properties": {
+          "block_ref": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContentRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "course_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "kind": {
+            "const": "reader",
+            "title": "Kind",
+            "type": "string"
+          },
+          "lesson_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          }
+        },
+        "required": [
+          "kind",
+          "course_ref",
+          "lesson_ref",
+          "block_ref"
+        ],
+        "title": "RecommendationReaderOption",
+        "type": "object"
+      },
+      "RecommendationRouteBasis": {
+        "additionalProperties": false,
+        "properties": {
+          "route_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "source_event_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "title": "Source Event Ids",
+            "type": "array"
+          },
+          "step_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Step Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "route_ref",
+          "step_id",
+          "source_event_ids"
+        ],
+        "title": "RecommendationRouteBasis",
+        "type": "object"
+      },
+      "RecommendationRuleParameters": {
+        "additionalProperties": false,
+        "properties": {
+          "calibration": {
+            "const": "uncalibrated",
+            "title": "Calibration",
+            "type": "string"
+          },
+          "review_after_days": {
+            "exclusiveMinimum": 0.0,
+            "title": "Review After Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "review_after_days",
+          "calibration"
+        ],
+        "title": "RecommendationRuleParameters",
+        "type": "object"
+      },
+      "RecommendationView": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "read",
+              "practice",
+              "test",
+              "review",
+              "inspect_source"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "activity_refs": {
+            "items": {
+              "$ref": "#/components/schemas/RecommendationActivityRef"
+            },
+            "title": "Activity Refs",
+            "type": "array"
+          },
+          "decision": {
+            "enum": [
+              "pending",
+              "accepted",
+              "dismissed"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "decision_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision Reason"
+          },
+          "decision_revision": {
+            "minimum": 1.0,
+            "title": "Decision Revision",
+            "type": "integer"
+          },
+          "decision_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Decision Sha256",
+            "type": "string"
+          },
+          "estimated_minutes": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Minutes"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/RecommendationEvidenceRef"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "explanation": {
+            "minLength": 1,
+            "title": "Explanation",
+            "type": "string"
+          },
+          "generated_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "navigation_options": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "assessment": "#/components/schemas/RecommendationAssessmentOption",
+                  "practice": "#/components/schemas/RecommendationPracticeOption",
+                  "reader": "#/components/schemas/RecommendationReaderOption"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/RecommendationReaderOption"
+                },
+                {
+                  "$ref": "#/components/schemas/RecommendationPracticeOption"
+                },
+                {
+                  "$ref": "#/components/schemas/RecommendationAssessmentOption"
+                }
+              ]
+            },
+            "minItems": 1,
+            "title": "Navigation Options",
+            "type": "array"
+          },
+          "prerequisite_gaps": {
+            "items": {
+              "$ref": "#/components/schemas/ContentRef"
+            },
+            "title": "Prerequisite Gaps",
+            "type": "array"
+          },
+          "profile_basis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecommendationProfileBasis"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason_codes": {
+            "items": {
+              "enum": [
+                "prerequisite_gap",
+                "assessment_error",
+                "review_due",
+                "next_route_step",
+                "user_goal",
+                "read_without_practice",
+                "practice_without_independent"
+              ],
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "route_basis": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecommendationRouteBasis"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rule_version": {
+            "minLength": 1,
+            "title": "Rule Version",
+            "type": "string"
+          },
+          "staleness": {
+            "enum": [
+              "current",
+              "stale"
+            ],
+            "title": "Staleness",
+            "type": "string"
+          },
+          "target_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "target_title": {
+            "minLength": 1,
+            "title": "Target Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "target_ref",
+          "target_title",
+          "action",
+          "reason_codes",
+          "explanation",
+          "evidence_refs",
+          "activity_refs",
+          "profile_basis",
+          "route_basis",
+          "prerequisite_gaps",
+          "navigation_options",
+          "estimated_minutes",
+          "rule_version",
+          "generated_at",
+          "staleness",
+          "decision",
+          "decision_revision",
+          "decision_sha256",
+          "decision_reason"
+        ],
+        "title": "RecommendationView",
+        "type": "object"
+      },
       "RegradeItemReview": {
         "additionalProperties": false,
         "properties": {
@@ -13400,6 +14014,402 @@
         ]
       }
     },
+    "/api/v1/recommendations": {
+      "get": {
+        "operationId": "page_api_v1_recommendations_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "course_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Course Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "recommendation_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recommendation Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1024,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecommendationPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Page",
+        "tags": [
+          "recommendations"
+        ]
+      }
+    },
+    "/api/v1/recommendations/{id}/decision": {
+      "post": {
+        "operationId": "decide_api_v1_recommendations__id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "title": "Origin",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,128}$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Quoted strong SHA-256 of the current decision version.",
+            "in": "header",
+            "name": "If-Match",
+            "required": true,
+            "schema": {
+              "pattern": "^\"[0-9a-f]{64}\"$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecommendationDecisionWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationAck"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Decide",
+        "tags": [
+          "recommendations"
+        ]
+      }
+    },
     "/api/v1/routes": {
       "get": {
         "operationId": "routes_api_v1_routes_get",
@@ -15738,7 +16748,7 @@
   },
   "x-source-spec": {
     "source": "PRODUCT_DESIGN.md",
-    "spec_sha256": "ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c",
-    "spec_version": "3.0.0"
+    "spec_sha256": "397829f5267248aedfc60faf7cacbb12669966b1c1d636a909b04189e0cc09dd",
+    "spec_version": "3.0.1"
   }
 }

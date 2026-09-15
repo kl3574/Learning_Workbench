@@ -60,7 +60,7 @@ function acknowledge(workspace: string, key: string, record: DraftRecord): void 
 }
 
 return function useResponseDrafts(workspace: string): {
-  records: Record<string, DraftRecord>; ready: boolean; saving: boolean; error: string; unsafe: boolean
+  records: Record<string, DraftRecord>; ready: boolean; saving: boolean; error: string; unsafe: boolean; workspaceUnsafe: boolean
   save(envelope: Envelope): void; resolve(key: string, text: string): Promise<Envelope>
 } {
   const owner = useRef(crypto.randomUUID())
@@ -213,6 +213,9 @@ return function useResponseDrafts(workspace: string): {
     records: session.records, ready: session.ready, saving: session.busy > 0,
     error: [session.loadError, ...session.errors.values()].filter(Boolean).join(' '),
     unsafe: !!session.loadError || session.busy > 0 || memory.size > 0 || [...session.branches.values()].some(branch => !branch.durable),
+    // Operations in another workspace can proceed while the existing global
+    // unsafe flag continues to protect all page-memory inputs from unmount.
+    workspaceUnsafe: !!session.loadError || session.busy > 0 || memoryFor(session.workspace).length > 0 || [...session.branches.values()].some(branch => !branch.durable),
     save, resolve,
   }
 }

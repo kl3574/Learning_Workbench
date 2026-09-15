@@ -1,6 +1,6 @@
 # 知径 Learning Workbench：完整产品设计与工程实施规范
 
-**版本：3.0.0｜日期：2026-09-14｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
+**版本：3.0.1｜日期：2026-09-15｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
 
 **本文件（含文末附录）是唯一产品与工程规范。** 将它放入空目录即可开始；不需要旧版设计包、旧 Demo、之前聊天、私有 GitHub 仓库或另一份提示词说明需求。正文定义产品，附录内嵌数据模型、HTTP 字段、数据库设计、模块接口、样例和验收用例。构建 Agent 根据本文生成实现文件、OpenAPI、测试和进度记录；这些是派生产物，不是第二套产品需求。
 
@@ -647,11 +647,18 @@ Broker 的最小职责：探测可用性与授权状态；维护产品 session �
 
 ### 13.3 推荐第一版
 
-首期采用可解释规则，不训练一个缺少数据却声称个性化准确的模型。候选项先过滤权限/审核状态/课程可用性，再处理先修和目标。
+首期采用可解释规则，不训练一个缺少数据却声称个性化准确的模型。候选项先过滤权限/审核状态/课程可用性，再处理先修和目标。审核状态过滤按用途进行：未审教材或习题可作为阅读、练习或来源查看候选，但每项 explanation 和页面 warning 必须明确其实际未审状态，不承诺评分、独立证据资格或已验证补弱效果。用于补足独立证据的 test 候选必须实际可用、概念/技能映射完整、固定答案已审核且当前全工作区 prior-seen/暴露资格满足；没有合适测试就报告真实缺口，不能把普通可启动但未具资格的测验冒充诊断。
 
 默认顺序：存在确定性错题时推荐其依赖概念；先修缺证据时提供诊断或基础材料；已读但未练时推荐习题；有基础练习但缺独立证据时推荐合适测试；有既有证据且到复习时间时推荐复习；否则按用户目标和路线推进。用户可以跳过，并写入 skip_reason，不自动降低能力分。
 
 推荐输出包含：target_ref、action、reason_codes、evidence_refs、prerequisite_gaps、estimated_minutes、rule_version、generated_at、staleness。新结果到来后失效旧推荐，不能把昨日依据当作实时事实。
+
+推荐由 Recommendation 模块在源变更事务中登记失效意图，并由本地持久 worker 的启动恢复或后台维护生成及切换冻结投影。GET 只读取既有投影和只读核验当前依据，不生成、写 stale、排队刷新或调用外部服务。新学习结果、画像/路线/内容可用性变化或复习时点到达后，旧依据不再标为 current；计算失败保留旧快照及明确诊断，不改学习事实。推荐不能把自己消费了失效意图等同于 Content 已完成影响复核，不得清除其他模块仍需要的待复核信号。
+
+具体 HTTP 字段使用附录 A 的 RecommendationView/RecommendationPage；附录 B 的 Recommendation 保留原交换形状，不作为该端点的解码类型。原因有限枚举明确区分 read_without_practice 与 practice_without_independent，不给没有目标、路线或先修关系的参与活动伪造相应原因。Evidence 引用不是 ContentRef.Entity，评分来源引用必须保留真实 Evidence、作答、评分版本及精确内容身份。推荐的确定性错误依据须由 Assessment 核验该题在所选评分版本中的实际判分来源；人工重评后的低分或保留下来的旧确定性 trace 不自动变成当前确定性错题。
+
+接受、拒绝或显式更正决定/理由只改变推荐自己的决定历史，不改变路线、学习事件、成绩或能力状态；接受不自动打开付费工具、联网、重排或标记完成。实际打开材料仍走该精确对象的正常权限与读取流程。文档版本 3.0.1 的本次推荐 HTTP 更正不改变学习包及附录 B 核心模型的 schema_version=3.0.0，也不重写既有历史回执。
+
 
 **自报与跨教材推荐。** 用户通过设置中的“学习目标与基础”填写目标、每周时间、语言、概念自评（未学/接触过/能独立使用）和偏好难度；每项标记 self_report，独立保留来源与时间。候选范围默认当前工作区已导入且可访问的全部教材，不限当前一本；排序依次考虑目标概念覆盖、先修缺口、最近可信错题、内容审核等级和阅读成本。没有合适本地内容时给“缺少对应教材”的理由，可提出联网查找候选，但只有授权后才调用搜索。外部推荐返回候选标题、来源、定位及待导入状态，不伪造已拥有该教材。无授权时依然能运行本地规则。推荐的 estimated_minutes 未有实测来源时返回 null，不生成虚构数字。
 
@@ -1124,11 +1131,78 @@ CI 建议 job：`spec-contracts`、`backend`、`frontend`、`integration`、`bro
 | GET `/learning/progress` | `course_id?` | `{revision,readings:{ref,read,read_at}[],route_steps:{route_ref,step_id,completed}[]}`；无掌握概率 |
 | POST `/learning/actions` | `{kind:read_marked|bookmark_set,ref,expected_revision,value:boolean}` | `{event_id,progress_revision}`；客户端不能上传native grade_finalized事件 |
 | GET `/learning/evidence` | `concept_id?`,`skill?`,`cursor?`,`limit?` | Page<Evidence>；区分有效、过期、辅助、重复和未知 |
-| GET `/recommendations` | `course_id?`,`limit?`，默认全工作区 | Page<Recommendation>；每条原因和证据，不自报无数据百分比 |
-| POST `/recommendations/{id}/decision` | `{decision:accepted|dismissed,reason:string|null}` | MutationAck；拒绝不降低用户能力分 |
+| GET `/recommendations` | `course_id?`,`recommendation_id?`,`cursor?`,`limit?`，默认全工作区，limit 默认20、最大100 | RecommendationPage；仅回读已持久化推荐投影并校验当前依据，不生成/写入/排队刷新；每条有真实原因与来源，空态/缺材料/更新状态显式返回 |
+| POST `/recommendations/{id}/decision` | RecommendationDecisionWrite，即 `{decision:accepted|dismissed,reason:string|null}`；Idempotency-Key；If-Match 为所读 RecommendationView.decision_sha256 的带引号强标签 | MutationAck；revision 是该推荐决定版本，applied 表示原命令是否真正改变决定；接受/拒绝不改变路线、成绩、学习事件或能力状态 |
 | GET `/notes` | `ref_id?`,`cursor?`,`limit?` | Page<Note>；anchor状态可为stale，不静默迁移到最新版本 |
 | POST `/notes` | Note | 201 ContentRef；quote/codepoint与正文校验 |
 | PATCH `/notes/{id}` | Note + If-Match | ContentRef；id一致、revision按新版本处理，冲突412 |
+
+### 推荐应用 DTO、只读投影和决定版本
+
+下列类型是推荐端点的闭合应用契约，独立于附录 B 的 Recommendation；未知字段拒绝。未标 `?` 的字段必须出现，`|null` 只允许空值、不表示可省略。Id、Revision、Sha256、UTC、ContentRef、Evidence、SelfAssessment、Warning、MutationAck 沿用附录 B。新 View 只使用正文的 target_ref/reason_codes/evidence_refs，不额外返回 target/reason_code/evidence_ids 别名；不宣称原 Recommendation 严格解码器兼容。
+
+```text
+RecommendationReason = prerequisite_gap | assessment_error | review_due |
+  next_route_step | user_goal | read_without_practice | practice_without_independent
+RecommendationAction = read | practice | test | review | inspect_source
+RecommendationDecisionWrite = {decision:accepted|dismissed,reason:string|null}
+RecommendationEvidenceRef = {
+  evidence:Evidence,
+  question_ref:ContentRef, concept_ref:ContentRef, assessment_ref:ContentRef,
+  attempt_id:Id, grading_revision:Revision, submitted_at:UTC,
+  applicability:usable|pending_review|confirmed_stale,
+  grading_origin:deterministic|human_review|unknown
+}
+RecommendationActivityRef = {
+  kind:read_marked|practice_submitted|test_submitted,
+  event_id:Id, target_ref:ContentRef, source_id:Id|null, occurred_at:UTC
+}
+RecommendationProfileBasis = {
+  revision:Revision, goal_concept_ids:Id[], goals:string[],
+  self_assessments:SelfAssessment[]
+}
+RecommendationRouteBasis = {route_ref:ContentRef,step_id:Id,source_event_ids:Id[]}
+RecommendationNavigation =
+  {kind:reader,course_ref:ContentRef,lesson_ref:ContentRef,block_ref:ContentRef|null} |
+  {kind:practice,course_ref:ContentRef,lesson_ref:ContentRef,practice_ref:ContentRef} |
+  {kind:assessment,assessment_ref:ContentRef,course_ref:ContentRef|null}
+RecommendationView = {
+  id:Id, target_ref:ContentRef, target_title:string,
+  action:RecommendationAction, reason_codes:RecommendationReason[], explanation:string,
+  evidence_refs:RecommendationEvidenceRef[], activity_refs:RecommendationActivityRef[],
+  profile_basis:RecommendationProfileBasis|null, route_basis:RecommendationRouteBasis|null,
+  prerequisite_gaps:ContentRef[], navigation_options:RecommendationNavigation[],
+  estimated_minutes:integer>0|null, rule_version:string, generated_at:UTC,
+  staleness:current|stale,
+  decision:pending|accepted|dismissed, decision_revision:Revision,
+  decision_sha256:Sha256, decision_reason:string|null
+}
+RecommendationPage = {
+  items:RecommendationView[], next_cursor:string|null, total_hint?:integer>=0,
+  projection_state:missing|pending_refresh|ready|stale|failed,
+  warnings:Warning[], snapshot_id:Id|null, generated_at:UTC|null,
+  rule_version:string,
+  rule_parameters:{review_after_days:integer>0,calibration:uncalibrated}
+}
+```
+
+RecommendationView.reason_codes 非空、去重、第一项是主原因；七种原因必须逐项有真实依据。target_title、explanation、rule_version 非空。target_ref 仅引用真实可执行的 lesson/block/practice_set/assessment；read/inspect_source 指向教材 lesson/block，practice 指向 practice_set，test 指向 assessment，review 可指向以上已存在材料。prerequisite_gaps 中每个精确 ref 的 entity=concept，去重；尚无法解析的缺口放在 warning，不能造 ref。规则先验证所有引用的工作区、entity、revision/hash、实际父链与可用性，再排序，不用 latest 替换被推荐的原精确对象。
+
+navigation_options 非空、去重，每项严格指向 target_ref。Reader 的 course→lesson→block、Practice 的 course→lesson→practice 关系逐项存在；Assessment 保留实际概念/课程关联，无父课程时允许 course_ref=null。多个真实父链保留选项供用户选择，不能猜唯一教材归属；缺少必要父链的对象不能伪造可点击推荐。导航 refs 不是客户端授权凭据，正常读取仍重新校验权限。
+
+每个 RecommendationEvidenceRef 的 question_ref/concept_ref/assessment_ref 分别为 question/concept/assessment；concept_ref.id 必须等于 evidence.concept_id。evidence.event_id、attempt_id、grading_revision 绑定原成功评分和原 grade_finalized，submitted_at 为原提交时间，evidence.id 不重复。它不包含答案、用户作答、PrivateGradeTrace、私有答案 pin 或签名秘密。deterministic 判分来源必须由 Assessment 所有者验证；若当前评分的人工复核覆盖该题，grading_origin=human_review，不能因为仍保留旧自动 trace 而标 deterministic。未知来源明确 unknown。applicability=confirmed_stale 只用于 Content 实际已确认的结果，pending_review 不冒充已确认失效或可用独立证据。
+
+RecommendationActivityRef 保留原事件 kind/id/time/精确 target；read_marked 只列最后仍为 true 的可信阅读记录，source_id=null；practice_submitted/test_submitted 的 source_id 分别为原 practice session/attempt。hint/solution 获取、会话分配、单纯测试提交不冒充独立成绩。没有评分的参与/目标/路线推荐允许 evidence_refs=[]，必须用真实 activity/profile/route basis 解释，不能合成 grade/Evidence 填满数组。ProfileBasis 保留原自报的 origin/time；没有 profile 行时 revision=1 是默认投影，不表示已保存。RouteBasis 的 route_ref.entity=route，step_id 属于该精确修订，source_event_ids 只引用真实完成/撤销来源。列表内概念目标、自报概念、来源事件均去重。
+
+RecommendationPage 是通用分页外壳的明确应用扩展。未给 recommendation_id 时默认返回当前推荐批次，保留该批次所有 pending/accepted/dismissed 状态；给 recommendation_id 时按真实推荐 ID 精确读取原历史快照与当前决定，最多返回一项，不能因已被新批次替代而隐藏。recommendation_id 与 course_id/cursor 互斥，冲突请求422；未知/不可访问 ID404。所有列表和历史读取模式先核当前 Policy、工作区归属、冻结快照及决定历史/hash，不以历史 ID 绕过活动独立测试。旧目标已不可用时保留真实 stale 元数据；原导航记录不承诺现在可打开，实际导航按当前权限和可用性拒绝，不触发重算或恢复为 current。服务端签发 cursor，绑定工作区、course_id、limit、冻结批次和位置；不能跨范围、伪造或在旧游标下混入新排序，批次不可继续时返回明确游标过期。无快照时 snapshot_id/generated_at=null、items=[]，不能制造尚未落库的 snapshot id。missing 表示尚无可读快照且没有登记的刷新；pending_refresh 表示真实已登记但尚未完成的刷新，也可保留旧 stale 快照；ready 表示当前依据已核验、批次可读；stale 表示精确回读的历史批次依据已过期，不暗示已经为它登记刷新；failed 表示实际投影处理失败，可保留旧 stale 快照及安全诊断。pending_refresh 不等于 worker 此刻正在运行；没有实际执行记录不显示“正在生成”。非 ready 页中的旧 item 必须为 stale；页面 generated_at/rule_version/rule_parameters 绑定返回的实际批次，不能拿当前时钟/新参数冒充旧批次来源。
+
+warnings 使用闭合 Warning，至少区分 NO_LOCAL_MATERIAL、NO_REVIEWED_ASSESSMENT、UNREVIEWED_MATERIAL_ONLY、EXACT_MAPPING_UNRESOLVED、RECOMMENDATIONS_PENDING_REFRESH，locator 仅含安全对象标识或定位，不含私有路径。缺材料 warning 只能来自实际目标、路线或可信学习活动形成的具体需求；真实空工作区且没有目标时不编造缺口或画像。初版不增加未声明的 unresolved_needs 字段。未实测的 estimated_minutes=null；review_after_days 为实际后端可配置参数，初值3，calibration 固定 uncalibrated。
+
+新推荐的决定为 pending、decision_revision=1、decision_reason=null。用户可显式接受、拒绝或更正自己的决定/理由；每次实际变更追加不可变历史且版本加一，不允许客户端写 pending。完全相同的决定和理由、且基准仍当前时返回 applied=false、版本不变。decision_sha256 使用项目规范 JSON，对 `{version:"recommendation-decision-v1",workspace_id,recommendation_id,snapshot_sha256,revision,decision,reason}` 计算 SHA-256，排除 hash 本身；它不是教材 target 的 ETag。If-Match 只接受带引号的单个64位小写sha256强标签，拒绝弱标签、星号、多值或重复关键 header；缺少/格式错使用统一400，过期版本412。
+
+决定写事务先校验当前身份/CSRF/workspace Policy、推荐归属、冻结快照和全部决定历史/hash，再核幂等回执；活动独立测试期间旧 key 也不能绕过策略。请求指纹绑定严格 body 与解析后的 If-Match。回执绑定 actor、完整 route+推荐id、key、request hash、实际幂等实例 created_at、原决定版本/hash 和原 MutationAck。真正同实例重放返回原 revision/applied，不先拿历史 If-Match 与最新版本比较；后来决定被更正或原依据 stale 不抹去已成功命令，当前无权/坏历史仍拒绝。新命令在强 CAS 后核当前依据，stale 返回明确409，不把旧推荐静默改成新推荐再接受。幂等实例到期后的同 key 是新命令，不借旧实例回执通过校验；旧历史保留。首次副作用、决定历史、当前投影与回执同事务提交或回滚。
+
+推荐刷新使用自有 dirty generation/恢复记录；源模块通过 application port 在同一成功事务登记，后台在发布结果前比较所冻结输入仍当前。GET 可只读派生 stale，不能写 stale、刷新状态、队列、outbox 或幂等行。重启/失败/重复处理不能丢 dirty、重复创建同依据推荐或丢用户决定；不能清除共享 Content 待复核信号来冒充已完成影响分析。所有本地推荐读写/后台计算受独立测试 guard，不调用 Provider/Search，也不将接受本地建议视为外发 consent。
 
 ### 提供商 / 创作 / Codex / 外部连接
 
@@ -1827,7 +1901,13 @@ export interface ProviderPort<D extends DTOMap> {
 export interface LearningPort<D extends DTOMap> {
  recordUserAction(ctx:WriteContext, action:'read_marked'|'note_created', ref:ContentRef):Promise<void>;
  evidence(ctx:AuthContext, conceptId:string):Promise<D['Evidence'][]>;
- recommendations(ctx:AuthContext):Promise<D['Recommendation'][]>;
+}
+export interface RecommendationDTOMap {
+ RecommendationPage: unknown; RecommendationDecisionWrite: unknown; MutationAck: unknown;
+}
+export interface RecommendationPort<R extends RecommendationDTOMap> {
+ read(ctx:AuthContext, query:{courseId?:string;recommendationId?:string;cursor?:string;limit?:number}):Promise<R['RecommendationPage']>;
+ decide(ctx:WriteContext, id:string, request:R['RecommendationDecisionWrite'], expectedDecisionSha256:string):Promise<R['MutationAck']>;
 }
 export interface NotesPort<D extends DTOMap> {save(ctx:WriteContext, note:D['Note']):Promise<ContentRef>}
 export interface AuthoringPort<D extends DTOMap> {

@@ -168,6 +168,8 @@ def record_grade_finalized(connection: sqlite3.Connection, workspace_id: str, at
         finalized_at=source.result.finalized_at, recorded_at=now, event=event, event_sha256=metadata_sha256(event),
         progress_revision=updated.revision, outbox_id=outbox[0]['id'], items=items)
     repository.insert(value)
+    from .recommendations import inputs_changed
+    inputs_changed(connection, workspace_id, 'assessment.grade_finalized')
     return _checked_binding(connection, workspace_id, attempt_id, grading_revision)
 
 
