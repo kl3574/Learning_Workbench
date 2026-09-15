@@ -1,0 +1,132 @@
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { createHash } from 'node:crypto'
+const output = process.env.M42_CONTINUE_OBSERVATION_DIR
+if (!output) throw new Error('Missing isolated observation output directory')
+const ledgers = new WeakMap()
+const sessionFields = value => value && typeof value === 'object' ? {
+  revision: value.revision, course_ref: value.course_ref, navigation: value.navigation,
+  active_tab_id: value.active_tab_id, nav_collapsed: value.nav_collapsed, agent_collapsed: value.agent_collapsed,
+  tabs: Array.isArray(value.tabs) ? value.tabs.map(tab => ({ id: tab.id, scroll_offset: tab.scroll_offset,
+    context: { view_kind: tab.context?.view_kind, active_ref: tab.context?.active_ref, attached_refs: tab.context?.attached_refs, attempt_id: tab.context?.attempt_id } })) : undefined,
+} : null
+export async function install(page) {
+  mkdirSync(output, { recursive: true })
+  const started = process.hrtime.bigint(), pending = new Set(), requests = new WeakMap()
+  let reloadObserved = false, controlled = false, releaseClick
+  const afterReloadPracticeClick = new Promise(resolve => { releaseClick = resolve })
+  const controlMode = process.env.M42_CONTINUE_CONTROL ?? 'none'
+  let sequence = 0, count = 0
+  const record = value => { if (++count <= 3000) appendFileSync(resolve(output, 'events.jsonl'), JSON.stringify({ recorder_ms: Number(process.hrtime.bigint() - started) / 1e6, recorder_wall: new Date().toISOString(), ...value }) + '\n') }
+  ledgers.set(page, { record, pending, count: () => count })
+  record({ kind: 'observer-installed', control_mode: controlMode, note: 'Original test body, waits, actions and full-test 30000ms timeout unchanged. Instrumentation and explicitly selected response delivery control can affect timing.' })
+  page.on('console', message => { if (message.text().startsWith('[M42-CONTINUE-OBS]')) { try { const event = JSON.parse(message.text().slice(18)); record({ kind: 'dom', ...event }); if (event.state?.navigation_type === 'reload') { reloadObserved = true; if (event.reason === 'native-click-capture' && event.detail?.text?.includes('习题')) releaseClick('actual_reload_practice_click') } } catch { record({ kind: 'observer-decode-error' }) } } })
+  page.on('pageerror', error => record({ kind: 'pageerror', message: error.message.slice(0, 400) }))
+  page.on('request', request => {
+    const path = new URL(request.url()).pathname
+    if (!['/api/v1/session', '/api/v1/workbench/session'].includes(path)) return
+    const id = ++sequence; requests.set(request, { id, path, method: request.method() })
+    let candidate
+    if (path === '/api/v1/workbench/session' && request.method() === 'PUT') { try { const body = request.postDataJSON(); candidate = { expected_revision: body.expected_revision, session: sessionFields(body.session) } } catch { candidate = 'unreadable' } }
+    record({ kind: 'request', id, path, method: request.method(), candidate })
+  })
+  page.on('requestfailed', request => { const tracked = requests.get(request); if (tracked) record({ kind: 'request-failed', ...tracked, error: request.failure()?.errorText?.replace(/https?:\/\/\S+/g, '<url-omitted>').slice(0, 100) }) })
+  page.on('response', response => {
+    const tracked = requests.get(response.request()); if (!tracked) return
+    record({ kind: 'response-headers', ...tracked, status: response.status(), etag: response.headers().etag ?? null })
+    const reading = response.json().then(value => record({ kind: 'response-body', ...tracked, status: response.status(),
+      value: !response.ok() ? { error_code: value.error?.code } : tracked.path === '/api/v1/session'
+        ? { workspace_id: value.workspace_id, role: value.role, active_independent_attempt_id: value.active_independent_attempt_id }
+        : sessionFields(value),
+    })).catch(() => record({ kind: 'response-body-unavailable', ...tracked })).finally(() => pending.delete(reading))
+    pending.add(reading)
+  })
+  if (['delay_reload_workbench_until_practice_click', 'immediate_reload_workbench'].includes(controlMode)) {
+    await page.route('**/api/v1/workbench/session', async route => {
+      if (route.request().method() !== 'GET' || !reloadObserved || controlled) { await route.continue(); return }
+      controlled = true
+      record({ kind: 'control-target-request', method: 'GET', path: '/api/v1/workbench/session', note: 'Exactly one real response delivery is gated after reload; upstream request/status/headers/body are not manufactured.' })
+      const response = await route.fetch()
+      const body = await response.body()
+      const bodySha = createHash('sha256').update(body).digest('hex')
+      record({ kind: 'control-upstream-complete', status: response.status(), original_body_sha256: bodySha, body_bytes: body.length })
+      let timer
+      const releaseReason = controlMode === 'immediate_reload_workbench' ? 'matched_upstream_immediate_delivery' : await Promise.race([
+        afterReloadPracticeClick,
+        new Promise(resolve => { timer = setTimeout(() => resolve('gate_3000ms_fallback_no_observed_click'), 3000) }),
+      ])
+      clearTimeout(timer)
+      record({ kind: 'control-response-release', release_reason: releaseReason, original_body_sha256: bodySha, delivery_body_sha256: createHash('sha256').update(body).digest('hex'), body_bytes: body.length })
+      await route.fulfill({ response, body })
+      record({ kind: 'control-response-fulfilled', status: response.status() })
+    })
+  } else if (controlMode !== 'none') { throw new Error('Unknown isolated control mode') }
+  await page.addInitScript(() => {
+    const prefix = '[M42-CONTINUE-OBS]'; let previous = '', scheduled = false
+    const visible = element => { if (!element) return false; const style = getComputedStyle(element); return !element.closest('[hidden]') && style.display !== 'none' && style.visibility !== 'hidden' && element.getClientRects().length > 0 }
+    const safePending = () => {
+      try {
+        const workspace = localStorage.getItem('learning-workbench.last-confirmed-workspace.v1')
+        const client = sessionStorage.getItem('learning-workbench.ui-client')
+        if (!workspace || !client) return null
+        const value = JSON.parse(localStorage.getItem(`learning-workbench.${workspace}.pending-ui.${client}.v1`) ?? 'null')
+        if (!value) return null
+        const view = session => session ? { revision: session.revision, course_ref: session.course_ref, navigation: session.navigation,
+          active_tab_id: session.active_tab_id, tabs: Array.isArray(session.tabs) ? session.tabs.map(tab => ({ id: tab.id, context: { view_kind: tab.context?.view_kind, active_ref: tab.context?.active_ref } })) : null } : null
+        return { session: view(value.session), base: view(value.base), etag: value.etag ?? null }
+      } catch { return { read_state: 'unavailable' } }
+    }
+    const snapshot = () => {
+      const nav = document.querySelector('nav[aria-label="学习主导航"]'), container = nav?.closest('.navigation-content'), pane = document.querySelector('#nav-pane')
+      const buttons = [...document.querySelectorAll('button')].filter(element => element.textContent?.includes('继续浏览示例'))
+      return {
+        pending_ui: safePending(),
+        navigation_type: performance.getEntriesByType('navigation')[0]?.type ?? null,
+        primary_current: nav?.querySelector('[aria-current="page"]')?.textContent?.trim() ?? null,
+        course_summary: container?.querySelector('.course-summary')?.textContent?.trim().slice(0, 350) ?? null,
+        directory_labels: [...(container?.querySelectorAll('.directory-section') ?? [])].map(element => element.getAttribute('aria-label')),
+        assessment_directory: !!container?.querySelector('.assessment-directory'),
+        policy_checking: !!container?.textContent?.includes('正在核验工作区测试策略'),
+        policy_active: !!container?.textContent?.includes('独立测试进行中'),
+        pane_present: !!pane, pane_visible: visible(pane), viewport: [innerWidth, innerHeight],
+        continue_buttons: buttons.map(button => ({ text: button.textContent?.trim(), visible: visible(button), disabled: button.disabled, rect: { x: button.getBoundingClientRect().x, y: button.getBoundingClientRect().y, width: button.getBoundingClientRect().width, height: button.getBoundingClientRect().height } })),
+        status: document.querySelector('.statusbar')?.textContent?.trim() ?? null,
+        reader_heading: document.querySelector('#reader-main h1')?.textContent?.trim() ?? null,
+        selected_tab: document.querySelector('[role="tab"][aria-selected="true"]')?.textContent?.trim() ?? null,
+        save_alerts: [...document.querySelectorAll('.save-alert')].map(element => element.textContent?.trim().slice(0, 350)),
+      }
+    }
+    const emit = (reason, detail = null, forced = false) => { const value = snapshot(), serialized = JSON.stringify(value); if (forced || serialized !== previous) { previous = serialized; console.debug(prefix + JSON.stringify({ browser_time_origin_ms: performance.timeOrigin, browser_ms: performance.now(), browser_wall_ms: Date.now(), reason, detail, state: value })) } }
+    window.__m42ContinueSnapshot = snapshot
+    new MutationObserver(() => { if (!scheduled) { scheduled = true; queueMicrotask(() => { scheduled = false; emit('dom-change') }) } }).observe(document, { subtree: true, childList: true, attributes: true, characterData: true })
+    document.addEventListener('click', event => { const button = event.target instanceof Element ? event.target.closest('button') : null; const text = button?.textContent?.trim(); if (button && text && /习题|教材|学习路线|继续浏览示例|打开示例小节/.test(text)) emit('native-click-capture', { text: text.slice(0, 120), trusted: event.isTrusted }, true) }, true)
+    addEventListener('pageshow', () => emit('pageshow', null, true))
+    addEventListener('pagehide', () => emit('pagehide', null, true))
+  })
+}
+export async function finish(page, info) {
+  const ledger = ledgers.get(page); if (!ledger) return
+  const caseResult = { status_at_after_each_entry: info.status, expected_status: info.expectedStatus,
+    duration_ms_at_entry: info.duration, errors_at_entry: info.errors.map(error => ({ message: error.message })) }
+  ledger.record({ kind: 'case-body-finished', ...caseResult })
+  let timer, snapshotState = 'unavailable'
+  try {
+    const result = await Promise.race([
+      page.evaluate(() => window.__m42ContinueSnapshot?.() ?? null).then(state => ({ state, completed: true })),
+      new Promise(resolve => { timer = setTimeout(() => resolve({ completed: false }), 1000) }),
+    ])
+    snapshotState = result.completed ? 'complete' : 'bounded_timeout'
+    ledger.record({ kind: 'after-test-dom', observation_state: snapshotState, state: result.state ?? null })
+  } catch { ledger.record({ kind: 'after-test-dom-unavailable' }) }
+  finally { clearTimeout(timer) }
+  const pendingCount = ledger.pending.size
+  const observerResult = { finalize_status: pendingCount || snapshotState !== 'complete' ? 'complete_with_unfinished_observations' : 'complete',
+    pending_response_body_count: pendingCount, snapshot_state: snapshotState,
+    note: 'Response bodies are observed asynchronously; pending reads are explicitly recorded and never awaited by teardown.' }
+  ledger.record({ kind: 'observer-finalized', ...observerResult })
+  writeFileSync(resolve(output, 'test-result.json'), JSON.stringify({ case: caseResult, observer: observerResult,
+    expected_status: info.expectedStatus, timeout: info.timeout, event_count_attempted: ledger.count(), event_limit: 3000,
+    control_mode: process.env.M42_CONTINUE_CONTROL ?? 'none',
+    scope: 'Original test body and full-test timeout unchanged. Network/DOM observation and API-step reporter can affect timing. Explicit control_mode identifies any real-response delivery gating; no product source or response body changed.',
+  }, null, 2) + '\n')
+}

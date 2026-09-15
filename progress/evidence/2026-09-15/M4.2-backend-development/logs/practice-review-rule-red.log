@@ -1,0 +1,103 @@
+.........FFFF                                                            [100%]
+=================================== FAILURES ===================================
+_ test_submitted_practice_requires_actual_qualified_independent_test_or_explicit_gap[False] _
+
+ready = False
+
+    @pytest.mark.parametrize('ready', [False, True])
+    def test_submitted_practice_requires_actual_qualified_independent_test_or_explicit_gap(ready):
+        from services.api.app.application.recommendation_rules import derive_recommendations
+        inputs, fixture = rule_inputs()
+        skill = CandidateConceptSkill(concept_ref=reference(fixture.concept), skill='recall')
+        inputs.catalog.candidates[1].concept_skills = [skill]
+        assessment = inputs.catalog.candidates[1].model_copy(update={'target_ref': reference(fixture.assessment),
+            'navigation_options': [RouteAssessmentOption(kind='assessment', assessment_ref=reference(fixture.assessment),
+                course_ref=reference(fixture.course))], 'lesson_refs': [], 'test_ready': ready,
+            'test_warning_codes': [] if ready else ['ANSWER_UNREVIEWED']})
+        inputs.catalog.candidates.append(assessment)
+        inputs.activities.append(RecommendationActivityRef(kind='practice_submitted', event_id='submitted_actual',
+            target_ref=reference(fixture.practice), source_id='practice_session_actual', occurred_at=READ_AT))
+        plan = derive_recommendations(inputs, generated_at=NOW,
+            parameters=RecommendationRuleParameters(review_after_days=3, calibration='uncalibrated'))
+        tests = [item for item in plan.items if item.reason_codes == ['practice_without_independent']]
+        assert bool(tests) is ready
+        if ready:
+            assert tests[0].target_ref == reference(fixture.assessment) and tests[0].action == 'test'
+            assert tests[0].activity_refs[0].event_id == 'submitted_actual' and tests[0].evidence_refs == []
+        else:
+>           assert 'NO_REVIEWED_ASSESSMENT' in {warning.code for warning in plan.warnings}
+E           AssertionError: assert 'NO_REVIEWED_ASSESSMENT' in set()
+
+tests/unit/test_recommendation_rules.py:160: AssertionError
+_ test_submitted_practice_requires_actual_qualified_independent_test_or_explicit_gap[True] _
+
+ready = True
+
+    @pytest.mark.parametrize('ready', [False, True])
+    def test_submitted_practice_requires_actual_qualified_independent_test_or_explicit_gap(ready):
+        from services.api.app.application.recommendation_rules import derive_recommendations
+        inputs, fixture = rule_inputs()
+        skill = CandidateConceptSkill(concept_ref=reference(fixture.concept), skill='recall')
+        inputs.catalog.candidates[1].concept_skills = [skill]
+        assessment = inputs.catalog.candidates[1].model_copy(update={'target_ref': reference(fixture.assessment),
+            'navigation_options': [RouteAssessmentOption(kind='assessment', assessment_ref=reference(fixture.assessment),
+                course_ref=reference(fixture.course))], 'lesson_refs': [], 'test_ready': ready,
+            'test_warning_codes': [] if ready else ['ANSWER_UNREVIEWED']})
+        inputs.catalog.candidates.append(assessment)
+        inputs.activities.append(RecommendationActivityRef(kind='practice_submitted', event_id='submitted_actual',
+            target_ref=reference(fixture.practice), source_id='practice_session_actual', occurred_at=READ_AT))
+        plan = derive_recommendations(inputs, generated_at=NOW,
+            parameters=RecommendationRuleParameters(review_after_days=3, calibration='uncalibrated'))
+        tests = [item for item in plan.items if item.reason_codes == ['practice_without_independent']]
+>       assert bool(tests) is ready
+E       assert False is True
+E        +  where False = bool([])
+
+tests/unit/test_recommendation_rules.py:155: AssertionError
+_ test_review_uses_original_submission_and_actual_configurable_uncalibrated_days[3-True] _
+
+days = 3, due = True
+
+    @pytest.mark.parametrize(('days', 'due'), [(3, True), (4, False)])
+    def test_review_uses_original_submission_and_actual_configurable_uncalibrated_days(days, due):
+        from services.api.app.application.recommendation_rules import derive_recommendations
+        inputs, fixture = rule_inputs()
+        inputs.activities = []
+        inputs.observations = [observation(fixture, origin='human_review', outcome=None, submitted_at='2026-09-12T10:00:00Z')]
+        plan = derive_recommendations(inputs, generated_at=NOW,
+            parameters=RecommendationRuleParameters(review_after_days=days, calibration='uncalibrated'))
+        reviews = [item for item in plan.items if item.reason_codes == ['review_due']]
+>       assert bool(reviews) is due
+E       assert False is True
+E        +  where False = bool([])
+
+tests/unit/test_recommendation_rules.py:172: AssertionError
+_ test_review_uses_original_submission_and_actual_configurable_uncalibrated_days[4-False] _
+
+days = 4, due = False
+
+    @pytest.mark.parametrize(('days', 'due'), [(3, True), (4, False)])
+    def test_review_uses_original_submission_and_actual_configurable_uncalibrated_days(days, due):
+        from services.api.app.application.recommendation_rules import derive_recommendations
+        inputs, fixture = rule_inputs()
+        inputs.activities = []
+        inputs.observations = [observation(fixture, origin='human_review', outcome=None, submitted_at='2026-09-12T10:00:00Z')]
+        plan = derive_recommendations(inputs, generated_at=NOW,
+            parameters=RecommendationRuleParameters(review_after_days=days, calibration='uncalibrated'))
+        reviews = [item for item in plan.items if item.reason_codes == ['review_due']]
+        assert bool(reviews) is due
+        if due:
+            assert reviews[0].evidence_refs[0].submitted_at == '2026-09-12T10:00:00Z'
+            assert plan.valid_until is None
+        else:
+>           assert plan.valid_until == '2026-09-16T10:00:00.000000Z'
+E           AssertionError: assert None == '2026-09-16T10:00:00.000000Z'
+E            +  where None = RecommendationPlan(items=[], warnings=[], valid_until=None).valid_until
+
+tests/unit/test_recommendation_rules.py:177: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_recommendation_rules.py::test_submitted_practice_requires_actual_qualified_independent_test_or_explicit_gap[False]
+FAILED tests/unit/test_recommendation_rules.py::test_submitted_practice_requires_actual_qualified_independent_test_or_explicit_gap[True]
+FAILED tests/unit/test_recommendation_rules.py::test_review_uses_original_submission_and_actual_configurable_uncalibrated_days[3-True]
+FAILED tests/unit/test_recommendation_rules.py::test_review_uses_original_submission_and_actual_configurable_uncalibrated_days[4-False]
+4 failed, 9 passed in 0.14s

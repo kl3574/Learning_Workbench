@@ -24,6 +24,7 @@ class Settings:
     static_dir: Path = REPOSITORY_ROOT / "apps/web/dist"
     session_seconds: int = 43200
     bootstrap_seconds: int = 120
+    recommendation_review_after_days: int = 3
     max_grading_history_response_bytes: int = 16 * 1024 * 1024
     max_request_bytes: int = 2_097_152
     max_upload_bytes: int = 50 * 1024 * 1024
@@ -37,6 +38,8 @@ class Settings:
             raise ValueError("Public deployment is not supported; use a loopback bind address.")
         if not 1 <= self.port <= 65535:
             raise ValueError("Invalid local port.")
+        if type(self.recommendation_review_after_days) is not int or self.recommendation_review_after_days <= 0:
+            raise ValueError("Recommendation review delay must be a positive integer.")
         if type(self.max_upload_bytes) is not int or self.max_upload_bytes <= 0:
             raise ValueError("Upload budget must be a positive integer.")
         if type(self.max_grading_history_response_bytes) is not int or self.max_grading_history_response_bytes <= 0:
@@ -88,6 +91,7 @@ class Settings:
             host=os.environ.get("LEARNING_HOST", "127.0.0.1"),
             port=int(os.environ.get("LEARNING_PORT", "8765")),
             ui_origin=os.environ.get("LEARNING_UI_ORIGIN") or None,
+            recommendation_review_after_days=int(os.environ.get("LEARNING_RECOMMENDATION_REVIEW_AFTER_DAYS", "3")),
             max_grading_history_response_bytes=int(os.environ.get("LEARNING_MAX_GRADING_HISTORY_RESPONSE_BYTES", 16 * 1024 * 1024)),
             max_upload_bytes=int(os.environ.get("LEARNING_MAX_UPLOAD_BYTES", 50 * 1024 * 1024)),
             max_block_characters=int(os.environ.get("LEARNING_MAX_BLOCK_CHARACTERS", 400_000)),

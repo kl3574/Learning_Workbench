@@ -1,0 +1,56 @@
+............FFF.....                                                     [100%]
+=================================== FAILURES ===================================
+______ test_ambiguous_mapping_and_cross_workspace_dependency_do_not_guess ______
+
+catalog_storage = (<services.api.app.infrastructure.database.Database object at 0x78c568c81d30>, SessionIdentity(id='session_catalog', w...67ffbdb9c7fe2a5e23678f73451c4f2c')], allowed_modes=['independent', 'open_book', 'assisted'], time_limit_seconds=None)))
+
+    def test_ambiguous_mapping_and_cross_workspace_dependency_do_not_guess(catalog_storage):
+        database, identity, fixture = catalog_storage
+        concept2 = fixture.concept.model_copy(update={'revision': 2, 'title': '变化'})
+        ContentService(database).publish(identity.workspace_id, [concept2], {})
+        with database.transaction() as connection:
+            connection.execute("INSERT INTO object_dependencies(owner_id,owner_revision,target_id,target_revision,relation) VALUES(?,?,?,?,?)",
+                (fixture.block.id, 1, concept2.id, 2, 'concept'))
+        assert target(read(catalog_storage), fixture.block).mapping_state == 'unresolved'
+        with database.transaction() as connection:
+>           connection.execute("INSERT INTO workspace(id,name,created_at) SELECT 'workspace_other','other',created_at FROM workspace LIMIT 1")
+E           sqlite3.OperationalError: table workspace has no column named name
+
+tests/integration/test_recommendation_content_access.py:197: OperationalError
+_________________ test_integrity_damage_fails_closed[metadata] _________________
+
+catalog_storage = (<services.api.app.infrastructure.database.Database object at 0x78c568c81bb0>, SessionIdentity(id='session_catalog', w...67ffbdb9c7fe2a5e23678f73451c4f2c')], allowed_modes=['independent', 'open_book', 'assisted'], time_limit_seconds=None)))
+corruption = 'metadata'
+
+    @pytest.mark.parametrize('corruption', ['metadata', 'reference', 'body_registration'])
+    def test_integrity_damage_fails_closed(catalog_storage, corruption):
+        database, _, fixture = catalog_storage
+        with database.transaction() as connection:
+            if corruption == 'metadata':
+>               connection.execute("UPDATE revisions SET sha256=? WHERE object_id=?", ('f' * 64, fixture.block.id))
+E               sqlite3.IntegrityError: published revision immutable
+
+tests/integration/test_recommendation_content_access.py:207: IntegrityError
+________________ test_integrity_damage_fails_closed[reference] _________________
+
+catalog_storage = (<services.api.app.infrastructure.database.Database object at 0x78c568c839b0>, SessionIdentity(id='session_catalog', w...67ffbdb9c7fe2a5e23678f73451c4f2c')], allowed_modes=['independent', 'open_book', 'assisted'], time_limit_seconds=None)))
+corruption = 'reference'
+
+    @pytest.mark.parametrize('corruption', ['metadata', 'reference', 'body_registration'])
+    def test_integrity_damage_fails_closed(catalog_storage, corruption):
+        database, _, fixture = catalog_storage
+        with database.transaction() as connection:
+            if corruption == 'metadata':
+                connection.execute("UPDATE revisions SET sha256=? WHERE object_id=?", ('f' * 64, fixture.block.id))
+            elif corruption == 'reference':
+                lesson = fixture.lesson.model_copy(update={'block_refs': [reference(fixture.block).model_copy(update={'sha256': 'f' * 64})]})
+>               connection.execute('UPDATE revisions SET metadata_json=?,sha256=? WHERE object_id=?',
+                    (canonical_bytes(lesson).decode(), metadata_sha256(lesson), lesson.id))
+E               sqlite3.IntegrityError: published revision immutable
+
+tests/integration/test_recommendation_content_access.py:210: IntegrityError
+=========================== short test summary info ============================
+FAILED tests/integration/test_recommendation_content_access.py::test_ambiguous_mapping_and_cross_workspace_dependency_do_not_guess
+FAILED tests/integration/test_recommendation_content_access.py::test_integrity_damage_fails_closed[metadata]
+FAILED tests/integration/test_recommendation_content_access.py::test_integrity_damage_fails_closed[reference]
+3 failed, 17 passed in 1.03s

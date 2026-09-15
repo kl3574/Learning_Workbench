@@ -1,0 +1,1476 @@
+E401 [*] Multiple imports on one line
+ --> progress/evidence/2026-09-15/M4.2-frontend-development/run_check.py:1:1
+  |
+1 | import datetime,hashlib,json,pathlib,subprocess,sys
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2 | root=pathlib.Path('<REPOSITORY_ROOT>')
+3 | out=pathlib.Path('<ACCEPTANCE_CACHE>/m42-frontend')
+  |
+help: Split imports
+  |
+  - import datetime,hashlib,json,pathlib,subprocess,sys
+1 + import datetime
+2 + import hashlib
+3 + import json
+4 + import pathlib
+5 + import subprocess
+6 + import sys
+7 | root=pathlib.Path('<REPOSITORY_ROOT>')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-frontend-development/run_check.py:4:17
+  |
+2 | root=pathlib.Path('<REPOSITORY_ROOT>')
+3 | out=pathlib.Path('<ACCEPTANCE_CACHE>/m42-frontend')
+4 | name=sys.argv[1]; command=sys.argv[2:]
+  |                 ^
+5 | paths=list((root/'apps/web/src/features/recommendations').glob('*'))+[root/'apps/web/src/workbench/Shell.tsx',root/'apps/web/src/featur…
+6 | def inventory():return {str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(paths) if p.is_file()}
+  |
+
+E401 [*] Multiple imports on one line
+ --> progress/evidence/2026-09-15/M4.2-frontend-development/run_native.py:1:1
+  |
+1 | import datetime,hashlib,json,pathlib,subprocess,sys
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2 | root=pathlib.Path('<REPOSITORY_ROOT>');out=pathlib.Path('<ACCEPTANCE_CACHE>/m42-frontend')
+3 | name=sys.argv[1];command=sys.argv[2:]
+  |
+help: Split imports
+  |
+  - import datetime,hashlib,json,pathlib,subprocess,sys
+1 + import datetime
+2 + import hashlib
+3 + import json
+4 + import pathlib
+5 + import subprocess
+6 + import sys
+7 | root=pathlib.Path('<REPOSITORY_ROOT>');out=pathlib.Path('<ACCEPTANCE_CACHE>/m42-frontend')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-frontend-development/run_native.py:2:39
+  |
+1 | import datetime,hashlib,json,pathlib,subprocess,sys
+2 | root=pathlib.Path('<REPOSITORY_ROOT>');out=pathlib.Path('<ACCEPTANCE_CACHE>/m42-frontend')
+  |                                       ^
+3 | name=sys.argv[1];command=sys.argv[2:]
+4 | def inventory():
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-frontend-development/run_native.py:3:17
+  |
+1 | import datetime,hashlib,json,pathlib,subprocess,sys
+2 | root=pathlib.Path('<REPOSITORY_ROOT>');out=pathlib.Path('<ACCEPTANCE_CACHE>/m42-frontend')
+3 | name=sys.argv[1];command=sys.argv[2:]
+  |                 ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','--cached','--others','--exclude-standard','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-frontend-development/run_native.py:8:40
+   |
+ 6 |     return {name:hashlib.sha256((root/name).read_bytes()).hexdigest() for name in sorted(set(paths)) if name and (root/name).is_file()…
+ 7 | record={'scope':'developmental own RestartRuntime native; source drift is explicitly recorded; no M4.2 acceptance claim','started_at':…
+ 8 | source_copy=out/(name+'-source-inputs');source_copy.mkdir(exist_ok=False)
+   |                                        ^
+ 9 | for source,expected in record['sources_before'].items():
+10 |     if source.startswith('apps/web/src/features/recommendations/') or source.startswith('tests/e2e/recommendations') or source in ('ap…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-frontend-development/run_native.py:11:40
+   |
+ 9 | for source,expected in record['sources_before'].items():
+10 |     if source.startswith('apps/web/src/features/recommendations/') or source.startswith('tests/e2e/recommendations') or source in ('ap…
+11 |         body=(root/source).read_bytes();assert hashlib.sha256(body).hexdigest()==expected
+   |                                        ^
+12 |         target=source_copy/(source+'.txt');target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(body)
+13 | record['source_input_copies']=str(source_copy)
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-frontend-development/run_native.py:12:43
+   |
+10 |     if source.startswith('apps/web/src/features/recommendations/') or source.startswith('tests/e2e/recommendations') or source in ('ap…
+11 |         body=(root/source).read_bytes();assert hashlib.sha256(body).hexdigest()==expected
+12 |         target=source_copy/(source+'.txt');target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(body)
+   |                                           ^
+13 | record['source_input_copies']=str(source_copy)
+14 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-frontend-development/run_native.py:12:91
+   |
+10 |     if source.startswith('apps/web/src/features/recommendations/') or source.startswith('tests/e2e/recommendations') or source in ('ap…
+11 |         body=(root/source).read_bytes();assert hashlib.sha256(body).hexdigest()==expected
+12 |         target=source_copy/(source+'.txt');target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(body)
+   |                                                                                           ^
+13 | record['source_input_copies']=str(source_copy)
+14 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-frontend-development/run_native.py:18:80
+   |
+16 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,output_sha256=hashlib.s…
+17 | record['source_changes_during_run']=[p for p in sorted(set(record['sources_before'])|set(record['sources_after'])) if record['sources_…
+18 | (out/f'{name}.json').write_text(json.dumps(record,ensure_ascii=False,indent=2));print(result.stdout);print(json.dumps({'receipt':str(o…
+   |                                                                                ^
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-frontend-development/run_native.py:18:101
+   |
+16 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,output_sha256=hashlib.s…
+17 | record['source_changes_during_run']=[p for p in sorted(set(record['sources_before'])|set(record['sources_after'])) if record['sources_…
+18 | (out/f'{name}.json').write_text(json.dumps(record,ensure_ascii=False,indent=2));print(result.stdout);print(json.dumps({'receipt':str(o…
+   |                                                                                                     ^
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-frontend-development/run_native.py:18:250
+   |
+16 | …_after=inventory())
+17 | …
+18 | …'source_changes_during_run':record['source_changes_during_run']}));sys.exit(result.returncode)
+   |                                                                    ^
+
+E401 [*] Multiple imports on one line
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/package-evidence.py:2:1
+  |
+1 | from pathlib import Path
+2 | import datetime, hashlib, json, re, sys
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+3 | base=Path('<DIAGNOSIS_CACHE>')
+4 | root=Path('<REPOSITORY_ROOT>')
+  |
+help: Split imports
+  |
+1 | from pathlib import Path
+  - import datetime, hashlib, json, re, sys
+2 + import datetime
+3 + import hashlib
+4 + import json
+5 + import re
+6 + import sys
+7 | base=Path('<DIAGNOSIS_CACHE>')
+  |
+
+E701 Multiple statements on one line (colon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/package-evidence.py:14:23
+   |
+12 |     applied=[]
+13 |     for raw,alias in transforms:
+14 |         if raw in text: applied.append({'rule':'normalize personal filesystem prefix','to':alias,'count':text.count(raw)});text=text.r…
+   |                       ^
+15 |     return text.encode(),applied
+16 | entries=[]
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/package-evidence.py:14:123
+   |
+12 |     applied=[]
+13 |     for raw,alias in transforms:
+14 |         if raw in text: applied.append({'rule':'normalize personal filesystem prefix','to':alias,'count':text.count(raw)});text=text.r…
+   |                                                                                                                           ^
+15 |     return text.encode(),applied
+16 | entries=[]
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/package-evidence.py:18:46
+   |
+16 | entries=[]
+17 | def copy(path,target=None):
+18 |     rel=target or str(path.relative_to(base));raw=path.read_bytes()
+   |                                              ^
+19 |     if path.suffix=='.png':data=raw;applied=[]
+20 |     else:data,applied=normalize(raw)
+   |
+
+E701 Multiple statements on one line (colon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/package-evidence.py:19:27
+   |
+17 | def copy(path,target=None):
+18 |     rel=target or str(path.relative_to(base));raw=path.read_bytes()
+19 |     if path.suffix=='.png':data=raw;applied=[]
+   |                           ^
+20 |     else:data,applied=normalize(raw)
+21 |     dest=public/rel;dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(data)
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/package-evidence.py:19:36
+   |
+17 | def copy(path,target=None):
+18 |     rel=target or str(path.relative_to(base));raw=path.read_bytes()
+19 |     if path.suffix=='.png':data=raw;applied=[]
+   |                                    ^
+20 |     else:data,applied=normalize(raw)
+21 |     dest=public/rel;dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(data)
+   |
+
+E701 Multiple statements on one line (colon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/package-evidence.py:20:9
+   |
+18 |     rel=target or str(path.relative_to(base));raw=path.read_bytes()
+19 |     if path.suffix=='.png':data=raw;applied=[]
+20 |     else:data,applied=normalize(raw)
+   |         ^
+21 |     dest=public/rel;dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(data)
+22 |     entries.append({'path':rel,'original_path':normalize(str(path).encode())[0].decode(),'original_sha256':digest(raw),'public_sha256'…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/package-evidence.py:21:20
+   |
+19 |     if path.suffix=='.png':data=raw;applied=[]
+20 |     else:data,applied=normalize(raw)
+21 |     dest=public/rel;dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(data)
+   |                    ^
+22 |     entries.append({'path':rel,'original_path':normalize(str(path).encode())[0].decode(),'original_sha256':digest(raw),'public_sha256'…
+23 | selected_png_runs={'run-05-artifacts','run-06-artifacts','run-10-artifacts','run-11-artifacts','run-12-artifacts'}
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/package-evidence.py:21:66
+   |
+19 |     if path.suffix=='.png':data=raw;applied=[]
+20 |     else:data,applied=normalize(raw)
+21 |     dest=public/rel;dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(data)
+   |                                                                  ^
+22 |     entries.append({'path':rel,'original_path':normalize(str(path).encode())[0].decode(),'original_sha256':digest(raw),'public_sha256'…
+23 | selected_png_runs={'run-05-artifacts','run-06-artifacts','run-10-artifacts','run-11-artifacts','run-12-artifacts'}
+   |
+
+E701 Multiple statements on one line (colon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/package-evidence.py:25:22
+   |
+23 | selected_png_runs={'run-05-artifacts','run-06-artifacts','run-10-artifacts','run-11-artifacts','run-12-artifacts'}
+24 | for path in sorted(base.iterdir()):
+25 |     if path.is_file():copy(path)
+   |                      ^
+26 |     elif path.name.endswith('-source') or path.name=='fixed-harness-01':
+27 |         for child in sorted(path.rglob('*')):
+   |
+
+E701 Multiple statements on one line (colon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/package-evidence.py:28:31
+   |
+26 |     elif path.name.endswith('-source') or path.name=='fixed-harness-01':
+27 |         for child in sorted(path.rglob('*')):
+28 |             if child.is_file():copy(child)
+   |                               ^
+29 |     elif re.fullmatch(r'run-\d+-artifacts',path.name):
+30 |         for child in sorted(path.rglob('*')):
+   |
+
+E701 Multiple statements on one line (colon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/package-evidence.py:31:128
+   |
+29 |     elif re.fullmatch(r'run-\d+-artifacts',path.name):
+30 |         for child in sorted(path.rglob('*')):
+31 |             if child.is_file() and (child.suffix in {'.json','.md'} or child.suffix=='.png' and path.name in selected_png_runs):copy(c…
+   |                                                                                                                                ^
+32 | owned=['apps/web/src/shared/createResponseDraftJournal.ts','apps/web/src/shared/createResponseDraftJournal.test.tsx','apps/web/src/fea…
+33 | for p in owned:copy(base/'fixed-source-01'/p,'final-source/'+p+'.txt')
+   |
+
+E701 Multiple statements on one line (colon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/package-evidence.py:33:15
+   |
+31 |             if child.is_file() and (child.suffix in {'.json','.md'} or child.suffix=='.png' and path.name in selected_png_runs):copy(c…
+32 | owned=['apps/web/src/shared/createResponseDraftJournal.ts','apps/web/src/shared/createResponseDraftJournal.test.tsx','apps/web/src/fea…
+33 | for p in owned:copy(base/'fixed-source-01'/p,'final-source/'+p+'.txt')
+   |               ^
+34 | # Record actual unchanged assertion/body comparisons, independent of personal paths.
+35 | def body(path):
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/package-evidence.py:36:26
+   |
+34 | # Record actual unchanged assertion/body comparisons, independent of personal paths.
+35 | def body(path):
+36 |     text=path.read_text();text=text[text.index("test('real route creation"):];return text.split('\n\nimport { startObserver')[0].rstri…
+   |                          ^
+37 | original=body(base/'original-routes.spec.ts.txt')
+38 | assertions={'original_body_sha256':digest(original.encode()),'controlled_original_body_equal':body(base/'routes-controlled.spec.ts')==…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/package-evidence.py:36:78
+   |
+34 | # Record actual unchanged assertion/body comparisons, independent of personal paths.
+35 | def body(path):
+36 |     text=path.read_text();text=text[text.index("test('real route creation"):];return text.split('\n\nimport { startObserver')[0].rstri…
+   |                                                                              ^
+37 | original=body(base/'original-routes.spec.ts.txt')
+38 | assertions={'original_body_sha256':digest(original.encode()),'controlled_original_body_equal':body(base/'routes-controlled.spec.ts')==…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/package-evidence.py:40:32
+   |
+38 | assertions={'original_body_sha256':digest(original.encode()),'controlled_original_body_equal':body(base/'routes-controlled.spec.ts')==…
+39 | for name in ['observer.ts','observer-sampled.ts','observer-controlled.ts']:
+40 |     old=(base/name).read_text();new=(base/'fixed-harness-01'/name).read_text();assertions[name]={'exact_bytes_after_source_root_reloca…
+   |                                ^
+41 | assert all(assertions[k] for k in ['controlled_original_body_equal','fixed_controlled_body_equal','fixed_original_body_equal'])
+42 | new=(base/'fixed-source-01/tests/e2e/route-draft-input.spec.ts').read_text()
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/package-evidence.py:40:79
+   |
+38 | assertions={'original_body_sha256':digest(original.encode()),'controlled_original_body_equal':body(base/'routes-controlled.spec.ts')==…
+39 | for name in ['observer.ts','observer-sampled.ts','observer-controlled.ts']:
+40 |     old=(base/name).read_text();new=(base/'fixed-harness-01'/name).read_text();assertions[name]={'exact_bytes_after_source_root_reloca…
+   |                                                                               ^
+41 | assert all(assertions[k] for k in ['controlled_original_body_equal','fixed_controlled_body_equal','fixed_original_body_equal'])
+42 | new=(base/'fixed-source-01/tests/e2e/route-draft-input.spec.ts').read_text()
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/package-evidence.py:84:40
+   |
+82 | for name,result in results.items():
+83 |     receipt=base/(name+'.json')
+84 |     row=json.loads(receipt.read_text());sources=row.get('sources_before',{})
+   |                                        ^
+85 |     index.append({'run':name,'result':result,'receipt':name+'.json','original_receipt_sha256':digest(receipt.read_bytes()),'log':name+…
+86 | (public/'run-index.json').write_text(json.dumps(index,ensure_ascii=False,indent=2))
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/package-evidence.py:88:40
+   |
+86 | (public/'run-index.json').write_text(json.dumps(index,ensure_ascii=False,indent=2))
+87 | for filename in ['assertion-and-observer-comparison.json','summary.json','run-index.json']:
+88 |     data=(public/filename).read_bytes();entries.append({'path':filename,'original_path':None,'original_sha256':None,'public_sha256':di…
+   |                                        ^
+89 | (public/'manifest.json').write_text(json.dumps({'artifact_base':artifact_base,'files':entries},ensure_ascii=False,indent=2))
+90 | sys.path.insert(0,str(root));from scripts.check_publication import inspect
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/package-evidence.py:90:29
+   |
+88 |     data=(public/filename).read_bytes();entries.append({'path':filename,'original_path':None,'original_sha256':None,'public_sha256':di…
+89 | (public/'manifest.json').write_text(json.dumps({'artifact_base':artifact_base,'files':entries},ensure_ascii=False,indent=2))
+90 | sys.path.insert(0,str(root));from scripts.check_publication import inspect
+   |                             ^
+91 | flags={str(p.relative_to(public)):inspect(artifact_base+'/'+str(p.relative_to(public)),p.read_bytes()) for p in public.rglob('*') if p…
+92 | report={'checked_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'files':len(entries)+1,'status':'PASS' if not flags else…
+   |
+
+E402 Module level import not at top of file
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/package-evidence.py:90:30
+   |
+88 |     data=(public/filename).read_bytes();entries.append({'path':filename,'original_path':None,'original_sha256':None,'public_sha256':di…
+89 | (public/'manifest.json').write_text(json.dumps({'artifact_base':artifact_base,'files':entries},ensure_ascii=False,indent=2))
+90 | sys.path.insert(0,str(root));from scripts.check_publication import inspect
+   |                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+91 | flags={str(p.relative_to(public)):inspect(artifact_base+'/'+str(p.relative_to(public)),p.read_bytes()) for p in public.rglob('*') if p…
+92 | report={'checked_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'files':len(entries)+1,'status':'PASS' if not flags else…
+   |
+help: Move module level imports to top of file
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/package-evidence.py:91:146
+   |
+89 | …files':entries},ensure_ascii=False,indent=2))
+90 | …
+91 | …ublic)),p.read_bytes()) for p in public.rglob('*') if p.is_file()};flags={p:v for p,v in flags.items() if v}
+   |                                                                    ^
+92 | …files':len(entries)+1,'status':'PASS' if not flags else 'FAIL','flags':flags,'manifest_sha256':digest((public/'manifest.json').read_b…
+93 | …int(json.dumps({'package':str(public),**report},indent=2));sys.exit(bool(flags))
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/package-evidence.py:93:77
+   |
+91 | flags={str(p.relative_to(public)):inspect(artifact_base+'/'+str(p.relative_to(public)),p.read_bytes()) for p in public.rglob('*') if p…
+92 | report={'checked_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'files':len(entries)+1,'status':'PASS' if not flags else…
+93 | (base/'public-package-v1-scan.json').write_text(json.dumps(report,indent=2));print(json.dumps({'package':str(public),**report},indent=…
+   |                                                                             ^
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/package-evidence.py:93:138
+   |
+91 | …ive_to(public)),p.read_bytes()) for p in public.rglob('*') if p.is_file()};flags={p:v for p,v in flags.items() if v}
+92 | …rmat(),'files':len(entries)+1,'status':'PASS' if not flags else 'FAIL','flags':flags,'manifest_sha256':digest((public/'manifest.json'…
+93 | …t=2));print(json.dumps({'package':str(public),**report},indent=2));sys.exit(bool(flags))
+   |                                                                    ^
+
+E401 [*] Multiple imports on one line
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-controlled.py:2:1
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+3 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+4 | def inventory():
+  |
+help: Split imports
+  |
+1 | from pathlib import Path
+  - import datetime,hashlib,json,subprocess,sys
+2 + import datetime
+3 + import hashlib
+4 + import json
+5 + import subprocess
+6 + import sys
+7 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-controlled.py:3:44
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |                                            ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-controlled.py:3:74
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |                                                                          ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-controlled.py:3:91
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |                                                                                           ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-controlled.py:7:19
+  |
+5 |     paths=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+6 |     return {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in sorted(paths) if p and (root/p).is_file() and not p.startswith…
+7 | before=inventory();record={'started_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source_root':str(root),'source_commit…
+  |                   ^
+8 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(result…
+9 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.sh…
+  |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-controlled.py:8:98
+   |
+ 6 |     return {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in sorted(paths) if p and (root/p).is_file() and not p.startswit…
+ 7 | before=inventory();record={'started_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source_root':str(root),'source_commi…
+ 8 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+   |                                                                                                  ^
+ 9 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+10 | (out/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-controlled.py:8:144
+   |
+ 6 | …ed(paths) if p and (root/p).is_file() and not p.startswith(('progress/','docs/ui/','docs/adr/'))}
+ 7 | …ne.utc).isoformat(),'source_root':str(root),'source_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=root).decode().str…
+ 8 | …r=subprocess.STDOUT);(out/(name+'.log')).write_text(result.stdout);after=inventory()
+   |                                                                    ^
+ 9 | …mat(),exit_code=result.returncode,stdout_sha256=hashlib.sha256(result.stdout.encode()).hexdigest(),sources_after=after,source_changes…
+10 | …out);print(json.dumps({'exit_code':result.returncode,'receipt':str(out/(name+'.json')),'source_changes':record['source_changes']}));s…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-controlled.py:10:61
+   |
+ 8 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+ 9 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+10 | (out/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+   |                                                             ^
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-controlled.py:10:82
+   |
+ 8 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+ 9 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+10 | (out/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+   |                                                                                  ^
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-controlled.py:10:209
+   |
+ 8 | …);after=inventory()
+ 9 | …sult.stdout.encode()).hexdigest(),sources_after=after,source_changes=[p for p in sorted(set(before)|set(after)) if before.get(p)!=aft…
+10 | …r(out/(name+'.json')),'source_changes':record['source_changes']}));sys.exit(result.returncode)
+   |                                                                    ^
+
+E401 [*] Multiple imports on one line
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-fixed.py:2:1
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+3 | base=Path('<DIAGNOSIS_CACHE>');root=base/'fixed-source-01';name=sys.argv[1];command=sys.argv[2:]
+4 | manifest=json.loads((base/'fixed-source-01-manifest.json').read_text())
+  |
+help: Split imports
+  |
+1 | from pathlib import Path
+  - import datetime,hashlib,json,subprocess,sys
+2 + import datetime
+3 + import hashlib
+4 + import json
+5 + import subprocess
+6 + import sys
+7 | base=Path('<DIAGNOSIS_CACHE>');root=base/'fixed-source-01';name=sys.argv[1];command=sys.argv[2:]
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-fixed.py:3:31
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | base=Path('<DIAGNOSIS_CACHE>');root=base/'fixed-source-01';name=sys.argv[1];command=sys.argv[2:]
+  |                               ^
+4 | manifest=json.loads((base/'fixed-source-01-manifest.json').read_text())
+5 | def inventory(): return {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in manifest['files']}
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-fixed.py:3:59
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | base=Path('<DIAGNOSIS_CACHE>');root=base/'fixed-source-01';name=sys.argv[1];command=sys.argv[2:]
+  |                                                           ^
+4 | manifest=json.loads((base/'fixed-source-01-manifest.json').read_text())
+5 | def inventory(): return {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in manifest['files']}
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-fixed.py:3:76
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | base=Path('<DIAGNOSIS_CACHE>');root=base/'fixed-source-01';name=sys.argv[1];command=sys.argv[2:]
+  |                                                                            ^
+4 | manifest=json.loads((base/'fixed-source-01-manifest.json').read_text())
+5 | def inventory(): return {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in manifest['files']}
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-fixed.py:6:19
+  |
+4 | manifest=json.loads((base/'fixed-source-01-manifest.json').read_text())
+5 | def inventory(): return {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in manifest['files']}
+6 | before=inventory();record={'started_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source_root':str(root),'source_manife…
+  |                   ^
+7 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(base/(name+'.log')).write_text(resul…
+8 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.sh…
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-fixed.py:7:98
+  |
+5 | def inventory(): return {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in manifest['files']}
+6 | before=inventory();record={'started_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source_root':str(root),'source_manife…
+7 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(base/(name+'.log')).write_text(resul…
+  |                                                                                                  ^
+8 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.sh…
+9 | (base/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-fixed.py:7:145
+  |
+5 | …or p in manifest['files']}
+6 | …e.utc).isoformat(),'source_root':str(root),'source_manifest_sha256':hashlib.sha256((base/'fixed-source-01-manifest.json').read_bytes()…
+7 | …=subprocess.STDOUT);(base/(name+'.log')).write_text(result.stdout);after=inventory()
+  |                                                                    ^
+8 | …at(),exit_code=result.returncode,stdout_sha256=hashlib.sha256(result.stdout.encode()).hexdigest(),sources_after=after,source_changes=[…
+9 | …out);print(json.dumps({'exit_code':result.returncode,'receipt':str(base/(name+'.json')),'source_changes':record['source_changes']}));s…
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-fixed.py:9:62
+  |
+7 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(base/(name+'.log')).write_text(resul…
+8 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.sh…
+9 | (base/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+  |                                                              ^
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-fixed.py:9:83
+  |
+7 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(base/(name+'.log')).write_text(resul…
+8 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.sh…
+9 | (base/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+  |                                                                                   ^
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-fixed.py:9:211
+  |
+7 | …;after=inventory()
+8 | …lt.stdout.encode()).hexdigest(),sources_after=after,source_changes=[p for p in sorted(set(before)|set(after)) if before.get(p)!=after.…
+9 | …(base/(name+'.json')),'source_changes':record['source_changes']}));sys.exit(result.returncode)
+  |                                                                    ^
+
+E401 [*] Multiple imports on one line
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check-v2.py:2:1
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+3 | root=Path('<REPOSITORY_ROOT>');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+4 | def inventory():
+  |
+help: Split imports
+  |
+1 | from pathlib import Path
+  - import datetime,hashlib,json,subprocess,sys
+2 + import datetime
+3 + import hashlib
+4 + import json
+5 + import subprocess
+6 + import sys
+7 | root=Path('<REPOSITORY_ROOT>');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check-v2.py:3:31
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | root=Path('<REPOSITORY_ROOT>');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |                               ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','--cached','--others','--exclude-standard','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check-v2.py:3:61
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | root=Path('<REPOSITORY_ROOT>');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |                                                             ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','--cached','--others','--exclude-standard','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check-v2.py:3:78
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | root=Path('<REPOSITORY_ROOT>');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |                                                                              ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','--cached','--others','--exclude-standard','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check-v2.py:7:19
+  |
+5 |     paths=subprocess.check_output(['git','ls-files','--cached','--others','--exclude-standard','-z'],cwd=root).decode().split('\0')
+6 |     return {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in sorted(set(paths)) if p and (root/p).is_file() and not p.start…
+7 | before=inventory();record={'started_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source_root':str(root),'source_commit…
+  |                   ^
+8 | copies=out/(name+'-source');copies.mkdir(exist_ok=False)
+9 | for source in ['apps/web/src/shared/createResponseDraftJournal.ts','apps/web/src/shared/createResponseDraftJournal.test.tsx','apps/web/…
+  |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check-v2.py:8:28
+   |
+ 6 |     return {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in sorted(set(paths)) if p and (root/p).is_file() and not p.star…
+ 7 | before=inventory();record={'started_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source_root':str(root),'source_commi…
+ 8 | copies=out/(name+'-source');copies.mkdir(exist_ok=False)
+   |                            ^
+ 9 | for source in ['apps/web/src/shared/createResponseDraftJournal.ts','apps/web/src/shared/createResponseDraftJournal.test.tsx','apps/web…
+10 |     path=root/source
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check-v2.py:12:38
+   |
+10 |     path=root/source
+11 |     if path.is_file():
+12 |         target=copies/(source+'.txt');target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(path.read_bytes())
+   |                                      ^
+13 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+14 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check-v2.py:12:86
+   |
+10 |     path=root/source
+11 |     if path.is_file():
+12 |         target=copies/(source+'.txt');target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(path.read_bytes())
+   |                                                                                      ^
+13 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+14 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check-v2.py:13:98
+   |
+11 |     if path.is_file():
+12 |         target=copies/(source+'.txt');target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(path.read_bytes())
+13 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+   |                                                                                                  ^
+14 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+15 | (out/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check-v2.py:13:144
+   |
+11 | …
+12 | …ok=True);target.write_bytes(path.read_bytes())
+13 | …r=subprocess.STDOUT);(out/(name+'.log')).write_text(result.stdout);after=inventory()
+   |                                                                    ^
+14 | …mat(),exit_code=result.returncode,stdout_sha256=hashlib.sha256(result.stdout.encode()).hexdigest(),sources_after=after,source_changes…
+15 | …out);print(json.dumps({'exit_code':result.returncode,'receipt':str(out/(name+'.json')),'source_changes':record['source_changes']}));s…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check-v2.py:15:61
+   |
+13 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+14 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+15 | (out/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+   |                                                             ^
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check-v2.py:15:82
+   |
+13 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+14 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+15 | (out/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+   |                                                                                  ^
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check-v2.py:15:209
+   |
+13 | …);after=inventory()
+14 | …sult.stdout.encode()).hexdigest(),sources_after=after,source_changes=[p for p in sorted(set(before)|set(after)) if before.get(p)!=aft…
+15 | …r(out/(name+'.json')),'source_changes':record['source_changes']}));sys.exit(result.returncode)
+   |                                                                    ^
+
+E401 [*] Multiple imports on one line
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check.py:2:1
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+3 | root=Path('<REPOSITORY_ROOT>');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+4 | def inventory():
+  |
+help: Split imports
+  |
+1 | from pathlib import Path
+  - import datetime,hashlib,json,subprocess,sys
+2 + import datetime
+3 + import hashlib
+4 + import json
+5 + import subprocess
+6 + import sys
+7 | root=Path('<REPOSITORY_ROOT>');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check.py:3:31
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | root=Path('<REPOSITORY_ROOT>');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |                               ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','--cached','--others','--exclude-standard','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check.py:3:61
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | root=Path('<REPOSITORY_ROOT>');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |                                                             ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','--cached','--others','--exclude-standard','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check.py:3:78
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | root=Path('<REPOSITORY_ROOT>');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |                                                                              ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','--cached','--others','--exclude-standard','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check.py:7:19
+  |
+5 |     paths=subprocess.check_output(['git','ls-files','--cached','--others','--exclude-standard','-z'],cwd=root).decode().split('\0')
+6 |     return {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in sorted(set(paths)) if p and (root/p).is_file() and not p.start…
+7 | before=inventory();record={'started_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source_root':str(root),'source_commit…
+  |                   ^
+8 | copies=out/(name+'-source');copies.mkdir(exist_ok=False)
+9 | for source in ['apps/web/src/shared/createResponseDraftJournal.ts','apps/web/src/features/routes/RouteEditor.tsx','apps/web/src/feature…
+  |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check.py:8:28
+   |
+ 6 |     return {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in sorted(set(paths)) if p and (root/p).is_file() and not p.star…
+ 7 | before=inventory();record={'started_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source_root':str(root),'source_commi…
+ 8 | copies=out/(name+'-source');copies.mkdir(exist_ok=False)
+   |                            ^
+ 9 | for source in ['apps/web/src/shared/createResponseDraftJournal.ts','apps/web/src/features/routes/RouteEditor.tsx','apps/web/src/featur…
+10 |     path=root/source
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check.py:12:38
+   |
+10 |     path=root/source
+11 |     if path.is_file():
+12 |         target=copies/(source+'.txt');target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(path.read_bytes())
+   |                                      ^
+13 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+14 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check.py:12:86
+   |
+10 |     path=root/source
+11 |     if path.is_file():
+12 |         target=copies/(source+'.txt');target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(path.read_bytes())
+   |                                                                                      ^
+13 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+14 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check.py:13:98
+   |
+11 |     if path.is_file():
+12 |         target=copies/(source+'.txt');target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(path.read_bytes())
+13 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+   |                                                                                                  ^
+14 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+15 | (out/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check.py:13:144
+   |
+11 | …
+12 | …ok=True);target.write_bytes(path.read_bytes())
+13 | …r=subprocess.STDOUT);(out/(name+'.log')).write_text(result.stdout);after=inventory()
+   |                                                                    ^
+14 | …mat(),exit_code=result.returncode,stdout_sha256=hashlib.sha256(result.stdout.encode()).hexdigest(),sources_after=after,source_changes…
+15 | …out);print(json.dumps({'exit_code':result.returncode,'receipt':str(out/(name+'.json')),'source_changes':record['source_changes']}));s…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check.py:15:61
+   |
+13 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+14 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+15 | (out/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+   |                                                             ^
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check.py:15:82
+   |
+13 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+14 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+15 | (out/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+   |                                                                                  ^
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-main-check.py:15:209
+   |
+13 | …);after=inventory()
+14 | …sult.stdout.encode()).hexdigest(),sources_after=after,source_changes=[p for p in sorted(set(before)|set(after)) if before.get(p)!=aft…
+15 | …r(out/(name+'.json')),'source_changes':record['source_changes']}));sys.exit(result.returncode)
+   |                                                                    ^
+
+E401 [*] Multiple imports on one line
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-minimal.py:2:1
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+3 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+4 | def inventory():
+  |
+help: Split imports
+  |
+1 | from pathlib import Path
+  - import datetime,hashlib,json,subprocess,sys
+2 + import datetime
+3 + import hashlib
+4 + import json
+5 + import subprocess
+6 + import sys
+7 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-minimal.py:3:44
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |                                            ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-minimal.py:3:74
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |                                                                          ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-minimal.py:3:91
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |                                                                                           ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-minimal.py:7:19
+  |
+5 |     paths=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+6 |     return {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in sorted(paths) if p and (root/p).is_file() and not p.startswith…
+7 | before=inventory();record={'started_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source_root':str(root),'source_commit…
+  |                   ^
+8 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(result…
+9 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.sh…
+  |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-minimal.py:8:98
+   |
+ 6 |     return {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in sorted(paths) if p and (root/p).is_file() and not p.startswit…
+ 7 | before=inventory();record={'started_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source_root':str(root),'source_commi…
+ 8 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+   |                                                                                                  ^
+ 9 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+10 | (out/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-minimal.py:8:144
+   |
+ 6 | …ed(paths) if p and (root/p).is_file() and not p.startswith(('progress/','docs/ui/','docs/adr/'))}
+ 7 | …ne.utc).isoformat(),'source_root':str(root),'source_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=root).decode().str…
+ 8 | …r=subprocess.STDOUT);(out/(name+'.log')).write_text(result.stdout);after=inventory()
+   |                                                                    ^
+ 9 | …mat(),exit_code=result.returncode,stdout_sha256=hashlib.sha256(result.stdout.encode()).hexdigest(),sources_after=after,source_changes…
+10 | …out);print(json.dumps({'exit_code':result.returncode,'receipt':str(out/(name+'.json')),'source_changes':record['source_changes']}));s…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-minimal.py:10:61
+   |
+ 8 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+ 9 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+10 | (out/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+   |                                                             ^
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-minimal.py:10:82
+   |
+ 8 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+ 9 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+10 | (out/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+   |                                                                                  ^
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-minimal.py:10:209
+   |
+ 8 | …);after=inventory()
+ 9 | …sult.stdout.encode()).hexdigest(),sources_after=after,source_changes=[p for p in sorted(set(before)|set(after)) if before.get(p)!=aft…
+10 | …r(out/(name+'.json')),'source_changes':record['source_changes']}));sys.exit(result.returncode)
+   |                                                                    ^
+
+E401 [*] Multiple imports on one line
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-permanent-before-02.py:2:1
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+3 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+4 | def inventory():
+  |
+help: Split imports
+  |
+1 | from pathlib import Path
+  - import datetime,hashlib,json,subprocess,sys
+2 + import datetime
+3 + import hashlib
+4 + import json
+5 + import subprocess
+6 + import sys
+7 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-permanent-before-02.py:3:44
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |                                            ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-permanent-before-02.py:3:74
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |                                                                          ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-permanent-before-02.py:3:91
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |                                                                                           ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-permanent-before-02.py:7:19
+  |
+5 |     paths=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+6 |     return {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in sorted(paths) if p and (root/p).is_file() and not p.startswith…
+7 | before=inventory();record={'started_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source_root':str(root),'source_commit…
+  |                   ^
+8 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(result…
+9 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.sh…
+  |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-permanent-before-02.py:8:98
+   |
+ 6 |     return {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in sorted(paths) if p and (root/p).is_file() and not p.startswit…
+ 7 | before=inventory();record={'started_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source_root':str(root),'source_commi…
+ 8 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+   |                                                                                                  ^
+ 9 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+10 | (out/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-permanent-before-02.py:8:144
+   |
+ 6 | …ed(paths) if p and (root/p).is_file() and not p.startswith(('progress/','docs/ui/','docs/adr/'))}
+ 7 | …ne.utc).isoformat(),'source_root':str(root),'source_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=root).decode().str…
+ 8 | …r=subprocess.STDOUT);(out/(name+'.log')).write_text(result.stdout);after=inventory()
+   |                                                                    ^
+ 9 | …mat(),exit_code=result.returncode,stdout_sha256=hashlib.sha256(result.stdout.encode()).hexdigest(),sources_after=after,source_changes…
+10 | …out);print(json.dumps({'exit_code':result.returncode,'receipt':str(out/(name+'.json')),'source_changes':record['source_changes']}));s…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-permanent-before-02.py:10:61
+   |
+ 8 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+ 9 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+10 | (out/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+   |                                                             ^
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-permanent-before-02.py:10:82
+   |
+ 8 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+ 9 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+10 | (out/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+   |                                                                                  ^
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-permanent-before-02.py:10:209
+   |
+ 8 | …);after=inventory()
+ 9 | …sult.stdout.encode()).hexdigest(),sources_after=after,source_changes=[p for p in sorted(set(before)|set(after)) if before.get(p)!=aft…
+10 | …r(out/(name+'.json')),'source_changes':record['source_changes']}));sys.exit(result.returncode)
+   |                                                                    ^
+
+E401 [*] Multiple imports on one line
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-permanent-before.py:2:1
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+3 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+4 | def inventory():
+  |
+help: Split imports
+  |
+1 | from pathlib import Path
+  - import datetime,hashlib,json,subprocess,sys
+2 + import datetime
+3 + import hashlib
+4 + import json
+5 + import subprocess
+6 + import sys
+7 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-permanent-before.py:3:44
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |                                            ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-permanent-before.py:3:74
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |                                                                          ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-permanent-before.py:3:91
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |                                                                                           ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-permanent-before.py:7:19
+  |
+5 |     paths=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+6 |     return {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in sorted(paths) if p and (root/p).is_file() and not p.startswith…
+7 | before=inventory();record={'started_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source_root':str(root),'source_commit…
+  |                   ^
+8 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(result…
+9 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.sh…
+  |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-permanent-before.py:8:98
+   |
+ 6 |     return {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in sorted(paths) if p and (root/p).is_file() and not p.startswit…
+ 7 | before=inventory();record={'started_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source_root':str(root),'source_commi…
+ 8 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+   |                                                                                                  ^
+ 9 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+10 | (out/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-permanent-before.py:8:144
+   |
+ 6 | …ed(paths) if p and (root/p).is_file() and not p.startswith(('progress/','docs/ui/','docs/adr/'))}
+ 7 | …ne.utc).isoformat(),'source_root':str(root),'source_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=root).decode().str…
+ 8 | …r=subprocess.STDOUT);(out/(name+'.log')).write_text(result.stdout);after=inventory()
+   |                                                                    ^
+ 9 | …mat(),exit_code=result.returncode,stdout_sha256=hashlib.sha256(result.stdout.encode()).hexdigest(),sources_after=after,source_changes…
+10 | …out);print(json.dumps({'exit_code':result.returncode,'receipt':str(out/(name+'.json')),'source_changes':record['source_changes']}));s…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-permanent-before.py:10:61
+   |
+ 8 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+ 9 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+10 | (out/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+   |                                                             ^
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-permanent-before.py:10:82
+   |
+ 8 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+ 9 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+10 | (out/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+   |                                                                                  ^
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-permanent-before.py:10:209
+   |
+ 8 | …);after=inventory()
+ 9 | …sult.stdout.encode()).hexdigest(),sources_after=after,source_changes=[p for p in sorted(set(before)|set(after)) if before.get(p)!=aft…
+10 | …r(out/(name+'.json')),'source_changes':record['source_changes']}));sys.exit(result.returncode)
+   |                                                                    ^
+
+E401 [*] Multiple imports on one line
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-sampled.py:2:1
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+3 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+4 | def inventory():
+  |
+help: Split imports
+  |
+1 | from pathlib import Path
+  - import datetime,hashlib,json,subprocess,sys
+2 + import datetime
+3 + import hashlib
+4 + import json
+5 + import subprocess
+6 + import sys
+7 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-sampled.py:3:44
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |                                            ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-sampled.py:3:74
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |                                                                          ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-sampled.py:3:91
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |                                                                                           ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-sampled.py:7:19
+  |
+5 |     paths=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+6 |     return {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in sorted(paths) if p and (root/p).is_file() and not p.startswith…
+7 | before=inventory();record={'started_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source_root':str(root),'source_commit…
+  |                   ^
+8 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(result…
+9 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.sh…
+  |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-sampled.py:8:98
+   |
+ 6 |     return {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in sorted(paths) if p and (root/p).is_file() and not p.startswit…
+ 7 | before=inventory();record={'started_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source_root':str(root),'source_commi…
+ 8 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+   |                                                                                                  ^
+ 9 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+10 | (out/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-sampled.py:8:144
+   |
+ 6 | …ed(paths) if p and (root/p).is_file() and not p.startswith(('progress/','docs/ui/','docs/adr/'))}
+ 7 | …ne.utc).isoformat(),'source_root':str(root),'source_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=root).decode().str…
+ 8 | …r=subprocess.STDOUT);(out/(name+'.log')).write_text(result.stdout);after=inventory()
+   |                                                                    ^
+ 9 | …mat(),exit_code=result.returncode,stdout_sha256=hashlib.sha256(result.stdout.encode()).hexdigest(),sources_after=after,source_changes…
+10 | …out);print(json.dumps({'exit_code':result.returncode,'receipt':str(out/(name+'.json')),'source_changes':record['source_changes']}));s…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-sampled.py:10:61
+   |
+ 8 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+ 9 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+10 | (out/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+   |                                                             ^
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-sampled.py:10:82
+   |
+ 8 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+ 9 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+10 | (out/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+   |                                                                                  ^
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run-sampled.py:10:209
+   |
+ 8 | …);after=inventory()
+ 9 | …sult.stdout.encode()).hexdigest(),sources_after=after,source_changes=[p for p in sorted(set(before)|set(after)) if before.get(p)!=aft…
+10 | …r(out/(name+'.json')),'source_changes':record['source_changes']}));sys.exit(result.returncode)
+   |                                                                    ^
+
+E401 [*] Multiple imports on one line
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run.py:2:1
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+3 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+4 | def inventory():
+  |
+help: Split imports
+  |
+1 | from pathlib import Path
+  - import datetime,hashlib,json,subprocess,sys
+2 + import datetime
+3 + import hashlib
+4 + import json
+5 + import subprocess
+6 + import sys
+7 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run.py:3:44
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |                                            ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run.py:3:74
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |                                                                          ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run.py:3:91
+  |
+1 | from pathlib import Path
+2 | import datetime,hashlib,json,subprocess,sys
+3 | root=Path('<ACCEPTANCE_CACHE>/m42-4cf13f7');out=Path('<DIAGNOSIS_CACHE>');name=sys.argv[1];command=sys.argv[2:]
+  |                                                                                           ^
+4 | def inventory():
+5 |     paths=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+  |
+
+E702 Multiple statements on one line (semicolon)
+ --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run.py:7:19
+  |
+5 |     paths=subprocess.check_output(['git','ls-files','-z'],cwd=root).decode().split('\0')
+6 |     return {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in sorted(paths) if p and (root/p).is_file() and not p.startswith…
+7 | before=inventory();record={'started_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source_root':str(root),'source_commit…
+  |                   ^
+8 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(result…
+9 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.sh…
+  |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run.py:8:98
+   |
+ 6 |     return {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in sorted(paths) if p and (root/p).is_file() and not p.startswit…
+ 7 | before=inventory();record={'started_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source_root':str(root),'source_commi…
+ 8 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+   |                                                                                                  ^
+ 9 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+10 | (out/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run.py:8:144
+   |
+ 6 | …ed(paths) if p and (root/p).is_file() and not p.startswith(('progress/','docs/ui/','docs/adr/'))}
+ 7 | …ne.utc).isoformat(),'source_root':str(root),'source_commit':subprocess.check_output(['git','rev-parse','HEAD'],cwd=root).decode().str…
+ 8 | …r=subprocess.STDOUT);(out/(name+'.log')).write_text(result.stdout);after=inventory()
+   |                                                                    ^
+ 9 | …mat(),exit_code=result.returncode,stdout_sha256=hashlib.sha256(result.stdout.encode()).hexdigest(),sources_after=after,source_changes…
+10 | …out);print(json.dumps({'exit_code':result.returncode,'receipt':str(out/(name+'.json')),'source_changes':record['source_changes']}));s…
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run.py:10:61
+   |
+ 8 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+ 9 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+10 | (out/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+   |                                                             ^
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run.py:10:82
+   |
+ 8 | result=subprocess.run(command,cwd=root,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT);(out/(name+'.log')).write_text(resul…
+ 9 | record.update(finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),exit_code=result.returncode,stdout_sha256=hashlib.s…
+10 | (out/(name+'.json')).write_text(json.dumps(record,indent=2));print(result.stdout);print(json.dumps({'exit_code':result.returncode,'rec…
+   |                                                                                  ^
+
+E702 Multiple statements on one line (semicolon)
+  --> progress/evidence/2026-09-15/M4.2-route-draft-diagnosis/run.py:10:209
+   |
+ 8 | …);after=inventory()
+ 9 | …sult.stdout.encode()).hexdigest(),sources_after=after,source_changes=[p for p in sorted(set(before)|set(after)) if before.get(p)!=aft…
+10 | …r(out/(name+'.json')),'source_changes':record['source_changes']}));sys.exit(result.returncode)
+   |                                                                    ^
+
+Found 132 errors.
+[*] 12 fixable with the `--fix` option.

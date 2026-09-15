@@ -63,7 +63,13 @@ export interface ProviderPort<D extends DTOMap> {
 export interface LearningPort<D extends DTOMap> {
  recordUserAction(ctx:WriteContext, action:'read_marked'|'note_created', ref:ContentRef):Promise<void>;
  evidence(ctx:AuthContext, conceptId:string):Promise<D['Evidence'][]>;
- recommendations(ctx:AuthContext):Promise<D['Recommendation'][]>;
+}
+export interface RecommendationDTOMap {
+ RecommendationPage: unknown; RecommendationDecisionWrite: unknown; MutationAck: unknown;
+}
+export interface RecommendationPort<R extends RecommendationDTOMap> {
+ read(ctx:AuthContext, query:{courseId?:string;recommendationId?:string;cursor?:string;limit?:number}):Promise<R['RecommendationPage']>;
+ decide(ctx:WriteContext, id:string, request:R['RecommendationDecisionWrite'], expectedDecisionSha256:string):Promise<R['MutationAck']>;
 }
 export interface NotesPort<D extends DTOMap> {save(ctx:WriteContext, note:D['Note']):Promise<ContentRef>}
 export interface AuthoringPort<D extends DTOMap> {

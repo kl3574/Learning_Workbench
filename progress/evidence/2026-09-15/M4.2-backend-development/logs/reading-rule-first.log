@@ -1,0 +1,31 @@
+F.                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_real_reading_without_practice_has_its_own_reason_and_original_activity_time _
+
+    def test_real_reading_without_practice_has_its_own_reason_and_original_activity_time():
+        from services.api.app.application.recommendation_rules import derive_recommendations
+    
+>       inputs, fixture = rule_inputs()
+                          ^^^^^^^^^^^^^
+
+tests/unit/test_recommendation_rules.py:48: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    def rule_inputs():
+        from services.api.app.application.recommendation_rules import RecommendationInputs
+    
+        fixture = assessment_fixture('rules')
+        course_ref, concept_ref, lesson_ref = map(reference, (fixture.course, fixture.concept, fixture.lesson))
+        lesson = RecommendationCandidate(target_ref=lesson_ref, title=fixture.lesson.title,
+            navigation_options=[RouteReaderOption(kind='reader', course_ref=course_ref, lesson_ref=lesson_ref, block_ref=None)],
+            concept_refs=[concept_ref], concept_skills=[], prerequisite_refs=[], course_refs=[course_ref],
+>           lesson_refs=[lesson_ref], block_refs=[reference(item) for item in fixture.blocks], mapping_state='complete',
+                                                                              ^^^^^^^^^^^^^^
+            material_review='unreviewed', available=True, unavailable_reason_codes=[], test_ready=False,
+            test_warning_codes=[], estimated_minutes=None)
+E       AttributeError: 'AssessmentFixture' object has no attribute 'blocks'. Did you mean: 'block'?
+
+tests/unit/test_recommendation_rules.py:25: AttributeError
+=========================== short test summary info ============================
+FAILED tests/unit/test_recommendation_rules.py::test_real_reading_without_practice_has_its_own_reason_and_original_activity_time
+1 failed, 1 passed in 0.20s

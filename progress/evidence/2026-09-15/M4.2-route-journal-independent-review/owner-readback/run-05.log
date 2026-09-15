@@ -1,0 +1,28 @@
+
+Running 1 test using 1 worker
+
+(node:189331) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 ../m42-route-save-diagnosis/routes-controlled.spec.ts:10:1 › real route creation, reminder, manual false, reordered revision and exact target navigation preserve history (13.9s)
+
+
+  1) ../m42-route-save-diagnosis/routes-controlled.spec.ts:10:1 › real route creation, reminder, manual false, reordered revision and exact target navigation preserve history 
+
+    TimeoutError: locator.click: Timeout 10000ms exceeded.
+    Call log:
+      - waiting for getByRole('dialog', { name: '创建路线', exact: true }).getByRole('button', { name: '打开已保存路线', exact: true })
+
+
+      14 |   const refValue = (ref: typeof fixture.lesson) => `${ref.entity}:${ref.id}:${ref.revision}:${ref.sha256}`
+      15 |   await expect(editor.getByLabel('添加学习任务').locator(`option[value="${refValue(fixture.lesson)}"]`)).toHaveCount(1); await editor.getByLabel('添加学习任务').selectOption(refValue(fixture.lesson)); await editor.getByLabel('添加学习任务').selectOption(refValue(fixture.practice)); await editor.getByLabel('任务 1 标题').fill('先读精确小节'); await editor.getByLabel('任务 2 标题').fill('练习提醒可跳过')
+    > 16 |   const second = editor.locator('.route-editor-steps>li').nth(1); await second.locator('summary').click(); await second.getByRole('checkbox', { name: '先读精确小节', exact: true }).check(); await editor.getByRole('button', { name: '保存路线新修订', exact: true }).click(); await editor.getByRole('button', { name: '打开已保存路线', exact: true }).click(); await expect(page.getByRole('heading', { name: '原创路线与精确任务', exact: true })).toBeVisible()
+         |                                                                                                                                                                                                                                                                                                                                        ^
+      17 |   const first: PageRoute = await page.request.get('/api/v1/routes?limit=100').then(response => response.json()); expect(first.items).toHaveLength(1); expect(first.items[0].steps.map(step => step.target)).toEqual([fixture.lesson, fixture.practice]); const r1 = first.item_refs[0]
+      18 |   await expect(page.getByText('先修提醒：先读精确小节尚未完成；仍可打开本任务。', { exact: true })).toBeVisible(); await page.getByRole('button', { name: '打开任务：练习提醒可跳过', exact: true }).click(); await expect.poll(() => new URL(page.url()).searchParams.has('practice')).toBe(true); const practice = JSON.parse(new URL(page.url()).searchParams.get('practice')!); expect(practice.practice_ref).toEqual(fixture.practice); expect(practice.lesson_ref).toEqual(fixture.lesson); expect(practice.course_ref).toEqual(fixture.course)
+      19 |   await page.getByRole('tab', { name: /原创路线与精确任务/ }).click(); await page.getByRole('button', { name: '手动标为未完成：先读精确小节', exact: true }).click(); await page.getByRole('button', { name: '确认保存人工标记', exact: true }).click(); await expect(page.getByText(/人工未完成优先保留/)).toBeVisible()
+        at <ACCEPTANCE_CACHE>/m42-route-save-diagnosis/routes-controlled.spec.ts:16:328
+
+    Error Context: ../m42-route-save-diagnosis/run-05-artifacts/routes-controlled-real-rou-4198c-navigation-preserve-history/error-context.md
+
+  1 failed
+    ../m42-route-save-diagnosis/routes-controlled.spec.ts:10:1 › real route creation, reminder, manual false, reordered revision and exact target navigation preserve history 

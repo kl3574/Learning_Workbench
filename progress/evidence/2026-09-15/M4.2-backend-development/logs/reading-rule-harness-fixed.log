@@ -1,0 +1,58 @@
+F.                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_real_reading_without_practice_has_its_own_reason_and_original_activity_time _
+
+    def test_real_reading_without_practice_has_its_own_reason_and_original_activity_time():
+        from services.api.app.application.recommendation_rules import derive_recommendations
+    
+        inputs, fixture = rule_inputs()
+>       result = derive_recommendations(inputs, generated_at=NOW,
+            parameters=RecommendationRuleParameters(review_after_days=3, calibration='uncalibrated'))
+
+tests/unit/test_recommendation_rules.py:49: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/api/app/application/recommendation_rules.py:68: in derive_recommendations
+    identifier = 'recommendation_' + sha256_bytes(canonical_bytes({'workspace': inputs.profile.workspace_id,
+packages/contracts/canonical.py:26: in canonical_bytes
+    return json.dumps(
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/__init__.py:238: in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:200: in encode
+    chunks = self.iterencode(o, _one_shot=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:258: in iterencode
+    return _iterencode(o, 0)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.encoder.JSONEncoder object at 0x7543568060f0>
+o = ContentRef(entity='practice_set', id='practice_rules', revision=1, sha256='978a74d852a4b9fdbecba38c53cc0cd49fa16c8156dbf998f0510ea4664d9344')
+
+    def default(self, o):
+        """Implement this method in a subclass such that it returns
+        a serializable object for ``o``, or calls the base implementation
+        (to raise a ``TypeError``).
+    
+        For example, to support arbitrary iterators, you could
+        implement default like this::
+    
+            def default(self, o):
+                try:
+                    iterable = iter(o)
+                except TypeError:
+                    pass
+                else:
+                    return list(iterable)
+                # Let the base class default method raise the TypeError
+                return super().default(o)
+    
+        """
+>       raise TypeError(f'Object of type {o.__class__.__name__} '
+                        f'is not JSON serializable')
+E       TypeError: Object of type ContentRef is not JSON serializable
+
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:180: TypeError
+=========================== short test summary info ============================
+FAILED tests/unit/test_recommendation_rules.py::test_real_reading_without_practice_has_its_own_reason_and_original_activity_time
+1 failed, 1 passed in 0.20s

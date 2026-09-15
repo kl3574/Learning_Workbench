@@ -1,0 +1,66 @@
+{
+  "kind": "interim_review_only_open_findings",
+  "sole_spec_sha256": "397829f5267248aedfc60faf7cacbb12669966b1c1d636a909b04189e0cc09dd",
+  "scope": "Shared journal + RouteEditorDraftSequence tests; unchanged RouteEditor/routeDrafts/DraftStore read for integration. Native run05/06 and owner unit-red02/green01/red03/red04 logs read, not independently rerun.",
+  "unchanged_integration_inputs": {
+    "PRODUCT_DESIGN.md": {
+      "baseline_sha256": "397829f5267248aedfc60faf7cacbb12669966b1c1d636a909b04189e0cc09dd",
+      "live_sha256": "397829f5267248aedfc60faf7cacbb12669966b1c1d636a909b04189e0cc09dd"
+    },
+    "apps/web/src/features/routes/RouteEditor.tsx": {
+      "baseline_sha256": "72d863896b5e774cb45a51053bf5ff48a920e77f5a090f6f0d7a11f1de445ed6",
+      "live_sha256": "72d863896b5e774cb45a51053bf5ff48a920e77f5a090f6f0d7a11f1de445ed6"
+    },
+    "apps/web/src/features/routes/routeDrafts.ts": {
+      "baseline_sha256": "9435d256893360a2bb2adcbbcc088b926aab6419f62522366a82e11f067e2dec",
+      "live_sha256": "9435d256893360a2bb2adcbbcc088b926aab6419f62522366a82e11f067e2dec"
+    },
+    "apps/web/src/workbench/DraftStore.ts": {
+      "baseline_sha256": "dcbdf2d89d81e485335ee2167ddc48c20482dd1183b90c9bcfa2f3cb5402796b",
+      "live_sha256": "dcbdf2d89d81e485335ee2167ddc48c20482dd1183b90c9bcfa2f3cb5402796b"
+    }
+  },
+  "findings": [
+    {
+      "id": "RJ-1",
+      "origin": "root; independently statically confirmed",
+      "source_sha256": "c455e8800a6e5bd0fd23f5ca3c912214961b4aa76a66e3aa549c687d834b0f67",
+      "issue": "enqueue retainObserved keeps newer record but raw ACK marks disappeared active text durable and clears memory",
+      "owner_red": "m42-route-save-diagnosis/unit-red-03.log and unit-red-04.log",
+      "status": "owner fixing; final source not yet independently reviewed"
+    },
+    {
+      "id": "RJ-2",
+      "origin": "independent static review of test timing",
+      "test_source_sha256": "0c323675a83c2be1f8ddb07c6093567dbea8cbfa325a6e3d90d99cbcfe0b9408",
+      "issue": "own_save_first originally released reload before ACK without proving actual consumption order",
+      "status": "owner strengthening actual observation gates"
+    },
+    {
+      "id": "RJ-3",
+      "origin": "independent actual bounded unit reproduction",
+      "source_sha256": "c455e8800a6e5bd0fd23f5ca3c912214961b4aa76a66e3aa549c687d834b0f67",
+      "issue": "resolve late ACK rolls observed peer r3 back to r2 and hides peer while queued preservation waits; unsafe remains true, not itself proved durable loss",
+      "directory": "m42-route-resolve-independent",
+      "status": "actual 1 RED; owner fixing"
+    },
+    {
+      "id": "RJ-4",
+      "origin": "independent actual bounded unit reproduction requested jointly",
+      "source_sha256": "8e111500ed1318d5463b4e61dad25c365f7ac7dc55c1292a43443de3a1f9a53e",
+      "issue": "choose conflict A while current branch B; after peer C wins before resolve ACK and preservation settles, disk/hook keep C+B but no A and unsafe=false",
+      "directory": "m42-route-resolve-selected-independent",
+      "status": "actual 1 RED; owner fixing"
+    }
+  ],
+  "executed_by_this_agent": [
+    "One private JSDOM/fake-indexeddb test for resolve observed record reversal",
+    "One private JSDOM/fake-indexeddb selected!=branch variant"
+  ],
+  "not_run": [
+    "Native browser",
+    "Full business/unit suite",
+    "Any network or server/API operation"
+  ],
+  "repository_mutations": []
+}

@@ -1,0 +1,37 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/routes/RouteEditorDraftSequence.test.tsx
+
+
+ RUN  v5.0.0 <REPOSITORY_ROOT>/apps/web
+
+ ❯ src/features/routes/RouteEditorDraftSequence.test.tsx (2 tests | 1 failed) 259ms
+   × delivery of an earlier own route draft does not disable the next input while a newer local edit is queued 180ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/routes/RouteEditorDraftSequence.test.tsx > delivery of an earlier own route draft does not disable the next input while a newer local edit is queued
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/features/routes/RouteEditorDraftSequence.test.tsx:55:50
+     53|       expect(screen.getByText('本机路线候选')).toBeTruthy()
+     54|     } else {
+     55|       expect(goal.closest('fieldset')?.disabled).toBe(false)
+       |                                                  ^
+     56|       fireEvent.change(goal, { target: { value: '下一输入必须保留' } })
+     57|       await act(async () => { secondWrite.release() })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  11:53:31
+   Duration  788ms (tests 39%, environment 36%, transform 13%, import 11%)
+

@@ -20,6 +20,7 @@ from .interfaces.import_http import create_import_router
 from .interfaces.learning_http import create_learning_router
 from .interfaces.practice_http import create_practice_router
 from .interfaces.profile_http import create_profile_router
+from .interfaces.recommendation_http import create_recommendation_router
 from .interfaces.route_http import create_route_router
 from .infrastructure.import_worker import ImportWorker
 
@@ -61,6 +62,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(create_route_router(database))
     application.include_router(create_profile_router(database))
     application.include_router(create_concept_state_router(database))
+    application.include_router(create_recommendation_router(database))
     if settings.static_dir.is_dir():
         application.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="workbench")
     return application

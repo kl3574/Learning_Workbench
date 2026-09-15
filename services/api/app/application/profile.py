@@ -18,6 +18,15 @@ from ..profile_dto import ProfileWrite
 from .errors import ApiError
 
 
+def read_profile(connection: sqlite3.Connection, workspace_id: str) -> dm.LearnerProfile:
+    """Public Profile read port for one caller-owned consistent transaction."""
+    if not connection.in_transaction:
+        raise ApiError(409, 'TRANSACTION_REQUIRED', '画像读取需要同一事务的来源快照。')
+    guard_subject_access(connection, workspace_id)
+    ContentRepository(connection, workspace_id).require_workspace()
+    return ProfileRepository(connection, workspace_id).read()
+
+
 class ProfileService:
     def __init__(self, database: Database):
         self.database = database
@@ -65,6 +74,8 @@ class ProfileService:
                     goals=request.goals, goal_concept_ids=request.goal_concept_ids, weekly_minutes=request.weekly_minutes,
                     language=request.language, preferred_difficulty=request.preferred_difficulty, self_assessments=assessments)
                 repository.save(request, updated, now, request_hash)
+                from .recommendations import inputs_changed
+                inputs_changed(repository.connection, identity.workspace_id, 'profile.saved')
                 applied = True
                 return updated.model_dump(mode='json')
 

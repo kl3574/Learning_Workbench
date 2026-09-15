@@ -1,0 +1,10 @@
+import { appendFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+export default class StepReporter {
+  starts = new WeakMap()
+  record(value) { appendFileSync(resolve(process.env.M42_CONTINUE_OBSERVATION_DIR, 'steps.jsonl'), JSON.stringify({ recorder_wall: new Date().toISOString(), ...value }) + '\n') }
+  onTestBegin(test, result) { this.starts.set(result, result.startTime.getTime()); this.record({ kind: 'test-begin', test_start: result.startTime.toISOString(), title: test.title, timeout: test.timeout }) }
+  onStepBegin(test, result, step) { if (step.category === 'pw:api') this.record({ kind: 'step-begin', elapsed_ms: step.startTime.getTime() - this.starts.get(result), start: step.startTime.toISOString(), title: step.title.replace(/https?:\/\/\S+/g, '<url-omitted>'), location: step.location ? { file: step.location.file.split('/').pop(), line: step.location.line, column: step.location.column } : null }) }
+  onStepEnd(test, result, step) { if (step.category === 'pw:api') this.record({ kind: 'step-end', elapsed_ms: step.startTime.getTime() - this.starts.get(result), duration_ms: step.duration, title: step.title.replace(/https?:\/\/\S+/g, '<url-omitted>'), error: step.error ? { message: step.error.message.replace(/https?:\/\/\S+/g, '<url-omitted>') } : null }) }
+  onTestEnd(test, result) { this.record({ kind: 'test-end', status: result.status, duration_ms: result.duration, errors: result.errors.map(error => ({ message: error.message.replace(/https?:\/\/\S+/g, '<url-omitted>') })) }) }
+}

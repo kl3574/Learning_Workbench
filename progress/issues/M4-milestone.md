@@ -1,8 +1,8 @@
 <!-- task_id: M4-milestone -->
 task_id: `M4`
 
-spec_version: `3.0.0`
-spec_sha256: `ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
+spec_version: `3.0.1`
+spec_sha256: `397829f5267248aedfc60faf7cacbb12669966b1c1d636a909b04189e0cc09dd`
 
 唯一规范：根目录 PRODUCT_DESIGN.md（第 17/19 章及相关附录）。
 
@@ -25,8 +25,8 @@ spec_sha256: `ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
 经审查/合并后才关闭任务；当前清单不表示已经验收。
 
 <!-- engineering_progress:start -->
-当前实际状态：`in_progress`
-规范：`3.0.0` / `ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
+当前实际状态：`review`
+规范：`3.0.1` / `397829f5267248aedfc60faf7cacbb12669966b1c1d636a909b04189e0cc09dd`
 当前需求关联：
 验证代码：`NOT_RUN`
 验证：`NOT_RUN`

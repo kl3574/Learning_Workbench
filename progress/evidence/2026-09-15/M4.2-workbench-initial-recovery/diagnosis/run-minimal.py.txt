@@ -1,0 +1,28 @@
+from datetime import datetime,timezone
+from pathlib import Path
+import hashlib,json,os,re,socket,subprocess,sys,time
+base=Path(__file__).resolve().parent
+root=Path('<acceptance-cache>/m42-4cf13f7')
+if os.environ.get('M42_BROWSER_SLOT_RELEASED')!='1':raise SystemExit('Browser owner has not released the slot; no browser or service started.')
+for port in (8765,5173):
+ with socket.socket() as probe:
+  if probe.connect_ex(('127.0.0.1',port))==0:raise SystemExit('Required local test port is occupied; no browser or service started.')
+source=json.loads((base/'source-manifest.json').read_text())
+for item in source['files']:
+ if hashlib.sha256((root/item['path']).read_bytes()).hexdigest()!=item['sha256']:raise SystemExit('Frozen observed source mismatch: '+item['path'])
+case=(base/'original-case.ts.txt').read_text()
+assert case in (base/'observe-original.spec.ts').read_text()
+assert hashlib.sha256(case.encode()).hexdigest()==source['original_case_source_sha256']
+run_name=sys.argv[1]
+if not re.fullmatch(r'run-[0-9]{3}',run_name):raise SystemExit('Invalid isolated run name')
+output=base/run_name;output.mkdir()
+harness_names=('observe.mjs','observe-minimal.spec.ts','step-reporter.mjs','minimal.config.ts','run-minimal.py')
+harness_before={name:hashlib.sha256((base/name).read_bytes()).hexdigest() for name in harness_names}
+for name in harness_names:(output/(name+'.txt')).write_bytes((base/name).read_bytes())
+env={**os.environ,'TMPDIR':'<home>/.cache/lw-m42','LEARNING_E2E_DATA_DIR':str(output/'data'),'M42_CONTINUE_OBSERVATION_DIR':str(output)}
+command=['bash','scripts/node.sh','npm','--prefix','apps/web','exec','--','playwright','test','--config',str(base/'minimal.config.ts')]
+start=datetime.now(timezone.utc).isoformat();begin=time.monotonic()
+with (output/'playwright.log').open('xb') as log:result=subprocess.run(command,cwd=root,env=env,stdout=log,stderr=subprocess.STDOUT)
+receipt={'harness_sha256_before':harness_before,'harness_equal_after':all(hashlib.sha256((base/name).read_bytes()).hexdigest()==sha for name,sha in harness_before.items()),'source_commit':source['source_commit'],'started_at':start,'finished_at':datetime.now(timezone.utc).isoformat(),'duration_seconds':time.monotonic()-begin,'exit_code':result.returncode,'command':command,'original_case_source_sha256':source['original_case_source_sha256'],'executed_body':'observe-minimal.spec.ts','executed_body_sha256':hashlib.sha256((base/'observe-minimal.spec.ts').read_bytes()).hexdigest(),'derived_assertion_timeout_ms':1000,'full_test_timeout_ms':30000,'control_mode':env.get('M42_CONTINUE_CONTROL','none'),'scope':'Separate derived diagnostic minimization after original-case RED; original case remains unchanged and is not executed by this runner. One coordinated local observation run. Instrumentation or explicitly selected real-response delivery gating can affect timing; local outcome does not establish two CI causes. No product or repository test file edited.','log_sha256':hashlib.sha256((output/'playwright.log').read_bytes()).hexdigest(),'source_files_equal_after':all(hashlib.sha256((root/item['path']).read_bytes()).hexdigest()==item['sha256'] for item in source['files'])}
+(output/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n');print(json.dumps(receipt))
+raise SystemExit(result.returncode)

@@ -1,0 +1,27 @@
+.............F                                                           [100%]
+=================================== FAILURES ===================================
+__ test_next_route_step_uses_exact_route_and_real_completed_dependency_events __
+
+    def test_next_route_step_uses_exact_route_and_real_completed_dependency_events():
+        from services.api.app.application.recommendation_rules import derive_recommendations
+        inputs, fixture = rule_inputs()
+        inputs.activities = []
+        route = dm.Route(id='route_actual', revision=1, title='Actual ordered route', goal='Synthetic goal', steps=[
+            dm.RouteStep(id='first', title='Read', target=reference(fixture.lesson), completion_rule='manual'),
+            dm.RouteStep(id='second', title='Practice', target=reference(fixture.practice),
+                completion_rule='practice_submitted', requires_steps=['first'])])
+        inputs.catalog.routes = [route]
+        inputs.route_states = [RouteStepState(route_ref=reference(route), step_id='first', completed=True,
+            completion_origin='manual', manual_override=True, completed_at=READ_AT, updated_at=READ_AT, source_event_ids=['route_completed']),
+            RouteStepState(route_ref=reference(route), step_id='second', completed=False)]
+        plan = derive_recommendations(inputs, generated_at=NOW,
+            parameters=RecommendationRuleParameters(review_after_days=3, calibration='uncalibrated'))
+>       assert len(plan.items) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+E        +    where [] = RecommendationPlan(items=[], warnings=[], valid_until=None).items
+
+tests/unit/test_recommendation_rules.py:195: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_recommendation_rules.py::test_next_route_step_uses_exact_route_and_real_completed_dependency_events
+1 failed, 13 passed in 0.14s

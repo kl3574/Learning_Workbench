@@ -1,0 +1,23 @@
+from datetime import datetime,timezone
+from pathlib import Path
+import hashlib,json,os,socket,subprocess,time
+base=Path(__file__).resolve().parent
+root=Path('<acceptance-cache>/m42-4cf13f7')
+if os.environ.get('M42_BROWSER_SLOT_RELEASED')!='1':raise SystemExit('Browser owner has not released the slot; no browser or service started.')
+for port in (8765,5173):
+ with socket.socket() as probe:
+  if probe.connect_ex(('127.0.0.1',port))==0:raise SystemExit('Required local test port is occupied; no browser or service started.')
+source=json.loads((base/'source-manifest.json').read_text())
+for item in source['files']:
+ if hashlib.sha256((root/item['path']).read_bytes()).hexdigest()!=item['sha256']:raise SystemExit('Frozen observed source mismatch: '+item['path'])
+case=(base/'original-case.ts.txt').read_text()
+assert case in (base/'observe-original.spec.ts').read_text()
+assert hashlib.sha256(case.encode()).hexdigest()==source['original_case_source_sha256']
+output=base/'run-001';output.mkdir()
+env={**os.environ,'TMPDIR':'<home>/.cache/lw-m42','LEARNING_E2E_DATA_DIR':str(output/'data')}
+command=['bash','scripts/node.sh','npm','--prefix','apps/web','exec','--','playwright','test','--config',str(base/'playwright.config.ts')]
+start=datetime.now(timezone.utc).isoformat();begin=time.monotonic()
+with (output/'playwright.log').open('xb') as log:result=subprocess.run(command,cwd=root,env=env,stdout=log,stderr=subprocess.STDOUT)
+receipt={'source_commit':source['source_commit'],'started_at':start,'finished_at':datetime.now(timezone.utc).isoformat(),'duration_seconds':time.monotonic()-begin,'exit_code':result.returncode,'command':command,'original_case_source_sha256':source['original_case_source_sha256'],'original_timeout_ms':30000,'scope':'One coordinated local observation run. Passive instrumentation can affect timing; a PASS does not explain two CI failures. No product or repository test file edited.','log_sha256':hashlib.sha256((output/'playwright.log').read_bytes()).hexdigest(),'source_files_equal_after':all(hashlib.sha256((root/item['path']).read_bytes()).hexdigest()==item['sha256'] for item in source['files'])}
+(output/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n');print(json.dumps(receipt))
+raise SystemExit(result.returncode)

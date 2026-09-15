@@ -1,0 +1,18 @@
+from pathlib import Path
+import os,sys,socket,subprocess,hashlib,json,datetime,time
+base=Path(__file__).resolve().parent
+kind,name=sys.argv[1:]
+assert kind in ['original','fixed'] and name.startswith('native-')
+root=base/('native-source-'+kind+'-v2');source=json.loads((base/(kind+'-native-source-v2.json')).read_text())
+for f,sha in source['files'].items():assert hashlib.sha256((root/f).read_bytes()).hexdigest()==sha,f
+for port in (8765,5173):
+ with socket.socket() as s:assert s.connect_ex(('127.0.0.1',port))!=0,'Browser port occupied'
+output=base/name;output.mkdir()
+config=output/'playwright.config.ts';config.write_text("import original from '"+str(root/'tests/e2e/playwright.config.ts')+"'\nimport { defineConfig } from '"+str(root/'apps/web/node_modules/@playwright/test/index.mjs')+"'\nexport default defineConfig({...original, testDir:'"+str(root/'tests/e2e')+"', outputDir:'"+str(output/'results')+"', testMatch:['workbench-initial-recovery.spec.ts','workbench.spec.ts']})\n")
+pattern='initial workbench recovery' if kind=='original' else 'initial workbench recovery|route directory stays honestly empty and continue reading restores the exact last lesson'
+cmd=['bash','scripts/node.sh','npm','--prefix','apps/web','exec','--','playwright','test','--config',str(config),'--grep',pattern]
+env={**os.environ,'TMPDIR':'<home>/.cache/lw-m42','LEARNING_E2E_DATA_DIR':str(output/'data')}
+start=datetime.datetime.now(datetime.timezone.utc).isoformat();t=time.monotonic()
+with (output/'run.log').open('xb') as log:r=subprocess.run(cmd,cwd=root,env=env,stdout=log,stderr=subprocess.STDOUT)
+receipt={'source_commit_base':source['source_commit_base'],'source_overlay':source['overlaid_actual_worktree_files'],'source_manifest':str(base/(kind+'-native-source-v2.json')),'source_manifest_sha256':hashlib.sha256((base/(kind+'-native-source-v2.json')).read_bytes()).hexdigest(),'source_count':source['source_count'],'source_equal_after':all(hashlib.sha256((root/f).read_bytes()).hexdigest()==sha for f,sha in source['files'].items()),'started_at':start,'finished_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'duration_seconds':time.monotonic()-t,'exit_code':r.returncode,'command':cmd,'config_sha256':hashlib.sha256(config.read_bytes()).hexdigest(),'log_sha256':hashlib.sha256((output/'run.log').read_bytes()).hexdigest(),'scope':'Isolated fixed-source development check, not unified release or current CI acceptance. Original complete case unchanged. Permanent added recovery tests explicitly hold one real response, assert loading UI, then release unchanged bytes; not the earlier click-gated experiment.'}
+(output/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n');print(json.dumps(receipt));print((output/'run.log').read_text());raise SystemExit(r.returncode)

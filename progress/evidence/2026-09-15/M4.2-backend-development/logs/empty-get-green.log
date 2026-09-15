@@ -1,0 +1,33 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+___ test_empty_get_does_not_materialize_default_snapshot_or_register_refresh ___
+
+tmp_path = PosixPath('<home>/.cache/lw-m42/pytest-of-lkx/pytest-1/test_empty_get_does_not_materi0')
+
+    def test_empty_get_does_not_materialize_default_snapshot_or_register_refresh(tmp_path):
+        from services.api.app.application.recommendations import RecommendationService
+    
+        database = Database(Settings(data_dir=tmp_path / 'data'))
+        workspace = database.initialize()
+>       before = stored_rows(database)
+                 ^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_recommendations.py:21: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+database = <services.api.app.infrastructure.database.Database object at 0x76b13fe73ce0>
+
+    def stored_rows(database):
+        # Zero-write and ownership are explicit product guarantees, independently
+        # observed across all tables rather than inferred from returned DTOs.
+        with database.connect() as connection:
+            names = [row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")]
+>           return {name: [tuple(row) for row in connection.execute(f'SELECT * FROM "{name}" ORDER BY rowid')]
+                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                    for name in names}
+E           sqlite3.OperationalError: no such column: rowid
+
+tests/integration/test_recommendations.py:12: OperationalError
+=========================== short test summary info ============================
+FAILED tests/integration/test_recommendations.py::test_empty_get_does_not_materialize_default_snapshot_or_register_refresh
+1 failed in 0.16s

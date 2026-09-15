@@ -1,0 +1,50 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/shared/createResponseDraftJournal.test.tsx
+
+
+ RUN  v5.0.0 <REPO>/apps/web
+
+ ❯ src/shared/createResponseDraftJournal.test.tsx (2 tests | 2 failed) 343ms
+   × an old resolve ACK cannot remove an already observed peer candidate while its preservation write waits 179ms
+   × explicit selection of another conflict remains protected after a later peer write wins before the resolve ACK 163ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/shared/createResponseDraftJournal.test.tsx > an old resolve ACK cannot remove an already observed peer candidate while its preservation write waits
+AssertionError: expected [ Array(1) ] to include '{"workspace":"workspace_resolve_late_…'
+ ❯ src/shared/createResponseDraftJournal.test.tsx:61:69
+     59|     expect(disk.revision).toBe(3); expect(disk.text).toBe(c)
+     60|     const after = view.result.current.records[key]
+     61|     expect([after.text, ...after.conflicts.map(item => item.text)]).to…
+       |                                                                     ^
+     62|     expect(view.result.current.unsafe).toBe(true)
+     63|   } finally {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/shared/createResponseDraftJournal.test.tsx > explicit selection of another conflict remains protected after a later peer write wins before the resolve ACK
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/shared/createResponseDraftJournal.test.tsx:121:32
+    119|     const protectedSelection = diskTexts.includes(a) || hookTexts.incl…
+    120|     expect(diskTexts).toContain(c)
+    121|     expect(protectedSelection).toBe(true)
+       |                                ^
+    122|   } finally {
+    123|     await act(async () => { releaseResolve.release(); releasePreservat…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  12:08:04
+   Duration  808ms (tests 50%, environment 35%, import 8%, transform 6%)
+

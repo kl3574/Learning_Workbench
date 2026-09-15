@@ -1,0 +1,19 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_ test_cancel_queued_and_cancel_parsing_never_publish_and_old_lease_cannot_finish _
+
+imports = (<services.api.app.infrastructure.database.Database object at 0x7814ee1aba40>, <services.api.app.application.imports.I...ace_7b85c179f66d421f895008663f26a23e', role='learner', csrf_token='synthetic_csrf', expires_at='2099-01-01T00:00:00Z'))
+
+    def test_cancel_queued_and_cancel_parsing_never_publish_and_old_lease_cannot_finish(imports):
+        database, service, worker, identity = imports
+        staged = service.stage(identity, data=b"synthetic", filename="a.txt", kind="text", key="queued")
+        service.cancel(identity, staged.import_id, ImportCancelRequest(expected_input_sha256=staged.input_sha256), "cancel")
+>       assert worker.run_once() is False
+E       assert True is False
+E        +  where True = run_once()
+E        +    where run_once = <services.api.app.infrastructure.import_worker.ImportWorker object at 0x7814ee1abdd0>.run_once
+
+tests/integration/test_import_repository.py:119: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/test_import_repository.py::test_cancel_queued_and_cancel_parsing_never_publish_and_old_lease_cannot_finish
+1 failed in 0.27s

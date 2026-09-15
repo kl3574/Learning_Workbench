@@ -1,0 +1,66 @@
+import { test, expect, type Route } from '../../apps/web/node_modules/@playwright/test/index.mjs'
+import { createHash } from 'node:crypto'
+import { bootstrap } from './helpers'
+
+for (const width of [1440, 390]) {
+  test(`initial workbench recovery keeps the saved lesson and waits for the real session at ${width}px`, async ({ page }, info) => {
+    await bootstrap(page)
+    await page.getByRole('navigation', { name: '学习主导航' }).getByRole('button', { name: '教材' }).click()
+    await page.getByRole('button', { name: '浏览合成示例课程' }).click()
+    await page.getByRole('button', { name: '打开示例小节' }).click()
+    await page.getByRole('navigation', { name: '上下文目录' }).getByRole('link', { name: '1.3' }).click()
+    await expect(page.locator('.reader-content h1')).toContainText('1.3')
+    await expect(page.getByText('✓ UI 会话已保存')).toBeVisible()
+    await page.setViewportSize({ width, height: 900 })
+
+    let release!: () => void, received!: () => void
+    const delivery = new Promise<void>(resolve => { release = resolve })
+    const upstreamReady = new Promise<void>(resolve => { received = resolve })
+    let intercepted = false, writesWhileReading = 0, held = true, originalBodySha = '', deliveredBodySha = ''
+    let savedCourse: unknown, savedLesson: unknown
+    page.on('request', request => { if (held && request.method() === 'PUT' && new URL(request.url()).pathname === '/api/v1/workbench/session') writesWhileReading++ })
+    const handler = async (route: Route) => {
+      if (route.request().method() !== 'GET' || intercepted) { await route.continue(); return }
+      intercepted = true
+      const response = await route.fetch(), body = await response.body()
+      expect(response.status()).toBe(200)
+      const saved = JSON.parse(body.toString())
+      savedCourse = saved.course_ref
+      savedLesson = saved.tabs.find((tab: { id: string }) => tab.id === saved.active_tab_id)?.context.active_ref
+      originalBodySha = createHash('sha256').update(body).digest('hex')
+      received()
+      await delivery
+      deliveredBodySha = createHash('sha256').update(body).digest('hex')
+      await route.fulfill({ response, body })
+    }
+    await page.route('**/api/v1/workbench/session', handler)
+    try {
+      await page.reload()
+      await upstreamReady
+      await expect(page.getByRole('heading', { name: '正在恢复工作台', exact: true })).toBeVisible()
+      await expect(page.getByText('正在读取工作台状态，完成后可继续操作。', { exact: true })).toBeVisible()
+      await expect(page.getByRole('navigation', { name: '学习主导航' })).toHaveCount(0)
+      expect(writesWhileReading).toBe(0)
+      expect(savedCourse).toMatchObject({ entity: 'course', id: 'synthetic_course_layout' })
+      expect(savedLesson).toMatchObject({ entity: 'lesson', id: 'synthetic_lesson_1_3' })
+      await info.attach(`initial-workbench-loading-${width}`, { body: await page.screenshot(), contentType: 'image/png' })
+      held = false; release()
+      await expect(page.locator('.reader-content h1')).toContainText('1.3')
+      await expect(page.getByText('✓ UI 会话已保存')).toBeVisible()
+      expect(deliveredBodySha).toBe(originalBodySha)
+      if (width < 820) await page.getByRole('button', { name: '切换导航栏' }).click()
+      await page.getByRole('navigation', { name: '学习主导航' }).getByRole('button', { name: '习题' }).click()
+      if (width < 820) await page.getByRole('button', { name: '切换导航栏' }).click()
+      await page.getByRole('button', { name: '继续浏览示例' }).click()
+      await expect(page.locator('.reader-content h1')).toContainText('1.3')
+      await expect(page.getByText('✓ UI 会话已保存')).toBeVisible()
+      const current = await page.evaluate(async () => {
+        const response = await fetch('/api/v1/workbench/session')
+        if (!response.ok) throw new Error('Expected a readable saved workbench session')
+        return response.json()
+      })
+      expect(current.course_ref).toEqual(savedCourse)
+      expect(current.tabs.find((tab: { id: string }) => tab.id === current.active_tab_id)?.context.active_ref).toEqual(savedLesson)
+    } finally { held = false; release(); await page.unroute('**/api/v1/workbench/session', handler) }
+  })
+}

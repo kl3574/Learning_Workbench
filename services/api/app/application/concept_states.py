@@ -11,7 +11,6 @@ from packages.contracts import domain_models as dm
 from ..concept_state_dto import ConceptState, ConceptStateResponse, ConceptStateSource
 from ..infrastructure.content_repository import ContentRepository
 from ..infrastructure.database import Database
-from ..infrastructure.profile_repository import ProfileRepository
 from ..infrastructure.security import guard_subject_access
 from .concept_state_rules import derive_concept_state, observation_order
 from .content_learning_access import evidence_applicability, learning_scope, participation_in_scope
@@ -20,6 +19,7 @@ from .errors import ApiError
 from .evidence import latest_checked_observations
 from .learning_state_models import EvidenceApplicability, PracticeHelpActivity, SubmissionActivity
 from .practice_activity_access import practice_participation
+from .profile import read_profile
 from .question_qualification import QuestionQualificationFacts, question_qualification_facts
 
 RefKey: TypeAlias = tuple[str, str, int, str]
@@ -29,6 +29,19 @@ SKILLS: tuple[Skill, ...] = ('recall', 'explain', 'compute', 'derive', 'transfer
 
 def ref_key(ref: dm.ContentRef) -> RefKey:
     return ref.entity, ref.id, ref.revision, ref.sha256
+
+
+def read_concept_states(connection: sqlite3.Connection, workspace_id: str,
+                        course_id: str | None = None) -> ConceptStateResponse:
+    """Public Learning query inside the caller's transaction, with no default writes."""
+    if not connection.in_transaction:
+        raise ApiError(409, 'TRANSACTION_REQUIRED', '学习状态读取需要同一事务的来源快照。')
+    guard_subject_access(connection, workspace_id)
+    ContentRepository(connection, workspace_id).require_workspace()
+    try:
+        return ConceptStateService._read(connection, workspace_id, course_id)
+    except (ValidationError, ValueError, TypeError):
+        raise ApiError(409, 'LEARNING_STATE_INVALID', '学习状态来源或计数完整性校验失败。') from None
 
 
 class ConceptStateService:
@@ -49,7 +62,7 @@ class ConceptStateService:
     @staticmethod
     def _read(connection: sqlite3.Connection, workspace_id: str, course_id: str | None) -> ConceptStateResponse:
         scope = learning_scope(connection, workspace_id, course_id)
-        profile = ProfileRepository(connection, workspace_id).read()
+        profile = read_profile(connection, workspace_id)
         concepts = {ref_key(item.ref): item for item in scope.concepts}
         skills = {key: set(item.skill_dimensions) for key, item in concepts.items()}
         membership: dict[RefKey, bool] = {}

@@ -1,0 +1,91 @@
+
+Running 4 tests using 1 worker
+
+(node:121889) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/e2e/recommendations.spec.ts:56:1 › real recommendation decisions recover a lost ACK across browser and API restart without rewriting later decisions or learning facts (5.9s)
+  ✘  2 tests/e2e/recommendations.spec.ts:90:1 › real local suggestions cover another imported textbook and open its complete original refs independently of acceptance (4.8s)
+(node:122559) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  3 tests/e2e/recommendations.spec.ts:109:1 › real offline and stale decision candidates require explicit 412 correction and current independent policy hides delayed subject sources (15.0s)
+(node:122855) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  4 tests/e2e/recommendations.spec.ts:140:1 › a controlled archived fixture makes the real historical recommendation stale and its formerly current UI cannot open the old target (4.1s)
+
+
+  1) tests/e2e/recommendations.spec.ts:90:1 › real local suggestions cover another imported textbook and open its complete original refs independently of acceptance 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 409
+
+       at practiceTestData.ts:42
+
+      40 |   await dialog.getByRole('button', { name: '确认导入当前候选', exact: true }).click()
+      41 |   const response = await committing
+    > 42 |   expect(response.status()).toBe(200)
+         |                             ^
+      43 |   const receipt: ImportCommitResponse = await response.json()
+      44 |   expect(receipt.course_refs).toContainEqual(value.course)
+      45 |   await expect(dialog.getByRole('heading', { name: '导入已提交', exact: true })).toBeVisible()
+        at importPracticePackage (<REPOSITORY_ROOT>/tests/e2e/practiceTestData.ts:42:29)
+        at <REPOSITORY_ROOT>/tests/e2e/recommendations.spec.ts:94:63
+
+    Error Context: ../../../.cache/learning-workbench-acceptance/m42-frontend/native-02-artifacts/recommendations-real-local-8a602-independently-of-acceptance/error-context.md
+
+  2) tests/e2e/recommendations.spec.ts:109:1 › real offline and stale decision candidates require explicit 412 correction and current independent policy hides delayed subject sources 
+
+    TimeoutError: locator.click: Timeout 10000ms exceeded.
+    Call log:
+      - waiting for getByRole('button', { name: '明确开始本次测试', exact: true })
+        - locator resolved to <button disabled class="primary-button">明确开始本次测试</button>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not enabled
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not enabled
+        - retrying click action
+          - waiting 100ms
+        19 × waiting for element to be visible, enabled and stable
+           - element is not enabled
+         - retrying click action
+           - waiting 500ms
+
+
+      130 |     const other = await page.context().newPage()
+      131 |     try {
+    > 132 |       await other.goto(`${runtime.origin}/?assessment=${encodeURIComponent(JSON.stringify({ assessment_ref: fixture.assessment, course_ref: fixture.course }))}`); await other.getByRole('checkbox', { name: '我已核对内容状态与模式，确认开始未评分测试', exact: true }).check(); await other.getByRole('button', { name: '明确开始本次测试', exact: true }).click(); await expect(other.getByText('独立测试进行中', { exact: true }).first()).toBeVisible(); release()
+          |                                                                                                                                                                                                                                                                                                                                  ^
+      133 |       await expect(dialog.locator('[data-recommendation-id]')).toHaveCount(0); await expect(dialog.locator('.recommendation-sources')).toHaveCount(0); await expect(dialog).toContainText('本机候选保留，暂停读写'); expect((await page.request.get(`/api/v1/recommendations?recommendation_id=${item.id}`)).status()).toBe(409); await page.screenshot({ path: info.outputPath('recommendations-policy-hidden-390.png') })
+      134 |     } finally { release(); await page.unroute('**/api/v1/recommendations?*'); await other.close() }
+      135 |     expect(errors).toEqual([])
+        at <REPOSITORY_ROOT>/tests/e2e/recommendations.spec.ts:132:322
+
+    Error Context: ../../../.cache/learning-workbench-acceptance/m42-frontend/native-02-artifacts/recommendations-real-offli-ff5dd-des-delayed-subject-sources/error-context.md
+
+  3) tests/e2e/recommendations.spec.ts:140:1 › a controlled archived fixture makes the real historical recommendation stale and its formerly current UI cannot open the old target 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "stale"
+    Received: "pending_refresh"
+
+      153 |     // guard re-reads its original historical ID through the real HTTP endpoint.
+      154 |     const reading = page.waitForResponse(response => response.request().method() === 'GET' && new URL(response.url()).searchParams.get('recommendation_id') === item.id)
+    > 155 |     await button.click(); const response = await reading; expect(response.status()).toBe(200); const historical: RecommendationPage = await response.json(); expect(historical.projection_state).toBe('stale'); expect(historical.items[0]).toMatchObject({ id: item.id, target_ref: item.target_ref, staleness: 'stale', decision: 'pending', decision_revision: 1 })
+          |                                                                                                                                                                                                  ^
+      156 |     await expect(dialog.getByRole('alert').filter({ hasText: '推荐依据已过期，请查看最新推荐' })).toBeVisible(); await expect(button).toBeDisabled(); await expect(row.getByRole('button', { name: '接受此建议', exact: true })).toBeDisabled(); expect(page.url()).toBe(originalURL); await expect(page.getByRole('dialog', { name: '学习建议', exact: true })).toBeVisible()
+      157 |     await row.getByText('核对推荐原因与真实来源', { exact: true }).click(); await expect(row).toContainText(item.target_ref.sha256)
+      158 |     await page.setViewportSize({ width: 390, height: 844 }); await dialog.getByRole('alert').filter({ hasText: '推荐依据已过期，请查看最新推荐' }).scrollIntoViewIfNeeded(); await expect(dialog.getByRole('button', { name: '关闭学习建议', exact: true })).toBeInViewport(); expect(await dialog.evaluate(node => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1); await page.screenshot({ path: info.outputPath('recommendation-stale-open-blocked-390.png') })
+        at <REPOSITORY_ROOT>/tests/e2e/recommendations.spec.ts:155:194
+
+    Error Context: ../../../.cache/learning-workbench-acceptance/m42-frontend/native-02-artifacts/recommendations-a-controll-328df--cannot-open-the-old-target/error-context.md
+
+  3 failed
+    tests/e2e/recommendations.spec.ts:90:1 › real local suggestions cover another imported textbook and open its complete original refs independently of acceptance 
+    tests/e2e/recommendations.spec.ts:109:1 › real offline and stale decision candidates require explicit 412 correction and current independent policy hides delayed subject sources 
+    tests/e2e/recommendations.spec.ts:140:1 › a controlled archived fixture makes the real historical recommendation stale and its formerly current UI cannot open the old target 
+  1 passed (30.6s)
