@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { fixture, fixtureRef, findLesson, sameRef, type SyntheticLesson } from '../features/fixture'
 import { ConflictComparison } from './ConflictComparison'
+import { PreserveReaderViewport, readerViewportOwner } from './PreserveReaderViewport'
 import { ImportWorkflow } from '../features/imports/ImportWorkflow'
 import { Dialog, Splitter } from './Controls'
 import { Navigation } from './Navigation'
@@ -189,7 +190,7 @@ export function Shell() {
     { title: '切换专注模式', action: () => { setDialog(null); setFocus(!focus) } },
     { title: '查看快捷键', action: () => setDialog('快捷键') },
   ]
-  return <div className={`app-shell ${focus ? 'focus-mode' : ''}`}>
+  return <PreserveReaderViewport owner={readerViewportOwner(workspaceId, active)} conflict={status === 'conflict' && !!comparison} className={`app-shell ${focus ? 'focus-mode' : ''}`}>
     <a href="#reader-main" className="skip-link">跳到学习内容</a>
     <header className="topbar"><a className="brand" href="#" onClick={event => { event.preventDefault(); navigate('route') }}><span className="brand-symbol" aria-hidden="true">径</span><strong>知径</strong><span className="brand-subtitle">学习工作台</span></a><button className="command-trigger" onClick={() => commandCallback.current()}><span aria-hidden="true">⌕</span> 搜索与命令 <kbd>Ctrl ⇧ P</kbd></button><div className="topbar-tools"><button onClick={() => toggleSide('nav')} aria-label="切换导航栏" aria-expanded={width < 820 ? drawer === 'nav' : navVisible}>目录</button><button onClick={() => toggleSide('agent')} aria-label="切换 Agent 栏" aria-expanded={!desktop ? drawer === 'agent' : agentVisible}>Agent</button><button className="focus-trigger" onClick={() => setFocus(!focus)} aria-pressed={focus}>{focus ? '退出专注' : '专注'}</button><button className="import-trigger" onClick={() => openAux('导入')}>导入</button></div></header>
     {historyWarning && <div className="save-alert" role="status">{historyWarning}</div>}
@@ -209,5 +210,5 @@ export function Shell() {
     {closingLearning && <Dialog title={closingLearning === 'profile' ? '保留未同步画像' : '保留未同步路线'} close={() => setClosingLearning(null)}><p>尚有本机未同步候选。可以返回编辑保存到服务端，或在本机持久化完成后明确保留候选并关闭。</p><button disabled={!(closingLearning === 'profile' ? profileState.safe : routeEditState.safe)} onClick={() => { setClosingLearning(null); setDialog(null) }}>{closingLearning === 'profile' ? '保留本机画像草稿并关闭' : '保留本机路线草稿并关闭'}</button><button onClick={() => setClosingLearning(null)}>返回编辑</button></Dialog>}
     {closingNotes && <Dialog title="保留未同步笔记" close={() => setClosingNotes(false)}><p>笔记仍有未同步内容。可返回编辑并保存到服务端，或明确保留已保存的本机草稿后关闭。</p><button disabled={!noteState.safe} onClick={() => { setClosingNotes(false); setDialog(null) }}>保留本机笔记草稿并关闭</button><button onClick={() => setClosingNotes(false)}>返回编辑</button>{!noteState.safe && <p role="alert">本机草稿尚未安全保存，请保持窗口打开并重试。</p>}</Dialog>}
     {closing && (routeStates[closing]?.dirty || routeStates[closing]?.safe === false) ? <Dialog title="保留路线标记候选" close={() => setClosing(null)}><p>未确认的人工标记独立保留，不会因为关闭路线而提交。</p><button disabled={!routeStates[closing]?.safe} onClick={() => closeTab(closing)}>保留本机路线标记并关闭</button><button onClick={() => setClosing(null)}>返回路线</button></Dialog> : closing && (assessmentStates[closing]?.dirty || assessmentStates[closing]?.safe === false) ? <Dialog title="保留未同步测试作答" close={() => setClosing(null)}><p>测试仍有本机未同步候选。关闭不会提交或放弃，也不会修改冻结作答。</p><button disabled={!assessmentStates[closing]?.safe || draftSaving[closing] || !!draftErrors[closing]} onClick={() => closeTab(closing)}>保留本机测试作答并关闭</button><button onClick={() => setClosing(null)}>返回测试作答</button>{!assessmentStates[closing]?.safe && <p role="alert">本机候选尚未安全保存，请保持当前页面打开。</p>}</Dialog> : closing && (practiceStates[closing]?.dirty || practiceStates[closing]?.safe === false) ? <Dialog title="保留未同步作答" close={() => setClosing(null)}><p>本次练习仍有未同步作答。只有本机草稿已安全保存时才允许关闭；提交快照不会因此改变。</p><button disabled={!practiceStates[closing]?.safe || draftSaving[closing] || !!draftErrors[closing]} onClick={() => closeTab(closing)}>保留本机作答并关闭</button><button onClick={() => setClosing(null)}>返回练习</button>{!practiceStates[closing]?.safe && <p role="alert">本机作答尚未安全保存，请返回练习并重试。</p>}</Dialog> : closing && <Dialog title="保留问题草稿" close={() => setClosing(null)}><p>该对象有尚未发送的问题草稿。关闭标签前选择如何处理。</p><div className="dialog-actions"><button className="primary-button" disabled={draftSaving[closing] || !!draftErrors[closing]} onClick={() => closeTab(closing)}>保留本地草稿并关闭</button><button onClick={() => { updateDraft(closing, ''); closeTab(closing) }}>放弃草稿并关闭</button><button onClick={() => setClosing(null)}>取消</button></div></Dialog>}
-  </div>
+  </PreserveReaderViewport>
 }
