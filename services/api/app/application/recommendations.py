@@ -230,11 +230,31 @@ class RecommendationWorker:
         self.database = database
         self.stopping = stopping
 
+    def _no_work(self, workspace_id: str) -> bool:
+        # A checked no-work snapshot neither publishes subject data nor clears
+        # dirty state. Concurrent changes may defer work until the next tick.
+        # Any work below starts a separate writer transaction and rechecks all
+        # current facts; no read-snapshot inputs cross that admission boundary.
+        with self.database.transaction(immediate=False) as connection:
+            guard_subject_access(connection, workspace_id)
+            state, snapshots, _ = RecommendationRepository(connection, workspace_id).checked()
+            if state is None:
+                return False
+            if state['retry_at'] is not None and state['retry_at'] > utc_now():
+                return True
+            if (not snapshots or state['generation'] != state['completed_generation']
+                    or state['failure_json'] is not None):
+                return False
+            inputs = load_inputs(connection, workspace_id)
+            return basis_current(snapshots[-1], inputs, parameters(self.database), utc_now())
+
     def run_once(self) -> bool:
         if self.stopping():
             return False
         workspace_id = self.database.workspace_id()
         try:
+            if self._no_work(workspace_id):
+                return False
             with self.database.transaction() as connection:
                 guard_subject_access(connection, workspace_id)
                 repository = RecommendationRepository(connection, workspace_id)
