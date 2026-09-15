@@ -1,0 +1,16 @@
+{
+  "observed_at": "2026-09-15T12:27:45.539193+00:00",
+  "head": "ab6c27b417b98e50eb5e2feb469be191d1db4d41",
+  "implementation_commit": "d65e08e3c3fd896896f7228f6099ef93b9c3362d",
+  "remote_ref_verified": true,
+  "pull_request": "https://github.com/kl3574/Learning_Workbench/pull/50",
+  "pr_head": "ab6c27b417b98e50eb5e2feb469be191d1db4d41",
+  "draft": true,
+  "state": "open",
+  "merged": false,
+  "title": "[M5.2] 精确范围本地检索与读取、推荐恢复修复",
+  "body_sha256": "fd1f5b912a97affd1b8a207eb31b021eb5ce000c1651a22fce01f9cac215bd33",
+  "body": "本地检索按用户明确选定的精确块、小节或课程范围运行。索引缺失时通过真实 Job 构建，命中保留完整正文、来源、修订和哈希；浏览器恢复后继续回读原命令与当前任务，旧范围不静默迁移到新版本。\n\n本次补充三项有实际反例的回归修复：Policy 慢轮询响应可恢复可用状态；推荐首次可用点击不会被迟到的 effect 清理取消；推荐维护确认无需更新时使用只读事务，避免空闲检查占据 writer 锁。需要更新时仍在原写事务完整重核最新 Policy、历史和输入。Content/Reader 的排他权限与完整性检查、原 Reader 5 秒断言保持不变。\n\n验证代码：`d65e08e3c3fd896896f7228f6099ef93b9c3362d`，唯一规范 PRODUCT_DESIGN.md 3.0.3。\n\n- 该固定代码新运行完整 Python：1673 PASS / 2 依赖警告（291.76s）；真实浏览器：88 PASS（7.4m）；Ruff、mypy133、规范自检通过。787 输入前后绑定，native 唯一已知测试输出截图变化被原样记录、归档后精确恢复，原 unchanged=false 保留。\n- c83 前端完整 355 项测试、lint/typecheck/build 通过；与本次代码的前端输入相同关系单独核验，未声称重跑。\n- 推荐维护同一最终测试字节在旧逻辑下 3 FAIL、修复后 3 PASS；新旧相关集成测试 39 PASS。来源并发更新、独立测验权限、另一 worker 抢先完成、失败重试和未知错误都有负控。源码与原始日志接受独立审查。\n- 既有固定原创检索基准为 30 块、42 条 gold；两轮各 38 正向 Recall@5=1.0，4 无匹配通过。该小型词法基准不证明通用 RAG、模型回答质量或学习效果。\n\n历史 CI 失败保留：3dd 两个浏览器任务失败；73d 双工作流最终 10 success / 2 failure（push 推荐前端、PR Reader）。73d 实际 Reader 失败附件显示小节和目录 GET 在观察期未完成；具体延迟层与唯一原因仍未确定。累计合成库中的写锁等待是独立实测机制，不追认为 CI 秒级超时的唯一原因。后续 CI 仅按实际新 head 回读。\n\n详细证据与输入边界见 progress/M5.2-next.md 和 progress/evidence/2026-09-15/。保留原失败、测试脚本修正、已知测试输出截图变化及早期附件丢失事实。\n\n依赖未合并 PR #49；本 PR 保持 draft/open，不自动合并或关闭任务。M5.3 Tutor/Run/Agent 尚未实现，独立供应商最小接口测试成功与平台 Agent 验收分开记录；真实凭据和个人资料未加入仓库或 CI。\n\nRefs #27\n\n本轮实际发布 HEAD：`ab6c27b417b98e50eb5e2feb469be191d1db4d41`；双 CI 等待实际终态回读。\n",
+  "ci": "PENDING_REAL_TERMINAL_READBACK",
+  "push_exit_code": 0
+}

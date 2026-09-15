@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-15T12:21:23Z；规范 SHA-256：`a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8`
+更新：2026-09-15T12:51:44Z；规范 SHA-256：`a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED
-实施：IN_PROGRESS；当前任务：M5.2；下一任务：M5.3
+实施：IN_PROGRESS；当前任务：M5.2；下一任务：M5.2
 
-发布d65修复和完整证据，同步PR50/Issue27；核对精确新发布head的双CI实际终态。若新CI失败保留现场继续定位；通过后按未合并依赖流程继续M5.3。平台Agent目前仍未实现/未验，独立DeepSeek最小生成成功单列。
+继续M5.2：先封真实Shell的UI已保存而Policy未就绪窗口，验证首次导入点击的拒绝机制并保留实际独立测试负控；原用例追加最小阶段时钟以区分点击时策略，不增大60s、不自动重复受限操作。证据支持后修复、重验并读取新精确CI，再恢复M5.3 Thread/Run/SSE。平台Agent仍未实现/未端到端测试。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -61,7 +61,7 @@
 - m5_1_native_repair: PASS at254a4ff：新命令及明确更正采用同owner/provider较高真实readback，ACK不伪造current；unknown原命令不变。真实受控parent-delay DELETE由r1If-Match/412变r2If-Match/200，peer抢先r3仍412再explicit新key成功；原CI只确知r3ACK等待失败，不追认唯一因果。14secret/35Provider定向unit及5native通过；同source新323web/87fullnative通过。
 - m5_1_254a4ff_local: 六项实际命令PASS：lint、types(mypy125+web)、spec(54core/6embedded/106routes结构检查)、build(709modules,chunk警告保留)、323web/52files3.37s、87native6.9m。600source aggregate b00ae17d2d6e87e01aee18c0082ff1eee32c4be891d343fe4bd1b8df48417452；83完整native产物私有留存，当前阶段尚待新发布head CI。
 - m5_1_ci_current: PASS：发布f0b4ce2精确双workflow12/12success；每组323web/52files、87native（12.0m/11.9m）。6push checkout f0b4ce2、6PR checkout95ff622，全部Git tree c8d7d132相同；600source与254a4ff等同。85payload原件/公开件SHA、size、全部转换与聚合root逐项核验；此CI基于规范3.0.2，不涵盖当前M5.2工作树。
-- m5_2: LOCAL_PASS_WITH_DECLARED_SCOPES：最新验证代码d65e08e，1673Python/88native与Ruff/mypy/spec新PASS；355web/lint/types/build按相同c83执行输入沿用。原3dd检索gold42两轮通过及完整UI/源码审查保留。最新已发布73d远端10success/2failure；新修复待发布/CI，PR50仍draft/open/unmerged。
+- m5_2: LOCAL_PASS_REMOTE_FAIL：d65e08e固定代码新1673Python/88native与Ruff/mypy133/spec通过，c83相同前端输入355web/lint/types/build沿用；ab6真实双CI11success1failure（push导入前置失败，PR88browser通过）。不抵消原3dd/73d失败；PR50仍draft/open/unmerged。
 - m5_1_358bf5d_historical: LOCAL_FIXED_SOURCE_PASS：769原本地1494Python/314web/85native保留；6c首次CI10success2frontend FAIL，0c修refresh测试并五门禁PASS。e480新CI的PRfrontend314PASS，push不同revoke准备测试313PASS1FAIL，原件保留。358bf5d仅加7行等待journal/ACK后完整回读，600输入before/after/Git相同，lint/types/spec/build与314web/52files新PASS；原RED/观测/两次guard mutation反例保留，production原字节恢复。358本地未重跑backend/native（输入未变），新提交未推送、远端CI NOT_RUN；真实Provider/Codex/学习效果未验。
 - m5_2_input_coverage: 补证PASS：同f9新Python02实际1663PASS/2依赖弃用警告/273.45s，427声明输入与Git及before/after一致，含6个顶层helper；新spec03对430输入实测PASS，另含3个派生docs。Python02不追认这3个docs运行前快照，其内容由套件generate(check=True)及独立spec03核验。原01的1663PASS/421绑定和两条遗漏审查原件保留。
 - m5_2_ui_review: 两处修复有界闭合：同一合法11case在原逻辑快照7FAIL4PASS、修后同测通过，完整检索23web/5filesPASS。相同本机命令/ACK候选可恢复，不同身份/正文/ACK冲突保持拒绝；安全读取失败禁止父链离开。B独立源码/原日志/hash回读无新增阻断，未冒称其另跑测试。默认Reader scope误用practice的独立原RED/GREEN另保留。
@@ -74,10 +74,14 @@
 - m5_2_c83_gates: LOCAL_FIXED_SOURCE_PASS：c83b1d0完整355web/58files、lint/typecheck/build及88native/7.6m均PASS。五门禁785个声明输入before逐项同Git；四项before/after一致，native仅已知测试输出PNG变化，原unchanged=false保留且两图归档、精确hash保护恢复。初次恢复命令在完成恢复后因系统Python datetime.UTC写回执失败，后以项目Python真实读回；未冒称第一命令成功。独立终态读回已完成。仅此代码与命令范围，不宣称当前后端修复已测或远端CI通过。
 - m5_2_reader_lock_profile: MECHANISM_OBSERVED_NOT_CI_REPRODUCTION：真实累计合成数据库候选副本中一次RecommendationWorker no-work检查持写锁169.81ms；实际Content lesson/outline BEGIN等待178.69/228.71ms，返回均正常。原库/785源码不变，零blob读取；候选库有14精确fixture refs但缺随机全套artifact绑定，不是CI数据库。新建小库与累计库分别保留；线程SQL单时钟核验，CPU profile跨线程不误归因。无人工睡眠/数据放大/断言超时改动，未复现数秒等待。
 - m5_2_worker_repair: FOCUSED_PASS：最终生产734e19c3与test709dc3e0；同test旧逻辑3FAIL→新3PASS，另7负控未在此选择运行。完整新10+旧29相关integration共39PASS/2原警告；owned Ruff/mypy通过，原writer/catch后缀逐字相同，D独立8完整run读回无阻断。B786清单为原785tracked+owned新test，不含当时root新增untracked ADR，未追认全仓不变。red01/02 harness问题、green04错误历史catalog期望与最终同bytes闭合均保留。
-- m5_2_d65_gates: LOCAL_FIXED_SOURCE_PASS：d65e08e新完整Python1673PASS/2依赖弃用警告/291.76s，native88PASS/7.4m，完整Ruff、mypy133、spec均PASS。五门禁787before逐项同Git，四非nativeafter全同aggregate fcc585248ac016f6817d380962eb391b8fea3294ec23e154a287460815fdde02；native仅已知直接输出PNG改变，原unchanged=false保留，82界面文件预存原件、实际after归档后按精确hash恢复。前端c83的355web/58files、lint/types/build依377保守执行输入同字节与全Git仅三源变更的独立回读沿用，不称重跑。新远端CI NOT_RUN，不能用本地通过抹去73d原失败。
+- m5_2_d65_gates: LOCAL_FIXED_SOURCE_PASS：d65e08e新完整Python1673PASS/2依赖弃用警告/291.76s，native88PASS/7.4m，完整Ruff、mypy133、spec均PASS。五门禁787before逐项同Git，四非nativeafter全同aggregate fcc585248ac016f6817d380962eb391b8fea3294ec23e154a287460815fdde02；native仅已知直接输出PNG改变，原unchanged=false保留，82界面文件预存原件、实际after归档后按精确hash恢复。前端c83的355web/58files、lint/types/build依377保守执行输入同字节与全Git仅三源变更的独立回读沿用，不称重跑。后续发布ab6真实双CI11success1failure另列；不能用本地通过抹去原失败。
+- m5_2_current_publication: VERIFIED：ab6已push exit0并精确回读PR50/ref/body，相对d65仅324progress路径；该head双CI已终态失败。后续仅证据/检查点的提交不算修复，CI按自己的head另读，不替代ab6原结果。
+- m5_2_ab6_ci: FAIL：ab6c27b精确push34968882564/PR34968887070双CI终态11success/1failure。push browser87PASS1FAIL13.6m，PR browser88PASS12.5m；其余10组成功，各frontend355、backend576、integration654、spec456（组间重叠不相加）。新失败是reader.spec.ts:209私件撤权用例的导入前置，:216等待不存在dialog的解析格式时总60s预算耗尽，未进入上传/撤权/下载断言。12实际checkout分别ab6/a327ee75，同tree7af20e913e503c89aa8a423a5399a7f27360c346；真实2附件和原日志已核，点击时策略分支原因未证。
+- m5_2_ab6_import_opening: READONLY_DIAGNOSIS：实际两附件显示无Import dialog和Shell策略拒绝提示。唯一警告源openAux在subjectLocked时return；顶部导入始终enabled，UI saved与Policy known不同步。源码/原附件独立审查已核；点击当时unknown/暂败/真实independent未区分，受控实验和修复NOT_RUN。
+- m5_3_implementation: NOT_IMPLEMENTED / PLATFORM_AGENT_NOT_RUN：六条Thread/Tutor/Run HTTP未注册，Tutor发送永久disabled；已有草稿/固定帮助、Provider控制与内部供应商流不等于公开Run SSE。生产source/proof默认空。静态源码和生成路由逐字核验，非新HTTP/模型测试。
 
 ## 阻塞与待决项
 
-- M5_2_CI_REGRESSION: 原73d双CI10success/2failure，Reader耗时层未唯一定位。三项独立机制修复已在d65新完整本地1673Python/88native与同输入355web范围通过；新远端CI待发布/运行，不能提前解除远端验收阻断。非权限或凭据阻塞。
+- M5_2_CI_REGRESSION: ab6实际双CI11success1failure；push导入前置失败，未到私件安全断言，需受控定位与修复。已有d65本地门禁通过与PR浏览器88通过不替代此失败。非权限或凭据阻塞。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。
