@@ -40,6 +40,8 @@ test('a same-provider refresh must not discard an unacknowledged temporary secre
   await waitFor(() => expect(screen.getByLabelText('新秘密').matches(':disabled')).toBe(false))
   fireEvent.change(screen.getByLabelText('新秘密'), { target: { value: 'synthetic-retained' } }); fireEvent.click(screen.getByRole('button', { name: '保存秘密' }))
   await waitFor(() => expect(screen.getByRole('button', { name: '重试原秘密写入命令' }).matches(':disabled')).toBe(false))
+  // The child retry control settles before its busy effect reaches the parent.
+  await waitFor(() => expect(screen.getByRole('button', { name: '重新读取配置与能力' }).matches(':disabled')).toBe(false))
   fireEvent.click(screen.getByRole('button', { name: '重新读取配置与能力' }))
   await waitFor(() => expect(fixture.port.config).toHaveBeenCalledTimes(2))
   expect(screen.getByLabelText('新秘密')).toHaveProperty('value', 'synthetic-retained')
