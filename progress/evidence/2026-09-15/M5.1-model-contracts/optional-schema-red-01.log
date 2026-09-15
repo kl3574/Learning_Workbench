@@ -1,0 +1,29 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_______________ test_query_modes_and_optional_nonnullable_fields _______________
+
+    def test_query_modes_and_optional_nonnullable_fields():
+        query = TypeAdapter(dto.ConsentQuery)
+        assert isinstance(query.validate_python({}), dto.ConsentListQuery)
+        assert isinstance(query.validate_python({'consent_id': 'consent_one'}), dto.ConsentByIdQuery)
+        for bad in [{'consent_id': 'consent_one', 'limit': 20}, {'consent_id': 'consent_one', 'cursor': 'signed'},
+                    {'cursor': None}, {'cursor': ' '}, {'limit': None}, {'limit': True}, {'limit': 101}, {'other': 1}]:
+            with pytest.raises(ValidationError):
+                query.validate_python(bad)
+        page = {'items': [], 'next_cursor': None}
+        assert dto.ConsentPage.model_validate(page).model_dump() == page
+        assert dto.ConsentPage.model_validate({**page, 'total_hint': 0}).model_dump()['total_hint'] == 0
+        for bad in [None, True, -1, '0']:
+            with pytest.raises(ValidationError):
+                dto.ConsentPage.model_validate({**page, 'total_hint': bad})
+        for model, field in [(dto.ConsentListQuery, 'cursor'), (dto.ConsentPage, 'total_hint')]:
+            schema = model.model_json_schema()
+            assert field not in schema.get('required', [])
+            assert 'null' not in str(schema['properties'][field].get('anyOf', []))
+>           assert 'default' not in schema['properties'][field]
+E           AssertionError: assert 'default' not in {'default': None, 'minLength': 1, 'title': 'Cursor', 'type': 'string'}
+
+tests/contract/test_provider_dto.py:225: AssertionError
+=========================== short test summary info ============================
+FAILED tests/contract/test_provider_dto.py::test_query_modes_and_optional_nonnullable_fields
+1 failed in 0.12s

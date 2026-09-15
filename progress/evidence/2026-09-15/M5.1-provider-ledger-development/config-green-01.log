@@ -1,0 +1,73 @@
+F.                                                                       [100%]
+=================================== FAILURES ===================================
+______ test_first_config_secret_rotation_and_original_ack_survive_reopen _______
+
+tmp_path = PosixPath('${PRIVATE_HOME}/.cache/lw-m51-b/config-green/test_first_config_secret_rotat0')
+
+    def test_first_config_secret_rotation_and_original_ack_survive_reopen(tmp_path):
+        from services.api.app.application.providers import ProviderService
+        from services.api.app.infrastructure.provider_secret_store import FileSecretStore
+        from services.api.app.provider_dto import ProviderConfigWrite, ProviderSecretWrite
+    
+        database = Database(Settings(data_dir=tmp_path / 'data'))
+        workspace = database.initialize()
+        identity = SessionIdentity('session_provider_test', workspace, 'learner', 'unused', '2099-01-01T00:00:00Z')
+        secrets = FileSecretStore(tmp_path / 'secrets')
+        secrets.initialize()
+        service = ProviderService(database, secrets)
+        request = ProviderConfigWrite(expected_revision=0, adapter='compatible_chat',
+            base_url='https://provider.example/v1', model='unregistered-model', embedding_model=None,
+            endpoint_policy='public_https', pricing=None)
+>       created = service.save_config(identity, 'provider_test', request, 'create-config')
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_provider_config.py:22: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/api/app/application/providers.py:93: in save_config
+    fingerprint = self._fingerprint(identity, route, key, request)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+services/api/app/application/providers.py:62: in _fingerprint
+    return self.secret_store.fingerprint(canonical_bytes({'workspace_id': identity.workspace_id,
+packages/contracts/canonical.py:26: in canonical_bytes
+    return json.dumps(
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/__init__.py:238: in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:200: in encode
+    chunks = self.iterencode(o, _one_shot=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:258: in iterencode
+    return _iterencode(o, 0)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.encoder.JSONEncoder object at 0x7f7ed9b4aab0>
+o = ProviderConfigWrite(expected_revision=0, adapter='compatible_chat', base_url='https://provider.example/v1', model='unregistered-model', embedding_model=None, endpoint_policy='public_https', pricing=None)
+
+    def default(self, o):
+        """Implement this method in a subclass such that it returns
+        a serializable object for ``o``, or calls the base implementation
+        (to raise a ``TypeError``).
+    
+        For example, to support arbitrary iterators, you could
+        implement default like this::
+    
+            def default(self, o):
+                try:
+                    iterable = iter(o)
+                except TypeError:
+                    pass
+                else:
+                    return list(iterable)
+                # Let the base class default method raise the TypeError
+                return super().default(o)
+    
+        """
+>       raise TypeError(f'Object of type {o.__class__.__name__} '
+                        f'is not JSON serializable')
+E       TypeError: Object of type ProviderConfigWrite is not JSON serializable
+
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:180: TypeError
+=========================== short test summary info ============================
+FAILED tests/integration/test_provider_config.py::test_first_config_secret_rotation_and_original_ack_survive_reopen
+1 failed, 1 passed in 0.21s

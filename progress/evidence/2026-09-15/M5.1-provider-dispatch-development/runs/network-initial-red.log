@@ -1,0 +1,27 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__________ test_public_policy_rejects_cleartext_before_any_dns_lookup __________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x79530ddaf530>
+
+    def test_public_policy_rejects_cleartext_before_any_dns_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+        def forbidden_dns(*args: object, **kwargs: object) -> object:
+            pytest.fail('Saving a provider destination must not resolve DNS.')
+    
+        monkeypatch.setattr(socket, 'getaddrinfo', forbidden_dns)
+        with pytest.raises(ApiError) as error:
+>           validate_endpoint('http://provider.example/v1', 'public_https')
+
+tests/security/test_provider_network.py:17: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+base_url = 'http://provider.example/v1', policy = 'public_https'
+
+    def validate_endpoint(base_url: str, policy: Literal['public_https', 'explicit_loopback']) -> ProviderEndpoint:
+>       raise NotImplementedError('Provider endpoint validation is not implemented.')
+E       NotImplementedError: Provider endpoint validation is not implemented.
+
+services/api/app/infrastructure/provider_network.py:16: NotImplementedError
+=========================== short test summary info ============================
+FAILED tests/security/test_provider_network.py::test_public_policy_rejects_cleartext_before_any_dns_lookup
+1 failed in 0.01s

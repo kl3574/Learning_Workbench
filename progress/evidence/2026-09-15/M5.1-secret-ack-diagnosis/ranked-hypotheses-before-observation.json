@@ -1,0 +1,27 @@
+{
+  "recorded_at": "2026-09-15T08:14:03.299109+00:00",
+  "basis": "Original CI locator failure only; no observed DELETE status and no implementation theory accepted. Ranked before observational or controlled probe.",
+  "hypotheses": [
+    {
+      "rank": 1,
+      "cause": "ACK r2 visible while parent config base remains r1; immediate new delete uses stale expected_revision.",
+      "prediction": "Observe POST ACK r2, then DELETE expected_revision1 and real412 before GET config r2 delivery. Holding only config readback makes same failure repeat; releasing before next action removes it."
+    },
+    {
+      "rank": 2,
+      "cause": "Delete succeeds but later asynchronous refresh/re-render removes or hides its ACK.",
+      "prediction": "Observe DELETE200/revision3 and actual current config3 while target ACK absent or briefly present; config delivery timing affects DOM without changing successful DELETE."
+    },
+    {
+      "rank": 3,
+      "cause": "Current independent policy unexpectedly blocks secret control request.",
+      "prediction": "DELETE real409/ASSESSMENT_ACTIVE despite current base2; same control sequence without independent attempt succeeds. Delaying config readback alone need not matter."
+    },
+    {
+      "rank": 4,
+      "cause": "Delete command is not sent or network/handler rejects before server mutation.",
+      "prediction": "No DELETE request after actual click, or request failure/non412 response with error; current server remains2. Parent config base and response timing do not explain absence."
+    }
+  ],
+  "planned_observation": "Whitelist route/method/expected_revision/status/ackrevision/errorcode and safe DOM; no secret/header/session values."
+}

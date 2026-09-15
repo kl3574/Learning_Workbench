@@ -1,0 +1,79 @@
+{
+  "reviewed_at": "2026-09-15T06:48:17.427503+00:00",
+  "base_commit": "9051baf31790411fe979034d18d66a178cece323",
+  "spec_sha256": "537239aa30315170b2a177b74a5dfca026397fdc0e15ab14a094a8b14f7c51d9",
+  "mode": "Independent read-only review of two root-owned test repairs; no pytest/test suite, build, browser or lifecycle execution. Factory OpenAPI metadata was inspected once without running lifespan.",
+  "scope": [
+    "tests/security/test_local_boundary.py",
+    "tests/unit/test_spec_catalog.py"
+  ],
+  "final_source_sha256": {
+    "tests/security/test_local_boundary.py": "abcd8d1e4b216629ee0e225a3e1daedd5705297a77b89148e699bd50e5cec02b",
+    "tests/unit/test_spec_catalog.py": "fd244a355c72e1a1717b93987592a04dccef058ebb8019826013174bbf338a35"
+  },
+  "base_source_sha256": {
+    "tests/security/test_local_boundary.py": "a9915b459cad595d01eee9bb30f5e3747b19d186bc4297b5de1416a6ffc31fd3",
+    "tests/unit/test_spec_catalog.py": "0153ba00b8215c9a7071ed23187eadd59ba0b6a828c1b425a4ac5360deb553a3"
+  },
+  "exact_diff_sha256": "9ad6f960318fe0a160148c5a92b4d14c1dc5112481099191f4d2146143f1e7d4",
+  "exact_diff": "diff --git a/tests/security/test_local_boundary.py b/tests/security/test_local_boundary.py\nindex 9a07806..7c3611d 100644\n--- a/tests/security/test_local_boundary.py\n+++ b/tests/security/test_local_boundary.py\n@@ -202,10 +202,10 @@ def test_payload_budget_and_unimplemented_routes(runtime):\n     application, client, settings = runtime\n     headers = login(application, client, settings)\n     assert client.post(\"/api/v1/session/logout\", content=b\"x\" * (settings.max_request_bytes + 1), headers=headers).status_code == 413\n-    # M4.1 now implements routes. A later provider endpoint still must not be\n+    # M5.1 now implements provider capabilities. The later Codex endpoint must not be\n     # installed as a success stub or silently fall through to the SPA.\n-    assert client.get(\"/api/v1/providers/capabilities\").status_code == 404\n-    assert \"/api/v1/providers/capabilities\" not in application.openapi()[\"paths\"]\n+    assert client.get(\"/api/v1/codex/capabilities\").status_code == 404\n+    assert \"/api/v1/codex/capabilities\" not in application.openapi()[\"paths\"]\n \n \n @pytest.mark.parametrize(\"host\", [\"0.0.0.0\", \"192.168.1.2\", \"example.com\", \"::\"])\ndiff --git a/tests/unit/test_spec_catalog.py b/tests/unit/test_spec_catalog.py\nindex a3c2e66..d214de4 100644\n--- a/tests/unit/test_spec_catalog.py\n+++ b/tests/unit/test_spec_catalog.py\n@@ -20,7 +20,7 @@ def test_traceability_covers_all_stable_requirements_scenarios_tasks():\n def test_route_inventory_includes_inline_response_routes_and_e1():\n     catalog = route_catalog(ROOT / \"PRODUCT_DESIGN.md\")\n     routes = {(route[\"method\"], route[\"path\"]): route for route in catalog[\"routes\"]}\n-    assert len(routes) == 102\n+    assert len(routes) == 106\n     assert routes[\"GET\", \"/api/v1/blocks/{id}/body\"][\"location\"] == \"inline_response_cell\"\n     assert routes[\"GET\", \"/api/v1/attempts/{id}/responses\"][\"location\"] == \"inline_response_cell\"\n     assert routes[\"POST\", \"/api/v1/connectors/{id}/apply\"][\"priority\"] == \"P1\"\n",
+  "conclusion": "NO_BLOCKING_FINDING: both repairs preserve the original tests and reflect current sole-spec/runtime registration facts.",
+  "checks": [
+    {
+      "file": "tests/security/test_local_boundary.py",
+      "location": "201-208",
+      "original_intent": "Oversize request remains413; a declared future endpoint must remain actual404 and absent from OpenAPI, rejecting success stubs and SPA fallback.",
+      "finding": "Provider capabilities is now an actual typed M5.1 route; replacing this obsolete future probe with spec-declared GET /codex/capabilities preserves both actual404 and OpenAPI-absent assertions. Body413 and surrounding auth/host/storage protection assertions remain unchanged.",
+      "spec_locations": [
+        1261,
+        1467
+      ]
+    },
+    {
+      "file": "tests/unit/test_spec_catalog.py",
+      "location": "20-29",
+      "original_intent": "Fixed complete route inventory includes inline response routes/E1, stable task mapping, and no fake implementation status.",
+      "finding": "106 is independently corroborated by current requirements/routes.json and disjoint actual coverage70+backlog36; only numeric cardinality changed. Inline block body/attempt responses locators, E1 P1, health M0.2 and runtime-evidence-source assertions remain unchanged."
+    }
+  ],
+  "metadata_readback": {
+    "factory_openapi_matches_generated_without_x_source_spec": true,
+    "provider_capabilities_registered": true,
+    "codex_capabilities_registered": false,
+    "coverage_registered": 70,
+    "coverage_backlog": 36,
+    "overlap": 0,
+    "total": 106,
+    "requirements_route_count": 106,
+    "artifacts": {
+      "packages/contracts/generated/openapi.json": "61c83ebd9dd4caa7b411560e35f40b79b29556afdccd1fa6d44be8906bec0447",
+      "packages/contracts/generated/runtime-route-coverage.json": "bfce0b7fe2e9552cf833f3741ff34b42317cc6306a62b2af5cc0e8fffbf62651",
+      "docs/requirements/routes.json": "bfb22878d10b02e28f1354991d8d0c09cae3c2bb17eeb6d357265694613bffc3",
+      "services/api/app/main.py": "ebecd4e628b21efedb194ca386c04f5569971158f08bb3a4315d8b076156a247",
+      "services/api/app/interfaces/provider_http.py": "a6a764513cd1de09578dcf8b4adeb3df710c1c9d03aded374fe16858d0527fda"
+    }
+  },
+  "evidence_readback": [
+    {
+      "path": "progress/evidence/2026-09-15/M5.1-9051baf-unit-integration.json",
+      "receipt_sha256": "5c890bee06147f795ef75788faad3372ad250c8ef0c98caf9ec5f188f4baeac0",
+      "log_sha256": "2f3bef7f27d268e3e2d510fd8931dc16917bb5951b8b03c7d21dba51eca5eceb",
+      "status": "FAIL",
+      "attribution": "Root executed; reviewer only read and hash-verified.",
+      "result": "1492 passed, 2 failed, 2 warnings, 209.57s; make test stops before frontend."
+    },
+    {
+      "path": "progress/evidence/2026-09-15/M5.1-legacy-assertions-green.json",
+      "receipt_sha256": "c44db9a7d9dc88229fdeb1cca4933f29cd3c48928baa31f6cd96e27f755dfb06",
+      "log_sha256": "163dde1ba09bedb1e030ef160e3c9e85833f41a0f334b35aa439a749c71f41bb",
+      "status": "PASS",
+      "attribution": "Root executed; reviewer only read and hash-verified.",
+      "result": "Same two named assertions: 2 passed, 2 warnings, 0.74s. Not full regression."
+    }
+  ],
+  "limits": [
+    "These two diffs modify tests only and do not relax implementation security behavior.",
+    "Original full make test remains FAIL in its immutable record; focused GREEN does not replace a full run.",
+    "No claim of final M5.1 stage success, new frontend execution, provider dispatch or M5.2 implementation."
+  ]
+}

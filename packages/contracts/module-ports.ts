@@ -60,6 +60,26 @@ export interface ProviderPort<D extends DTOMap> {
  capabilities():Promise<D['ProviderCapabilities']>;
  generate(input:D['GenerationInput'],signal:AbortSignal):AsyncIterable<D['ProviderEvent']>;
 }
+export interface ProviderApplicationDTOMap {
+ ProviderCapabilitiesResponse: unknown; ProviderConfigWrite: unknown; ProviderConfigView: unknown;
+ ProviderConfigAck: unknown; ProviderSecretWrite: unknown; ProviderSecretAck: unknown;
+ ConsentPreviewWrite: unknown; ConsentProposalView: unknown; ConsentCreate: unknown;
+ ConsentCreateAck: unknown; ConsentRevoke: unknown; ConsentPage: unknown; MutationAck: unknown;
+}
+export type ProviderConsentQuery = {consent_id:string;cursor?:never;limit?:never}
+ | {consent_id?:never;cursor?:string;limit?:number};
+export interface ProviderApplicationPort<P extends ProviderApplicationDTOMap> {
+ capabilities(ctx:AuthContext):Promise<P['ProviderCapabilitiesResponse']>;
+ readConfig(ctx:AuthContext, providerId:string):Promise<P['ProviderConfigView']>;
+ saveConfig(ctx:WriteContext, providerId:string, request:P['ProviderConfigWrite']):Promise<P['ProviderConfigAck']>;
+ saveSecret(ctx:WriteContext, providerId:string, request:P['ProviderSecretWrite']):Promise<P['ProviderSecretAck']>;
+ deleteSecret(ctx:WriteContext, providerId:string, expectedConfigSha256:string):Promise<P['ProviderSecretAck']>;
+ preview(ctx:WriteContext, request:P['ConsentPreviewWrite']):Promise<P['ConsentProposalView']>;
+ proposal(ctx:AuthContext, proposalId:string):Promise<P['ConsentProposalView']>;
+ grant(ctx:WriteContext, request:P['ConsentCreate']):Promise<P['ConsentCreateAck']>;
+ consents(ctx:AuthContext, query:ProviderConsentQuery):Promise<P['ConsentPage']>;
+ revoke(ctx:WriteContext, consentId:string, request:P['ConsentRevoke']):Promise<P['MutationAck']>;
+}
 export interface LearningPort<D extends DTOMap> {
  recordUserAction(ctx:WriteContext, action:'read_marked'|'note_created', ref:ContentRef):Promise<void>;
  evidence(ctx:AuthContext, conceptId:string):Promise<D['Evidence'][]>;

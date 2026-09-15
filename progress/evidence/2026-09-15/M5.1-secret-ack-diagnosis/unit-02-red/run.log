@@ -1,0 +1,66 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/providers/providerSecret.test.tsx
+
+
+ RUN  v5.0.0 <REPO>/apps/web
+
+ ❯ src/features/providers/providerSecret.test.tsx (10 tests | 2 failed) 98ms
+   × a new secret command uses its actual readback while the parent still supplies the older config 6ms
+   × a different provider response cannot become a new secret command basis 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/providers/providerSecret.test.tsx > a new secret command uses its actual readback while the parent still supplies the older config
+AssertionError: expected '0000000000000000000000000000000000000…' to be '0000000000000000000000000000000000000…' // Object.is equality
+
+Expected: "0000000000000000000000000000000000000000000000000000000000000002"
+Received: "0000000000000000000000000000000000000000000000000000000000000001"
+
+ ❯ src/features/providers/providerSecret.test.tsx:67:65
+     65|   expect(hook.result.current.remote).toEqual(readback); expect(base.re…
+     66|   await act(() => hook.result.current.run('delete'))
+     67|   expect(vi.mocked(state.port.deleteSecret).mock.calls[0]?.[1]).toBe(r…
+       |                                                                 ^
+     68|   expect(hook.result.current.ack?.revision).toBe(3); expect(hook.resul…
+     69| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/features/providers/providerSecret.test.tsx > a different provider response cannot become a new secret command basis
+AssertionError: expected { Object (id, revision, ...) } to be null
+
+- Expected:
+null
+
++ Received:
+{
+  "adapter": "official_responses",
+  "base_url": "https://example.invalid/v1",
+  "config_sha256": "0000000000000000000000000000000000000000000000000000000000000009",
+  "configured": true,
+  "embedding_model": null,
+  "endpoint_policy": "public_https",
+  "id": "provider_wrong_response",
+  "model": "synthetic-model-9",
+  "pricing": null,
+  "revision": 9,
+  "secret_present": true,
+}
+
+ ❯ src/features/providers/providerSecret.test.tsx:99:89
+     97|   act(() => hook.result.current.edit('synthetic-provider-identity'))
+     98|   await act(() => hook.result.current.run('write'))
+     99|   expect(hook.result.current.ack?.revision).toBe(2); expect(hook.resul…
+       |                                                                                         ^
+    100|   expect(hook.result.current.error).toContain('当前配置尚未读回')
+    101|   await act(() => hook.result.current.run('delete'))
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 8 passed (10)
+   Start at  16:21:27
+   Duration  535ms (environment 43%, tests 21%, transform 21%, import 14%)
+

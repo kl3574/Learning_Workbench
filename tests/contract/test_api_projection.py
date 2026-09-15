@@ -33,8 +33,11 @@ def test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec():
     assert projection <= SPEC_ROUTES
     assert {('GET', '/api/v1/recommendations'),
             ('POST', '/api/v1/recommendations/{id}/decision')} <= projection
-    assert len(projection) == 60
-    assert len(SPEC_ROUTES - projection) == 42
+    provider_operations = {item for item in SPEC_ROUTES if item[1].startswith(('/api/v1/providers/', '/api/v1/consents'))}
+    assert len(provider_operations) == 10
+    assert provider_operations <= projection
+    assert len(projection) == 70
+    assert len(SPEC_ROUTES - projection) == 36
 
 
 OPERATIONS = [(path, method, operation) for path, methods in create_app().openapi()["paths"].items()
@@ -64,7 +67,7 @@ def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, meth
         if int(code) >= 400:
             assert response["content"]["application/json"]["schema"]["$ref"] == "#/components/schemas/ErrorEnvelope"
     if method == "delete":
-        assert path == "/api/v1/notes/{id}"
+        assert path in {"/api/v1/notes/{id}", "/api/v1/providers/{id}/secret"}
         assert "requestBody" not in operation
         headers = {value["name"] for value in operation["parameters"] if value["in"] == "header"}
         assert {"If-Match", "Idempotency-Key"} <= headers

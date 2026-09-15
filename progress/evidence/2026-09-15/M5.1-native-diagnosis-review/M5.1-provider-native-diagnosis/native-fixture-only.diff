@@ -1,0 +1,41 @@
+--- original/tests/e2e/provider-settings.spec.ts
++++ fixed/tests/e2e/provider-settings.spec.ts
+@@ -1,6 +1,6 @@
+ import { expect, test, type Locator, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
+ import { writeFileSync } from 'node:fs'
+-import type { ProviderCapabilitiesResponse, ProviderConfigView, ProviderConfigWrite } from '../../packages/contracts/generated/api-types'
++import type { AttemptSnapshot, ProviderCapabilitiesResponse, ProviderConfigView, ProviderConfigWrite, SessionResponse } from '../../packages/contracts/generated/api-types'
+ import { RestartRuntime } from './restartRuntime'
+ import { importAssessmentPackage, originalAssessmentPackage } from './assessmentTestData'
+ 
+@@ -114,14 +114,27 @@
+   const runtime = await RestartRuntime.start(), id = 'provider_native_independent', errors: string[] = []
+   try {
+     const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]; page.on('pageerror', error => errors.push(error.message)); await runtime.authenticateOnly(page)
+-    const fixture = originalAssessmentPackage('providerpolicynative', 'learner'), imported = await importAssessmentPackage(page, fixture); await imported.dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
++    // A learner package intentionally omits the private reference bindings and
++    // cannot start even an unscored attempt. The actual author import retains
++    // unreviewed references; this helper explicitly switches back to learner.
++    const fixture = originalAssessmentPackage('providerpolicynative', 'author'), imported = await importAssessmentPackage(page, fixture); await imported.dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
++    const identityResponse = await page.request.get('/api/v1/session'); expect(identityResponse.status()).toBe(200)
++    const identity: SessionResponse = await identityResponse.json(); expect(identity.role).toBe('learner')
+     await page.goto(`${runtime.origin}/?assessment=${encodeURIComponent(JSON.stringify({ assessment_ref: fixture.assessment, course_ref: fixture.course }))}`)
+-    await page.getByRole('checkbox', { name: '我已核对内容状态与模式，确认开始未评分测试', exact: true }).check(); await page.getByRole('button', { name: '明确开始本次测试', exact: true }).click(); await expect(page.getByText('独立测试进行中', { exact: true }).first()).toBeVisible()
++    await page.getByRole('radio', { name: '独立测试', exact: true }).check()
++    await page.getByRole('checkbox', { name: '我已核对内容状态与模式，确认开始未评分测试', exact: true }).check()
++    const creating = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith(`/api/v1/assessments/${fixture.assessment.id}/attempts`))
++    await page.getByRole('button', { name: '明确开始本次测试', exact: true }).click()
++    const created = await creating; expect(created.status()).toBe(201)
++    const attempt: AttemptSnapshot = await created.json()
++    expect(attempt.status).toBe('active'); expect(attempt.policy.mode).toBe('independent'); expect(attempt.grading_status).toBe('not_graded')
++    expect(attempt.preflight.startable).toBe(true); expect(attempt.preflight.grading).toMatchObject({ status: 'unreviewed', approved_count: 0, needs_review_count: 5, missing_count: 0, damaged_count: 0 })
++    await expect(page.getByText('独立测试进行中', { exact: true }).first()).toBeVisible()
+     const dialog = await settings(page); await expect(dialog.getByRole('region', { name: '授权历史', exact: true })).toContainText('授权摘要隐藏')
+     const rejected = await page.request.get('/api/v1/consents'); expect(rejected.status()).toBe(409)
+     await createConfig(page, dialog, id); await dialog.getByLabel('新秘密', { exact: true }).fill('synthetic-independent-control-only'); await dialog.getByRole('button', { name: '保存秘密', exact: true }).click(); await expect(dialog.getByText('原秘密命令已确认 · r2 · 当时有引用。当前状态另行回读。', { exact: true })).toBeVisible()
+     await dialog.getByRole('button', { name: '删除秘密引用', exact: true }).click(); await expect(dialog.getByText('原秘密命令已确认 · r3 · 当时无引用。当前状态另行回读。', { exact: true })).toBeVisible()
+     await expect(dialog.getByRole('region', { name: '冻结外发摘要', exact: true })).toHaveCount(0); expect(errors).toEqual([])
+-    writeFileSync(info.outputPath('actual-provider-independent-controls.json'), JSON.stringify({ scope: 'Real unreviewed learner import and actual independent unscored attempt; actual config and secret controls remain available while subject consent GET is denied. No injected consent, generation job, score, proof or provider dispatch.', consent_read_status: rejected.status(), config_revision_after_secret_delete: 3, subject_summary_visible: false, runtime_errors: errors }, null, 2))
++    writeFileSync(info.outputPath('actual-provider-independent-controls.json'), JSON.stringify({ scope: 'Real author package import with unreviewed reference bindings, explicit return to learner role, and actual independent unscored attempt; actual config and secret controls remain available while subject consent GET is denied. No injected consent, generation job, score, proof or provider dispatch.', authenticated_role: identity.role, attempt_id: attempt.id, attempt_status: attempt.status, attempt_policy: attempt.policy, grading_status: attempt.grading_status, preflight: attempt.preflight, consent_read_status: rejected.status(), config_revision_after_secret_delete: 3, subject_summary_visible: false, runtime_errors: errors }, null, 2))
+   } finally { await runtime.close() }
+ })

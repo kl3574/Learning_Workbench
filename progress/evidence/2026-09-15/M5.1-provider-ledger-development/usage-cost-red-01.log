@@ -1,0 +1,24 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_ test_reported_usage_with_frozen_known_price_is_estimated_never_provider_billing _
+
+tmp_path = PosixPath('${PRIVATE_HOME}/.cache/lw-m51-b/cost-red/test_reported_usage_with_froze0')
+
+    def test_reported_usage_with_frozen_known_price_is_estimated_never_provider_billing(tmp_path):
+        from services.api.app.provider_dto import ProviderConfigWrite, ProviderPricing
+    
+        database, identity, source, service, request = consent_setup(tmp_path)
+        original = service._providers.read_config(identity, 'provider_test')
+        service._providers.save_config(identity, 'provider_test', ProviderConfigWrite(expected_revision=2,
+            **original.model_dump(exclude={'id', 'revision', 'config_sha256', 'configured', 'secret_present', 'pricing'}),
+>           pricing=ProviderPricing(currency='USD', input_usd_per_million=2, output_usd_per_million=4,
+                source_note='Explicit synthetic fixture rates, not a real provider price')), 'priced-config')
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for ProviderPricing
+E       currency
+E         Extra inputs are not permitted [type=extra_forbidden, input_value='USD', input_type=str]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests/unit/test_provider_repository.py:123: ValidationError
+=========================== short test summary info ============================
+FAILED tests/unit/test_provider_repository.py::test_reported_usage_with_frozen_known_price_is_estimated_never_provider_billing
+1 failed in 0.22s

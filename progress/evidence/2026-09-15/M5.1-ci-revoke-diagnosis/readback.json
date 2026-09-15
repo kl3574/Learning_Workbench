@@ -1,0 +1,124 @@
+{
+  "version": "m51-ci-revoke-diagnosis-v1",
+  "created_at": "2026-09-15T07:51:17.839167+00:00",
+  "original_head": "e4807e97661147e243c2d40f65d8d4fb5af79a82",
+  "signal": "New push frontend failed a different ProviderSettings policy/revoke test: prepare clicked but confirmation control never appeared. PR frontend314PASS is a separate actual result.",
+  "hypotheses_ranked": [
+    "Command journal not ready, so prepare control still disabled",
+    "Revoke wrongly subject to academic policy restriction",
+    "Command preparation or persistence failed"
+  ],
+  "actual_before_click": {
+    "prepareDisabled": true,
+    "journalNotSafe": true,
+    "academicSummaryHidden": true
+  },
+  "cause": "History fixture returns independently before IndexedDB command journal transaction completes; region visible and paused does not prove commands.safe. Disabled click never prepares command.",
+  "first_correction": "Wait for actual prepare-revoke button enabled; original privacy/revoke assertions retained.",
+  "independent_followup": "Strengthen final audit timing: wait for concrete revision2 ACK, local command safe/nonbusy state, actual second capabilities read; then reassert hidden academic summary and original consentsOnce/noPreview/noGrant.",
+  "final_test_sha256": "955e55222959e83581479538c21a2aff5ff6c2fc9e6baf3e37eb1d639498406b",
+  "negative_controls": "Both first correction and finalv2 test fail when only paused guard before readRemote consents is removed; expected one read but actual two. Production guard restored exacte480 bytes after each.",
+  "checks": [
+    {
+      "receipt": "progress/evidence/2026-09-15/M5.1-ci-revoke-original-01.json",
+      "receipt_sha256": "4986274ee28667268f3578966c697e380892f80d5fb6bde772488cf746cbe46e",
+      "log": "progress/evidence/2026-09-15/M5.1-ci-revoke-original-01.log",
+      "log_sha256": "22730e27e6b1e44536a3755411cfe37a393e79d20a7a5373599295eedf20d142",
+      "status": "FAIL",
+      "exit_code": 1
+    },
+    {
+      "receipt": "progress/evidence/2026-09-15/M5.1-ci-revoke-observation-01.json",
+      "receipt_sha256": "bf594e5135583bb4896d4e4dcf86c82a035396a817252abf6bb19832d4441e7c",
+      "log": "progress/evidence/2026-09-15/M5.1-ci-revoke-observation-01.log",
+      "log_sha256": "80988701ff870f45bc5fb3435e87a81528c50f5f7e70dbe9f4576fec1c574e0b",
+      "status": "FAIL",
+      "exit_code": 1
+    },
+    {
+      "receipt": "progress/evidence/2026-09-15/M5.1-ci-revoke-targeted-green-01.json",
+      "receipt_sha256": "a6a4e8a7656bf32ed812ea5bd5b65a49073a68a6220ba2f8aca6ac65d4f205a8",
+      "log": "progress/evidence/2026-09-15/M5.1-ci-revoke-targeted-green-01.log",
+      "log_sha256": "9cf29df4884de05aca9947842698ec9721e39bf11cd4609f4ed63832779e1e3e",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "receipt": "progress/evidence/2026-09-15/M5.1-ci-revoke-read-guard-mutation-01.json",
+      "receipt_sha256": "2ff10efacfc42b2046d0fc775f629ca9dea2d030f735298c3535f8980cfebd2e",
+      "log": "progress/evidence/2026-09-15/M5.1-ci-revoke-read-guard-mutation-01.log",
+      "log_sha256": "aab9b01dbb596d28713f192a1a28e1bc08f848616a90f98d83026101179a8606",
+      "status": "FAIL",
+      "exit_code": 1
+    },
+    {
+      "receipt": "progress/evidence/2026-09-15/M5.1-ci-revoke-provider-green-01.json",
+      "receipt_sha256": "ffa059e7d826775b7f582fd33d1e117a8e99ec334ea1dd27764d687deea83e92",
+      "log": "progress/evidence/2026-09-15/M5.1-ci-revoke-provider-green-01.log",
+      "log_sha256": "7479c364c17764f890305fedf4990a40eb36cbbcdfcd5b2a144ebb6a7e36d63f",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "receipt": "progress/evidence/2026-09-15/M5.1-ci-revoke-final-targeted-green-02.json",
+      "receipt_sha256": "1f353a13f7e731d129800fd8c5e21bf76ec725c9e364f632dc5a477b9b8eaf36",
+      "log": "progress/evidence/2026-09-15/M5.1-ci-revoke-final-targeted-green-02.log",
+      "log_sha256": "baeb2cfba99d5ae0c687c47c7466f577c827c4fbed2e7c6377ff413116ef8b74",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "receipt": "progress/evidence/2026-09-15/M5.1-ci-revoke-final-read-guard-mutation-02.json",
+      "receipt_sha256": "e9af8aadcabdfa90258b1afef1e21dc53b393cf59d479ae2c7eab8ba9ced9843",
+      "log": "progress/evidence/2026-09-15/M5.1-ci-revoke-final-read-guard-mutation-02.log",
+      "log_sha256": "771ec326e097bc1f5e101226c20c2cd9d5422bab9043f2546959b33734874f7f",
+      "status": "FAIL",
+      "exit_code": 1
+    },
+    {
+      "receipt": "progress/evidence/2026-09-15/M5.1-ci-revoke-final-provider-green-02.json",
+      "receipt_sha256": "1ba9e265a713aa4033a2b92b6b048e558a27b4a469aa034b4faba31e45e1fe67",
+      "log": "progress/evidence/2026-09-15/M5.1-ci-revoke-final-provider-green-02.log",
+      "log_sha256": "15ddea32155b1a868a36d2bed0c5389eb7578fe1c1f5f244a46a4d27f60ade77",
+      "status": "PASS",
+      "exit_code": 0
+    }
+  ],
+  "source_archives": [
+    {
+      "path": "ProviderSettings.original.test.tsx",
+      "sha256": "21680a7f943c42d3c8f2687422de7a0634c8f873675293e34cf26d6dbaff5cf6",
+      "bytes": 9424
+    },
+    {
+      "path": "ProviderSettings.probe.test.tsx",
+      "sha256": "67b9e20a693591c676062e6f3464a2bf915cab1d94f88fb10ad713f107973f01",
+      "bytes": 9768
+    },
+    {
+      "path": "ProviderSettings.fixed.test.tsx",
+      "sha256": "5bb57c02c9827c821f0b9cea93ddaea6e54551d90d9467965aba6b46034df105",
+      "bytes": 9627
+    },
+    {
+      "path": "ProviderSettings.final-v2.test.tsx",
+      "sha256": "955e55222959e83581479538c21a2aff5ff6c2fc9e6baf3e37eb1d639498406b",
+      "bytes": 10190
+    },
+    {
+      "path": "useProviderCommands.original.ts",
+      "sha256": "778eaf6c6376c667ea5bd9166f5f9fe543814ab50cedd669fbda2bdeb854c99e",
+      "bytes": 10876
+    },
+    {
+      "path": "useProviderCommands.mutation.ts",
+      "sha256": "2632b777aff16b20d94df75580c108c6a80bbff17825d9bca3f58b7776be3cc3",
+      "bytes": 10834
+    }
+  ],
+  "limits": [
+    "UI controlled fixture and IndexedDB unit layer only, not actual provider credentials or production API authorization tests",
+    "Readiness fix and stronger observation do not alter production Policy",
+    "Original e480 dual CI and new head CI are recorded separately; no new full-suite result inferred"
+  ]
+}

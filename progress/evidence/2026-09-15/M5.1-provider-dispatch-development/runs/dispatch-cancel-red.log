@@ -1,0 +1,207 @@
+.F                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_cancellation_of_real_waiting_http_retains_consumed_call_and_closes_stream _
+
+self = <services.api.app.application.provider_dispatch.CheckedDispatch object at 0x7f678ced7da0>
+identity = SessionIdentity(id='<REDACTED_RUNTIME_SESSION_ID>', workspace_id='workspace_e0767eacfab24875b007d15ef87a56c...srf_token='<REDACTED_RUNTIME_CSRF>', expires_at='2026-09-15T17:53:07.849531Z')
+job_id = 'job_9a94d7d0949344d596a0abacdf09f520'
+consent_id = 'consent_b46457779c094e4fb6eefdb79cea86d2'
+lease = DispatchLease(owner_id='worker_7a51a5f1d3cc4f2c8d5cdbc0f2a8d9ee', job_revision=2, expires_at='2026-09-15T05:58:07.877226Z')
+abort = <asyncio.locks.Event object at 0x7f678ced5ca0 [set]>
+
+    async def dispatch(self, identity: SessionIdentity, job_id: str, consent_id: str,
+                       lease: DispatchLease, abort: AbortSignal) -> AsyncIterator[CheckedProviderEvent]:
+        with self.database.transaction() as conn:
+            guard_subject_access(conn, identity.workspace_id)
+            repo = ConsentRepository(conn, identity.workspace_id)
+            summary, material, body = repo.dispatch_material(consent_id)
+            if summary.job_id != job_id:
+                raise ApiError(409, 'OUTBOUND_SOURCE_CHANGED', '许可不属于此任务。')
+            previous = repo.dispatch_for_consent(consent_id)
+            if previous is not None:
+                # Original durable result, no new source/config CAS and no HTTP.
+                # Integrity and current private-output Policy still precede replay.
+                Policy(conn, identity.workspace_id).check('private_artifact')
+                if previous.terminal is None:
+                    raise ApiError(409, 'PROVIDER_OUTCOME_UNKNOWN', '原调用结果尚未确认，不能重新派发。')
+                replay = previous.terminal.terminal
+            else:
+                replay = None
+                if abort.is_set():
+                    raise stopped()
+                source = self.source_registry.resolve(conn, identity, job_id)
+                source.verify_dispatch(conn, identity, material, lease, consent_id)
+                providers = ProviderRepository(conn, identity.workspace_id)
+                config = providers.config(summary.provider_id)
+                self.preparer.verify(config, material, summary, body)
+                locator = providers.secret_locator(config.id, config.revision)
+                if locator is None:
+                    raise ApiError(409, 'PROVIDER_SECRET_UNAVAILABLE', '提供商秘密不可用。')
+                secret = self.secret_store.read(locator).encode()
+                # Wall-clock identity and monotonic duration start at reservation.
+                started = time.monotonic()
+                record, created = repo.begin_dispatch(consent_id, job_id, sha256_bytes(body), utc_now())
+                if not created:
+                    raise ApiError(409, 'PROVIDER_OUTCOME_UNKNOWN', '许可已经消耗，不能重新派发。')
+        if replay is not None:
+            yield replay
+            return
+        decoder = ProtocolDecoder(config.adapter, config.model)
+        deadline = started + summary.budget.timeout_seconds
+        answer, refusal = bytearray(), bytearray()
+        usage = UsageSnapshot(input_tokens=None, output_tokens=None)
+        saved = False
+        pending: asyncio.Task | None = None
+        abort_wait = asyncio.create_task(abort.wait())
+        terminal: CheckedProviderTerminal | None = None
+        try:
+            self._guard(identity, record, material, lease, summary, body, secret, abort)
+            async with aclosing(self.transport.stream(config, body, secret)) as chunks:
+                async with aclosing(decoder.stream(chunks)) as stream:
+                    while terminal is None:
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0:
+                            raise ApiError(504, 'PROVIDER_TIMEOUT', '提供商请求超过总时限。')
+                        self._guard(identity, record, material, lease, summary, body, secret, abort)
+                        if pending is None:
+                            pending = asyncio.create_task(anext(stream))
+                        done, _ = await asyncio.wait({pending, abort_wait}, timeout=min(0.1, remaining),
+                                                     return_when=asyncio.FIRST_COMPLETED)
+                        if abort_wait in done or abort.is_set():
+>                           raise stopped()
+E                           services.api.app.application.errors.ApiError: (409, 'PROVIDER_CANCELLED', '提供商派发已请求停止。')
+
+services/api/app/application/provider_dispatch.py:146: ApiError
+
+During handling of the above exception, another exception occurred:
+
+self = <services.api.app.application.provider_dispatch.CheckedDispatch object at 0x7f678ced7da0>
+identity = SessionIdentity(id='<REDACTED_RUNTIME_SESSION_ID>', workspace_id='workspace_e0767eacfab24875b007d15ef87a56c...srf_token='<REDACTED_RUNTIME_CSRF>', expires_at='2026-09-15T17:53:07.849531Z')
+job_id = 'job_9a94d7d0949344d596a0abacdf09f520'
+consent_id = 'consent_b46457779c094e4fb6eefdb79cea86d2'
+lease = DispatchLease(owner_id='worker_7a51a5f1d3cc4f2c8d5cdbc0f2a8d9ee', job_revision=2, expires_at='2026-09-15T05:58:07.877226Z')
+abort = <asyncio.locks.Event object at 0x7f678ced5ca0 [set]>
+
+    async def dispatch(self, identity: SessionIdentity, job_id: str, consent_id: str,
+                       lease: DispatchLease, abort: AbortSignal) -> AsyncIterator[CheckedProviderEvent]:
+        with self.database.transaction() as conn:
+            guard_subject_access(conn, identity.workspace_id)
+            repo = ConsentRepository(conn, identity.workspace_id)
+            summary, material, body = repo.dispatch_material(consent_id)
+            if summary.job_id != job_id:
+                raise ApiError(409, 'OUTBOUND_SOURCE_CHANGED', '许可不属于此任务。')
+            previous = repo.dispatch_for_consent(consent_id)
+            if previous is not None:
+                # Original durable result, no new source/config CAS and no HTTP.
+                # Integrity and current private-output Policy still precede replay.
+                Policy(conn, identity.workspace_id).check('private_artifact')
+                if previous.terminal is None:
+                    raise ApiError(409, 'PROVIDER_OUTCOME_UNKNOWN', '原调用结果尚未确认，不能重新派发。')
+                replay = previous.terminal.terminal
+            else:
+                replay = None
+                if abort.is_set():
+                    raise stopped()
+                source = self.source_registry.resolve(conn, identity, job_id)
+                source.verify_dispatch(conn, identity, material, lease, consent_id)
+                providers = ProviderRepository(conn, identity.workspace_id)
+                config = providers.config(summary.provider_id)
+                self.preparer.verify(config, material, summary, body)
+                locator = providers.secret_locator(config.id, config.revision)
+                if locator is None:
+                    raise ApiError(409, 'PROVIDER_SECRET_UNAVAILABLE', '提供商秘密不可用。')
+                secret = self.secret_store.read(locator).encode()
+                # Wall-clock identity and monotonic duration start at reservation.
+                started = time.monotonic()
+                record, created = repo.begin_dispatch(consent_id, job_id, sha256_bytes(body), utc_now())
+                if not created:
+                    raise ApiError(409, 'PROVIDER_OUTCOME_UNKNOWN', '许可已经消耗，不能重新派发。')
+        if replay is not None:
+            yield replay
+            return
+        decoder = ProtocolDecoder(config.adapter, config.model)
+        deadline = started + summary.budget.timeout_seconds
+        answer, refusal = bytearray(), bytearray()
+        usage = UsageSnapshot(input_tokens=None, output_tokens=None)
+        saved = False
+        pending: asyncio.Task | None = None
+        abort_wait = asyncio.create_task(abort.wait())
+        terminal: CheckedProviderTerminal | None = None
+        try:
+            self._guard(identity, record, material, lease, summary, body, secret, abort)
+            async with aclosing(self.transport.stream(config, body, secret)) as chunks:
+>               async with aclosing(decoder.stream(chunks)) as stream:
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+services/api/app/application/provider_dispatch.py:135: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <contextlib.aclosing object at 0x7f678d0e9a90>
+exc_info = (<class 'services.api.app.application.errors.ApiError'>, ApiError(status=409, code='PROVIDER_CANCELLED', message='提供商派发已请求停止。', retryable=False), <traceback object at 0x7f678ceb8100>)
+
+    async def __aexit__(self, *exc_info):
+>       await self.thing.aclose()
+E       RuntimeError: aclose(): asynchronous generator is already running
+
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:386: RuntimeError
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = PosixPath('<HOME>/.cache/lw-m51/pytest-of-lkx/pytest-4/test_cancellation_of_real_wait0')
+
+    def test_cancellation_of_real_waiting_http_retains_consumed_call_and_closes_stream(tmp_path: Path) -> None:
+        async def run():
+            async with local_provider(hold=True) as server:
+                db, identity, _, registry, job, secrets, preparer, _, grant, lease = authorized_source(tmp_path, server.base_url)
+                service = CheckedDispatch(db, secrets, registry, preparer)
+                abort = asyncio.Event()
+                async def consume():
+                    return [event async for event in service.dispatch(identity, job, grant.id, lease, abort)]
+                task = asyncio.create_task(consume())
+                await asyncio.wait_for(server.request_seen.wait(), 2)
+                abort.set()
+                events = await asyncio.wait_for(task, 2)
+                assert events[-1].type == 'error' and events[-1].error_code == 'PROVIDER_CANCELLED'
+                assert events[-1].provider_outcome == 'unknown'
+                with db.transaction() as conn:
+                    record = ConsentRepository(conn, identity.workspace_id).dispatch_for_consent(grant.id)
+                    assert record.terminal.terminal == events[-1]
+                assert len(server.requests) == 1
+>       asyncio.run(run())
+
+tests/integration/test_provider_dispatch.py:47: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/integration/test_provider_dispatch.py:40: in run
+    events = await asyncio.wait_for(task, 2)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/tasks.py:520: in wait_for
+    return await fut
+           ^^^^^^^^^
+tests/integration/test_provider_dispatch.py:36: in consume
+    return [event async for event in service.dispatch(identity, job, grant.id, lease, abort)]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+services/api/app/application/provider_dispatch.py:134: in dispatch
+    async with aclosing(self.transport.stream(config, body, secret)) as chunks:
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <contextlib.aclosing object at 0x7f678d0a6720>
+exc_info = (<class 'RuntimeError'>, RuntimeError('aclose(): asynchronous generator is already running'), <traceback object at 0x7f678cece400>)
+
+    async def __aexit__(self, *exc_info):
+>       await self.thing.aclose()
+E       RuntimeError: aclose(): asynchronous generator is already running
+
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/contextlib.py:386: RuntimeError
+=========================== short test summary info ============================
+FAILED tests/integration/test_provider_dispatch.py::test_cancellation_of_real_waiting_http_retains_consumed_call_and_closes_stream
+1 failed, 1 passed in 0.50s

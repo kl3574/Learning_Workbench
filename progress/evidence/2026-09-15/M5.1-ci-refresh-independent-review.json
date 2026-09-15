@@ -1,0 +1,224 @@
+{
+  "version": "m51-ci-refresh-independent-review-v1",
+  "created_at": "2026-09-15T07:31:25.031470+00:00",
+  "reviewer": "/root/m42_contracts_preflight",
+  "mode": "Read-only static code review and actual existing evidence readback; no tests, browser, network, product edits or publication performed.",
+  "original_commit": "6c9f997a89793a6cdbdd83a1f20e07e504047612",
+  "spec_sha256": "537239aa30315170b2a177b74a5dfca026397fdc0e15ab14a094a8b14f7c51d9",
+  "spec_scope": [
+    {
+      "locator": "PRODUCT_DESIGN.md:995-997 and 1401",
+      "requirement": "Secret is temporary memory only; ambiguous acknowledgement uses original key and command; original acknowledgement is distinct from current reads. This review does not broaden that rule."
+    }
+  ],
+  "decision": "PASS_BOUNDED_TEST_CHANGE_REVIEW",
+  "blocking_findings": [],
+  "exact_change": {
+    "path": "apps/web/src/features/providers/ProviderSettings.test.tsx",
+    "old_sha256": "4214cb527c06702902b8cdeb04c3388ce835ac954c9e704f94192c10fbd1af7b",
+    "new_sha256": "21680a7f943c42d3c8f2687422de7a0634c8f873675293e34cf26d6dbaff5cf6",
+    "added_lines": 2,
+    "deleted_lines": 0,
+    "removing_exact_two_added_lines_reconstructs_original_bytes": true,
+    "description": "One comment and waitFor actual parent refresh button enabled before clicking. No fixed delay, timeout extension, retries of the click, skipped test or weakened existing assertion."
+  },
+  "causal_review": [
+    {
+      "locator": "apps/web/src/features/providers/useProviderSecret.ts:50",
+      "fact": "Rejected controlled promise reaches finally and schedules local busy=false."
+    },
+    {
+      "locator": "apps/web/src/features/providers/ProviderSecretPanel.tsx:7 and :11",
+      "fact": "Retry button directly reads child hook busy; parent receives busy through useEffect onState, requiring a separate parent render."
+    },
+    {
+      "locator": "apps/web/src/features/providers/ProviderSettings.tsx:18 and :45",
+      "fact": "Refresh disabled reads parent secretState.busy. Therefore enabled child retry does not prove parent refresh enabled."
+    },
+    {
+      "locator": "progress/evidence/2026-09-15/M5.1-ci-refresh-observation-02.log:9",
+      "fact": "Actual pre-click observer recorded retryDisabled=false, refreshDisabled=true, configCalls=1; subsequent failure expected config calls 2 but actual 1."
+    },
+    {
+      "locator": "apps/web/src/features/providers/ProviderSettings.test.tsx:44",
+      "fact": "New wait checks the exact interacted parent control, then preserves the original single click. It closes the proven test readiness race."
+    }
+  ],
+  "preserved_assertions": [
+    {
+      "locator": "apps/web/src/features/providers/ProviderSettings.test.tsx:46",
+      "fact": "Config must actually have two calls after refresh."
+    },
+    {
+      "locator": "apps/web/src/features/providers/ProviderSettings.test.tsx:47",
+      "fact": "Unacknowledged temporary input must retain its original exact value."
+    },
+    {
+      "locator": "apps/web/src/features/providers/ProviderSettings.test.tsx:49",
+      "fact": "Explicit original-command retry must issue exactly the second saveSecret call."
+    },
+    {
+      "locator": "apps/web/src/features/providers/ProviderSettings.test.tsx:50",
+      "fact": "Both entire saveSecret argument tuples must equal, covering provider id, original body with expected revision and secret bytes, and original key."
+    }
+  ],
+  "negative_control": {
+    "author_and_executor": "root",
+    "only_mutation": "useProviderReads same-owner/id retained config changed to setConfig(null). Corrected test bytes remain unchanged.",
+    "actual_result": "FAIL at ProviderSettings.test.tsx:47 retained secret value expected nonempty synthetic original but received empty. The prior config-two-calls assertion had completed.",
+    "implication": "The readiness correction still detects the intended editor-unmount data-loss regression.",
+    "production_restoration": "Current useProviderReads bytes equal original 6c9 git blob and original archive, SHA 630b159590f8afa39547550fcea243b856b9a193176729f2c3cc64fd028e8517.",
+    "scope": "One controlled mutation, not a proof against every possible secret-handling defect."
+  },
+  "existing_executions_read": [
+    {
+      "receipt": "progress/evidence/2026-09-15/M5.1-ci-refresh-original-red-01.json",
+      "receipt_sha256": "077fbfbe2776053c938baa7d5f4b2afbc9de7d5187c2aa0267c9496a5c7984f5",
+      "log": "progress/evidence/2026-09-15/M5.1-ci-refresh-original-red-01.log",
+      "log_sha256": "f8e0d8778804936b6cecce94361ded8978ac4b4367e3011a12972d05346d028f",
+      "status": "FAIL",
+      "exit_code": 1,
+      "verification": "Actual archived receipt and log bytes read; hash/status/exit match. Execution belongs to root, not this reviewer."
+    },
+    {
+      "receipt": "progress/evidence/2026-09-15/M5.1-ci-refresh-observation-red-01.json",
+      "receipt_sha256": "50d304b5dbbb9a24db2c30b9ce63c733158680318c81af5886e6bf952b7e31c0",
+      "log": "progress/evidence/2026-09-15/M5.1-ci-refresh-observation-red-01.log",
+      "log_sha256": "6748365edf70489708ee49f8d57a4f4eebd6451490a8d0acc2862e18fe10b4b6",
+      "status": "PASS",
+      "exit_code": 0,
+      "verification": "Actual archived receipt and log bytes read; hash/status/exit match. Execution belongs to root, not this reviewer."
+    },
+    {
+      "receipt": "progress/evidence/2026-09-15/M5.1-ci-refresh-observation-02.json",
+      "receipt_sha256": "e9e19423e265d79956c3b21d749c07a0e1fd41f8a8e345f51c413ac4d3daac62",
+      "log": "progress/evidence/2026-09-15/M5.1-ci-refresh-observation-02.log",
+      "log_sha256": "659aec25a9b930ffed21ccca91f7fdf82ce76bc05409dc8b7676d0744ffaf498",
+      "status": "FAIL",
+      "exit_code": 1,
+      "verification": "Actual archived receipt and log bytes read; hash/status/exit match. Execution belongs to root, not this reviewer."
+    },
+    {
+      "receipt": "progress/evidence/2026-09-15/M5.1-ci-refresh-targeted-green-01.json",
+      "receipt_sha256": "ad9e96a643a082c694aa0acd4dd6cce95a08a6cc6b1323b33194dee45ed360b3",
+      "log": "progress/evidence/2026-09-15/M5.1-ci-refresh-targeted-green-01.log",
+      "log_sha256": "31d131b840637f2c21690bacfaf1248b6f39ce3e84b194924b5cd80629ba5a79",
+      "status": "PASS",
+      "exit_code": 0,
+      "verification": "Actual archived receipt and log bytes read; hash/status/exit match. Execution belongs to root, not this reviewer."
+    },
+    {
+      "receipt": "progress/evidence/2026-09-15/M5.1-ci-refresh-regression-mutation-01.json",
+      "receipt_sha256": "556ef78613bb2b8432df1f27953ac078d9a2c753bd9416b0c1b9a657adc25f8c",
+      "log": "progress/evidence/2026-09-15/M5.1-ci-refresh-regression-mutation-01.log",
+      "log_sha256": "f4838bda8896529f067f6a916327dda87d5b54abf6c6d773c1957fc67e854276",
+      "status": "FAIL",
+      "exit_code": 1,
+      "verification": "Actual archived receipt and log bytes read; hash/status/exit match. Execution belongs to root, not this reviewer."
+    },
+    {
+      "receipt": "progress/evidence/2026-09-15/M5.1-ci-refresh-provider-green-01.json",
+      "receipt_sha256": "8144c91c4db4622792a8ebc092ca5b7f91a0190108c05f077c4c70a4990611bd",
+      "log": "progress/evidence/2026-09-15/M5.1-ci-refresh-provider-green-01.log",
+      "log_sha256": "c918f1679d880479833c9195294a9818742a8d88e5011f47f125542b14b94b45",
+      "status": "PASS",
+      "exit_code": 0,
+      "verification": "Actual archived receipt and log bytes read; hash/status/exit match. Execution belongs to root, not this reviewer."
+    }
+  ],
+  "source_archives_verified": [
+    {
+      "path": "ProviderSettings.original.test.tsx",
+      "sha256": "4214cb527c06702902b8cdeb04c3388ce835ac954c9e704f94192c10fbd1af7b",
+      "bytes": 9212,
+      "base": "progress/evidence/2026-09-15/M5.1-ci-refresh-diagnosis",
+      "verified": true
+    },
+    {
+      "path": "ProviderSettings.probe.test.tsx",
+      "sha256": "a8e94d20643f3bf5775de1a20bc8f86f9c5ecbfc193722ae6b5cda6c105eeffa",
+      "bytes": 9544,
+      "base": "progress/evidence/2026-09-15/M5.1-ci-refresh-diagnosis",
+      "verified": true
+    },
+    {
+      "path": "ProviderSettings.fixed.test.tsx",
+      "sha256": "21680a7f943c42d3c8f2687422de7a0634c8f873675293e34cf26d6dbaff5cf6",
+      "bytes": 9424,
+      "base": "progress/evidence/2026-09-15/M5.1-ci-refresh-diagnosis",
+      "verified": true
+    },
+    {
+      "path": "useProviderReads.original.ts",
+      "sha256": "630b159590f8afa39547550fcea243b856b9a193176729f2c3cc64fd028e8517",
+      "bytes": 5568,
+      "base": "progress/evidence/2026-09-15/M5.1-ci-refresh-diagnosis",
+      "verified": true
+    },
+    {
+      "path": "useProviderReads.mutation.ts",
+      "sha256": "2c3ddfb694ac6f0135d588e926b08971fff14c31bb63b9f5011823185e753718",
+      "bytes": 5515,
+      "base": "progress/evidence/2026-09-15/M5.1-ci-refresh-diagnosis",
+      "verified": true
+    }
+  ],
+  "reviewed_live_sources": [
+    {
+      "path": "PRODUCT_DESIGN.md",
+      "current_sha256": "537239aa30315170b2a177b74a5dfca026397fdc0e15ab14a094a8b14f7c51d9",
+      "git_6c9_sha256": "537239aa30315170b2a177b74a5dfca026397fdc0e15ab14a094a8b14f7c51d9",
+      "unchanged_from_6c9": true
+    },
+    {
+      "path": "apps/web/src/features/providers/ProviderSettings.test.tsx",
+      "current_sha256": "21680a7f943c42d3c8f2687422de7a0634c8f873675293e34cf26d6dbaff5cf6",
+      "git_6c9_sha256": "4214cb527c06702902b8cdeb04c3388ce835ac954c9e704f94192c10fbd1af7b",
+      "unchanged_from_6c9": false
+    },
+    {
+      "path": "apps/web/src/features/providers/ProviderSettings.tsx",
+      "current_sha256": "48a0d86fb39c96d98bfd4751605e96bd9ce7f669266be50188e0c0af79c85c1b",
+      "git_6c9_sha256": "48a0d86fb39c96d98bfd4751605e96bd9ce7f669266be50188e0c0af79c85c1b",
+      "unchanged_from_6c9": true
+    },
+    {
+      "path": "apps/web/src/features/providers/ProviderSecretPanel.tsx",
+      "current_sha256": "92edc49a87c2d87cface1b24b8741f7030e1c52af761a3089b46d176176d696a",
+      "git_6c9_sha256": "92edc49a87c2d87cface1b24b8741f7030e1c52af761a3089b46d176176d696a",
+      "unchanged_from_6c9": true
+    },
+    {
+      "path": "apps/web/src/features/providers/useProviderSecret.ts",
+      "current_sha256": "1da103f035e6fad28d70952f321cc97f4bbee1c13c0330dd64a278d51dad3367",
+      "git_6c9_sha256": "1da103f035e6fad28d70952f321cc97f4bbee1c13c0330dd64a278d51dad3367",
+      "unchanged_from_6c9": true
+    },
+    {
+      "path": "apps/web/src/features/providers/useProviderReads.ts",
+      "current_sha256": "630b159590f8afa39547550fcea243b856b9a193176729f2c3cc64fd028e8517",
+      "git_6c9_sha256": "630b159590f8afa39547550fcea243b856b9a193176729f2c3cc64fd028e8517",
+      "unchanged_from_6c9": true
+    },
+    {
+      "path": "apps/web/src/features/providers/testFixtures.ts",
+      "current_sha256": "4db365f182eeaa0b8b2918bfe6b871bbee11c6cab875b643c0e5bab489867814",
+      "git_6c9_sha256": "4db365f182eeaa0b8b2918bfe6b871bbee11c6cab875b643c0e5bab489867814",
+      "unchanged_from_6c9": true
+    }
+  ],
+  "ci_failure_read": {
+    "cache_relative_path": "m51-ci-6c9f997/early-failure-job-104290245753.log",
+    "sha256": "e38f993ee225e4b0b31bea5498550b1473c6762ff1c87b494479626fefd272ca",
+    "job_id": 104290245753,
+    "actual_summary": "313 passed, 1 failed across 52 files; failing same-provider refresh case stopped at config expected 2, got 1.",
+    "scope": "This one downloaded job log was read; no terminal conclusion for all workflows/checks made here."
+  },
+  "evidence_notes": [
+    "The observational run whose id includes observation-red-01 actually PASSed; its receipt and log correctly retain PASS. Unchanged observation-02 later FAILed. This is scheduling-sensitive, not claimed deterministic on every execution.",
+    "Original red, probe pass and red, corrected targeted green, controlled mutation red, and full seven-case ProviderSettings green all retained. Hashes match their readback index.",
+    "The reviewer read existing test outputs; this review is not an independent rerun or new full frontend, native, provider or CI success.",
+    "This correction changes test readiness only. It does not establish paid-provider behavior, independent-test permissions beyond existing tests, secret persistence support, or M5.1 stage completion."
+  ],
+  "m52_status": "Private proposal v1 sealed, unadopted; no M5.2 implementation begun."
+}

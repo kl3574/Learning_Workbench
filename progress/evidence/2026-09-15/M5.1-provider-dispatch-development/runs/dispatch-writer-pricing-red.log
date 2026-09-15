@@ -1,0 +1,108 @@
+..F...........F                                                          [100%]
+=================================== FAILURES ===================================
+__ test_real_sqlite_writer_lock_does_not_block_event_loop_or_cancel_preflight __
+
+tmp_path = PosixPath('<HOME>/.cache/lw-m51/pytest-of-lkx/pytest-7/test_real_sqlite_writer_lock_d0')
+
+    def test_real_sqlite_writer_lock_does_not_block_event_loop_or_cancel_preflight(tmp_path: Path) -> None:
+        import threading
+        import time
+        from services.api.app.application.errors import ApiError
+        async def run():
+            async with local_provider() as server:
+                db, identity, _, registry, job, secrets, preparer, _, grant, lease = authorized_source(tmp_path, server.base_url)
+                locked = threading.Event()
+                def hold_writer():
+                    with db.transaction():
+                        locked.set()
+                        time.sleep(0.6)
+                thread = threading.Thread(target=hold_writer)
+                thread.start()
+                await asyncio.to_thread(locked.wait)
+                service = CheckedDispatch(db, secrets, registry, preparer)
+                abort = asyncio.Event()
+                async def consume():
+                    try:
+                        return [event async for event in service.dispatch(identity, job, grant.id, lease, abort)]
+                    except ApiError as error:
+                        return error.code
+                task = asyncio.create_task(consume())
+                start = time.monotonic()
+                await asyncio.sleep(0.03)
+                heartbeat_elapsed = time.monotonic() - start
+                abort.set()
+                result = await asyncio.wait_for(task, 3)
+                await asyncio.to_thread(thread.join)
+                assert heartbeat_elapsed < 0.2
+                assert result == 'PROVIDER_CANCELLED'
+                assert server.requests == []
+                with db.transaction() as conn:
+                    assert ConsentRepository(conn, identity.workspace_id).dispatch_for_consent(grant.id) is None
+>       asyncio.run(run())
+
+tests/integration/test_provider_dispatch.py:84: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    async def run():
+        async with local_provider() as server:
+            db, identity, _, registry, job, secrets, preparer, _, grant, lease = authorized_source(tmp_path, server.base_url)
+            locked = threading.Event()
+            def hold_writer():
+                with db.transaction():
+                    locked.set()
+                    time.sleep(0.6)
+            thread = threading.Thread(target=hold_writer)
+            thread.start()
+            await asyncio.to_thread(locked.wait)
+            service = CheckedDispatch(db, secrets, registry, preparer)
+            abort = asyncio.Event()
+            async def consume():
+                try:
+                    return [event async for event in service.dispatch(identity, job, grant.id, lease, abort)]
+                except ApiError as error:
+                    return error.code
+            task = asyncio.create_task(consume())
+            start = time.monotonic()
+            await asyncio.sleep(0.03)
+            heartbeat_elapsed = time.monotonic() - start
+            abort.set()
+            result = await asyncio.wait_for(task, 3)
+            await asyncio.to_thread(thread.join)
+>           assert heartbeat_elapsed < 0.2
+E           assert 0.671152559996699 < 0.2
+
+tests/integration/test_provider_dispatch.py:79: AssertionError
+______ test_pricing_proof_hash_is_scoped_to_provider_revision_and_domain _______
+
+tmp_path = PosixPath('<HOME>/.cache/lw-m51/pytest-of-lkx/pytest-7/test_pricing_proof_hash_is_sco0')
+
+    def test_pricing_proof_hash_is_scoped_to_provider_revision_and_domain(tmp_path):
+        from packages.contracts.canonical import canonical_bytes, sha256_bytes
+        from services.api.app.provider_dto import ProviderPricing
+        material, config, budget = prepared_inputs(tmp_path)
+        pricing = ProviderPricing(input_usd_per_million=1.0, output_usd_per_million=2.0, source_note='Synthetic local rate')
+        config = config.model_copy(update={'pricing': pricing})
+        prepared = test_preparer().prepare(config, material, budget)
+>       assert prepared.cost_estimate.pricing_sha256 == sha256_bytes(canonical_bytes({
+            'version': 'provider-pricing-v1', 'provider_id': config.id,
+            'provider_revision': config.revision, 'pricing': pricing.model_dump(mode='json')}))
+E       AssertionError: assert '3847008817b1...6f326e1bc579a' == '31ce4bdac665...61daccb64e8c5'
+E         
+E         - 31ce4bdac665f6054f7d7b21a311e10c5492217ed796bf1ba4b61daccb64e8c5
+E         + 3847008817b18ba65a35cad840955368f31307e38006f9e3b2a6f326e1bc579a
+
+tests/unit/test_provider_budget.py:100: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/test_provider_dispatch.py::test_real_sqlite_writer_lock_does_not_block_event_loop_or_cancel_preflight
+FAILED tests/unit/test_provider_budget.py::test_pricing_proof_hash_is_scoped_to_provider_revision_and_domain
+2 failed, 13 passed in 1.57s

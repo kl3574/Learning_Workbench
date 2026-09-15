@@ -1,0 +1,111 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_original_secret_ack_checks_its_history_prefix_not_a_later_damaged_revision _
+
+tmp_path = PosixPath('${PRIVATE_HOME}/.cache/lw-m51-b/config-boundary-red/test_original_secret_ack_check0')
+
+    def test_original_secret_ack_checks_its_history_prefix_not_a_later_damaged_revision(tmp_path):
+        from services.api.app.application.errors import ApiError
+        from services.api.app.provider_dto import ProviderSecretWrite
+    
+        database, identity, _, service = config_storage(tmp_path)
+        original = ProviderSecretWrite(expected_revision=1, secret='synthetic-first')
+        ack = service.save_secret(identity, 'provider_test', original, 'original-secret')
+        service.save_secret(identity, 'provider_test', ProviderSecretWrite(expected_revision=2,
+            secret='synthetic-later'), 'later-secret')
+        with database.transaction() as connection:
+            connection.execute('DROP TRIGGER provider_config_history_no_update')
+            connection.execute("UPDATE provider_config_history SET config_json='{}' WHERE provider_id='provider_test' AND revision=3")
+>       assert service.save_secret(identity, 'provider_test', original, 'original-secret') == ack
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_provider_config.py:71: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/api/app/application/providers.py:124: in save_secret
+    repo.config(provider_id, original.revision)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.provider_repository.ProviderRepository object at 0x741f3cdc6c90>
+provider_id = 'provider_test', revision = 2
+
+    def config(self, provider_id: str, revision: int | None = None) -> ProviderConfigView:
+        self.require_workspace()
+        head = self.connection.execute('SELECT * FROM provider_config_heads WHERE provider_id=? AND workspace_id=?',
+                                       (provider_id, self.workspace_id)).fetchone()
+        if head is None:
+            if self.connection.execute('SELECT 1 FROM provider_config_history WHERE provider_id=? AND workspace_id=?',
+                                        (provider_id, self.workspace_id)).fetchone():
+                raise integrity_error()
+            raise ApiError(404, 'PROVIDER_MISSING', '提供商配置不存在或不可访问。')
+        rows = self.connection.execute('SELECT * FROM provider_config_history WHERE provider_id=? AND workspace_id=? ORDER BY revision',
+                                       (provider_id, self.workspace_id)).fetchall()
+        previous = None
+        configs = []
+        try:
+            for index, row in enumerate(rows, 1):
+                value = ProviderConfigView.model_validate(strict_json(row['config_json']))
+                material = {key: row[key] for key in ('provider_id', 'workspace_id', 'revision', 'config_json',
+                    'config_sha256', 'previous_sha256', 'command_id', 'created_at')}
+                command = self.command(row['command_id'])
+                ack = strict_json(command['result_json'])
+                if (row['revision'] != index or value.revision != index or value.id != provider_id
+                        or value.config_sha256 != row['config_sha256'] or config_digest(self.workspace_id, value) != value.config_sha256
+                        or canonical_bytes(value).decode() != row['config_json'] or row['previous_sha256'] != previous
+                        or digest(material) != row['history_sha256'] or not isinstance(ack, dict)
+                        or ack.get('id') != provider_id or ack.get('revision') != index
+                        or ack.get('config_sha256') != value.config_sha256 or ack.get('secret_present') != value.secret_present):
+                    raise integrity_error()
+                TypeAdapter(dm.UTC).validate_python(row['created_at'])
+                self._locator(value)
+                configs.append(value)
+                previous = row['history_sha256']
+            if not configs or head['revision'] != len(configs):
+                raise integrity_error()
+            if revision is not None:
+                if not 1 <= revision <= len(configs):
+                    raise integrity_error()
+                return configs[revision - 1]
+            return configs[-1]
+        except (ValueError, TypeError, KeyError):
+>           raise integrity_error() from None
+E           services.api.app.application.errors.ApiError: (503, 'PROVIDER_INTEGRITY_INVALID', '提供商授权历史无法通过完整性校验。')
+
+services/api/app/infrastructure/provider_repository.py:177: ApiError
+_____ test_exception_after_commit_never_deletes_a_committed_secret_version _____
+
+tmp_path = PosixPath('${PRIVATE_HOME}/.cache/lw-m51-b/config-boundary-red/test_exception_after_commit_ne0')
+
+    def test_exception_after_commit_never_deletes_a_committed_secret_version(tmp_path):
+        from services.api.app.infrastructure.provider_repository import ProviderRepository
+        from services.api.app.provider_dto import ProviderSecretWrite
+    
+        class InterruptedReceiptDatabase(Database):
+            interrupt_receipt = False
+    
+            @contextmanager
+            def transaction(self):
+                with super().transaction() as connection:
+                    yield connection
+                if self.interrupt_receipt:
+                    self.interrupt_receipt = False
+                    raise RuntimeError('synthetic interruption after committed transaction')
+    
+        database, identity, store, service = config_storage(tmp_path, InterruptedReceiptDatabase)
+        request = ProviderSecretWrite(expected_revision=1, secret='synthetic-committed-key')
+        database.interrupt_receipt = True
+        with pytest.raises(RuntimeError, match='synthetic interruption'):
+            service.save_secret(identity, 'provider_test', request, 'committed-secret')
+        current = service.read_config(identity, 'provider_test')
+        assert current.revision == 2 and current.secret_present
+        with database.transaction() as connection:
+            locator = ProviderRepository(connection, identity.workspace_id).secret_locator('provider_test', 2)
+>       assert locator is not None and store.available(locator)
+E       AssertionError: assert ('secret_<REDACTED_RUNTIME_LOCATOR>' is not None and False)
+E        +  where False = available('secret_<REDACTED_RUNTIME_LOCATOR>')
+E        +    where available = <services.api.app.infrastructure.provider_secret_store.FileSecretStore object at 0x741f3cdc65a0>.available
+
+tests/integration/test_provider_config.py:101: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/test_provider_config.py::test_original_secret_ack_checks_its_history_prefix_not_a_later_damaged_revision
+FAILED tests/integration/test_provider_config.py::test_exception_after_commit_never_deletes_a_committed_secret_version
+2 failed, 1 deselected in 0.22s

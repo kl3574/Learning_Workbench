@@ -1,0 +1,39 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_ test_checked_frozen_proposal_remains_readable_when_its_owner_is_unregistered _
+
+tmp_path = PosixPath('${PRIVATE_HOME}/.cache/lw-m51-b/unregistered-green/test_checked_frozen_proposal_r0')
+
+    def test_checked_frozen_proposal_remains_readable_when_its_owner_is_unregistered(tmp_path):
+        import pytest
+        from services.api.app.application.consents import ConsentsService
+        from services.api.app.application.provider_ports import OutboundSourceRegistry
+    
+        database, identity, source, service, request = consent_setup(tmp_path)
+        proposal = service.preview(identity, request, 'preview')
+        unavailable = ConsentsService(database, service.secret_store, OutboundSourceRegistry(), service.preparer)
+        with database.transaction() as conn:
+            before = sha256_bytes('\n'.join(conn.iterdump()).encode())
+        view = unavailable.proposal(identity, proposal.id)
+        assert view.validity == 'unavailable' and view.summary == proposal.summary
+        assert any(warning.code == 'source_unavailable' for warning in view.warnings)
+        with pytest.raises(ApiError) as blocked:
+            unavailable.grant(identity, ConsentCreate(proposal_id=proposal.id,
+                proposal_sha256=proposal.proposal_sha256), 'grant-unavailable')
+        assert blocked.value.code == 'OUTBOUND_SOURCE_UNAVAILABLE'
+        with database.transaction() as conn:
+            assert sha256_bytes('\n'.join(conn.iterdump()).encode()) == before
+            assert conn.execute('SELECT COUNT(*) FROM provider_dispatches').fetchone()[0] == 0
+        with pytest.raises(ApiError) as unbound:
+            source.claim(identity, request.job_id)
+        assert unbound.value.code == 'CONSENT_REQUIRED'
+        # A missing real job is not the explicit unavailable-owner diagnostic.
+        with database.transaction() as conn:
+            conn.execute('DELETE FROM test_provider_sources WHERE job_id=?', (request.job_id,))
+>           conn.execute('DELETE FROM test_provider_preparation_versions WHERE job_id=?', (request.job_id,))
+E           sqlite3.OperationalError: no such table: test_provider_preparation_versions
+
+tests/integration/test_provider_consents.py:203: OperationalError
+=========================== short test summary info ============================
+FAILED tests/integration/test_provider_consents.py::test_checked_frozen_proposal_remains_readable_when_its_owner_is_unregistered
+1 failed in 0.24s

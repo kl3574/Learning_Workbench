@@ -1,0 +1,20 @@
+.....................F                                                   [100%]
+=================================== FAILURES ===================================
+_ test_conflicting_frame_already_received_with_terminal_is_rejected_before_commit _
+
+    def test_conflicting_frame_already_received_with_terminal_is_rejected_before_commit():
+        async def chunks():
+            yield chat_stream() + b'data: {"id":"different","choices":[]}\n\n'
+        async def run():
+            return [event async for event in checked_stream(chunks(), 'compatible_chat', MODEL)]
+        events = asyncio.run(run())
+>       assert events[-1].type == 'error' and events[-1].error_code == 'PROVIDER_PROTOCOL_ERROR'
+E       AssertionError: assert ('finished' == 'error'
+E         
+E         - error
+E         + finished)
+
+tests/unit/test_provider_protocol.py:129: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_provider_protocol.py::test_conflicting_frame_already_received_with_terminal_is_rejected_before_commit
+1 failed, 21 passed in 0.18s

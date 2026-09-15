@@ -20,6 +20,91 @@ from scripts.schema_types import generate_types
 from scripts.api_contracts import api_artifacts, runtime_openapi
 
 
+PROVIDER_OPERATIONS = {
+    ('/api/v1/providers/capabilities', 'get'): (None, 'ProviderCapabilitiesResponse', '200'),
+    ('/api/v1/providers/{id}/config', 'get'): (None, 'ProviderConfigView', '200'),
+    ('/api/v1/providers/{id}/config', 'put'): ('ProviderConfigWrite', 'ProviderConfigAck', '200'),
+    ('/api/v1/providers/{id}/secret', 'post'): ('ProviderSecretWrite', 'ProviderSecretAck', '200'),
+    ('/api/v1/providers/{id}/secret', 'delete'): (None, 'ProviderSecretAck', '200'),
+    ('/api/v1/consents/preview', 'post'): ('ConsentPreviewWrite', 'ConsentProposalView', '201'),
+    ('/api/v1/consents/preview/{id}', 'get'): (None, 'ConsentProposalView', '200'),
+    ('/api/v1/consents', 'post'): ('ConsentCreate', 'ConsentCreateAck', '201'),
+    ('/api/v1/consents', 'get'): (None, 'ConsentPage', '200'),
+    ('/api/v1/consents/{id}/revoke', 'post'): ('ConsentRevoke', 'MutationAck', '200'),
+}
+
+
+def provider_ports_binding(ports: str, openapi: dict, provenance: dict[str, str]) -> str:
+    """Bind the separate map only to all ten implemented, closed operations.
+
+    The URL query union is the scalar transport contract, not an invented body
+    component. A declaration alone cannot supply a runtime application binding.
+    """
+    marker = 'export interface ProviderApplicationDTOMap {'
+    if ports.count(marker) != 1:
+        raise ValueError('provider application map must be explicitly declared once')
+    block = ports.split(marker, 1)[1].split('}', 1)[0]
+    names = re.findall(r'\b(\w+): unknown;', block)
+    expected_names = {name for request, response, _ in PROVIDER_OPERATIONS.values()
+                      for name in (request, response) if name is not None}
+    if (len(names) != len(set(names)) or set(names) != expected_names
+            or re.sub(r'\b\w+: unknown;', '', block).strip()):
+        raise ValueError('provider application map has unmapped or duplicate DTOs')
+    schemas = openapi.get('components', {}).get('schemas', {})
+    for (path, method), (request_name, response_name, status) in PROVIDER_OPERATIONS.items():
+        operation = openapi.get('paths', {}).get(path, {}).get(method)
+        if operation is None:
+            raise ValueError('provider application binding requires all ten registered runtime operations')
+        response = operation.get('responses', {}).get(status, {}).get('content', {})
+        if response != {'application/json': {'schema': {'$ref': f'#/components/schemas/{response_name}'}}}:
+            raise ValueError('provider runtime response must bind its declared DTO, media type and status')
+        if request_name is None:
+            if 'requestBody' in operation:
+                raise ValueError('provider bodyless operation cannot accept an undocumented body')
+        else:
+            request = operation.get('requestBody', {})
+            if (request.get('required') is not True or request.get('content') != {
+                    'application/json': {'schema': {'$ref': f'#/components/schemas/{request_name}'}}}):
+                raise ValueError('provider runtime request must bind its declared required DTO')
+        parameters = operation.get('parameters', [])
+        identities = [(value.get('in'), value.get('name', '').lower()) for value in parameters]
+        if len(identities) != len(set(identities)):
+            raise ValueError('provider operation declares duplicate transport parameters')
+        headers = {value.get('name', '').lower(): value for value in parameters if value.get('in') == 'header'}
+        if method != 'get':
+            key = headers.get('idempotency-key', {})
+            if (key.get('required') is not True or key.get('schema', {}).get('type') != 'string'
+                    or key.get('schema', {}).get('pattern') != '^[A-Za-z0-9_-]{1,128}$'):
+                raise ValueError('provider mutation requires its declared original command key')
+        if method == 'delete':
+            match = headers.get('if-match', {})
+            if (match.get('required') is not True or match.get('schema', {}).get('type') != 'string'
+                    or match.get('schema', {}).get('pattern') != '^"[0-9a-f]{64}"$'):
+                raise ValueError('provider secret deletion requires its strong configuration version')
+        queries = {value['name']: value for value in parameters if value.get('in') == 'query'}
+        if (path, method) == ('/api/v1/consents', 'get'):
+            if set(queries) != {'consent_id', 'cursor', 'limit'} or any(value.get('required') for value in queries.values()):
+                raise ValueError('provider consent query must bind the three actual optional scalar parameters')
+            limit = queries['limit'].get('schema', {})
+            if limit.get('type') != 'integer' or limit.get('minimum') != 1 or limit.get('maximum') != 100 or limit.get('default') != 20:
+                raise ValueError('provider consent query has an incorrect pagination bound')
+        elif queries:
+            raise ValueError('provider operation declares undocumented query fields')
+    for name in names:
+        schema = schemas.get(name, {})
+        if schema.get('type') != 'object' or schema.get('additionalProperties') is not False:
+            raise ValueError('provider application DTO must be a registered closed object')
+    lines = [f"// Generated from PRODUCT_DESIGN.md v{provenance['spec_version']} and runtime OpenAPI; do not edit.",
+             f"// spec_sha256: {provenance['spec_sha256']}",
+             'import type { ProviderApplicationDTOMap } from "../module-ports";',
+             'import type * as Api from "./api-types";', '',
+             'export type { ProviderConsentQuery } from "../module-ports";', '',
+             'export interface ProviderRuntimeDTOMap extends ProviderApplicationDTOMap {']
+    lines.extend(f'  {name}: Api.{name};' for name in names)
+    lines.append('}')
+    return '\n'.join(lines) + '\n'
+
+
 def recommendation_ports_binding(ports: str, openapi: dict, provenance: dict[str, str]) -> str:
     """Bind the application map only after both real recommendation routes exist."""
     marker = 'export interface RecommendationDTOMap {'
@@ -100,6 +185,8 @@ def artifacts(root: Path = ROOT) -> dict[Path, bytes]:
     openapi = runtime_openapi()
     application_binding = recommendation_ports_binding(ports, openapi, provenance)
     output[root / 'packages/contracts/generated/recommendation-ports-binding.ts'] = application_binding.encode()
+    provider_binding = provider_ports_binding(ports, openapi, provenance)
+    output[root / 'packages/contracts/generated/provider-ports-binding.ts'] = provider_binding.encode()
     for name, value in api_artifacts(openapi, catalog, provenance).items():
         target = "packages/contracts/generated/" + name
         if isinstance(value, str):

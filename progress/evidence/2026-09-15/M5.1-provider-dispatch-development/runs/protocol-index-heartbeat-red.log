@@ -1,0 +1,113 @@
+......................FFFF                                               [100%]
+=================================== FAILURES ===================================
+________________ test_responses_rejects_boolean_output_index[1] ________________
+
+event_index = 1
+
+    @pytest.mark.parametrize('event_index', [1, 2, 6])
+    def test_responses_rejects_boolean_output_index(event_index):
+        records = [strict_json(line[6:]) for line in responses_stream().splitlines() if line.startswith(b'data: ')]
+        records[event_index]['output_index'] = False
+        data = b''.join(b'data: ' + canonical_bytes(value) + b'\n\n' for value in records)
+        terminal = collect_fixture(data, 'official_responses')[-1]
+>       assert terminal.type == 'error' and terminal.error_code == 'PROVIDER_PROTOCOL_ERROR'
+E       AssertionError: assert ('finished' == 'error'
+E         
+E         - error
+E         + finished)
+
+tests/unit/test_provider_protocol.py:138: AssertionError
+________________ test_responses_rejects_boolean_output_index[2] ________________
+
+event_index = 2
+
+    @pytest.mark.parametrize('event_index', [1, 2, 6])
+    def test_responses_rejects_boolean_output_index(event_index):
+        records = [strict_json(line[6:]) for line in responses_stream().splitlines() if line.startswith(b'data: ')]
+        records[event_index]['output_index'] = False
+        data = b''.join(b'data: ' + canonical_bytes(value) + b'\n\n' for value in records)
+        terminal = collect_fixture(data, 'official_responses')[-1]
+>       assert terminal.type == 'error' and terminal.error_code == 'PROVIDER_PROTOCOL_ERROR'
+E       AssertionError: assert ('finished' == 'error'
+E         
+E         - error
+E         + finished)
+
+tests/unit/test_provider_protocol.py:138: AssertionError
+________________ test_responses_rejects_boolean_output_index[6] ________________
+
+event_index = 6
+
+    @pytest.mark.parametrize('event_index', [1, 2, 6])
+    def test_responses_rejects_boolean_output_index(event_index):
+        records = [strict_json(line[6:]) for line in responses_stream().splitlines() if line.startswith(b'data: ')]
+        records[event_index]['output_index'] = False
+        data = b''.join(b'data: ' + canonical_bytes(value) + b'\n\n' for value in records)
+        terminal = collect_fixture(data, 'official_responses')[-1]
+>       assert terminal.type == 'error' and terminal.error_code == 'PROVIDER_PROTOCOL_ERROR'
+E       AssertionError: assert ('finished' == 'error'
+E         
+E         - error
+E         + finished)
+
+tests/unit/test_provider_protocol.py:138: AssertionError
+_________ test_near_resource_limits_do_not_block_event_loop_heartbeat __________
+
+    def test_near_resource_limits_do_not_block_event_loop_heartbeat():
+        import time
+        base = {'id': 'chat_test_1', 'model': MODEL, 'choices': [{'index': 0,
+            'delta': {'content': 'x' * 240000}, 'finish_reason': None}]}
+        payload = ((b':' + b'c' * 240000 + b'\n\n') * 16
+                   + (b'data: ' + canonical_bytes(base) + b'\n\n') * 16
+                   + chat_stream(''))
+        assert len(payload) < 8 * 1024 * 1024
+        async def run():
+            async def chunks():
+                yield payload
+            async def consume():
+                return [event async for event in checked_stream(chunks(), 'compatible_chat', MODEL)]
+            task = asyncio.create_task(consume())
+            start = time.monotonic()
+            await asyncio.sleep(0.01)
+            delay = time.monotonic() - start
+            events = await task
+            assert ''.join(event.text for event in events if event.type == 'delta') == 'x' * 3840000
+            assert events[-1].type == 'finished'
+            assert delay < 0.2
+>       asyncio.run(run())
+
+tests/unit/test_provider_protocol.py:162: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    async def run():
+        async def chunks():
+            yield payload
+        async def consume():
+            return [event async for event in checked_stream(chunks(), 'compatible_chat', MODEL)]
+        task = asyncio.create_task(consume())
+        start = time.monotonic()
+        await asyncio.sleep(0.01)
+        delay = time.monotonic() - start
+        events = await task
+        assert ''.join(event.text for event in events if event.type == 'delta') == 'x' * 3840000
+        assert events[-1].type == 'finished'
+>       assert delay < 0.2
+E       assert 13.229480873000284 < 0.2
+
+tests/unit/test_provider_protocol.py:161: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_provider_protocol.py::test_responses_rejects_boolean_output_index[1]
+FAILED tests/unit/test_provider_protocol.py::test_responses_rejects_boolean_output_index[2]
+FAILED tests/unit/test_provider_protocol.py::test_responses_rejects_boolean_output_index[6]
+FAILED tests/unit/test_provider_protocol.py::test_near_resource_limits_do_not_block_event_loop_heartbeat
+4 failed, 22 passed in 13.44s

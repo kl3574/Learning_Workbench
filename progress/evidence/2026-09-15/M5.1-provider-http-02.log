@@ -1,0 +1,59 @@
+.F............                                                           [100%]
+=================================== FAILURES ===================================
+_ test_real_independent_attempt_blocks_summaries_and_grant_replay_but_keeps_controls_and_revoke _
+
+tmp_path = PosixPath('<TEMP>/pytest-5/test_real_independent_attempt_0')
+
+    def test_real_independent_attempt_blocks_summaries_and_grant_replay_but_keeps_controls_and_revoke(tmp_path):
+        from services.api.app.application.assessment import AssessmentService
+        from services.api.app.application.errors import ApiError
+        from services.api.app.provider_dto import ConsentPreviewWrite
+        from tests.assessment_fixtures import assessment_fixture
+        from tests.integration.test_assessment_attempts import import_fixture, start
+        from tests.integration.test_recommendation_source_ports import all_table_rows
+    
+        database, identity, source, registry, job = provider_source(tmp_path)
+        client, headers = client_for(database, source_registry=registry, preparer=ControlledPreparation())
+        config_path = '/api/v1/providers/provider_policy/config'
+        assert client.put(config_path, json=config_body(), headers=write_headers(headers, 'config')).status_code == 200
+        assert client.post('/api/v1/providers/provider_policy/secret', json={'expected_revision': 1,
+            'secret': 'synthetic-policy-key'}, headers=write_headers(headers, 'secret')).status_code == 200
+        preview_body = {'job_id': job, 'expected_job_revision': 1, 'provider_id': 'provider_policy',
+            'expected_provider_revision': 2, 'expires_at': (datetime.now(UTC) + timedelta(hours=1)).isoformat().replace('+00:00', 'Z'),
+            'budget': {'max_input_tokens': 10000, 'max_output_tokens': 100, 'max_provider_calls': 1,
+                       'max_search_calls': 0, 'max_tool_calls': 0, 'max_cost_usd': None}}
+        proposal = client.app.state.consent_service.preview(identity, ConsentPreviewWrite.model_validate(preview_body), 'preview')
+        grant_body = {'proposal_id': proposal.id, 'proposal_sha256': proposal.proposal_sha256}
+        granted = client.post('/api/v1/consents', json=grant_body, headers=write_headers(headers, 'grant-original'))
+        assert granted.status_code == 201
+>       fixture = assessment_fixture('provider_policy')
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_provider_http.py:115: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/assessment_fixtures.py:27: in assessment_fixture
+    original = practice_fixture(prefix, profile=profile, revision=revision)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+prefix = 'provider_policy', profile = 'author', revision = 1
+
+    def practice_fixture(prefix: str = 'practice', *, profile: Literal['learner', 'author'] = 'author', revision: int = 1) -> PracticeFixture:
+        if not prefix.isascii() or not prefix.isalpha() or revision not in {1, 2}:
+>           raise ValueError('Use an ASCII alphabetic prefix and revision 1 or 2')
+E           ValueError: Use an ASCII alphabetic prefix and revision 1 or 2
+
+tests/practice_fixtures.py:34: ValueError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <REPO>/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <REPO>/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_provider_http.py::test_real_independent_attempt_blocks_summaries_and_grant_replay_but_keeps_controls_and_revoke
+1 failed, 13 passed, 2 warnings in 3.22s

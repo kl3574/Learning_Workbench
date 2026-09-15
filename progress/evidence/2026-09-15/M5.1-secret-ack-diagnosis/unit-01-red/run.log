@@ -1,0 +1,34 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/providers/providerSecret.test.tsx
+
+
+ RUN  v5.0.0 <REPO>/apps/web
+
+ ❯ src/features/providers/providerSecret.test.tsx (8 tests | 1 failed) 27ms
+   × a new secret command uses its actual readback while the parent still supplies the older config 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/providers/providerSecret.test.tsx > a new secret command uses its actual readback while the parent still supplies the older config
+AssertionError: expected '0000000000000000000000000000000000000…' to be '0000000000000000000000000000000000000…' // Object.is equality
+
+Expected: "0000000000000000000000000000000000000000000000000000000000000002"
+Received: "0000000000000000000000000000000000000000000000000000000000000001"
+
+ ❯ src/features/providers/providerSecret.test.tsx:67:65
+     65|   expect(hook.result.current.remote).toEqual(readback); expect(base.re…
+     66|   await act(() => hook.result.current.run('delete'))
+     67|   expect(vi.mocked(state.port.deleteSecret).mock.calls[0]?.[1]).toBe(r…
+       |                                                                 ^
+     68|   expect(hook.result.current.ack?.revision).toBe(3); expect(hook.resul…
+     69| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 passed (8)
+   Start at  16:19:50
+   Duration  454ms (environment 50%, transform 26%, import 16%, tests 7%, worker 1%)
+

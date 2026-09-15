@@ -1,0 +1,21 @@
+.................................F                                       [100%]
+=================================== FAILURES ===================================
+_______ test_cross_workspace_cannot_read_or_occupy_existing_provider_id ________
+
+tmp_path = PosixPath('${PRIVATE_HOME}/.cache/lw-m51-b/owned03/test_cross_workspace_cannot_re0')
+
+    def test_cross_workspace_cannot_read_or_occupy_existing_provider_id(tmp_path):
+        from dataclasses import replace
+        from services.api.app.application.errors import ApiError
+        from services.api.app.provider_dto import ProviderConfigWrite
+        from services.api.app.infrastructure.database import utc_now
+    
+        database, identity, _, service = config_storage(tmp_path)
+        with database.transaction() as conn:
+>           conn.execute('INSERT INTO workspace VALUES(?,?,?,?)', ('workspace_other', 'Synthetic second workspace', '{}', utc_now()))
+E           sqlite3.OperationalError: table workspace has 5 columns but 4 values were supplied
+
+tests/integration/test_provider_config.py:188: OperationalError
+=========================== short test summary info ============================
+FAILED tests/integration/test_provider_config.py::test_cross_workspace_cannot_read_or_occupy_existing_provider_id
+1 failed, 33 passed in 1.95s

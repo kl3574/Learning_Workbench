@@ -1,0 +1,35 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_______ test_empty_production_registry_cannot_prepare_or_advertise_chat ________
+
+tmp_path = PosixPath('<HOME>/.cache/lw-m51/pytest-of-lkx/pytest-0/test_empty_production_registry0')
+
+    def test_empty_production_registry_cannot_prepare_or_advertise_chat(tmp_path: Path) -> None:
+        db, identity, source, _, job_id = provider_source(tmp_path)
+        with db.transaction() as conn:
+            material = source.read_prepared(conn, identity, job_id, 1)
+        config = ProviderConfigView(id='provider_test', revision=1, config_sha256='a'*64,
+            adapter='official_responses', base_url='https://provider.example/v1', model='unregistered-model',
+            embedding_model=None, endpoint_policy='public_https', pricing=None, configured=True, secret_present=True)
+        budget = FrozenOutboundBudget(max_input_tokens=10000, max_output_tokens=20,
+            max_provider_calls=1, max_search_calls=0, max_tool_calls=0, timeout_seconds=180, max_cost_usd=None)
+        preparer = RequestPreparer(ProofRegistry())
+        with pytest.raises(ApiError) as error:
+>           preparer.prepare(config, material, budget)
+
+tests/unit/test_provider_budget.py:22: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.application.provider_budget.RequestPreparer object at 0x71872c37bc80>
+config = ProviderConfigView(id='provider_test', revision=1, config_sha256='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa...tered-model', embedding_model=None, endpoint_policy='public_https', pricing=None, configured=True, secret_present=True)
+material = PreparedOutboundMaterial(job_id='job_8c5835e9add1437f8dec549235851e33', job_revision=1, job_input_sha256='d31a3fe0cda1...n='test-persisted-source-v1', prepared_input_sha256='90a859842a2c11c52bd084d73a4a4db16019e2918057db004c19f9b02d63d891')
+budget = FrozenOutboundBudget(max_input_tokens=10000, max_output_tokens=20, max_provider_calls=1, max_search_calls=0, max_tool_calls=0, timeout_seconds=180, max_cost_usd=None)
+
+    def prepare(self, config, material, budget):
+>       raise NotImplementedError('Complete request admission is not implemented.')
+E       NotImplementedError: Complete request admission is not implemented.
+
+services/api/app/application/provider_budget.py:13: NotImplementedError
+=========================== short test summary info ============================
+FAILED tests/unit/test_provider_budget.py::test_empty_production_registry_cannot_prepare_or_advertise_chat
+1 failed in 0.20s

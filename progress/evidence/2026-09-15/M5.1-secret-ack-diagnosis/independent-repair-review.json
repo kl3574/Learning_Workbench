@@ -1,0 +1,679 @@
+{
+  "version": "secret-basis-independent-repair-review-v2",
+  "observed_at": "2026-09-15T08:34:15.885797+00:00",
+  "baseline_commit": "358bf5d2bbe66b7b9084ba5b4a025e09d1916dbc",
+  "reviewed_commit": "254a4ffe70dcab9db56663cc37245a33ae1495a5",
+  "sole_spec": {
+    "path": "PRODUCT_DESIGN.md",
+    "version": "3.0.2",
+    "sha256": "537239aa30315170b2a177b74a5dfca026397fdc0e15ab14a094a8b14f7c51d9",
+    "normative_lines": [
+      993,
+      995,
+      997,
+      1397,
+      1401
+    ]
+  },
+  "review_kind": "Read-only code review and original owner evidence readback; reviewer did not run tests or browser.",
+  "verdict": "NO_NEW_BLOCKING_FINDING_WITHIN_REVIEWED_SCOPE",
+  "baseline_review_sha256": "c566ccadc18e15fe43f007b3d32b2b71d133356fe7d300420d45b4b50025062b",
+  "findings": [
+    {
+      "id": "M51-SECRET-BASIS-01",
+      "status": "CLOSED_IN_REVIEWED_SOURCE_AND_FOCUSED_OWNER_EVIDENCE",
+      "statement": "Fresh commands now select the higher same-owner/provider actual GET revision; ACK remains historical and cannot synthesize a config basis. Controlled original DELETE changed from actual r1-hash/412 to r2-hash/200."
+    },
+    {
+      "id": "M51-SECRET-READBACK-ID-02",
+      "status": "CLOSED_IN_REVIEWED_SOURCE_AND_IDENTICAL_UNIT_RED_GREEN",
+      "statement": "Child config GET is wire-checked and must match original provider id before storing remote; wrong-id response is rejected. Active owner and provider-port guards reject late results."
+    },
+    {
+      "id": "M51-SECRET-CORRECTION-BASIS-03",
+      "status": "CLOSED_IN_REVIEWED_SOURCE_AND_IDENTICAL_UNIT_RED_GREEN",
+      "statement": "Explicit correction and comparison UI share correctionBasis, so a later actual parent read wins without changing the original command before the user chooses correction."
+    }
+  ],
+  "reviewed_boundaries": [
+    "New command freezes a full cloned actual readback basis; a larger parent revision takes precedence over an older child readback.",
+    "An existing unknown command is replayed with the original key/base/raw in-memory body despite newer parent state. It cannot switch write/delete kind.",
+    "ACK id/revision/presence remain checked against original command semantics, including no-op deletion; no ACK-to-current-config conversion was added.",
+    "Successful ACK followed by failed GET retains the previous actual readback separately; UI labels it the most recently read configuration and reports current readback unavailable.",
+    "A real peer update still yields 412; correction remains an explicit user choice and creates a new key, with no automatic replay at a fresh revision.",
+    "Workspace/session/provider/port owner changes invalidate late results; secret state is not written to browser persistence.",
+    "Equal-revision disagreement is not accepted as a legitimate alternate server state: the trusted owner enforces immutable revision/hash history; the UI deterministically keeps the parent on ties and still uses server CAS. No arbitrary malicious-server assurance is claimed."
+  ],
+  "test_evidence": {
+    "owner_root_relative": "m51-secret-ack-diagnosis",
+    "records": [
+      {
+        "owner_relative": "unit-02-red",
+        "receipt_sha256": "dfbd86272eeefa0ed400e613147ef35c24e9ba6a3fbc45dba8d65d3a0a554cb3",
+        "log_sha256": "1f5b308b1621b4fe691b22191f8b1044ec7eee2f7feb44e5364cc1339c918200",
+        "started_at": "2026-09-15T08:21:26.917258+00:00",
+        "finished_at": "2026-09-15T08:21:27.728268+00:00",
+        "exit_code": 1,
+        "source_before_after_equal": true,
+        "source_scope": [
+          {
+            "path": "apps/web/src/features/providers/useProviderSecret.ts",
+            "sha256": "1da103f035e6fad28d70952f321cc97f4bbee1c13c0330dd64a278d51dad3367"
+          },
+          {
+            "path": "apps/web/src/features/providers/ProviderSecretPanel.tsx",
+            "sha256": "92edc49a87c2d87cface1b24b8741f7030e1c52af761a3089b46d176176d696a"
+          },
+          {
+            "path": "apps/web/src/features/providers/providerSecret.test.tsx",
+            "sha256": "3604d531d39c5865e610fd3822bd64f248fec82001b4180fe6ae08dedf5eaf75"
+          }
+        ],
+        "archived_source_checks": [
+          {
+            "path": "apps/web/src/features/providers/useProviderSecret.ts",
+            "snapshot_sha256": "1da103f035e6fad28d70952f321cc97f4bbee1c13c0330dd64a278d51dad3367",
+            "actual_archived_bytes_match": true
+          },
+          {
+            "path": "apps/web/src/features/providers/ProviderSecretPanel.tsx",
+            "snapshot_sha256": "92edc49a87c2d87cface1b24b8741f7030e1c52af761a3089b46d176176d696a",
+            "actual_archived_bytes_match": true
+          },
+          {
+            "path": "apps/web/src/features/providers/providerSecret.test.tsx",
+            "snapshot_sha256": "3604d531d39c5865e610fd3822bd64f248fec82001b4180fe6ae08dedf5eaf75",
+            "actual_archived_bytes_match": true
+          }
+        ],
+        "summary_lines": [
+          {
+            "line": 62,
+            "text": "Test Files  1 failed (1)"
+          },
+          {
+            "line": 63,
+            "text": "Tests  2 failed | 8 passed (10)"
+          },
+          {
+            "line": 65,
+            "text": "Duration  535ms (environment 43%, tests 21%, transform 21%, import 14%)"
+          }
+        ]
+      },
+      {
+        "owner_relative": "unit-03-green",
+        "receipt_sha256": "08409e32c9e8759f767bd000d8ec55e07a76b3b120b4dbd20e4e21a7d634bbec",
+        "log_sha256": "1e611d8fc1eee7eab19023ee17fbdabafb9ece5370a76c2cd51792e0be46e928",
+        "started_at": "2026-09-15T08:22:37.662189+00:00",
+        "finished_at": "2026-09-15T08:22:38.424709+00:00",
+        "exit_code": 0,
+        "source_before_after_equal": true,
+        "source_scope": [
+          {
+            "path": "apps/web/src/features/providers/useProviderSecret.ts",
+            "sha256": "a396ded9e2c66645df24e00bb4cc7ee7973fcd21478ba4936c39033e008efe6f"
+          },
+          {
+            "path": "apps/web/src/features/providers/ProviderSecretPanel.tsx",
+            "sha256": "942b4859b2e3a7af16dc992ca04049ca5a75db0d97f61f56c4baa578e5bdca46"
+          },
+          {
+            "path": "apps/web/src/features/providers/providerSecret.test.tsx",
+            "sha256": "3604d531d39c5865e610fd3822bd64f248fec82001b4180fe6ae08dedf5eaf75"
+          }
+        ],
+        "archived_source_checks": [
+          {
+            "path": "apps/web/src/features/providers/useProviderSecret.ts",
+            "snapshot_sha256": "a396ded9e2c66645df24e00bb4cc7ee7973fcd21478ba4936c39033e008efe6f",
+            "actual_archived_bytes_match": true
+          },
+          {
+            "path": "apps/web/src/features/providers/ProviderSecretPanel.tsx",
+            "snapshot_sha256": "942b4859b2e3a7af16dc992ca04049ca5a75db0d97f61f56c4baa578e5bdca46",
+            "actual_archived_bytes_match": true
+          },
+          {
+            "path": "apps/web/src/features/providers/providerSecret.test.tsx",
+            "snapshot_sha256": "3604d531d39c5865e610fd3822bd64f248fec82001b4180fe6ae08dedf5eaf75",
+            "actual_archived_bytes_match": true
+          }
+        ],
+        "summary_lines": [
+          {
+            "line": 9,
+            "text": "Test Files  1 passed (1)"
+          },
+          {
+            "line": 10,
+            "text": "Tests  10 passed (10)"
+          },
+          {
+            "line": 12,
+            "text": "Duration  502ms (environment 44%, transform 22%, tests 19%, import 15%)"
+          }
+        ]
+      },
+      {
+        "owner_relative": "unit-05-correction-red",
+        "receipt_sha256": "19edaf496021cf2c1e87627fab9d6884066426e1d1ae8cfbcb52b7837ad8fb2d",
+        "log_sha256": "8ce73260d9c78d64127db5c00c48e4611330431626a35339af3a096589daec74",
+        "started_at": "2026-09-15T08:25:55.089968+00:00",
+        "finished_at": "2026-09-15T08:25:55.926691+00:00",
+        "exit_code": 1,
+        "source_before_after_equal": true,
+        "source_scope": [
+          {
+            "path": "apps/web/src/features/providers/useProviderSecret.ts",
+            "sha256": "a396ded9e2c66645df24e00bb4cc7ee7973fcd21478ba4936c39033e008efe6f"
+          },
+          {
+            "path": "apps/web/src/features/providers/ProviderSecretPanel.tsx",
+            "sha256": "aa5876351953f1b9691bcbd9aed6df3d182fca2f53ba934314ecda248a9f24e9"
+          },
+          {
+            "path": "apps/web/src/features/providers/providerSecret.test.tsx",
+            "sha256": "f7210c249390485367e4514b9224837781dc58bad9fe12b26062971918df1d58"
+          }
+        ],
+        "archived_source_checks": [
+          {
+            "path": "apps/web/src/features/providers/useProviderSecret.ts",
+            "snapshot_sha256": "a396ded9e2c66645df24e00bb4cc7ee7973fcd21478ba4936c39033e008efe6f",
+            "actual_archived_bytes_match": true
+          },
+          {
+            "path": "apps/web/src/features/providers/ProviderSecretPanel.tsx",
+            "snapshot_sha256": "aa5876351953f1b9691bcbd9aed6df3d182fca2f53ba934314ecda248a9f24e9",
+            "actual_archived_bytes_match": true
+          },
+          {
+            "path": "apps/web/src/features/providers/providerSecret.test.tsx",
+            "snapshot_sha256": "f7210c249390485367e4514b9224837781dc58bad9fe12b26062971918df1d58",
+            "actual_archived_bytes_match": true
+          }
+        ],
+        "summary_lines": [
+          {
+            "line": 47,
+            "text": "Test Files  1 failed (1)"
+          },
+          {
+            "line": 48,
+            "text": "Tests  1 failed | 13 passed (14)"
+          },
+          {
+            "line": 50,
+            "text": "Duration  567ms (environment 39%, tests 29%, transform 19%, import 13%)"
+          }
+        ]
+      },
+      {
+        "owner_relative": "unit-06-correction-green",
+        "receipt_sha256": "1ec6ad7c039d051d104423b265efde7ca118a69a1435fcf038819c777eabde41",
+        "log_sha256": "b27c3ca2e803f542f34ca7cb30077fb418cb97c9cb7a2cbf3850715ca1989f33",
+        "started_at": "2026-09-15T08:26:29.406387+00:00",
+        "finished_at": "2026-09-15T08:26:30.230866+00:00",
+        "exit_code": 0,
+        "source_before_after_equal": true,
+        "source_scope": [
+          {
+            "path": "apps/web/src/features/providers/useProviderSecret.ts",
+            "sha256": "df8a9c6b5f0edf0556d07f5aee0db40c4a3d3ded0b6c7e273387e0c4b07597f0"
+          },
+          {
+            "path": "apps/web/src/features/providers/ProviderSecretPanel.tsx",
+            "sha256": "5ac2859ccd94a77bfb1552a54c49585f70aaab71b4cb55a42b83f79eaed05807"
+          },
+          {
+            "path": "apps/web/src/features/providers/providerSecret.test.tsx",
+            "sha256": "f7210c249390485367e4514b9224837781dc58bad9fe12b26062971918df1d58"
+          }
+        ],
+        "archived_source_checks": [
+          {
+            "path": "apps/web/src/features/providers/useProviderSecret.ts",
+            "snapshot_sha256": "df8a9c6b5f0edf0556d07f5aee0db40c4a3d3ded0b6c7e273387e0c4b07597f0",
+            "actual_archived_bytes_match": true
+          },
+          {
+            "path": "apps/web/src/features/providers/ProviderSecretPanel.tsx",
+            "snapshot_sha256": "5ac2859ccd94a77bfb1552a54c49585f70aaab71b4cb55a42b83f79eaed05807",
+            "actual_archived_bytes_match": true
+          },
+          {
+            "path": "apps/web/src/features/providers/providerSecret.test.tsx",
+            "snapshot_sha256": "f7210c249390485367e4514b9224837781dc58bad9fe12b26062971918df1d58",
+            "actual_archived_bytes_match": true
+          }
+        ],
+        "summary_lines": [
+          {
+            "line": 9,
+            "text": "Test Files  1 passed (1)"
+          },
+          {
+            "line": 10,
+            "text": "Tests  14 passed (14)"
+          },
+          {
+            "line": 12,
+            "text": "Duration  565ms (environment 40%, tests 28%, transform 19%, import 13%)"
+          }
+        ]
+      },
+      {
+        "owner_relative": "lint-02",
+        "receipt_sha256": "782bd3c159ee33eff440e2e95121deee6ff25523fee7e48d3713053432814882",
+        "log_sha256": "b9df407f06dd3350bcb5d41df640c2603d5d70f268d57fe256fe1159da11cc68",
+        "started_at": "2026-09-15T08:26:58.359162+00:00",
+        "finished_at": "2026-09-15T08:26:58.827820+00:00",
+        "exit_code": 0,
+        "source_before_after_equal": null,
+        "source_scope": null,
+        "archived_source_checks": [],
+        "summary_lines": []
+      },
+      {
+        "owner_relative": "run-04-held-parent",
+        "receipt_sha256": "89af8094a06c41e20a933c6d6e063e9b9a1d308539815765c9fbf115cebb761d",
+        "log_sha256": "93cab388bc13a3e22300d9d50565d900b0e25b9b5106bbe6b4fb2bd461bc5e50",
+        "started_at": "2026-09-15T08:16:03.423755+00:00",
+        "finished_at": "2026-09-15T08:16:14.114765+00:00",
+        "exit_code": 1,
+        "source_before_after_equal": true,
+        "source_scope": [
+          {
+            "path": "tests/e2e/provider-settings.spec.ts",
+            "sha256": "476c294c95936c749db0513cd0bbbc0a2691acfef816d6756d4574f76bb0f466"
+          },
+          {
+            "path": "apps/web/src/features/providers/useProviderSecret.ts",
+            "sha256": "1da103f035e6fad28d70952f321cc97f4bbee1c13c0330dd64a278d51dad3367"
+          },
+          {
+            "path": "apps/web/src/features/providers/ProviderSecretPanel.tsx",
+            "sha256": "92edc49a87c2d87cface1b24b8741f7030e1c52af761a3089b46d176176d696a"
+          },
+          {
+            "path": "apps/web/src/features/providers/ProviderSettings.tsx",
+            "sha256": "48a0d86fb39c96d98bfd4751605e96bd9ce7f669266be50188e0c0af79c85c1b"
+          }
+        ],
+        "archived_source_checks": [],
+        "summary_lines": [
+          {
+            "line": 34,
+            "text": "1 failed"
+          }
+        ]
+      },
+      {
+        "owner_relative": "run-06-permanent-red",
+        "receipt_sha256": "803cf4d148f53f9c65469d8a22938008a5e9cb5ff8e48dab01c67dd82405ee93",
+        "log_sha256": "46ae9e5553dd5a5e9add989571a3c69a671b942317523319d7732a2511c60343",
+        "started_at": "2026-09-15T08:20:31.508529+00:00",
+        "finished_at": "2026-09-15T08:20:46.641364+00:00",
+        "exit_code": 1,
+        "source_before_after_equal": true,
+        "source_scope": [
+          {
+            "path": "tests/e2e/provider-settings.spec.ts",
+            "sha256": "b9a8938dd2b9b3355e83ca835dc22ec3a93070f6201bcd9223f8fc4196d9a7aa"
+          },
+          {
+            "path": "apps/web/src/features/providers/useProviderSecret.ts",
+            "sha256": "1da103f035e6fad28d70952f321cc97f4bbee1c13c0330dd64a278d51dad3367"
+          },
+          {
+            "path": "apps/web/src/features/providers/ProviderSecretPanel.tsx",
+            "sha256": "92edc49a87c2d87cface1b24b8741f7030e1c52af761a3089b46d176176d696a"
+          },
+          {
+            "path": "apps/web/src/features/providers/ProviderSettings.tsx",
+            "sha256": "48a0d86fb39c96d98bfd4751605e96bd9ce7f669266be50188e0c0af79c85c1b"
+          }
+        ],
+        "archived_source_checks": [],
+        "summary_lines": [
+          {
+            "line": 64,
+            "text": "2 failed"
+          }
+        ]
+      },
+      {
+        "owner_relative": "run-08-held-fixed",
+        "receipt_sha256": "147d9e2d4eb7019893a83a91ce3e6a9e52ce39251b99ca15481eb1d0af58695b",
+        "log_sha256": "e791bf8ea5d7c691b0e92fccbe67652a181c5dbbfc9d0ad87eb007c97014b5c1",
+        "started_at": "2026-09-15T08:23:40.130293+00:00",
+        "finished_at": "2026-09-15T08:23:45.640831+00:00",
+        "exit_code": 0,
+        "source_before_after_equal": true,
+        "source_scope": [
+          {
+            "path": "tests/e2e/provider-settings.spec.ts",
+            "sha256": "b9a8938dd2b9b3355e83ca835dc22ec3a93070f6201bcd9223f8fc4196d9a7aa"
+          },
+          {
+            "path": "apps/web/src/features/providers/useProviderSecret.ts",
+            "sha256": "a396ded9e2c66645df24e00bb4cc7ee7973fcd21478ba4936c39033e008efe6f"
+          },
+          {
+            "path": "apps/web/src/features/providers/ProviderSecretPanel.tsx",
+            "sha256": "942b4859b2e3a7af16dc992ca04049ca5a75db0d97f61f56c4baa578e5bdca46"
+          },
+          {
+            "path": "apps/web/src/features/providers/ProviderSettings.tsx",
+            "sha256": "48a0d86fb39c96d98bfd4751605e96bd9ce7f669266be50188e0c0af79c85c1b"
+          }
+        ],
+        "archived_source_checks": [],
+        "summary_lines": [
+          {
+            "line": 8,
+            "text": "1 passed (5.1s)"
+          }
+        ]
+      },
+      {
+        "owner_relative": "run-09-final-five",
+        "receipt_sha256": "29d580d8004072c0050e0557b6e87db2b393107faca5ba4808de2300faaacbc2",
+        "log_sha256": "f8212b19d889cdaccfb35b99eb1784b1e2e050a013a33ff3d780fd5bc05c50dc",
+        "started_at": "2026-09-15T08:26:30.325146+00:00",
+        "finished_at": "2026-09-15T08:26:46.500803+00:00",
+        "exit_code": 0,
+        "source_before_after_equal": true,
+        "source_scope": [
+          {
+            "path": "tests/e2e/provider-settings.spec.ts",
+            "sha256": "2c22d184af11b5790ffaa67681253e281ec20e144114c925837627eb8e269450"
+          },
+          {
+            "path": "apps/web/src/features/providers/useProviderSecret.ts",
+            "sha256": "df8a9c6b5f0edf0556d07f5aee0db40c4a3d3ded0b6c7e273387e0c4b07597f0"
+          },
+          {
+            "path": "apps/web/src/features/providers/ProviderSecretPanel.tsx",
+            "sha256": "5ac2859ccd94a77bfb1552a54c49585f70aaab71b4cb55a42b83f79eaed05807"
+          },
+          {
+            "path": "apps/web/src/features/providers/ProviderSettings.tsx",
+            "sha256": "48a0d86fb39c96d98bfd4751605e96bd9ce7f669266be50188e0c0af79c85c1b"
+          }
+        ],
+        "archived_source_checks": [],
+        "summary_lines": [
+          {
+            "line": 12,
+            "text": "5 passed (15.8s)"
+          }
+        ]
+      }
+    ],
+    "identical_unit_pairs": [
+      {
+        "red": "unit-02-red",
+        "green": "unit-03-green",
+        "identical_test_bytes": true,
+        "test_sha256": "3604d531d39c5865e610fd3822bd64f248fec82001b4180fe6ae08dedf5eaf75"
+      },
+      {
+        "red": "unit-05-correction-red",
+        "green": "unit-06-correction-green",
+        "identical_test_bytes": true,
+        "test_sha256": "f7210c249390485367e4514b9224837781dc58bad9fe12b26062971918df1d58"
+      }
+    ],
+    "final_native_case_rows": [
+      {
+        "line": 6,
+        "text": "✓  1 tests/e2e/provider-settings.spec.ts:53:1 › real settings persist control configuration and temporary secrets without claiming production generation (2.7s)"
+      },
+      {
+        "line": 7,
+        "text": "✓  2 tests/e2e/provider-settings.spec.ts:84:1 › real config lost ACK restores the original command after browser/API restart and reads later current state separately (3.8s)"
+      },
+      {
+        "line": 8,
+        "text": "✓  3 tests/e2e/provider-settings.spec.ts:112:1 › actual independent assessment policy keeps settings controls available and denies subject consent reads (4.5s)"
+      },
+      {
+        "line": 9,
+        "text": "✓  4 tests/e2e/provider-settings.spec.ts:142:41 › secret controls use an actual newer readback while the parent refresh is held; peer change false (2.1s)"
+      },
+      {
+        "line": 10,
+        "text": "✓  5 tests/e2e/provider-settings.spec.ts:142:41 › secret controls use an actual newer readback while the parent refresh is held; peer change true (2.3s)"
+      }
+    ],
+    "original_5_unit_case_prefix_bytes_preserved": true,
+    "original_3_native_case_prefix_bytes_preserved": true,
+    "original_native_assertions_and_timeouts_unchanged": true,
+    "native_red_to_final_difference": {
+      "red_test_sha256": "b9a8938dd2b9b3355e83ca835dc22ec3a93070f6201bcd9223f8fc4196d9a7aa",
+      "final_test_sha256": "2c22d184af11b5790ffaa67681253e281ec20e144114c925837627eb8e269450",
+      "difference": "Exactly one precondition label changed to match the truthful retained-readback wording; all behavior/assertion structure otherwise equal.",
+      "proof": "Reverse exactly one final label in memory and match the original run06 receipt SHA. This is reconstruction, not a contemporaneous RED source copy.",
+      "identical_test_byte_claim": false
+    },
+    "controlled_original_case_wrappers": [
+      {
+        "path": "controlled.spec.ts",
+        "sha256": "f32a2bdc7e8ef65d8be3cee8149e9202cec7c24961dba5518f196349da08874e",
+        "original_third_case_exact_byte_span_equal": true,
+        "original_third_case_sha256": "920754766e074bb7fc08566109d6a2e8c37473daef72569a96748b84ac6185fd",
+        "body_only_scope": "Exact original case span; appended observer/shutdown wrappers are separate."
+      },
+      {
+        "path": "controlled-cleanup.spec.ts",
+        "sha256": "452c92dbeb40e93828c26cd7704a41dad727d1b28757f141445d546e6445e705",
+        "original_third_case_exact_byte_span_equal": true,
+        "original_third_case_sha256": "920754766e074bb7fc08566109d6a2e8c37473daef72569a96748b84ac6185fd",
+        "body_only_scope": "Exact original case span; appended observer/shutdown wrappers are separate."
+      }
+    ],
+    "controlled_wrapper_difference": "run08 adds cleanup-only unrouteAll before runtime close. Original case body and 5000ms r3 assertion stay byte-equal; wrapper scripts are not claimed identical.",
+    "focused_scope_limit": "Owner receipts pin 3 frontend files for unit runs and 4 relevant files for native runs, not all 600 platform inputs. Root fixed-commit integration gates remain separate."
+  },
+  "actual_protocol_readback": [
+    {
+      "run": "run-04-held-parent",
+      "original_observer_sha256": "1d2edc2d0153bc9d5dde5e494dab0e3ecb2014fec3dafe7c74d6e0f959541ffe",
+      "pending_body_observers": 0,
+      "protocol_events_without_identity_or_credentials": [
+        {
+          "at_ms": 1789460168837,
+          "kind": "response",
+          "method": "POST",
+          "status": 200,
+          "revision": 2,
+          "secret_present": true,
+          "error_code": null
+        },
+        {
+          "at_ms": 1789460168840,
+          "kind": "upstream-config",
+          "ordinal": 1,
+          "status": 200,
+          "revision": 2
+        },
+        {
+          "at_ms": 1789460168842,
+          "kind": "delivered-config",
+          "ordinal": 1
+        },
+        {
+          "at_ms": 1789460168863,
+          "kind": "upstream-config",
+          "ordinal": 2,
+          "status": 200,
+          "revision": 2
+        },
+        {
+          "at_ms": 1789460168863,
+          "kind": "hold-parent-read",
+          "ordinal": 2
+        },
+        {
+          "at_ms": 1789460168884,
+          "kind": "delete_request",
+          "matches_r1_hash": true,
+          "matches_r2_hash": false
+        },
+        {
+          "at_ms": 1789460168903,
+          "kind": "release-parent-read-after-delete-response",
+          "status": 412
+        },
+        {
+          "at_ms": 1789460168904,
+          "kind": "delivered-config",
+          "ordinal": 2
+        },
+        {
+          "at_ms": 1789460168910,
+          "kind": "response",
+          "method": "DELETE",
+          "status": 412,
+          "revision": null,
+          "secret_present": null,
+          "error_code": "PROVIDER_VERSION_CONFLICT"
+        },
+        {
+          "at_ms": 1789460168919,
+          "kind": "upstream-config",
+          "ordinal": 3,
+          "status": 200,
+          "revision": 2
+        },
+        {
+          "at_ms": 1789460168920,
+          "kind": "delivered-config",
+          "ordinal": 3
+        }
+      ]
+    },
+    {
+      "run": "run-08-held-fixed",
+      "original_observer_sha256": "a32aed7c6004c64c16bb1ddba6a2ccd3206ed89a0c5db79130971c36594578b6",
+      "pending_body_observers": 0,
+      "protocol_events_without_identity_or_credentials": [
+        {
+          "at_ms": 1789460625323,
+          "kind": "response",
+          "method": "POST",
+          "status": 200,
+          "revision": 2,
+          "secret_present": true,
+          "error_code": null
+        },
+        {
+          "at_ms": 1789460625330,
+          "kind": "upstream-config",
+          "ordinal": 1,
+          "status": 200,
+          "revision": 2
+        },
+        {
+          "at_ms": 1789460625331,
+          "kind": "delivered-config",
+          "ordinal": 1
+        },
+        {
+          "at_ms": 1789460625348,
+          "kind": "upstream-config",
+          "ordinal": 2,
+          "status": 200,
+          "revision": 2
+        },
+        {
+          "at_ms": 1789460625348,
+          "kind": "hold-parent-read",
+          "ordinal": 2
+        },
+        {
+          "at_ms": 1789460625382,
+          "kind": "delete_request",
+          "matches_r1_hash": false,
+          "matches_r2_hash": true
+        },
+        {
+          "at_ms": 1789460625400,
+          "kind": "release-parent-read-after-delete-response",
+          "status": 200
+        },
+        {
+          "at_ms": 1789460625402,
+          "kind": "delivered-config",
+          "ordinal": 2
+        },
+        {
+          "at_ms": 1789460625407,
+          "kind": "response",
+          "method": "DELETE",
+          "status": 200,
+          "revision": 3,
+          "secret_present": false,
+          "error_code": null
+        },
+        {
+          "at_ms": 1789460625417,
+          "kind": "upstream-config",
+          "ordinal": 3,
+          "status": 200,
+          "revision": 3
+        },
+        {
+          "at_ms": 1789460625418,
+          "kind": "delivered-config",
+          "ordinal": 3
+        }
+      ]
+    }
+  ],
+  "actions": {
+    "repository_edits": false,
+    "tests_run_by_reviewer": false,
+    "browser_run_by_reviewer": false,
+    "network_calls": false,
+    "credentials_or_private_provider_smoke_read": false,
+    "commits_or_pushes": false
+  },
+  "limits": [
+    "This review does not turn the original e480 CI failures into successes or claim a new full-suite/CI result.",
+    "Separate user-authorized vendor smoke and README wording are outside this review; they do not prove platform generation.",
+    "The initial whole-suffix wrapper comparison included appended observation code; the final comparison uses the exact original test body byte span and separately records wrapper changes."
+  ],
+  "source_bindings": [
+    {
+      "path": "apps/web/src/features/providers/useProviderSecret.ts",
+      "sha256": "df8a9c6b5f0edf0556d07f5aee0db40c4a3d3ded0b6c7e273387e0c4b07597f0",
+      "bytes": 6471,
+      "commit_bytes_equal": true,
+      "snapshot": "final-source/apps/web/src/features/providers/useProviderSecret.ts.txt"
+    },
+    {
+      "path": "apps/web/src/features/providers/ProviderSecretPanel.tsx",
+      "sha256": "5ac2859ccd94a77bfb1552a54c49585f70aaab71b4cb55a42b83f79eaed05807",
+      "bytes": 3173,
+      "commit_bytes_equal": true,
+      "snapshot": "final-source/apps/web/src/features/providers/ProviderSecretPanel.tsx.txt"
+    },
+    {
+      "path": "apps/web/src/features/providers/providerSecret.test.tsx",
+      "sha256": "f7210c249390485367e4514b9224837781dc58bad9fe12b26062971918df1d58",
+      "bytes": 13645,
+      "commit_bytes_equal": true,
+      "snapshot": "final-source/apps/web/src/features/providers/providerSecret.test.tsx.txt"
+    },
+    {
+      "path": "tests/e2e/provider-settings.spec.ts",
+      "sha256": "2c22d184af11b5790ffaa67681253e281ec20e144114c925837627eb8e269450",
+      "bytes": 23258,
+      "commit_bytes_equal": true,
+      "snapshot": "final-source/tests/e2e/provider-settings.spec.ts.txt"
+    }
+  ]
+}

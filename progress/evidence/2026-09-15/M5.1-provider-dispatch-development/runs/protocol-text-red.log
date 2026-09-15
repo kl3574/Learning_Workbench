@@ -1,0 +1,40 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_ test_chat_preserves_whitespace_and_unknown_usage_without_synthetic_eof_success _
+
+    def test_chat_preserves_whitespace_and_unknown_usage_without_synthetic_eof_success() -> None:
+        data = (b'data: {"id":"c1","model":"test-byte-model","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}\r\n\r\n'
+                b'data: {"id":"c1","model":"test-byte-model","choices":[{"index":0,"delta":{"content":" \\n"},"finish_reason":null}]}\n\n')
+>       events = collect(data)
+                 ^^^^^^^^^^^^^
+
+tests/unit/test_provider_protocol.py:19: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/test_provider_protocol.py:13: in collect
+    return asyncio.run(run())
+           ^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/unit/test_provider_protocol.py:12: in run
+    return [event async for event in checked_stream(chunks(), adapter, 'test-byte-model')]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+chunks = <async_generator object collect.<locals>.chunks at 0x7b4c37d87ed0>
+adapter = 'compatible_chat', model = 'test-byte-model'
+
+    async def checked_stream(chunks, adapter, model):
+>       raise NotImplementedError('Checked stream normalization is not implemented.')
+E       NotImplementedError: Checked stream normalization is not implemented.
+
+services/api/app/infrastructure/provider_sse.py:3: NotImplementedError
+=========================== short test summary info ============================
+FAILED tests/unit/test_provider_protocol.py::test_chat_preserves_whitespace_and_unknown_usage_without_synthetic_eof_success
+1 failed in 0.03s

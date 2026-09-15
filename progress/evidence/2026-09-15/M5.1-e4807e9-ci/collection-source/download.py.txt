@@ -1,0 +1,23 @@
+from pathlib import Path
+from datetime import datetime,UTC
+from concurrent.futures import ThreadPoolExecutor
+import subprocess,json,hashlib
+p=Path('<HOME>/.cache/learning-workbench-acceptance/m51-ci-e4807e9')
+history=sorted(path for path in p.glob('checks-*.json') if '.raw.' not in path.name and '.error.' not in path.name)
+latest=json.loads(history[-1].read_text()); specs=[]
+for check in latest['checks']:
+    if check['status']=='completed':
+        job=check['id']
+        specs.extend([(f'job-{job}.raw.json',f'repos/kl3574/Learning_Workbench/actions/jobs/{job}'),(f'job-{job}.log',f'repos/kl3574/Learning_Workbench/actions/jobs/{job}/logs')])
+def fetch(pair):
+    name,endpoint=pair; target=p/name
+    if target.exists():return None
+    start=datetime.now(UTC).isoformat();r=subprocess.run(['gh','api',endpoint],capture_output=True)
+    receipt={'endpoint':endpoint,'started_at':start,'read_at':datetime.now(UTC).isoformat(),'exit_code':r.returncode,'raw_sha256':hashlib.sha256(r.stdout).hexdigest(),'bytes':len(r.stdout),'stderr':r.stderr.decode()}
+    if r.returncode:
+        error=p/(name+'.error-'+datetime.now(UTC).strftime('%H%M%S')+'.json');error.write_text(json.dumps(receipt,indent=2)+'\n');return {'file':name,'error':r.returncode}
+    with target.open('xb') as out:out.write(r.stdout)
+    (p/(name+'.receipt.json')).write_text(json.dumps(receipt,indent=2)+'\n')
+    return {'file':name,'sha256':receipt['raw_sha256']}
+with ThreadPoolExecutor(max_workers=4) as pool:results=[result for result in pool.map(fetch,specs) if result]
+print(json.dumps({'read_from':history[-1].name,'new_downloads':results}))

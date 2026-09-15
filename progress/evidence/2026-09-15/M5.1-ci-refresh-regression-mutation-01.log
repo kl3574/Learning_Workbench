@@ -1,0 +1,36 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/providers/ProviderSettings.test.tsx -t a same-provider refresh must not discard an unacknowledged temporary secret
+
+
+ RUN  v5.0.0 <REPO>/apps/web
+
+ ❯ src/features/providers/ProviderSettings.test.tsx (7 tests | 1 failed | 6 skipped) 185ms
+   × a same-provider refresh must not discard an unacknowledged temporary secret 184ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/providers/ProviderSettings.test.tsx > a same-provider refresh must not discard an unacknowledged temporary secret
+AssertionError: expected <input …(4)></input> to have property "value" with value 'synthetic-retained'
+
+- Expected
++ Received
+
+- synthetic-retained
+
+ ❯ src/features/providers/ProviderSettings.test.tsx:47:40
+     45|   fireEvent.click(screen.getByRole('button', { name: '重新读取配置与能力' }))
+     46|   await waitFor(() => expect(fixture.port.config).toHaveBeenCalledTime…
+     47|   expect(screen.getByLabelText('新秘密')).toHaveProperty('value', 'synthe…
+       |                                        ^
+     48|   fireEvent.click(screen.getByRole('button', { name: '重试原秘密写入命令' }))
+     49|   await waitFor(() => expect(fixture.port.saveSecret).toHaveBeenCalled…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 6 skipped (7)
+   Start at  15:26:56
+   Duration  666ms (environment 33%, tests 32%, transform 24%, import 12%)
+

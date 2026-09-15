@@ -1,0 +1,8 @@
+Exploratory scoped typecheck: tool-output transcription, not an original shell log file.
+Command: uv run --frozen mypy services/api/app/application/providers.py services/api/app/application/consents.py services/api/app/application/provider_backup.py services/api/app/infrastructure/provider_repository.py services/api/app/infrastructure/consent_repository.py services/api/app/infrastructure/provider_secret_store.py
+Actual tool result exit_code=1:
+services/api/app/infrastructure/consent_repository.py:335: error: Incompatible types in assignment (expression has type "list[Never]", variable has type "dict[Any, bytes]")  [assignment]
+services/api/app/infrastructure/consent_repository.py:341: error: "dict[Any, bytes]" has no attribute "append"  [attr-defined]
+services/api/app/application/consents.py:227: error: Argument "status" to "ConsentView" has incompatible type "str"; expected "Literal['active', 'revoked', 'expired']"  [arg-type]
+Found 3 errors in 2 files (checked 6 source files)
+These errors were corrected before owned-types-02 / owned-types-03 actual PASS logs. This transcription has no exact before-source snapshot and does not invent one.
