@@ -155,7 +155,7 @@ def test_infrastructure_errors_are_sanitized(runtime, monkeypatch, caplog):
     login(application, client, settings)
     secret = "/private/person/database.sqlite secret-key-value"
 
-    def fail():
+    def fail(*, busy_timeout_ms=None):
         raise sqlite3.OperationalError(secret)
 
     monkeypatch.setattr(application.state.database, "connect", fail)

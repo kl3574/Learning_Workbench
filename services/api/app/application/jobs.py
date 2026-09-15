@@ -89,6 +89,14 @@ class JobService:
             from .tutor import TutorService
             from .tutor_context import ContextService
             return TutorService(self.database, ContextService(self.database))
+        if row['kind'] == 'authoring':
+            from .authoring import AuthoringService
+            return AuthoringService(self.database)
+        if row['kind'] == 'authoring_numeric_check':
+            from .authoring_context import AuthoringContext
+            from .authoring_numeric_service import NumericService
+            from ..infrastructure.authoring_numeric_runtime import NumericRuntime
+            return NumericService(self.database, AuthoringContext(self.database), NumericRuntime())
         raise ApiError(409, "JOB_KIND_UNAVAILABLE", "此任务类型尚未实现受控读取。")
 
     def job(self, identity, identifier):

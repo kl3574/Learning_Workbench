@@ -1,6 +1,6 @@
-// Generated from PRODUCT_DESIGN.md v3.0.5 and actual runtime OpenAPI; do not edit.
-// spec_sha256: 2bfd471933be478a7cac51363a0482a87c81ec113c3e6cbdec88cfd139d43f37
-import type { AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, BlockReadResponse, BootstrapRequest, BootstrapResponse, ConceptStateResponse, ConsentCreate, ConsentCreateAck, ConsentPage, ConsentPreviewWrite, ConsentProposalView, ConsentRevoke, ContentRef, Course, DirectorySearchResponse, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearnerProfile, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, OutlineResponse, PageAssessment, PageCourse, PageEvidence, PageNote, PagePracticeSet, PageRevision, PageRoute, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ProfileWrite, ProviderCapabilitiesResponse, ProviderConfigAck, ProviderConfigView, ProviderConfigWrite, ProviderSecretAck, ProviderSecretWrite, ReadinessResponse, RecommendationDecisionWrite, RecommendationPage, RegradeRequest, ResponsesWrite, RetrievalIndexOverview, RetrievalIndexRebuildWrite, RetrievalIndexScopeStatus, RetrievalQueryView, RetrievalQueryWrite, RoleRequest, Route, RouteCompletionRequest, SessionResponse, SourceResponse, TutorAnswerDeltaEvent, TutorApprovalRequiredEvent, TutorCancelledEvent, TutorCitationEvent, TutorCompletedEvent, TutorContextReadyEvent, TutorFailedEvent, TutorMessagePage, TutorQueuedEvent, TutorRetrievalCompletedEvent, TutorRunCancel, TutorRunControlView, TutorRunCreate, TutorRunView, TutorThreadCreate, TutorThreadPage, TutorThreadView, TutorUsageEvent, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
+// Generated from PRODUCT_DESIGN.md v3.0.6 and actual runtime OpenAPI; do not edit.
+// spec_sha256: 30220c34fe7312887f5bcb1c67406c9638f1719ff3ed7bc9e95d7d5085b5d924
+import type { ApprovalDecision, AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, AuthoringDraftView, AuthoringJobPage, AuthoringJobView, AuthoringPrepareWrite, BlockReadResponse, BootstrapRequest, BootstrapResponse, ConceptStateResponse, ConsentCreate, ConsentCreateAck, ConsentPage, ConsentPreviewWrite, ConsentProposalView, ConsentRevoke, ContentRef, Course, DirectorySearchResponse, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearnerProfile, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, NumericCheckDecisionAck, NumericCheckPreviewWrite, NumericCheckView, OutlineResponse, PageAssessment, PageCourse, PageEvidence, PageNote, PagePracticeSet, PageRevision, PageRoute, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ProfileWrite, ProviderCapabilitiesResponse, ProviderConfigAck, ProviderConfigView, ProviderConfigWrite, ProviderSecretAck, ProviderSecretWrite, ReadinessResponse, RecommendationDecisionWrite, RecommendationPage, RegradeRequest, ResponsesWrite, RetrievalIndexOverview, RetrievalIndexRebuildWrite, RetrievalIndexScopeStatus, RetrievalQueryView, RetrievalQueryWrite, RoleRequest, Route, RouteCompletionRequest, SessionResponse, SourceResponse, TutorAnswerDeltaEvent, TutorApprovalRequiredEvent, TutorCancelledEvent, TutorCitationEvent, TutorCompletedEvent, TutorContextReadyEvent, TutorFailedEvent, TutorMessagePage, TutorQueuedEvent, TutorRetrievalCompletedEvent, TutorRunCancel, TutorRunControlView, TutorRunCreate, TutorRunView, TutorThreadCreate, TutorThreadPage, TutorThreadView, TutorUsageEvent, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
 
 import type { RetrievalIndexStatusQuery } from "./retrieval-ports-binding";
 export interface ApiEndpointMap {
@@ -14,6 +14,13 @@ export interface ApiEndpointMap {
   "PUT /api/v1/attempts/{id}/responses": { request: ResponsesWrite; response: AttemptSnapshot; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/attempts/{id}/result": { request: undefined; response: AssessmentGradingResult | AssessmentGradingJob; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
   "POST /api/v1/attempts/{id}/submit": { request: AttemptSubmit; response: AttemptSnapshot; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
+  "GET /api/v1/authoring/drafts/{id}": { request: undefined; response: AuthoringDraftView; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
+  "POST /api/v1/authoring/drafts/{id}/numeric-checks": { request: NumericCheckPreviewWrite; response: NumericCheckView; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
+  "GET /api/v1/authoring/jobs": { request: undefined; response: AuthoringJobPage; headers: null; parameters: { query?: { "cursor"?: string; "limit"?: number } }; parametersRequired: false };
+  "POST /api/v1/authoring/jobs": { request: AuthoringPrepareWrite; response: JobRef; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
+  "GET /api/v1/authoring/jobs/{id}": { request: undefined; response: AuthoringJobView; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
+  "GET /api/v1/authoring/numeric-checks/{id}": { request: undefined; response: NumericCheckView; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
+  "POST /api/v1/authoring/numeric-checks/{id}/decision": { request: ApprovalDecision; response: NumericCheckDecisionAck; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/blocks/{id}": { request: undefined; response: BlockReadResponse; headers: null; parameters: { path: { "id": string }; query: { "include_provenance"?: boolean; "revision": number } }; parametersRequired: true };
   "GET /api/v1/blocks/{id}/body": { request: undefined; response: string; headers: null; parameters: { path: { "id": string }; query: { "revision": number } }; parametersRequired: true };
   "GET /api/v1/consents": { request: undefined; response: ConsentPage; headers: null; parameters: { query?: { "consent_id"?: (string | null); "cursor"?: (string | null); "limit"?: number } }; parametersRequired: false };
@@ -237,6 +244,112 @@ export const API_ENDPOINTS = {
   "POST /api/v1/attempts/{id}/submit": {
     "method": "POST",
     "path": "/api/v1/attempts/{id}/submit",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
+  "GET /api/v1/authoring/drafts/{id}": {
+    "method": "GET",
+    "path": "/api/v1/authoring/drafts/{id}",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
+  "POST /api/v1/authoring/drafts/{id}/numeric-checks": {
+    "method": "POST",
+    "path": "/api/v1/authoring/drafts/{id}/numeric-checks",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
+  "GET /api/v1/authoring/jobs": {
+    "method": "GET",
+    "path": "/api/v1/authoring/jobs",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
+    "queryParameters": [
+      {
+        "name": "cursor",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      }
+    ]
+  },
+  "POST /api/v1/authoring/jobs": {
+    "method": "POST",
+    "path": "/api/v1/authoring/jobs",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
+    "queryParameters": []
+  },
+  "GET /api/v1/authoring/jobs/{id}": {
+    "method": "GET",
+    "path": "/api/v1/authoring/jobs/{id}",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
+  "GET /api/v1/authoring/numeric-checks/{id}": {
+    "method": "GET",
+    "path": "/api/v1/authoring/numeric-checks/{id}",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
+  "POST /api/v1/authoring/numeric-checks/{id}/decision": {
+    "method": "POST",
+    "path": "/api/v1/authoring/numeric-checks/{id}/decision",
     "responseKind": "json",
     "requestKind": "json",
     "multipartFields": [],

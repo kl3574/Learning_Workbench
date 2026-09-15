@@ -92,6 +92,21 @@ def check_csrf(request: Request, identity: SessionIdentity) -> None:
         raise ApiError(403, "CSRF_INVALID", "请求未通过本机会话保护校验。")
 
 
+def author_execution_identity(connection: sqlite3.Connection, workspace_id: str, actor_id: str) -> SessionIdentity:
+    """Reload an approved creator's actual session for a private author worker.
+
+    This grants no transport permission: the source's original consent, Policy,
+    material and live job lease are checked independently before dispatch.
+    """
+    if not connection.in_transaction:
+        raise ApiError(409, 'TRANSACTION_REQUIRED', '执行身份需要当前事务核验。')
+    row = connection.execute("SELECT id,workspace_id,role,expires_at FROM local_sessions WHERE id=? AND workspace_id=? AND revoked_at IS NULL AND expires_at>?",
+                             (actor_id, workspace_id, utc_now())).fetchone()
+    if row is None or row['role'] != 'author':
+        raise ApiError(403, 'POLICY_DENIED', '本次批准的作者会话已失效或身份已改变。')
+    return SessionIdentity(row['id'], row['workspace_id'], row['role'], '', row['expires_at'])
+
+
 def active_independent_attempt(connection: sqlite3.Connection, workspace_id: str) -> str | None:
     from ..application.assessment_access import AssessmentAccess
     return AssessmentAccess(connection, workspace_id).active_independent()

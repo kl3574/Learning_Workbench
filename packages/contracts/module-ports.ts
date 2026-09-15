@@ -31,7 +31,7 @@ export interface ContentPort<D extends DTOMap> {
  getLesson(ctx:AuthContext, ref:ContentRef):Promise<D['Lesson']>;
  getBlock(ctx:AuthContext, ref:ContentRef):Promise<D['ContentBlock']>;
  createDraft(ctx:WriteContext, base:ContentRef|null):Promise<{draftId:string;revision:number}>;
- publish(ctx:WriteContext, ref:ContentRef, receiptId:string):Promise<ContentRef>;
+ publish(ctx:WriteContext, candidate:DraftCandidate, receiptId:string):Promise<ContentRef>;
 }
 export interface RoutePort<D extends DTOMap> {
  save(ctx:WriteContext, route:D['Route']):Promise<ContentRef>;
@@ -126,9 +126,24 @@ export interface RecommendationPort<R extends RecommendationDTOMap> {
  decide(ctx:WriteContext, id:string, request:R['RecommendationDecisionWrite'], expectedDecisionSha256:string):Promise<R['MutationAck']>;
 }
 export interface NotesPort<D extends DTOMap> {save(ctx:WriteContext, note:D['Note']):Promise<ContentRef>}
+export interface DraftCandidate {draft_id:string;draft_revision:number;entity:Entity;candidate_sha256:string}
+export interface AuthoringApplicationDTOMap {
+ AuthoringPrepareWrite:unknown; AuthoringJobPage:unknown; AuthoringJobView:unknown;
+ AuthoringDraftView:unknown; NumericCheckPreviewWrite:unknown; NumericCheckView:unknown;
+ NumericCheckDecisionAck:unknown; ApprovalDecision:unknown;
+}
+export interface AuthoringApplicationPort<A extends AuthoringApplicationDTOMap> {
+ prepareJob(ctx:WriteContext,request:A['AuthoringPrepareWrite']):Promise<JobRef>;
+ listJobs(ctx:AuthContext,query:{cursor?:string;limit?:number}):Promise<A['AuthoringJobPage']>;
+ readJob(ctx:AuthContext,id:string):Promise<A['AuthoringJobView']>;
+ readDraft(ctx:AuthContext,id:string):Promise<A['AuthoringDraftView']>;
+ previewNumeric(ctx:WriteContext,draftId:string,request:A['NumericCheckPreviewWrite']):Promise<A['NumericCheckView']>;
+ readNumeric(ctx:AuthContext,id:string):Promise<A['NumericCheckView']>;
+ decideNumeric(ctx:WriteContext,id:string,request:A['ApprovalDecision']):Promise<A['NumericCheckDecisionAck']>;
+}
 export interface AuthoringPort<D extends DTOMap> {
  generate(ctx:WriteContext, request:D['AuthoringRequest']):Promise<JobRef>;
- review(ctx:WriteContext, ref:ContentRef):Promise<D['ReviewReceipt']>;
+ review(ctx:WriteContext, candidate:DraftCandidate):Promise<D['ReviewReceipt']>;
 }
 export interface CodexBrokerPort<D extends DTOMap> {
  start(ctx:WriteContext, sandboxRootId:string):Promise<{sessionId:string}>;

@@ -1,0 +1,3927 @@
+{
+  "AuthoringBlockRef": {
+    "additionalProperties": false,
+    "properties": {
+      "entity": {
+        "const": "block",
+        "title": "Entity",
+        "type": "string"
+      },
+      "id": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+        "title": "Id",
+        "type": "string"
+      },
+      "revision": {
+        "minimum": 1,
+        "title": "Revision",
+        "type": "integer"
+      },
+      "sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Sha256",
+        "type": "string"
+      }
+    },
+    "required": [
+      "entity",
+      "id",
+      "revision",
+      "sha256"
+    ],
+    "title": "AuthoringBlockRef",
+    "type": "object"
+  },
+  "AuthoringCandidate": {
+    "additionalProperties": false,
+    "properties": {
+      "draft_id": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+        "title": "Draft Id",
+        "type": "string"
+      },
+      "draft_revision": {
+        "minimum": 1,
+        "title": "Draft Revision",
+        "type": "integer"
+      },
+      "entity": {
+        "const": "block",
+        "title": "Entity",
+        "type": "string"
+      },
+      "candidate_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Candidate Sha256",
+        "type": "string"
+      }
+    },
+    "required": [
+      "draft_id",
+      "draft_revision",
+      "entity",
+      "candidate_sha256"
+    ],
+    "title": "AuthoringCandidate",
+    "type": "object"
+  },
+  "AuthoringPrepareWrite": {
+    "$defs": {
+      "AuthoringBlockRef": {
+        "additionalProperties": false,
+        "properties": {
+          "entity": {
+            "const": "block",
+            "title": "Entity",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity",
+          "id",
+          "revision",
+          "sha256"
+        ],
+        "title": "AuthoringBlockRef",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "topic": {
+        "maxLength": 4000,
+        "minLength": 1,
+        "title": "Topic",
+        "type": "string"
+      },
+      "prerequisites": {
+        "items": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "type": "string"
+        },
+        "maxItems": 32,
+        "title": "Prerequisites",
+        "type": "array"
+      },
+      "objectives": {
+        "items": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "type": "string"
+        },
+        "maxItems": 32,
+        "minItems": 1,
+        "title": "Objectives",
+        "type": "array"
+      },
+      "proof_policy": {
+        "enum": [
+          "full",
+          "declared_dependencies"
+        ],
+        "title": "Proof Policy",
+        "type": "string"
+      },
+      "output_kind": {
+        "const": "worked_example",
+        "title": "Output Kind",
+        "type": "string"
+      },
+      "source_refs": {
+        "items": {
+          "$ref": "#/$defs/AuthoringBlockRef"
+        },
+        "maxItems": 8,
+        "title": "Source Refs",
+        "type": "array"
+      },
+      "provider_id": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+        "title": "Provider Id",
+        "type": "string"
+      }
+    },
+    "required": [
+      "topic",
+      "prerequisites",
+      "objectives",
+      "proof_policy",
+      "output_kind",
+      "source_refs",
+      "provider_id"
+    ],
+    "title": "AuthoringPrepareWrite",
+    "type": "object"
+  },
+  "NumericVariable": {
+    "additionalProperties": false,
+    "properties": {
+      "name": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+        "title": "Name",
+        "type": "string"
+      },
+      "value": {
+        "title": "Value",
+        "type": "number"
+      },
+      "unit": {
+        "maxLength": 64,
+        "minLength": 1,
+        "title": "Unit",
+        "type": "string"
+      }
+    },
+    "required": [
+      "name",
+      "value",
+      "unit"
+    ],
+    "title": "NumericVariable",
+    "type": "object"
+  },
+  "NumericAssertion": {
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+        "title": "Id",
+        "type": "string"
+      },
+      "expression": {
+        "maxLength": 512,
+        "minLength": 1,
+        "title": "Expression",
+        "type": "string"
+      },
+      "expected": {
+        "title": "Expected",
+        "type": "number"
+      },
+      "atol": {
+        "minimum": 0,
+        "title": "Atol",
+        "type": "number"
+      },
+      "rtol": {
+        "minimum": 0,
+        "title": "Rtol",
+        "type": "number"
+      },
+      "unit": {
+        "maxLength": 64,
+        "minLength": 1,
+        "title": "Unit",
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "expression",
+      "expected",
+      "atol",
+      "rtol",
+      "unit"
+    ],
+    "title": "NumericAssertion",
+    "type": "object"
+  },
+  "NumericPlan": {
+    "$defs": {
+      "NumericAssertion": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "expression": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Expression",
+            "type": "string"
+          },
+          "expected": {
+            "title": "Expected",
+            "type": "number"
+          },
+          "atol": {
+            "minimum": 0,
+            "title": "Atol",
+            "type": "number"
+          },
+          "rtol": {
+            "minimum": 0,
+            "title": "Rtol",
+            "type": "number"
+          },
+          "unit": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "expression",
+          "expected",
+          "atol",
+          "rtol",
+          "unit"
+        ],
+        "title": "NumericAssertion",
+        "type": "object"
+      },
+      "NumericVariable": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          },
+          "unit": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "value",
+          "unit"
+        ],
+        "title": "NumericVariable",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "version": {
+        "const": "finite-arithmetic-v1",
+        "title": "Version",
+        "type": "string"
+      },
+      "variables": {
+        "items": {
+          "$ref": "#/$defs/NumericVariable"
+        },
+        "maxItems": 32,
+        "title": "Variables",
+        "type": "array"
+      },
+      "assertions": {
+        "items": {
+          "$ref": "#/$defs/NumericAssertion"
+        },
+        "maxItems": 32,
+        "minItems": 1,
+        "title": "Assertions",
+        "type": "array"
+      },
+      "seed": {
+        "title": "Seed",
+        "type": "null"
+      }
+    },
+    "required": [
+      "version",
+      "variables",
+      "assertions",
+      "seed"
+    ],
+    "title": "NumericPlan",
+    "type": "object"
+  },
+  "WorkedExampleSymbol": {
+    "additionalProperties": false,
+    "properties": {
+      "name": {
+        "minLength": 1,
+        "title": "Name",
+        "type": "string"
+      },
+      "tex": {
+        "minLength": 1,
+        "title": "Tex",
+        "type": "string"
+      },
+      "domain": {
+        "minLength": 1,
+        "title": "Domain",
+        "type": "string"
+      },
+      "dimension": {
+        "minLength": 1,
+        "title": "Dimension",
+        "type": "string"
+      }
+    },
+    "required": [
+      "name",
+      "tex",
+      "domain",
+      "dimension"
+    ],
+    "title": "WorkedExampleSymbol",
+    "type": "object"
+  },
+  "WorkedExamplePayload": {
+    "$defs": {
+      "AuthoringBlockRef": {
+        "additionalProperties": false,
+        "properties": {
+          "entity": {
+            "const": "block",
+            "title": "Entity",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity",
+          "id",
+          "revision",
+          "sha256"
+        ],
+        "title": "AuthoringBlockRef",
+        "type": "object"
+      },
+      "NumericAssertion": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "expression": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Expression",
+            "type": "string"
+          },
+          "expected": {
+            "title": "Expected",
+            "type": "number"
+          },
+          "atol": {
+            "minimum": 0,
+            "title": "Atol",
+            "type": "number"
+          },
+          "rtol": {
+            "minimum": 0,
+            "title": "Rtol",
+            "type": "number"
+          },
+          "unit": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "expression",
+          "expected",
+          "atol",
+          "rtol",
+          "unit"
+        ],
+        "title": "NumericAssertion",
+        "type": "object"
+      },
+      "NumericPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "const": "finite-arithmetic-v1",
+            "title": "Version",
+            "type": "string"
+          },
+          "variables": {
+            "items": {
+              "$ref": "#/$defs/NumericVariable"
+            },
+            "maxItems": 32,
+            "title": "Variables",
+            "type": "array"
+          },
+          "assertions": {
+            "items": {
+              "$ref": "#/$defs/NumericAssertion"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Assertions",
+            "type": "array"
+          },
+          "seed": {
+            "title": "Seed",
+            "type": "null"
+          }
+        },
+        "required": [
+          "version",
+          "variables",
+          "assertions",
+          "seed"
+        ],
+        "title": "NumericPlan",
+        "type": "object"
+      },
+      "NumericVariable": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          },
+          "unit": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "value",
+          "unit"
+        ],
+        "title": "NumericVariable",
+        "type": "object"
+      },
+      "WorkedExampleSymbol": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "tex": {
+            "minLength": 1,
+            "title": "Tex",
+            "type": "string"
+          },
+          "domain": {
+            "minLength": 1,
+            "title": "Domain",
+            "type": "string"
+          },
+          "dimension": {
+            "minLength": 1,
+            "title": "Dimension",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "tex",
+          "domain",
+          "dimension"
+        ],
+        "title": "WorkedExampleSymbol",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "version": {
+        "const": "worked-example-candidate-v1",
+        "title": "Version",
+        "type": "string"
+      },
+      "kind": {
+        "const": "worked_example",
+        "title": "Kind",
+        "type": "string"
+      },
+      "title": {
+        "maxLength": 300,
+        "minLength": 1,
+        "title": "Title",
+        "type": "string"
+      },
+      "body_markdown": {
+        "maxLength": 400000,
+        "minLength": 1,
+        "title": "Body Markdown",
+        "type": "string"
+      },
+      "symbols": {
+        "items": {
+          "$ref": "#/$defs/WorkedExampleSymbol"
+        },
+        "maxItems": 64,
+        "minItems": 1,
+        "title": "Symbols",
+        "type": "array"
+      },
+      "declared_source_refs": {
+        "items": {
+          "$ref": "#/$defs/AuthoringBlockRef"
+        },
+        "maxItems": 8,
+        "title": "Declared Source Refs",
+        "type": "array"
+      },
+      "numeric_plan": {
+        "$ref": "#/$defs/NumericPlan"
+      }
+    },
+    "required": [
+      "version",
+      "kind",
+      "title",
+      "body_markdown",
+      "symbols",
+      "declared_source_refs",
+      "numeric_plan"
+    ],
+    "title": "WorkedExamplePayload",
+    "type": "object"
+  },
+  "AuthoringInputMaterial": {
+    "$defs": {
+      "AuthoringBlockRef": {
+        "additionalProperties": false,
+        "properties": {
+          "entity": {
+            "const": "block",
+            "title": "Entity",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity",
+          "id",
+          "revision",
+          "sha256"
+        ],
+        "title": "AuthoringBlockRef",
+        "type": "object"
+      },
+      "Citation": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "locator": {
+            "title": "Locator",
+            "type": "string"
+          },
+          "source_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source Sha256"
+          },
+          "verification": {
+            "enum": [
+              "verified",
+              "unverified",
+              "user_supplied"
+            ],
+            "title": "Verification",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "locator",
+          "verification"
+        ],
+        "title": "Citation",
+        "type": "object"
+      },
+      "RetrievalProvenance": {
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "enum": [
+              "frozen",
+              "unresolved"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "original": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/RetrievalRetainedSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/$defs/Citation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "unresolved_citation_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "title": "Unresolved Citation Ids",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/$defs/Warning"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "state",
+          "original",
+          "citations",
+          "unresolved_citation_ids",
+          "warnings"
+        ],
+        "title": "RetrievalProvenance",
+        "type": "object"
+      },
+      "RetrievalRetainedSource": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "media_type": {
+            "title": "Media Type",
+            "type": "string"
+          },
+          "size": {
+            "minimum": 0,
+            "title": "Size",
+            "type": "integer"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          },
+          "rights": {
+            "title": "Rights",
+            "type": "string"
+          },
+          "parser_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parser Version"
+          }
+        },
+        "required": [
+          "id",
+          "media_type",
+          "size",
+          "sha256",
+          "rights",
+          "parser_version"
+        ],
+        "title": "RetrievalRetainedSource",
+        "type": "object"
+      },
+      "Warning": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "locator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Locator"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "warning",
+              "error"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "severity"
+        ],
+        "title": "Warning",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "ref": {
+        "$ref": "#/$defs/AuthoringBlockRef"
+      },
+      "title": {
+        "minLength": 1,
+        "title": "Title",
+        "type": "string"
+      },
+      "body_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Body Sha256",
+        "type": "string"
+      },
+      "body_bytes": {
+        "minimum": 1,
+        "title": "Body Bytes",
+        "type": "integer"
+      },
+      "material_review": {
+        "const": "unreviewed",
+        "title": "Material Review",
+        "type": "string"
+      },
+      "provenance": {
+        "$ref": "#/$defs/RetrievalProvenance"
+      }
+    },
+    "required": [
+      "ref",
+      "title",
+      "body_sha256",
+      "body_bytes",
+      "material_review",
+      "provenance"
+    ],
+    "title": "AuthoringInputMaterial",
+    "type": "object"
+  },
+  "AuthoringPreparationSummary": {
+    "$defs": {
+      "AuthoringBlockRef": {
+        "additionalProperties": false,
+        "properties": {
+          "entity": {
+            "const": "block",
+            "title": "Entity",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity",
+          "id",
+          "revision",
+          "sha256"
+        ],
+        "title": "AuthoringBlockRef",
+        "type": "object"
+      },
+      "AuthoringInputMaterial": {
+        "additionalProperties": false,
+        "properties": {
+          "ref": {
+            "$ref": "#/$defs/AuthoringBlockRef"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "body_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Body Sha256",
+            "type": "string"
+          },
+          "body_bytes": {
+            "minimum": 1,
+            "title": "Body Bytes",
+            "type": "integer"
+          },
+          "material_review": {
+            "const": "unreviewed",
+            "title": "Material Review",
+            "type": "string"
+          },
+          "provenance": {
+            "$ref": "#/$defs/RetrievalProvenance"
+          }
+        },
+        "required": [
+          "ref",
+          "title",
+          "body_sha256",
+          "body_bytes",
+          "material_review",
+          "provenance"
+        ],
+        "title": "AuthoringInputMaterial",
+        "type": "object"
+      },
+      "Citation": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "locator": {
+            "title": "Locator",
+            "type": "string"
+          },
+          "source_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source Sha256"
+          },
+          "verification": {
+            "enum": [
+              "verified",
+              "unverified",
+              "user_supplied"
+            ],
+            "title": "Verification",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "locator",
+          "verification"
+        ],
+        "title": "Citation",
+        "type": "object"
+      },
+      "RetrievalProvenance": {
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "enum": [
+              "frozen",
+              "unresolved"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "original": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/RetrievalRetainedSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/$defs/Citation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "unresolved_citation_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "title": "Unresolved Citation Ids",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/$defs/Warning"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "state",
+          "original",
+          "citations",
+          "unresolved_citation_ids",
+          "warnings"
+        ],
+        "title": "RetrievalProvenance",
+        "type": "object"
+      },
+      "RetrievalRetainedSource": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "media_type": {
+            "title": "Media Type",
+            "type": "string"
+          },
+          "size": {
+            "minimum": 0,
+            "title": "Size",
+            "type": "integer"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          },
+          "rights": {
+            "title": "Rights",
+            "type": "string"
+          },
+          "parser_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parser Version"
+          }
+        },
+        "required": [
+          "id",
+          "media_type",
+          "size",
+          "sha256",
+          "rights",
+          "parser_version"
+        ],
+        "title": "RetrievalRetainedSource",
+        "type": "object"
+      },
+      "Warning": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "locator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Locator"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "warning",
+              "error"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "severity"
+        ],
+        "title": "Warning",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "context_snapshot_id": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+        "title": "Context Snapshot Id",
+        "type": "string"
+      },
+      "snapshot_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Snapshot Sha256",
+        "type": "string"
+      },
+      "job_input_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Job Input Sha256",
+        "type": "string"
+      },
+      "prepared_input_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Prepared Input Sha256",
+        "type": "string"
+      },
+      "character_count": {
+        "maximum": 12000,
+        "minimum": 1,
+        "title": "Character Count",
+        "type": "integer"
+      },
+      "materials": {
+        "items": {
+          "$ref": "#/$defs/AuthoringInputMaterial"
+        },
+        "maxItems": 8,
+        "title": "Materials",
+        "type": "array"
+      },
+      "warnings": {
+        "items": {
+          "$ref": "#/$defs/Warning"
+        },
+        "title": "Warnings",
+        "type": "array"
+      }
+    },
+    "required": [
+      "context_snapshot_id",
+      "snapshot_sha256",
+      "job_input_sha256",
+      "prepared_input_sha256",
+      "character_count",
+      "materials",
+      "warnings"
+    ],
+    "title": "AuthoringPreparationSummary",
+    "type": "object"
+  },
+  "AuthoringValidation": {
+    "$defs": {
+      "Warning": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "locator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Locator"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "warning",
+              "error"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "severity"
+        ],
+        "title": "Warning",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "schema": {
+        "enum": [
+          "PASS",
+          "FAIL",
+          "NOT_RUN"
+        ],
+        "title": "Schema",
+        "type": "string"
+      },
+      "references": {
+        "enum": [
+          "PASS",
+          "FAIL",
+          "NOT_RUN"
+        ],
+        "title": "References",
+        "type": "string"
+      },
+      "symbol_declarations": {
+        "enum": [
+          "PASS",
+          "FAIL",
+          "NOT_RUN"
+        ],
+        "title": "Symbol Declarations",
+        "type": "string"
+      },
+      "issues": {
+        "items": {
+          "$ref": "#/$defs/Warning"
+        },
+        "title": "Issues",
+        "type": "array"
+      },
+      "mathematical": {
+        "const": "NOT_RUN",
+        "title": "Mathematical",
+        "type": "string"
+      },
+      "sources": {
+        "const": "NOT_RUN",
+        "title": "Sources",
+        "type": "string"
+      },
+      "independent_pedagogy": {
+        "const": "NOT_RUN",
+        "title": "Independent Pedagogy",
+        "type": "string"
+      }
+    },
+    "required": [
+      "schema",
+      "references",
+      "symbol_declarations",
+      "issues",
+      "mathematical",
+      "sources",
+      "independent_pedagogy"
+    ],
+    "title": "AuthoringValidation",
+    "type": "object"
+  },
+  "AuthoringJobSummary": {
+    "$defs": {
+      "AuthoringCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "draft_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Draft Id",
+            "type": "string"
+          },
+          "draft_revision": {
+            "minimum": 1,
+            "title": "Draft Revision",
+            "type": "integer"
+          },
+          "entity": {
+            "const": "block",
+            "title": "Entity",
+            "type": "string"
+          },
+          "candidate_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Candidate Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft_id",
+          "draft_revision",
+          "entity",
+          "candidate_sha256"
+        ],
+        "title": "AuthoringCandidate",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+        "title": "Id",
+        "type": "string"
+      },
+      "kind": {
+        "const": "authoring",
+        "title": "Kind",
+        "type": "string"
+      },
+      "job_revision": {
+        "minimum": 1,
+        "title": "Job Revision",
+        "type": "integer"
+      },
+      "status": {
+        "enum": [
+          "queued",
+          "running",
+          "awaiting_approval",
+          "completed",
+          "failed",
+          "cancelled"
+        ],
+        "title": "Status",
+        "type": "string"
+      },
+      "title": {
+        "minLength": 1,
+        "title": "Title",
+        "type": "string"
+      },
+      "candidate": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/AuthoringCandidate"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "created_at": {
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+        "title": "Created At",
+        "type": "string"
+      },
+      "updated_at": {
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+        "title": "Updated At",
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "kind",
+      "job_revision",
+      "status",
+      "title",
+      "candidate",
+      "created_at",
+      "updated_at"
+    ],
+    "title": "AuthoringJobSummary",
+    "type": "object"
+  },
+  "AuthoringPageQuery": {
+    "additionalProperties": false,
+    "properties": {
+      "cursor": {
+        "minLength": 1,
+        "title": "Cursor",
+        "type": "string"
+      },
+      "limit": {
+        "default": 20,
+        "maximum": 100,
+        "minimum": 1,
+        "title": "Limit",
+        "type": "integer"
+      }
+    },
+    "title": "AuthoringPageQuery",
+    "type": "object"
+  },
+  "AuthoringJobPage": {
+    "$defs": {
+      "ContentRef": {
+        "additionalProperties": false,
+        "properties": {
+          "entity": {
+            "enum": [
+              "course",
+              "lesson",
+              "block",
+              "concept",
+              "route",
+              "question",
+              "practice_set",
+              "assessment",
+              "note"
+            ],
+            "title": "Entity",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity",
+          "id",
+          "revision",
+          "sha256"
+        ],
+        "title": "ContentRef",
+        "type": "object"
+      },
+      "ErrorDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "request_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          },
+          "details": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Details",
+            "type": "array"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "request_id",
+          "retryable"
+        ],
+        "title": "ErrorDetail",
+        "type": "object"
+      },
+      "JobProgress": {
+        "additionalProperties": false,
+        "properties": {
+          "completed": {
+            "minimum": 0,
+            "title": "Completed",
+            "type": "integer"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "completed",
+          "total",
+          "label"
+        ],
+        "title": "JobProgress",
+        "type": "object"
+      },
+      "JobSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "workspace_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "awaiting_approval",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "created_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Created At",
+            "type": "string"
+          },
+          "updated_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "progress": {
+            "$ref": "#/$defs/JobProgress"
+          },
+          "result_refs": {
+            "items": {
+              "$ref": "#/$defs/ContentRef"
+            },
+            "title": "Result Refs",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/$defs/Warning"
+            },
+            "title": "Warnings",
+            "type": "array"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ErrorDetail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "workspace_id",
+          "kind",
+          "status",
+          "revision",
+          "created_at",
+          "updated_at",
+          "progress",
+          "result_refs",
+          "warnings",
+          "error"
+        ],
+        "title": "JobSnapshot",
+        "type": "object"
+      },
+      "Warning": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "locator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Locator"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "warning",
+              "error"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "severity"
+        ],
+        "title": "Warning",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "items": {
+        "items": {
+          "$ref": "#/$defs/JobSnapshot"
+        },
+        "maxItems": 100,
+        "title": "Items",
+        "type": "array"
+      },
+      "next_cursor": {
+        "anyOf": [
+          {
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Next Cursor"
+      },
+      "total_hint": {
+        "minimum": 0,
+        "title": "Total Hint",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "items",
+      "next_cursor"
+    ],
+    "title": "AuthoringJobPage",
+    "type": "object"
+  },
+  "AuthoringJobView": {
+    "$defs": {
+      "AuthoringBlockRef": {
+        "additionalProperties": false,
+        "properties": {
+          "entity": {
+            "const": "block",
+            "title": "Entity",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity",
+          "id",
+          "revision",
+          "sha256"
+        ],
+        "title": "AuthoringBlockRef",
+        "type": "object"
+      },
+      "AuthoringCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "draft_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Draft Id",
+            "type": "string"
+          },
+          "draft_revision": {
+            "minimum": 1,
+            "title": "Draft Revision",
+            "type": "integer"
+          },
+          "entity": {
+            "const": "block",
+            "title": "Entity",
+            "type": "string"
+          },
+          "candidate_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Candidate Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft_id",
+          "draft_revision",
+          "entity",
+          "candidate_sha256"
+        ],
+        "title": "AuthoringCandidate",
+        "type": "object"
+      },
+      "AuthoringInputMaterial": {
+        "additionalProperties": false,
+        "properties": {
+          "ref": {
+            "$ref": "#/$defs/AuthoringBlockRef"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "body_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Body Sha256",
+            "type": "string"
+          },
+          "body_bytes": {
+            "minimum": 1,
+            "title": "Body Bytes",
+            "type": "integer"
+          },
+          "material_review": {
+            "const": "unreviewed",
+            "title": "Material Review",
+            "type": "string"
+          },
+          "provenance": {
+            "$ref": "#/$defs/RetrievalProvenance"
+          }
+        },
+        "required": [
+          "ref",
+          "title",
+          "body_sha256",
+          "body_bytes",
+          "material_review",
+          "provenance"
+        ],
+        "title": "AuthoringInputMaterial",
+        "type": "object"
+      },
+      "AuthoringJobSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "authoring",
+            "title": "Kind",
+            "type": "string"
+          },
+          "job_revision": {
+            "minimum": 1,
+            "title": "Job Revision",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "awaiting_approval",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "candidate": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/AuthoringCandidate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Created At",
+            "type": "string"
+          },
+          "updated_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "job_revision",
+          "status",
+          "title",
+          "candidate",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AuthoringJobSummary",
+        "type": "object"
+      },
+      "AuthoringPreparationSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "context_snapshot_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Context Snapshot Id",
+            "type": "string"
+          },
+          "snapshot_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Snapshot Sha256",
+            "type": "string"
+          },
+          "job_input_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Job Input Sha256",
+            "type": "string"
+          },
+          "prepared_input_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Prepared Input Sha256",
+            "type": "string"
+          },
+          "character_count": {
+            "maximum": 12000,
+            "minimum": 1,
+            "title": "Character Count",
+            "type": "integer"
+          },
+          "materials": {
+            "items": {
+              "$ref": "#/$defs/AuthoringInputMaterial"
+            },
+            "maxItems": 8,
+            "title": "Materials",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/$defs/Warning"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "context_snapshot_id",
+          "snapshot_sha256",
+          "job_input_sha256",
+          "prepared_input_sha256",
+          "character_count",
+          "materials",
+          "warnings"
+        ],
+        "title": "AuthoringPreparationSummary",
+        "type": "object"
+      },
+      "AuthoringPrepareWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "topic": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Topic",
+            "type": "string"
+          },
+          "prerequisites": {
+            "items": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Prerequisites",
+            "type": "array"
+          },
+          "objectives": {
+            "items": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Objectives",
+            "type": "array"
+          },
+          "proof_policy": {
+            "enum": [
+              "full",
+              "declared_dependencies"
+            ],
+            "title": "Proof Policy",
+            "type": "string"
+          },
+          "output_kind": {
+            "const": "worked_example",
+            "title": "Output Kind",
+            "type": "string"
+          },
+          "source_refs": {
+            "items": {
+              "$ref": "#/$defs/AuthoringBlockRef"
+            },
+            "maxItems": 8,
+            "title": "Source Refs",
+            "type": "array"
+          },
+          "provider_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Provider Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic",
+          "prerequisites",
+          "objectives",
+          "proof_policy",
+          "output_kind",
+          "source_refs",
+          "provider_id"
+        ],
+        "title": "AuthoringPrepareWrite",
+        "type": "object"
+      },
+      "AuthoringValidation": {
+        "additionalProperties": false,
+        "properties": {
+          "schema": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "NOT_RUN"
+            ],
+            "title": "Schema",
+            "type": "string"
+          },
+          "references": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "NOT_RUN"
+            ],
+            "title": "References",
+            "type": "string"
+          },
+          "symbol_declarations": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "NOT_RUN"
+            ],
+            "title": "Symbol Declarations",
+            "type": "string"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/$defs/Warning"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "mathematical": {
+            "const": "NOT_RUN",
+            "title": "Mathematical",
+            "type": "string"
+          },
+          "sources": {
+            "const": "NOT_RUN",
+            "title": "Sources",
+            "type": "string"
+          },
+          "independent_pedagogy": {
+            "const": "NOT_RUN",
+            "title": "Independent Pedagogy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema",
+          "references",
+          "symbol_declarations",
+          "issues",
+          "mathematical",
+          "sources",
+          "independent_pedagogy"
+        ],
+        "title": "AuthoringValidation",
+        "type": "object"
+      },
+      "Citation": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "locator": {
+            "title": "Locator",
+            "type": "string"
+          },
+          "source_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source Sha256"
+          },
+          "verification": {
+            "enum": [
+              "verified",
+              "unverified",
+              "user_supplied"
+            ],
+            "title": "Verification",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "locator",
+          "verification"
+        ],
+        "title": "Citation",
+        "type": "object"
+      },
+      "RetrievalProvenance": {
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "enum": [
+              "frozen",
+              "unresolved"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "original": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/RetrievalRetainedSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "citations": {
+            "items": {
+              "$ref": "#/$defs/Citation"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "unresolved_citation_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "title": "Unresolved Citation Ids",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/$defs/Warning"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "state",
+          "original",
+          "citations",
+          "unresolved_citation_ids",
+          "warnings"
+        ],
+        "title": "RetrievalProvenance",
+        "type": "object"
+      },
+      "RetrievalRetainedSource": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "media_type": {
+            "title": "Media Type",
+            "type": "string"
+          },
+          "size": {
+            "minimum": 0,
+            "title": "Size",
+            "type": "integer"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          },
+          "rights": {
+            "title": "Rights",
+            "type": "string"
+          },
+          "parser_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parser Version"
+          }
+        },
+        "required": [
+          "id",
+          "media_type",
+          "size",
+          "sha256",
+          "rights",
+          "parser_version"
+        ],
+        "title": "RetrievalRetainedSource",
+        "type": "object"
+      },
+      "UsageSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "input_tokens": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Tokens"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Tokens"
+          }
+        },
+        "required": [
+          "input_tokens",
+          "output_tokens"
+        ],
+        "title": "UsageSnapshot",
+        "type": "object"
+      },
+      "Warning": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "locator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Locator"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "warning",
+              "error"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "severity"
+        ],
+        "title": "Warning",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "summary": {
+        "$ref": "#/$defs/AuthoringJobSummary"
+      },
+      "request": {
+        "$ref": "#/$defs/AuthoringPrepareWrite"
+      },
+      "preparation": {
+        "$ref": "#/$defs/AuthoringPreparationSummary"
+      },
+      "proposal_id": {
+        "anyOf": [
+          {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Proposal Id"
+      },
+      "consent_id": {
+        "anyOf": [
+          {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Consent Id"
+      },
+      "provider_receipt_id": {
+        "anyOf": [
+          {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Provider Receipt Id"
+      },
+      "provider_outcome": {
+        "anyOf": [
+          {
+            "enum": [
+              "completed",
+              "failed",
+              "incomplete",
+              "cancelled",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Provider Outcome"
+      },
+      "usage": {
+        "$ref": "#/$defs/UsageSnapshot"
+      },
+      "raw_answer": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Raw Answer"
+      },
+      "raw_refusal": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Raw Refusal"
+      },
+      "validation": {
+        "$ref": "#/$defs/AuthoringValidation"
+      },
+      "error_code": {
+        "anyOf": [
+          {
+            "minLength": 1,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Error Code"
+      }
+    },
+    "required": [
+      "summary",
+      "request",
+      "preparation",
+      "proposal_id",
+      "consent_id",
+      "provider_receipt_id",
+      "provider_outcome",
+      "usage",
+      "raw_answer",
+      "raw_refusal",
+      "validation",
+      "error_code"
+    ],
+    "title": "AuthoringJobView",
+    "type": "object"
+  },
+  "AuthoringDraftView": {
+    "$defs": {
+      "AuthoringBlockRef": {
+        "additionalProperties": false,
+        "properties": {
+          "entity": {
+            "const": "block",
+            "title": "Entity",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity",
+          "id",
+          "revision",
+          "sha256"
+        ],
+        "title": "AuthoringBlockRef",
+        "type": "object"
+      },
+      "AuthoringCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "draft_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Draft Id",
+            "type": "string"
+          },
+          "draft_revision": {
+            "minimum": 1,
+            "title": "Draft Revision",
+            "type": "integer"
+          },
+          "entity": {
+            "const": "block",
+            "title": "Entity",
+            "type": "string"
+          },
+          "candidate_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Candidate Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft_id",
+          "draft_revision",
+          "entity",
+          "candidate_sha256"
+        ],
+        "title": "AuthoringCandidate",
+        "type": "object"
+      },
+      "AuthoringValidation": {
+        "additionalProperties": false,
+        "properties": {
+          "schema": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "NOT_RUN"
+            ],
+            "title": "Schema",
+            "type": "string"
+          },
+          "references": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "NOT_RUN"
+            ],
+            "title": "References",
+            "type": "string"
+          },
+          "symbol_declarations": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "NOT_RUN"
+            ],
+            "title": "Symbol Declarations",
+            "type": "string"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/$defs/Warning"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "mathematical": {
+            "const": "NOT_RUN",
+            "title": "Mathematical",
+            "type": "string"
+          },
+          "sources": {
+            "const": "NOT_RUN",
+            "title": "Sources",
+            "type": "string"
+          },
+          "independent_pedagogy": {
+            "const": "NOT_RUN",
+            "title": "Independent Pedagogy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema",
+          "references",
+          "symbol_declarations",
+          "issues",
+          "mathematical",
+          "sources",
+          "independent_pedagogy"
+        ],
+        "title": "AuthoringValidation",
+        "type": "object"
+      },
+      "NumericAssertion": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "expression": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Expression",
+            "type": "string"
+          },
+          "expected": {
+            "title": "Expected",
+            "type": "number"
+          },
+          "atol": {
+            "minimum": 0,
+            "title": "Atol",
+            "type": "number"
+          },
+          "rtol": {
+            "minimum": 0,
+            "title": "Rtol",
+            "type": "number"
+          },
+          "unit": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "expression",
+          "expected",
+          "atol",
+          "rtol",
+          "unit"
+        ],
+        "title": "NumericAssertion",
+        "type": "object"
+      },
+      "NumericPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "const": "finite-arithmetic-v1",
+            "title": "Version",
+            "type": "string"
+          },
+          "variables": {
+            "items": {
+              "$ref": "#/$defs/NumericVariable"
+            },
+            "maxItems": 32,
+            "title": "Variables",
+            "type": "array"
+          },
+          "assertions": {
+            "items": {
+              "$ref": "#/$defs/NumericAssertion"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Assertions",
+            "type": "array"
+          },
+          "seed": {
+            "title": "Seed",
+            "type": "null"
+          }
+        },
+        "required": [
+          "version",
+          "variables",
+          "assertions",
+          "seed"
+        ],
+        "title": "NumericPlan",
+        "type": "object"
+      },
+      "NumericVariable": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          },
+          "unit": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "value",
+          "unit"
+        ],
+        "title": "NumericVariable",
+        "type": "object"
+      },
+      "Warning": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "locator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Locator"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "warning",
+              "error"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "severity"
+        ],
+        "title": "Warning",
+        "type": "object"
+      },
+      "WorkedExamplePayload": {
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "const": "worked-example-candidate-v1",
+            "title": "Version",
+            "type": "string"
+          },
+          "kind": {
+            "const": "worked_example",
+            "title": "Kind",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "body_markdown": {
+            "maxLength": 400000,
+            "minLength": 1,
+            "title": "Body Markdown",
+            "type": "string"
+          },
+          "symbols": {
+            "items": {
+              "$ref": "#/$defs/WorkedExampleSymbol"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Symbols",
+            "type": "array"
+          },
+          "declared_source_refs": {
+            "items": {
+              "$ref": "#/$defs/AuthoringBlockRef"
+            },
+            "maxItems": 8,
+            "title": "Declared Source Refs",
+            "type": "array"
+          },
+          "numeric_plan": {
+            "$ref": "#/$defs/NumericPlan"
+          }
+        },
+        "required": [
+          "version",
+          "kind",
+          "title",
+          "body_markdown",
+          "symbols",
+          "declared_source_refs",
+          "numeric_plan"
+        ],
+        "title": "WorkedExamplePayload",
+        "type": "object"
+      },
+      "WorkedExampleSymbol": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "tex": {
+            "minLength": 1,
+            "title": "Tex",
+            "type": "string"
+          },
+          "domain": {
+            "minLength": 1,
+            "title": "Domain",
+            "type": "string"
+          },
+          "dimension": {
+            "minLength": 1,
+            "title": "Dimension",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "tex",
+          "domain",
+          "dimension"
+        ],
+        "title": "WorkedExampleSymbol",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "owner": {
+        "const": "authoring",
+        "title": "Owner",
+        "type": "string"
+      },
+      "candidate": {
+        "$ref": "#/$defs/AuthoringCandidate"
+      },
+      "source_job_id": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+        "title": "Source Job Id",
+        "type": "string"
+      },
+      "state": {
+        "const": "draft",
+        "title": "State",
+        "type": "string"
+      },
+      "base_ref": {
+        "title": "Base Ref",
+        "type": "null"
+      },
+      "body_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Body Sha256",
+        "type": "string"
+      },
+      "payload": {
+        "$ref": "#/$defs/WorkedExamplePayload"
+      },
+      "validation": {
+        "$ref": "#/$defs/AuthoringValidation"
+      },
+      "numeric_check_ids": {
+        "items": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "type": "string"
+        },
+        "maxItems": 100,
+        "title": "Numeric Check Ids",
+        "type": "array"
+      },
+      "warnings": {
+        "items": {
+          "$ref": "#/$defs/Warning"
+        },
+        "title": "Warnings",
+        "type": "array"
+      }
+    },
+    "required": [
+      "owner",
+      "candidate",
+      "source_job_id",
+      "state",
+      "base_ref",
+      "body_sha256",
+      "payload",
+      "validation",
+      "numeric_check_ids",
+      "warnings"
+    ],
+    "title": "AuthoringDraftView",
+    "type": "object"
+  },
+  "NumericCheckPreviewWrite": {
+    "$defs": {
+      "AuthoringCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "draft_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Draft Id",
+            "type": "string"
+          },
+          "draft_revision": {
+            "minimum": 1,
+            "title": "Draft Revision",
+            "type": "integer"
+          },
+          "entity": {
+            "const": "block",
+            "title": "Entity",
+            "type": "string"
+          },
+          "candidate_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Candidate Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft_id",
+          "draft_revision",
+          "entity",
+          "candidate_sha256"
+        ],
+        "title": "AuthoringCandidate",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "candidate": {
+        "$ref": "#/$defs/AuthoringCandidate"
+      }
+    },
+    "required": [
+      "candidate"
+    ],
+    "title": "NumericCheckPreviewWrite",
+    "type": "object"
+  },
+  "NumericRuntimeProfile": {
+    "additionalProperties": false,
+    "properties": {
+      "evaluator_version": {
+        "const": "finite-arithmetic-v1",
+        "title": "Evaluator Version",
+        "type": "string"
+      },
+      "evaluator_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Evaluator Sha256",
+        "type": "string"
+      },
+      "runtime_manifest_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Runtime Manifest Sha256",
+        "type": "string"
+      },
+      "python_version": {
+        "minLength": 1,
+        "title": "Python Version",
+        "type": "string"
+      },
+      "sandbox_version": {
+        "minLength": 1,
+        "title": "Sandbox Version",
+        "type": "string"
+      },
+      "wall_seconds": {
+        "const": 5,
+        "title": "Wall Seconds",
+        "type": "integer"
+      },
+      "cpu_seconds": {
+        "const": 2,
+        "title": "Cpu Seconds",
+        "type": "integer"
+      },
+      "memory_bytes": {
+        "const": 268435456,
+        "title": "Memory Bytes",
+        "type": "integer"
+      },
+      "output_bytes": {
+        "const": 65536,
+        "title": "Output Bytes",
+        "type": "integer"
+      },
+      "evaluator_process_limit": {
+        "const": 1,
+        "title": "Evaluator Process Limit",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "evaluator_version",
+      "evaluator_sha256",
+      "runtime_manifest_sha256",
+      "python_version",
+      "sandbox_version",
+      "wall_seconds",
+      "cpu_seconds",
+      "memory_bytes",
+      "output_bytes",
+      "evaluator_process_limit"
+    ],
+    "title": "NumericRuntimeProfile",
+    "type": "object"
+  },
+  "NumericAssertionResult": {
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+        "title": "Id",
+        "type": "string"
+      },
+      "actual": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Actual"
+      },
+      "passed": {
+        "title": "Passed",
+        "type": "boolean"
+      },
+      "error_code": {
+        "anyOf": [
+          {
+            "enum": [
+              "NUMERIC_DOMAIN_ERROR",
+              "NUMERIC_NONFINITE"
+            ],
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Error Code"
+      }
+    },
+    "required": [
+      "id",
+      "actual",
+      "passed",
+      "error_code"
+    ],
+    "title": "NumericAssertionResult",
+    "type": "object"
+  },
+  "NumericCheckResult": {
+    "$defs": {
+      "NumericAssertionResult": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "actual": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "NUMERIC_DOMAIN_ERROR",
+                  "NUMERIC_NONFINITE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          }
+        },
+        "required": [
+          "id",
+          "actual",
+          "passed",
+          "error_code"
+        ],
+        "title": "NumericAssertionResult",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "job_id": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+        "title": "Job Id",
+        "type": "string"
+      },
+      "input_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Input Sha256",
+        "type": "string"
+      },
+      "operation_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Operation Sha256",
+        "type": "string"
+      },
+      "outcome": {
+        "enum": [
+          "passed",
+          "mismatch",
+          "evaluation_error",
+          "timeout",
+          "resource_limit",
+          "cancelled",
+          "environment_unavailable",
+          "outcome_unknown"
+        ],
+        "title": "Outcome",
+        "type": "string"
+      },
+      "verdict": {
+        "enum": [
+          "PASS",
+          "FAIL",
+          "BLOCKED"
+        ],
+        "title": "Verdict",
+        "type": "string"
+      },
+      "started_at": {
+        "anyOf": [
+          {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Started At"
+      },
+      "finished_at": {
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+        "title": "Finished At",
+        "type": "string"
+      },
+      "exit_code": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Exit Code"
+      },
+      "assertions": {
+        "items": {
+          "$ref": "#/$defs/NumericAssertionResult"
+        },
+        "maxItems": 32,
+        "title": "Assertions",
+        "type": "array"
+      },
+      "output_sha256": {
+        "anyOf": [
+          {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Output Sha256"
+      },
+      "result_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Result Sha256",
+        "type": "string"
+      }
+    },
+    "required": [
+      "job_id",
+      "input_sha256",
+      "operation_sha256",
+      "outcome",
+      "verdict",
+      "started_at",
+      "finished_at",
+      "exit_code",
+      "assertions",
+      "output_sha256",
+      "result_sha256"
+    ],
+    "title": "NumericCheckResult",
+    "type": "object"
+  },
+  "NumericCheckView": {
+    "$defs": {
+      "AuthoringCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "draft_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Draft Id",
+            "type": "string"
+          },
+          "draft_revision": {
+            "minimum": 1,
+            "title": "Draft Revision",
+            "type": "integer"
+          },
+          "entity": {
+            "const": "block",
+            "title": "Entity",
+            "type": "string"
+          },
+          "candidate_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Candidate Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft_id",
+          "draft_revision",
+          "entity",
+          "candidate_sha256"
+        ],
+        "title": "AuthoringCandidate",
+        "type": "object"
+      },
+      "JobRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "awaiting_approval",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status"
+        ],
+        "title": "JobRef",
+        "type": "object"
+      },
+      "NumericAssertion": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "expression": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Expression",
+            "type": "string"
+          },
+          "expected": {
+            "title": "Expected",
+            "type": "number"
+          },
+          "atol": {
+            "minimum": 0,
+            "title": "Atol",
+            "type": "number"
+          },
+          "rtol": {
+            "minimum": 0,
+            "title": "Rtol",
+            "type": "number"
+          },
+          "unit": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "expression",
+          "expected",
+          "atol",
+          "rtol",
+          "unit"
+        ],
+        "title": "NumericAssertion",
+        "type": "object"
+      },
+      "NumericAssertionResult": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "actual": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "NUMERIC_DOMAIN_ERROR",
+                  "NUMERIC_NONFINITE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          }
+        },
+        "required": [
+          "id",
+          "actual",
+          "passed",
+          "error_code"
+        ],
+        "title": "NumericAssertionResult",
+        "type": "object"
+      },
+      "NumericCheckResult": {
+        "additionalProperties": false,
+        "properties": {
+          "job_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "input_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Input Sha256",
+            "type": "string"
+          },
+          "operation_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Operation Sha256",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "passed",
+              "mismatch",
+              "evaluation_error",
+              "timeout",
+              "resource_limit",
+              "cancelled",
+              "environment_unavailable",
+              "outcome_unknown"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "BLOCKED"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Finished At",
+            "type": "string"
+          },
+          "exit_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Code"
+          },
+          "assertions": {
+            "items": {
+              "$ref": "#/$defs/NumericAssertionResult"
+            },
+            "maxItems": 32,
+            "title": "Assertions",
+            "type": "array"
+          },
+          "output_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Sha256"
+          },
+          "result_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Result Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "input_sha256",
+          "operation_sha256",
+          "outcome",
+          "verdict",
+          "started_at",
+          "finished_at",
+          "exit_code",
+          "assertions",
+          "output_sha256",
+          "result_sha256"
+        ],
+        "title": "NumericCheckResult",
+        "type": "object"
+      },
+      "NumericPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "const": "finite-arithmetic-v1",
+            "title": "Version",
+            "type": "string"
+          },
+          "variables": {
+            "items": {
+              "$ref": "#/$defs/NumericVariable"
+            },
+            "maxItems": 32,
+            "title": "Variables",
+            "type": "array"
+          },
+          "assertions": {
+            "items": {
+              "$ref": "#/$defs/NumericAssertion"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Assertions",
+            "type": "array"
+          },
+          "seed": {
+            "title": "Seed",
+            "type": "null"
+          }
+        },
+        "required": [
+          "version",
+          "variables",
+          "assertions",
+          "seed"
+        ],
+        "title": "NumericPlan",
+        "type": "object"
+      },
+      "NumericRuntimeProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "evaluator_version": {
+            "const": "finite-arithmetic-v1",
+            "title": "Evaluator Version",
+            "type": "string"
+          },
+          "evaluator_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Evaluator Sha256",
+            "type": "string"
+          },
+          "runtime_manifest_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Runtime Manifest Sha256",
+            "type": "string"
+          },
+          "python_version": {
+            "minLength": 1,
+            "title": "Python Version",
+            "type": "string"
+          },
+          "sandbox_version": {
+            "minLength": 1,
+            "title": "Sandbox Version",
+            "type": "string"
+          },
+          "wall_seconds": {
+            "const": 5,
+            "title": "Wall Seconds",
+            "type": "integer"
+          },
+          "cpu_seconds": {
+            "const": 2,
+            "title": "Cpu Seconds",
+            "type": "integer"
+          },
+          "memory_bytes": {
+            "const": 268435456,
+            "title": "Memory Bytes",
+            "type": "integer"
+          },
+          "output_bytes": {
+            "const": 65536,
+            "title": "Output Bytes",
+            "type": "integer"
+          },
+          "evaluator_process_limit": {
+            "const": 1,
+            "title": "Evaluator Process Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "evaluator_version",
+          "evaluator_sha256",
+          "runtime_manifest_sha256",
+          "python_version",
+          "sandbox_version",
+          "wall_seconds",
+          "cpu_seconds",
+          "memory_bytes",
+          "output_bytes",
+          "evaluator_process_limit"
+        ],
+        "title": "NumericRuntimeProfile",
+        "type": "object"
+      },
+      "NumericVariable": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          },
+          "unit": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "value",
+          "unit"
+        ],
+        "title": "NumericVariable",
+        "type": "object"
+      },
+      "Warning": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "locator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Locator"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "warning",
+              "error"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "severity"
+        ],
+        "title": "Warning",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+        "title": "Id",
+        "type": "string"
+      },
+      "revision": {
+        "minimum": 1,
+        "title": "Revision",
+        "type": "integer"
+      },
+      "candidate": {
+        "$ref": "#/$defs/AuthoringCandidate"
+      },
+      "plan": {
+        "$ref": "#/$defs/NumericPlan"
+      },
+      "runtime": {
+        "$ref": "#/$defs/NumericRuntimeProfile"
+      },
+      "operation_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Operation Sha256",
+        "type": "string"
+      },
+      "decision": {
+        "enum": [
+          "pending",
+          "approve_once",
+          "decline"
+        ],
+        "title": "Decision",
+        "type": "string"
+      },
+      "created_at": {
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+        "title": "Created At",
+        "type": "string"
+      },
+      "expires_at": {
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+        "title": "Expires At",
+        "type": "string"
+      },
+      "expired": {
+        "title": "Expired",
+        "type": "boolean"
+      },
+      "job": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/JobRef"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "job_revision": {
+        "anyOf": [
+          {
+            "minimum": 1,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Job Revision"
+      },
+      "result": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/NumericCheckResult"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "warnings": {
+        "items": {
+          "$ref": "#/$defs/Warning"
+        },
+        "title": "Warnings",
+        "type": "array"
+      }
+    },
+    "required": [
+      "id",
+      "revision",
+      "candidate",
+      "plan",
+      "runtime",
+      "operation_sha256",
+      "decision",
+      "created_at",
+      "expires_at",
+      "expired",
+      "job",
+      "job_revision",
+      "result",
+      "warnings"
+    ],
+    "title": "NumericCheckView",
+    "type": "object"
+  },
+  "NumericCheckDecisionAck": {
+    "$defs": {
+      "JobRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "awaiting_approval",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status"
+        ],
+        "title": "JobRef",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+        "title": "Id",
+        "type": "string"
+      },
+      "revision": {
+        "minimum": 1,
+        "title": "Revision",
+        "type": "integer"
+      },
+      "operation_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Operation Sha256",
+        "type": "string"
+      },
+      "decision": {
+        "enum": [
+          "approve_once",
+          "decline"
+        ],
+        "title": "Decision",
+        "type": "string"
+      },
+      "applied": {
+        "const": true,
+        "title": "Applied",
+        "type": "boolean"
+      },
+      "job": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/JobRef"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "id",
+      "revision",
+      "operation_sha256",
+      "decision",
+      "applied",
+      "job"
+    ],
+    "title": "NumericCheckDecisionAck",
+    "type": "object"
+  },
+  "ApprovalDecision": {
+    "additionalProperties": false,
+    "properties": {
+      "operation_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Operation Sha256",
+        "type": "string"
+      },
+      "decision": {
+        "enum": [
+          "approve_once",
+          "decline"
+        ],
+        "title": "Decision",
+        "type": "string"
+      },
+      "expected_revision": {
+        "minimum": 1,
+        "title": "Expected Revision",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "operation_sha256",
+      "decision",
+      "expected_revision"
+    ],
+    "title": "ApprovalDecision",
+    "type": "object"
+  }
+}

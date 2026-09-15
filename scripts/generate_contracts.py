@@ -19,6 +19,7 @@ from scripts.extract_spec import PATTERN
 from scripts.schema_types import generate_types
 from scripts.api_contracts import api_artifacts, runtime_openapi
 from scripts.tutor_contracts import tutor_artifacts
+from scripts.authoring_contracts import authoring_artifacts
 
 
 PROVIDER_OPERATIONS = {
@@ -306,7 +307,8 @@ def artifacts(root: Path = ROOT) -> dict[Path, bytes]:
     output[root / 'packages/contracts/generated/provider-ports-binding.ts'] = provider_binding.encode()
     for name, value in {**api_artifacts(openapi, catalog, provenance),
                         **retrieval_artifacts(ports, openapi, provenance),
-                        **tutor_artifacts(ports, openapi, provenance)}.items():
+                        **tutor_artifacts(ports, openapi, provenance),
+                        **authoring_artifacts(ports, openapi, provenance)}.items():
         target = "packages/contracts/generated/" + name
         if isinstance(value, str):
             output[root / target] = value.encode("utf-8")

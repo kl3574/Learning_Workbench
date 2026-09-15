@@ -19,6 +19,12 @@ from .application.tutor import TutorService
 from .application.tutor_context import ContextService
 from .application.tutor_source import TutorOutboundSource, build_outbound
 from .application.tutor_worker import TutorWorker
+from .application.authoring import AuthoringService
+from .application.authoring_context import AuthoringContext
+from .application.authoring_source import AuthoringOutboundSource
+from .application.authoring_worker import AuthoringWorker
+from .application.authoring_numeric_service import NumericService
+from .application.authoring_numeric_worker import NumericWorker
 from .config import Settings
 from .database import Database
 from .interfaces.boundary import install_boundary
@@ -35,8 +41,10 @@ from .interfaces.recommendation_http import create_recommendation_router
 from .interfaces.retrieval_http import create_retrieval_router
 from .interfaces.route_http import create_route_router
 from .interfaces.tutor_http import create_tutor_router
+from .interfaces.authoring_http import create_authoring_router
 from .infrastructure.import_worker import ImportWorker
 from .infrastructure.provider_secret_store import preferred_secret_store
+from .infrastructure.authoring_numeric_runtime import NumericRuntime
 
 
 def create_app(settings: Settings | None = None, *,
@@ -48,17 +56,23 @@ def create_app(settings: Settings | None = None, *,
     import_worker = ImportWorker(database)
     tutor_context = ContextService(database)
     tutor_service = TutorService(database, tutor_context)
+    authoring_context = AuthoringContext(database)
     # Registrations are explicit trusted Python composition, never HTTP or
     # environment data. The production Tutor source owns real jobs; production
     # model proofs remain unavailable until their separate verification.
     provider_sources = (outbound_sources if outbound_sources is not None else OutboundSourceRegistry()).with_source(
-        'tutor', TutorOutboundSource(tutor_context))
+        'tutor', TutorOutboundSource(tutor_context)).with_source('authoring', AuthoringOutboundSource(authoring_context))
     provider_preparer = request_preparer if request_preparer is not None else RequestPreparer(ProofRegistry())
     provider_secrets = preferred_secret_store(settings.provider_secret_dir)
     providers = ProviderService(database, provider_secrets, provider_preparer)
     consents = ConsentsService(database, provider_secrets, provider_sources, provider_preparer)
     provider_dispatch = CheckedDispatch(database, provider_secrets, provider_sources, provider_preparer)
     tutor_worker = TutorWorker(database, tutor_context, provider_dispatch, build_outbound)
+    authoring_service = AuthoringService(database, authoring_context, provider_dispatch)
+    authoring_worker = AuthoringWorker(database, authoring_context, provider_dispatch)
+    numeric_runtime = NumericRuntime()
+    numeric_service = NumericService(database, authoring_context, numeric_runtime)
+    numeric_worker = NumericWorker(database, authoring_context, numeric_runtime)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
@@ -71,9 +85,13 @@ def create_app(settings: Settings | None = None, *,
         application.state.provenance_backfill = backfill_provenance(database)
         import_worker.start()
         tutor_worker.start()
+        authoring_worker.start()
+        numeric_worker.start()
         try:
             yield
         finally:
+            numeric_worker.stop()
+            authoring_worker.stop()
             tutor_worker.stop()
             import_worker.stop()
 
@@ -93,6 +111,11 @@ def create_app(settings: Settings | None = None, *,
     application.state.provider_dispatch = provider_dispatch
     application.state.tutor_service = tutor_service
     application.state.tutor_worker = tutor_worker
+    application.state.authoring_service = authoring_service
+    application.state.authoring_worker = authoring_worker
+    application.state.numeric_service = numeric_service
+    application.state.numeric_runtime = numeric_runtime
+    application.state.numeric_worker = numeric_worker
     application.state.outbound_sources = provider_sources
     application.state.request_preparer = provider_preparer
     install_boundary(application, settings, database)
@@ -109,6 +132,7 @@ def create_app(settings: Settings | None = None, *,
     application.include_router(create_recommendation_router(database))
     application.include_router(create_retrieval_router(database))
     application.include_router(create_tutor_router(tutor_service))
+    application.include_router(create_authoring_router(authoring_service, numeric_service))
     if settings.static_dir.is_dir():
         application.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="workbench")
     return application

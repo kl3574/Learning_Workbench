@@ -1,6 +1,6 @@
 # 知径 Learning Workbench：完整产品设计与工程实施规范
 
-**版本：3.0.5｜日期：2026-09-15｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
+**版本：3.0.6｜日期：2026-09-16｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
 
 **本文件（含文末附录）是唯一产品与工程规范。** 将它放入空目录即可开始；不需要旧版设计包、旧 Demo、之前聊天、私有 GitHub 仓库或另一份提示词说明需求。正文定义产品，附录内嵌数据模型、HTTP 字段、数据库设计、模块接口、样例和验收用例。构建 Agent 根据本文生成实现文件、OpenAPI、测试和进度记录；这些是派生产物，不是第二套产品需求。
 
@@ -28,6 +28,7 @@
 | 3.0.3 | M5.2 显式精确scope、未审材料标识、Content材料/来源、只读scope状态/CAS、离线词法代际/Jobs、资源和原创基准 | 不代表检索或基准已运行/通过，不开放自动扩范围、embedding或真实外发；54 core、基线DDL、学习包3.0.0不变 |
 | 3.0.4 | M5.3 真实 Thread/Run/Jobs、上下文身份、授权衔接、受检输出、严格 SSE 与取消恢复 | 不代表生产模型可调度或已授权费用测试；54 core、基线 DDL、学习包 3.0.0 不变 |
 | 3.0.5 | M5.4 完整输入证明的精确目的地、模型/格式/有效性绑定及显式无思考 Responses 请求 | 不代表托管完整计量证明、真实模型/搜索或教学验收已通过；54 core、基线 DDL、学习包 3.0.0 不变 |
+| 3.0.6 | M6.1 首个 worked_example 的授权前准备、生成候选身份及单独批准的隔离算术复算 | 仅首个纵向切片，不代表全部 M6.1、M6.2 发布、M6.3 Codex、托管 InputProof 或数学/来源审核完成；54 core、基线 DDL、学习包 3.0.0 不变 |
 
 ## 0. 执行摘要与不可变决策
 
@@ -550,7 +551,7 @@ visibility 取 `learner` 或 `author_private`。导出学习者包不是 CSS 隐
 | Notes | GET/POST `/notes`；PATCH `/notes/{id}` | anchor、Markdown、expected_revision |
 | Recommendation | GET `/recommendations`；POST `/recommendations/{id}/decision` | 原因/证据与用户接受拒绝 |
 | Provider | GET `/providers/capabilities`；配置/秘密；POST `/consents/preview`；POST `/consents`；GET `/consents`；POST `/consents/{id}/revoke` | 附录 A 的十个精确操作；本机配置、服务端冻结、明确批准、当前/历史回读、撤回 |
-| Authoring generation | POST `/authoring/jobs`；GET `/jobs/{id}`；POST `/jobs/{id}/cancel` | 固定教学约束、产物引用 |
+| Authoring generation | POST/GET `/authoring/jobs`；GET `/authoring/jobs/{id}`；GET `/authoring/drafts/{id}`；候选数值检查预览/决定/读取；GET `/jobs/{id}`；POST `/jobs/{id}/cancel` | 首个例题授权前准备、真实候选与独立数值执行批准，精确路由见附录 A |
 | Approval | POST `/approvals/{id}/decision` | 绑定任务、操作哈希、单次/范围审批 |
 | Codex | POST `/codex/sessions`；POST `/codex/sessions/{id}/turns`；POST `/codex/sessions/{id}/interrupt` | Broker 转译、产物限沙盒目录 |
 | Export | POST `/exports`；GET `/exports/{id}`；POST `/backups/restore-preview`；POST `/backups/restore-commit` | profile、清单、确认与回滚 |
@@ -1052,7 +1053,7 @@ M5.4 首个生产文本-only Responses profile 明确关闭 thinking：服务端
 
 Provider 内部采用附录 D 的 delta/usage/finished/error 四类严格事件，保留 answer/refusal、complete/refused/incomplete、部分输出与未知计量。Responses text.done 不是请求结束；Chat choice finish_reason 后继续消费 usage 和 [DONE]；EOF 不是成功。远端终态及当前实际收到的计量一致性核验后，自有终态回执与私有部分产物原子登记，方可投影粗粒度核心事件。core ProviderEvent 保持不变：仅内部 complete 可投影 finished，refused/incomplete 以 PROVIDER_REFUSAL/PROVIDER_INCOMPLETE 错误投影，完整事实仍保存在自有回执；不把 JSON 偷塞进 text/error_code。consumer 读取该回执并完成自己的结果校验/事务后才有本机 completed。Run SSE 与 Tutor 状态机在 M5.3 实现。[S29][S30]
 
-活跃真实 source job 在 queued/running/awaiting_approval 均参加 workspace 独立测试排他；Provider 子步骤不豁免。M5.1 可独立实现并逐项验收本机配置/秘密/严格授权历史、无授权或无证明零传输、测试专属真实 SQLite source 和有明确计量规则的受控 HTTP 流协议。测试 source/model/proof/服务不得进入生产注册表，人工计量规则不能证明真实供应商隐藏开销。无生产 source 时设置显示没有可授权任务；无模型证明时 chat/streaming 显示不可调度。现 core AuthoringRequest 的 consent_id 必填，而 preview 要求先有真实 job，首次 Authoring 准备路径尚未闭合；M6 production source 接入前必须先在本文定义真实 owner 的授权前 prepare-job 入口和独立应用 DTO。现 core AuthoringRequest 不能充首次未授权 job 的创建输入，不能使用假 consent 或其他任务许可绕过。M5.1 不注册此生产来源、不把既有 POST /authoring/jobs 称为已可贯通，也不据本阶段验收标记 M6 已闭合；本次不新增 M6 路由或修改54 core。配置存在、受控协议 PASS 或本地预算 PASS 不能合并为生产生成贯通、模型质量、真实搜索或整个 M5 完成；真实 Provider/Codex 费用测试仍须另外显式授权，未执行为 NOT_RUN，真实模型评测在 M5.4。
+活跃真实 source job 在 queued/running/awaiting_approval 均参加 workspace 独立测试排他；Provider 子步骤不豁免。M5.1 可独立实现并逐项验收本机配置/秘密/严格授权历史、无授权或无证明零传输、测试专属真实 SQLite source 和有明确计量规则的受控 HTTP 流协议。测试 source/model/proof/服务不得进入生产注册表，人工计量规则不能证明真实供应商隐藏开销。无生产 source 时设置显示没有可授权任务；无模型证明时 chat/streaming 显示不可调度。现 core AuthoringRequest 的 consent_id 必填，仍不作为首次未授权 job 的创建输入，不使用假 consent 或其他任务许可。M6.1 首个例题的授权前路径由 §20.8 与附录 A/D 的独立应用 DTO 定义；M5.1 本身不据此追认 Authoring 已贯通，后续注册真实 source 也不豁免完整输入证明。配置存在、受控协议 PASS 或本地预算 PASS 不能合并为生产生成贯通、模型质量、真实搜索或整个 M5 完成；真实 Provider/Codex 费用测试仍须另外显式授权，未执行为 NOT_RUN，真实模型评测在 M5.4。
 
 推荐与联网事实分开：本地材料可精确引用；搜索候选未抓取或未核查时标 unverified；模型推导无来源可以清晰标“推导尝试”，不能配伪造外部引用。后续已实现搜索默认最多 3 次/请求、5 个来源、抓取 10 MiB/页面、5 次重定向，并逐步重新核权限与预算；这些上限不授予 M5.1 搜索能力。M5.2 来源/current descriptor变化按§20.7使代际待复核；无当前匹配代际时只返回明确状态与空hits，不用旧正文冒充新目标。显式旧scope可重新构建并返回原旧ref的真实正文，不静默迁移到最新版。
 
@@ -1106,6 +1107,34 @@ worker在短事务领取可恢复租约；在事务外逐块读取/核真实正�
 Content发布/current pointer/生命周期或来源descriptor变化在owner事务中登记依赖失效意图，已登记scope保留原roots。M5.2不因GET/query或stale状态自动新建任务；只有显式rebuild命令创建新Job，worker启动恢复已经登记的未终态任务。维护可标记自己的旧代际/消费进度，但不能追加未选择的scope，不能替Content/Learning清除共享依赖复核信号。有效性读回仍重算当前descriptor，不能只信dirty标记。所有queued/running/awaiting_approval学科任务参与现有独立测试排他；索引不豁免。worker调度给索引、导入、评分、推荐有界轮次，不能用长期写锁、无界循环或只做fire-and-forget宣称可靠构建。
 
 **基准与验收。** 附录F.1的原创冻结词法语料/gold是M5.2工程基准，实际数据、全部精确ContentRef/body SHA、算法/Unicode/SQLite版本、硬件、规模、冷暖条件、测试命令和逐case排名必须记录；先冻结再运行，不能按结果改gold或删除失败例。正向集合平均 Recall@5≥0.90，Recall@5按每个case的gold完整ref集合中进入前5的比例再算术平均；无匹配、安全与别名诊断单列，不加入该均值凑分。私解/越权scope/旧ref错贴/语法执行/Policy切换/损坏字节与Jobs恢复全部安全断言必须PASS。前端/native需至少真实query冷态→显式rebuild→job完成→准确命中/无结果/资源遗漏及旧scope重建回读，截图和范围说明不冒充真实模型、专家审校或整个M5验收。阈值是本项目首轮工程门槛，不是已测结果或通用RAG质量保证。
+
+### 20.8 M6.1 首个例题生成与数值检查切片
+
+本切片只生成一个新 `worked_example` 候选块，不修改既有内容、不生成整课/习题集/测验，不执行 M6.2 审核发布或 M6.3 Codex。它是 M6.1 的第一项可独立验证的实现，不能据此关闭整个 M6.1。作者在“创作”辅助入口明确填写主题、先修、目标、证明策略、provider 和零至八个精确公开 block 引用；无来源允许准备，但清楚显示“无已选教材来源”，不伪造引用。其他 output_kind、question/私有答案/历史作答源、自动扩范围、网络搜索和任意代码执行在本切片不开放。
+
+**准备与生成。** POST `/authoring/jobs` 只接附录 A 的 AuthoringPrepareWrite，不接 consent_id、客户端上下文全文或 hash。服务端在 author 会话、工作区/Policy 和源引用核验后，同事务保存真实 `jobs.kind=authoring`、不可变输入与准备快照、原创建命令回执；初始 awaiting_approval，无 Provider 请求。所选 block 由 Content owner 读取精确元数据与真实正文 bytes/SHA，冻结原来源/未审事实；按用户引用顺序去重（重复输入拒绝），不从 current 指针改用新版，不从引用推定审核通过。仅两条基础 message（版本化 system 模板、原教学约束规范 JSON）及所选完整块 evidence，最终包装后仍须≤12,000 codepoints、evidence≤8；任何已选材料或必要约束超限均明确拒绝准备，不静默省略。source_refs=[] 时不调用要求非空 scope 的 Content 端口。模板把材料作为不可信数据，保留 full/declared_dependencies 原约束；保留约束不代表模型已经满足证明要求。
+
+作者从同一实际 Job 的当前 id/revision 发起已有 Provider preview/grant。purpose=authoring，原 Job+input/context/prepared/request-body SHA 与真实 proposal/consent 一一绑定；不能再次 POST 改带 consent 的 body 来“继续”。批准回调经 Authoring owner 同事务使同 Job 可调度；撤回/过期后不自动重批，若尚未 dispatch 可在同一未终态 Job 当前阶段重新明确预览，已有开始许可则只恢复原实例。Provider 实际使用普通文本 chat/streaming，提示返回一个严格 JSON 对象不等于供应商 structured_output 能力；不增加 response_format、tools 或搜索能力。仅实际受检 complete、无 refusal 的完整 answer 可尝试解析，禁止剥代码围栏、截取局部 JSON、猜字段或用修复请求暗增第二次调用。解析失败/拒答/不完整保留原输出与受检终态，Job failed 或按取消事实 cancelled，不造候选成功。
+
+通过结构/引用检查时，Authoring 同事务建立唯一不可变 DraftCandidate、检查记录及 completed Job 结果；completed 只表示候选已持久，数值复算及人类数学/来源审校仍未运行。candidate.entity=block，draft_revision 首版为1，candidate_sha256 对完整候选 payload 的规范 JSON，不是尚不存在的 ContentRef；其中 body_sha256 对原 body_markdown UTF-8 字节，正文不悄悄规范化。Job.result_refs 永远不塞入草稿/检查 ID，首切片为 []；生成结果从专用读口回读。原模型输出保留且标未核验，即使文本自称 APPROVED 也不授予审核。机器可检查 schema、声明引用是否来自本次材料、声明符号是否重名、算术计划能否解析；不能自动证明 Markdown 的公式/条件/推导或数字与计划等价。
+
+**草稿归属。** 首切片 Authoring 用自己的不可变候选/修订表和命令账本，GET `/authoring/drafts/{id}` 返回 authoring 判别字段及专用 payload；既有 GET `/drafts/{id}` 保持 Import owner 的 ImportDraftSnapshot，不替换成宽 union、不让 import_id 解析生成候选。两个 owner 只读自己真实记录，未知/其他 owner ID 返回404，不能根据 ID 前缀授予权限，也不跨 owner SQL 猜归属。首切片不往原 Import drafts 写假 import_id；M6.2 接入通用审核/发布前须用所属迁移/端口统一真实候选身份与 reviews 外键，不能拿本切片名义提前开放发布。原第15.1节 Draft 状态不新增 rejected/needs_review：本切片合法候选始终 draft，数值失败仍为 draft；§12.4 的 rejected/needs_review 是检查结论或待审提示，不是新 Draft 状态。坏 JSON 仅保留生成失败产物，没有合法 DraftCandidate。
+
+**独立的数值批准。** 候选里的 numeric_plan 是待检查建议、默认不执行。作者显式 POST 候选的 numeric-checks 预览后，服务端冻结精确 DraftCandidate、整个计划、固定 evaluator/runtime SHA、资源界限与操作 SHA；浏览器展示所有变量/单位、表达式、期望值和容差及仅本机执行范围。只有另外的 approve_once 才创建实际 `jobs.kind=authoring_numeric_check` 并允许隔离 worker 执行；Provider consent 不批准本机执行，生成完成/打开预览/GET 不运行检查。decline 不建 Job、零执行；过期批准拒绝，原决定 ACK 按完整命令/当前允许范围回放。每个预览最多一个实际检查 Job，其他 key 重复决定409；首切片每个候选最多100份数值预览（包含已过期/拒绝/完成者），达到上限时仅拒绝新预览为413 NUMERIC_PREVIEW_LIMIT，不删除旧记录腾位，不阻断原100份读取、原ACK、已批准Job取消。这个初始资源边界可由后续明确的分页/配额改进替代，不代表永久能力上限。用户需要再次复算时显式建新预览/批准，保留两次事实，不把旧批准挪给新版候选/计划/runtime。
+
+首个 evaluator 为 `finite-arithmetic-v1`：表达式只允许有限十进制常量、已声明变量、括号、一元 +/-、二元 + - * / **；无函数调用、属性、下标、字符串、布尔、复数、赋值、import、文件或网络。先有界解析后解释 AST，不调用 eval/exec/compile 执行表达式，不运行模型代码。每式≤512 codepoints、128 AST节点、深度16；幂指数求值后必须为 -16..16 的整数，所有常量、中间值、结果为有限 binary64，变量和检查分别最多32，每个 NumericAssertion.unit 同时标注该条 actual/expected 的数值，变量 unit 仅展示；本 evaluator 不推导表达式单位、不验证维度相容，也不实施单位换算，不能宣称已通过维度检查。比较用 §13 的 atol+rtol 规则；差值、容差乘积/和等比较中间值同样须有限，溢出为真实 NUMERIC_NONFINITE，不能因阈值变Infinity而通过。随机数不支持，seed 显式 null。受限语言之外的任务明确 NUMERIC_PLAN_UNSUPPORTED，不换 shell/Python/Codex 通道。
+
+预览中的 evaluator_sha256/runtime_manifest_sha256 必须由受信数值 owner 对实际将用的本机文件取得，不接受调用者或模型提交。受信部署清单列出完整执行闭包：evaluator入口、启动/限制规则、Python可执行文件及实际允许加载的标准库/动态库、sandbox可执行文件和配置；每项含无个人路径的逻辑相对路径、实际bytes大小和SHA，另记录版本与清单格式。preview实际逐文件安全打开并核bytes后计算规范清单SHA，不能只读一串缓存SHA当已核runtime；执行前再次核全部成员、路径/非symlink/大小/SHA与原清单，建立同批经核验的只读固定文件/描述符挂载，不能先核后切到另一可变路径执行。未声明依赖不得从宿主Python环境/用户site-packages/环境搜索路径补入；闭包无法核实则不可批准或执行。更换任一成员/版本/限制规则使原预览不可用于新执行，须新预览/明确批准，不改原操作/ACK。隔离检查和数值计算的实际运行由用户该次单独批准；preview只读文件/本机元数据，不通过执行模型代码或联网“探测”环境。
+
+执行必须用真实隔离子进程，禁止网络与读取工作区、用户HOME、环境秘密、Provider密钥；只只读挂载批准输入和受信 evaluator/runtime，临时输出隔离，非 root/无额外权限。初始预算 wall=5s、CPU=2s、内存=256MiB、输出=64KiB、进程数=1；启动程序可有受控sandbox supervisor但计算器不能派生子进程。缺可靠隔离或资源限制为 BLOCKED_ENVIRONMENT，零非隔离fallback。批准后执行前重核候选/操作/实际runtime SHA、Policy、租约与取消；不在数据库写事务内等待进程。执行开始事实先持久，再启动；终态/结构化输出清单与哈希同事务提交。启动后崩溃无法核实结果时记录 outcome_unknown、不自动再运行；只有能证明尚未取得开始许可的准备可安全重试。取消/超时杀整个子进程组并保留已发生事实，不声称未执行。
+
+数值 PASS 仅指本次完整计划在记录的输入、binary64、单位标签及容差下全部通过；模型同时编造表达式和期望值仍可能自洽错误，正文与计划关联未经数学核验。FAIL 保存实际不符/算术错误；超时/环境/资源/取消/未知运行状态保留真实边界而非PASS。每次结果有原输入和计划 SHA、软件/可执行文件/沙箱版本清单 SHA、seed、实际开始/结束、退出码（未取得则null）、结构化输出及其SHA。无运行/无输出不得填0退出码或空成功。任何数值或 Schema PASS 都不改变 mathematical/sources=NOT_RUN、independent_pedagogy=NOT_RUN，不生成 APPROVED ReviewReceipt，不发布 Content，不更新学习证据/成绩。
+
+准备、学科详情/草稿/原输出/数值结果读取、批准、派发与执行前均要求 author 且受当前工作区 Policy；首切片不接 attempt/question 上下文，用原 private_artifact 防护保守阻断尚受答案保护的测验（含 assisted），另显式阻断活动 open_book/independent，不能从 Authoring 绕过 Tutor 的绑定规则。普通材料读取不因此改权限。所有非终态 Authoring/数值 Jobs 参加既有 independent 启动排他。GET `/authoring/jobs` 控制分页、GET `/jobs/{id}` 和原 cancel 是不含学科正文的控制入口：所属工作区 learner/author 在角色降低/策略锁后仍能回读状态或取消，不返回题设/源标题/正文/原错误详情/候选payload。GET 不修状态；worker负责唯一终态。所有领域写校验会话、Origin/CSRF及完整 route/actor/workspace/key/body/CAS；原 ACK 和当前投影分别回读，412保留本页候选，新key不用于偷重试未知结果。
+
+创作辅助入口须能进入安全控制面板：已确认工作区会话下，即使角色为learner、策略未知或活动测试限制学科读取，仍可发现上述安全Job列表并取消；不因Shell的学科入口总锁而把所有控制藏起来。此时清空/阻断主题、源材料、候选、数值输入/输出等学科payload，准备/详情/批准不可用，不借控制入口恢复旧缓存正文；workspace/session变化废弃旧异步，保留既有未保存关闭保护。恢复正常author及当前Policy后再显式读取受保护详情，不自动批准或执行。四个主导航不变。
+
+首切片验收须分开真实 SQLite/受控 Provider/隔离进程链、浏览器授权/候选/批准/拒绝/恢复、真正托管 Provider 的完整证明和本次费用授权。缺托管证明时继续可验证的本地工作，生产外发仍零传输且 NOT_RUN；受控本机模型、固定合成例题或数值 PASS 不代表真实模型、所有生成类型或数学/来源审校完成。
 
 ## 21. 旧格式兼容与确定的范围边界
 
@@ -1669,7 +1698,13 @@ consumed_provider_calls 是本机保守消耗额度，不声称服务商实际�
 
 | 接口 | 请求 | 响应与业务语义 |
 |---|---|---|
-| POST `/authoring/jobs` | AuthoringRequest | 202 JobRef；生成范围/证明策略/引用限制不丢失 |
+| POST `/authoring/jobs` | AuthoringPrepareWrite；Idempotency-Key | 202 JobRef，真实 authoring Job，初始 awaiting_approval；无外发 |
+| GET `/authoring/jobs` | `cursor?`,`limit?`；默认20、最大100，拒未知/重复/null参数 | AuthoringJobPage；工作区内 authoring/authoring_numeric_check 两种真实Job的安全控制分页，learner/author均可；冻结创建序列，不下发正文/原标题/候选/父级学科关联 |
+| GET `/authoring/jobs/{id}` | 无 | AuthoringJobView；真实准备/许可/原生成结果，作者及当前学科读取许可 |
+| GET `/authoring/drafts/{id}` | 无 | AuthoringDraftView；精确 DraftCandidate 与 immutable payload，非 ContentRef；不与 Import `/drafts/{id}` 争用 |
+| POST `/authoring/drafts/{id}/numeric-checks` | NumericCheckPreviewWrite；Idempotency-Key | 201 NumericCheckView，冻结完整操作、有效10分钟；不创建执行Job、不运行 |
+| GET `/authoring/numeric-checks/{id}` | 无 | NumericCheckView；原预览/决定/真实Job与结果，GET零写 |
+| POST `/authoring/numeric-checks/{id}/decision` | ApprovalDecision；Idempotency-Key | NumericCheckDecisionAck；approve_once后202真实检查Job，decline后200且job=null；expected_revision强CAS，操作SHA必须完全一致 |
 | GET `/jobs/{id}` | 无 | JobSnapshot；敏感日志不下发原始完整请求 |
 | POST `/jobs/{id}/cancel` | `{expected_revision}` | JobSnapshot；按任务终态约束 |
 | POST `/approvals/{id}/decision` | ApprovalDecision | RunSnapshot；actor、操作hash、任务版本及过期时间校验 |
@@ -1681,6 +1716,96 @@ consumed_provider_calls 是本机保守消耗额度，不声称服务商实际�
 | GET `/connectors` | 无 | `{items:{id,name,configured,read_capabilities:string[],write_capabilities:string[],last_sync:UTC|null}[]}` |
 | POST `/connectors/{id}/preview` | `{scope_ref_ids:Id[],direction:pull|push}` | 202 `{proposal_id,job:JobRef}`；连接不可用明示，预览不写远端 |
 | POST `/connectors/{id}/apply` | `{proposal_id,operation_sha256,consent_id,expected_remote_version:string|null}` | 202 JobRef；授权、版本和幂等检查；不支持的标准能力拒绝 |
+
+**M6.1 首切片严格应用字段：** 下列全部对象闭合，未标 optional 的字段 required，nullable 显式 null；bool 不能冒充 int/number，数值 finite，nonblank string 不接受纯空白。Id/Revision/Sha256/UTC/DraftCandidate/JobRef/ApprovalDecision/Warning/UsageSnapshot 沿既有契约；引用 entity 另按这里限制。正文只在当前 author 学科读口，列表/通用 Jobs 控制不携带正文。nullable 不代表可省略。
+
+```text
+AuthoringPrepareWrite = {
+  topic: nonblank string[1..4000], prerequisites: array[0..32] of nonblank string[1..2000],
+  objectives: array[1..32] of nonblank string[1..2000], proof_policy: full|declared_dependencies,
+  output_kind: worked_example, source_refs: ContentRef(entity=block)[0..8], provider_id: Id
+}
+NumericVariable = {name: ASCII identifier[1..32], value: finite number, unit: nonblank string[1..64]}
+NumericAssertion = {
+  id: Id, expression: nonblank string[1..512], expected: finite number,
+  atol: finite number>=0, rtol: finite number>=0, unit: nonblank string[1..64]
+}
+NumericPlan = {version: finite-arithmetic-v1, variables: array[0..32] of NumericVariable, assertions: array[1..32] of NumericAssertion, seed: null}
+WorkedExamplePayload = {
+  version: worked-example-candidate-v1, kind: worked_example,
+  title: nonblank string[1..300], body_markdown: nonblank string[1..400000],
+  symbols: array[1..64] of {name:nonblank string,tex:nonblank string,domain:nonblank string,dimension:nonblank string},
+  declared_source_refs: ContentRef(entity=block)[0..8], numeric_plan: NumericPlan
+}
+AuthoringInputMaterial = {
+  ref: ContentRef(entity=block), title: nonblank string, body_sha256: Sha256,
+  body_bytes: integer>=1, material_review: unreviewed, provenance: RetrievalProvenance
+}
+AuthoringPreparationSummary = {
+  context_snapshot_id: Id, snapshot_sha256: Sha256, job_input_sha256: Sha256,
+  prepared_input_sha256: Sha256, character_count: integer[1..12000],
+  materials: AuthoringInputMaterial[0..8], warnings: Warning[]
+}
+AuthoringValidation = {
+  schema: PASS|FAIL|NOT_RUN, references: PASS|FAIL|NOT_RUN,
+  symbol_declarations: PASS|FAIL|NOT_RUN, issues: Warning[],
+  mathematical: NOT_RUN, sources: NOT_RUN, independent_pedagogy: NOT_RUN
+}
+AuthoringJobSummary = {
+  id: Id, kind: authoring, job_revision: Revision, status: JobRef.status,
+  title: nonblank string, candidate: DraftCandidate|null, created_at: UTC, updated_at: UTC
+}
+AuthoringJobPage = {items: JobSnapshot[], next_cursor: nonblank string|null, total_hint?:integer>=0}
+AuthoringJobView = {
+  summary: AuthoringJobSummary, request: AuthoringPrepareWrite,
+  preparation: AuthoringPreparationSummary, proposal_id: Id|null, consent_id: Id|null,
+  provider_receipt_id: Id|null, provider_outcome: completed|failed|incomplete|cancelled|unknown|null,
+  usage: UsageSnapshot, raw_answer: string|null, raw_refusal: string|null,
+  validation: AuthoringValidation, error_code: nonblank string|null
+}
+AuthoringDraftView = {
+  owner: authoring, candidate: DraftCandidate(entity=block), source_job_id: Id,
+  state: draft, base_ref: null, body_sha256: Sha256,
+  payload: WorkedExamplePayload, validation: AuthoringValidation,
+  numeric_check_ids: Id[0..100], warnings: Warning[]
+}
+NumericCheckPreviewWrite = {candidate: DraftCandidate(entity=block)}
+NumericRuntimeProfile = {
+  evaluator_version: finite-arithmetic-v1, evaluator_sha256: Sha256,
+  runtime_manifest_sha256: Sha256, python_version: nonblank string, sandbox_version: nonblank string,
+  wall_seconds: 5, cpu_seconds: 2, memory_bytes: 268435456, output_bytes: 65536, evaluator_process_limit: 1
+}
+NumericAssertionResult = {
+  id: Id, actual: finite number|null, passed: boolean,
+  error_code: NUMERIC_DOMAIN_ERROR|NUMERIC_NONFINITE|null
+}
+NumericCheckResult = {
+  job_id: Id, input_sha256: Sha256, operation_sha256: Sha256,
+  outcome: passed|mismatch|evaluation_error|timeout|resource_limit|cancelled|environment_unavailable|outcome_unknown,
+  verdict: PASS|FAIL|BLOCKED, started_at: UTC|null, finished_at: UTC,
+  exit_code: integer|null, assertions: NumericAssertionResult[],
+  output_sha256: Sha256|null, result_sha256: Sha256
+}
+NumericCheckView = {
+  id: Id, revision: Revision, candidate: DraftCandidate(entity=block),
+  plan: NumericPlan, runtime: NumericRuntimeProfile, operation_sha256: Sha256,
+  decision: pending|approve_once|decline, created_at: UTC, expires_at: UTC,
+  expired: boolean, job: JobRef|null, job_revision: Revision|null,
+  result: NumericCheckResult|null, warnings: Warning[]
+}
+NumericCheckDecisionAck = {
+  id: Id, revision: Revision, operation_sha256: Sha256,
+  decision: approve_once|decline, applied: true, job: JobRef|null
+}
+```
+
+AuthoringPrepareWrite 中每条先修/目标≤2000 codepoints，整个真实准备仍受12k约束；来源refs完整去重且不冲突。WorkedExamplePayload 是供应商普通文本需解析的唯一对象，禁止重复JSON键/额外字段/非有限数；它不携带 provider/consent、候选ID/正文SHA、审核批准或任意产物路径，这些只能由owner取得/计算。declared_source_refs只能是本次实际 materials的子集，完整ref比较；未声明真实外部引用不能从文字URL猜来源。symbols名称唯一，numeric变量名称为 `[A-Za-z][A-Za-z0-9_]{0,31}`，变量/assertion IDs各自唯一；每个数值变量必须同名出现在symbols，单位dimension只是声明，不把字符串一致当维度定理。NumericPlan 仅声明可复算的显式算术实例，不证明全文与实例相符。
+
+AuthoringJobSummary.candidate 仅在实际候选完成事务后非null，completed与非null候选及三项结构PASS相互对应。失败输出只通过原 CheckedProviderResult 核验后保存/回读，未知用量为null；refusal/incomplete不能建立候选，JSON/schema/ref失败不隐瞒原受检 provider_outcome=completed。合法候选之后的 numeric结果不改候选SHA、Draft状态或已完成生成Job。新 NumericCheckPreview 同时核 URL id 与完整candidate，revision不符412，hash/entity不符409；每次preview是新独立批准对象。operation_sha256=SHA256(规范JSON `{version:"numeric-operation-v1",workspace_id,check_id,candidate,plan,runtime}`)，全部内容先由server冻结，不接受客户端自报plan/runtime替换。expires_at=创建时间+10分钟，GET expired只读派生；decline可对过期预览执行，approve_once须未过期且当前runtime仍同hash。revision 初版1，唯一决定推进到2，Job后续进展不暗改决定修订；原决定同key回ACK后另GET看当前Job，不把原queued ACK当当前queued。
+
+NumericCheckView 仅批准后 job/job_revision 同时非null；decline为null，pending为null，result只在该实际Job唯一终态后出现。NumericCheckResult passed→PASS，mismatch/evaluation_error→FAIL，其余→BLOCKED；正常完整评估每个assertion必须恰好一项且原序，算术域/非有限错误为actual=null、passed=false及真实error_code，否则actual有限、error_code=null、passed按固定比较规则。完整计划评估即使数值不符也可是Job.completed，其检查verdict仍FAIL；环境/超时/资源/未知为Job.failed，取消为cancelled。非完整执行 assertions只列真实已保存项，不把未执行项补假0。result.input_sha256绑定实际NumericJobInput；output_sha256对实际完整子进程输出原bytes（若无则null），result_sha256对完整result唯一排除自身字段。平台控制错误不能用供应商/计算器任意报文直接填API错误；安全code枚举可沿既有错误契约扩展，原正文/输出仅存在本作用域受保护记录。
+
+控制列表cursor冻结workspace、两种Job kind的固定成员范围、limit、创建序列上界和最后排序位置，按创建序列倒序；不冻结动态job状态，下一页不得重复/漏既定成员，新增任务需刷新。AuthoringJobPage.items严格使用现有具名JobSnapshot且kind只允许authoring/authoring_numeric_check，result_refs=[]、warnings=[]、progress.label为固定非学科阶段标签，error只用受控安全code/固定说明；无原主题、源标题、candidate、check或父级关联。其归属/历史逐项由对应owner核验，learner/author不因学科Policy锁而失去安全发现/取消入口；坏历史不跳过成完整列表。拥有正常作者学科权限时，UI再对authoring类id读取AuthoringJobView/候选；numeric类列表只提供现有Job状态/取消，完整检查仍从所属候选的numeric_check_ids及受保护NumericCheckView进入，不猜外露父级ID。无query的三个id读口不接隐式revision或任意path。全部写先校验当前访问与自有历史，再回放原key；新操作才校验当前业务基准/有效性，完整命令不同409、强CAS旧基准412。安全控制通过原 GET/POST jobs，不新增宽权限学科view。
 
 ### 生成与覆盖核对规则
 
@@ -1715,7 +1840,7 @@ consumed_provider_calls 是本机保守消耗额度，不声称服务商实际�
 | POST `/objects/{id}/archive` | `{expected_revision,archived:boolean}` | MutationAck；变更对象lifecycle，不改旧修订正文 |
 | POST `/deletions/preview` | `{target:workspace|course|personal_data,target_id,scope:archive|purge}` | `{proposal_id,operation_sha256,affected_counts,unresolved_dependencies,warnings}` |
 | POST `/deletions/commit` | `{proposal_id,operation_sha256,expected_workspace_revision,confirm_purge:boolean}` | 202 JobRef；执行前可恢复备份；purge需要额外明确确认 |
-| GET `/drafts/{id}` | 无 | `{id,kind,revision,base_ref,state,candidate_sha256,payload,warnings}`；payload按kind专用DTO；测试期受限 |
+| GET `/drafts/{id}` | 无 | 既有 ImportDraftSnapshot：`{id,kind,revision,base_ref,state,candidate_sha256,payload,warnings}`；Import owner、按kind专用DTO，测试期受限；M6.1 Authoring 只用专属 `/authoring/drafts/{id}`，通用审核整合见§20.8 |
 | GET `/reviews/{id}` | 无 | ReviewReceipt；candidate绑定确切草稿版本，不返回未授权答案 |
 | POST `/reviews/{id}/decision` | `{expected_revision,candidate_sha256,mathematical:APPROVED|REJECTED|NOT_APPLICABLE,sources:APPROVED|REJECTED|NOT_APPLICABLE,reason,evidence_artifact_ids:Id[]}` | ReviewReceipt；author会话显式人工确认，操作者从会话得出；不允许模型自报人工reviewer |
 | POST `/attempts/{id}/regrade` | `{expected_grading_revision,reason,item_reviews:[{question_id,score:finite>=0,feedback_markdown}]}` | 202 JobRef；人工复核已提交项，新grading_revision不改旧结果；score≤max |
@@ -2330,7 +2455,7 @@ export interface ContentPort<D extends DTOMap> {
  getLesson(ctx:AuthContext, ref:ContentRef):Promise<D['Lesson']>;
  getBlock(ctx:AuthContext, ref:ContentRef):Promise<D['ContentBlock']>;
  createDraft(ctx:WriteContext, base:ContentRef|null):Promise<{draftId:string;revision:number}>;
- publish(ctx:WriteContext, ref:ContentRef, receiptId:string):Promise<ContentRef>;
+ publish(ctx:WriteContext, candidate:DraftCandidate, receiptId:string):Promise<ContentRef>;
 }
 export interface RoutePort<D extends DTOMap> {
  save(ctx:WriteContext, route:D['Route']):Promise<ContentRef>;
@@ -2425,9 +2550,24 @@ export interface RecommendationPort<R extends RecommendationDTOMap> {
  decide(ctx:WriteContext, id:string, request:R['RecommendationDecisionWrite'], expectedDecisionSha256:string):Promise<R['MutationAck']>;
 }
 export interface NotesPort<D extends DTOMap> {save(ctx:WriteContext, note:D['Note']):Promise<ContentRef>}
+export interface DraftCandidate {draft_id:string;draft_revision:number;entity:Entity;candidate_sha256:string}
+export interface AuthoringApplicationDTOMap {
+ AuthoringPrepareWrite:unknown; AuthoringJobPage:unknown; AuthoringJobView:unknown;
+ AuthoringDraftView:unknown; NumericCheckPreviewWrite:unknown; NumericCheckView:unknown;
+ NumericCheckDecisionAck:unknown; ApprovalDecision:unknown;
+}
+export interface AuthoringApplicationPort<A extends AuthoringApplicationDTOMap> {
+ prepareJob(ctx:WriteContext,request:A['AuthoringPrepareWrite']):Promise<JobRef>;
+ listJobs(ctx:AuthContext,query:{cursor?:string;limit?:number}):Promise<A['AuthoringJobPage']>;
+ readJob(ctx:AuthContext,id:string):Promise<A['AuthoringJobView']>;
+ readDraft(ctx:AuthContext,id:string):Promise<A['AuthoringDraftView']>;
+ previewNumeric(ctx:WriteContext,draftId:string,request:A['NumericCheckPreviewWrite']):Promise<A['NumericCheckView']>;
+ readNumeric(ctx:AuthContext,id:string):Promise<A['NumericCheckView']>;
+ decideNumeric(ctx:WriteContext,id:string,request:A['ApprovalDecision']):Promise<A['NumericCheckDecisionAck']>;
+}
 export interface AuthoringPort<D extends DTOMap> {
  generate(ctx:WriteContext, request:D['AuthoringRequest']):Promise<JobRef>;
- review(ctx:WriteContext, ref:ContentRef):Promise<D['ReviewReceipt']>;
+ review(ctx:WriteContext, candidate:DraftCandidate):Promise<D['ReviewReceipt']>;
 }
 export interface CodexBrokerPort<D extends DTOMap> {
  start(ctx:WriteContext, sandboxRootId:string):Promise<{sessionId:string}>;
@@ -2607,6 +2747,32 @@ OutboundSourcePort新增 `record_proposal(transaction, AuthContext, job_id, prep
 Provider-owned `read_result(transaction, AuthContext, job_id, consent_id) -> CheckedProviderResult|null` 定位真实源/唯一dispatch，先核归属、自有历史、源verify_output，再核receipt SHA、原请求/授权关联、artifact membership/通道/实际UTF-8字节/size/SHA。null仅确无终态；已登记产物缺失/损坏拒绝，不造空答案。零外发/零重复dispatch，不接文件/URL/任意artifact，不向浏览器暴露路径。原terminal对已注册source使用同一源专属输出许可，其他private_artifact保护不变。Provider只写自己的dispatch/receipt/artifact，Tutor只经此端口消费原answer/refusal，不从粗粒度finished或恢复流猜正文。 内部停止/恢复另可用 `read_control_result(transaction, AuthContext, job_id, consent_id) -> ProviderTerminalReceipt|null`：核真实工作区、Jobs、许可/dispatch/receipt关联，仅返回已核终态元数据、不返回artifact正文；学科失权时仍可保留实际远端事实并结束本机任务。该口不向浏览器新增接口、不解除正文读取权限。
 
 Tutor/Jobs owner管claim/lease/cancel/唯一终态/命令回执；Context/Provider各经自己端口参与调用方事务。新增所属迁移，不改0001。租约公平性、事件读取批量/合并的普通工程细节用ADR，不另造规范。验收分开真实SQLite/受控适配器完整链、浏览器恢复/权限/停止、生产proof/费用调用是否实跑；缺生产证明/本次费用授权标NOT_RUN，不把测试注册当生产能力。
+
+**M6.1 首切片内部协作：** AuthoringApplicationDTOMap 绑定附录 A 的实际命名应用DTO，运行生成独立 AuthoringRuntimeDTOMap；旧 AuthoringPort.generate(core AuthoringRequest) 只是已授权的粗粒度目标，不作为首次HTTP创建或绕过新source准入。review/publish 的未发布输入纠正为 DraftCandidate，不再用尚不存在的ContentRef；这是已有§20.1语义的对齐，M6.2未实现时仍不得注册假handler。ImportDraftSnapshot 保持原绑定，新增 Authoring 读取不冒充旧Import读口。54 core与0001字节不改。
+
+```text
+AuthoringJobInput = {version:authoring-job-v1,workspace_id:Id,job_id:Id,request:AuthoringPrepareWrite}
+PreparedAuthoringContext = {
+  version:authoring-context-v1,job_id:Id,snapshot:ContextSnapshot,
+  template_version:nonblank string,messages:GenerationMessage[2],evidence:EvidenceChunk[0..8],
+  materials:AuthoringInputMaterial[0..8],warnings:Warning[]
+}
+AuthoringCandidateRecord = {
+  version:authoring-candidate-v1,workspace_id:Id,candidate:DraftCandidate(entity=block),
+  source_job_id:Id,provider_receipt_id:Id,payload:WorkedExamplePayload,
+  body_sha256:Sha256,validation:AuthoringValidation,created_at:UTC
+}
+NumericJobInput = {
+  version:authoring-numeric-job-v1,workspace_id:Id,job_id:Id,check_id:Id,
+  operation_sha256:Sha256,candidate:DraftCandidate(entity=block),plan:NumericPlan,runtime:NumericRuntimeProfile
+}
+```
+
+以上内部对象仍全部required/闭合，messages/evidence/正文禁止普通repr/log。Job input SHA对实际规范JSON；准备 snapshot.policy=authoring，request_sha256对原 AuthoringPrepareWrite，snapshot_sha256对完整PreparedAuthoringContext唯一排除snapshot.snapshot_sha256；character_count与Provider包装后实际计数相同。prepared_input_sha256仍依§20.5，不能套用Tutor完整context哈希或仅哈希core snapshot。candidate_sha256对WorkedExamplePayload；AuthoringCandidateRecord另保存完整记录SHA并核其所有关联。numeric Job input、批准操作和结果完整关联，不凭自洽JSON+新SHA替代真实历史核验。
+
+Authoring owner 的 prepare_context/verify_context/read_context 使用调用方真实SQLite事务，在自己的准备表保存/核验；Content经现有ContentRetrievalSource.resolve_scope/read_material/revalidate_scope的public块端口提供真实refs/bytes/provenance，无需先建检索索引、无访问私题解。其source实现已有OutboundSourcePort的全部真实方法（含reference_summaries/record_proposal/bind_authorization/verify_dispatch/verify_output），只注册Jobs.kind=authoring；numeric_check不是外发source。Provider按原checked dispatch/read_result/read_control_result读口交付自身受检终态/产物，Authoring不直接查Provider SQL或读取任意artifact文件。新source结果许可必须核作者来源/同job/context/current Policy，不能普遍放宽private_artifact。
+
+Jobs-owned适配器提供两种kind的真实JobSnapshot和原cancel，所有命令回执绑定原route/body/key/actor/workspace，cancel终态no-op和旧ACK规则沿现有Jobs契约。生成完整候选事务与数值检查终态事务各自原子，不把数值等待挂在已完成生成Job上。新迁移只改所属新表/注册，不改0001和已有import记录。隔离runner为Quality/数值owner的 typed run(NumericJobInput, cancellation)->受检执行结果；实际runtime清单与operation一致、stdin/输出有界、进程启动与结束证据由该owner取得，不信任模型自报退出码。数值审批/开始/终态/结果与候选membership全回读校验；出现损坏failclosed，无GET修复。工具链固定与资源限制实现、lease公平性、错误分类等工程细化可写ADR，不扩大本节语言能力或改变审核语义。
 
 # 附录 E：确定性样例生成器
 

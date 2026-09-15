@@ -1,0 +1,38 @@
+import 'fake-indexeddb/auto'
+import { render, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
+import { afterEach, test, expect, vi } from 'vitest'
+const state = vi.hoisted(() => ({ policy: {known:false, independentId:null as string|null, openBookId:null, error:'',refresh:()=>{} } }))
+vi.mock('../../workbench/useWorkbench', async () => {
+ const {emptySession}=await import('../../workbench/model')
+ return {useWorkbench:()=>({session:emptySession(),set:vi.fn(),status:'saved',uiReady:true,error:'',drafts:{},updateDraft:vi.fn(),reconnect:vi.fn(),draftConflicts:{},draftSaving:{},draftErrors:{},chooseDraft:vi.fn(),draftResolving:{},workspaceId:'workspace_shell_control',recoverable:[],restorePending:false,comparison:null,retainLocal:vi.fn(),draftBases:{},draftStored:{}})}
+})
+vi.mock('../assessment/useWorkspacePolicy',()=>({useWorkspacePolicy:()=>state.policy}))
+vi.mock('../routes/useRoutes',()=>({useRoutes:()=>({records:[],loading:false,error:'',refresh:()=>{}})}))
+vi.mock('../learning/useConceptStates',()=>({useConceptStates:()=>({value:null,error:''})}))
+vi.mock('../../workbench/Tutor',()=>({Tutor:()=>null}))
+HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
+HTMLDialogElement.prototype.close = function () { this.removeAttribute('open') }
+import {Shell} from '../../workbench/Shell'
+afterEach(()=>{cleanup();vi.unstubAllGlobals()})
+test.each(['unknown','independent'])('Shell %s Policy still exposes actual safe Authoring cancellation',async mode=>{
+ state.policy.known=mode!=='unknown';state.policy.independentId=mode==='independent'?'attempt_synthetic':null
+ const calls:string[]=[]
+ const job={id:'job_numeric_control',workspace_id:'workspace_shell_control',kind:'authoring_numeric_check',status:'running',revision:2,created_at:'2026-09-16T00:00:00Z',updated_at:'2026-09-16T00:00:01Z',progress:{completed:0,total:null,label:'running'},result_refs:[],warnings:[],error:null}
+ vi.stubGlobal('fetch',vi.fn(async(path:string,init:RequestInit)=>{
+  calls.push(`${init?.method??'GET'} ${path}`)
+  let value:unknown
+  if(path.startsWith('/api/v1/authoring/jobs'))value={items:[job],next_cursor:null}
+  else if(path==='/api/v1/session')value={workspace_id:job.workspace_id,role:'learner',csrf_token:'synthetic-component-only',active_independent_attempt_id:state.policy.independentId,active_open_book_attempt_id:null}
+  else if(path===`/api/v1/jobs/${job.id}/cancel`)value={...job,status:'running',revision:3}
+  else throw new Error('Unexpected request in bounded Shell control test')
+  return new Response(JSON.stringify(value),{status:200,headers:{'Content-Type':'application/json'}})
+ }))
+ render(<Shell/>)
+ fireEvent.click(screen.getByRole('button',{name:'创作'}))
+ const cancel=await screen.findByRole('button',{name:`明确取消任务 ${job.id}`})
+ await waitFor(()=>expect((cancel as HTMLButtonElement).disabled).toBe(false))
+ fireEvent.click(cancel)
+ await waitFor(()=>expect(calls).toContain(`POST /api/v1/jobs/${job.id}/cancel`))
+ expect(screen.queryByLabelText('例题主题')).toBeNull()
+ expect(calls.some(v=>v.includes('/drafts/')||v.includes('/numeric-checks/'))).toBe(false)
+})

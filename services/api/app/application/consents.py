@@ -60,6 +60,9 @@ class ConsentsService:
             previous = providers.replay(route, key, fingerprint, ConsentProposalView)
             if previous is not None:
                 repo.proposal(previous.id)
+                if previous.summary.purpose == 'authoring':
+                    self.source_registry.resolve(connection, identity, previous.summary.job_id).read_job(
+                        connection, identity, previous.summary.job_id)
                 return previous
             now = utc_now()
             if instant(request.expires_at) <= instant(now):
@@ -172,6 +175,9 @@ class ConsentsService:
             previous = providers.replay(route, key, fingerprint, ConsentCreateAck)
             if previous is not None:
                 repo.consent(previous.id, previous.revision)
+                if previous.summary.purpose == 'authoring':
+                    self.source_registry.resolve(connection, identity, previous.summary.job_id).read_job(
+                        connection, identity, previous.summary.job_id)
                 return previous
             original = repo.proposal(request.proposal_id)
             if original.proposal_sha256 != request.proposal_sha256:
@@ -192,10 +198,13 @@ class ConsentsService:
             consent_id = 'consent_' + uuid4().hex
             cid = command_id()
             repo.append_consent(consent_id, view.id, cid, utc_now())
-            source.bind_authorization(connection, identity, material.job_id, material.prepared_input_sha256, consent_id)
             ack = ConsentCreateAck(id=consent_id, revision=1, status='active', proposal_id=view.id,
                                    proposal_sha256=view.proposal_sha256, summary=view.summary)
             providers.record_command(cid, route, key, request, fingerprint, ack)
+            # The source owner can now verify the complete original consent and
+            # ACK through the Provider port. All rows still commit or roll back
+            # together; a binding rejection cannot leave a granted consent.
+            source.bind_authorization(connection, identity, material.job_id, material.prepared_input_sha256, consent_id)
             return ack
 
     def revoke(self, identity: SessionIdentity, consent_id: str, request: ConsentRevoke, key: str | None) -> dm.MutationAck:
