@@ -43,6 +43,22 @@ test('acceptance saves only after the explicit command action and never opens co
   await waitFor(() => expect(state.current().decision).toBe('accepted')); expect(open).not.toHaveBeenCalled()
   view.rerender(<RecommendationsPanel {...props} paused />); expect(screen.queryByText('合成建议目标 · 记录选择')).toBeNull(); expect(screen.queryByText('合成单测目标')).toBeNull(); expect(screen.queryByRole('article')).toBeNull()
 })
+test('the first enabled parent-chain click survives initial local storage readiness', async () => {
+  const item = testRecommendation(), state = decisionFixture(item), port = { ...state.port, list: vi.fn(async () => testPage([item])) }, open = vi.fn()
+  let clicked = false
+  // Observe the real DOM commit before pending passive effects, without delaying
+  // storage, replacing the hook, or waiting for a second user action.
+  const observer = new MutationObserver(() => {
+    const button = screen.queryByRole('button', { name: '从教材 course_b · r2 / 小节 lesson_original · r1 打开材料' })
+    if (!clicked && button && !button.hasAttribute('disabled')) { clicked = true; fireEvent.click(button) }
+  })
+  observer.observe(document.body, { subtree: true, childList: true, attributes: true })
+  try {
+    render(<RecommendationsPanel workspace="workspace_panel_first_enabled" paused={false} course={null} port={port} open={open} onState={() => {}} />)
+    await waitFor(() => expect(open).toHaveBeenCalledExactlyOnceWith(item.navigation_options[1]))
+    expect(state.inspect).toHaveBeenCalledExactlyOnceWith(item.id); expect(state.save).not.toHaveBeenCalled(); expect(state.current().decision).toBe('pending')
+  } finally { observer.disconnect() }
+})
 test('an actual empty projection warning remains visible without fabricated local targets or a personalized score', async () => {
   const state = decisionFixture(), empty: RecommendationPage = { ...testPage([]), warnings: [{ code: 'NO_LOCAL_MATERIAL', severity: 'warning', message: '缺少对应教材：已记录目标概念没有匹配的本地内容。', locator: 'concept_original' }] }
   render(<RecommendationsPanel workspace="workspace_panel_missing" paused={false} course={null} port={{ ...state.port, list: vi.fn(async () => empty) }} open={vi.fn()} onState={() => {}} />)

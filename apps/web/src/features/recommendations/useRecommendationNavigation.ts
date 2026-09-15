@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { RecommendationPage, RecommendationView } from '../../../../../packages/contracts/generated/api-types'
 import { getSessionGeneration, subscribeSessionAccess } from '../../api/client'
 import { refKey, sameRef } from '../reader/target'
@@ -10,7 +10,9 @@ export function useRecommendationNavigation(workspace: string, paused: boolean, 
   const owner = JSON.stringify([workspace, access, context]), scope = useRef({ owner, paused, closeSafe }); scope.current = { owner, paused, closeSafe }
   const callback = useRef(open); callback.current = open
   const epoch = useRef(0), [state, setState] = useState({ owner, busy: false, error: '', staleIds: [] as string[] })
-  useEffect(() => { ++epoch.current; setState(old => ({ owner, busy: false, error: '', staleIds: old.owner === owner ? old.staleIds : [] })); return () => { ++epoch.current } }, [owner, paused, closeSafe])
+  // Commit the guard epoch before an enabled button can be clicked. A passive
+  // readiness effect could otherwise invalidate that first valid navigation.
+  useLayoutEffect(() => { ++epoch.current; setState(old => ({ owner, busy: false, error: '', staleIds: old.owner === owner ? old.staleIds : [] })); return () => { ++epoch.current } }, [owner, paused, closeSafe])
   const navigate = async (item: RecommendationView, option: RecommendationNavigation) => {
     if (scope.current.paused || !scope.current.closeSafe || state.busy || item.staleness !== 'current') return
     const captured = owner, sequence = ++epoch.current
