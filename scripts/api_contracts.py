@@ -133,9 +133,13 @@ def response_contract(operation: dict) -> tuple[list[str], str, set[str]]:
             response_types.append("Blob")
             kinds.add("blob")
         else:
-            model = typescript_type(json_schema(content))
+            schema = json_schema(content)
+            model = typescript_type(schema)
             response_types.append(model)
-            models.add(model)
+            alternatives = schema.get('oneOf', schema.get('anyOf', [schema]))
+            if any('$ref' not in item for item in alternatives):
+                raise ValueError('Endpoint response requires named strict DTO union members')
+            models.update(item['$ref'].rsplit('/', 1)[1] for item in alternatives)
             kinds.add("json")
     if not response_types:
         raise ValueError("Runtime operation has no declared successful response")
@@ -172,6 +176,7 @@ type Endpoint = {
   requestKind: 'json' | 'multipart';
   multipartFields: readonly { name: string; required: boolean; binary: boolean }[];
   pathParameters: readonly Parameter[]; queryParameters: readonly Parameter[];
+  queryMode?: 'retrieval-status';
 };
 
 function requestBody(endpoint: Endpoint, value: unknown): BodyInit | undefined {
@@ -231,6 +236,14 @@ export function createApiClient(transport: ApiTransport) {
   return function request<K extends EndpointKey>(operation: K, ...args: ApiArgs<K>): Promise<ApiResponse<K>> {
     const endpoint: Endpoint = API_ENDPOINTS[operation];
     const parameters = (args[2] ?? {}) as UrlParameters;
+    if (endpoint.queryMode === 'retrieval-status') {
+      const query = parameters.query ?? {};
+      if ((Object.hasOwn(query, 'scope_refs') && (Object.hasOwn(query, 'cursor') || Object.hasOwn(query, 'limit')))
+          || Object.values(query).some(value => value === null)
+          || (Object.hasOwn(query, 'scope_refs') && typeof query.scope_refs !== 'string')) {
+        throw new TypeError('Scope status and overview parameters cannot be mixed or null');
+      }
+    }
     const paths = new Map(parameterEntries(endpoint.pathParameters, parameters.path));
     const path = endpoint.path.replace(/\\{([^{}]+)\\}/g, (_match, name: string) => encodeURIComponent(paths.get(name)!));
     const query = new URLSearchParams(parameterEntries(endpoint.queryParameters, parameters.query)).toString();
@@ -270,9 +283,13 @@ def api_artifacts(openapi: dict, catalog: dict, provenance: dict[str, str]) -> d
                     required = any(item["required"] for item in parameters[location])
                     parameter_fields.append(f"{location}{'' if required else '?'}: {parameter_type(parameters[location])}")
             params_type = "{ " + "; ".join(parameter_fields) + " }" if parameter_fields else "Record<string, never>"
+            retrieval_status = (method, path) == ('get', '/api/v1/index/status')
+            if retrieval_status:
+                params_type = '{ query?: RetrievalIndexStatusQuery }'
             required_params = any(item["required"] for location in ("path", "query") for item in parameters[location])
             key = method.upper() + " " + path
             endpoints[key] = {"method": method.upper(), "path": path, "responseKind": response_kind,
+                              **({'queryMode': 'retrieval-status'} if retrieval_status else {}),
                               "requestKind": request_kind, "multipartFields": multipart_fields,
                               **{location + "Parameters": [{name: value for name, value in item.items() if name != "typescript"}
                                                             for item in parameters[location]] for location in ("path", "query")}}
@@ -285,6 +302,8 @@ def api_artifacts(openapi: dict, catalog: dict, provenance: dict[str, str]) -> d
                f"// spec_sha256: {provenance['spec_sha256']}",
                ("import type { " + ", ".join(sorted(models_needed - {"undefined"})) + ' } from "./api-types";')
                if models_needed - {"undefined"} else "", "",
+               ('import type { RetrievalIndexStatusQuery } from "./retrieval-ports-binding";')
+               if 'GET /api/v1/index/status' in endpoints else '',
                "export interface ApiEndpointMap {", *entries, "}", "",
                "export const API_ENDPOINTS = " + json.dumps(endpoints, ensure_ascii=False, indent=2) + " as const;", "",
                CLIENT_RUNTIME]

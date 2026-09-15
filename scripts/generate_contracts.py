@@ -146,6 +146,122 @@ def recommendation_ports_binding(ports: str, openapi: dict, provenance: dict[str
     return '\n'.join(lines) + '\n'
 
 
+
+def retrieval_artifacts(ports: str, openapi: dict, provenance: dict[str, str]) -> dict[str, str | dict]:
+    """Bind three real operations and a separate non-HTTP Content byte port."""
+    from copy import deepcopy
+    from services.api.app.application.retrieval_models import RetrievalBlockMaterial, RetrievalScopeSnapshot
+
+    expected = {
+        ('/api/v1/retrieval/query', 'post'): ('RetrievalQueryWrite', 'RetrievalQueryView', '200'),
+        ('/api/v1/index/rebuild', 'post'): ('RetrievalIndexRebuildWrite', 'JobRef', '202'),
+        ('/api/v1/index/status', 'get'): (None, None, '200'),
+    }
+    application = {'RetrievalQueryWrite', 'RetrievalQueryView', 'RetrievalIndexRebuildWrite',
+                   'RetrievalIndexStatusQuery', 'RetrievalIndexStatusView'}
+    internal = {'RetrievalScopeSnapshot', 'RetrievalBlockMaterial'}
+    for interface, wanted in [('RetrievalApplicationDTOMap', application), ('ContentRetrievalDTOMap', internal)]:
+        marker = f'export interface {interface} {{'
+        if ports.count(marker) != 1:
+            raise ValueError('retrieval DTO maps must be declared once')
+        block = ports.split(marker, 1)[1].split('}', 1)[0]
+        names = re.findall(r'\b(\w+): unknown;', block)
+        if (len(names) != len(set(names)) or set(names) != wanted
+                or re.sub(r'\b\w+: unknown;', '', block).strip()):
+            raise ValueError('retrieval map has unmapped or duplicate DTOs')
+    schemas = openapi.get('components', {}).get('schemas', {})
+    for (path, method), (request_name, response_name, code) in expected.items():
+        operation = openapi.get('paths', {}).get(path, {}).get(method)
+        if operation is None:
+            raise ValueError('retrieval binding requires all three registered runtime operations')
+        if {status for status in operation.get('responses', {}) if status.startswith('2')} != {code}:
+            raise ValueError('retrieval operation has an incorrect successful status')
+        response = operation['responses'][code].get('content', {})
+        if set(response) != {'application/json'}:
+            raise ValueError('retrieval responses require the actual JSON transport')
+        response_schema = response['application/json'].get('schema', {})
+        if response_name is not None:
+            if response_schema != {'$ref': f'#/components/schemas/{response_name}'}:
+                raise ValueError('retrieval response must bind its actual named DTO')
+        else:
+            members = ['RetrievalIndexScopeStatus', 'RetrievalIndexOverview']
+            if (response_schema.get('oneOf') != [{'$ref': f'#/components/schemas/{name}'} for name in members]
+                    or response_schema.get('discriminator') != {'propertyName': 'kind', 'mapping': {
+                        'scope': '#/components/schemas/RetrievalIndexScopeStatus',
+                        'overview': '#/components/schemas/RetrievalIndexOverview'}}):
+                raise ValueError('retrieval status must preserve its discriminated response union')
+        if request_name is None:
+            if 'requestBody' in operation:
+                raise ValueError('retrieval status is a scalar URL query, not a JSON body')
+        elif operation.get('requestBody') != {'required': True, 'content': {
+                'application/json': {'schema': {'$ref': f'#/components/schemas/{request_name}'}}}}:
+            raise ValueError('retrieval request must bind its required closed DTO')
+        parameters = operation.get('parameters', [])
+        identifiers = [(p.get('in'), p.get('name', '').lower()) for p in parameters]
+        if len(identifiers) != len(set(identifiers)):
+            raise ValueError('retrieval parameters must not repeat')
+        headers = {p['name'].lower(): p for p in parameters if p.get('in') == 'header'}
+        if method == 'post':
+            if any(headers.get(name, {}).get('required') is not True for name in ('origin', 'x-csrf-token')):
+                raise ValueError('retrieval POST requires the actual session/CSRF boundary')
+        key = headers.get('idempotency-key')
+        if path.endswith('/rebuild'):
+            if (key is None or key.get('required') is not True or key.get('schema') != {
+                    'type': 'string', 'pattern': '^[A-Za-z0-9_-]{1,128}$'}):
+                raise ValueError('rebuild requires its single original command key')
+        elif key is not None:
+            raise ValueError('read-only query/status cannot acquire an idempotency requirement')
+        if 'if-match' in headers:
+            raise ValueError('retrieval corpus CAS belongs to the rebuild body')
+        queries = {p['name']: p for p in parameters if p.get('in') == 'query'}
+        if method == 'get':
+            if set(queries) != {'scope_refs', 'cursor', 'limit'} or any(p.get('required') for p in queries.values()):
+                raise ValueError('retrieval status requires its three optional scalar query fields')
+            for name in ('scope_refs', 'cursor'):
+                schema = queries[name].get('schema', {})
+                choices = [v for v in schema.get('anyOf', [schema]) if v.get('type') != 'null']
+                if len(choices) != 1 or choices[0].get('type') != 'string':
+                    raise ValueError('retrieval scope_refs and cursor must be scalar strings')
+            limit = queries['limit'].get('schema', {})
+            if (limit.get('type'), limit.get('minimum'), limit.get('maximum'), limit.get('default')) != ('integer', 1, 100, 20):
+                raise ValueError('retrieval overview pagination bound is incorrect')
+        elif queries:
+            raise ValueError('retrieval POST does not accept query parameters')
+    concrete = application - {'RetrievalIndexStatusQuery', 'RetrievalIndexStatusView'}
+    for name in concrete | {'RetrievalIndexScopeStatus', 'RetrievalIndexOverview', 'JobRef'}:
+        if schemas.get(name, {}).get('type') != 'object' or schemas[name].get('additionalProperties') is not False:
+            raise ValueError('retrieval runtime DTO must be a closed named object')
+    if internal & set(schemas) or {'RetrievalIndexStatusQuery', 'RetrievalIndexStatusView'} & set(schemas):
+        raise ValueError('internal ports and scalar query unions are not fabricated HTTP components')
+    raw_internal = {model.__name__: model.model_json_schema() for model in (RetrievalScopeSnapshot, RetrievalBlockMaterial)}
+    if (RetrievalBlockMaterial.model_fields['body'].annotation is not bytes
+            or raw_internal['RetrievalBlockMaterial']['properties']['body'].get('format') != 'binary'):
+        raise ValueError('Content material bytes must retain the actual Python bytes annotation')
+    ts_internal = deepcopy(raw_internal)
+    ts_internal['RetrievalBlockMaterial']['properties']['body'] = {'$ref': '#/$defs/RetrievalBodyBytes'}
+    internal_types = generate_types(ts_internal, provenance) + '\nexport type RetrievalBodyBytes = Uint8Array;\n'
+    lines = [f"// Generated from PRODUCT_DESIGN.md v{provenance['spec_version']} and real registered contracts; do not edit.",
+             f"// spec_sha256: {provenance['spec_sha256']}",
+             'import type { RetrievalApplicationDTOMap, ContentRetrievalDTOMap } from "../module-ports";',
+             'import type * as Api from "./api-types";',
+             'import type * as Content from "./retrieval-content-types";', '',
+             'export type RetrievalIndexStatusQuery =',
+             '  | { scope_refs: string; cursor?: never; limit?: never }',
+             '  | { scope_refs?: never; cursor?: string; limit?: number };',
+             'export type RetrievalIndexStatusView = Api.RetrievalIndexScopeStatus | Api.RetrievalIndexOverview;', '',
+             'export interface RetrievalRuntimeDTOMap extends RetrievalApplicationDTOMap {',
+             *[f'  {name}: Api.{name};' for name in sorted(concrete)],
+             '  RetrievalIndexStatusQuery: RetrievalIndexStatusQuery;',
+             '  RetrievalIndexStatusView: RetrievalIndexStatusView;', '}', '',
+             'export interface ContentRetrievalRuntimeDTOMap extends ContentRetrievalDTOMap {',
+             *[f'  {name}: Content.{name};' for name in sorted(internal)], '}', '']
+    return {'retrieval-ports-binding.ts': '\n'.join(lines),
+            'retrieval-content-types.ts': internal_types,
+            'retrieval-content-schemas.json': {**provenance, 'scope': 'internal_content_port_not_http_transport',
+                'byte_binding': {'RetrievalBlockMaterial.body': 'Python bytes / TypeScript Uint8Array'},
+                'schemas': raw_internal}}
+
+
 def artifacts(root: Path = ROOT) -> dict[Path, bytes]:
     spec = root / "PRODUCT_DESIGN.md"
     provenance = spec_metadata(spec)
@@ -187,7 +303,8 @@ def artifacts(root: Path = ROOT) -> dict[Path, bytes]:
     output[root / 'packages/contracts/generated/recommendation-ports-binding.ts'] = application_binding.encode()
     provider_binding = provider_ports_binding(ports, openapi, provenance)
     output[root / 'packages/contracts/generated/provider-ports-binding.ts'] = provider_binding.encode()
-    for name, value in api_artifacts(openapi, catalog, provenance).items():
+    for name, value in {**api_artifacts(openapi, catalog, provenance),
+                        **retrieval_artifacts(ports, openapi, provenance)}.items():
         target = "packages/contracts/generated/" + name
         if isinstance(value, str):
             output[root / target] = value.encode("utf-8")

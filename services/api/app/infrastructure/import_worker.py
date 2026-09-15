@@ -18,6 +18,7 @@ from ..application.evidence import EvidenceRecovery
 from ..application.grading import GradingWorker
 from ..application.imports import ImportService, safe_filename
 from ..application.recommendations import RecommendationWorker
+from ..application.retrieval import RetrievalWorker
 from .content_repository import damaged
 from .database import Database, utc_now
 from .document_sandbox import bind_parent_lifetime
@@ -71,6 +72,8 @@ class ImportWorker:
         self.grading = GradingWorker(database, stopping=self._stop.is_set)
         self.evidence_recovery = EvidenceRecovery(database, stopping=self._stop.is_set)
         self.recommendations = RecommendationWorker(database, stopping=self._stop.is_set)
+        self.retrieval = RetrievalWorker(database, stopping=self._stop.is_set)
+        self.retrieval_failure_code: str | None = None
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
         self.parse_timeout_seconds = 60.0
@@ -284,11 +287,19 @@ class ImportWorker:
             # A bounded local recommendation refresh gets every maintenance tick,
             # including while grading/import queues stay continuously nonempty.
             recommended = self.recommendations.run_once()
-            if self.grading.run_once():
-                return True
+            try:
+                indexed = self.retrieval.run_once()
+                self.retrieval_failure_code = None
+            except (ApiError, sqlite3.Error) as error:
+                # A damaged derived queue must not prevent real grading/import
+                # progress. With no other work the loop waits normally, rather
+                # than reporting successful work and spinning on the same fault.
+                self.retrieval_failure_code = error.code if isinstance(error, ApiError) else 'INDEX_STORAGE_UNAVAILABLE'
+                indexed = False
+            graded = self.grading.run_once()
             lease = self.claim()
             if lease is None:
-                return recovered or recommended
+                return recovered or recommended or indexed or graded
             data, options = self._input(lease)
             parsed = self._parse(lease, data, options)
             self.complete_preview(lease, parsed)

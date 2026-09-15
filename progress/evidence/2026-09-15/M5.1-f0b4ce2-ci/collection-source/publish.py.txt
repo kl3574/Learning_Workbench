@@ -1,0 +1,61 @@
+from pathlib import Path
+from datetime import datetime,UTC
+from collections import Counter
+import json,hashlib,re
+base=Path('<HOME>/.cache/learning-workbench-acceptance');raw=base/'m51-ci-f0b4ce2';out=base/'m51-ci-f0b4ce2-publication-v1'
+assert not out.exists();sha=lambda b:hashlib.sha256(b).hexdigest();final=json.loads((raw/'final-ci-receipt.json').read_text());assert final['all_checks_terminal']
+workflows='\n'.join(f"- {r['event']}: run {r['id']}, {r['conclusion']}, actual run attempt {r['run_attempt']}." for r in final['workflows'])
+job_lines=[]
+for j in sorted(final['jobs'],key=lambda x:(x['workflow_event'],x['name'])):
+    summaries=[x['text'].split('Z ',1)[-1] for x in j['test_and_check_excerpts'] if re.search(r'\b\d+ passed.*\d+\.\d+s|Test Files|\bTests\s+\d+|\b\d+ passed \(',x['text'])]
+    job_lines.append(f"- {j['workflow_event']} / {j['name']}, job {j['job_id']}: {j['conclusion']}. "+' | '.join(summaries[-2:]))
+failures='\n'.join(f"- {j['workflow_event']} {j['name']}: line {x['original_line']}: {x['text'].split('Z ',1)[-1]}" for j in final['jobs'] if j['conclusion']=='failure' for x in j['test_and_check_excerpts'] if ' FAIL ' in x['text'] or 'TestingLibraryElementError' in x['text'] or 'AssertionError' in x['text'])
+readme=f'''# M5.1 secret-control basis repair publication f0b4ce2: actual CI results
+
+Publication head: {final['publication_head']}. Software anchor: {final['software_anchor']}. Final checks: {json.dumps(final['conclusion_counts'])}. All results are actual observations; this collector performed no rerun or cancellation.
+
+{workflows}
+
+{chr(10).join(job_lines)}
+
+Observed failure excerpts, if any:
+{failures or 'None in these final checks.'}
+
+Every completed job has actual start/end times, original API metadata and complete log hashes. Browser verdicts are derived from actual numbered tests/e2e rows and terminal summaries, with expected source case count87 recorded separately. Test counts from overlapping spec/backend/integration selections must not be summed into a full-suite count. A failed assertion establishes the observed failure, not its product cause. Earlier e480 failures remain unchanged in their own package.
+
+All12 checkout logs are bound to their actual checkout commit and GitHub Git commit tree responses in final-ci-receipt.json. PR synthetic merge identity remains distinct from the publication head, even when their tree hashes match. PR49 state is the final timestamped API observation, not a guarantee about later changes.
+
+Immutable Git blobs prove all600 source inventory inputs at f0b4ce2 equal254a4ff, aggregate b00ae17d2d6e87e01aee18c0082ff1eee32c4be891d343fe4bd1b8df48417452. The265 publication changes are progress/evidence plus docs/ui/m1-session-three-way-conflict.png, previously attributed to the direct native test output. The working tree is not used for these comparisons. Original local fullPython1494 is historical evidence at its original software anchor, not a newly executed publication-head run. Separately recorded local254a gates/native87 are not replaced by this CI receipt. No private provider-test files or user keys were read; separate user-authorized vendor smoke is outside this CI collection and does not establish platform generation, search, Codex, model quality or learning effectiveness.
+
+Every payload has original/public SHA-256 and byte counts. Raw JSON and logs stay unchanged in private cache. Personal and hosted-runner path prefixes and concrete runtime identity/secret-location values are normalized with per-file counts. Explicit synthetic fixture constants and type declarations remain. Complete logs preserve ANSI; final receipt excerpts remove ANSI for readability while retaining original line numbers. Browser rows require an actual tests/e2e path, excluding build checkmarks.
+
+Aggregate: SHA-256 of UTF-8 JSON for the path-sorted array [{{"path":public_relative_path,"sha256":public_sha256}},...], using json.dumps(sort_keys=True,separators=(",",":"),ensure_ascii=True), without trailing newline. Manifest is excluded from the aggregate and included in the bounded path/key/provider-token/session/CSRF/locator/staging scan. This scan is not an all-secrets or future-log guarantee. No repository edits, local tests, rerun, cancellation, push, ready or merge occurred in this collection.
+'''
+with (raw/'publication-README.md').open('x') as f:f.write(readme)
+source_dir=raw/'collection-source';source_dir.mkdir()
+for name in ['collect','download','finalize','publish']:(source_dir/(name+'.py.txt')).write_bytes((base/f'm51-ci-f0b4ce2-{name}.py').read_bytes())
+files=sorted(p for p in raw.rglob('*') if p.is_file());before={p:sha(p.read_bytes()) for p in files}
+def normalize(data):
+    changes=[]
+    for old,new,kind in [(b'<RUNNER_WORKSPACE>',b'<RUNNER_WORKSPACE>','runner workspace'),(b'<RUNNER_HOME>',b'<RUNNER_HOME>','runner home'),(b'<HOME>',b'<HOME>','personal home')]:
+        count=data.count(old)
+        if count:data=data.replace(old,new);changes.append({'kind':kind,'count':count})
+    text=data.decode()
+    for pattern,replacement,kind in [(r'(?<![A-Za-z0-9_])session_[0-9a-f]{32}(?![A-Za-z0-9_])','<REDACTED_RUNTIME_SESSION_ID>','runtime session'),(r"(\b(?:csrf_token|srf_token)['\"]?\s*[=:]\s*['\"])([0-9a-f]{32,})(['\"])",r'\1<REDACTED_RUNTIME_CSRF>\3','runtime CSRF'),(r'(?<![A-Za-z0-9_])secret_[0-9a-f]{32}(?![A-Za-z0-9_])','<REDACTED_RUNTIME_SECRET_LOCATOR>','runtime locator'),(r'\.staging-[0-9a-f]{32}(?![A-Za-z0-9_])','<REDACTED_RUNTIME_STAGING_NAME>','runtime staging')]:
+        text,count=re.subn(pattern,replacement,text)
+        if count:changes.append({'kind':kind,'count':count})
+    return text.encode(),changes
+out.mkdir();items=[]
+for p in files:
+    rel=p.relative_to(raw).as_posix();rel='README.md' if rel=='publication-README.md' else rel;data=p.read_bytes();public,changes=normalize(data);dest=out/rel;dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(public)
+    items.append({'path':rel,'original_path':str(p).replace('<HOME>','<HOME>'),'original_sha256':sha(data),'public_sha256':sha(public),'original_bytes':len(data),'public_bytes':len(public),'transforms':changes})
+items.sort(key=lambda i:i['path']);aggregate=sha(json.dumps([{'path':i['path'],'sha256':i['public_sha256']} for i in items],sort_keys=True,separators=(',',':'),ensure_ascii=True).encode())
+manifest={'version':'m51-ci-f0b4ce2-publication-v1','created_at':datetime.now(UTC).isoformat(),'publication_head':final['publication_head'],'software_anchor':final['software_anchor'],'check_conclusions':final['conclusion_counts'],'payload_count':len(items),'payload_aggregate_sha256':aggregate,'aggregate_algorithm':'sha256(UTF8(json.dumps(path-sorted [{path: public_relative_path, sha256: public_sha256}], sort_keys=True, separators=(comma,colon), ensure_ascii=True))); no trailing newline; excludes manifest','items':items}
+(out/'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+'\n')
+patterns={'private_home':r'/home/[A-Za-z0-9_.-]+','private_key':r'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----','provider_token':r'\bsk-(?:proj-|svcacct-)?[A-Za-z0-9_-]{16,}','runtime_session':r'(?<![A-Za-z0-9_])session_[0-9a-f]{32}(?![A-Za-z0-9_])','runtime_csrf':r"\b(?:csrf_token|srf_token)['\"]?\s*[=:]\s*['\"][0-9a-f]{32,}['\"]",'runtime_locator':r'(?<![A-Za-z0-9_])secret_[0-9a-f]{32}(?![A-Za-z0-9_])','runtime_staging':r'\.staging-[0-9a-f]{32}(?![A-Za-z0-9_])','github_token':r'\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,})','bearer_token':r'(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{16,}'}
+hits=[{'path':p.relative_to(out).as_posix(),'pattern':kind} for p in out.rglob('*') if p.is_file() for kind,pattern in patterns.items() if re.search(pattern,p.read_text())];assert not hits,hits
+for p,digest in before.items():assert sha(p.read_bytes())==digest
+for i in items:
+    origin=Path(i['original_path'].replace('<HOME>','<HOME>',1));public=(out/i['path']).read_bytes();assert sha(origin.read_bytes())==i['original_sha256'] and sha(public)==i['public_sha256'] and normalize(origin.read_bytes())[0]==public
+receipt={'version':'m51-ci-f0b4ce2-publication-readback-v1','finished_at':datetime.now(UTC).isoformat(),'manifest_sha256':sha((out/'manifest.json').read_bytes()),'payload_count':len(items),'payload_aggregate_sha256':aggregate,'raw_public_hashes_and_transforms_verified':True,'raw_inputs_unchanged':True,'aggregate_reconstructed':True,'scan_patterns':patterns,'scan_hits':hits,'transformation_file_counts':dict(Counter(c['kind'] for i in items for c in i['transforms'])),'final_ci_receipt_sha256':sha((raw/'final-ci-receipt.json').read_bytes()),'check_conclusions':final['conclusion_counts'],'repo_edits_or_local_tests_or_rerun_or_cancel':False}
+(base/'m51-ci-f0b4ce2-publication-v1-readback.json').write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n');print(json.dumps({'directory':str(out),'manifest_sha256':receipt['manifest_sha256'],'payload_count':len(items),'aggregate':aggregate,'counts':final['conclusion_counts'],'scan_hits':hits}))

@@ -28,6 +28,7 @@ from .interfaces.practice_http import create_practice_router
 from .interfaces.profile_http import create_profile_router
 from .interfaces.provider_http import create_provider_router
 from .interfaces.recommendation_http import create_recommendation_router
+from .interfaces.retrieval_http import create_retrieval_router
 from .interfaces.route_http import create_route_router
 from .infrastructure.import_worker import ImportWorker
 from .infrastructure.provider_secret_store import preferred_secret_store
@@ -92,6 +93,7 @@ def create_app(settings: Settings | None = None, *,
     application.include_router(create_provider_router(providers, consents))
     application.include_router(create_concept_state_router(database))
     application.include_router(create_recommendation_router(database))
+    application.include_router(create_retrieval_router(database))
     if settings.static_dir.is_dir():
         application.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="workbench")
     return application

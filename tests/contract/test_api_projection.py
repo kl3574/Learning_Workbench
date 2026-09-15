@@ -36,8 +36,10 @@ def test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec():
     provider_operations = {item for item in SPEC_ROUTES if item[1].startswith(('/api/v1/providers/', '/api/v1/consents'))}
     assert len(provider_operations) == 10
     assert provider_operations <= projection
-    assert len(projection) == 70
-    assert len(SPEC_ROUTES - projection) == 36
+    assert {('POST', '/api/v1/retrieval/query'), ('POST', '/api/v1/index/rebuild'),
+            ('GET', '/api/v1/index/status')} <= projection
+    assert len(projection) == 73
+    assert len(SPEC_ROUTES - projection) == 33
 
 
 OPERATIONS = [(path, method, operation) for path, methods in create_app().openapi()["paths"].items()

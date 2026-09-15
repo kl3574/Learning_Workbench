@@ -1,0 +1,148 @@
+"""Jobs-owned lifecycle port for deterministic local retrieval work.
+
+Only this Jobs adapter accesses jobs/job_events for retrieval. The Retrieval
+owner separately validates its immutable input allocation and generation result.
+"""
+
+from dataclasses import dataclass
+import sqlite3
+from typing import Literal
+from uuid import uuid4
+
+from pydantic import TypeAdapter
+
+from packages.contracts import domain_models as dm
+from packages.contracts.canonical import canonical_bytes, sha256_bytes, strict_json
+
+from ..application.errors import ApiError
+from .database import utc_now
+from .security import expires_after
+
+TERMINAL = {'completed', 'failed', 'cancelled'}
+
+
+def job_integrity() -> ApiError:
+    return ApiError(409, 'INDEX_JOB_INTEGRITY_INVALID', '索引任务的持久输入或状态记录未通过完整性校验。')
+
+
+@dataclass(frozen=True)
+class RetrievalLease:
+    job_id: str
+    workspace_id: str
+    owner: str
+    revision: int
+
+
+class RetrievalJobRepository:
+    def __init__(self, connection: sqlite3.Connection, workspace_id: str):
+        self.connection = connection
+        self.workspace_id = workspace_id
+
+    def load(self, identifier: str) -> sqlite3.Row:
+        row = self.connection.execute("SELECT * FROM jobs WHERE id=? AND workspace_id=? AND kind='retrieval_index'",
+                                      (identifier, self.workspace_id)).fetchone()
+        if row is None:
+            raise ApiError(404, 'JOB_MISSING', '任务不存在或不可访问。')
+        try:
+            if sha256_bytes(row['input_json'].encode()) != row['input_sha256']:
+                raise job_integrity()
+            if canonical_bytes(strict_json(row['input_json'])).decode() != row['input_json']:
+                raise job_integrity()
+            TypeAdapter(dm.Id).validate_python(row['id'])
+            TypeAdapter(dm.Revision).validate_python(row['revision'])
+            for name in ('created_at', 'updated_at'):
+                TypeAdapter(dm.UTC).validate_python(row[name])
+            events = self.connection.execute('SELECT * FROM job_events WHERE job_id=? ORDER BY seq', (identifier,)).fetchall()
+            if len(events) != row['revision'] or not events:
+                raise job_integrity()
+            terminal_count = 0
+            previous = None
+            for seq, event in enumerate(events, 1):
+                payload = strict_json(event['payload_json'])
+                expected = {'revision': seq, 'status': event['type']}
+                if (event['seq'] != seq or payload != expected or canonical_bytes(expected).decode() != event['payload_json']
+                        or (seq == 1 and event['type'] != 'queued') or previous in TERMINAL
+                        or (seq > 1 and event['type'] not in {'running', *TERMINAL})):
+                    raise job_integrity()
+                TypeAdapter(dm.UTC).validate_python(event['occurred_at'])
+                terminal_count += event['type'] in TERMINAL
+                previous = event['type']
+            if previous != row['status'] or terminal_count != int(row['status'] in TERMINAL):
+                raise job_integrity()
+            if events[0]['occurred_at'] != row['created_at'] or events[-1]['occurred_at'] != row['updated_at']:
+                raise job_integrity()
+            running = row['status'] == 'running'
+            if running != (row['lease_owner'] is not None) or running != (row['lease_until'] is not None):
+                raise job_integrity()
+            if running:
+                TypeAdapter(dm.Id).validate_python(row['lease_owner'])
+                TypeAdapter(dm.UTC).validate_python(row['lease_until'])
+            if (row['cancel_requested'] == 1) != (row['status'] == 'cancelled'):
+                raise job_integrity()
+            if row['status'] in {'queued', 'running', 'cancelled'} and row['result_json'] is not None:
+                raise job_integrity()
+            if row['status'] in {'completed', 'failed'} and row['result_json'] is None:
+                raise job_integrity()
+            return row
+        except (ValueError, TypeError, KeyError):
+            raise job_integrity() from None
+
+    def _event(self, identifier: str, status: str, revision: int, now: str) -> None:
+        self.connection.execute('INSERT INTO job_events(job_id,seq,type,payload_json,occurred_at) VALUES(?,?,?,?,?)',
+            (identifier, revision, status, canonical_bytes({'status': status, 'revision': revision}).decode(), now))
+
+    def enqueue(self, input_json: str) -> dm.JobRef:
+        identifier = f'job_{uuid4().hex}'
+        now = utc_now()
+        self.connection.execute("INSERT INTO jobs(id,workspace_id,kind,status,revision,input_sha256,input_json,created_at,updated_at) "
+            "VALUES(?,?,'retrieval_index','queued',1,?,?,?,?)",
+            (identifier, self.workspace_id, sha256_bytes(input_json.encode()), input_json, now, now))
+        self._event(identifier, 'queued', 1, now)
+        return dm.JobRef(id=identifier, status='queued')
+
+    def available(self) -> sqlite3.Row | None:
+        return self.connection.execute("SELECT id FROM jobs WHERE workspace_id=? AND kind='retrieval_index' "
+            "AND cancel_requested=0 AND (status='queued' OR (status='running' AND lease_until<=?)) "
+            "AND (next_retry_at IS NULL OR next_retry_at<=?) ORDER BY created_at,id LIMIT 1",
+            (self.workspace_id, utc_now(), utc_now())).fetchone()
+
+    def claim(self, row: sqlite3.Row, lease_seconds: int) -> RetrievalLease:
+        now = utc_now()
+        owner = f'lease_{uuid4().hex}'
+        if row['status'] != 'queued' and not (row['status'] == 'running' and row['lease_until'] <= now):
+            raise ApiError(409, 'INDEX_LEASE_LOST', '索引任务已有有效持有者。')
+        changed = self.connection.execute("UPDATE jobs SET status='running',revision=revision+1,lease_owner=?,lease_until=?,"
+            'retry_count=retry_count+?,updated_at=? WHERE id=? AND workspace_id=? AND revision=?',
+            (owner, expires_after(lease_seconds), int(row['status'] == 'running'), now,
+             row['id'], self.workspace_id, row['revision']))
+        if changed.rowcount != 1:
+            raise ApiError(409, 'INDEX_LEASE_LOST', '索引任务已由另一工作进程领取。')
+        self._event(row['id'], 'running', row['revision'] + 1, now)
+        return RetrievalLease(row['id'], self.workspace_id, owner, row['revision'] + 1)
+
+    @staticmethod
+    def owned(row: sqlite3.Row, lease: RetrievalLease) -> bool:
+        return (row['workspace_id'] == lease.workspace_id and row['id'] == lease.job_id
+                and row['status'] == 'running' and row['revision'] == lease.revision
+                and row['lease_owner'] == lease.owner and row['lease_until'] > utc_now()
+                and row['cancel_requested'] == 0)
+
+    def renew(self, row: sqlite3.Row, lease: RetrievalLease, lease_seconds: int) -> bool:
+        if not self.owned(row, lease):
+            return False
+        self.connection.execute('UPDATE jobs SET lease_until=? WHERE id=? AND workspace_id=? AND revision=? AND lease_owner=?',
+            (expires_after(lease_seconds), lease.job_id, lease.workspace_id, lease.revision, lease.owner))
+        return True
+
+    def terminal(self, row: sqlite3.Row, status: Literal['completed', 'failed', 'cancelled'],
+                 result: dict | None = None) -> None:
+        if row['status'] in TERMINAL:
+            raise ApiError(409, 'JOB_TERMINAL', '任务已经结束。')
+        now = utc_now()
+        changed = self.connection.execute('UPDATE jobs SET status=?,revision=revision+1,result_json=?,cancel_requested=?,'
+            'lease_owner=NULL,lease_until=NULL,updated_at=? WHERE id=? AND workspace_id=? AND revision=?',
+            (status, canonical_bytes(result).decode() if result is not None else None, int(status == 'cancelled'),
+             now, row['id'], self.workspace_id, row['revision']))
+        if changed.rowcount != 1:
+            raise ApiError(409, 'INDEX_LEASE_LOST', '索引任务的状态已改变。')
+        self._event(row['id'], status, row['revision'] + 1, now)

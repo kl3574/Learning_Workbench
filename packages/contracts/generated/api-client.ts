@@ -1,7 +1,8 @@
-// Generated from PRODUCT_DESIGN.md v3.0.2 and actual runtime OpenAPI; do not edit.
-// spec_sha256: 537239aa30315170b2a177b74a5dfca026397fdc0e15ab14a094a8b14f7c51d9
-import type { AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, BlockReadResponse, BootstrapRequest, BootstrapResponse, ConceptStateResponse, ConsentCreate, ConsentCreateAck, ConsentPage, ConsentPreviewWrite, ConsentProposalView, ConsentRevoke, ContentRef, Course, DirectorySearchResponse, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearnerProfile, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, OutlineResponse, PageAssessment, PageCourse, PageEvidence, PageNote, PagePracticeSet, PageRevision, PageRoute, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ProfileWrite, ProviderCapabilitiesResponse, ProviderConfigAck, ProviderConfigView, ProviderConfigWrite, ProviderSecretAck, ProviderSecretWrite, ReadinessResponse, RecommendationDecisionWrite, RecommendationPage, RegradeRequest, ResponsesWrite, RoleRequest, Route, RouteCompletionRequest, SessionResponse, SourceResponse, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
+// Generated from PRODUCT_DESIGN.md v3.0.3 and actual runtime OpenAPI; do not edit.
+// spec_sha256: a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8
+import type { AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, BlockReadResponse, BootstrapRequest, BootstrapResponse, ConceptStateResponse, ConsentCreate, ConsentCreateAck, ConsentPage, ConsentPreviewWrite, ConsentProposalView, ConsentRevoke, ContentRef, Course, DirectorySearchResponse, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearnerProfile, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, OutlineResponse, PageAssessment, PageCourse, PageEvidence, PageNote, PagePracticeSet, PageRevision, PageRoute, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ProfileWrite, ProviderCapabilitiesResponse, ProviderConfigAck, ProviderConfigView, ProviderConfigWrite, ProviderSecretAck, ProviderSecretWrite, ReadinessResponse, RecommendationDecisionWrite, RecommendationPage, RegradeRequest, ResponsesWrite, RetrievalIndexOverview, RetrievalIndexRebuildWrite, RetrievalIndexScopeStatus, RetrievalQueryView, RetrievalQueryWrite, RoleRequest, Route, RouteCompletionRequest, SessionResponse, SourceResponse, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
 
+import type { RetrievalIndexStatusQuery } from "./retrieval-ports-binding";
 export interface ApiEndpointMap {
   "GET /api/v1/artifacts/{id}/download": { request: undefined; response: Blob; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/assessments": { request: undefined; response: PageAssessment; headers: null; parameters: { query?: { "course_id"?: (string | null); "cursor"?: (string | null); "limit"?: number } }; parametersRequired: false };
@@ -29,6 +30,8 @@ export interface ApiEndpointMap {
   "GET /api/v1/imports/{id}": { request: undefined; response: ImportPreview; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
   "POST /api/v1/imports/{id}/cancel": { request: ImportCancelRequest; response: ImportCancelResponse; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
   "POST /api/v1/imports/{id}/commit": { request: ImportCommitRequest; response: ImportCommitResponse; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
+  "POST /api/v1/index/rebuild": { request: RetrievalIndexRebuildWrite; response: JobRef; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
+  "GET /api/v1/index/status": { request: undefined; response: (RetrievalIndexScopeStatus | RetrievalIndexOverview); headers: null; parameters: { query?: RetrievalIndexStatusQuery }; parametersRequired: false };
   "GET /api/v1/jobs/{id}": { request: undefined; response: JobSnapshot; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
   "POST /api/v1/jobs/{id}/cancel": { request: JobCancelRequest; response: JobSnapshot; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/learner/profile": { request: undefined; response: LearnerProfile; headers: null; parameters: Record<string, never>; parametersRequired: false };
@@ -59,6 +62,7 @@ export interface ApiEndpointMap {
   "GET /api/v1/readiness": { request: undefined; response: ReadinessResponse; headers: null; parameters: Record<string, never>; parametersRequired: false };
   "GET /api/v1/recommendations": { request: undefined; response: RecommendationPage; headers: null; parameters: { query?: { "course_id"?: (string | null); "cursor"?: (string | null); "limit"?: number; "recommendation_id"?: (string | null) } }; parametersRequired: false };
   "POST /api/v1/recommendations/{id}/decision": { request: RecommendationDecisionWrite; response: MutationAck; headers: { "Idempotency-Key": string; "If-Match": string }; parameters: { path: { "id": string } }; parametersRequired: true };
+  "POST /api/v1/retrieval/query": { request: RetrievalQueryWrite; response: RetrievalQueryView; headers: null; parameters: Record<string, never>; parametersRequired: false };
   "GET /api/v1/routes": { request: undefined; response: PageRoute; headers: null; parameters: { query?: { "cursor"?: (string | null); "limit"?: number } }; parametersRequired: false };
   "POST /api/v1/routes": { request: Route; response: ContentRef; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
   "PUT /api/v1/routes/{id}": { request: Route; response: ContentRef; headers: { "Idempotency-Key": string; "If-Match"?: (string | null) }; parameters: { path: { "id": string } }; parametersRequired: true };
@@ -552,6 +556,43 @@ export const API_ENDPOINTS = {
     ],
     "queryParameters": []
   },
+  "POST /api/v1/index/rebuild": {
+    "method": "POST",
+    "path": "/api/v1/index/rebuild",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
+    "queryParameters": []
+  },
+  "GET /api/v1/index/status": {
+    "method": "GET",
+    "path": "/api/v1/index/status",
+    "responseKind": "json",
+    "queryMode": "retrieval-status",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
+    "queryParameters": [
+      {
+        "name": "cursor",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      },
+      {
+        "name": "scope_refs",
+        "required": false,
+        "type": "string"
+      }
+    ]
+  },
   "GET /api/v1/jobs/{id}": {
     "method": "GET",
     "path": "/api/v1/jobs/{id}",
@@ -1043,6 +1084,15 @@ export const API_ENDPOINTS = {
     ],
     "queryParameters": []
   },
+  "POST /api/v1/retrieval/query": {
+    "method": "POST",
+    "path": "/api/v1/retrieval/query",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
+    "queryParameters": []
+  },
   "GET /api/v1/routes": {
     "method": "GET",
     "path": "/api/v1/routes",
@@ -1235,6 +1285,7 @@ type Endpoint = {
   requestKind: 'json' | 'multipart';
   multipartFields: readonly { name: string; required: boolean; binary: boolean }[];
   pathParameters: readonly Parameter[]; queryParameters: readonly Parameter[];
+  queryMode?: 'retrieval-status';
 };
 
 function requestBody(endpoint: Endpoint, value: unknown): BodyInit | undefined {
@@ -1294,6 +1345,14 @@ export function createApiClient(transport: ApiTransport) {
   return function request<K extends EndpointKey>(operation: K, ...args: ApiArgs<K>): Promise<ApiResponse<K>> {
     const endpoint: Endpoint = API_ENDPOINTS[operation];
     const parameters = (args[2] ?? {}) as UrlParameters;
+    if (endpoint.queryMode === 'retrieval-status') {
+      const query = parameters.query ?? {};
+      if ((Object.hasOwn(query, 'scope_refs') && (Object.hasOwn(query, 'cursor') || Object.hasOwn(query, 'limit')))
+          || Object.values(query).some(value => value === null)
+          || (Object.hasOwn(query, 'scope_refs') && typeof query.scope_refs !== 'string')) {
+        throw new TypeError('Scope status and overview parameters cannot be mixed or null');
+      }
+    }
     const paths = new Map(parameterEntries(endpoint.pathParameters, parameters.path));
     const path = endpoint.path.replace(/\{([^{}]+)\}/g, (_match, name: string) => encodeURIComponent(paths.get(name)!));
     const query = new URLSearchParams(parameterEntries(endpoint.queryParameters, parameters.query)).toString();

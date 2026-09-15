@@ -1,0 +1,360 @@
+"""Content-owned retrieval seams over actual SQLite and synthetic publication.
+
+No fixture is expert approved. Direct SQL below is explicitly a fault/archive
+fixture, never a product editing, approval or archive workflow.
+"""
+
+from dataclasses import replace
+from pathlib import Path
+
+import pytest
+
+from packages.contracts import domain_models as dm
+from packages.contracts.canonical import canonical_bytes, sha256_bytes
+from services.api.app.application.content import ContentService
+from services.api.app.application.content_retrieval import ContentRetrievalSource, _EncodingBudget
+from services.api.app.application.errors import ApiError
+from services.api.app.application.reader import backfill_provenance
+from services.api.app.application.retrieval_models import SCOPE_BYTE_BUDGET, scope_sha256
+from services.api.app.infrastructure.blobs import BlobStore
+from services.api.app.infrastructure.config import Settings
+from services.api.app.infrastructure.content_repository import ContentRepository, reference
+from services.api.app.infrastructure.database import Database
+from services.api.app.infrastructure.provenance_repository import ProvenanceRepository
+from services.api.app.infrastructure.security import SessionIdentity
+from services.api.app.retrieval_dto import path_sort_key, ref_sort_key
+from tests.integration import test_reader_provenance as importing
+from tests.integration import test_assessment_attempts as assessing
+
+imports = importing.imports
+assessment_storage = assessing.storage
+
+
+@pytest.fixture
+def store(tmp_path):
+    database = Database(Settings(data_dir=tmp_path / 'data'))
+    workspace = database.initialize()
+    identity = SessionIdentity('session_retrieval_synthetic', workspace, 'learner', 'unused', '2099-01-01T00:00:00Z')
+    return database, identity, ContentService(database), ContentRetrievalSource(database)
+
+
+def block(identifier='block_retrieval', *, body=b'Worked answer: x = 2.\n', title='合成未审例题'):
+    return dm.ContentBlock(id=identifier, revision=1, kind='worked_example', title=title,
+        body_path=f'content/{identifier}.md', body_sha256=sha256_bytes(body)), body
+
+
+def lesson(identifier, blocks, title='合成小节'):
+    return dm.Lesson(id=identifier, revision=1, title=title, objectives=[], block_refs=[reference(item) for item in blocks])
+
+
+def course(identifier, lessons, title='合成课程'):
+    return dm.Course(id=identifier, revision=1, title=title, audience='仅合成验证',
+        lesson_refs=[reference(item) for item in lessons])
+
+
+def error(code, call):
+    with pytest.raises(ApiError) as caught:
+        call()
+    assert caught.value.code == code
+    return caught.value
+
+
+def resolve(store, refs):
+    database, identity, _, source = store
+    with database.transaction() as conn:
+        return source.resolve_scope(conn, identity, refs)
+
+
+def test_explicit_multiroot_preserves_every_parent_and_never_expands_dependencies(store, monkeypatch):
+    database, identity, publisher, source = store
+    shared, body = block()
+    outside, outside_body = block('outside_block', body=b'Outside selected material.\n')
+    shared = shared.model_copy(update={'depends_on': [reference(outside)]})
+    one, two = lesson('lesson_one', [shared]), lesson('lesson_two', [shared])
+    left, right = course('course_left', [one, two]), course('course_right', [one, two])
+    publisher.publish(identity.workspace_id, [outside, shared, one, two, left, right],
+        {outside.body_path: outside_body, shared.body_path: body})
+    roots = [reference(right), reference(shared), reference(one), reference(left), reference(left)]
+    with monkeypatch.context() as guarded:
+        guarded.setattr(BlobStore, 'read', lambda *args, **kwargs: pytest.fail('metadata read opened physical bytes'))
+        guarded.setattr(ProvenanceRepository, 'original_access', lambda *args: pytest.fail('metadata read used original access'))
+        with database.transaction() as conn:
+            before = conn.total_changes
+            snapshot = source.resolve_scope(conn, identity, roots)
+            source.revalidate_scope(conn, identity, snapshot)
+            assert conn.total_changes == before
+    descriptor = snapshot.descriptor
+    assert descriptor.scope_refs == sorted(set_refs(roots), key=ref_sort_key)
+    assert descriptor.scope_sha256 == scope_sha256(identity.workspace_id, roots)
+    assert snapshot.corpus_sha256 == sha256_bytes(canonical_bytes(descriptor))
+    assert [item.ref for item in descriptor.blocks] == [reference(shared)]
+    assert {item.ref.id for item in descriptor.graph} == {shared.id, one.id, two.id, left.id, right.id}
+    paths = descriptor.blocks[0].parent_paths
+    assert len(paths) == 6 and [path_sort_key(item) for item in paths] == sorted({path_sort_key(item) for item in paths})
+    assert {(item.course_ref.id if item.course_ref else None, item.lesson_ref.id if item.lesson_ref else None)
+            for item in paths} == {(left.id, one.id), (left.id, two.id), (right.id, one.id),
+                                  (right.id, two.id), (None, one.id), (None, None)}
+    provenance = descriptor.blocks[0].provenance
+    assert provenance.state == 'unresolved' and provenance.original is None
+    assert provenance.citations == [] and provenance.unresolved_citation_ids == []
+    assert [warning.code for warning in provenance.warnings] == ['PROVENANCE_UNRESOLVED']
+    with database.transaction() as conn:
+        actual = source.read_material(conn, identity, snapshot, reference(shared))
+        assert actual.body == body and actual.body_sha256 == sha256_bytes(body)
+        assert actual.scope_sha256 == descriptor.scope_sha256 and actual.corpus_sha256 == snapshot.corpus_sha256
+        assert 'Worked answer' not in repr(actual)
+        error('REFERENCE_MISSING', lambda: source.read_material(conn, identity, snapshot, reference(outside)))
+
+
+def set_refs(refs):
+    return list({ref_sort_key(item): item for item in refs}.values())
+
+
+def test_old_exact_tree_keeps_body_but_current_and_archival_change_corpus(store):
+    database, identity, publisher, source = store
+    old, body = block()
+    first_lesson = lesson('history_lesson', [old])
+    first_course = course('history_course', [first_lesson])
+    publisher.publish(identity.workspace_id, [old, first_lesson, first_course], {old.body_path: body})
+    initial = resolve(store, [reference(first_course)])
+    new_body = b'Changed public body.\n'
+    new = old.model_copy(update={'revision': 2, 'body_sha256': sha256_bytes(new_body)})
+    new_lesson = first_lesson.model_copy(update={'revision': 2, 'block_refs': [reference(new)]})
+    new_course = first_course.model_copy(update={'revision': 2, 'lesson_refs': [reference(new_lesson)]})
+    publisher.publish(identity.workspace_id, [new, new_lesson, new_course], {new.body_path: new_body})
+    with database.transaction() as conn:
+        error('INDEX_INPUT_CHANGED', lambda: source.revalidate_scope(conn, identity, initial))
+        error('INDEX_INPUT_CHANGED', lambda: source.read_material(conn, identity, initial, reference(old)))
+    updated = resolve(store, [reference(first_course)])
+    assert updated.descriptor.scope_sha256 == initial.descriptor.scope_sha256
+    assert updated.corpus_sha256 != initial.corpus_sha256
+    assert {item.ref.revision for item in updated.descriptor.graph} == {1}
+    assert {item.current_ref.revision for item in updated.descriptor.graph} == {2}
+    mixed = resolve(store, [reference(first_course), reference(new_course)])
+    assert [item.ref for item in mixed.descriptor.blocks] == [reference(old), reference(new)]
+    assert [item.parent_paths[0].course_ref for item in mixed.descriptor.blocks] == [reference(first_course), reference(new_course)]
+    with database.transaction() as conn:
+        assert source.read_material(conn, identity, updated, reference(old)).body == body
+        # Controlled lifecycle fixture: no archive HTTP/product capability claimed.
+        conn.execute("UPDATE objects SET lifecycle='archived' WHERE workspace_id=? AND id=?", (identity.workspace_id, old.id))
+    archived = resolve(store, [reference(first_course)])
+    assert archived.corpus_sha256 != updated.corpus_sha256
+    assert next(item for item in archived.descriptor.graph if item.ref.id == old.id).lifecycle == 'archived'
+    with database.transaction() as conn:
+        assert source.read_material(conn, identity, archived, reference(old)).body == body
+
+
+def test_transactions_workspace_exact_hash_and_no_private_root_shortcuts(store):
+    database, identity, publisher, source = store
+    value, body = block()
+    publisher.publish(identity.workspace_id, [value], {value.body_path: body})
+    snapshot = resolve(store, [reference(value)])
+    with database.connect() as conn:
+        for call in (lambda: source.resolve_scope(conn, identity, [reference(value)]),
+                     lambda: source.read_material(conn, identity, snapshot, reference(value)),
+                     lambda: source.revalidate_scope(conn, identity, snapshot)):
+            error('TRANSACTION_REQUIRED', call)
+    with database.transaction() as conn:
+        conn.execute("INSERT INTO workspace(id,title,created_at) VALUES('foreign_workspace','合成','2026-09-15T00:00:00Z')")
+        other = replace(identity, workspace_id='foreign_workspace', role='author')
+        error('REFERENCE_MISSING', lambda: source.resolve_scope(conn, other, [reference(value)]))
+        error('REFERENCE_MISSING', lambda: source.read_material(conn, other, snapshot, reference(value)))
+        wrong = reference(value).model_copy(update={'sha256': '0' * 64})
+        error('CONTENT_HASH_MISMATCH', lambda: source.resolve_scope(conn, identity, [wrong]))
+        error('RETRIEVAL_SCOPE_INVALID', lambda: source.resolve_scope(conn, identity, [reference(value), wrong]))
+        for entity in ('note', 'question', 'practice_set', 'assessment', 'route', 'concept'):
+            private = reference(value).model_copy(update={'entity': entity})
+            error('RETRIEVAL_SCOPE_INVALID', lambda: source.resolve_scope(conn, replace(identity, role='author'), [private]))
+        forged = snapshot.model_copy(update={'corpus_sha256': '0' * 64})
+        error('CONTENT_HASH_MISMATCH', lambda: source.read_material(conn, identity, forged, reference(value)))
+
+
+@pytest.mark.parametrize('fault', ['missing', 'hash', 'symlink'])
+def test_physical_body_fault_is_not_a_metadata_success(store, fault):
+    database, identity, publisher, source = store
+    value, body = block()
+    publisher.publish(identity.workspace_id, [value], {value.body_path: body})
+    first = resolve(store, [reference(value)])
+    path = database.settings.data_dir / 'blobs' / value.body_sha256[:2] / value.body_sha256
+    if fault == 'hash':
+        path.write_bytes(b'X' * len(body))
+    else:
+        path.unlink()
+        if fault == 'symlink':
+            path.symlink_to(Path('unreadable_synthetic_target'))
+    assert resolve(store, [reference(value)]) == first
+    with database.transaction() as conn:
+        source.revalidate_scope(conn, identity, first)
+        expected = 'CONTENT_HASH_MISMATCH' if fault == 'hash' else 'BLOB_STORAGE_UNAVAILABLE'
+        error(expected, lambda: source.read_material(conn, identity, first, reference(value)))
+
+
+def test_frozen_source_uses_exact_import_snapshot_without_original_download(imports, monkeypatch):
+    database, _, _, identity = imports
+    staged, value = importing.committed(imports, data=importing.citation_package('外部声明未核验'),
+        filename='synthetic.learnpack', kind='learnpack')
+    source = ContentRetrievalSource(database)
+    original = database.settings.data_dir / 'blobs' / staged.input_sha256[:2] / staged.input_sha256
+    original.unlink()
+    monkeypatch.setattr(ProvenanceRepository, 'original_access', lambda *args: pytest.fail('opened original permission path'))
+    with database.transaction() as conn:
+        snapshot = source.resolve_scope(conn, identity, [reference(value)])
+        provenance = snapshot.descriptor.blocks[0].provenance
+        assert provenance.state == 'frozen' and provenance.original.sha256 == staged.input_sha256
+        assert provenance.citations[0].source_sha256 == 'a' * 64
+        assert provenance.citations[0].verification == 'unverified'
+        assert provenance.citations[0].title == '外部声明未核验'
+        assert snapshot.descriptor.blocks[0].source_descriptor_sha256 == sha256_bytes(canonical_bytes(provenance))
+        assert source.read_material(conn, identity, snapshot, reference(value)).body == b'Synthetic cited content.\n'
+        conn.execute('DROP TRIGGER block_provenance_no_update')
+        conn.execute("UPDATE block_provenance SET snapshot_json='{}' WHERE workspace_id=?", (identity.workspace_id,))
+        error('CONTENT_HASH_MISMATCH', lambda: source.resolve_scope(conn, identity, [reference(value)]))
+
+
+def test_actual_independent_attempt_blocks_all_three_ports_including_author(assessment_storage):
+    database, identity, fixture, _ = assessment_storage
+    source = ContentRetrievalSource(database)
+    with database.transaction() as conn:
+        snapshot = source.resolve_scope(conn, identity, [reference(fixture.course)])
+        assert [item.ref for item in snapshot.descriptor.blocks] == [reference(fixture.block)]
+        material = source.read_material(conn, replace(identity, role='author'), snapshot, reference(fixture.block))
+        assert material.body == fixture.bodies[fixture.block.body_path]
+        assert all(solution.solution_markdown.encode() not in material.body for solution in fixture.solutions)
+        assert b'private/solutions' not in canonical_bytes(snapshot)
+    assessing.start(assessment_storage)
+    with database.transaction() as conn:
+        for actor in (identity, replace(identity, role='author')):
+            error('ASSESSMENT_ACTIVE', lambda: source.resolve_scope(conn, actor, [reference(fixture.course)]))
+            error('ASSESSMENT_ACTIVE', lambda: source.read_material(conn, actor, snapshot, snapshot.descriptor.blocks[0].ref))
+            error('ASSESSMENT_ACTIVE', lambda: source.revalidate_scope(conn, actor, snapshot))
+
+
+@pytest.mark.parametrize('kind', ['roots', 'blocks', 'body_total', 'paths', 'descriptor'])
+def test_scope_budgets_reject_whole_scope_without_reading_body(store, monkeypatch, kind):
+    database, identity, publisher, source = store
+    size = 513 if kind == 'blocks' else 512 if kind == 'paths' else 43 if kind == 'body_total' else 32
+    body = b'x' * 400000 if kind == 'body_total' else b'x\n'
+    values = [block(f'budget_block_{index}', body=body)[0] for index in range(size)]
+    title = '界' * 100000 if kind == 'descriptor' else '合成预算课程'
+    lessons = [lesson(f'budget_lesson_{index}', values) for index in range(17 if kind == 'paths' else 2)]
+    root = course('budget_course', lessons, title=title)
+    publisher.publish(identity.workspace_id, [*values, *lessons, root], {value.body_path: body for value in values})
+    roots = [reference(root)] * 17 if kind == 'roots' else [reference(root)]
+    seen = []
+    actual = ContentRepository.body_info
+    def observe(repository, value):
+        seen.append(value.id)
+        return actual(repository, value)
+    monkeypatch.setattr(ContentRepository, 'body_info', observe)
+    monkeypatch.setattr(BlobStore, 'read', lambda *args, **kwargs: pytest.fail('scope budget read physical bytes'))
+    with database.transaction() as conn:
+        before = conn.total_changes
+        result = error('SCOPE_BUDGET_EXCEEDED', lambda: source.resolve_scope(conn, identity, roots))
+        assert result.status == 413 and conn.total_changes == before
+    if kind == 'roots':
+        assert seen == []
+    if kind == 'blocks':
+        assert len(seen) == 512
+    if kind == 'descriptor':
+        # 64 repeated course titles alone exceed 16 MiB; unique metadata and
+        # registered bodies are much smaller. Stop before all paths are built.
+        assert len(seen) == 32
+
+
+def test_bounded_provenance_checks_bytes_before_decoder(imports, monkeypatch):
+    database, _, _, identity = imports
+    _, value = importing.committed(imports)
+    with database.transaction() as conn:
+        repository = ProvenanceRepository(conn, identity.workspace_id)
+        monkeypatch.setattr(repository, 'frozen', lambda *args: pytest.fail('oversize snapshot was parsed'))
+        error('SCOPE_BUDGET_EXCEEDED', lambda: repository.bounded_frozen(value, max_bytes=1))
+
+
+def test_actual_backfill_changes_unresolved_descriptor_and_notifies_its_owner(imports):
+    database, _, _, identity = imports
+    _, value = importing.committed(imports)
+    source = ContentRetrievalSource(database)
+    with database.transaction() as conn:
+        # Controlled legacy missing-snapshot fixture; explicit owner recovery
+        # below must parse the actual retained synthetic import and freeze it.
+        conn.execute('DELETE FROM block_provenance WHERE workspace_id=? AND block_id=? AND block_revision=?',
+            (identity.workspace_id, value.id, value.revision))
+        unresolved = source.resolve_scope(conn, identity, [reference(value)])
+        assert unresolved.descriptor.blocks[0].provenance.state == 'unresolved'
+        events_before = conn.execute("SELECT count(*) FROM retrieval_input_events WHERE source='provenance.frozen'").fetchone()[0]
+    repaired = backfill_provenance(database)
+    assert repaired.frozen_blocks == 1
+    with database.transaction() as conn:
+        current = source.resolve_scope(conn, identity, [reference(value)])
+        assert current.descriptor.blocks[0].provenance.state == 'frozen'
+        assert current.descriptor.scope_sha256 == unresolved.descriptor.scope_sha256
+        assert current.corpus_sha256 != unresolved.corpus_sha256
+        error('INDEX_INPUT_CHANGED', lambda: source.revalidate_scope(conn, identity, unresolved))
+        assert conn.execute("SELECT count(*) FROM retrieval_input_events WHERE source='provenance.frozen'").fetchone()[0] == events_before + 1
+
+
+@pytest.mark.parametrize('body', [b'not UTF-8: \xff\n', b'wrong line ending\r\n'])
+def test_body_decoder_rejects_consistent_hash_for_invalid_utf8_or_cr(store, body):
+    database, identity, _, source = store
+    value, _ = block(body=body)
+    # Explicit storage-fault fixture bypasses publication, which rejects these
+    # bytes. Even a matching registered hash must not make them valid material.
+    info = BlobStore(database.settings.data_dir).write(body)
+    with database.transaction() as conn:
+        repository = ContentRepository(conn, identity.workspace_id)
+        repository.insert_revisions([value], {info.sha256: info})
+        repository.advance(value)
+        snapshot = source.resolve_scope(conn, identity, [reference(value)])
+        error('CONTENT_HASH_MISMATCH', lambda: source.read_material(conn, identity, snapshot, reference(value)))
+
+
+def test_distinct_metadata_budget_stops_before_loading_next_large_revision(store, monkeypatch):
+    database, identity, publisher, source = store
+    value, body = block()
+    lessons = [lesson(f'large_meta_{index}', [value]).model_copy(update={'objectives': ['x' * (9 * 1024 * 1024)]})
+               for index in range(2)]
+    root = course('large_meta_course', lessons)
+    publisher.publish(identity.workspace_id, [value, *lessons, root], {value.body_path: body})
+    loaded = []
+    actual = ContentRepository.load
+    def observe(repository, entity, identifier, revision):
+        loaded.append(identifier)
+        return actual(repository, entity, identifier, revision)
+    monkeypatch.setattr(ContentRepository, 'load', observe)
+    with database.transaction() as conn:
+        error('SCOPE_BUDGET_EXCEEDED', lambda: source.resolve_scope(conn, identity, [reference(root)]))
+    assert lessons[0].id in loaded and lessons[1].id not in loaded
+
+
+def test_current_pointer_metadata_is_verified_even_when_old_scope_is_exact(store):
+    database, identity, publisher, source = store
+    value, body = block()
+    publisher.publish(identity.workspace_id, [value], {value.body_path: body})
+    new = value.model_copy(update={'revision': 2})
+    publisher.publish(identity.workspace_id, [new], {})
+    with database.transaction() as conn:
+        conn.execute('DROP TRIGGER revisions_no_update')
+        conn.execute("UPDATE revisions SET sha256=? WHERE object_id=? AND revision=2", ('0' * 64, value.id))
+        error('CONTENT_HASH_MISMATCH', lambda: source.resolve_scope(conn, identity, [reference(value)]))
+
+
+def test_owner_revalidates_constructed_ref_instead_of_treating_bool_as_revision_one(store):
+    database, identity, publisher, source = store
+    value, body = block()
+    publisher.publish(identity.workspace_id, [value], {value.body_path: body})
+    malformed = reference(value).model_copy(update={'revision': True})
+    with database.transaction() as conn:
+        snapshot = source.resolve_scope(conn, identity, [reference(value)])
+        error('RETRIEVAL_SCOPE_INVALID', lambda: source.resolve_scope(conn, identity, [malformed]))
+        error('RETRIEVAL_SCOPE_INVALID', lambda: source.read_material(conn, identity, snapshot, malformed))
+
+
+def test_bounded_json_accounting_counts_repeated_escaped_unicode_and_stops_early():
+    repeated = '汉字🧠\\"\n\t\x00' * 3000
+    value = {'title': repeated, 'paths': [{'same': repeated}, {'same': repeated}], 'null': None, 'n': 123}
+    meter = _EncodingBudget()
+    size = len(canonical_bytes(value))
+    assert meter.size(value, size) == size
+    error('SCOPE_BUDGET_EXCEEDED', lambda: meter.size(value, size - 1))
+    error('SCOPE_BUDGET_EXCEEDED', lambda: _EncodingBudget().size('x' * 10000, 40))
+    assert size < SCOPE_BYTE_BUDGET

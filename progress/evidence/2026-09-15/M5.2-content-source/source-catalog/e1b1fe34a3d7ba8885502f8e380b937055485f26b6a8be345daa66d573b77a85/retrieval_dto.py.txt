@@ -1,0 +1,330 @@
+"""Strict M5.2 application shapes from PRODUCT_DESIGN.md 3.0.3 appendix A.
+
+Local relationships are checked here. Only Content/Policy owners can establish
+access and source integrity; a valid DTO never establishes that authority.
+"""
+
+from typing import Annotated, Literal, Self
+
+from pydantic import AfterValidator, BaseModel, BeforeValidator, Field, model_validator
+
+from packages.contracts import domain_models as dm
+from packages.contracts.canonical import sha256_bytes
+
+from .provider_dto import NonEmpty, NonNegativeInt, _omit_schema_default
+from pydantic.json_schema import SkipJsonSchema
+
+
+def _unicode(value: object) -> None:
+    if isinstance(value, str):
+        try:
+            value.encode('utf-8', errors='strict')
+        except UnicodeError:
+            raise ValueError('valid Unicode scalar values are required') from None
+    elif isinstance(value, BaseModel):
+        for name in type(value).model_fields:
+            _unicode(getattr(value, name))
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            _unicode(key)
+            _unicode(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            _unicode(item)
+
+
+class RetrievalModel(dm.StrictModel):
+    @model_validator(mode='before')
+    @classmethod
+    def valid_unicode(cls, value: object) -> object:
+        _unicode(value)
+        return value
+
+
+def ref_sort_key(ref: dm.ContentRef) -> tuple[str, str, int, str]:
+    return ref.entity, ref.id, ref.revision, ref.sha256
+
+
+def normalize_scope_refs(refs: list[dm.ContentRef]) -> list[dm.ContentRef]:
+    if not 1 <= len(refs) <= 16:
+        raise ValueError('one to sixteen explicit roots are required')
+    revisions: dict[tuple[str, str, int], str] = {}
+    for ref in refs:
+        if ref.entity not in {'course', 'lesson', 'block'}:
+            raise ValueError('only public course, lesson and block roots are supported')
+        key = ref_sort_key(ref)[:3]
+        if key in revisions and revisions[key] != ref.sha256:
+            raise ValueError('conflicting hashes for one exact revision')
+        revisions[key] = ref.sha256
+    return sorted({ref_sort_key(ref): ref for ref in refs}.values(), key=ref_sort_key)
+
+
+RetrievalScopeRefs = Annotated[
+    list[dm.ContentRef], Field(min_length=1, max_length=16), AfterValidator(normalize_scope_refs),
+]
+RetrievalIndexState = Literal['ready', 'stale', 'building', 'missing']
+RetrievalResultState = Literal['matched', 'no_match', 'indexed_empty', 'resource_omitted', 'not_ready']
+
+
+class RetrievalQueryWrite(RetrievalModel):
+    query: Annotated[str, Field(min_length=1, max_length=512)]
+    scope_refs: RetrievalScopeRefs
+    limit: Annotated[int, Field(ge=1, le=20)]
+
+    @model_validator(mode='after')
+    def nonblank_query(self) -> Self:
+        if not self.query.strip():
+            raise ValueError('query must contain non-whitespace text')
+        return self
+
+
+class RetrievalIndexRebuildWrite(RetrievalModel):
+    scope_refs: RetrievalScopeRefs
+    expected_corpus_sha256: dm.Sha256
+    provider_id: dm.Id | None
+    consent_id: dm.Id | None
+
+
+class RetrievalIndexScopeQuery(RetrievalModel):
+    scope_refs: str
+
+
+class RetrievalIndexOverviewQuery(RetrievalModel):
+    cursor: NonEmpty | SkipJsonSchema[None] = Field(
+        default=None, exclude_if=lambda value: value is None, json_schema_extra=_omit_schema_default,
+    )
+    limit: Annotated[int, Field(ge=1, le=100)] = 20
+
+    @model_validator(mode='before')
+    @classmethod
+    def omitted_cursor(cls, value: object) -> object:
+        if isinstance(value, dict) and 'cursor' in value and value['cursor'] is None:
+            raise ValueError('cursor may be omitted but cannot be null')
+        return value
+
+
+RetrievalIndexStatusQuery = RetrievalIndexScopeQuery | RetrievalIndexOverviewQuery
+
+
+def _zero(value: object) -> object:
+    if type(value) is not int:
+        raise ValueError('an integer literal is required')
+    return value
+
+
+class RetrievalWholeBlockLocation(RetrievalModel):
+    version: Literal['whole-block-v1']
+    unit: Literal['unicode_codepoint']
+    start_cp: Annotated[Literal[0], BeforeValidator(_zero)]
+    end_cp: NonNegativeInt
+
+
+class RetrievalScopePath(RetrievalModel):
+    root_ref: dm.ContentRef
+    course_ref: dm.ContentRef | None
+    course_title: str | None
+    lesson_ref: dm.ContentRef | None
+    lesson_title: str | None
+    block_ref: dm.ContentRef
+
+    @model_validator(mode='after')
+    def exact_chain_shape(self) -> Self:
+        if self.block_ref.entity != 'block':
+            raise ValueError('a path must terminate at a block')
+        for ref, title, entity in ((self.course_ref, self.course_title, 'course'),
+                                   (self.lesson_ref, self.lesson_title, 'lesson')):
+            if (ref is None) != (title is None) or (ref is not None and ref.entity != entity):
+                raise ValueError('parent references and titles must match their entity and nullability')
+        if self.root_ref.entity == 'block':
+            valid = self.root_ref == self.block_ref and self.course_ref is None and self.lesson_ref is None
+        elif self.root_ref.entity == 'lesson':
+            valid = self.root_ref == self.lesson_ref and self.course_ref is None
+        elif self.root_ref.entity == 'course':
+            valid = self.root_ref == self.course_ref and self.lesson_ref is not None
+        else:
+            valid = False
+        if not valid:
+            raise ValueError('path must start at its explicit public root')
+        return self
+
+
+def path_sort_key(path: RetrievalScopePath) -> tuple:
+    return tuple(ref_sort_key(ref) if ref is not None else ('', '', 0, '')
+                 for ref in (path.root_ref, path.course_ref, path.lesson_ref, path.block_ref))
+
+
+class RetrievalRetainedSource(RetrievalModel):
+    id: dm.Id
+    media_type: str
+    size: NonNegativeInt
+    sha256: dm.Sha256
+    rights: str
+    parser_version: str | None
+
+
+class RetrievalProvenance(RetrievalModel):
+    state: Literal['frozen', 'unresolved']
+    original: RetrievalRetainedSource | None
+    citations: list[dm.Citation]
+    unresolved_citation_ids: list[dm.Id]
+    warnings: list[dm.Warning]
+
+    @model_validator(mode='after')
+    def source_state(self) -> Self:
+        if self.state == 'frozen':
+            if self.original is None or self.unresolved_citation_ids:
+                raise ValueError('a frozen source needs its retained descriptor')
+        elif (self.original is not None or self.citations
+              or not any(w.code == 'PROVENANCE_UNRESOLVED' for w in self.warnings)):
+            raise ValueError('an unresolved source requires the explicit warning and no invented source')
+        return self
+
+
+class RetrievalHitView(RetrievalModel):
+    ref: dm.ContentRef
+    title: str
+    text: str
+    locator: str
+    score: Annotated[float, Field(gt=0, le=1, allow_inf_nan=False)]
+    body_sha256: dm.Sha256
+    location: RetrievalWholeBlockLocation
+    current_ref: dm.ContentRef
+    lifecycle: Literal['active', 'archived']
+    material_review: Literal['unreviewed']
+    provenance: RetrievalProvenance
+    parent_paths: Annotated[list[RetrievalScopePath], Field(min_length=1, max_length=8192)]
+    warnings: list[dm.Warning]
+
+    @model_validator(mode='after')
+    def exact_hit_shape(self) -> Self:
+        if self.ref.entity != 'block' or (self.current_ref.entity, self.current_ref.id) != ('block', self.ref.id):
+            raise ValueError('hit and current references must identify the same public block')
+        if sha256_bytes(self.text.encode('utf-8')) != self.body_sha256 or '\r' in self.text:
+            raise ValueError('hit body must preserve its verified UTF-8/LF bytes')
+        expected = f'block:{self.ref.id}@r{self.ref.revision};body:{self.body_sha256};cp:0-{len(self.text)}'
+        if self.location.end_cp != len(self.text) or self.locator != expected:
+            raise ValueError('whole-block location must bind the complete body')
+        keys = [path_sort_key(path) for path in self.parent_paths]
+        if keys != sorted(set(keys)) or any(path.block_ref != self.ref for path in self.parent_paths):
+            raise ValueError('hit paths must be sorted, distinct and bound to this exact block')
+        codes = {warning.code for warning in self.warnings}
+        if ('MATERIAL_UNREVIEWED' not in codes
+                or ('HISTORICAL_REVISION' in codes) != (self.current_ref != self.ref)
+                or ('CONTENT_ARCHIVED' in codes) != (self.lifecycle == 'archived')):
+            raise ValueError('hit warnings must preserve review, revision and lifecycle facts')
+        return self
+
+
+class RetrievalOmissionCounts(RetrievalModel):
+    result_limit: Annotated[int, Field(ge=0, le=512)]
+    text_byte_budget: Annotated[int, Field(ge=0, le=512)]
+    json_byte_budget: Annotated[int, Field(ge=0, le=512)]
+
+
+class RetrievalQueryView(RetrievalModel):
+    scope_sha256: dm.Sha256
+    scope_refs: RetrievalScopeRefs
+    corpus_sha256: dm.Sha256
+    indexed_corpus_sha256: dm.Sha256 | None
+    index_version: dm.Id | None
+    index_state: RetrievalIndexState
+    result_state: RetrievalResultState
+    matched_count: Annotated[int, Field(ge=0, le=512)] | None
+    hits: Annotated[list[RetrievalHitView], Field(max_length=20)]
+    omissions: RetrievalOmissionCounts
+    warnings: list[dm.Warning]
+
+    @model_validator(mode='after')
+    def result_facts(self) -> Self:
+        omitted = sum(self.omissions.model_dump().values())
+        if (self.index_version is None) != (self.indexed_corpus_sha256 is None):
+            raise ValueError('generation version and hash must be null together')
+        if any(path.root_ref not in self.scope_refs for hit in self.hits for path in hit.parent_paths):
+            raise ValueError('every hit path must start within the explicit scope')
+        if len({ref_sort_key(hit.ref) for hit in self.hits}) != len(self.hits):
+            raise ValueError('hits must be distinct exact blocks')
+        if sum(len(hit.text.encode('utf-8')) for hit in self.hits) > 2 * 1024 * 1024:
+            raise ValueError('whole-block text budget exceeded')
+        codes = {warning.code for warning in self.warnings}
+        if self.index_state != 'ready':
+            if (self.result_state != 'not_ready' or self.matched_count is not None or self.hits or omitted
+                    or f'INDEX_{self.index_state.upper()}' not in codes):
+                raise ValueError('an unqueried index must expose its actual nonready state')
+        else:
+            if (self.index_version is None or self.indexed_corpus_sha256 != self.corpus_sha256
+                    or self.matched_count is None or omitted != self.matched_count - len(self.hits)):
+                raise ValueError('ready query must bind its generation and account for every match')
+            if self.result_state == 'matched':
+                valid = bool(self.hits)
+            elif self.result_state == 'resource_omitted':
+                valid = self.matched_count > 0 and not self.hits and 'RETRIEVAL_RESOURCE_OMITTED' in codes
+            elif self.result_state in {'no_match', 'indexed_empty'}:
+                valid = self.matched_count == 0 and not self.hits and omitted == 0
+            else:
+                valid = False
+            if not valid:
+                raise ValueError('result state must reflect the returned matches')
+        return self
+
+
+class RetrievalJobError(RetrievalModel):
+    code: str
+    message: str
+    retryable: bool
+
+
+class RetrievalJobSummary(RetrievalModel):
+    job: dm.JobRef
+    target_corpus_sha256: dm.Sha256
+    error: RetrievalJobError | None
+
+
+class RetrievalCommittedIndex(RetrievalModel):
+    index_version: dm.Id
+    corpus_sha256: dm.Sha256
+    built_at: dm.UTC
+    block_count: Annotated[int, Field(ge=1, le=512)]
+    term_count: NonNegativeInt
+
+
+class RetrievalIndexScopeStatus(RetrievalModel):
+    kind: Literal['scope']
+    scope_sha256: dm.Sha256
+    scope_refs: RetrievalScopeRefs
+    corpus_sha256: dm.Sha256
+    state: RetrievalIndexState
+    indexed_corpus_sha256: dm.Sha256 | None
+    index_version: dm.Id | None
+    last_built_at: dm.UTC | None
+    latest_job: RetrievalJobSummary | None
+
+    @model_validator(mode='after')
+    def generation_state(self) -> Self:
+        absent = self.index_version is None
+        if absent != (self.indexed_corpus_sha256 is None) or absent != (self.last_built_at is None):
+            raise ValueError('generation version, hash and time must be null together')
+        if self.state == 'ready' and (absent or self.indexed_corpus_sha256 != self.corpus_sha256):
+            raise ValueError('ready requires a matching committed generation')
+        if self.state == 'stale' and (absent or self.indexed_corpus_sha256 == self.corpus_sha256):
+            raise ValueError('stale requires a different committed generation')
+        if self.state == 'missing' and not absent:
+            raise ValueError('missing cannot describe a committed generation')
+        return self
+
+
+class RetrievalRegisteredScope(RetrievalModel):
+    scope_sha256: dm.Sha256
+    scope_refs: RetrievalScopeRefs
+    latest_index: RetrievalCommittedIndex | None
+    latest_job: RetrievalJobSummary | None
+
+
+class RetrievalIndexOverview(RetrievalModel):
+    kind: Literal['overview']
+    items: Annotated[list[RetrievalRegisteredScope], Field(max_length=100)]
+    next_cursor: str | None
+
+
+RetrievalIndexStatusView = Annotated[
+    RetrievalIndexScopeStatus | RetrievalIndexOverview, Field(discriminator='kind'),
+]

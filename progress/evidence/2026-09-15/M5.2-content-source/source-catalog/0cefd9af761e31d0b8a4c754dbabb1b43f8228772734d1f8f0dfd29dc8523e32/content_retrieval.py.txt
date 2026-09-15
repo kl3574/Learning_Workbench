@@ -1,0 +1,317 @@
+"""Content-owned, bounded public material reads for an explicit retrieval scope.
+
+Scope resolution reads metadata only. Physical body verification is a separate
+operation; neither a hash nor a caller-constructed snapshot grants access.
+"""
+
+from collections.abc import Iterator
+from contextlib import contextmanager
+import sqlite3
+
+from pydantic import ValidationError
+
+from packages.contracts import domain_models as dm
+from packages.contracts.canonical import canonical_bytes, sha256_bytes
+
+from ..infrastructure.blobs import BlobStore
+from ..infrastructure.content_repository import ContentRepository, StoredRevision, damaged, missing, reference
+from ..infrastructure.database import Database
+from ..infrastructure.provenance_repository import ProvenanceRepository
+from ..infrastructure.security import SessionIdentity
+from ..retrieval_dto import (
+    RetrievalProvenance, RetrievalRetainedSource, RetrievalScopePath,
+    normalize_scope_refs, path_sort_key, ref_sort_key,
+)
+from .errors import ApiError
+from .policy import Policy
+from .retrieval_models import (
+    MAX_BLOCKS, MAX_PATHS, SCOPE_BYTE_BUDGET, RetrievalBlockDescriptor,
+    RetrievalBlockMaterial, RetrievalCorpusDescriptor, RetrievalRefState,
+    RetrievalScopeSnapshot, algorithm_versions, scope_sha256,
+)
+
+RefKey = tuple[str, str, int, str]
+
+
+def budget_exceeded() -> ApiError:
+    return ApiError(413, 'SCOPE_BUDGET_EXCEEDED', '所选范围超过本地检索资源预算。')
+
+
+class _EncodingBudget:
+    """Exact compact JSON size, with bounded string encoding before accumulation.
+
+    A shared long title is measured once, but its bytes are charged at every
+    occurrence. No oversized descriptor or oversized escaped string is built.
+    """
+
+    def __init__(self) -> None:
+        self.strings: dict[str, int] = {}
+
+    def size(self, value: object, available: int = SCOPE_BYTE_BUDGET) -> int:
+        if isinstance(value, str):
+            cached = self.strings.get(value)
+            if cached is None:
+                cached = 2
+                for start in range(0, len(value), 4096):
+                    cached += len(canonical_bytes(value[start:start + 4096])) - 2
+                    if cached > available:
+                        raise budget_exceeded()
+                self.strings[value] = cached
+            total = cached
+        elif isinstance(value, dict):
+            total = 2
+            for index, (key, item) in enumerate(value.items()):
+                total += (1 if index else 0) + self.size(key, available - total) + 1
+                total += self.size(item, available - total)
+        elif isinstance(value, list):
+            total = 2
+            for index, item in enumerate(value):
+                total += (1 if index else 0) + self.size(item, available - total)
+        elif value is None or type(value) in {bool, int, float}:
+            total = len(canonical_bytes(value))
+        else:
+            raise TypeError('only canonical JSON values can be measured')
+        if total > available:
+            raise budget_exceeded()
+        return total
+
+
+class _ScopeReader:
+    def __init__(self, conn: sqlite3.Connection, identity: SessionIdentity, roots: list[dm.ContentRef]):
+        self.conn = conn
+        self.workspace = identity.workspace_id
+        self.roots = roots
+        self.repository = ContentRepository(conn, self.workspace)
+        self.provenance = ProvenanceRepository(conn, self.workspace)
+        self.metadata: dict[tuple[str, str, int], StoredRevision] = {}
+        self.references: dict[tuple[str, str, int], dm.ContentRef] = {}
+        self.graph: dict[RefKey, RetrievalRefState] = {}
+        self.blocks: dict[RefKey, dict] = {}
+        self.paths: dict[RefKey, dict[tuple, RetrievalScopePath]] = {}
+        self.source_hashes: set[str] = set()
+        self.metadata_bytes = 0
+        self.body_bytes = 0
+        self.path_count = 0
+        self.encoding = _EncodingBudget()
+        self.envelope = {
+            'version': 'retrieval-corpus-v1', 'workspace_id': self.workspace,
+            'scope_sha256': scope_sha256(self.workspace, roots),
+            'scope_refs': [ref.model_dump(mode='json') for ref in roots],
+            'graph': [], 'blocks': [], 'versions': algorithm_versions().model_dump(mode='json'),
+        }
+        self.descriptor_bytes = self.encoding.size(self.envelope)
+
+    def reserve(self, value: object, *, comma: bool) -> None:
+        available = SCOPE_BYTE_BUDGET - self.descriptor_bytes - int(comma)
+        amount = self.encoding.size(value, available)
+        self.descriptor_bytes += amount + int(comma)
+
+    def load(self, entity: str, identifier: str, revision: int) -> StoredRevision:
+        key = (entity, identifier, revision)
+        if key in self.metadata:
+            return self.metadata[key]
+        # Content-owned scalar preflight: do not materialize arbitrary stored
+        # metadata before checking the remaining distinct-metadata budget.
+        row = self.conn.execute(
+            'SELECT length(CAST(r.metadata_json AS BLOB)) AS size FROM revisions r '
+            'JOIN objects o ON o.id=r.object_id '
+            'WHERE o.workspace_id=? AND o.id=? AND o.kind=? AND r.revision=?',
+            (self.workspace, identifier, entity, revision),
+        ).fetchone()
+        if row is None:
+            raise missing()
+        if row['size'] > SCOPE_BYTE_BUDGET - self.metadata_bytes:
+            raise budget_exceeded()
+        stored = self.repository.load(entity, identifier, revision)
+        raw = canonical_bytes(stored.value)
+        self.metadata_bytes += len(raw)
+        if self.metadata_bytes > SCOPE_BYTE_BUDGET:
+            raise budget_exceeded()
+        self.metadata[key] = stored
+        self.references[key] = reference(stored.value)
+        return stored
+
+    def node(self, ref: dm.ContentRef) -> StoredRevision:
+        if ref.entity not in {'course', 'lesson', 'block'}:
+            raise damaged()
+        stored = self.load(ref.entity, ref.id, ref.revision)
+        if self.references[(ref.entity, ref.id, ref.revision)] != ref:
+            raise damaged()
+        key = ref_sort_key(ref)
+        if key not in self.graph:
+            current_revision = self.repository.object_row(ref.id)['current_revision']
+            if type(current_revision) is not int or current_revision < 1:
+                raise damaged()
+            self.load(ref.entity, ref.id, current_revision)
+            state = RetrievalRefState(ref=ref,
+                current_ref=self.references[(ref.entity, ref.id, current_revision)], lifecycle=stored.lifecycle)
+            self.reserve(state.model_dump(mode='json'), comma=bool(self.graph))
+            self.graph[key] = state
+        return stored
+
+    def source(self, block: dm.ContentBlock) -> tuple[RetrievalProvenance, str]:
+        # FrozenProvenance additionally contains its binding block ref. Its
+        # bounded wrapper is not part of the resulting provenance descriptor.
+        frozen = self.provenance.bounded_frozen(block, max_bytes=SCOPE_BYTE_BUDGET + 1024)
+        if frozen is None:
+            provenance = RetrievalProvenance(
+                state='unresolved', original=None, citations=[], unresolved_citation_ids=block.citations,
+                warnings=[dm.Warning(code='PROVENANCE_UNRESOLVED', severity='warning',
+                    message='此修订尚无可核验的冻结来源记录；原始引用保留，未按相同 ID 猜测来源。')],
+            )
+        else:
+            provenance = RetrievalProvenance(
+                state='frozen', original=RetrievalRetainedSource.model_validate(frozen.source.model_dump(mode='json')),
+                citations=frozen.citations, unresolved_citation_ids=[], warnings=frozen.warnings,
+            )
+        projected = provenance.model_dump(mode='json')
+        amount = self.encoding.size(projected)
+        digest = sha256_bytes(canonical_bytes(projected))
+        if digest not in self.source_hashes:
+            if self.metadata_bytes + amount > SCOPE_BYTE_BUDGET:
+                raise budget_exceeded()
+            self.metadata_bytes += amount
+            self.source_hashes.add(digest)
+        return provenance, digest
+
+    def block(self, root: dm.ContentRef, ref: dm.ContentRef,
+              course: dm.Course | None, lesson: dm.Lesson | None) -> None:
+        key = ref_sort_key(ref)
+        if key not in self.blocks and len(self.blocks) == MAX_BLOCKS:
+            raise budget_exceeded()
+        stored = self.node(ref)
+        if not isinstance(stored.value, dm.ContentBlock):
+            raise damaged()
+        value = stored.value
+        if key not in self.blocks:
+            if value.body_path.startswith('private/'):
+                raise damaged()
+            body = self.repository.body_info(value)
+            if self.body_bytes + body.size > SCOPE_BYTE_BUDGET:
+                raise budget_exceeded()
+            provenance, digest = self.source(value)
+            data = {
+                'ref': ref.model_dump(mode='json'), 'title': value.title,
+                'body_sha256': body.sha256, 'body_bytes': body.size,
+                'provenance': provenance.model_dump(mode='json'), 'source_descriptor_sha256': digest,
+                'parent_paths': [],
+            }
+            self.reserve(data, comma=bool(self.blocks))
+            self.blocks[key] = data
+            self.paths[key] = {}
+            self.body_bytes += body.size
+        path = RetrievalScopePath(
+            root_ref=root, course_ref=root if course else None,
+            course_title=course.title if course else None,
+            lesson_ref=self.references[('lesson', lesson.id, lesson.revision)] if lesson else None,
+            lesson_title=lesson.title if lesson else None,
+            block_ref=ref,
+        )
+        path_key = path_sort_key(path)
+        if path_key not in self.paths[key]:
+            if self.path_count == MAX_PATHS:
+                raise budget_exceeded()
+            self.reserve(path.model_dump(mode='json'), comma=bool(self.paths[key]))
+            self.paths[key][path_key] = path
+            self.path_count += 1
+
+    def lesson(self, root: dm.ContentRef, ref: dm.ContentRef, course: dm.Course | None) -> None:
+        stored = self.node(ref)
+        if not isinstance(stored.value, dm.Lesson):
+            raise damaged()
+        for block in stored.value.block_refs:
+            if block.entity != 'block':
+                raise damaged()
+            self.block(root, block, course, stored.value)
+
+    def resolve(self) -> RetrievalScopeSnapshot:
+        for ref in self.roots:
+            value = self.node(ref).value
+            if isinstance(value, dm.Course):
+                for lesson in value.lesson_refs:
+                    if lesson.entity != 'lesson':
+                        raise damaged()
+                    self.lesson(ref, lesson, value)
+            elif isinstance(value, dm.Lesson):
+                self.lesson(ref, ref, None)
+            elif isinstance(value, dm.ContentBlock):
+                self.block(ref, ref, None, None)
+            else:
+                raise damaged()
+        blocks = []
+        for key in sorted(self.blocks):
+            data = self.blocks[key]
+            data['parent_paths'] = [self.paths[key][path].model_dump(mode='json') for path in sorted(self.paths[key])]
+            blocks.append(RetrievalBlockDescriptor.model_validate(data))
+        descriptor = RetrievalCorpusDescriptor(
+            version='retrieval-corpus-v1', workspace_id=self.workspace,
+            scope_sha256=scope_sha256(self.workspace, self.roots), scope_refs=self.roots,
+            versions=algorithm_versions(),
+            graph=[self.graph[key] for key in sorted(self.graph)], blocks=blocks,
+        )
+        raw = canonical_bytes(descriptor)
+        if len(raw) != self.descriptor_bytes:
+            raise damaged()
+        return RetrievalScopeSnapshot(descriptor=descriptor, corpus_sha256=sha256_bytes(raw))
+
+
+class ContentRetrievalSource:
+    def __init__(self, database: Database):
+        self.blobs = BlobStore(database.settings.data_dir, max_bytes=SCOPE_BYTE_BUDGET)
+
+    @staticmethod
+    @contextmanager
+    def _access(conn: sqlite3.Connection, identity: SessionIdentity) -> Iterator[None]:
+        if not conn.in_transaction:
+            raise ApiError(409, 'TRANSACTION_REQUIRED', '检索材料读取需要有效事务。')
+        try:
+            Policy(conn, identity.workspace_id).check('subject_read')
+            ContentRepository(conn, identity.workspace_id).require_workspace()
+            yield
+        except sqlite3.Error:
+            raise ApiError(503, 'CONTENT_STORAGE_UNAVAILABLE', '内容存储暂不可用。', retryable=True) from None
+        except (ValidationError, UnicodeError):
+            raise damaged() from None
+
+    def resolve_scope(self, conn: sqlite3.Connection, identity: SessionIdentity,
+                      scope_refs: list[dm.ContentRef]) -> RetrievalScopeSnapshot:
+        with self._access(conn, identity):
+            if len(scope_refs) > 16:
+                raise budget_exceeded()
+            try:
+                refs = normalize_scope_refs([
+                    dm.ContentRef.model_validate(ref.model_dump(mode='python')) for ref in scope_refs
+                ])
+            except (ValueError, TypeError):
+                raise ApiError(422, 'RETRIEVAL_SCOPE_INVALID', '请明确选择课程、小节或正文块的完整修订。') from None
+            return _ScopeReader(conn, identity, refs).resolve()
+
+    def _current(self, conn: sqlite3.Connection, identity: SessionIdentity,
+                 scope: RetrievalScopeSnapshot) -> RetrievalScopeSnapshot:
+        if scope.descriptor.workspace_id != identity.workspace_id:
+            raise missing()
+        # model_copy/construct must not bypass the original descriptor hash.
+        if sha256_bytes(canonical_bytes(scope.descriptor)) != scope.corpus_sha256:
+            raise damaged()
+        current = self.resolve_scope(conn, identity, scope.descriptor.scope_refs)
+        if current != scope:
+            raise ApiError(409, 'INDEX_INPUT_CHANGED', '所选范围的当前描述已改变，请重新核验索引。')
+        return current
+
+    def read_material(self, conn: sqlite3.Connection, identity: SessionIdentity,
+                      scope: RetrievalScopeSnapshot, ref: dm.ContentRef) -> RetrievalBlockMaterial:
+        with self._access(conn, identity):
+            current = self._current(conn, identity, scope)
+            block = next((block for block in current.descriptor.blocks if block.ref == ref), None)
+            if block is None:
+                raise missing()
+            body = self.blobs.read(block.body_sha256, expected_size=block.body_bytes)
+            return RetrievalBlockMaterial(
+                scope_sha256=current.descriptor.scope_sha256, corpus_sha256=current.corpus_sha256,
+                ref=block.ref, body_sha256=block.body_sha256, body=body,
+            )
+
+    def revalidate_scope(self, conn: sqlite3.Connection, identity: SessionIdentity,
+                         scope: RetrievalScopeSnapshot) -> None:
+        with self._access(conn, identity):
+            self._current(conn, identity, scope)

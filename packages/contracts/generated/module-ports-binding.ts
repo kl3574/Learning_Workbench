@@ -1,5 +1,5 @@
-// Generated from PRODUCT_DESIGN.md v3.0.2; do not edit.
-// spec_sha256: 537239aa30315170b2a177b74a5dfca026397fdc0e15ab14a094a8b14f7c51d9
+// Generated from PRODUCT_DESIGN.md v3.0.3; do not edit.
+// spec_sha256: a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8
 import type { DTOMap } from "../module-ports";
 import type * as Model from "./types";
 

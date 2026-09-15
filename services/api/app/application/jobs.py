@@ -82,6 +82,9 @@ class JobService:
             return GradingService(self.database)
         if row["kind"] == "import":
             return ImportService(self.database)
+        if row["kind"] == "retrieval_index":
+            from .retrieval import RetrievalService
+            return RetrievalService(self.database)
         raise ApiError(409, "JOB_KIND_UNAVAILABLE", "此任务类型尚未实现受控读取。")
 
     def job(self, identity, identifier):

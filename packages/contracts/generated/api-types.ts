@@ -1,5 +1,5 @@
-// Generated from PRODUCT_DESIGN.md v3.0.2. DO NOT EDIT.
-// spec_sha256: 537239aa30315170b2a177b74a5dfca026397fdc0e15ab14a094a8b14f7c51d9
+// Generated from PRODUCT_DESIGN.md v3.0.3. DO NOT EDIT.
+// spec_sha256: a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8
 // JSON Schema is the type source; runtime semantic checks remain required.
 
 export type ActualUsageCost = {
@@ -1177,6 +1177,133 @@ export type ResponsesWrite = {
 export type RetainedOriginal = {
   "source": ProvenanceSource;
   "original_access": "allowed" | "author_required" | "unavailable";
+};
+
+export type RetrievalCommittedIndex = {
+  "index_version": string;
+  "corpus_sha256": string;
+  "built_at": string;
+  "block_count": number;
+  "term_count": number;
+};
+
+export type RetrievalHitView = {
+  "ref": ContentRef;
+  "title": string;
+  "text": string;
+  "locator": string;
+  "score": number;
+  "body_sha256": string;
+  "location": RetrievalWholeBlockLocation;
+  "current_ref": ContentRef;
+  "lifecycle": "active" | "archived";
+  "material_review": "unreviewed";
+  "provenance": RetrievalProvenance;
+  "parent_paths": Array<RetrievalScopePath>;
+  "warnings": Array<Warning>;
+};
+
+export type RetrievalIndexOverview = {
+  "kind": "overview";
+  "items": Array<RetrievalRegisteredScope>;
+  "next_cursor": (string | null);
+};
+
+export type RetrievalIndexRebuildWrite = {
+  "scope_refs": Array<ContentRef>;
+  "expected_corpus_sha256": string;
+  "provider_id": (string | null);
+  "consent_id": (string | null);
+};
+
+export type RetrievalIndexScopeStatus = {
+  "kind": "scope";
+  "scope_sha256": string;
+  "scope_refs": Array<ContentRef>;
+  "corpus_sha256": string;
+  "state": "ready" | "stale" | "building" | "missing";
+  "indexed_corpus_sha256": (string | null);
+  "index_version": (string | null);
+  "last_built_at": (string | null);
+  "latest_job": (RetrievalJobSummary | null);
+};
+
+export type RetrievalJobError = {
+  "code": string;
+  "message": string;
+  "retryable": boolean;
+};
+
+export type RetrievalJobSummary = {
+  "job": JobRef;
+  "target_corpus_sha256": string;
+  "error": (RetrievalJobError | null);
+};
+
+export type RetrievalOmissionCounts = {
+  "result_limit": number;
+  "text_byte_budget": number;
+  "json_byte_budget": number;
+};
+
+export type RetrievalProvenance = {
+  "state": "frozen" | "unresolved";
+  "original": (RetrievalRetainedSource | null);
+  "citations": Array<Citation>;
+  "unresolved_citation_ids": Array<string>;
+  "warnings": Array<Warning>;
+};
+
+export type RetrievalQueryView = {
+  "scope_sha256": string;
+  "scope_refs": Array<ContentRef>;
+  "corpus_sha256": string;
+  "indexed_corpus_sha256": (string | null);
+  "index_version": (string | null);
+  "index_state": "ready" | "stale" | "building" | "missing";
+  "result_state": "matched" | "no_match" | "indexed_empty" | "resource_omitted" | "not_ready";
+  "matched_count": (number | null);
+  "hits": Array<RetrievalHitView>;
+  "omissions": RetrievalOmissionCounts;
+  "warnings": Array<Warning>;
+};
+
+export type RetrievalQueryWrite = {
+  "query": string;
+  "scope_refs": Array<ContentRef>;
+  "limit": number;
+};
+
+export type RetrievalRegisteredScope = {
+  "scope_sha256": string;
+  "scope_refs": Array<ContentRef>;
+  "latest_index": (RetrievalCommittedIndex | null);
+  "latest_job": (RetrievalJobSummary | null);
+};
+
+export type RetrievalRetainedSource = {
+  "id": string;
+  "media_type": string;
+  "size": number;
+  "sha256": string;
+  "rights": string;
+  "parser_version": (string | null);
+};
+
+export type RetrievalScopePath = {
+  "root_ref": ContentRef;
+  "course_ref": (ContentRef | null);
+  "course_title": (string | null);
+  "lesson_ref": (ContentRef | null);
+  "lesson_title": (string | null);
+  "block_ref": ContentRef;
+};
+
+export type RetrievalWholeBlockLocation = {
+  "version": "whole-block-v1";
+  "unit": "unicode_codepoint";
+  "start_cp": 0;
+  "end_cp": number;
 };
 
 export type ReviewMaterial = {

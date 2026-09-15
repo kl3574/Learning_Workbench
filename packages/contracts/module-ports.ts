@@ -50,6 +50,24 @@ export interface AssessmentPort<D extends DTOMap> {
 }
 export interface RetrievalHit {ref:ContentRef; text:string; locator:string; score:number}
 export interface RetrievalPort {query(ctx:AuthContext, q:string, scope:ContentRef[], limit:number):Promise<RetrievalHit[]>}
+export interface RetrievalApplicationDTOMap {
+ RetrievalQueryWrite: unknown; RetrievalQueryView: unknown;
+ RetrievalIndexRebuildWrite: unknown; RetrievalIndexStatusQuery: unknown;
+ RetrievalIndexStatusView: unknown;
+}
+export interface RetrievalApplicationPort<R extends RetrievalApplicationDTOMap> {
+ query(ctx:AuthContext, request:R['RetrievalQueryWrite']):Promise<R['RetrievalQueryView']>;
+ indexStatus(ctx:AuthContext, request:R['RetrievalIndexStatusQuery']):Promise<R['RetrievalIndexStatusView']>;
+ rebuild(ctx:WriteContext, request:R['RetrievalIndexRebuildWrite']):Promise<JobRef>;
+}
+export interface ContentRetrievalDTOMap {
+ RetrievalScopeSnapshot: unknown; RetrievalBlockMaterial: unknown;
+}
+export interface ContentRetrievalPort<C extends ContentRetrievalDTOMap, Transaction> {
+ resolveScope(transaction:Transaction, ctx:AuthContext, scope:readonly ContentRef[]):Promise<C['RetrievalScopeSnapshot']>;
+ readMaterial(transaction:Transaction, ctx:AuthContext, scope:C['RetrievalScopeSnapshot'], ref:ContentRef):Promise<C['RetrievalBlockMaterial']>;
+ revalidateScope(transaction:Transaction, ctx:AuthContext, scope:C['RetrievalScopeSnapshot']):Promise<void>;
+}
 export interface ContextPort<D extends DTOMap> {freeze(ctx:AuthContext, request:D['TutorRequest']):Promise<D['ContextSnapshot']>}
 export interface TutorPort<D extends DTOMap> {
  start(ctx:WriteContext, request:D['TutorRequest']):Promise<D['RunSnapshot']>;

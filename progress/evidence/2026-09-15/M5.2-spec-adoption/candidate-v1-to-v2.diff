@@ -1,0 +1,38 @@
+--- PRODUCT_DESIGN.M5.2-candidate-v1.md
++++ PRODUCT_DESIGN.M5.2-candidate-v2.md
+@@ -1063,7 +1063,7 @@
+ 
+ 状态优先级：存在完整可核验且匹配当前 corpus 的已提交代际为 ready（冗余重建 Job 仍单独显示）；否则存在为当前 corpus 真正登记且非终态的重建 Job 为 building；否则有旧已提交代际为 stale；否则 missing。building 不表示 worker 正在 CPU 执行，也不能由旧目标的 Job 冒充。失败/取消通过真实 Job 表达并保留旧代际；没有代际时 version/time 为 null。查询仅在 ready 时匹配当前代际，其他状态返回 hits=[]、matched_count=null 和 not_ready；旧代际 version 仍可作为诊断事实返回，但不返回它的正文冒充当前目标。显式历史 scope 重建后 ready 与这种 stale 不矛盾。
+ 
+-**工程预算 retrieval-resource-v1。** roots 输入1..16项（先计输入再去重），最多512个不同展开 block；这些 block 登记 body size 合计最多16 MiB。为避免重复父链绕过去重预算，读取的不同精确公开元数据及不同来源descriptor的规范 JSON 合计最多16 MiB、显式范围路径总数最多8192；元数据按完整ref、来源按descriptor SHA去重计数，路径按完整链身份计数，不靠循环访问制造重复。超出任一 scope 预算整次拒绝 SCOPE_BUDGET_EXCEEDED（413），不静默漏子块/父链后宣称范围完整。查询原文为有效 Unicode、1..512码点，不能全空白；规范化后1..64个不同派生 term，零 term 为 QUERY_NO_TERMS（422），超过为 QUERY_TERM_BUDGET_EXCEEDED（422），不静默取前64个。字符串不得有孤立 surrogate，JSON 写命令未知字段拒绝。
++**工程预算 retrieval-resource-v1。** roots 输入1..16项（先计输入再去重），最多512个不同展开 block；这些 block 登记 body size 合计最多16 MiB。为避免重复父链绕过去重预算，读取的不同精确公开元数据及不同来源descriptor的规范 JSON 合计最多16 MiB、显式范围路径总数最多8192；元数据按完整ref、来源按descriptor SHA去重计数，路径按完整链身份计数，不靠循环访问制造重复。除上述独立预算外，完整 RetrievalCorpusDescriptor 的实际规范 JSON UTF-8 编码不得超过16 MiB；graph、来源、父链、每次重复出现的标题及全部字段均计入，不能按共享对象或去重后大小代替。范围展开和规范编码须累计计量并有界停止，不能先构造超大对象再事后计算，也不能截断descriptor或父链。超出任一 scope 预算整次拒绝 SCOPE_BUDGET_EXCEEDED（413），不静默漏子块/父链后宣称范围完整。查询原文为有效 Unicode、1..512码点，不能全空白；规范化后1..64个不同派生 term，零 term 为 QUERY_NO_TERMS（422），超过为 QUERY_TERM_BUDGET_EXCEEDED（422），不静默取前64个。字符串不得有孤立 surrogate，JSON 写命令未知字段拒绝。
+ 
+ query limit 必填整数1..20，最多返回 limit 个完整块。所有返回 text 的真实 UTF-8 字节合计≤2 MiB，整个实际 HTTP JSON 编码≤8 MiB（包括来源/父链/warnings，不以未转义字符数冒充字节数）。按已声明排名顺序选择完整块；某块会超过正文或 JSON 预算时整块遗漏并继续考虑后续块，不截断条件/结论、不截来源和父链。资源 omissions 按 result_limit/text_byte_budget/json_byte_budget 分别计数，合计=matched_count−len(hits)；最终实际编码若仍超8 MiB，从已选末位整块撤下并计 json_byte_budget，直至符合。超过 limit 的剩余匹配以 result_limit 计；在到达 limit 前实际因资源跳过的块计对应资源原因，text 预算优先于 JSON 预算。完整响应预算不能导致一个明显过大的诊断本身被无声丢弃。
+ 
+@@ -1315,7 +1315,7 @@
+ RetrievalIndexStatusView = RetrievalIndexScopeStatus | RetrievalIndexOverview
+ ```
+ 
+-RetrievalIndexScopeQuery.scope_refs 只是一层传输编码，严格JSON解码后必须验证RetrievalScopeRefs；不能接受多个同名值或其它参数。overview 默认limit20，无scope_refs字段，不把[]当省略。规范化后的scope_refs回读按§20.7排序去重；scope_sha256与workspace、这些roots一致。任何query/rebuild都有相同的实体、512块/16MiB正文登记、16MiB元数据/来源descriptor和8192路径上限，status并非绕开scope预算的接口。
++RetrievalIndexScopeQuery.scope_refs 只是一层传输编码，严格JSON解码后必须验证RetrievalScopeRefs；不能接受多个同名值或其它参数。overview 默认limit20，无scope_refs字段，不把[]当省略。规范化后的scope_refs回读按§20.7排序去重；scope_sha256与workspace、这些roots一致。任何query/rebuild都有相同的实体、512块/16MiB正文登记、16MiB元数据/来源descriptor和8192路径上限，另有完整实际规范JSON descriptor的16MiB累计上限；status并非绕开scope预算的接口。
+ 
+ 每条Hit.ref为block，current_ref的entity/id与ref相同但revision/hash可以不同；lifecycle是该对象读取时的事实。text必须是该完整block的实际body，UTF8(text)的SHA等于body_sha256；location.end_cp=len(text)，start_cp=0，locator逐字满足§20.7格式。score使用固定覆盖率，不从客户端提供。title/当前ref/lifecycle/正文/来源/路径须同一受检目标描述与当前Policy一致；不能把元数据正确当成正文已核验。
+ 
+@@ -2370,7 +2370,7 @@
+ }
+ ```
+ 
+-corpus_sha256=SHA256(规范JSON descriptor)，scope_sha256依§20.7；source_descriptor_sha256=SHA256(规范JSON provenance)。graph包含roots、显式展开的全部中间lesson和block，按完整ref排序且无重复；每项current_ref和ref同entity/id，current pointer指向的元数据也通过Content完整性核验。blocks与graph中的block集合完全相同，body_bytes为登记size且总和≤16MiB；parent_paths完整、不跨roots，总数≤8192；公开元数据及provenance描述总预算依§20.7。归档/旧ref保留，不从current_ref再展开新子节点。descriptor使用的current_ref/lifecycle是当次读取事实，不能按块发布时旧值硬编码。
++corpus_sha256=SHA256(规范JSON descriptor)，scope_sha256依§20.7；source_descriptor_sha256=SHA256(规范JSON provenance)。graph包含roots、显式展开的全部中间lesson和block，按完整ref排序且无重复；每项current_ref和ref同entity/id，current pointer指向的元数据也通过Content完整性核验。blocks与graph中的block集合完全相同，body_bytes为登记size且总和≤16MiB；parent_paths完整、不跨roots，总数≤8192；公开元数据及provenance描述总预算依§20.7；完整descriptor实际规范JSON UTF-8还须≤16MiB，包括重复标题/来源/路径，展开和编码累计有界检查，超限整scope为413 SCOPE_BUDGET_EXCEEDED，不先无界构造再计数。归档/旧ref保留，不从current_ref再展开新子节点。descriptor使用的current_ref/lifecycle是当次读取事实，不能按块发布时旧值硬编码。
+ 
+ ContentRetrievalPort.resolveScope使用调用方真实活动SQLite事务，在当前身份/Policy下核精确图与安全来源描述后返回snapshot，无写入。readMaterial再次核scope及block成员身份，从public block-body登记经安全BlobStore读实际bytes/hash/size并返回绑定snapshot的材料；单有调用方组装的snapshot/hash不是权限。revalidateScope重算完整descriptor并核原hash；body实际核验另外由readMaterial承担，不把metadata CAS冒充字节验证。跨事务工作必须在最终交付/代际切换前重新核当前Policy与完整descriptor。
+ 
+@@ -2746,7 +2746,7 @@
+ 
+ ## F.1 M5.2 原创冻结词法基准 lexical-gold-v1
+ 
+-以下完整语料/gold是本规范的工程fixture，不依赖另一设计包或下载文件，不宣称数学/来源已经独立审校。初始事实为SPEC_FIXTURE_NOT_EXECUTED；实际运行结果只写进度/证据，不反改这里的初始事实。30块均为显式范围中的未审公开教材，其中2块是含完整步骤的worked_example。42条字面查询中q01–q38为正向gold，宏平均Recall@5目标≥0.90；q39–q42必须无匹配，单列、不计免费召回分。算法、词面规则、数据/gold、所有精确refs在运行前冻结；不能按实际结果改gold或补同义词使门槛通过。
++以下完整语料/gold是本规范的工程fixture，不依赖另一设计包或下载文件，不宣称数学/来源已经独立审校。初始事实为SPEC_FIXTURE_NOT_EXECUTED；实际运行结果只写进度/证据，不反改这里的初始事实。30块均为显式范围中的未审公开教材，其中3块是含完整步骤的worked_example。42条字面查询中q01–q38为正向gold，宏平均Recall@5目标≥0.90；q39–q42必须无匹配，单列、不计免费召回分。算法、词面规则、数据/gold、所有精确refs在运行前冻结；不能按实际结果改gold或补同义词使门槛通过。
+ 
+ 建立fixture时，每块使用JSON中的block_id/title/kind，revision=1、schema_version=3.0.0、body_path=`content/{block_id}.md`，concepts/citations/depends_on=[]；body为body_markdown经JSON解码后直接UTF-8编码，不加末尾换行。分别核所列body SHA并据完整ContentBlock规范JSON计算ContentRef。Lesson固定id=m52_lexical_lesson、revision=1、title=原创词法基准小节、objectives/prerequisite_ids=[]、proof_policy=full、block_refs按下列blocks顺序列全30个精确ref。Course固定id=m52_lexical_course、revision=1、title=原创词法基准课程、language=zh-CN、audience=工程验收未审材料、difficulty=beginner、objectives/concept_refs/sections=[]、lesson_refs仅含该精确Lesson；schema_version均3.0.0。使用Content公开发布owner建立这个明确受控软件fixture，不冒称普通导入已获专家批准。公开块无冻结provenance时如实unresolved。
+ 
