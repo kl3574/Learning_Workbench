@@ -138,3 +138,68 @@ test('actual independent assessment policy keeps settings controls available and
     writeFileSync(info.outputPath('actual-provider-independent-controls.json'), JSON.stringify({ scope: 'Real author package import with unreviewed reference bindings, explicit return to learner role, and actual independent unscored attempt; actual config and secret controls remain available while subject consent GET is denied. No injected consent, generation job, score, proof or provider dispatch.', authenticated_role: identity.role, attempt_id: attempt.id, attempt_status: attempt.status, attempt_policy: attempt.policy, grading_status: attempt.grading_status, preflight: attempt.preflight, consent_read_status: rejected.status(), config_revision_after_secret_delete: 3, subject_summary_visible: false, runtime_errors: errors }, null, 2))
   } finally { await runtime.close() }
 })
+
+for (const peerChange of [false, true]) test(`secret controls use an actual newer readback while the parent refresh is held; peer change ${peerChange}`, async ({ playwright }, info) => {
+  const runtime = await RestartRuntime.start(), id = 'provider_native_secret_basis'
+  let releaseParent!: () => void
+  let cleanupRoutes = async () => {}
+  const parentGate = new Promise<void>(resolve => { releaseParent = resolve })
+  try {
+    const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]
+    cleanupRoutes = () => page.unrouteAll({ behavior: 'wait' })
+    await runtime.authenticateOnly(page)
+    const dialog = await settings(page), initial = await createConfig(page, dialog, id)
+    let armed = false, reads = 0, parentHeld!: () => void
+    const held = new Promise<void>(resolve => { parentHeld = resolve })
+    const deletes: { sha: string; key: string; status: number }[] = []
+    await page.route(`**/api/v1/providers/${id}/secret`, async route => {
+      const response = await route.fetch()
+      if (route.request().method() === 'POST') { expect(response.status()).toBe(200); armed = true }
+      if (route.request().method() === 'DELETE') {
+        deletes.push({ sha: route.request().headers()['if-match'], key: route.request().headers()['idempotency-key'], status: response.status() })
+        releaseParent()
+      }
+      await route.fulfill({ response })
+    })
+    await page.route(`**/api/v1/providers/${id}/config`, async route => {
+      if (route.request().method() !== 'GET' || !armed) { await route.continue(); return }
+      const ordinal = ++reads, response = await route.fetch()
+      if (ordinal === 2) {
+        expect(response.status()).toBe(200)
+        const value: ProviderConfigView = await response.json(); expect(value.revision).toBe(2)
+        parentHeld(); await parentGate
+      }
+      await route.fulfill({ response })
+    })
+    await dialog.getByLabel('新秘密', { exact: true }).fill('synthetic-held-parent-secret-only')
+    await dialog.getByRole('button', { name: '保存秘密', exact: true }).click()
+    await expect(dialog.getByText('原秘密命令已确认 · r2 · 当时有引用。当前状态另行回读。', { exact: true })).toBeVisible()
+    await held
+    await expect(dialog.getByText('最近实际读回的配置：r2 · 有秘密引用。', { exact: true })).toBeVisible()
+    await expect(dialog.getByText(`提供商 ${id}：当前读回 r1，无秘密引用`, { exact: true })).toBeVisible()
+    const readbackResponse = await page.request.get(`/api/v1/providers/${id}/config`); expect(readbackResponse.status()).toBe(200)
+    const readback: ProviderConfigView = await readbackResponse.json(); expect(readback.revision).toBe(2)
+    if (peerChange) {
+      const body: ProviderConfigWrite = { expected_revision: 2, adapter: readback.adapter, base_url: readback.base_url, model: 'synthetic-real-peer-config', embedding_model: readback.embedding_model, endpoint_policy: readback.endpoint_policy, pricing: readback.pricing }
+      const response = await page.request.put(`/api/v1/providers/${id}/config`, { headers: await headers(page, runtime, 'native-secret-peer-config'), data: body }); expect(response.status()).toBe(200)
+    }
+    await dialog.getByRole('button', { name: '删除秘密引用', exact: true }).click()
+    if (peerChange) {
+      const comparison = dialog.getByRole('region', { name: '秘密控制版本比较', exact: true })
+      await expect(comparison).toContainText('原始基准 r2；当前r3')
+      expect(deletes).toHaveLength(1); expect(deletes[0].status).toBe(412)
+      await comparison.getByRole('button', { name: '采用当前版本，明确更正秘密命令', exact: true }).click()
+      await dialog.getByRole('button', { name: '重试原删除引用命令', exact: true }).click()
+      await expect(dialog.getByText('原秘密命令已确认 · r4 · 当时无引用。当前状态另行回读。', { exact: true })).toBeVisible()
+      expect(deletes).toHaveLength(2); expect(deletes[1].status).toBe(200); expect(deletes[1].key).not.toBe(deletes[0].key)
+    } else {
+      await expect(dialog.getByText('原秘密命令已确认 · r3 · 当时无引用。当前状态另行回读。', { exact: true })).toBeVisible()
+      await expect(dialog.getByRole('region', { name: '秘密控制版本比较', exact: true })).toHaveCount(0)
+      expect(deletes).toHaveLength(1); expect(deletes[0].status).toBe(200)
+    }
+    expect(deletes[0].sha).toBe(`"${readback.config_sha256}"`); expect(deletes[0].sha).not.toBe(`"${initial.config_sha256}"`)
+    const finalResponse = await page.request.get(`/api/v1/providers/${id}/config`); expect(finalResponse.status()).toBe(200)
+    const final: ProviderConfigView = await finalResponse.json(); expect(final.revision).toBe(peerChange ? 4 : 3); expect(final.secret_present).toBe(false)
+    writeFileSync(info.outputPath('actual-secret-readback-basis.json'), JSON.stringify({ scope: 'Actual local synthetic secret/config requests; only the second real config GET after the POST is held. No forged response or production provider request.', peer_change: peerChange, parent_revision_when_held: 1, actual_hook_readback_revision: 2, first_delete_uses_actual_readback_hash: true, delete_statuses: deletes.map(value => value.status), explicit_correction: peerChange, final_revision: final.revision, final_secret_present: final.secret_present }, null, 2))
+  } finally { releaseParent(); await cleanupRoutes(); await runtime.close() }
+})
