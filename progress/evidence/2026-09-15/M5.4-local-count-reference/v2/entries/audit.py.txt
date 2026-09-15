@@ -1,0 +1,132 @@
+"""Offline synthetic reference audit. Never a production or hosted InputProof.
+
+The wheel binary is pinned independently; reproducible equivalence to source
+commit 8cadfede is NOT claimed. The manual renderer covers only admitted roles,
+text format, no tools, effort=none, and derives from the fixed Rust sources.
+"""
+from pathlib import Path
+import json,hashlib,sys,os,traceback
+from datetime import datetime,UTC
+A=Path('/audit'); O=Path('/output'); T=Path('/materials/static/tokenizers/v41/tokenizer.json')
+TSHA='81f64d1248a68ce3663e07ab3ee48b851e5df0e32d27cb98e4c9a268151e8d99'
+def sha(b):return hashlib.sha256(b).hexdigest()
+def canon(v):return json.dumps(v,ensure_ascii=False,sort_keys=True,separators=(',',':'),allow_nan=False).encode()
+def pairs(p):
+ d={}
+ for k,v in p:
+  if k in d:raise ValueError('duplicate field')
+  d[k]=v
+ return d
+def invalid(_):raise ValueError('nonfinite')
+def admit(raw):
+ v=json.loads(raw,object_pairs_hook=pairs,parse_constant=invalid)
+ if not isinstance(v,dict) or set(v)!={'model','stream','input','max_output_tokens','truncation','store','reasoning'}:raise ValueError('top shape')
+ if v['model']!='deepseek-flash' or v['stream'] is not True or v['store'] is not False or v['truncation']!='disabled' or v['reasoning']!={'effort':'none'} or type(v['max_output_tokens']) is not int or v['max_output_tokens']<1:raise ValueError('option')
+ if type(v['input']) is not list or not 1<=len(v['input'])<=14:raise ValueError('messages')
+ for m in v['input']:
+  if not isinstance(m,dict) or set(m)!={'role','content'} or m['role'] not in {'system','user','assistant'} or not isinstance(m['content'],str):raise ValueError('message shape')
+ if sum(len(m['content']) for m in v['input'])>12000:raise ValueError('character budget')
+ if canon(v)!=raw:raise ValueError('noncanonical')
+ return v
+
+def manual(v):
+ # Responses convert: only adjacent assistant textual messages are joined.
+ # Empty new assistant is ignored after existing assistant; separator only
+ # when both texts nonempty. Then encoding joins adjacent user with two LF.
+ converted=[]
+ for m in v['input']:
+  r,t=m['role'],m['content']
+  if r=='assistant' and converted and converted[-1][0]=='assistant':
+   if t:
+    old=converted[-1][1];converted[-1]=('assistant',old+('\n\n' if old else '')+t)
+  else:converted.append((r,t))
+ normalized=[]
+ for r,t in converted:
+  if r=='user' and normalized and normalized[-1][0]=='user':normalized[-1]=('user',normalized[-1][1]+'\n\n'+t)
+  else:normalized.append((r,t))
+ s='<｜begin▁of▁sentence｜>'
+ for r,t in normalized:
+  if r=='system':s+='<｜System｜>'+t
+  elif r=='user':s+='<｜User｜>'+t
+  else:s+='<｜Assistant｜></think>'+t+'<｜end▁of▁sentence｜>'
+ return s+'<｜Assistant｜></think>'
+
+def main():
+ started=datetime.now(UTC).isoformat()
+ inv=json.loads((A/'wheel-acquisition.json').read_text())
+ # Check native bytes before import (not only after executing initializer).
+ native_file=next(Path('/wheel').glob('deepseek_recipe/_native*.so'))
+ expected=next(m['sha256'] for m in inv['members'] if m['path']==str(native_file.relative_to('/wheel')))
+ assert sha(native_file.read_bytes())==expected
+ assert sha(T.read_bytes())==TSHA
+ import deepseek_recipe as d
+ required=['DeepseekV41Encoding','Tokenizer','ResponsesRequest','ResponsesChunkGenerator','StreamProcessor','ParsingOptions','InferenceChunk']
+ assert all(hasattr(d,x) for x in required)
+ environment={'python':sys.version,'prefix':sys.prefix,'env_keys':sorted(os.environ),'network_namespace':os.readlink('/proc/self/ns/net'),'network_interfaces':Path('/proc/net/dev').read_text(),'home_exists':Path('/home').exists(),'native_sha256':expected,'package_version':d.__version__,'required_APIs_present':required,'wheel_source_reproducible_build_proven':False}
+ mapped=[]
+ for line in Path('/proc/self/maps').read_text().splitlines():
+  parts=line.split(maxsplit=5)
+  if len(parts)==6 and parts[5].startswith('/'):
+   p=Path(parts[5])
+   if p.is_file() and str(p) not in {x['path'] for x in mapped}:mapped.append({'path':str(p),'sha256':sha(p.read_bytes()),'bytes':p.stat().st_size})
+ environment['actual_mapped_files_after_import']=mapped
+ (O/'environment.json').write_bytes(canon(environment))
+ tokenizer=d.Tokenizer.from_file(str(T));encoder=d.DeepseekV41Encoding().with_tokenizer(tokenizer)
+ def convert(raw):return d.ResponsesRequest(raw).convert(d.ConversionOptions(default_thinking_mode=True,responses_web_search=d.WebSearchBehavior.Reject)).conversation
+ records=[]
+ for c in json.loads((A/'cases-manifest.json').read_text())['cases']:
+  rec={'id':c['id'],'kind':c['kind'],'started_at':datetime.now(UTC).isoformat()};raw=(A/'cases'/c['file']).read_bytes();assert sha(raw)==c['sha256']
+  try:
+   if c['kind']=='audit_admission_negative':
+    try:admit(raw)
+    except ValueError as e:rec.update(result='PASS',rejected=str(e),converter_called=False)
+    else:raise AssertionError('negative admitted')
+   else:
+    v=admit(raw);conv=convert(raw)
+    assert conv.thinking_mode is False and not conv.tools and conv.response_format=='text'
+    rendered=encoder.render_conversation(conv);p=rendered.prompt
+    assert not rendered.image_sources
+    expected_prompt=manual(v)
+    folder=O/c['id'];folder.mkdir();(folder/'rendered-prompt.txt').write_bytes(p.encode());(folder/'manual-prompt.txt').write_bytes(expected_prompt.encode())
+    assert p==expected_prompt, 'official vs independent renderer differ'
+    ids=encoder.encode(conv);independent_ids=tokenizer.encode(expected_prompt)
+    assert ids==independent_ids,'complete prompt count mismatch'
+    repeat=encoder.encode(convert(raw));assert ids==repeat,'fresh-conversion repeat mismatch'
+    (folder/'token-ids.json').write_bytes(canon(ids));(folder/'repeat-token-ids.json').write_bytes(canon(repeat))
+    bare=''.join(m['content'] for m in v['input']);bare_ids=tokenizer.encode(bare)
+    rec.update(result='PASS',reference_token_count=len(ids),bare_content_token_count=len(bare_ids),prompt_bytes=len(p.encode()),prompt_sha256=sha(p.encode()),token_ids_sha256=sha(canon(ids)),repeat_token_ids_sha256=sha(canon(repeat)),exact_complete_prompt_equal=True,model_effort=conv.reasoning_effort,tool_choice=conv.tool_choice)
+  except Exception as e:rec.update(result='FAIL',error_type=type(e).__name__,error=str(e),traceback=traceback.format_exc())
+  rec['ended_at']=datetime.now(UTC).isoformat();records.append(rec);print(json.dumps(rec,ensure_ascii=False),flush=True)
+  (O/'case-results.json').write_bytes(canon(records))
+ # Actual reference behavior negative controls (not product guards).
+ controls=[]
+ def check(name,fn):
+  r={'id':name}
+  try:r.update(fn());r['result']='PASS'
+  except Exception as e:r.update(result='FAIL',error_type=type(e).__name__,error=str(e),traceback=traceback.format_exc())
+  controls.append(r);print(json.dumps(r,ensure_ascii=False),flush=True)
+ raw=(A/'cases/minimal.json').read_bytes()
+ def missing_tokenizer():
+  try:d.DeepseekV41Encoding().encode(convert(raw))
+  except RuntimeError as e:return {'rejected':str(e)}
+  raise AssertionError('missing tokenizer accepted')
+ def default_thinking():
+  v=json.loads(raw);v.pop('reasoning');c=convert(canon(v));assert c.thinking_mode is True
+  p=d.DeepseekV41Encoding().render_conversation(c).prompt;assert 'Reasoning Effort: 75' in p and p.endswith('<think>')
+  (O/'missing-reasoning-default-prompt.txt').write_text(p)
+  return {'actual_default_thinking':True,'reasoning_effort_template_present':True,'outbound_missing_none_rejected_by_audit':True}
+ def permissive_extra():
+  c=convert((A/'cases/unknown_field.json').read_bytes());assert encoder.encode(c)==encoder.encode(convert((A/'cases/tools_empty.json').read_bytes()))
+  return {'reference_converter_ignores_unknown_field':True,'outer_admission_required':True}
+ def wrong_pin():
+  mutated=T.read_bytes()+b'\n';assert sha(mutated)!=TSHA
+  return {'wrong_tokenizer_bytes_rejected_before_loading':True,'mutated_sha256':sha(mutated)}
+ def wrong_template():
+  c=convert((A/'cases/mid_system.json').read_bytes());a=d.DeepseekV41Encoding().render_conversation(c).prompt;b=d.DeepseekV4Encoding().render_conversation(c).prompt
+  assert a!=b;return {'v41_and_v4_render_differ':True,'no_legacy_fallback':True}
+ for n,f in [('missing_tokenizer',missing_tokenizer),('missing_wire_none_default',default_thinking),('unknown_field_permissive_converter',permissive_extra),('wrong_tokenizer_bytes',wrong_pin),('wrong_template_version',wrong_template)]:check(n,f)
+ (O/'control-results.json').write_bytes(canon(controls))
+ result={'started_at':started,'ended_at':datetime.now(UTC).isoformat(),'case_pass':sum(x['result']=='PASS' for x in records),'case_fail':sum(x['result']=='FAIL' for x in records),'control_pass':sum(x['result']=='PASS' for x in controls),'control_fail':sum(x['result']=='FAIL' for x in controls),'hosted_API_equivalence_proven':False,'production_InputProof_registered':False,'binary_source_build_equivalence_proven':False,'production_capacity_endpoint_registry_tests':'NOT_RUN, owned by separate product task','scope':'offline pinned wheel reference + fixed tokenizer + narrow independent renderer, synthetic text only'}
+ (O/'result.json').write_bytes(canon(result));print(json.dumps(result),flush=True)
+ return int(bool(result['case_fail'] or result['control_fail']))
+if __name__=='__main__':sys.exit(main())

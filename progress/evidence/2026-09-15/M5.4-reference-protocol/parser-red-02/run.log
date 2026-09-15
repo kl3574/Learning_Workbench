@@ -1,0 +1,30 @@
+............F..                                                          [100%]
+=================================== FAILURES ===================================
+______ test_mutated_reference_cannot_manufacture_a_completed_result[role] ______
+
+mutation = 'role'
+
+    @pytest.mark.parametrize('mutation', ['sequence', 'model', 'role', 'text', 'eof'])
+    def test_mutated_reference_cannot_manufacture_a_completed_result(mutation):
+        values = reference('complete')
+        if mutation == 'sequence':
+            values[4]['sequence_number'] += 1
+        elif mutation == 'model':
+            values[-1]['response']['model'] = 'another-model'
+        elif mutation == 'role':
+            values[-1]['response']['output'][0]['role'] = 'user'
+        elif mutation == 'text':
+            values[-1]['response']['output'][0]['content'][0]['text'] += ' changed'
+        else:
+            values.pop()  # A closed HTTP body cannot replace the missing terminal.
+        events = decode(values)
+>       assert events[-1].type == 'error'
+E       AssertionError: assert 'finished' == 'error'
+E         
+E         - error
+E         + finished
+
+tests/unit/test_provider_reference_events.py:82: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_provider_reference_events.py::test_mutated_reference_cannot_manufacture_a_completed_result[role]
+1 failed, 14 passed in 0.41s

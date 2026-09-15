@@ -1,0 +1,13 @@
+# Local full-request reference count evidence
+
+This is a publication candidate, not a publication or stage acceptance. v1 retains its actual incomplete-download outcome and authored narrow renderer result. v2 independently verified root's later completed official wheel and executed the unchanged 28-case audit: 13 official full conversion/count cases, 15 audit-only shape rejections, four official behavior controls plus one digest comparison. wrong-pin-02 then actually rejects altered tokenizer bytes before native import (expected child exit 1).
+
+No real model/HTTP inference, secret, production proof, hosted equivalence or reproducible binary build is claimed. Distribution 0.1.1 and native Rust version 0.1.0 are recorded separately. root protocol-generator/parser tests are a separate evidence scope, not part of these count results.
+
+Exact raw case bytes, first full prompts/token IDs, all run logs/receipts and per-case results are retained. Identical manual prompts and repeated token IDs are represented by a byte-checked alias index. One compact manifest losslessly represents all 4,889 declared input path/size/content-hash rows. Both original complete input-file SHA values are retained; the two bulky before/after files are not copied again. Raw and normalized path aggregates have separate declared algorithms. Runtime mapped library hashes are post-import observations, not invented before snapshots.
+
+No wheel, ELF binary, third-party complete source, SBOM, vocabulary/tokenizer, partial download binary or duplicate 4,889-entry snapshot is included. Excluded original manifests and the corrupted tokenizer retain exact source SHA/size references and remain in private cache. A receipt may refer to these explicitly omitted original artifacts; it does not imply that they are copied here.
+
+Publication transformation is exactly one byte-prefix replacement: the fixed user's home prefix becomes `[HOME]/`; its original bytes are identified only by SHA256 in manifest.json. There is no secret substitution, assertion editing, whitespace normalization or raw-hash recomputation. Authored .py entries are archived as .py.txt. Each included payload carries original/public SHA and bytes plus transformation count. The top-level payload aggregate uses sorted publication-relative path + NUL + public SHA256 + LF. The scanner complements the synthetic-content and provenance review; it is not a guarantee for arbitrary personal data.
+
+The first proxy download's KeyboardInterrupt exists in tool session output, not a disk raw log; download-deadline-receipt.json states that limitation. Direct/range downloader processes returned exit 0 with failure recorded in their JSON, and those failures are preserved as failures. No raw log was invented.

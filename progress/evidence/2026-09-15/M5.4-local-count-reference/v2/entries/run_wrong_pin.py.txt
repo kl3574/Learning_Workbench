@@ -1,0 +1,11 @@
+"""Negative control: unchanged original entry, only mounted tokenizer bytes differ."""
+from pathlib import Path
+import json,subprocess,hashlib
+from datetime import datetime,UTC
+O=Path(__file__).parent;R=O/'wrong-pin-02';R.mkdir();T=Path('[HOME]/.cache/learning-workbench-acceptance/m54-v41-offline-audit-material-v1/source/static/tokenizers/v41/tokenizer.json');bad=R/'mutated-tokenizer.json';bad.write_bytes(T.read_bytes()+b'\n')
+base=json.loads((O/'run-01/execution-receipt.json').read_text());cmd=base['command'];cmd=[str(R) if s==str(O/'run-01') else s for s in cmd];pos=cmd.index('--chdir');cmd[pos:pos]=['--ro-bind',str(bad),'/materials/static/tokenizers/v41/tokenizer.json']
+def h(p):return hashlib.sha256(p.read_bytes()).hexdigest()
+r={'started_at':datetime.now(UTC).isoformat(),'command':cmd,'audit_entry_sha256':h(O/'audit.py'),'original_tokenizer_sha256':h(T),'mutated_tokenizer_sha256':h(bad),'mutation':'append exactly one LF to valid JSON, preserving decoded tokenizer semantics; raw proof pin must still reject','expected_exit_code':1,'expected_before_native_import':True}
+with (R/'run.log').open('wb') as f:p=subprocess.run(cmd,stdout=f,stderr=subprocess.STDOUT,timeout=30,check=False)
+log=(R/'run.log').read_text();r.update(ended_at=datetime.now(UTC).isoformat(),exit_code=p.returncode,log_sha256=h(R/'run.log'),guard_assertion_observed='assert sha(T.read_bytes())==TSHA' in log and 'AssertionError' in log,entry_unchanged=h(O/'audit.py')==r['audit_entry_sha256'],native_environment_receipt_absent=not (R/'environment.json').exists());assert r['guard_assertion_observed'] and p.returncode==1
+(R/'receipt.json').write_text(json.dumps(r,indent=2)+'\n');print(json.dumps(r,indent=2))

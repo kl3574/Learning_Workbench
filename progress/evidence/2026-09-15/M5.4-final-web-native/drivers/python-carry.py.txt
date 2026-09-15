@@ -1,0 +1,25 @@
+"""Read-only source relation: do not represent the parent test as a child rerun."""
+import json
+import subprocess
+from pathlib import Path
+from common import ROOT, OUT, COMMIT, sha, write, now
+parent='64b5db92ec20af3b7c7a0e2175665ccbc3ebaded'
+raw=OUT.parent/'m54-full-python-v2'
+r=json.loads((raw/'receipt.json').read_bytes())
+assert r['fixed_commit']==parent and r['exit_code']==0 and r['source_unchanged'] and r['all_source_matches_git_after']
+assert sha((raw/'run.log').read_bytes())==r['log_sha256']
+assert '1838 passed, 2 warnings in 349.75s' in (raw/'run.log').read_text()
+subprocess.run(['git','merge-base','--is-ancestor',parent,COMMIT],cwd=ROOT,check=True)
+diff=subprocess.check_output(['git','diff','--name-status',parent,COMMIT],cwd=ROOT,text=True)
+rows=[{'status':line.split('\t')[0],'path':line.split('\t')[1]} for line in diff.splitlines()]
+expected={'.github/workflows/ci.yml','tests/e2e/tutor-diagnostic.spec.ts','tests/e2e/tutor.spec.ts','tests/e2e/tutorDiagnostic.ts','tests/e2e/tutorRuntime.ts'}
+assert {x['path'] for x in rows}==expected and len(rows)==5
+actualdiff=subprocess.check_output(['git','diff','--binary',parent,COMMIT,'--',*sorted(expected)],cwd=ROOT)
+(OUT/'python-parent-to-current.diff').write_bytes(actualdiff)
+value={'recorded_at':now(),'parent_test_commit':parent,'current_commit':COMMIT,'parent_receipt_path':str(raw/'receipt.json'),
+       'parent_receipt_sha256':sha((raw/'receipt.json').read_bytes()),'parent_log_sha256':r['log_sha256'],
+       'actual_parent_result':'1838 passed, 2 warnings in 349.75s','parent_source_count':850,
+       'child_pytest_rerun':False,'diff':rows,'full_diff_sha256':sha(actualdiff),
+       'scope':'Git proves only five TS/CI changes. Python source, Python tests, fixtures, contracts, migrations, package locks and toolchain configuration match the actually tested parent. Current scheduled verify_spec independently checks generated structure. Python1838 is carried from parent64b, not claimed executed at e982. Progress prose is not a product-source execution claim.'}
+write(OUT/'python-carry.json',value)
+print('Parent1838 preserved; exact Git diff is only 5 TS/CI files; no Python rerun claim.')

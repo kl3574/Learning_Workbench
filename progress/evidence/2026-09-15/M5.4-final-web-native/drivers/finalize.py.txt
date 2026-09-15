@@ -1,0 +1,42 @@
+"""Readback only after every actual gate and separately guarded restoration."""
+import json
+import re
+from pathlib import Path
+from common import ROOT, OUT, COMMIT, sha, now, write, snapshot, git_compare
+
+names=['01-web-lint','02-web-typecheck','03-web-tests','04-web-build','05-spec','06-native']
+receipts=[]
+first=None
+for name in names:
+ p=OUT/name;r=json.loads((p/'receipt.json').read_bytes())
+ assert r['fixed_commit']==COMMIT and r['git_match_before'] and r['before_count']==852
+ for filename,key in [('run.log','log_sha256'),('source-before.json','source_before_sha256'),('source-after.json','source_after_sha256'),('git-before.json','git_before_sha256'),('git-after.json','git_after_sha256')]:
+  assert sha((p/filename).read_bytes())==r[key],(name,filename)
+ source=json.loads((p/'source-before.json').read_bytes())
+ if first is None:first=source
+ assert first==source
+ if name!='06-native':assert r['unchanged'] and r['git_match_after']
+ receipts.append({'gate':name,'receipt_sha256':sha((p/'receipt.json').read_bytes()),'log_sha256':r['log_sha256'],'exit_code':r['exit_code'],'raw_unchanged':r['unchanged'],'changed_inputs':r['changed_inputs']})
+assert all(x['exit_code']==0 for x in receipts)
+restoration=json.loads((OUT/'06-native/restoration.json').read_bytes())
+assert restoration['all_852_sources_match_before_and_fixed_git_after_restoration']
+assert snapshot()==first and git_compare(first)['all_match']
+ansi=re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]')
+native=ansi.sub('',(OUT/'06-native/run.log').read_text())
+assert re.search(r'\b94 passed\b',native)
+completed=re.findall(r'^\s*✓\s+(\d+)\s',native,re.M)
+assert sorted(map(int,completed))==list(range(1,95)),completed
+assert re.search(r'Tests\s+383 passed',ansi.sub('',(OUT/'03-web-tests/run.log').read_text()))
+artifacts=[]
+for p in sorted((OUT/'06-native/artifacts').rglob('*')):
+ if p.is_file():artifacts.append({'path':p.relative_to(OUT/'06-native/artifacts').as_posix(),'bytes':p.stat().st_size,'sha256':sha(p.read_bytes())})
+write(OUT/'native-artifact-manifest.json',{'artifact_base':'06-native/artifacts','files':artifacts,'scope':'Only actual Playwright output artifacts, not runtime-data or browser profiles. A passing diagnostic negative control intentionally retains its caught original five-second failure verdict in its own diagnostic JSON.'})
+carry=json.loads((OUT/'python-carry.json').read_bytes())
+assert not carry['child_pytest_rerun']
+result={'recorded_at':now(),'fixed_commit':COMMIT,'gates':receipts,'web_tests':'383 passed in 64 files','native_tests':'94 passed; native execution indices 1..94 individually present','python_result':'1838 passed on parent64b; not rerun at e982','python_carry_sha256':sha((OUT/'python-carry.json').read_bytes()),
+ 'source_count':852,'source_aggregate':first['aggregate_sha256'],'source_matches_fixed_git_after_restoration':True,
+ 'native_original_unchanged':receipts[-1]['raw_unchanged'],'native_original_changes':receipts[-1]['changed_inputs'],
+ 'restoration_sha256':sha((OUT/'06-native/restoration.json').read_bytes()),'native_artifact_count':len(artifacts),'native_artifact_manifest_sha256':sha((OUT/'native-artifact-manifest.json').read_bytes()),
+ 'no_paid_vendor_or_production_proof_claim':True,'scope':'Local fixed-source software checks only. No current CI, publication, production model, Codex/search or learning effectiveness result is inferred.'}
+write(OUT/'final-receipt.json',result)
+print(json.dumps(result,indent=2))

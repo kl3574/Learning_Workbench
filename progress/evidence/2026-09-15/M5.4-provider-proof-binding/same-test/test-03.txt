@@ -1,0 +1,13 @@
+def test_expired_reviewed_basis_never_authorizes_a_new_request(exact_profile):
+    from dataclasses import replace
+    from services.api.app.application.provider_budget import ProofRegistry, RequestPreparer
+
+    material, config, budget, preparer = exact_profile
+    proof = preparer.registry.resolve(config)
+    expired = replace(proof, valid_until='2000-01-01T00:00:00Z',
+        validity_evidence=b'Artificial proof validity ended at the explicitly recorded deadline.')
+    current = RequestPreparer(ProofRegistry([expired]))
+    with pytest.raises(ApiError) as refused:
+        current.prepare(config, material, budget)
+    assert refused.value.code == 'CAPABILITY_UNSUPPORTED'
+    assert not current.capabilities(config, secret_available=True).chat

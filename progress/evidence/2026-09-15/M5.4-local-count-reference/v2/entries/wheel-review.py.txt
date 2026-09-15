@@ -1,0 +1,38 @@
+from pathlib import Path,PurePosixPath
+import zipfile,hashlib,json,base64,csv,io,stat,subprocess
+from datetime import datetime,UTC
+O=Path('[HOME]/.cache/learning-workbench-acceptance/m54-local-count-audit-v2');O.mkdir()
+W=Path('[HOME]/.cache/learning-workbench-acceptance/m54-root-wheel-resume-04/deepseek_recipe-0.1.1-cp310-abi3-manylinux_2_28_x86_64.whl');D=O/'wheel-inspection';D.mkdir();S=Path('[HOME]/.cache/learning-workbench-acceptance/m54-v41-offline-audit-material-v1/source');V=Path('[HOME]/.cache/learning-workbench-acceptance/m54-local-count-audit-v1')
+def sha(b):return hashlib.sha256(b).hexdigest()
+b=W.read_bytes();assert len(b)==11367229 and sha(b)=='7818802935becc76ac9b81af6b4a1e5390ec65355cecefd1fd4790f51845c1c5'
+with zipfile.ZipFile(W) as z:
+ items=z.infolist();names=[m.filename for m in items];assert len(names)==len(set(names));assert sum(m.file_size for m in items)<120_000_000
+ members=[]
+ for m in items:
+  path=PurePosixPath(m.filename);assert not path.is_absolute() and '..' not in path.parts and '\\' not in m.filename and m.file_size<80_000_000
+  assert not stat.S_ISLNK(m.external_attr>>16) and not m.filename.endswith('.pth')
+  bb=z.read(m);members.append({'path':m.filename,'bytes':len(bb),'sha256':sha(bb)})
+  if not m.is_dir():p=D/m.filename;p.parent.mkdir(exist_ok=True,parents=True);p.write_bytes(bb)
+ record_name=next(n for n in names if n.endswith('.dist-info/RECORD'))
+ records=list(csv.reader(io.StringIO(z.read(record_name).decode())))
+ for name,digest,size in records:
+  assert name in names
+  if name==record_name:assert digest==size=='';continue
+  assert digest.startswith('sha256=') and int(size)==len(z.read(name))
+  assert base64.urlsafe_b64encode(hashlib.sha256(z.read(name)).digest()).rstrip(b'=').decode()==digest[7:]
+ assert {x[0] for x in records}=={m.filename for m in items if not m.is_dir()}
+r={'observed_at':datetime.now(UTC).isoformat(),'source_wheel':str(W),'actual_sha256':sha(b),'bytes':len(b),'RECORD_all_entries_match':True,'zip_path_size_symlink_checks':'PASS','members':members,'executed':False,'installed':False,'binary_source_build_equivalence_proven':False}
+comparisons=[]
+for name in ['__init__.py','_native.pyi']:
+ p=D/'deepseek_recipe'/name;q=S/'deepseek-recipe-python/python/deepseek_recipe'/name;comparisons.append({'path':name,'wheel_sha256':sha(p.read_bytes()),'fixed_source_sha256':sha(q.read_bytes()),'equal':p.read_bytes()==q.read_bytes()})
+r['python_entry_comparisons']=comparisons
+(O/'wheel-acquisition.json').write_text(json.dumps(r,indent=2)+'\n')
+for name in ['audit.py','run_audit.py','cases-manifest.json','reviewed-entry-sources.json']:(O/name).write_bytes((V/name).read_bytes())
+(O/'cases').mkdir()
+for p in (V/'cases').iterdir():(O/'cases'/p.name).write_bytes(p.read_bytes())
+elf=[]
+for p in sorted(D.rglob('*.so*')):
+ cmd=['readelf','-d',str(p)];v=subprocess.run(cmd,capture_output=True,text=True,timeout=10,check=False);assert v.returncode==0
+ elf.append({'path':str(p.relative_to(D)),'sha256':sha(p.read_bytes()),'command':cmd,'exit_code':v.returncode,'dynamic':v.stdout})
+(O/'elf-inspection.json').write_text(json.dumps(elf,indent=2)+'\n')
+print(json.dumps({k:v for k,v in r.items() if k!='members'},indent=2));print('ELF',[(v['path'],v['sha256']) for v in elf]);print('FILES',[m['path'] for m in members])

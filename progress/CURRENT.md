@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-15T14:51:38Z；规范 SHA-256：`9cc5adbe72edfc993b5d5e99dcb3f9436e475ab2be4dd58e83f72e3104353b9c`
+更新：2026-09-15T16:15:47Z；规范 SHA-256：`2bfd471933be478a7cac51363a0482a87c81ec113c3e6cbdec88cfd139d43f37`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED
-实施：IN_PROGRESS；当前任务：M5.3；下一任务：M5.3
+实施：IN_PROGRESS；当前任务：M5.4；下一任务：M5.4
 
-发布依赖PR50的M5.3 draft PR并回读精确head CI；保持review待审不自动合并。继续M5.4生产准入绑定、Responses形状和离线完整计量审计。
+完成固定e982源native门禁及真实回读；同步本地实现、离线计数、失败与修复证据，发布依赖PR51的M5.4草稿PR。托管完整输入格式关系未证成，生产proof保持空；真实模型/搜索/质量分别NOT_RUN，继续不受影响的后续本地任务。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -30,7 +30,7 @@
 | M5.1 ProviderPort/能力协商/服务端冻结授权/受控预算/秘密与脱敏 | review | [#26](https://github.com/kl3574/Learning_Workbench/issues/26) | 254a4ffe70dcab9db56663cc37245a33ae1495a5 |
 | M5.2 检索权限、中文 FTS、来源和修订哈希 | review | [#27](https://github.com/kl3574/Learning_Workbench/issues/27) | 69e54478ae3c3604a925f2cdb905ce03ddda2b8b |
 | M5.3 Tutor 状态机、SSE/取消/重连/异步上下文 | review | [#28](https://github.com/kl3574/Learning_Workbench/issues/28) | 919a00532b499cff604ef2be4e90c88cc6378490 |
-| M5.4 真实模型与搜索评测 | todo | [#29](https://github.com/kl3574/Learning_Workbench/issues/29) | 未验证提交 |
+| M5.4 真实模型与搜索评测 | in_progress | [#29](https://github.com/kl3574/Learning_Workbench/issues/29) | e982a14644317c7be12a63ec0b31c1e615c72fa6 |
 | M6.1 教材/例题/题目生成 schema + 数值验证 | todo | [#30](https://github.com/kl3574/Learning_Workbench/issues/30) | 未验证提交 |
 | M6.2 审校/发布/版本对比/影响分析/恢复旧内容 | todo | [#31](https://github.com/kl3574/Learning_Workbench/issues/31) | 未验证提交 |
 | M6.3 CodexBroker/App Server、操作审批、产物清单 | todo | [#32](https://github.com/kl3574/Learning_Workbench/issues/32) | 未验证提交 |
@@ -83,10 +83,20 @@
 - m5_2_import_admission: CONTROLLED_RED_TO_GREEN_AND_FINAL_GATES_PASS：原UI saved/Policy unknown真实响应hold/release复现guard拒绝，修后disabled，无自动重放；新增真实independent start/abandon保留dialog/file/format负控。focused03测试locator错误和active污染保留，final改own RestartRuntime隔离。原Reader字节/60s不变，未认定旧CI唯一原因。
 - m5_3: IMPLEMENTING_NOT_ACCEPTED：真实Thread/Run/Jobs/Context/Provider source及7条HTTP/SSE已实现。受控loopback完整Provider链、恢复/取消及原回执校验定向通过；根12项真实Practice/assisted/复盘Context通过，旧ACK缺失消息2项RED修复后同case+相关组34PASS。浏览器本地prepare/空生产proof诊断/cancel/reload1PASS；受控模型浏览器链已到真实completed，移动布局测试修正中。Practice AI帮助事实和坏Job公平性修复仍在测试。未固定整阶段门禁/发布M5.3；平台DeepSeek E2E仍NOT_RUN。 后续真实浏览器lostACK同key回放、openbook跨页清正文已过；安全停止GET jobs实证500，正在修契约投影，第三native未通过。练习AI帮助11项和有界调度24相关项已实际通过，不能替代固定全阶段验收。
 - m5_2_b895_ci: PASS：attempt1 push34977114033/PR34977119117共12success；各90native；原12logs与实际checkout/tree均核。
-- m5_3_local: LOCAL_VERIFIED_REVIEW_PENDING：固定919a005实跑1807 Python/328.07s、383 web/64files、93 native/8.2m，ruff、mypy148源、web lint/build及规范6嵌入/54core/72生成均PASS。838非progress输入逐项与Git一致；native仅4张已有PNG直接输出改变，44个顶层UI原文件预存、after归档及精确hash恢复，原unchanged=false保留。三新增浏览器用例包含实际SQLite/HTTP/IndexedDB/Policy与test-only loopback Provider；生产ProofRegistry仍空，真实DeepSeek平台E2E、外部搜索、Codex与教学效果NOT_RUN。原失败和修复回执完整保留；M5.3远端CI尚未运行，不关闭Issue。
+- m5_3_local: LOCAL_VERIFIED_REVIEW_PENDING：固定919a005实跑1807 Python/328.07s、383 web/64files、93 native/8.2m，ruff、mypy148源、web lint/build及规范6嵌入/54core/72生成均PASS。838非progress输入逐项与Git一致；native仅4张已有PNG直接输出改变，44个顶层UI原文件预存、after归档及精确hash恢复，原unchanged=false保留。三新增浏览器用例包含实际SQLite/HTTP/IndexedDB/Policy与test-only loopback Provider；生产ProofRegistry仍空，真实DeepSeek平台E2E、外部搜索、Codex与教学效果NOT_RUN。原失败和修复回执完整保留；70b0278后续CI真实失败另见m5_3_ci，原固定本地PASS不覆盖该失败。
+- m5_3_ci: FAIL：70b0278 attempt1双CI实际11success/1failure。push34984643765 browser93PASS11.1m；PR34984703682 browser92PASS1FAIL14.8m。原Tutor批准后completed heading在5000ms内未出现，实际上下文仅证明UI queued；backend当时状态和流时序未知。12原日志、两失败附件及相同tree/不同commit核验保留。
+- m5_4_targeted: IN_PROGRESS_LOCAL_SOURCE_FIXED：64b5db9包含精确endpoint/模型/格式/有效性proof绑定与Responses none；定向80+factory1通过，五项全仓静态PASS；官方参考5流47事件实跑，terminal role真实14PASS1FAIL后同15+旧29共44PASS。独立审查通过。官方完整转换计数13输入、15外层拒绝及错误词表实际负控另列离线证据，不能证明托管API等价。850源逐Git/blob/mode绑定全量Python实际1838PASS/349.75s/2依赖弃用警告、前后相同；生产proof仍空，真实平台DeepSeek/搜索/质量NOT_RUN。
+- m5_4_offline: LOCAL_OFFLINE_ONLY：官方PyPI wheel11367229bytes总SHA781880…经部分下载续取实际完成；v1失败保留。v2禁网13官方完整转换/计数及重复token IDs通过，15自写严格入口反例拒绝；4实际官方行为controls、1旧digest-only检查分列，新增wrong-pin真实执行在import前拒绝。4889声明输入前后同。native报告0.1.0/distribution0.1.1；二进制构建与托管API等价均未证明。
+- m5_4_python: PASS：64b5db9固定850全部非progress源逐Git blob+mode匹配；完整1838PASS349.75s/2依赖弃用警告，before/after同aggregate d1af15efb6b6cd72145f52cf814c530cda0a6a9b37f07ab3dfa1981368e00247。不是生产模型、浏览器或整阶段验收。
+- m5_3_diagnostic_publication: PUBLISHED：PR51实际head0010699，新增e30c519五诊断/CI文件，draft/open/unmerged。远端ref、PR head、PR正文及Issue28正文实际回读相同；新CI尚未回读终态，不预填成功。
+- m5_4_web: PASS：固定e982a146上的web lint/typecheck、64文件383tests、build及spec72生成检查实际exit0；各852非progress源在执行前后均逐Git匹配且同aggregate addcdf8efae9ca0db0de80dceb51060535e1c4d497225b3f6774d6976cd045a2。build原大chunk警告保留；94项native实际PASS8.1m，原unchanged=false的4PNG在44顶层UI原件/after保全后按hash恢复，当前852源逐Git相同。Python1838是在64b5db9执行，未称在e982重跑。
+- m5_4_native: PASS：e982a146实际94项/8.1m，ordinal1..94各一次，原5s业务断言未放宽。44顶层UI前后原件保全；仅4已有直接输出PNG改变，原unchanged=false与after aggregate保留，精确guard恢复后852源逐Git/blob/mode一致。Root已读取本轮1440/390 Tutor实际合成截图，不推断真实模型或旧CI失败原因。
+- m5_3_001_ci: FAIL：0010699 attempt1双CI终态11success/1failure。push34991095035 browser104455641488实际93PASS1FAIL14.4m；PR34991097477 browser104455650410实际94PASS10.8m。原第三Tutor completed断言仍5000ms。新单Node观察时钟记录completed DOM在断言开始后4779.307ms、失败冻结5002.232ms；post读取真实Run completed seq6/job r6，受控请求1received/1validated/0invalid。框架error-context仍queued，PNG已见合成回答；不能把不同采样时点合并。DOM answer_present包含占位，不表示真实回答；safeRun读取另有真实answer。实际12logs、4失败artifact和checkout同tree已核，原70b失败同样保留，尚未认定根因或修复。
+- m5_3_completion_diagnostics: DIAGNOSTICS_IMPLEMENTED_NOT_ROOT_CAUSE_FIXED：e30c519仅5个测试/CI诊断文件，产品/原三case业务断言/5s不变。诊断自己的部分回读丢失1RED→同test1GREEN；原第三case加被动观察1PASS10.9s，真实queued GET保留至同Runcompleted后原样交付对照1PASS11.9s；均未复现原CI。No-tests-found、ESM及adhoc类型解析前置失败保留。新诊断CI待实际发布运行。 以上为001发布前历史；该head实际11success/1failure另列m5_3_001_ci。
 
 ## 阻塞与待决项
 
-- 暂无已确认阻塞。
+- M5_3_CI_TUTOR_COMPLETION_OBSERVATION_FAILED: 70b与001均实际11success1failure；001在同Node时钟4.779s已观察completed、约5s仍断言失败，具体轮询/交付原因待受控复现。不是已修复。
+- PRODUCTION_INPUT_PROOF_NOT_ESTABLISHED: 尚未建立当前托管模型完整请求格式的exact/严格upper-bound证明；已有官方编码资料允许继续离线工程审计。这是工程/证据缺口，不是权限或缺凭据。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。

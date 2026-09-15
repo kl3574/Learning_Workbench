@@ -1,0 +1,39 @@
+from pathlib import Path
+from urllib.request import Request, urlopen
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
+import hashlib,json,time
+base=Path('<private-home>/.cache/learning-workbench-acceptance/m54-root-wheel-resume-04/verified-inputs'); out=Path(__file__).parent
+old=json.loads((base/'download-range-receipt.json').read_text()); digest=lambda b:hashlib.sha256(b).hexdigest(); N=old['expected_bytes']; started=time.monotonic(); records=[]
+for x in old['ranges']:
+ b=(base/'range-parts'/f"{x['index']:02}.bin").read_bytes()
+ assert len(b)==x['bytes'] and digest(b)==x['sha256']
+ if b: assert x['status']==206 and x['content_range']==f"bytes {x['start']}-{x['end']}/{N}"
+def fetch(x):
+ a=x['start']+x['bytes'];z=x['end']; r={'index':x['index'],'start':a,'end':z,'previous_bytes':x['bytes'],'previous_sha256':x['sha256'],'started_at':datetime.now(timezone.utc).isoformat()}; b=bytearray()
+ try:
+  with urlopen(Request(old['url'],headers={'User-Agent':'learning-workbench-offline-audit/1','Range':f'bytes={a}-{z}'}),timeout=12) as resp:
+   r.update(status=resp.status,content_range=resp.headers.get('Content-Range'),final_url=resp.url)
+   assert resp.status==206 and r['content_range']==f'bytes {a}-{z}/{N}' and resp.url==old['url']
+   while True:
+    if time.monotonic()-started>180:raise TimeoutError('bounded resume deadline')
+    c=resp.read1(65536)
+    if not c:break
+    b.extend(c)
+    if len(b)>z-a+1:raise ValueError('oversize')
+   assert len(b)==z-a+1
+  r['result']='PASS'
+ except Exception as e:r.update(result='FAIL',error_type=type(e).__name__,error=str(e))
+ (out/f"{x['index']:02}-suffix.bin").write_bytes(b);r.update(bytes=len(b),sha256=digest(b),ended_at=datetime.now(timezone.utc).isoformat());print(json.dumps(r),flush=True);return r
+with ThreadPoolExecutor(max_workers=7) as pool:
+ records=sorted([f.result() for f in as_completed([pool.submit(fetch,x) for x in old['ranges'] if x['result']!='PASS'])],key=lambda x:x['index'])
+receipt={'previous_receipt_sha256':digest((base/'download-range-receipt.json').read_bytes()),'url':old['url'],'expected_bytes':N,'expected_sha256':old['expected_sha256'],'ranges':records,'result':'FAIL','original_files_unchanged':True}
+if all(x['result']=='PASS' for x in records):
+ pieces=[]
+ for x in old['ranges']:
+  b=(base/'range-parts'/f"{x['index']:02}.bin").read_bytes()
+  if x['result']!='PASS':b+=(out/f"{x['index']:02}-suffix.bin").read_bytes()
+  assert len(b)==x['end']-x['start']+1;pieces.append(b)
+ data=b''.join(pieces);assert len(data)==N and digest(data)==old['expected_sha256']
+ target=out/old['url'].rsplit('/',1)[1];target.write_bytes(data);receipt.update(result='PASS',wheel_path=target.name,actual_sha256=digest(data))
+receipt['finished_at']=datetime.now(timezone.utc).isoformat();(out/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n');print(json.dumps({k:v for k,v in receipt.items() if k!='ranges'}));raise SystemExit(0 if receipt['result']=='PASS' else 1)
