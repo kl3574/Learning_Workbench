@@ -1,0 +1,103 @@
+{
+  "version": "m51-ci-refresh-diagnosis-v1",
+  "created_at": "2026-09-15T07:28:46.863104+00:00",
+  "head": "6c9f997a89793a6cdbdd83a1f20e07e504047612",
+  "original_signal": "Both exact-head remote frontend jobs failed with313PASS1FAIL; config expected2 got1. Original local targeted command also failed twice; one local run has durable receipt.",
+  "hypotheses_ranked": [
+    "Clicked parent refresh still disabled after child retry enabled",
+    "Refresh event/read effect did not start despite enabled click",
+    "Fresh response discarded by generation guard"
+  ],
+  "observed_before_click": {
+    "retryDisabled": false,
+    "refreshDisabled": true,
+    "configCalls": 1
+  },
+  "root_cause": "Child busy=false makes its retry button enabled before useEffect publishes onState to parent; test clicked still-disabled parent refresh. No second config call was made.",
+  "correction": "Wait for actual refresh button enabled; retain original two-call, retained value, and original secret command body/key equality assertions.",
+  "production_edits": "NONE; negative-control useProviderReads mutation restored exact6c9 bytes.",
+  "negative_control": "Restored original editor unmount behavior setConfig(null) with corrected test; real failure at retained secret value expected synthetic-retained but empty, after config2 reached.",
+  "observational_probe_scope": "First instrumented run passed (id contains red but receipt correctly PASS); second with unchanged observer failed and logged only three non-secret state facts. Scheduling-sensitive failure, not deterministic every run.",
+  "checks": [
+    {
+      "receipt": "progress/evidence/2026-09-15/M5.1-ci-refresh-original-red-01.json",
+      "receipt_sha256": "077fbfbe2776053c938baa7d5f4b2afbc9de7d5187c2aa0267c9496a5c7984f5",
+      "log": "progress/evidence/2026-09-15/M5.1-ci-refresh-original-red-01.log",
+      "log_sha256": "f8e0d8778804936b6cecce94361ded8978ac4b4367e3011a12972d05346d028f",
+      "status": "FAIL",
+      "exit_code": 1
+    },
+    {
+      "receipt": "progress/evidence/2026-09-15/M5.1-ci-refresh-observation-red-01.json",
+      "receipt_sha256": "50d304b5dbbb9a24db2c30b9ce63c733158680318c81af5886e6bf952b7e31c0",
+      "log": "progress/evidence/2026-09-15/M5.1-ci-refresh-observation-red-01.log",
+      "log_sha256": "6748365edf70489708ee49f8d57a4f4eebd6451490a8d0acc2862e18fe10b4b6",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "receipt": "progress/evidence/2026-09-15/M5.1-ci-refresh-observation-02.json",
+      "receipt_sha256": "e9e19423e265d79956c3b21d749c07a0e1fd41f8a8e345f51c413ac4d3daac62",
+      "log": "progress/evidence/2026-09-15/M5.1-ci-refresh-observation-02.log",
+      "log_sha256": "659aec25a9b930ffed21ccca91f7fdf82ce76bc05409dc8b7676d0744ffaf498",
+      "status": "FAIL",
+      "exit_code": 1
+    },
+    {
+      "receipt": "progress/evidence/2026-09-15/M5.1-ci-refresh-targeted-green-01.json",
+      "receipt_sha256": "ad9e96a643a082c694aa0acd4dd6cce95a08a6cc6b1323b33194dee45ed360b3",
+      "log": "progress/evidence/2026-09-15/M5.1-ci-refresh-targeted-green-01.log",
+      "log_sha256": "31d131b840637f2c21690bacfaf1248b6f39ce3e84b194924b5cd80629ba5a79",
+      "status": "PASS",
+      "exit_code": 0
+    },
+    {
+      "receipt": "progress/evidence/2026-09-15/M5.1-ci-refresh-regression-mutation-01.json",
+      "receipt_sha256": "556ef78613bb2b8432df1f27953ac078d9a2c753bd9416b0c1b9a657adc25f8c",
+      "log": "progress/evidence/2026-09-15/M5.1-ci-refresh-regression-mutation-01.log",
+      "log_sha256": "f4838bda8896529f067f6a916327dda87d5b54abf6c6d773c1957fc67e854276",
+      "status": "FAIL",
+      "exit_code": 1
+    },
+    {
+      "receipt": "progress/evidence/2026-09-15/M5.1-ci-refresh-provider-green-01.json",
+      "receipt_sha256": "8144c91c4db4622792a8ebc092ca5b7f91a0190108c05f077c4c70a4990611bd",
+      "log": "progress/evidence/2026-09-15/M5.1-ci-refresh-provider-green-01.log",
+      "log_sha256": "c918f1679d880479833c9195294a9818742a8d88e5011f47f125542b14b94b45",
+      "status": "PASS",
+      "exit_code": 0
+    }
+  ],
+  "source_archives": [
+    {
+      "path": "ProviderSettings.original.test.tsx",
+      "sha256": "4214cb527c06702902b8cdeb04c3388ce835ac954c9e704f94192c10fbd1af7b",
+      "bytes": 9212
+    },
+    {
+      "path": "ProviderSettings.probe.test.tsx",
+      "sha256": "a8e94d20643f3bf5775de1a20bc8f86f9c5ecbfc193722ae6b5cda6c105eeffa",
+      "bytes": 9544
+    },
+    {
+      "path": "ProviderSettings.fixed.test.tsx",
+      "sha256": "21680a7f943c42d3c8f2687422de7a0634c8f873675293e34cf26d6dbaff5cf6",
+      "bytes": 9424
+    },
+    {
+      "path": "useProviderReads.original.ts",
+      "sha256": "630b159590f8afa39547550fcea243b856b9a193176729f2c3cc64fd028e8517",
+      "bytes": 5568
+    },
+    {
+      "path": "useProviderReads.mutation.ts",
+      "sha256": "2c3ddfb694ac6f0135d588e926b08971fff14c31bb63b9f5011823185e753718",
+      "bytes": 5515
+    }
+  ],
+  "limits": [
+    "UI unit fixture, not real Provider credentials or actual HTTP evidence",
+    "No local full-suite or new CI success inferred from these targeted checks",
+    "Probe and mutation are archived development inputs only; not live production code"
+  ]
+}

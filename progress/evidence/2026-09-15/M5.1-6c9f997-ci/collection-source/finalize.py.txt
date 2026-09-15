@@ -1,0 +1,65 @@
+from pathlib import Path
+from datetime import datetime,UTC
+from collections import Counter
+import subprocess,json,hashlib,re
+p=Path('<HOME>/.cache/learning-workbench-acceptance/m51-ci-6c9f997')
+head='6c9f997a89793a6cdbdd83a1f20e07e504047612'; source='769ebebfc7418076cbf5526ee8a4dfec73f11bb3'
+sha=lambda b:hashlib.sha256(b).hexdigest()
+history=sorted(path for path in p.glob('checks-*.json') if '.raw.' not in path.name and '.error.' not in path.name)
+latest=json.loads(history[-1].read_text())
+assert len(latest['checks'])==12 and all(c['head_sha']==head and c['status']=='completed' for c in latest['checks'])
+stamp=datetime.now(UTC).strftime('%Y%m%dT%H%M%S')
+def fetch(stem,endpoint):
+    name=stem+'-'+stamp+'.raw.json'; target=p/name
+    start=datetime.now(UTC).isoformat(); result=subprocess.run(['gh','api',endpoint],capture_output=True)
+    metadata={'endpoint':endpoint,'started_at':start,'read_at':datetime.now(UTC).isoformat(),'exit_code':result.returncode,'raw_sha256':sha(result.stdout),'bytes':len(result.stdout),'stderr':result.stderr.decode()}
+    with target.open('xb') as out:out.write(result.stdout)
+    (p/(name+'.receipt.json')).write_text(json.dumps(metadata,indent=2)+'\n')
+    if result.returncode:raise SystemExit('Actual read failed; see private raw receipt')
+    return name,json.loads(result.stdout)
+runids=sorted({c['html_url'].split('/runs/')[1].split('/')[0] for c in latest['checks']}); runs={}
+for rid in runids:
+    name,value=fetch('run-'+rid+'-terminal',f'repos/kl3574/Learning_Workbench/actions/runs/{rid}')
+    assert value['head_sha']==head
+    if value['status']!='completed':raise SystemExit('Actual workflow still running; defer finalization and keep observation')
+    runs[int(rid)]={'raw_file':name,'raw_sha256':sha((p/name).read_bytes()),**{k:value[k] for k in ['id','event','head_sha','run_attempt','status','conclusion','created_at','run_started_at','updated_at','html_url']}}
+assert Counter(r['event'] for r in runs.values())=={'push':1,'pull_request':1}
+ansi=re.compile(r'\x1b\[[0-9;]*[A-Za-z]'); jobs=[]; checkout_commits={head}
+for check in latest['checks']:
+    jid=check['id']; mf=p/f'job-{jid}.raw.json'; lf=p/f'job-{jid}.log'; m=json.loads(mf.read_text()); raw=lf.read_bytes(); lines=raw.decode().splitlines()
+    assert m['id']==jid and m['head_sha']==head and m['status']=='completed' and m['conclusion']==check['conclusion']
+    for path in [mf,lf]:assert json.loads((p/(path.name+'.receipt.json')).read_text())['raw_sha256']==sha(path.read_bytes())
+    checkout=[]; excerpts=[]; cases=[]
+    for index,line in enumerate(lines):
+        plain=ansi.sub('',line)
+        if re.search(r'\b\d+ (?:passed|failed|skipped|cancelled)|Test Files|Tests\s+\d+|All checks passed|Success: no issues found|AssertionError|generated_artifacts|implemented_handlers|catalog_endpoints|PASS:|##\[error\]|Error: expect\(|Test timeout|Error: locator|waiting for getByRole|Error Context:',plain):excerpts.append({'original_line':index+1,'text':plain})
+        if 'git log -1 --format=%H' in plain:
+            for following in lines[index+1:index+4]:
+                hit=re.search(r'Z ([a-f0-9]{40})$',following)
+                if hit:checkout.append({'sha':hit.group(1),'original_line':lines.index(following,index+1)+1})
+        if m['name']=='browser':
+            hit=re.search(r'Z\s+([✓✔✘×])\s+(\d+)\s+(.+)$',plain)
+            if hit and 'tests/e2e/' in hit.group(3):cases.append({'number':int(hit.group(2)),'result':'passed' if hit.group(1) in '✓✔' else 'failed','text':hit.group(3),'original_line':index+1})
+    assert len(checkout)==1
+    checkout_commits.add(checkout[0]['sha'])
+    jobs.append({'job_id':jid,'run_id':m['run_id'],'workflow_event':runs[m['run_id']]['event'],'name':m['name'],'head_sha':head,'status':m['status'],'conclusion':m['conclusion'],'started_at':m['started_at'],'completed_at':m['completed_at'],'html_url':m['html_url'],'steps':m['steps'],'metadata_file':mf.name,'metadata_sha256':sha(mf.read_bytes()),'log_file':lf.name,'log_sha256':sha(raw),'actual_checkout_from_log':checkout,'test_and_check_excerpts':excerpts,'browser_case_readback':cases,'browser_case_count':len(cases) if m['name']=='browser' else None,'excerpt_transform':'ANSI escape sequences removed for readability; original logs retain every byte.'})
+for rid in runs:assert Counter(j['name'] for j in jobs if j['run_id']==rid)==Counter(['security-publication','integration','browser','frontend','backend','spec-contracts'])
+trees={}
+for commit in sorted(checkout_commits):
+    existing=p/f'git-commit-{commit}.raw.json'
+    if existing.exists():name=existing.name; value=json.loads(existing.read_text())
+    else:name,value=fetch('git-commit-'+commit,f'repos/kl3574/Learning_Workbench/git/commits/{commit}')
+    assert value['sha']==commit
+    trees[commit]={'tree_sha':value['tree']['sha'],'raw_file':name,'raw_sha256':sha((p/name).read_bytes())}
+for job in jobs:
+    execution=job['actual_checkout_from_log'][0]['sha']
+    job['checkout_commit_equals_publication_head']=execution==head
+    job['checkout_tree_equals_publication_head']=trees[execution]['tree_sha']==trees[head]['tree_sha']
+prfile,pr=fetch('pr49-terminal','repos/kl3574/Learning_Workbench/pulls/49')
+prfacts={'number':pr['number'],'url':pr['html_url'],'head_sha':pr['head']['sha'],'head_ref':pr['head']['ref'],'base_sha':pr['base']['sha'],'base_ref':pr['base']['ref'],'draft':pr['draft'],'state':pr['state'],'merged':pr['merged'],'merged_at':pr['merged_at'],'head_matches_checked_sha':pr['head']['sha']==head,'raw_file':prfile,'raw_sha256':sha((p/prfile).read_bytes())}
+intervals=[]
+for a,b in zip(history,history[1:]):intervals.append((datetime.fromisoformat(json.loads(b.read_text())['read_at'])-datetime.fromisoformat(json.loads(a.read_text())['read_at'])).total_seconds())
+assert all(x>=60 for x in intervals)
+receipt={'version':'m51-publication-head-ci-final-v1','finalized_at':datetime.now(UTC).isoformat(),'publication_head':head,'software_anchor':source,'final_check_read_at':latest['read_at'],'check_count':12,'conclusion_counts':dict(Counter(c['conclusion'] for c in latest['checks'])),'all_checks_success':all(c['conclusion']=='success' for c in latest['checks']),'all_checks_terminal':True,'workflows':list(runs.values()),'jobs':jobs,'actual_checkout_commit_trees':trees,'pull_request':prfacts,'source_relationship':json.loads((p/'source-publication-relationship.json').read_text()),'poll_readbacks':[{'file':x.name,'read_at':json.loads(x.read_text())['read_at'],'raw_sha256':json.loads(x.read_text())['raw_sha256']} for x in history],'poll_intervals_seconds':intervals,'actions':'Read-only GitHub GET and local immutable blob reads. No rerun/cancel/push/ready/merge/test or repository edits.','limits':['CI suites overlap; their counts are not added to replace local fullPython1494.','PR executes an actual synthetic merge commit when shown by checkout logs; tree equality is separately proved by GitHub git-commit objects.','Publication source inventory has599 unchanged nonREADME inputs plus changed README;600 all-equal is not claimed.','Failure logs report an observed assertion; this collector does not infer its product root cause.']}
+with (p/'final-ci-receipt.json').open('x') as out:out.write(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n')
+print(json.dumps({'receipt_sha256':sha((p/'final-ci-receipt.json').read_bytes()),'counts':receipt['conclusion_counts'],'browsers':[{'event':j['workflow_event'],'conclusion':j['conclusion'],'case_count':j['browser_case_count']} for j in jobs if j['name']=='browser'],'pr':prfacts}))
