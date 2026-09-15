@@ -6,7 +6,7 @@ session views. A solution body is returned only by the explicit reveal command.
 
 from typing import Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, StrictBool, field_validator, model_validator
 
 from packages.contracts import domain_models as dm
 
@@ -62,6 +62,11 @@ class PracticeAssistance(dm.StrictModel):
     _level_type = field_validator("highest_hint_level", mode="before")(integer_hint)
 
 
+class PracticeAssistanceView(PracticeAssistance):
+    # Omission is only legacy receipt compatibility; current projections emit it.
+    model_help_received: StrictBool = False
+
+
 class PracticeSession(dm.StrictModel):
     id: dm.Id
     revision: dm.Revision
@@ -72,7 +77,7 @@ class PracticeSession(dm.StrictModel):
     status: PracticeStatus
     exposure_event_ids: list[dm.Id]
     assisted: bool
-    assistance: list[PracticeAssistance]
+    assistance: list[PracticeAssistanceView]
     results: list[dm.ItemGrade] | None
 
     _practice_ref = field_validator("practice_ref")(practice_reference)
@@ -89,7 +94,7 @@ class PracticeSession(dm.StrictModel):
             raise ValueError("responses must be unique assigned questions")
         if len(assistance) != len(set(assistance)) or set(assistance) != set(assigned):
             raise ValueError("assistance must describe every assigned question exactly once")
-        if self.assisted != any(item.highest_hint_level > 0 or item.solution_revealed for item in self.assistance):
+        if self.assisted != any(item.highest_hint_level > 0 or item.solution_revealed or item.model_help_received for item in self.assistance):
             raise ValueError("assisted must reflect recorded assistance")
         if len(self.exposure_event_ids) != len(set(self.exposure_event_ids)):
             raise ValueError("duplicate exposure event IDs")
@@ -125,7 +130,7 @@ class PracticeSubmitted(dm.StrictModel):
     evidence_label: Literal["practice"]
     exposure_event_ids: list[dm.Id]
     assisted: bool
-    assistance: list[PracticeAssistance]
+    assistance: list[PracticeAssistanceView]
 
     @model_validator(mode="after")
     def public_submission(self) -> "PracticeSubmitted":

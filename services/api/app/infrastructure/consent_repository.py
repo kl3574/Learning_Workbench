@@ -5,11 +5,14 @@ import sqlite3
 from uuid import uuid4
 
 from packages.contracts import domain_models as dm
-from packages.contracts.canonical import canonical_bytes, sha256_bytes, snapshot_sha256, strict_json
+from packages.contracts.canonical import canonical_bytes, sha256_bytes, strict_json
 from pydantic import TypeAdapter
 
 from ..application.errors import ApiError
-from ..application.provider_models import PreparedOutboundMaterial, ProviderTerminalReceipt, CheckedProviderTerminal, UsageSnapshot
+from ..application.provider_models import (
+    CheckedProviderArtifact, CheckedProviderResult, PreparedOutboundMaterial,
+    ProviderTerminalReceipt, CheckedProviderTerminal, UsageSnapshot,
+)
 from ..application.provider_ports import DispatchRecord
 from ..provider_dto import ConsentCreateAck, ConsentProposalView, FrozenOutboundSummary
 from .provider_repository import ProviderRepository, digest, integrity_error, require_transaction
@@ -56,9 +59,12 @@ class ConsentRepository:
                     or prepared_digest(self.workspace_id, material) != summary.input_sha256
                     or summary.purpose != material.purpose or summary.context_snapshot_id != material.context_snapshot.id
                     or summary.context_snapshot_sha256 != material.context_snapshot.snapshot_sha256
-                    or snapshot_sha256(material.context_snapshot) != summary.context_snapshot_sha256
                     or summary.input_token_assurance.request_body_sha256 != sha256_bytes(body)):
                 raise integrity_error()
+            # The Context owner authenticates its complete private envelope.
+            # Its digest need not be a hash of the small public ContextSnapshot
+            # projection. Provider instead binds those exact owner bytes through
+            # the immutable prepared-input, proposal and request-body hashes.
             if len(summary.messages) != len(material.messages) or len(summary.references) != len(material.evidence):
                 raise integrity_error()
             for shown, actual in zip(summary.messages, material.messages, strict=True):
@@ -238,6 +244,26 @@ class ConsentRepository:
         row = self.connection.execute('SELECT id FROM provider_dispatches WHERE consent_id=? AND workspace_id=?',
                                        (consent_id, self.workspace_id)).fetchone()
         return self._record(self._dispatch(row['id'])) if row else None
+
+    def read_dispatch(self, dispatch_id: str) -> DispatchRecord:
+        return self._record(self._dispatch(dispatch_id))
+
+    def read_result(self, dispatch_id: str) -> CheckedProviderResult | None:
+        """Private owner port; the application checks source output permission."""
+        receipt = self.read_terminal(dispatch_id)
+        if receipt is None:
+            return None
+        channels: dict[str, CheckedProviderArtifact] = {}
+        # read_terminal has verified exact membership, channel, hash and UTF-8
+        # under this same transaction. No path or caller-selected artifact read.
+        for row in self.connection.execute(
+                'SELECT * FROM provider_artifacts WHERE workspace_id=? AND dispatch_id=?',
+                (self.workspace_id, dispatch_id)):
+            data = bytes(row['bytes'])
+            channels[row['channel']] = CheckedProviderArtifact(
+                id=row['id'], channel=row['channel'], text=data.decode('utf-8'),
+                utf8_bytes=len(data), sha256=row['sha256'])
+        return CheckedProviderResult(receipt=receipt, answer=channels.get('answer'), refusal=channels.get('refusal'))
 
     def usage(self, dispatch_id: str) -> UsageSnapshot:
         self._dispatch(dispatch_id)

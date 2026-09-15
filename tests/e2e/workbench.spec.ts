@@ -7,12 +7,12 @@ test('empty workspace, native bootstrap, four fixed navigation and truthful auxi
   const labels = await page.getByRole('navigation', { name: '学习主导航' }).getByRole('button').allTextContents()
   expect(labels.map(text => text.replace(/[↗▤✎☑]/g, '').replace(/含例题|含解答/g, '').trim())).toEqual(['学习路线', '教材', '习题', '测试题'])
   await expect(page.getByRole('heading', { name: '从学习目标开始', exact: true })).toBeVisible()
-  await expect(page.getByText('未配置模型')).toBeVisible()
+  await expect(page.getByText('本地任务 · 明确授权')).toBeVisible()
   for (const name of ['教材', '习题', '测试题', '学习路线']) {
     await page.getByRole('navigation', { name: '学习主导航' }).getByRole('button', { name, exact: false }).click()
     await expect(page.getByRole('heading', { name: 'Agent', exact: true })).toBeVisible()
   }
-  await page.getByRole('button', { name: '发送 ↑' }).isDisabled().then(disabled => expect(disabled).toBe(true))
+  await page.getByRole('button', { name: '创建本次问答任务 ↑' }).isDisabled().then(disabled => expect(disabled).toBe(true))
   await page.keyboard.press('Control+Shift+P')
   await expect(page.getByRole('dialog', { name: '命令面板' })).toBeVisible()
   await page.getByRole('dialog').getByRole('button', { name: '导出备份' }).click()

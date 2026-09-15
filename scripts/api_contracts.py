@@ -121,6 +121,17 @@ def response_contract(operation: dict) -> tuple[list[str], str, set[str]]:
         if not content:
             response_types.append("undefined")
             kinds.add("json")
+        elif set(content) == {"text/event-stream"}:
+            schema = content["text/event-stream"].get("schema", {})
+            alternatives = schema.get("oneOf", [])
+            if (schema.get("type") != "object" or not alternatives
+                    or any(set(item) != {"$ref"} for item in alternatives)
+                    or schema.get("discriminator", {}).get("propertyName") != "type"):
+                raise ValueError("SSE needs an explicit generated adapter with closed event union")
+            names = [item["$ref"].rsplit("/", 1)[1] for item in alternatives]
+            response_types.append("AsyncIterable<" + " | ".join(names) + ">")
+            models.update(names)
+            kinds.add("sse")
         elif set(content) == {"text/markdown"}:
             if content["text/markdown"].get("schema", {}).get("type") != "string":
                 raise ValueError("Markdown responses require an explicit string schema")
@@ -160,7 +171,7 @@ export type ApiArgs<K extends EndpointKey> = ApiEndpointMap[K]['parametersRequir
     ? [body: ApiRequest<K>, headers?: undefined, parameters?: ApiParameters<K>]
     : [body: ApiRequest<K>, headers: ApiHeaders<K>, parameters?: ApiParameters<K>];
 
-export type ResponseKind = 'json' | 'text' | 'blob';
+export type ResponseKind = 'json' | 'text' | 'blob' | 'sse';
 // The caller owns same-origin session/CSRF and HTTP error handling.
 // Raw transport data is unknown; endpoint results always use generated DTOs.
 export type ApiTransport = (path: string, init: RequestInit, responseKind?: ResponseKind) => Promise<unknown>;
@@ -274,6 +285,8 @@ def api_artifacts(openapi: dict, catalog: dict, provenance: dict[str, str]) -> d
             if request_type != "undefined":
                 models_needed.add(request_type)
             response_types, response_kind, response_models = response_contract(operation)
+            if response_kind == "sse" and (method, path) != ("get", "/api/v1/runs/{id}/events"):
+                raise ValueError("SSE operation requires its explicit generated adapter")
             models_needed.update(response_models)
             parameters = operation_parameters(path, methods, operation)
             header_type = parameter_type(parameters["header"]) if parameters["header"] else "null"

@@ -85,6 +85,10 @@ class JobService:
         if row["kind"] == "retrieval_index":
             from .retrieval import RetrievalService
             return RetrievalService(self.database)
+        if row['kind'] == 'tutor':
+            from .tutor import TutorService
+            from .tutor_context import ContextService
+            return TutorService(self.database, ContextService(self.database))
         raise ApiError(409, "JOB_KIND_UNAVAILABLE", "此任务类型尚未实现受控读取。")
 
     def job(self, identity, identifier):

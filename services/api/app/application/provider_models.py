@@ -114,3 +114,36 @@ class ProviderTerminalReceipt(dm.StrictModel):
                     and self.refusal_artifact_id is None):
                 raise ValueError('complete refusal output requires a refusal artifact')
         return self
+
+
+class CheckedProviderArtifact(dm.StrictModel):
+    """Provider-owned bytes, validated with their actual terminal membership."""
+    id: dm.Id
+    channel: Literal['answer', 'refusal']
+    text: Annotated[str, Field(min_length=1)]
+    utf8_bytes: Annotated[int, Field(strict=True, ge=1)]
+    sha256: dm.Sha256
+
+    @model_validator(mode='after')
+    def exact_bytes(self) -> Self:
+        from packages.contracts.canonical import sha256_bytes
+        data = self.text.encode('utf-8')
+        if len(data) != self.utf8_bytes or sha256_bytes(data) != self.sha256:
+            raise ValueError('artifact text must match its actual UTF-8 bytes')
+        return self
+
+
+class CheckedProviderResult(dm.StrictModel):
+    receipt: ProviderTerminalReceipt
+    answer: CheckedProviderArtifact | None
+    refusal: CheckedProviderArtifact | None
+
+    @model_validator(mode='after')
+    def receipt_membership(self) -> Self:
+        for channel in ('answer', 'refusal'):
+            artifact = getattr(self, channel)
+            identifier = getattr(self.receipt, channel + '_artifact_id')
+            if ((artifact is None) != (identifier is None)
+                    or artifact is not None and (artifact.id != identifier or artifact.channel != channel)):
+                raise ValueError('result channels must be members of the checked receipt')
+        return self

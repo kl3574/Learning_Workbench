@@ -23,11 +23,10 @@ from ..infrastructure.provider_transport import ProviderTransport
 from ..infrastructure.security import SessionIdentity, guard_subject_access
 from ..provider_dto import FrozenOutboundSummary, ProviderConfigView, ProviderFailureCode
 from .errors import ApiError
-from .policy import Policy
-from .jobs import outbound_lease_active
+from .jobs import outbound_lease_active, outbound_source_kind
 from .provider_budget import check_usage
 from .provider_models import (
-    CheckedProviderError, CheckedProviderEvent, CheckedProviderTerminal, DispatchLease,
+    CheckedProviderError, CheckedProviderEvent, CheckedProviderResult, CheckedProviderTerminal, DispatchLease,
     PreparedOutboundMaterial, ProviderTerminalReceipt, UsageSnapshot,
 )
 from .provider_ports import AbortSignal, DispatchRecord, OutboundSourceRegistry, ProviderRequestPreparer
@@ -117,14 +116,54 @@ class CheckedDispatch:
                     raise ApiError(503, 'PROVIDER_OUTCOME_UNKNOWN', '本机派发记录暂不可用。') from None
                 await asyncio.sleep(0.005)
 
-    def _output_allowed(self, identity: SessionIdentity) -> None:
+    def _output_allowed(self, identity: SessionIdentity, job_id: str, consent_id: str) -> None:
         with self._transaction(readonly=True) as conn:
-            Policy(conn, identity.workspace_id).check('private_artifact')
+            record = ConsentRepository(conn, identity.workspace_id).dispatch_for_consent(consent_id)
+            if record is None or record.job_id != job_id:
+                raise ApiError(409, 'OUTBOUND_SOURCE_CHANGED', '提供商输出未绑定此任务。')
+            self.source_registry.resolve(conn, identity, job_id).verify_output(conn, identity, job_id, record.id)
 
     def terminal(self, identity: SessionIdentity, dispatch_id: str) -> ProviderTerminalReceipt | None:
         with self._transaction(readonly=True) as conn:
-            Policy(conn, identity.workspace_id).check('private_artifact')
-            return ConsentRepository(conn, identity.workspace_id).read_terminal(dispatch_id)
+            repo = ConsentRepository(conn, identity.workspace_id)
+            record = repo.read_dispatch(dispatch_id)
+            self.source_registry.resolve(conn, identity, record.job_id).verify_output(
+                conn, identity, record.job_id, dispatch_id)
+            return record.terminal
+
+    def read_result(self, conn: sqlite3.Connection, identity: SessionIdentity,
+                    job_id: str, consent_id: str) -> CheckedProviderResult | None:
+        if not conn.in_transaction:
+            raise ApiError(409, 'TRANSACTION_REQUIRED', '结果回读需要有效事务。')
+        repo = ConsentRepository(conn, identity.workspace_id)
+        summary, _, _ = repo.dispatch_material(consent_id)
+        if summary.job_id != job_id:
+            raise ApiError(409, 'OUTBOUND_SOURCE_CHANGED', '许可不属于此任务。')
+        source = self.source_registry.resolve(conn, identity, job_id)
+        source.read_job(conn, identity, job_id)
+        record = repo.dispatch_for_consent(consent_id)
+        if record is None:
+            return None
+        source.verify_output(conn, identity, job_id, record.id)
+        return repo.read_result(record.id)
+
+    def read_control_result(self, conn: sqlite3.Connection, identity: SessionIdentity,
+                            job_id: str, consent_id: str) -> ProviderTerminalReceipt | None:
+        """Internal stop/recovery facts only; never returns artifact text.
+
+        A current academic lock must not prevent preserving a remote outcome
+        while ending a local job. Actual bytes still require read_result and
+        the source's current output permission.
+        """
+        if not conn.in_transaction:
+            raise ApiError(409, 'TRANSACTION_REQUIRED', '控制结果回读需要有效事务。')
+        outbound_source_kind(conn, identity.workspace_id, job_id)
+        repo = ConsentRepository(conn, identity.workspace_id)
+        summary, _, _ = repo.dispatch_material(consent_id)
+        if summary.job_id != job_id:
+            raise ApiError(409, 'OUTBOUND_SOURCE_CHANGED', '许可不属于此任务。')
+        record = repo.dispatch_for_consent(consent_id)
+        return record.terminal if record is not None else None
 
     def _start(self, identity: SessionIdentity, job_id: str, consent_id: str,
                lease: DispatchLease, abort: AbortSignal) -> _Started | ProviderTerminalReceipt:
@@ -138,7 +177,7 @@ class CheckedDispatch:
                 raise ApiError(409, 'OUTBOUND_SOURCE_CHANGED', '许可不属于此任务。')
             previous = repo.dispatch_for_consent(consent_id)
             if previous is not None:
-                Policy(conn, identity.workspace_id).check('private_artifact')
+                self.source_registry.resolve(conn, identity, job_id).verify_output(conn, identity, job_id, previous.id)
                 if previous.terminal is None:
                     raise ApiError(409, 'PROVIDER_OUTCOME_UNKNOWN', '原调用结果尚未确认，不能重新派发。')
                 return previous.terminal
@@ -212,7 +251,7 @@ class CheckedDispatch:
             while (item := await queue.get()) is not None:
                 if isinstance(item, BaseException):
                     raise item
-                await self._db(lambda: self._output_allowed(identity))
+                await self._db(lambda: self._output_allowed(identity, job_id, consent_id))
                 yield item
         finally:
             combined.local.set()
@@ -327,8 +366,9 @@ class CheckedDispatch:
                 else:
                     def verified() -> None:
                         with self._transaction(readonly=True) as conn:
-                            Policy(conn, identity.workspace_id).check('private_artifact')
                             record = ConsentRepository(conn, identity.workspace_id).dispatch_for_consent(consent_id)
+                            if record is not None:
+                                self.source_registry.resolve(conn, identity, job_id).verify_output(conn, identity, job_id, record.id)
                             if (record is None or record.job_id != job_id or record.terminal is None
                                     or record.terminal.terminal != event):
                                 raise ApiError(409, 'PROVIDER_OUTCOME_UNKNOWN', '原派发终态尚不可核验。')

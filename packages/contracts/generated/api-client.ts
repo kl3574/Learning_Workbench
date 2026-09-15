@@ -1,6 +1,6 @@
-// Generated from PRODUCT_DESIGN.md v3.0.3 and actual runtime OpenAPI; do not edit.
-// spec_sha256: a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8
-import type { AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, BlockReadResponse, BootstrapRequest, BootstrapResponse, ConceptStateResponse, ConsentCreate, ConsentCreateAck, ConsentPage, ConsentPreviewWrite, ConsentProposalView, ConsentRevoke, ContentRef, Course, DirectorySearchResponse, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearnerProfile, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, OutlineResponse, PageAssessment, PageCourse, PageEvidence, PageNote, PagePracticeSet, PageRevision, PageRoute, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ProfileWrite, ProviderCapabilitiesResponse, ProviderConfigAck, ProviderConfigView, ProviderConfigWrite, ProviderSecretAck, ProviderSecretWrite, ReadinessResponse, RecommendationDecisionWrite, RecommendationPage, RegradeRequest, ResponsesWrite, RetrievalIndexOverview, RetrievalIndexRebuildWrite, RetrievalIndexScopeStatus, RetrievalQueryView, RetrievalQueryWrite, RoleRequest, Route, RouteCompletionRequest, SessionResponse, SourceResponse, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
+// Generated from PRODUCT_DESIGN.md v3.0.4 and actual runtime OpenAPI; do not edit.
+// spec_sha256: 9cc5adbe72edfc993b5d5e99dcb3f9436e475ab2be4dd58e83f72e3104353b9c
+import type { AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, BlockReadResponse, BootstrapRequest, BootstrapResponse, ConceptStateResponse, ConsentCreate, ConsentCreateAck, ConsentPage, ConsentPreviewWrite, ConsentProposalView, ConsentRevoke, ContentRef, Course, DirectorySearchResponse, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearnerProfile, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, OutlineResponse, PageAssessment, PageCourse, PageEvidence, PageNote, PagePracticeSet, PageRevision, PageRoute, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ProfileWrite, ProviderCapabilitiesResponse, ProviderConfigAck, ProviderConfigView, ProviderConfigWrite, ProviderSecretAck, ProviderSecretWrite, ReadinessResponse, RecommendationDecisionWrite, RecommendationPage, RegradeRequest, ResponsesWrite, RetrievalIndexOverview, RetrievalIndexRebuildWrite, RetrievalIndexScopeStatus, RetrievalQueryView, RetrievalQueryWrite, RoleRequest, Route, RouteCompletionRequest, SessionResponse, SourceResponse, TutorAnswerDeltaEvent, TutorApprovalRequiredEvent, TutorCancelledEvent, TutorCitationEvent, TutorCompletedEvent, TutorContextReadyEvent, TutorFailedEvent, TutorMessagePage, TutorQueuedEvent, TutorRetrievalCompletedEvent, TutorRunCancel, TutorRunControlView, TutorRunCreate, TutorRunView, TutorThreadCreate, TutorThreadPage, TutorThreadView, TutorUsageEvent, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
 
 import type { RetrievalIndexStatusQuery } from "./retrieval-ports-binding";
 export interface ApiEndpointMap {
@@ -67,11 +67,18 @@ export interface ApiEndpointMap {
   "POST /api/v1/routes": { request: Route; response: ContentRef; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
   "PUT /api/v1/routes/{id}": { request: Route; response: ContentRef; headers: { "Idempotency-Key": string; "If-Match"?: (string | null) }; parameters: { path: { "id": string } }; parametersRequired: true };
   "POST /api/v1/routes/{id}/steps/{step_id}/complete": { request: RouteCompletionRequest; response: LearningActionResponse; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string; "step_id": string } }; parametersRequired: true };
+  "GET /api/v1/runs/{id}": { request: undefined; response: TutorRunView; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
+  "POST /api/v1/runs/{id}/cancel": { request: TutorRunCancel; response: TutorRunControlView; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
+  "GET /api/v1/runs/{id}/events": { request: undefined; response: AsyncIterable<TutorQueuedEvent | TutorContextReadyEvent | TutorRetrievalCompletedEvent | TutorAnswerDeltaEvent | TutorCitationEvent | TutorApprovalRequiredEvent | TutorUsageEvent | TutorCompletedEvent | TutorFailedEvent | TutorCancelledEvent>; headers: { "Last-Event-ID"?: string }; parameters: { path: { "id": string }; query?: { "after_seq"?: number } }; parametersRequired: true };
   "GET /api/v1/session": { request: undefined; response: SessionResponse; headers: null; parameters: Record<string, never>; parametersRequired: false };
   "POST /api/v1/session/bootstrap": { request: BootstrapRequest; response: BootstrapResponse; headers: null; parameters: Record<string, never>; parametersRequired: false };
   "POST /api/v1/session/logout": { request: EmptyRequest; response: LogoutResponse; headers: null; parameters: Record<string, never>; parametersRequired: false };
   "POST /api/v1/session/role": { request: RoleRequest; response: SessionResponse; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
   "GET /api/v1/sources/{id}": { request: undefined; response: SourceResponse; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
+  "GET /api/v1/threads": { request: undefined; response: TutorThreadPage; headers: null; parameters: { query?: { "cursor"?: string; "limit"?: number } }; parametersRequired: false };
+  "POST /api/v1/threads": { request: TutorThreadCreate; response: TutorThreadView; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
+  "GET /api/v1/threads/{id}/messages": { request: undefined; response: TutorMessagePage; headers: null; parameters: { path: { "id": string }; query?: { "cursor"?: string; "limit"?: number } }; parametersRequired: true };
+  "POST /api/v1/tutor/runs": { request: TutorRunCreate; response: TutorRunView; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
   "GET /api/v1/workbench/session": { request: undefined; response: WorkbenchSession; headers: null; parameters: Record<string, never>; parametersRequired: false };
   "PUT /api/v1/workbench/session": { request: WorkbenchSaveRequest; response: WorkbenchSession; headers: { "If-Match"?: (string | null) }; parameters: Record<string, never>; parametersRequired: false };
   "GET /api/v1/workspace": { request: undefined; response: WorkspaceResponse; headers: null; parameters: Record<string, never>; parametersRequired: false };
@@ -1159,6 +1166,58 @@ export const API_ENDPOINTS = {
     ],
     "queryParameters": []
   },
+  "GET /api/v1/runs/{id}": {
+    "method": "GET",
+    "path": "/api/v1/runs/{id}",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
+  "POST /api/v1/runs/{id}/cancel": {
+    "method": "POST",
+    "path": "/api/v1/runs/{id}/cancel",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
+  "GET /api/v1/runs/{id}/events": {
+    "method": "GET",
+    "path": "/api/v1/runs/{id}/events",
+    "responseKind": "sse",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": [
+      {
+        "name": "after_seq",
+        "required": false,
+        "type": "integer",
+        "minimum": 0
+      }
+    ]
+  },
   "GET /api/v1/session": {
     "method": "GET",
     "path": "/api/v1/session",
@@ -1208,6 +1267,74 @@ export const API_ENDPOINTS = {
         "type": "string"
       }
     ],
+    "queryParameters": []
+  },
+  "GET /api/v1/threads": {
+    "method": "GET",
+    "path": "/api/v1/threads",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
+    "queryParameters": [
+      {
+        "name": "cursor",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      }
+    ]
+  },
+  "POST /api/v1/threads": {
+    "method": "POST",
+    "path": "/api/v1/threads",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
+    "queryParameters": []
+  },
+  "GET /api/v1/threads/{id}/messages": {
+    "method": "GET",
+    "path": "/api/v1/threads/{id}/messages",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": [
+      {
+        "name": "cursor",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      }
+    ]
+  },
+  "POST /api/v1/tutor/runs": {
+    "method": "POST",
+    "path": "/api/v1/tutor/runs",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
     "queryParameters": []
   },
   "GET /api/v1/workbench/session": {
@@ -1269,7 +1396,7 @@ export type ApiArgs<K extends EndpointKey> = ApiEndpointMap[K]['parametersRequir
     ? [body: ApiRequest<K>, headers?: undefined, parameters?: ApiParameters<K>]
     : [body: ApiRequest<K>, headers: ApiHeaders<K>, parameters?: ApiParameters<K>];
 
-export type ResponseKind = 'json' | 'text' | 'blob';
+export type ResponseKind = 'json' | 'text' | 'blob' | 'sse';
 // The caller owns same-origin session/CSRF and HTTP error handling.
 // Raw transport data is unknown; endpoint results always use generated DTOs.
 export type ApiTransport = (path: string, init: RequestInit, responseKind?: ResponseKind) => Promise<unknown>;

@@ -38,8 +38,13 @@ def test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec():
     assert provider_operations <= projection
     assert {('POST', '/api/v1/retrieval/query'), ('POST', '/api/v1/index/rebuild'),
             ('GET', '/api/v1/index/status')} <= projection
-    assert len(projection) == 73
-    assert len(SPEC_ROUTES - projection) == 33
+    tutor = {('POST', '/api/v1/threads'), ('GET', '/api/v1/threads'),
+             ('GET', '/api/v1/threads/{id}/messages'), ('POST', '/api/v1/tutor/runs'),
+             ('GET', '/api/v1/runs/{id}'), ('GET', '/api/v1/runs/{id}/events'),
+             ('POST', '/api/v1/runs/{id}/cancel')}
+    assert tutor <= projection
+    assert len(projection) == 80
+    assert len(SPEC_ROUTES - projection) == 27
 
 
 OPERATIONS = [(path, method, operation) for path, methods in create_app().openapi()["paths"].items()

@@ -63,18 +63,29 @@ def _witness(connection: sqlite3.Connection, workspace_id: str, exposure_id: str
     receipt = connection.execute('SELECT * FROM practice_exposures WHERE exposure_id=? AND session_id=? AND question_id=? AND kind=?',
         (exposure_id, record.id, ref.id, row['kind'])).fetchone()
     if receipt is None:
-        raise ValueError('missing help receipt')
-    help_result = repository.help(record, ref.id, row['kind'], receipt['level'])
-    if help_result is None or help_result[0] != event.event_id:
-        raise ValueError('help receipt event mismatch')
+        from ..infrastructure.practice_model_help_repository import PracticeModelHelpRepository
+        model_help = PracticeModelHelpRepository(connection, workspace_id).by_exposure(exposure_id)
+        if (model_help is None or row['kind'] != 'hint' or model_help.event_id != event.event_id
+                or model_help.answer.practice.session_id != record.id
+                or model_help.answer.practice.question_ref != ref):
+            raise ValueError('missing help receipt')
+        # Zero means no rules hint level; the immutable receipt explicitly says model.
+        level, receipt_hash, help_hash = 0, metadata_sha256(model_help), model_help.answer.text_sha256
+    else:
+        help_result = repository.help(record, ref.id, row['kind'], receipt['level'])
+        if help_result is None or help_result[0] != event.event_id:
+            raise ValueError('help receipt event mismatch')
+        level = receipt['level']
+        receipt_hash = sha256_bytes(canonical_bytes({key: receipt[key] for key in receipt.keys() if key != 'help_json'}))
+        help_hash = metadata_sha256(help_result[1])
     instant(row['occurred_at'])
     return HelpWitness(exposure_id=exposure_id, workspace_id=workspace_id, session_id=record.id,
-        question_ref=ref, exposure_group=question.exposure_group, kind=row['kind'], level=receipt['level'],
+        question_ref=ref, exposure_group=question.exposure_group, kind=row['kind'], level=level,
         occurred_at=row['occurred_at'], event_id=event.event_id, event_occurred_at=event.occurred_at,
         event_sha256=metadata_sha256(event), exposure_sha256=sha256_bytes(canonical_bytes(dict(row))),
-        receipt_sha256=sha256_bytes(canonical_bytes({key: receipt[key] for key in receipt.keys() if key != 'help_json'})),
+        receipt_sha256=receipt_hash,
         assignment_sha256=sha256_bytes(assignment_bytes(record.practice_ref, record.question_refs, record.solution_refs)),
-        help_sha256=metadata_sha256(help_result[1]))
+        help_sha256=help_hash)
 
 
 def help_witnesses(connection: sqlite3.Connection, workspace_id: str, question_ref: dm.ContentRef,

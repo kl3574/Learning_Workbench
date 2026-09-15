@@ -40,6 +40,13 @@ class AssessmentAccess:
         return AttemptAccess(value.id, value.workspace_id, value.assessment_ref, value.status,
                              value.policy, tuple(value.question_refs))
 
+    def active_open_book(self) -> str | None:
+        row = self.connection.execute(
+            "SELECT id FROM attempts WHERE workspace_id=? AND mode='open_book' AND status='active' ORDER BY id LIMIT 1",
+            (self.workspace_id,),
+        ).fetchone()
+        return str(row['id']) if row else None
+
     def protected(self) -> tuple[AttemptAccess, ...]:
         rows = self.connection.execute(
             "SELECT id FROM attempts WHERE workspace_id=? AND (status='active' OR "
