@@ -1,0 +1,47 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_ test_checked_frozen_proposal_remains_readable_when_its_owner_is_unregistered _
+
+tmp_path = PosixPath('${PRIVATE_HOME}/.cache/lw-m51-b/unregistered-red/test_checked_frozen_proposal_r0')
+
+    def test_checked_frozen_proposal_remains_readable_when_its_owner_is_unregistered(tmp_path):
+        import pytest
+        from services.api.app.application.consents import ConsentsService
+        from services.api.app.application.provider_ports import OutboundSourceRegistry
+    
+        database, identity, source, service, request = consent_setup(tmp_path)
+        proposal = service.preview(identity, request, 'preview')
+        unavailable = ConsentsService(database, service.secret_store, OutboundSourceRegistry(), service.preparer)
+        with database.transaction() as conn:
+            before = sha256_bytes('\n'.join(conn.iterdump()).encode())
+>       view = unavailable.proposal(identity, proposal.id)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_provider_consents.py:187: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/api/app/application/consents.py:151: in proposal
+    return self._current(connection, identity, proposal_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+services/api/app/application/consents.py:112: in _current
+    source = self.source_registry.resolve(connection, identity, material.job_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.application.provider_ports.OutboundSourceRegistry object at 0x7e64bbd05d00>
+transaction = <sqlite3.Connection object at 0x7e64bb783e20>
+identity = SessionIdentity(<synthetic runtime session and CSRF redacted>)
+job_id = 'job_d3af4d85cab64e488ecf7cb30f1421a5'
+
+    def resolve(self, transaction: sqlite3.Connection, identity: SessionIdentity,
+                job_id: str) -> OutboundSourcePort:
+        from .jobs import outbound_source_kind
+        kind = outbound_source_kind(transaction, identity.workspace_id, job_id)
+        source = self._sources.get(kind)
+        if source is None:
+>           raise ApiError(409, 'OUTBOUND_SOURCE_UNAVAILABLE', '此任务尚无可用的外发准备来源。')
+E           services.api.app.application.errors.ApiError: (409, 'OUTBOUND_SOURCE_UNAVAILABLE', '此任务尚无可用的外发准备来源。')
+
+services/api/app/application/provider_ports.py:105: ApiError
+=========================== short test summary info ============================
+FAILED tests/integration/test_provider_consents.py::test_checked_frozen_proposal_remains_readable_when_its_owner_is_unregistered
+1 failed in 0.25s

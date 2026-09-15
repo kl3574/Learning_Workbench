@@ -1,0 +1,128 @@
+{
+  "version": "m51-b-independent-c-static-review-v1",
+  "reviewer": "C independent review of B owner implementation",
+  "finished_at": "2026-09-15T06:29:18.397867+00:00",
+  "spec_sha256": "537239aa30315170b2a177b74a5dfca026397fdc0e15ab14a094a8b14f7c51d9",
+  "scope": {
+    "production_files": 6,
+    "migration_files": 1,
+    "all_listed_files_read_completely": true,
+    "not_claimed": [
+      "No executed tests or full-platform acceptance",
+      "No actual OS/system SecretStore verification; reviewed implementation is FileSecretStore fallback with an explicit Protocol/injection seam",
+      "No M7 full restore workflow verification",
+      "No arbitrary malicious full-database-and-key rewrite resistance proof"
+    ]
+  },
+  "files": [
+    {
+      "path": "services/api/app/application/providers.py",
+      "sha256_before": "c915da86ca8c33f567d21df2c7854d02e8bcc9ebeecbe29a9e795c4e9c233ef7",
+      "sha256_after": "c915da86ca8c33f567d21df2c7854d02e8bcc9ebeecbe29a9e795c4e9c233ef7",
+      "line_count": 188,
+      "archive": "source/services/api/app/application/providers.py.txt"
+    },
+    {
+      "path": "services/api/app/application/consents.py",
+      "sha256_before": "8b013d61be0c450b0a696775e06d3888ad7e2dd88ce3318171e02538cd56ec5b",
+      "sha256_after": "8b013d61be0c450b0a696775e06d3888ad7e2dd88ce3318171e02538cd56ec5b",
+      "line_count": 302,
+      "archive": "source/services/api/app/application/consents.py.txt"
+    },
+    {
+      "path": "services/api/app/application/provider_backup.py",
+      "sha256_before": "fd276006f63fad839565e5d535689a8d0e29d82da817afebba93978e9475479d",
+      "sha256_after": "fd276006f63fad839565e5d535689a8d0e29d82da817afebba93978e9475479d",
+      "line_count": 58,
+      "archive": "source/services/api/app/application/provider_backup.py.txt"
+    },
+    {
+      "path": "services/api/app/infrastructure/provider_repository.py",
+      "sha256_before": "2e768d2c2fb6a7068764326e6c6457fe393c9f63e741f3517e532efc73fe6ba4",
+      "sha256_after": "2e768d2c2fb6a7068764326e6c6457fe393c9f63e741f3517e532efc73fe6ba4",
+      "line_count": 257,
+      "archive": "source/services/api/app/infrastructure/provider_repository.py.txt"
+    },
+    {
+      "path": "services/api/app/infrastructure/consent_repository.py",
+      "sha256_before": "480d7634e5abc2fcadf5bf2501b064b0f4b9b32e440fbc6d6c591eeba216ebbd",
+      "sha256_after": "480d7634e5abc2fcadf5bf2501b064b0f4b9b32e440fbc6d6c591eeba216ebbd",
+      "line_count": 368,
+      "archive": "source/services/api/app/infrastructure/consent_repository.py.txt"
+    },
+    {
+      "path": "services/api/app/infrastructure/provider_secret_store.py",
+      "sha256_before": "020c17279538b2030a40e5c473a38bc50805a7362359541696af1e05bbec99f0",
+      "sha256_after": "020c17279538b2030a40e5c473a38bc50805a7362359541696af1e05bbec99f0",
+      "line_count": 171,
+      "archive": "source/services/api/app/infrastructure/provider_secret_store.py.txt"
+    },
+    {
+      "path": "migrations/0010_provider_authorization.sql",
+      "sha256_before": "7b5f30aae28e7f058b59efdba6910a1e26db1a45cfae7842a0f231fc53ca722b",
+      "sha256_after": "7b5f30aae28e7f058b59efdba6910a1e26db1a45cfae7842a0f231fc53ca722b",
+      "line_count": 97,
+      "archive": "source/migrations/0010_provider_authorization.sql.txt"
+    }
+  ],
+  "source_before_after_equal": true,
+  "findings": [
+    {
+      "id": "M51-B-C-01",
+      "severity": "P2",
+      "status": "STATIC_FINDING_OWNER_CONFIRMED_NOT_EXECUTED",
+      "title": "Crash-left staging files cannot be recovered; post-link leftovers also block immutable-version reads",
+      "locations": [
+        {
+          "path": "services/api/app/infrastructure/provider_secret_store.py",
+          "lines": [
+            87,
+            104
+          ]
+        },
+        {
+          "path": "services/api/app/infrastructure/provider_secret_store.py",
+          "lines": [
+            65,
+            73
+          ]
+        },
+        {
+          "path": "services/api/app/infrastructure/provider_secret_store.py",
+          "lines": [
+            156,
+            160
+          ]
+        },
+        {
+          "path": "services/api/app/application/providers.py",
+          "lines": [
+            137,
+            152
+          ]
+        }
+      ],
+      "spec": "PRODUCT_DESIGN.md 3.0.2 section 20.4: immutable secret write before CAS; orphan versions must be recoverably cleanable.",
+      "trigger": "Abrupt process exit after a .staging-<uuid> file has been created/written and before the finally unlink; includes the window immediately after os.link publishes the immutable filename.",
+      "current_behavior": "FileSecretStore.versions() enumerates only secret_<32hex>. cleanup_orphan_secrets() uses only that enumeration. A staging-only file is never selected. If link already succeeded, the staging and immutable names share an inode with st_nlink=2; _read rejects it, so read/available and deletion through delete->_read fail closed instead of recovering that locally-created state.",
+      "impact": "No claimed unauthorized generation or public secret leak. The promised orphan recovery is incomplete, and a crash can leave a valid newly written private version (or fingerprint-key publication) unavailable until manual filesystem intervention.",
+      "minimum_followup": "Owner should serialize initialize/put/recovery at the storage level; safely recognize only its own staging artifacts, validate type/owner/mode and avoid symlinks, recover before removing unreferenced immutable versions. Do not delete a concurrently active writer staging file merely by name.",
+      "needed_verification": [
+        "Real subprocess exit at the pre-link window, followed by cleanup with private bytes removed.",
+        "Real subprocess exit after link but before unlink: recover nlink=2 staging state, preserve any committed referenced version, then clean true orphans.",
+        "Concurrent initialize/put versus cleanup cannot remove an active temporary version."
+      ],
+      "evidence_limit": "Read-only static review; no tests, process-kill probe, browser, network, credential access or code edit performed by this reviewer. B independently confirmed no other staging recovery implementation exists and accepted the candidate for verification."
+    }
+  ],
+  "checked_without_new_blocking_finding": [
+    "Complete command HMAC binds stable single-user workspace actor, route, key, payload and version preconditions. Secret commands persist a redacted command body and private HMAC, not secret bytes or ordinary public secret hashes.",
+    "Original config/secret/grant/revoke ACK replays validate the relevant immutable history prefix before new-operation CAS; academic Policy precedes consent summary/replay access. Later current reads and old ACK values remain distinct.",
+    "Configuration reference existence is historical secret_present; physical unreadability does not rewrite it. Secret writes append immutable versions and commit CAS+safe ACK together; commit uncertainty does not immediately delete a possibly referenced version.",
+    "Frozen proposal reads validate canonical bytes, complete material/snapshot/message/reference digests, provider revision and original ACK bindings. Grant history, source binding and receipt join the caller transaction.",
+    "One consent reserves at most one dispatch, usage is monotonic and nullable, and terminal/UTF8 channel artifacts are validated together and written under SAVEPOINT. Identical terminal replay preserves the original; different terminal/bytes are rejected.",
+    "Backup sanitization requires an independent copy, validates native history first, removes private fingerprint/locator rows, preserves immutable historical audit bytes and records a checked dispatch-disabled projection. Export packing/checkpoint/VACUUM are caller responsibilities, not proof supplied by this static review.",
+    "Unknown source registry and confirmed preparation changes are distinguished from integrity corruption in proposal diagnostics. Dispatch views still require a real source-owned JobRef and may safely reject readback if that owner is unavailable; no fabricated JobRef/status fallback was found.",
+    "Migration creates deferred command references, unique proposal/consent/dispatch relationships and immutable-history triggers; legacy provider rows are not automatically accepted as native grants."
+  ]
+}

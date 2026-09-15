@@ -1,8 +1,8 @@
 <!-- task_id: M5-milestone -->
 task_id: `M5`
 
-spec_version: `3.0.1`
-spec_sha256: `397829f5267248aedfc60faf7cacbb12669966b1c1d636a909b04189e0cc09dd`
+spec_version: `3.0.2`
+spec_sha256: `537239aa30315170b2a177b74a5dfca026397fdc0e15ab14a094a8b14f7c51d9`
 
 唯一规范：根目录 PRODUCT_DESIGN.md（第 17/19 章及相关附录）。
 
@@ -15,7 +15,7 @@ spec_sha256: `397829f5267248aedfc60faf7cacbb12669966b1c1d636a909b04189e0cc09dd`
 修改范围：规范对应模块、契约、测试和脱敏工程进度。
 
 验收清单及预期证据：
-- [ ] M5.1: 无授权零外发；兼容 chat 不冒充 search
+- [ ] M5.1: 本地控制面、真实持久授权与受控 HTTP 协议分层验收；无授权或无完整输入证明则零外发；不冒充生产模型贯通或 search
 - [ ] M5.2: 私有答案过滤、旧索引、中文检索基准
 - [ ] M5.3: 终态唯一、断连不重生成、切标签不串内容
 - [ ] M5.4: 显式授权小预算调用；引用回查；无凭据 NOT_RUN
@@ -27,8 +27,8 @@ spec_sha256: `397829f5267248aedfc60faf7cacbb12669966b1c1d636a909b04189e0cc09dd`
 经审查/合并后才关闭任务；当前清单不表示已经验收。
 
 <!-- engineering_progress:start -->
-当前实际状态：`todo`
-规范：`3.0.1` / `397829f5267248aedfc60faf7cacbb12669966b1c1d636a909b04189e0cc09dd`
+当前实际状态：`in_progress`
+规范：`3.0.2` / `537239aa30315170b2a177b74a5dfca026397fdc0e15ab14a094a8b14f7c51d9`
 当前需求关联：
 验证代码：`NOT_RUN`
 验证：`NOT_RUN`

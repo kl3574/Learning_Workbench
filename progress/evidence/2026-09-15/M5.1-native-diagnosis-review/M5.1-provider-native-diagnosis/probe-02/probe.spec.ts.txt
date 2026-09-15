@@ -1,0 +1,17 @@
+import { test, expect } from '<REPO>/apps/web/node_modules/@playwright/test/index.mjs'
+import { RestartRuntime } from '<REPO>/tests/e2e/restartRuntime'
+import { originalAssessmentPackage, importAssessmentPackage } from '<REPO>/tests/e2e/assessmentTestData'
+import { writeFileSync } from 'node:fs'
+test('observe actual disabled assessment start after checked confirmation', async ({playwright},info)=>{
+ const runtime=await RestartRuntime.start(), observations: unknown[]=[], pending:Promise<void>[]=[]
+ try {
+ const context=await runtime.openBrowser(playwright.chromium),page=context.pages()[0]; await runtime.authenticateOnly(page)
+ const fixture=originalAssessmentPackage('providerpolicynative','learner'),imported=await importAssessmentPackage(page,fixture);await imported.dialog.getByRole('button',{name:'关闭导入',exact:true}).click()
+ page.on('response',response=>{if(response.request().method()==='GET' && response.url().includes('/api/v1/assessments')) pending.push(response.json().then(body=>{observations.push({url:new URL(response.url()).pathname+new URL(response.url()).search,status:response.status(),body})}).catch(()=>{}))})
+ await page.goto(`${runtime.origin}/?assessment=${encodeURIComponent(JSON.stringify({assessment_ref:fixture.assessment,course_ref:fixture.course}))}`)
+ const check=page.getByRole('checkbox',{name:'我已核对内容状态与模式，确认开始未评分测试',exact:true}),button=page.getByRole('button',{name:'明确开始本次测试',exact:true})
+ await check.check(); await expect(check).toBeChecked()
+ try { await expect(button).toBeEnabled({timeout:2000}) }
+ finally { await Promise.all(pending);writeFileSync(info.outputPath('actual-observation.json'),JSON.stringify({scope:'Observational private probe; original learner import and actual UI; no interception, source edits, direct attempt creation or response replacement.',checkbox_checked:await check.isChecked(),button_disabled:await button.isDisabled(),page_text:await page.locator('body').innerText(),observations},null,2)) }
+ } finally {await runtime.close()}
+})

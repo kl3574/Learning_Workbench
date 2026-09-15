@@ -1,0 +1,148 @@
+{
+  "kind": "M5.1-candidate-independent-semantics-review",
+  "revision": 1,
+  "recorded_at": "2026-09-15T05:08:45.854590+00:00",
+  "reviewer": "m41_native_fix",
+  "status": "AWAIT_EXPLICIT_CANDIDATE_V2_CORRECTIONS",
+  "scope": "Read-only semantic review of new M5.1 control/Policy, secret/CAS/idempotency/backup, frozen authorization/dispatch races, full-input assurance, internal terminal receipts and core projection. No repository/candidate edits, tests, network or secret reads. Parent separately reviews structural diff, generated bindings and source integration.",
+  "candidate": {
+    "path": "PRODUCT_DESIGN.M5.1-candidate.md",
+    "sha256": "93952b9140d0a7362b1829851f903e46f917d578ddb9f097a44fb75b53d75bed",
+    "bytes": 242884,
+    "line_count": 2616,
+    "diff_path": "PRODUCT_DESIGN.3.0.1-to-M5.1-candidate.diff",
+    "diff_sha256": "6f5afb16640a1d449cb49cb97c192d08b253f820c4a61baba6e3a9736e44a9cd",
+    "author_freeze_confirmed_by": "m42_contracts_preflight",
+    "author_freeze_sha256": "93952b9140d0a7362b1829851f903e46f917d578ddb9f097a44fb75b53d75bed",
+    "in_force": false
+  },
+  "live_spec": {
+    "path": "PRODUCT_DESIGN.md",
+    "sha256": "397829f5267248aedfc60faf7cacbb12669966b1c1d636a909b04189e0cc09dd",
+    "version": "3.0.1",
+    "unchanged": true
+  },
+  "semantic_checks": [
+    {
+      "area": "Control permissions and subject Policy",
+      "candidate_lines": [
+        967,
+        991,
+        1257
+      ],
+      "result": "NO_BLOCKER",
+      "basis": "Authenticated learner/author workspace control operations and revocation remain local and subject-free. Proposal/consent summaries, approval, dispatch and stream consumption recheck current Policy; active real source jobs participate in the independent-attempt exclusion. UI settings availability does not grant subject access."
+    },
+    {
+      "area": "Secret identity, CAS and replay",
+      "candidate_lines": [
+        993,
+        995,
+        997,
+        1393,
+        1399
+      ],
+      "result": "NO_BLOCKER",
+      "basis": "Secret reference existence is historical per revision, not dynamic media health. Configuration and secret changes share one revision; historical ACK differs from current GET. Secret bytes and public fingerprints never enter generic payload/IDB/logs; private HMAC binds full command identity. First write/CAS and deletion ordering preserve honest failure, durable replay identity and non-reuse across commands."
+    },
+    {
+      "area": "Backup ownership and history",
+      "candidate_lines": [
+        999,
+        2199
+      ],
+      "result": "NO_BLOCKER",
+      "basis": "The owner modifies only an independent shareable backup via a checkable safe projection/downgrade record, removing secret/HMAC/locator material while preserving historical facts. It cannot mutate a status/locator and leave invalid hashes, revive permission on restore or mislabel the local migration recovery backup as sanitized. This is a requirement, not an implemented M7 restore claim."
+    },
+    {
+      "area": "Freeze to grant and one dispatch",
+      "candidate_lines": [
+        1007,
+        1009,
+        1011,
+        1021,
+        1023,
+        1025,
+        2189,
+        2191
+      ],
+      "result": "NO_BLOCKER_WITH_EXPLICIT_M6_INTEGRATION_GAP",
+      "basis": "Real owner preparation freezes source input, exact references/context and actual adapter request bytes; grants bind proposal ID/hash, and a consent has at most one dispatch. Owner/lease/current Policy/input/provider/secret/expiry/cancel/budget checks precede the durable start boundary. Revoke/rotation racing start are linearized locally without claiming database/network atomicity; post-start unknown outcomes cannot free the call or regenerate."
+    },
+    {
+      "area": "Token, output, time and monetary boundaries",
+      "candidate_lines": [
+        1013,
+        1015,
+        1017,
+        1019,
+        1021,
+        1025
+      ],
+      "result": "NO_BLOCKER",
+      "basis": "Local exact or a verified local upper bound must cover the full actual request shape and model/adapter/checker proof; no evidence means zero transport. Character counts, tokenizer-only estimates, remote counting, safety margins or a fixed model label cannot replace this proof. Output/context constraints and total monotonic timeout remain hard; money based on local pricing stays an estimate, null stays unknown, actual usage violations are recorded without rewriting old proof."
+    },
+    {
+      "area": "Terminal truth and core ProviderPort mapping",
+      "candidate_lines": [
+        1027,
+        2153,
+        2157,
+        2167,
+        2173,
+        2180,
+        2193,
+        2195,
+        2197,
+        2199
+      ],
+      "result": "NO_BLOCKER",
+      "basis": "Answer/refusal, complete/refused/incomplete, actual cumulative usage and unknown outcomes survive in the owner terminal receipt with private partial artifacts. EOF/text.done is not success; Chat consumes terminal usage and DONE. Receipt persistence precedes projection; only checked complete maps to core finished, refusal/incomplete map to explicit errors. The consumer must validate its own result before local completed. No JSON is hidden in core text/error fields and unobserved future frames are not claimed verified."
+    },
+    {
+      "area": "Production capability and route truth",
+      "candidate_lines": [
+        1029,
+        1255,
+        1273,
+        1393,
+        2153
+      ],
+      "result": "NO_BLOCKER_WITH_EXPLICIT_M6_INTEGRATION_GAP",
+      "basis": "Controlled SQLite source/model/proof/HTTP fixtures remain outside production registration. Missing production source or model proof visibly disables scheduling. Ten declared application operations and an internal receipt port are future implementation contracts, not proof that handlers, production models, M5.2 retrieval or M5.3 streaming already exist."
+    }
+  ],
+  "findings": [
+    {
+      "id": "M51-SPEC-SEM-01",
+      "classification": "REQUIRED_BEFORE_M6_PRODUCTION_AUTHORING_SOURCE_INTEGRATION",
+      "candidate_lines": [
+        1007,
+        1011,
+        1407,
+        1823,
+        1831
+      ],
+      "problem": "The first Authoring request has a circular prerequisite: the only described POST /authoring/jobs consumes core AuthoringRequest with required consent_id, while a new consent requires a proposal prepared from an already existing job. The new binding prevents using another job consent or a fake ID.",
+      "minimal_counterexample": "An empty workspace has no authoring job and no consent. It cannot create the job without consent, obtain a proposal without that job, or grant a consent without the proposal.",
+      "current_stage_boundary": "Root explicitly limits M5.1 to unregistered production Authoring sources; it must fail closed, without fake consent IDs or a hidden testing product endpoint. The author independently confirmed this association gap. This does not block the isolated M5.1 control/protocol scope if the later-stage dependency is made explicit.",
+      "required_followup": "Before M6 production registration, the sole spec must define a real owner preparation-job entry/application DTO and approval continuation binding. Do not alter the 54 core contracts or invent that future route as part of the current M5.1 review. Mark this as unresolved future integration, not fixed or implemented."
+    },
+    {
+      "id": "M51-SPEC-SEM-02",
+      "classification": "CANDIDATE_WORDING_CORRECTION_BEFORE_ADOPTION",
+      "candidate_lines": [
+        924,
+        1015
+      ],
+      "problem": "The milestone table says no authorization OR full-input proof implies zero transmission, omitting the second no. The detailed section correctly requires zero transmission when proof is missing.",
+      "required_followup": "Correct the milestone table to no authorization OR no full-input proof, without weakening the detailed hard limit. Parent independently identified this wording issue."
+    }
+  ],
+  "unreviewed_boundaries": [
+    "No external API citation verification; no browsing authorized for this task.",
+    "No implementation, migration, security test, browser, paid provider, production model or teaching-quality acceptance.",
+    "No claim of complete M5/M6 capability."
+  ],
+  "additional_blocking_findings": []
+}

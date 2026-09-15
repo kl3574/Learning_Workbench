@@ -1,0 +1,115 @@
+....FFFF                                                                 [100%]
+=================================== FAILURES ===================================
+_ test_invalid_terminal_never_leaves_partial_ledger_even_if_caller_handles_error _
+
+tmp_path = PosixPath('${PRIVATE_HOME}/.cache/lw-m51-b/ledger-red/test_invalid_terminal_never_le0')
+
+    def test_invalid_terminal_never_leaves_partial_ledger_even_if_caller_handles_error(tmp_path):
+        database, identity, _, _, dispatch = started_dispatch(tmp_path)
+        invalid_relation = CheckedProviderFinished(type='finished', outcome='complete', reason=None,
+            output_state='none', usage=UsageSnapshot(input_tokens=5, output_tokens=2))
+        with database.transaction() as conn:
+            repo = ConsentRepository(conn, identity.workspace_id)
+            with pytest.raises((ValidationError, ApiError)):
+                repo.finish_dispatch(dispatch.id, invalid_relation, b'synthetic answer', b'', utc_now())
+        with database.transaction() as conn:
+            repo = ConsentRepository(conn, identity.workspace_id)
+>           assert conn.execute('SELECT COUNT(*) FROM provider_artifacts').fetchone()[0] == 0
+E           assert 1 == 0
+
+tests/unit/test_provider_repository.py:71: AssertionError
+______ test_terminal_preceding_actual_start_is_rejected_without_mutation _______
+
+tmp_path = PosixPath('${PRIVATE_HOME}/.cache/lw-m51-b/ledger-red/test_terminal_preceding_actual0')
+
+    def test_terminal_preceding_actual_start_is_rejected_without_mutation(tmp_path):
+        database, identity, _, _, dispatch = started_dispatch(tmp_path)
+        terminal = CheckedProviderFinished(type='finished', outcome='complete', reason=None,
+            output_state='none', usage=UsageSnapshot(input_tokens=None, output_tokens=None))
+        earlier = (datetime.now(UTC) - timedelta(days=1)).isoformat().replace('+00:00', 'Z')
+        with database.transaction() as conn:
+            repo = ConsentRepository(conn, identity.workspace_id)
+>           with pytest.raises(ApiError):
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: DID NOT RAISE ApiError
+
+tests/unit/test_provider_repository.py:83: Failed
+___ test_orphan_cleanup_requires_complete_reference_history_before_deleting ____
+
+tmp_path = PosixPath('${PRIVATE_HOME}/.cache/lw-m51-b/ledger-red/test_orphan_cleanup_requires_c0')
+
+    def test_orphan_cleanup_requires_complete_reference_history_before_deleting(tmp_path):
+        from services.api.app.application.errors import ApiError
+        from services.api.app.provider_dto import ProviderSecretWrite
+    
+        database, identity, store, service = config_storage(tmp_path)
+        service.save_secret(identity, 'provider_test', ProviderSecretWrite(expected_revision=1,
+            secret='synthetic-preserved-key'), 'secret')
+        versions = store.versions()
+        with database.transaction() as connection:
+            connection.execute('DELETE FROM provider_private_references')  # Controlled corruption, not an application operation.
+>       with pytest.raises(ApiError) as error:
+             ^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ApiError
+
+tests/integration/test_provider_config.py:115: Failed
+_________ test_original_grant_ack_does_not_read_a_later_corrupt_revoke _________
+
+tmp_path = PosixPath('${PRIVATE_HOME}/.cache/lw-m51-b/ledger-red/test_original_grant_ack_does_n0')
+
+    def test_original_grant_ack_does_not_read_a_later_corrupt_revoke(tmp_path):
+        import pytest
+    
+        database, identity, _, service, request = consent_setup(tmp_path)
+        proposal = service.preview(identity, request, 'preview')
+        create = ConsentCreate(proposal_id=proposal.id, proposal_sha256=proposal.proposal_sha256)
+        grant = service.grant(identity, create, 'grant')
+        service.revoke(identity, grant.id, ConsentRevoke(expected_revision=1), 'revoke')
+        with database.transaction() as conn:
+            conn.execute('DROP TRIGGER provider_consent_history_no_update')
+            conn.execute("UPDATE provider_consent_history SET history_sha256=? WHERE revision=2", ('0' * 64,))
+>       assert service.grant(identity, create, 'grant') == grant
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_provider_consents.py:92: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/api/app/application/consents.py:157: in grant
+    repo.consent(previous.id)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.consent_repository.ConsentRepository object at 0x7f0c45c20950>
+identifier = 'consent_ea18ef12527b408591361d5aaa98ab9f'
+
+    def consent(self, identifier: str) -> sqlite3.Row:
+        head = self.connection.execute('SELECT * FROM provider_consent_heads WHERE id=? AND workspace_id=?',
+                                       (identifier, self.workspace_id)).fetchone()
+        if head is None:
+            if self.connection.execute('SELECT 1 FROM provider_consent_history WHERE id=? AND workspace_id=?', (identifier, self.workspace_id)).fetchone():
+                raise integrity_error()
+            raise ApiError(404, 'CONSENT_MISSING', '授权不存在或不可访问。')
+        rows = self.connection.execute('SELECT * FROM provider_consent_history WHERE id=? AND workspace_id=? ORDER BY revision',
+                                       (identifier, self.workspace_id)).fetchall()
+        proposal = self.proposal(head['proposal_id'])
+        previous = None
+        for index, row in enumerate(rows, 1):
+            value = {k: row[k] for k in ('id', 'workspace_id', 'revision', 'proposal_id', 'status',
+                                        'created_at', 'revoked_at', 'previous_sha256', 'command_id')}
+            command = self.providers.command(row['command_id'])
+            try:
+                ack = strict_json(command['result_json'])
+                if (row['revision'] != index or row['proposal_id'] != proposal.id or row['previous_sha256'] != previous
+                        or digest(value) != row['history_sha256'] or index > 2 or not isinstance(ack, dict)
+                        or ack.get('id') != identifier or ack.get('revision') != index
+                        or row['status'] != ('active' if index == 1 else 'revoked')
+                        or (row['revoked_at'] is None) != (index == 1)
+                        or row['created_at'] != rows[0]['created_at']):
+>                   raise integrity_error()
+E                   services.api.app.application.errors.ApiError: (503, 'PROVIDER_INTEGRITY_INVALID', '提供商授权历史无法通过完整性校验。')
+
+services/api/app/infrastructure/consent_repository.py:118: ApiError
+=========================== short test summary info ============================
+FAILED tests/unit/test_provider_repository.py::test_invalid_terminal_never_leaves_partial_ledger_even_if_caller_handles_error
+FAILED tests/unit/test_provider_repository.py::test_terminal_preceding_actual_start_is_rejected_without_mutation
+FAILED tests/integration/test_provider_config.py::test_orphan_cleanup_requires_complete_reference_history_before_deleting
+FAILED tests/integration/test_provider_consents.py::test_original_grant_ack_does_not_read_a_later_corrupt_revoke
+4 failed, 4 passed in 0.76s

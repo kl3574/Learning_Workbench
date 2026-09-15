@@ -1,0 +1,181 @@
+FF.                                                                      [100%]
+=================================== FAILURES ===================================
+_ test_received_checked_fact_survives_real_revoke_before_public_delivery[delta] _
+
+tmp_path = PosixPath('<HOME>/.cache/lw-m51/pytest-of-lkx/pytest-16/test_received_checked_fact_sur0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x75995d6d6b70>
+watched = 'delta'
+
+    @pytest.mark.parametrize('watched', ['delta', 'usage'])
+    def test_received_checked_fact_survives_real_revoke_before_public_delivery(tmp_path, monkeypatch, watched):
+        from services.api.app.infrastructure.provider_sse import ProtocolDecoder
+        async def run():
+            async with local_provider() as server:
+                db, identity, _, registry, job, secrets, preparer, consents, grant, lease = authorized_source(tmp_path, server.base_url)
+                original = ProtocolDecoder.stream
+                revoked = False
+                received = None
+                async def release_after_revoke(decoder, chunks):
+                    nonlocal revoked, received
+                    async for event in original(decoder, chunks):
+                        if event.type == watched and not revoked:
+                            received = event
+                            await asyncio.to_thread(consents.revoke, identity, grant.id,
+                                                    ConsentRevoke(expected_revision=1), 'receive-boundary-revoke')
+                            revoked = True
+                        yield event
+                monkeypatch.setattr(ProtocolDecoder, 'stream', release_after_revoke)
+                service = CheckedDispatch(db, secrets, registry, preparer)
+                events = [e async for e in service.dispatch(identity, job, grant.id, lease, asyncio.Event())]
+                assert revoked and received is not None
+                assert events[-1].error_code == 'CONSENT_REVOKED'
+                with db.transaction() as conn:
+                    repo = ConsentRepository(conn, identity.workspace_id)
+                    receipt = repo.dispatch_for_consent(grant.id).terminal
+                    assert receipt.terminal.output_state == 'partial' and receipt.answer_artifact_id is not None
+                    if watched == 'usage':
+                        assert receipt.terminal.usage.input_tokens == received.input_tokens
+                        assert receipt.terminal.usage.output_tokens == received.output_tokens
+                    else:
+                        assert all(event.type != 'delta' for event in events)
+                    artifact = conn.execute('SELECT bytes FROM provider_artifacts WHERE id=?', (receipt.answer_artifact_id,)).fetchone()
+                    assert bytes(artifact[0]) == b'ok'
+                assert len(server.requests) == 1
+>       asyncio.run(run())
+
+tests/integration/test_provider_dispatch.py:345: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    async def run():
+        async with local_provider() as server:
+            db, identity, _, registry, job, secrets, preparer, consents, grant, lease = authorized_source(tmp_path, server.base_url)
+            original = ProtocolDecoder.stream
+            revoked = False
+            received = None
+            async def release_after_revoke(decoder, chunks):
+                nonlocal revoked, received
+                async for event in original(decoder, chunks):
+                    if event.type == watched and not revoked:
+                        received = event
+                        await asyncio.to_thread(consents.revoke, identity, grant.id,
+                                                ConsentRevoke(expected_revision=1), 'receive-boundary-revoke')
+                        revoked = True
+                    yield event
+            monkeypatch.setattr(ProtocolDecoder, 'stream', release_after_revoke)
+            service = CheckedDispatch(db, secrets, registry, preparer)
+            events = [e async for e in service.dispatch(identity, job, grant.id, lease, asyncio.Event())]
+            assert revoked and received is not None
+            assert events[-1].error_code == 'CONSENT_REVOKED'
+            with db.transaction() as conn:
+                repo = ConsentRepository(conn, identity.workspace_id)
+                receipt = repo.dispatch_for_consent(grant.id).terminal
+>               assert receipt.terminal.output_state == 'partial' and receipt.answer_artifact_id is not None
+E               AssertionError: assert ('none' == 'partial'
+E                 
+E                 - partial
+E                 + none)
+
+tests/integration/test_provider_dispatch.py:336: AssertionError
+_ test_received_checked_fact_survives_real_revoke_before_public_delivery[usage] _
+
+tmp_path = PosixPath('<HOME>/.cache/lw-m51/pytest-of-lkx/pytest-16/test_received_checked_fact_sur1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x75995d6fb980>
+watched = 'usage'
+
+    @pytest.mark.parametrize('watched', ['delta', 'usage'])
+    def test_received_checked_fact_survives_real_revoke_before_public_delivery(tmp_path, monkeypatch, watched):
+        from services.api.app.infrastructure.provider_sse import ProtocolDecoder
+        async def run():
+            async with local_provider() as server:
+                db, identity, _, registry, job, secrets, preparer, consents, grant, lease = authorized_source(tmp_path, server.base_url)
+                original = ProtocolDecoder.stream
+                revoked = False
+                received = None
+                async def release_after_revoke(decoder, chunks):
+                    nonlocal revoked, received
+                    async for event in original(decoder, chunks):
+                        if event.type == watched and not revoked:
+                            received = event
+                            await asyncio.to_thread(consents.revoke, identity, grant.id,
+                                                    ConsentRevoke(expected_revision=1), 'receive-boundary-revoke')
+                            revoked = True
+                        yield event
+                monkeypatch.setattr(ProtocolDecoder, 'stream', release_after_revoke)
+                service = CheckedDispatch(db, secrets, registry, preparer)
+                events = [e async for e in service.dispatch(identity, job, grant.id, lease, asyncio.Event())]
+                assert revoked and received is not None
+                assert events[-1].error_code == 'CONSENT_REVOKED'
+                with db.transaction() as conn:
+                    repo = ConsentRepository(conn, identity.workspace_id)
+                    receipt = repo.dispatch_for_consent(grant.id).terminal
+                    assert receipt.terminal.output_state == 'partial' and receipt.answer_artifact_id is not None
+                    if watched == 'usage':
+                        assert receipt.terminal.usage.input_tokens == received.input_tokens
+                        assert receipt.terminal.usage.output_tokens == received.output_tokens
+                    else:
+                        assert all(event.type != 'delta' for event in events)
+                    artifact = conn.execute('SELECT bytes FROM provider_artifacts WHERE id=?', (receipt.answer_artifact_id,)).fetchone()
+                    assert bytes(artifact[0]) == b'ok'
+                assert len(server.requests) == 1
+>       asyncio.run(run())
+
+tests/integration/test_provider_dispatch.py:345: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    async def run():
+        async with local_provider() as server:
+            db, identity, _, registry, job, secrets, preparer, consents, grant, lease = authorized_source(tmp_path, server.base_url)
+            original = ProtocolDecoder.stream
+            revoked = False
+            received = None
+            async def release_after_revoke(decoder, chunks):
+                nonlocal revoked, received
+                async for event in original(decoder, chunks):
+                    if event.type == watched and not revoked:
+                        received = event
+                        await asyncio.to_thread(consents.revoke, identity, grant.id,
+                                                ConsentRevoke(expected_revision=1), 'receive-boundary-revoke')
+                        revoked = True
+                    yield event
+            monkeypatch.setattr(ProtocolDecoder, 'stream', release_after_revoke)
+            service = CheckedDispatch(db, secrets, registry, preparer)
+            events = [e async for e in service.dispatch(identity, job, grant.id, lease, asyncio.Event())]
+            assert revoked and received is not None
+            assert events[-1].error_code == 'CONSENT_REVOKED'
+            with db.transaction() as conn:
+                repo = ConsentRepository(conn, identity.workspace_id)
+                receipt = repo.dispatch_for_consent(grant.id).terminal
+                assert receipt.terminal.output_state == 'partial' and receipt.answer_artifact_id is not None
+                if watched == 'usage':
+>                   assert receipt.terminal.usage.input_tokens == received.input_tokens
+E                   AssertionError: assert None == 854
+E                    +  where None = UsageSnapshot(input_tokens=None, output_tokens=None).input_tokens
+E                    +    where UsageSnapshot(input_tokens=None, output_tokens=None) = CheckedProviderError(type='error', error_code='CONSENT_REVOKED', provider_outcome='completed', output_state='partial', usage=UsageSnapshot(input_tokens=None, output_tokens=None)).usage
+E                    +      where CheckedProviderError(type='error', error_code='CONSENT_REVOKED', provider_outcome='completed', output_state='partial', usage=UsageSnapshot(input_tokens=None, output_tokens=None)) = ProviderTerminalReceipt(id='provider_terminal_3b644d0a2bcd43b9b1e42c3fda029bb3', workspace_id='workspace_6a30b27d0efa4...ed_at='2026-09-15T06:16:55.280535Z', receipt_sha256='d3595e41d5301ffb4f2f9595ecc6d3ce146b43397616bfc8681479433d8a4ae7').terminal
+E                    +  and   854 = CheckedProviderUsage(type='usage', input_tokens=854, output_tokens=2).input_tokens
+
+tests/integration/test_provider_dispatch.py:338: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/test_provider_dispatch.py::test_received_checked_fact_survives_real_revoke_before_public_delivery[delta]
+FAILED tests/integration/test_provider_dispatch.py::test_received_checked_fact_survives_real_revoke_before_public_delivery[usage]
+2 failed, 1 passed, 23 deselected in 2.30s

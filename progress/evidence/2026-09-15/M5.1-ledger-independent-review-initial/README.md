@@ -1,0 +1,13 @@
+# Independent B static review: original candidate v1
+
+This publication preserves the original read-only review of six production files and migration 0010 against sole PRODUCT_DESIGN.md 3.0.2 (SHA 537239aa30315170b2a177b74a5dfca026397fdc0e15ab14a094a8b14f7c51d9). All seven archived source bodies were actually copied at the original review; they are not reconstructed from a later repair. The original review, its README and original manifest are preserved as review.json, review-README.md and original-manifest.json.
+
+M51-B-C-01 remains an open, owner-confirmed static finding at this recorded point: abrupt exit before staging cleanup can leave an orphan stage or a published immutable version with two links, which the original reader rejects. No test was executed by this reviewer. Later owner RED/GREEN and repair review belong in a separate addendum; they must not overwrite this original record.
+
+For precise navigation in the archived original SecretStore, _write is lines 81–94 (link at 91, unlink at 93), _read is lines 69–78 (link-count check at 74), and versions is lines 157–160. Original review.json retains its original broader locator ranges unchanged. ProviderService cleanup is lines 137–152.
+
+Scope is the FileSecretStore fallback and the reviewed ACK/CAS, immutable history, terminal atomicity and backup sanitization paths. The protocol seam for a system store is not evidence of a working OS-backed store. This is not platform acceptance, M7 restore acceptance, an executed process-kill experiment, or a guarantee against arbitrary database-plus-key rewriting. No network, browser, credential access or product modification was performed for this review.
+
+Every source archive ends in .txt. The only permitted public transformation is replacing the literal personal home prefix with <HOME>; no content or ANSI filtering is applied. This package currently needs no source/review transformation. Per-payload original/public byte counts and SHA-256 values are in manifest.json. Its original paths identify the immutable cache artifacts, not a potentially changed live worktree.
+
+The payload aggregate is SHA-256 over UTF-8 JSON of the path-sorted array [{"path": public_relative_path, "sha256": public_sha256}, ...], serialized with Python json.dumps(sort_keys=True, separators=(",", ":"), ensure_ascii=True), without a trailing newline. The manifest itself is excluded. The sibling readback receipt records full payload comparison, aggregate reconstruction and a bounded text scan for personal paths and credential-shaped material; the scan is not a general secret-detection guarantee.

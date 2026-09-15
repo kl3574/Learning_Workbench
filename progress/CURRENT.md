@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-15T05:17:45Z；规范 SHA-256：`397829f5267248aedfc60faf7cacbb12669966b1c1d636a909b04189e0cc09dd`
+更新：2026-09-15T07:13:25Z；规范 SHA-256：`537239aa30315170b2a177b74a5dfca026397fdc0e15ab14a094a8b14f7c51d9`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED
-实施：IN_PROGRESS；当前任务：M4.2；下一任务：M5.1
+实施：IN_PROGRESS；当前任务：M5.1；下一任务：M5.2
 
-发布M4.2修复及精确CI归档；基于已验证8d源码续做M5.1，采用已独立审查的唯一规范细化并实施Provider本机控制/授权/受控传输。
+提交审过的公开证据与README状态，推送M5.1分支并创建依赖PR48的审查PR；回读远端head与exact-SHA CI，通过后M5.1转review并进入M5.2。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -27,7 +27,7 @@
 | M3.4 交卷/评分/复盘闭环，评分版本与 evidence | review | [#23](https://github.com/kl3574/Learning_Workbench/issues/23) | 40bd4298f28443ae4dff3c2eb4de987f60df4924 |
 | M4.1 学习事件、概念/技能证据、路线完成 | review | [#24](https://github.com/kl3574/Learning_Workbench/issues/24) | 5bd81576a2a0e2dbb454165eb3bcde5920493b05 |
 | M4.2 先修/补弱/复习/下一步推荐，接受/拒绝 | review | [#25](https://github.com/kl3574/Learning_Workbench/issues/25) | 8d4b36f57b3ace950f9d3f0e750c4810fce9b0ec |
-| M5.1 ProviderPort/能力协商/外发授权/预算/脱敏 | todo | [#26](https://github.com/kl3574/Learning_Workbench/issues/26) | 未验证提交 |
+| M5.1 ProviderPort/能力协商/服务端冻结授权/受控预算/秘密与脱敏 | in_progress | [#26](https://github.com/kl3574/Learning_Workbench/issues/26) | 769ebebfc7418076cbf5526ee8a4dfec73f11bb3 |
 | M5.2 检索权限、中文 FTS、来源和修订哈希 | todo | [#27](https://github.com/kl3574/Learning_Workbench/issues/27) | 未验证提交 |
 | M5.3 Tutor 状态机、SSE/取消/重连/异步上下文 | todo | [#28](https://github.com/kl3574/Learning_Workbench/issues/28) | 未验证提交 |
 | M5.4 真实模型与搜索评测 | todo | [#29](https://github.com/kl3574/Learning_Workbench/issues/29) | 未验证提交 |
@@ -55,7 +55,8 @@
 - m4_1_layout_repair: PASS:真实412布局及焦点回归；原失败保留，限定机制归因；新74完整套件通过。
 - m4_2: 1db509f固定提交七类本地门禁PASS：1197 Python/288 web/82 native；545源码前后一致。精确源码双CI12/12 success，各82 native。独立最终源码/日志/产物/11图审查PASS。待人工review，未合并；证据提交发布与后续CI另报。
 - m4_1_publication_ci: 98f1701仅证据提交实际12/12success已回读；独立于5bd8157源码验收，不推定M4.2 CI。
-- m4_2_publication_ci: 1db完整本地1197Python/288web/82native和精确12CI PASS已归档。42f历史证据CI为10success2backend Ruff失败（132归档错误，pytest跳过），双browser各82PASS。8d仅修Ruff归档范围，固定本地lint/spec、独立审查及精确12CI全部PASS；两workflow各243contract/440backend/527integration/288web/82native，组间不相加。PR48 ready/open/unmerged。
+- m4_2_publication_ci: 1db完整本地1197Python/288web/82native和精确12CI PASS已归档。42f历史证据CI为10success2backend Ruff失败（132归档错误，pytest跳过），双browser各82PASS。8d仅修Ruff归档范围，固定本地lint/spec、独立审查及精确12CI全部PASS；两workflow各243contract/440backend/527integration/288web/82native，组间不相加。PR48 ready/open/unmerged。 4ed纯证据后续CI实际12/12success，两browser82PASS11.7m/11.3m；轻回执只抽两browser日志，不重复宣称完整本地重跑。
+- m5_1: LOCAL_FIXED_SOURCE_PASS：769ebeb600源码在全部命令前后与提交一致；lint/typecheck/spec/build PASS；Python1494PASS2既有warnings211.50s，前端314PASS/52文件3.06s，native85PASS6.9m。原9051baf1492PASS2FAIL及全部定向RED/修复/独立审保留。四张终版Provider截图root实际已看；公开派生原件/前版/修正版hash回核，未发布日志敏感字段已修正。分支与PR待发布，远端CI NOT_RUN；真实Provider/Codex/学习效果及系统SecretStore/M7完整恢复未验。
 
 ## 阻塞与待决项
 

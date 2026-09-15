@@ -1,0 +1,67 @@
+{
+  "recorded_at": "2026-09-15T06:20:12.828180+00:00",
+  "mode": "Independent read-only source and owner-evidence readback, no tests rerun.",
+  "files": [
+    {
+      "path": "services/api/app/application/provider_budget.py",
+      "sha256": "56f890fe7d728d63b4aa0cb43746efa48fd3394b9f088773e0c6d9963e6b2cd2",
+      "bytes": 11120
+    },
+    {
+      "path": "services/api/app/application/provider_dispatch.py",
+      "sha256": "d380f574d8b2863c11a8f4d132c26dd665ae93517b6b2382b2814dc9d94b1a39",
+      "bytes": 19942
+    },
+    {
+      "path": "services/api/app/infrastructure/provider_network.py",
+      "sha256": "af634ae988332ee40952454fd164962d0dc6a664f2ec78d0f853309a3964b257",
+      "bytes": 10102
+    },
+    {
+      "path": "services/api/app/infrastructure/provider_transport.py",
+      "sha256": "1d9c4561445a01e8aa58160956d964ddb524476e991466951c0b2f8e6f4ebe5d",
+      "bytes": 3021
+    },
+    {
+      "path": "services/api/app/infrastructure/provider_sse.py",
+      "sha256": "0f36dc88db60e6937d48260cd8493c7df897594d53ec9e972db811d31ff2b036",
+      "bytes": 10638
+    },
+    {
+      "path": "tests/integration/test_provider_dispatch.py",
+      "sha256": "65b9b073e8bb737aa805deb8696f535d3e4e5925c436263cc0dde30167840bff",
+      "bytes": 23249
+    }
+  ],
+  "owner_runs": [
+    {
+      "name": "dispatch-received-deadline-red-v2",
+      "receipt_sha256": "7c4c192578829500620db4c355d375118e45ff08380bd9c076d86b8ba68cf28d",
+      "log_sha256": "9a763ad9ac0c7242423aaff97eeb544c90e1ba0b7d86d397ebc508bcc91d3849",
+      "log_matches_receipt": true,
+      "exit_code": 1,
+      "sources_before_after_equal": true,
+      "dispatch_sha256": "747437f78cb9a3c6dad9aaa8f294b85baca277591c48f05001b91026982a177e",
+      "test_sha256": "65b9b073e8bb737aa805deb8696f535d3e4e5925c436263cc0dde30167840bff"
+    },
+    {
+      "name": "dispatch-received-deadline-green",
+      "receipt_sha256": "cf4e2b9e02202231e8142fbd0bdbffdd823261e4df96c5add8667adde512e0c2",
+      "log_sha256": "a73caf41d5fb362abc46f636b0964381a21bdb8df47d6865bb07df0be7b773ab",
+      "log_matches_receipt": true,
+      "exit_code": 0,
+      "sources_before_after_equal": true,
+      "dispatch_sha256": "d380f574d8b2863c11a8f4d132c26dd665ae93517b6b2382b2814dc9d94b1a39",
+      "test_sha256": "65b9b073e8bb737aa805deb8696f535d3e4e5925c436263cc0dde30167840bff"
+    }
+  ],
+  "findings": {
+    "C-R1": "Closed in static review: _guard rechecks the same monotonic deadline after owner/proof/secret transaction and abort before returning to the network write. Owner actual RED headers_received=1, then GREEN headers_received=0. Original body-only observation had not shown this boundary and is not misrepresented as proof of zero transmission.",
+    "C-R2": "Closed in static review: checked event facts are retained privately before post-read guard; error/finally uses joined parser accepted state, while public delivery remains behind fresh Policy checks. Owner actual delta and usage RED, then both GREEN. Read parser_work cancellation-join and accepted-state seam only; not a full parser review."
+  },
+  "result": "No remaining blocking finding in the requested four-file scope at these source hashes.",
+  "limits": [
+    "Owner executed 3 targeted tests; reviewer independently checked logs, hashes, unchanged owner scope and assertions but did not execute tests.",
+    "Broader C final-v2, root full suite, production model proof, paid provider and protocol parser acceptance remain their own evidence scopes."
+  ]
+}

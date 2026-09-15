@@ -1,0 +1,15 @@
+{
+  "check_id": "M5.1-source-fixture-smoke-01",
+  "category": "controlled-source",
+  "command": "uv run --frozen python -c 'import tempfile; from pathlib import Path; from tests.provider_fixture import provider_source; from services.api.app.application.provider_models import PreparedOutboundMaterial; temp=tempfile.TemporaryDirectory(prefix=\"m51-source-\"); db,identity,source,registry,job=provider_source(Path(temp.name)); conn=db.connect(); connection=conn.__enter__(); connection.execute(\"BEGIN\"); material=registry.resolve(connection,identity,job).read_prepared(connection,identity,job,1); source.verify_prepared(connection,identity,material); assert source.reference_summaries(connection,identity,material)[0].character_count>0; print(\"PASS: actual SQLite job/context, exact published synthetic block/blob and prepared material verified through source owner; no Provider, HTTP, proof or authorization acceptance.\"); connection.rollback(); conn.__exit__(None,None,None); temp.cleanup()'",
+  "started_at": "2026-09-15T05:38:14.885865+00:00",
+  "finished_at": "2026-09-15T05:38:15.144576+00:00",
+  "implementation_commit": "4ed8ea9244cafdad955f24a8d6ae699c82577779",
+  "tracked_worktree_diff_sha256": "79343c60f4068ef62a6b7ea8e462221b95c04e4cbc9a5a6bbeed647b935bb531",
+  "spec_sha256": "537239aa30315170b2a177b74a5dfca026397fdc0e15ab14a094a8b14f7c51d9",
+  "exit_code": 0,
+  "status": "PASS",
+  "output_path": "progress/evidence/2026-09-15/M5.1-source-fixture-smoke-01.log",
+  "output_sha256": "61c215e6e8dba4b3f47ecd3f3e24da39438e6e9bd5a3aa56007e1a496aea47b9",
+  "scope": "Only the command executed; no implication for unrun business, real-provider, Codex or learning-effectiveness tests."
+}

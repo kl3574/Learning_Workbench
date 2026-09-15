@@ -1,0 +1,41 @@
+.F                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_mixed_public_and_private_dns_answer_is_rejected_without_selecting_a_public_fallback _
+
+    def test_mixed_public_and_private_dns_answer_is_rejected_without_selecting_a_public_fallback() -> None:
+        calls: list[tuple[str, int]] = []
+    
+        async def resolver(host: str, port: int) -> tuple[str, ...]:
+            calls.append((host, port))
+            return ('93.184.216.34', '127.0.0.1')
+    
+        endpoint = validate_endpoint('https://provider.example/v1', 'public_https')
+        with pytest.raises(ApiError) as error:
+>           asyncio.run(resolve_destination(endpoint, 'public_https', resolver))
+
+tests/security/test_provider_network.py:31: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+endpoint = ProviderEndpoint(scheme='https', host='provider.example', port=443, base_path='/v1')
+policy = 'public_https'
+resolver = <function test_mixed_public_and_private_dns_answer_is_rejected_without_selecting_a_public_fallback.<locals>.resolver at 0x78ef33f5e980>
+
+    async def resolve_destination(endpoint: ProviderEndpoint, policy: Literal['public_https', 'explicit_loopback'],
+                                  resolver: Resolver | None = None) -> PinnedDestination:
+>       raise NotImplementedError('Provider destination pinning is not implemented.')
+E       NotImplementedError: Provider destination pinning is not implemented.
+
+services/api/app/infrastructure/provider_network.py:37: NotImplementedError
+=========================== short test summary info ============================
+FAILED tests/security/test_provider_network.py::test_mixed_public_and_private_dns_answer_is_rejected_without_selecting_a_public_fallback
+1 failed, 1 passed in 0.03s

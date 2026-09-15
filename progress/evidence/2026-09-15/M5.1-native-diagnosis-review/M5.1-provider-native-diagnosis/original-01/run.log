@@ -1,0 +1,52 @@
+
+> @learning-workbench/web@0.1.0 test:e2e
+> playwright test --config ../../tests/e2e/playwright.config.ts provider-settings.spec.ts --grep actual independent assessment --output <PRIVATE_ACCEPTANCE>/m51-provider-native-diagnosis/original-01/results
+
+[WebServer] INFO:     Started server process [332755]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+[WebServer] (node:332911) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:332996) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 ../../tests/e2e/provider-settings.spec.ts:112:1 › actual independent assessment policy keeps settings controls available and denies subject consent reads (13.7s)
+
+
+  1) ../../tests/e2e/provider-settings.spec.ts:112:1 › actual independent assessment policy keeps settings controls available and denies subject consent reads 
+
+    TimeoutError: locator.click: Timeout 10000ms exceeded.
+    Call log:
+      - waiting for getByRole('button', { name: '明确开始本次测试', exact: true })
+        - locator resolved to <button disabled class="primary-button">明确开始本次测试</button>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not enabled
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not enabled
+        - retrying click action
+          - waiting 100ms
+        19 × waiting for element to be visible, enabled and stable
+           - element is not enabled
+         - retrying click action
+           - waiting 500ms
+
+
+      117 |     const fixture = originalAssessmentPackage('providerpolicynative', 'learner'), imported = await importAssessmentPackage(page, fixture); await imported.dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
+      118 |     await page.goto(`${runtime.origin}/?assessment=${encodeURIComponent(JSON.stringify({ assessment_ref: fixture.assessment, course_ref: fixture.course }))}`)
+    > 119 |     await page.getByRole('checkbox', { name: '我已核对内容状态与模式，确认开始未评分测试', exact: true }).check(); await page.getByRole('button', { name: '明确开始本次测试', exact: true }).click(); await expect(page.getByText('独立测试进行中', { exact: true }).first()).toBeVisible()
+          |                                                                                                                                                                 ^
+      120 |     const dialog = await settings(page); await expect(dialog.getByRole('region', { name: '授权历史', exact: true })).toContainText('授权摘要隐藏')
+      121 |     const rejected = await page.request.get('/api/v1/consents'); expect(rejected.status()).toBe(409)
+      122 |     await createConfig(page, dialog, id); await dialog.getByLabel('新秘密', { exact: true }).fill('synthetic-independent-control-only'); await dialog.getByRole('button', { name: '保存秘密', exact: true }).click(); await expect(dialog.getByText('原秘密命令已确认 · r2 · 当时有引用。当前状态另行回读。', { exact: true })).toBeVisible()
+        at <REPO>/tests/e2e/provider-settings.spec.ts:119:161
+
+    Error Context: ../../../../../.cache/learning-workbench-acceptance/m51-provider-native-diagnosis/original-01/results/provider-settings-actual-i-43f0d-enies-subject-consent-reads/error-context.md
+
+  1 failed
+    ../../tests/e2e/provider-settings.spec.ts:112:1 › actual independent assessment policy keeps settings controls available and denies subject consent reads 

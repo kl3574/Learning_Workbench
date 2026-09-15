@@ -1,0 +1,189 @@
+FFFFF                                                                    [100%]
+=================================== FAILURES ===================================
+_ test_process_crash_staging_is_recovered_without_changing_fingerprint_key[before_link-77] _
+
+tmp_path = PosixPath('${PRIVATE_HOME}/.cache/lw-m51-b/stage-red/test_process_crash_staging_is_0')
+point = 'before_link', exit_code = 77
+
+    @pytest.mark.parametrize('point,exit_code', [('before_link', 77), ('after_link', 78)])
+    def test_process_crash_staging_is_recovered_without_changing_fingerprint_key(tmp_path, point, exit_code):
+        from tests.integration.test_provider_config import config_storage
+    
+        _, identity, store, service = config_storage(tmp_path)
+        key_before = (store.root / 'fingerprint.key').read_bytes()
+        result = subprocess.run([sys.executable, '-c', CRASHING_WRITER, str(store.root), point],
+            capture_output=True, timeout=5)
+        assert result.returncode == exit_code
+        stages = list(store.root.glob('.staging-*'))
+        assert len(stages) == 1
+        assert stages[0].stat().st_nlink == (2 if point == 'after_link' else 1)
+        service.cleanup_orphan_secrets(identity)
+>       assert not list(store.root.glob('.staging-*'))
+E       AssertionError: assert not [PosixPath('${PRIVATE_HOME}/.cache/lw-m51-b/stage-red/test_process_crash_staging_is_0/secrets/.staging-SYNTHETIC_NAME_REDACTED')]
+E        +  where [PosixPath('${PRIVATE_HOME}/.cache/lw-m51-b/stage-red/test_process_crash_staging_is_0/secrets/.staging-SYNTHETIC_NAME_REDACTED')] = list(<generator object Path.glob at 0x7f7bd75d2bd0>)
+E        +    where <generator object Path.glob at 0x7f7bd75d2bd0> = glob('.staging-*')
+E        +      where glob = PosixPath('${PRIVATE_HOME}/.cache/lw-m51-b/stage-red/test_process_crash_staging_is_0/secrets').glob
+E        +        where PosixPath('${PRIVATE_HOME}/.cache/lw-m51-b/stage-red/test_process_crash_staging_is_0/secrets') = <services.api.app.infrastructure.provider_secret_store.FileSecretStore object at 0x7f7bd7518320>.root
+
+tests/unit/test_provider_secret_store.py:125: AssertionError
+_ test_process_crash_staging_is_recovered_without_changing_fingerprint_key[after_link-78] _
+
+tmp_path = PosixPath('${PRIVATE_HOME}/.cache/lw-m51-b/stage-red/test_process_crash_staging_is_1')
+point = 'after_link', exit_code = 78
+
+    @pytest.mark.parametrize('point,exit_code', [('before_link', 77), ('after_link', 78)])
+    def test_process_crash_staging_is_recovered_without_changing_fingerprint_key(tmp_path, point, exit_code):
+        from tests.integration.test_provider_config import config_storage
+    
+        _, identity, store, service = config_storage(tmp_path)
+        key_before = (store.root / 'fingerprint.key').read_bytes()
+        result = subprocess.run([sys.executable, '-c', CRASHING_WRITER, str(store.root), point],
+            capture_output=True, timeout=5)
+        assert result.returncode == exit_code
+        stages = list(store.root.glob('.staging-*'))
+        assert len(stages) == 1
+        assert stages[0].stat().st_nlink == (2 if point == 'after_link' else 1)
+>       service.cleanup_orphan_secrets(identity)
+
+tests/unit/test_provider_secret_store.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/api/app/application/providers.py:150: in cleanup_orphan_secrets
+    self.secret_store.delete(locator)
+services/api/app/infrastructure/provider_secret_store.py:167: in delete
+    self._read(directory, name, limit=65574)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.provider_secret_store.FileSecretStore object at 0x7f7bd74a98e0>
+directory = 16, name = 'secret_SYNTHETIC_LOCATOR_REDACTED', limit = 65574
+
+    def _read(self, directory: int, name: str, *, limit: int) -> bytes:
+        descriptor = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+        try:
+            info = os.fstat(descriptor)
+            if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
+                    or stat.S_IMODE(info.st_mode) != 0o600 or info.st_nlink != 1 or info.st_size > limit):
+>               raise unavailable()
+E               services.api.app.application.errors.ApiError: (503, 'PROVIDER_SECRET_UNAVAILABLE', '提供商秘密存储不可用，请检查本机安全设置。')
+
+services/api/app/infrastructure/provider_secret_store.py:75: ApiError
+_ test_active_staging_writer_excludes_other_recovery_initialization_and_writers[cleanup] _
+
+tmp_path = PosixPath('${PRIVATE_HOME}/.cache/lw-m51-b/stage-red/test_active_staging_writer_exc0')
+operation = 'cleanup'
+
+    @pytest.mark.parametrize('operation', ['cleanup', 'initialize', 'put'])
+    def test_active_staging_writer_excludes_other_recovery_initialization_and_writers(tmp_path, operation):
+        from tests.integration.test_provider_config import config_storage
+    
+        _, identity, store, service = config_storage(tmp_path)
+        child = subprocess.Popen([sys.executable, '-c', CRASHING_WRITER, str(store.root), 'paused_link'],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        entered, finished = threading.Event(), threading.Event()
+        def competing_operation():
+            entered.set()
+            try:
+                if operation == 'cleanup':
+                    service.cleanup_orphan_secrets(identity)
+                elif operation == 'initialize':
+                    FileSecretStore(store.root).initialize()
+                else:
+                    FileSecretStore(store.root).put('synthetic-second-writer')
+            finally:
+                finished.set()
+        try:
+            assert child.stdout.readline().strip() == 'STAGING_READY'
+            with ThreadPoolExecutor(max_workers=1) as workers:
+                future = workers.submit(competing_operation)
+                assert entered.wait(2)
+                completed_while_writer_active = finished.wait(0.15)
+                child.stdin.write('release\n')
+                child.stdin.flush()
+                child.communicate(timeout=5)
+                future.result(timeout=5)
+>           assert not completed_while_writer_active
+E           assert not True
+
+tests/unit/test_provider_secret_store.py:159: AssertionError
+_ test_active_staging_writer_excludes_other_recovery_initialization_and_writers[initialize] _
+
+tmp_path = PosixPath('${PRIVATE_HOME}/.cache/lw-m51-b/stage-red/test_active_staging_writer_exc1')
+operation = 'initialize'
+
+    @pytest.mark.parametrize('operation', ['cleanup', 'initialize', 'put'])
+    def test_active_staging_writer_excludes_other_recovery_initialization_and_writers(tmp_path, operation):
+        from tests.integration.test_provider_config import config_storage
+    
+        _, identity, store, service = config_storage(tmp_path)
+        child = subprocess.Popen([sys.executable, '-c', CRASHING_WRITER, str(store.root), 'paused_link'],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        entered, finished = threading.Event(), threading.Event()
+        def competing_operation():
+            entered.set()
+            try:
+                if operation == 'cleanup':
+                    service.cleanup_orphan_secrets(identity)
+                elif operation == 'initialize':
+                    FileSecretStore(store.root).initialize()
+                else:
+                    FileSecretStore(store.root).put('synthetic-second-writer')
+            finally:
+                finished.set()
+        try:
+            assert child.stdout.readline().strip() == 'STAGING_READY'
+            with ThreadPoolExecutor(max_workers=1) as workers:
+                future = workers.submit(competing_operation)
+                assert entered.wait(2)
+                completed_while_writer_active = finished.wait(0.15)
+                child.stdin.write('release\n')
+                child.stdin.flush()
+                child.communicate(timeout=5)
+                future.result(timeout=5)
+>           assert not completed_while_writer_active
+E           assert not True
+
+tests/unit/test_provider_secret_store.py:159: AssertionError
+_ test_active_staging_writer_excludes_other_recovery_initialization_and_writers[put] _
+
+tmp_path = PosixPath('${PRIVATE_HOME}/.cache/lw-m51-b/stage-red/test_active_staging_writer_exc2')
+operation = 'put'
+
+    @pytest.mark.parametrize('operation', ['cleanup', 'initialize', 'put'])
+    def test_active_staging_writer_excludes_other_recovery_initialization_and_writers(tmp_path, operation):
+        from tests.integration.test_provider_config import config_storage
+    
+        _, identity, store, service = config_storage(tmp_path)
+        child = subprocess.Popen([sys.executable, '-c', CRASHING_WRITER, str(store.root), 'paused_link'],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        entered, finished = threading.Event(), threading.Event()
+        def competing_operation():
+            entered.set()
+            try:
+                if operation == 'cleanup':
+                    service.cleanup_orphan_secrets(identity)
+                elif operation == 'initialize':
+                    FileSecretStore(store.root).initialize()
+                else:
+                    FileSecretStore(store.root).put('synthetic-second-writer')
+            finally:
+                finished.set()
+        try:
+            assert child.stdout.readline().strip() == 'STAGING_READY'
+            with ThreadPoolExecutor(max_workers=1) as workers:
+                future = workers.submit(competing_operation)
+                assert entered.wait(2)
+                completed_while_writer_active = finished.wait(0.15)
+                child.stdin.write('release\n')
+                child.stdin.flush()
+                child.communicate(timeout=5)
+                future.result(timeout=5)
+>           assert not completed_while_writer_active
+E           assert not True
+
+tests/unit/test_provider_secret_store.py:159: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_provider_secret_store.py::test_process_crash_staging_is_recovered_without_changing_fingerprint_key[before_link-77]
+FAILED tests/unit/test_provider_secret_store.py::test_process_crash_staging_is_recovered_without_changing_fingerprint_key[after_link-78]
+FAILED tests/unit/test_provider_secret_store.py::test_active_staging_writer_excludes_other_recovery_initialization_and_writers[cleanup]
+FAILED tests/unit/test_provider_secret_store.py::test_active_staging_writer_excludes_other_recovery_initialization_and_writers[initialize]
+FAILED tests/unit/test_provider_secret_store.py::test_active_staging_writer_excludes_other_recovery_initialization_and_writers[put]
+5 failed, 8 deselected in 0.45s

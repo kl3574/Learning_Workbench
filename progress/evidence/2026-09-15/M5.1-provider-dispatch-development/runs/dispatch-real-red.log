@@ -1,0 +1,51 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__ test_real_http_dispatch_persists_single_terminal_and_never_replays_network __
+
+tmp_path = PosixPath('<HOME>/.cache/lw-m51/pytest-of-lkx/pytest-2/test_real_http_dispatch_persis0')
+
+    def test_real_http_dispatch_persists_single_terminal_and_never_replays_network(tmp_path: Path) -> None:
+        async def run():
+            async with local_provider() as server:
+                db, identity, source, registry, job, secrets, preparer, consents, grant, lease = authorized_source(tmp_path, server.base_url)
+                service = CheckedDispatch(db, secrets, registry, preparer, ProviderTransport())
+                events = [event async for event in service.dispatch(identity, job, grant.id, lease, asyncio.Event())]
+                assert ''.join(event.text for event in events if event.type == 'delta') == 'ok'
+                assert events[-1].type == 'finished' and events[-1].outcome == 'complete'
+                with db.transaction() as conn:
+                    record = ConsentRepository(conn, identity.workspace_id).dispatch_for_consent(grant.id)
+                    assert record is not None and record.terminal is not None
+                    assert record.terminal.terminal == events[-1]
+                replay = [event async for event in service.dispatch(identity, job, grant.id, lease, asyncio.Event())]
+                assert replay == [events[-1]]
+                assert len(server.requests) == server.connections == 1
+                assert service.terminal(identity, record.id) == record.terminal
+>       asyncio.run(run())
+
+tests/integration/test_provider_dispatch.py:26: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/integration/test_provider_dispatch.py:15: in run
+    events = [event async for event in service.dispatch(identity, job, grant.id, lease, asyncio.Event())]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.application.provider_dispatch.CheckedDispatch object at 0x73db1cd2e6f0>
+args = (SessionIdentity(id='<REDACTED_RUNTIME_SESSION_ID>', workspace_id='workspace_3f8b99d5b802402d9984505a440ebe...50', job_revision=2, expires_at='2026-09-15T05:55:28.579554Z'), <asyncio.locks.Event object at 0x73db1cdda690 [unset]>)
+
+    async def dispatch(self, *args):
+>       raise NotImplementedError('Checked dispatch is not implemented.')
+E       NotImplementedError: Checked dispatch is not implemented.
+
+services/api/app/application/provider_dispatch.py:6: NotImplementedError
+=========================== short test summary info ============================
+FAILED tests/integration/test_provider_dispatch.py::test_real_http_dispatch_persists_single_terminal_and_never_replays_network
+1 failed in 0.26s

@@ -1,0 +1,37 @@
+--- PRODUCT_DESIGN.M5.1-candidate.md@93952b9
++++ PRODUCT_DESIGN.M5.1-candidate-v2.md
+@@ -921,7 +921,7 @@
+ | M3.4 | 交卷/评分/复盘闭环，评分版本与 evidence | 评分更新不覆盖旧成绩，未审推导不标正确 |
+ | M4.1 | 学习事件、概念/技能证据、路线完成 | 自报/阅读/辅助/独立/重复证据分离 |
+ | M4.2 | 先修/补弱/复习/下一步推荐，接受/拒绝 | 每条推荐有引用，空数据不伪造画像 |
+-| M5.1 | ProviderPort/能力协商/服务端冻结授权/受控预算/秘密与脱敏 | 本地控制面、真实持久授权与受控 HTTP 协议分层验收；无授权或完整输入证明则零外发；不冒充生产模型贯通或 search |
++| M5.1 | ProviderPort/能力协商/服务端冻结授权/受控预算/秘密与脱敏 | 本地控制面、真实持久授权与受控 HTTP 协议分层验收；无授权或无完整输入证明则零外发；不冒充生产模型贯通或 search |
+ | M5.2 | 检索权限、中文 FTS、来源和修订哈希 | 私有答案过滤、旧索引、中文检索基准 |
+ | M5.3 | Tutor 状态机、SSE/取消/重连/异步上下文 | 终态唯一、断连不重生成、切标签不串内容 |
+ | M5.4 | 真实模型与搜索评测 | 显式授权小预算调用；引用回查；无凭据 NOT_RUN |
+@@ -992,11 +992,11 @@
+ 
+ 配置与秘密引用共用一个单调 revision；首次 config expected_revision=0 仅创建未占用的合法 ID，r1 起始，跨工作区记录不可读写。普通配置命令与秘密替换成功推进一次；秘密已无引用且匹配当前基准的删除不推进。config_sha256 对 `{version:"provider-config-v1",workspace_id,id,revision,adapter,base_url,model,embedding_model,endpoint_policy,pricing,secret_present}` 的项目规范 JSON 计算；不含秘密、秘密摘要或 locator。secret_present 表示该修订已提交的秘密引用存在性，不等于秘密介质当前可读取、密钥有效或提供商可调度；实体缺失/损坏时保持原历史，拒绝派发并报告安全诊断，GET 不写新版本或重算成另一配置。配置/秘密轮换改变 revision，从而使旧提案不能授权新请求。历史 ACK 保留当时值，UI 必须另 GET 当前配置。
+ 
+-key 只经专用 write-only 端点进入 Provider 的 SecretStore，优先系统安全存储，fallback 使用公开与备份目录之外的受限文件（目录 0700、文件 0600，防符号链接/路径逃逸，原子写入）。M5.1 不自动扫描或导入环境凭据；将来若接启动环境变量，须走同一秘密版本绑定与安全日志边界。GET、错误、日志、任务输入、config_json、content_blobs、HTTP 回执、浏览器 DraftStore/IDB/localStorage/WorkbenchSession 与公开证据永不包含秘密或其可公开比对的摘要，不能把可逆编码当作加密。locator 只在 Provider 私有存储，不返回浏览器或进入可分享备份。
+-
+-秘密写先存不可变版本，再在事务内 CAS 切换引用与配置 revision 并保存安全 ACK；存储失败/DB 回滚不能声称已保存，孤立版本须可恢复清理。删除先使当前引用不可再调度，再清理秘密版本；不承诺介质级擦除或撤回已发生外发。幂等比较使用服务端专用秘密的 HMAC 指纹，指纹与指纹密钥不进 API、日志或可分享备份；不得将 raw secret 或普通 SHA 作为通用幂等 payload。六个写操作均校验同一完整命令实例：workspace、actor、route、原 key、全部字段及版本条件。相同 key 不同命令 409，同命令回原安全 ACK；secret 丢 ACK 后只凭 secret_present 不能确认“刚输入的 key 已保存”，原命令字节在内存仍有时可原 key 回放，刷新后不能从浏览器持久层恢复秘密。
+-
+-Provider-owned 备份降权端口仅修改独立备份副本：排除所有秘密字节、HMAC 私密材料和物理 locator，使其中授权不可派发，并保持自有配置 SHA、不可变原历史与降权后的当前投影一致。不得只把 consents.status 改 revoked/locator 改空却留下不一致 hash 或绕过不可变历史。保留历史原事实，通过自有可校验的备份安全投影/降权记录表达不可调度；恢复时不能复活旧许可或把历史 secret_present 当成实际秘密。数据库在线迁移前备份是受限的本机恢复原件；可分享备份另外经过本端口净化，二者不能混称。此要求不提前实现 M7 完整恢复流程。
++key 只经专用 write-only 端点进入 Provider 的 SecretStore，优先系统安全存储，fallback 使用公开与备份目录之外的受限文件（目录 0700、文件 0600，防符号链接/路径逃逸，原子写入）。M5.1 不自动扫描或导入环境凭据；将来若接启动环境变量，须走同一秘密版本绑定与安全日志边界。GET、错误、日志、任务输入、config_json、content_blobs、HTTP 回执、浏览器 DraftStore/IDB/localStorage/WorkbenchSession 与公开证据永不包含秘密或其可公开比对的摘要，不能把可逆编码当作加密。locator 只在 Provider 私有存储，不返回浏览器或进入导出备份（仍含敏感个人数据，不得公开）。
++
++秘密写先存不可变版本，再在事务内 CAS 切换引用与配置 revision 并保存安全 ACK；存储失败/DB 回滚不能声称已保存，孤立版本须可恢复清理。删除先使当前引用不可再调度，再清理秘密版本；不承诺介质级擦除或撤回已发生外发。幂等比较使用服务端专用秘密的 HMAC 指纹，指纹与指纹密钥不进 API、日志或导出备份（仍含敏感个人数据，不得公开）；不得将 raw secret 或普通 SHA 作为通用幂等 payload。六个写操作均校验同一完整命令实例：workspace、actor、route、原 key、全部字段及版本条件。相同 key 不同命令 409，同命令回原安全 ACK；secret 丢 ACK 后只凭 secret_present 不能确认“刚输入的 key 已保存”，原命令字节在内存仍有时可原 key 回放，刷新后不能从浏览器持久层恢复秘密。
++
++Provider-owned 备份降权端口仅修改独立备份副本：排除所有秘密字节、HMAC 私密材料和物理 locator，使其中授权不可派发，并保持自有配置 SHA、不可变原历史与降权后的当前投影一致。不得只把 consents.status 改 revoked/locator 改空却留下不一致 hash 或绕过不可变历史。保留历史原事实，通过自有可校验的备份安全投影/降权记录表达不可调度；恢复时不能复活旧许可或把历史 secret_present 当成实际秘密。数据库在线迁移前备份是受限的本机恢复原件；导出备份（仍含敏感个人数据，不得公开）另外经过本端口净化，二者不能混称。此要求不提前实现 M7 完整恢复流程。
+ 
+ 目的地策略 public_https 仅允许 HTTPS 公网；explicit_loopback 必须在该配置明确选择，仅允许 localhost/127.0.0.1/::1 的确切端口和 base path，可用 HTTP，不开放 LAN。拒绝 URL userinfo/query/fragment/未支持 scheme；本机 allowed_origins 不是提供商许可。保存时只做本地语法校验。出站在许可与预算准入后才解析并固定地址，检查实际连接 IP、TLS 主机、端口/路径，防 DNS 重绑定；不自动跟随重定向或继承环境代理，不把 3xx 改址后继续外发。每次实际 HTTP 尝试都受同一额度与取消约束。
+ 
+@@ -1026,7 +1026,7 @@
+ 
+ Provider 内部采用附录 D 的 delta/usage/finished/error 四类严格事件，保留 answer/refusal、complete/refused/incomplete、部分输出与未知计量。Responses text.done 不是请求结束；Chat choice finish_reason 后继续消费 usage 和 [DONE]；EOF 不是成功。远端终态及当前实际收到的计量一致性核验后，自有终态回执与私有部分产物原子登记，方可投影粗粒度核心事件。core ProviderEvent 保持不变：仅内部 complete 可投影 finished，refused/incomplete 以 PROVIDER_REFUSAL/PROVIDER_INCOMPLETE 错误投影，完整事实仍保存在自有回执；不把 JSON 偷塞进 text/error_code。consumer 读取该回执并完成自己的结果校验/事务后才有本机 completed。Run SSE 与 Tutor 状态机在 M5.3 实现。[S29][S30]
+ 
+-活跃真实 source job 在 queued/running/awaiting_approval 均参加 workspace 独立测试排他；Provider 子步骤不豁免。M5.1 可独立实现并逐项验收本机配置/秘密/严格授权历史、无授权或无证明零传输、测试专属真实 SQLite source 和有明确计量规则的受控 HTTP 流协议。测试 source/model/proof/服务不得进入生产注册表，人工计量规则不能证明真实供应商隐藏开销。无生产 source 时设置显示没有可授权任务；无模型证明时 chat/streaming 显示不可调度。配置存在、受控协议 PASS 或本地预算 PASS 不能合并为生产生成贯通、模型质量、真实搜索或整个 M5 完成；真实 Provider/Codex 费用测试仍须另外显式授权，未执行为 NOT_RUN，真实模型评测在 M5.4。
++活跃真实 source job 在 queued/running/awaiting_approval 均参加 workspace 独立测试排他；Provider 子步骤不豁免。M5.1 可独立实现并逐项验收本机配置/秘密/严格授权历史、无授权或无证明零传输、测试专属真实 SQLite source 和有明确计量规则的受控 HTTP 流协议。测试 source/model/proof/服务不得进入生产注册表，人工计量规则不能证明真实供应商隐藏开销。无生产 source 时设置显示没有可授权任务；无模型证明时 chat/streaming 显示不可调度。现 core AuthoringRequest 的 consent_id 必填，而 preview 要求先有真实 job，首次 Authoring 准备路径尚未闭合；M6 production source 接入前必须先在本文定义真实 owner 的授权前 prepare-job 入口和独立应用 DTO。现 core AuthoringRequest 不能充首次未授权 job 的创建输入，不能使用假 consent 或其他任务许可绕过。M5.1 不注册此生产来源、不把既有 POST /authoring/jobs 称为已可贯通，也不据本阶段验收标记 M6 已闭合；本次不新增 M6 路由或修改54 core。配置存在、受控协议 PASS 或本地预算 PASS 不能合并为生产生成贯通、模型质量、真实搜索或整个 M5 完成；真实 Provider/Codex 费用测试仍须另外显式授权，未执行为 NOT_RUN，真实模型评测在 M5.4。
+ 
+ 推荐与联网事实分开：本地材料可精确引用；搜索候选未抓取或未核查时标 unverified；模型推导无来源可以清晰标“推导尝试”，不能配伪造外部引用。后续已实现搜索默认最多 3 次/请求、5 个来源、抓取 10 MiB/页面、5 次重定向，并逐步重新核权限与预算；这些上限不授予 M5.1 搜索能力。来源更新改 hash、索引过期时只返回旧修订真实引用或明确重建中，不冒充最新版。
+ 

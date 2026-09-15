@@ -1,0 +1,5 @@
+# B independent reviews of C — publication candidate
+
+Three original independent review records and their archived source evidence were authored by B (/root/m41_native_fix) reviewing C. D (/root/m42_contracts_preflight) only prepared this candidate package and verified file hashes/sizes. D did not repeat the review or execute any referenced tests. Statements and outcomes inside each review remain attributed to its original author and exact scope/time; review readbacks of owner tests are not independent test reruns.
+
+All 14 original payloads are preserved. Ten archived Python files have a .txt display suffix; their public bytes are exactly the original bytes. The only normalization anywhere is replacing the personal /home prefix with <HOME>/. The raw private originals remain unchanged; the manifest provides raw and public SHA-256, sizes and explicit aggregate algorithms. Nested hashes continue to identify the original recorded inputs and logs. This package does not claim current source acceptance or production Provider/billing execution.

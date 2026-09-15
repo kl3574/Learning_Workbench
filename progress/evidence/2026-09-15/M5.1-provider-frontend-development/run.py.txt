@@ -1,0 +1,17 @@
+from pathlib import Path
+from datetime import datetime, UTC
+import hashlib, json, subprocess, sys
+root = Path.cwd()
+out = Path(__file__).parent
+label = sys.argv[1]
+cmd = sys.argv[2:]
+paths = ['PRODUCT_DESIGN.md', 'apps/web/src/workbench/Shell.tsx', 'packages/contracts/generated/api-types.ts', 'packages/contracts/generated/api-client.ts', 'packages/contracts/generated/openapi.json', *map(str, sorted(Path('apps/web/src/features/providers').rglob('*.*')))]
+def hashes(): return {p: hashlib.sha256((root / p).read_bytes()).hexdigest() for p in paths}
+assert not (out / (label + '.json')).exists()
+before = hashes(); start = datetime.now(UTC).isoformat()
+r = subprocess.run(cmd, capture_output=True, text=True)
+log = out / (label + '.log'); log.write_text(r.stdout + r.stderr)
+rec = {'command': cmd, 'started_at': start, 'finished_at': datetime.now(UTC).isoformat(), 'exit_code': r.returncode, 'sources_before': before, 'sources_after': hashes(), 'log_sha256': hashlib.sha256(log.read_bytes()).hexdigest(), 'scope': 'Feature unit/static checks only. No native browser or external provider test.'}
+(out / (label + '.json')).write_text(json.dumps(rec, indent=2) + '\n')
+print(r.stdout + r.stderr)
+print(json.dumps({'receipt': label + '.json', 'exit_code': r.returncode, 'same_inputs': rec['sources_before'] == rec['sources_after']}))

@@ -1,0 +1,52 @@
+F.............                                                           [100%]
+=================================== FAILURES ===================================
+__ test_backup_retains_original_history_and_body_but_never_revives_permission __
+
+tmp_path = PosixPath('${PRIVATE_HOME}/.cache/lw-m51-b/auth-green/test_backup_retains_original_h0')
+
+    def test_backup_retains_original_history_and_body_but_never_revives_permission(tmp_path):
+        from services.api.app.application.provider_backup import sanitize_provider_backup
+    
+        database, identity, _, service, request = consent_setup(tmp_path)
+        proposal = service.preview(identity, request, 'preview')
+        ack = service.grant(identity, ConsentCreate(proposal_id=proposal.id,
+            proposal_sha256=proposal.proposal_sha256), 'grant')
+        with database.transaction() as connection:
+            original_config = ProviderRepository(connection, identity.workspace_id).config('provider_test')
+            authentication_bytes = [row[0].encode() for row in connection.execute('SELECT locator FROM provider_private_references')]
+            authentication_bytes += [row[0].encode() for row in connection.execute('SELECT fingerprint FROM provider_private_commands')]
+            _, original_material, original_body = ConsentRepository(connection, identity.workspace_id).dispatch_material(ack.id)
+            with pytest.raises(ApiError) as rejected:
+                sanitize_provider_backup(connection, live_database_path=database.path)
+            assert rejected.value.code == 'PROVIDER_BACKUP_TARGET_INVALID'
+        backup_path = database.online_backup()
+        with sqlite3.connect(backup_path, isolation_level=None) as copy:
+            copy.row_factory = sqlite3.Row
+            copy.execute('PRAGMA foreign_keys=ON')
+            copy.execute('BEGIN IMMEDIATE')
+            sanitize_provider_backup(copy, live_database_path=database.path)
+            copy.commit()
+            config = ProviderRepository(copy, identity.workspace_id).config('provider_test')
+            assert config == original_config and config.secret_present
+            repo = ConsentRepository(copy, identity.workspace_id)
+            summary, material, body = repo.dispatch_material(ack.id)
+            assert summary == proposal.summary and material == original_material and body == original_body
+            assert copy.execute('SELECT count(*) FROM provider_private_commands').fetchone()[0] == 0
+            assert copy.execute('SELECT count(*) FROM provider_private_references').fetchone()[0] == 0
+            copy.execute('BEGIN IMMEDIATE')
+            with pytest.raises(ApiError) as blocked:
+                repo.begin_dispatch(ack.id, request.job_id, proposal.summary.input_token_assurance.request_body_sha256,
+                    proposal.summary.created_at)
+            assert blocked.value.code == 'CONSENT_REVOKED'
+            copy.rollback()
+        backup_bytes = Path(backup_path).read_bytes()
+        assert b'synthetic-controlled-provider-key' not in backup_bytes
+>       assert not any(value in backup_bytes for value in authentication_bytes), 'Export file retains excluded authentication material'
+E       AssertionError: Export file retains excluded authentication material
+E       assert not True
+E        +  where True = any(<generator object test_backup_retains_original_history_and_body_but_never_revives_permission.<locals>.<genexpr> at 0x734eea1c8e10>)
+
+tests/integration/test_provider_migration.py:52: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/test_provider_migration.py::test_backup_retains_original_history_and_body_but_never_revives_permission
+1 failed, 13 passed in 0.42s
