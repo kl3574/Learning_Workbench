@@ -1,0 +1,144 @@
+{
+  "$comment": "Generated; do not edit.",
+  "$defs": {
+    "ContentRef": {
+      "additionalProperties": false,
+      "properties": {
+        "entity": {
+          "enum": [
+            "course",
+            "lesson",
+            "block",
+            "concept",
+            "route",
+            "question",
+            "practice_set",
+            "assessment",
+            "note"
+          ],
+          "title": "Entity",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entity",
+        "id",
+        "revision",
+        "sha256"
+      ],
+      "title": "ContentRef",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "body_path": {
+      "title": "Body Path",
+      "type": "string"
+    },
+    "body_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Body Sha256",
+      "type": "string"
+    },
+    "citations": {
+      "items": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+        "type": "string"
+      },
+      "title": "Citations",
+      "type": "array"
+    },
+    "concepts": {
+      "items": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+        "type": "string"
+      },
+      "title": "Concepts",
+      "type": "array"
+    },
+    "depends_on": {
+      "items": {
+        "$ref": "#/$defs/ContentRef"
+      },
+      "title": "Depends On",
+      "type": "array"
+    },
+    "entity": {
+      "const": "block",
+      "default": "block",
+      "title": "Entity",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "orientation",
+        "definition",
+        "theorem",
+        "proof",
+        "intuition",
+        "worked_example",
+        "boundary",
+        "summary",
+        "text",
+        "code",
+        "figure"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "3.0.0",
+      "default": "3.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "title": {
+      "maxLength": 400000,
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "revision",
+    "kind",
+    "title",
+    "body_path",
+    "body_sha256"
+  ],
+  "title": "ContentBlock",
+  "type": "object",
+  "x-source-spec": {
+    "source": "PRODUCT_DESIGN.md",
+    "spec_sha256": "a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8",
+    "spec_version": "3.0.3"
+  }
+}

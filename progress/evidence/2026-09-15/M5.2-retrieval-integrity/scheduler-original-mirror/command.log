@@ -1,0 +1,38 @@
+.F                                                                       [100%]
+=================================== FAILURES ===================================
+_____ test_damaged_queued_index_does_not_starve_real_import_work[fault_on] _____
+
+ledger = (<services.api.app.infrastructure.database.Database object at 0x7a51489684d0>, SessionIdentity(id='session_integrity_s...d_corpus_sha256='fe4a59faa7f30400fbc30485c9035b20b05d5e8209504fb252466eccb4baa583', provider_id=None, consent_id=None))
+fault = True
+
+    @pytest.mark.parametrize('fault', [False, True], ids=['fault_off', 'fault_on'])
+    def test_damaged_queued_index_does_not_starve_real_import_work(ledger, fault):
+        database, identity, service, _, request = ledger
+        queued = service.rebuild(identity, request, 'damaged_build')
+        if fault:
+            with database.transaction() as conn:
+                conn.execute('DROP TRIGGER retrieval_commands_no_update')
+                conn.execute("UPDATE retrieval_commands SET ack_sha256=? WHERE job_id=? AND route='POST /index/rebuild'",
+                    ('0' * 64, queued.id))
+        ingestion = ImportService(database)
+        staged = ingestion.stage(identity, data=b'# Independent queued import\n\nOriginal synthetic material.\n',
+            filename='synthetic.md', kind='markdown', key='unrelated_import')
+        worker = ImportWorker(database)
+        try:
+            # Bounded deterministic maintenance ticks, no timeouts, sleeps or fake
+            # replacement worker callbacks. The ordinary import parses real bytes.
+            for _ in range(2):
+                worker.run_once()
+            with database.connect() as conn:
+                status = conn.execute('SELECT status FROM jobs WHERE id=?', (staged.job.id,)).fetchone()[0]
+>           assert status == 'awaiting_approval', f'actual unrelated import job stayed {status}'
+E           AssertionError: actual unrelated import job stayed queued
+E           assert 'queued' == 'awaiting_approval'
+E             
+E             - awaiting_approval
+E             + queued
+
+tests/integration/test_retrieval_integrity.py:138: AssertionError
+=========================== short test summary info ============================
+FAILED tests/integration/test_retrieval_integrity.py::test_damaged_queued_index_does_not_starve_real_import_work[fault_on]
+1 failed, 1 passed, 9 deselected in 0.75s

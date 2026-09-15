@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-15T09:34:04Z；规范 SHA-256：`a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8`
+更新：2026-09-15T10:06:09Z；规范 SHA-256：`a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8`
 
 仓库发布：VERIFIED；Issues 同步：PENDING_LOCAL_UPDATES
 实施：IN_PROGRESS；当前任务：M5.2；下一任务：M5.3
 
-读取冻结gold真实结果，完成检索辅助UI及原生测试，再在固定代码提交执行完整阶段门禁。
+冻结并提交检索UI及测试源码；执行完整frontend lint/types/unit/build/native门禁，归档结果后公开M5.2依赖PR并回读精确CI。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -61,8 +61,11 @@
 - m5_1_native_repair: PASS at254a4ff：新命令及明确更正采用同owner/provider较高真实readback，ACK不伪造current；unknown原命令不变。真实受控parent-delay DELETE由r1If-Match/412变r2If-Match/200，peer抢先r3仍412再explicit新key成功；原CI只确知r3ACK等待失败，不追认唯一因果。14secret/35Provider定向unit及5native通过；同source新323web/87fullnative通过。
 - m5_1_254a4ff_local: 六项实际命令PASS：lint、types(mypy125+web)、spec(54core/6embedded/106routes结构检查)、build(709modules,chunk警告保留)、323web/52files3.37s、87native6.9m。600source aggregate b00ae17d2d6e87e01aee18c0082ff1eee32c4be891d343fe4bd1b8df48417452；83完整native产物私有留存，当前阶段尚待新发布head CI。
 - m5_1_ci_current: PASS：发布f0b4ce2精确双workflow12/12success；每组323web/52files、87native（12.0m/11.9m）。6push checkout f0b4ce2、6PR checkout95ff622，全部Git tree c8d7d132相同；600source与254a4ff等同。85payload原件/公开件SHA、size、全部转换与聚合root逐项核验；此CI基于规范3.0.2，不涵盖当前M5.2工作树。
-- m5_2: IN_PROGRESS：当前冻结后端25项实际SQLite安全/资源场景PASS，12项独立账本/调度完整性反例修后PASS；原9FAIL1PASS、丢代际1FAIL、调度原断言修正与准确镜像RED保留。词法39、Content67、接口生成160、迁移2为各自定向证据，不能相加替代全套。正式gold正在执行；检索UI/native/全套门禁尚未验。
+- m5_2: IN_PROGRESS：本地后端检查点f9a307a，最新完整Python1663PASS/2依赖弃用警告，427声明输入前后与Git一致；Ruff、mypy133源及独立430输入specPASS。输入清单遗漏及补证经独立审查闭合，原件保留。F.1两轮各42响应：38正向macro Recall@5=1.0、4无结果全过，216输入与f9一致，root逐DTO/ref/正文/排序核验。25SQLite及12独立账本定向回归通过；原失败/漂移/修复保留。最终定向23web及native04单条真实闭环通过，UI两处恢复问题经同测试RED→GREEN和独立回读闭合；最终完整前端/native尚未验，不代表整阶段或平台Agent完成。
 - m5_1_358bf5d_historical: LOCAL_FIXED_SOURCE_PASS：769原本地1494Python/314web/85native保留；6c首次CI10success2frontend FAIL，0c修refresh测试并五门禁PASS。e480新CI的PRfrontend314PASS，push不同revoke准备测试313PASS1FAIL，原件保留。358bf5d仅加7行等待journal/ACK后完整回读，600输入before/after/Git相同，lint/types/spec/build与314web/52files新PASS；原RED/观测/两次guard mutation反例保留，production原字节恢复。358本地未重跑backend/native（输入未变），新提交未推送、远端CI NOT_RUN；真实Provider/Codex/学习效果未验。
+- m5_2_input_coverage: 补证PASS：同f9新Python02实际1663PASS/2依赖弃用警告/273.45s，427声明输入与Git及before/after一致，含6个顶层helper；新spec03对430输入实测PASS，另含3个派生docs。Python02不追认这3个docs运行前快照，其内容由套件generate(check=True)及独立spec03核验。原01的1663PASS/421绑定和两条遗漏审查原件保留。
+- m5_2_ui_review: 两处修复有界闭合：同一合法11case在原逻辑快照7FAIL4PASS、修后同测通过，完整检索23web/5filesPASS。相同本机命令/ACK候选可恢复，不同身份/正文/ACK冲突保持拒绝；安全读取失败禁止父链离开。B独立源码/原日志/hash回读无新增阻断，未冒称其另跑测试。默认Reader scope误用practice的独立原RED/GREEN另保留。
+- m5_2_native_development: native04实际1PASS13.5s，root独立看1440/390图，完整r1原文/currentr2/未审与历史warning可见；root另存原04附件。native02的两图和响应附件曾因03测试输出目录误配置被覆盖，原02源码/receipt/log保留，丢失附件明确不可恢复；03产物只归03，04为新正确目录与实际视口内正文截图。不得说所有早期附件仍完整。
 
 ## 阻塞与待决项
 

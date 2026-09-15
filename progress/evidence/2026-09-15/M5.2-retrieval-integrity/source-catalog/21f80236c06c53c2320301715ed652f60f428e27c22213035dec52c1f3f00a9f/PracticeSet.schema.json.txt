@@ -1,0 +1,109 @@
+{
+  "$comment": "Generated; do not edit.",
+  "$defs": {
+    "ContentRef": {
+      "additionalProperties": false,
+      "properties": {
+        "entity": {
+          "enum": [
+            "course",
+            "lesson",
+            "block",
+            "concept",
+            "route",
+            "question",
+            "practice_set",
+            "assessment",
+            "note"
+          ],
+          "title": "Entity",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entity",
+        "id",
+        "revision",
+        "sha256"
+      ],
+      "title": "ContentRef",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "entity": {
+      "const": "practice_set",
+      "default": "practice_set",
+      "title": "Entity",
+      "type": "string"
+    },
+    "feedback_policy": {
+      "const": "on_submit_or_reveal",
+      "default": "on_submit_or_reveal",
+      "title": "Feedback Policy",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "lesson_ref": {
+      "$ref": "#/$defs/ContentRef"
+    },
+    "question_refs": {
+      "items": {
+        "$ref": "#/$defs/ContentRef"
+      },
+      "minItems": 1,
+      "title": "Question Refs",
+      "type": "array"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "3.0.0",
+      "default": "3.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "title": {
+      "title": "Title",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "revision",
+    "title",
+    "lesson_ref",
+    "question_refs"
+  ],
+  "title": "PracticeSet",
+  "type": "object",
+  "x-source-spec": {
+    "source": "PRODUCT_DESIGN.md",
+    "spec_sha256": "a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8",
+    "spec_version": "3.0.3"
+  }
+}

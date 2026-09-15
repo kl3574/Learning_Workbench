@@ -1,0 +1,262 @@
+"""Immutable source snapshots bound to exact published revisions and import receipts."""
+
+from collections.abc import Callable, Sequence
+import sqlite3
+from typing import Literal
+
+from pydantic import ValidationError
+
+from packages.contracts import domain_models as dm
+from packages.contracts.canonical import canonical_bytes, metadata_sha256, sha256_bytes, strict_json
+from packages.contracts.validation import ENTITY_MODELS, PublishedModel
+
+from ..import_dto import ImportCommitRequest, ImportIdMapping
+from ..reader_dto import ProvenanceSource, ResolvedCitation
+from .content_repository import ContentRepository, damaged, reference
+from .database import utc_now
+from .import_mapping import remap_import
+from .import_repository import json_object
+from .security import SessionIdentity
+from ..application.errors import ApiError
+
+
+class FrozenProvenance(dm.StrictModel):
+    block_ref: dm.ContentRef
+    source: ProvenanceSource
+    citations: list[dm.Citation]
+    warnings: list[dm.Warning]
+
+
+def relevant_warnings(warnings: Sequence[dm.Warning], citations: Sequence[dm.Citation], source_id: str) -> list[dm.Warning]:
+    locators = {citation.locator for citation in citations}
+    return [warning for warning in warnings if warning.code != 'IMPORT_PRIVATE_ANSWERS' and (
+        warning.locator is None or warning.locator in {f'source:{source_id}', f'source:{source_id};docx:container'}
+        or warning.locator in locators
+        or any(locator.startswith(warning.locator + '/') for locator in locators))]
+
+
+class ProvenanceRepository:
+    def __init__(self, connection: sqlite3.Connection, workspace_id: str):
+        self.connection = connection
+        self.workspace_id = workspace_id
+
+    def _source(self, source_id: str) -> sqlite3.Row | None:
+        return self.connection.execute(
+            'SELECT s.*,b.size FROM sources s JOIN content_blobs b ON b.sha256=s.blob_sha256 '
+            'WHERE s.id=? AND s.workspace_id=?', (source_id, self.workspace_id),
+        ).fetchone()
+
+    def _snapshot(self, block: dm.ContentBlock, source: sqlite3.Row, *,
+                  parsed_citations: Sequence[dm.Citation] | None = None,
+                  parsed_warnings: Sequence[dm.Warning] | None = None) -> FrozenProvenance:
+        metadata = json_object(source['metadata_json'])
+        available = parsed_citations if parsed_citations is not None else [dm.Citation.model_validate(item) for item in metadata.get('citations', [])]
+        citations = [item for item in available if item.id in block.citations]
+        if len({item.id for item in citations}) != len(citations) or {item.id for item in citations} != set(block.citations):
+            raise damaged()
+        warnings = list(parsed_warnings) if parsed_warnings is not None else [dm.Warning.model_validate(item) for item in metadata.get('warnings', [])]
+        return FrozenProvenance(block_ref=reference(block), source=ProvenanceSource(
+            id=source['id'], media_type=source['media_type'], size=source['size'], sha256=source['blob_sha256'],
+            rights=source['rights'], parser_version=source['parser_version']), citations=citations,
+            warnings=relevant_warnings(warnings, citations, source['id']))
+
+    def freeze_import(self, import_id: str, values: Sequence[PublishedModel]) -> None:
+        """Only the caller's guarded publication transaction may write this snapshot."""
+        if not self.connection.in_transaction:
+            raise ApiError(409, 'TRANSACTION_REQUIRED', '来源冻结需要有效发布事务。')
+        imported = self.connection.execute(
+            'SELECT * FROM ingestion_imports WHERE id=? AND workspace_id=?', (import_id, self.workspace_id),
+        ).fetchone()
+        if imported is None or imported['status'] != 'preview_ready':
+            raise damaged()
+        source = self._source(imported['source_id'])
+        if source is None or source['blob_sha256'] != imported['input_sha256']:
+            raise damaged()
+        repository = ContentRepository(self.connection, self.workspace_id)
+        for block in values:
+            if not isinstance(block, dm.ContentBlock):
+                continue
+            if reference(repository.load('block', block.id, block.revision).value) != reference(block):
+                raise damaged()
+            snapshot = self._snapshot(block, source)
+            self._insert(import_id, snapshot)
+
+    def _insert(self, import_id: str, snapshot: FrozenProvenance) -> None:
+        raw = canonical_bytes(snapshot)
+        ref = snapshot.block_ref
+        self.connection.execute(
+            'INSERT INTO block_provenance(workspace_id,block_id,block_revision,block_sha256,source_id,import_id,'
+            'snapshot_json,snapshot_sha256,created_at) VALUES(?,?,?,?,?,?,?,?,?)',
+            (self.workspace_id, ref.id, ref.revision, ref.sha256, snapshot.source.id, import_id,
+             raw.decode(), sha256_bytes(raw), utc_now()),
+        )
+        from .retrieval_repository import RetrievalInvalidation
+
+        RetrievalInvalidation(self.connection, self.workspace_id).changed('provenance.frozen')
+
+    def bounded_frozen(self, block: dm.ContentBlock, *, max_bytes: int) -> FrozenProvenance | None:
+        """Meter the exact snapshot before loading/parsing it in the caller's transaction.
+
+        This reads only retained metadata, never the private original or its
+        current download permission. Existing Reader reads keep their semantics.
+        """
+        if not self.connection.in_transaction:
+            raise ApiError(409, 'TRANSACTION_REQUIRED', '来源读取需要有效事务。')
+        if type(max_bytes) is not int or max_bytes < 0:
+            raise ValueError('a nonnegative byte budget is required')
+        row = self.connection.execute(
+            'SELECT length(CAST(snapshot_json AS BLOB)) AS size FROM block_provenance '
+            'WHERE workspace_id=? AND block_id=? AND block_revision=? AND block_sha256=?',
+            (self.workspace_id, block.id, block.revision, metadata_sha256(block)),
+        ).fetchone()
+        if row is not None and row['size'] > max_bytes:
+            raise ApiError(413, 'SCOPE_BUDGET_EXCEEDED', '所选范围超过本地检索资源预算。')
+        return self.frozen(block)
+
+    def frozen(self, block: dm.ContentBlock) -> FrozenProvenance | None:
+        row = self.connection.execute(
+            'SELECT * FROM block_provenance WHERE workspace_id=? AND block_id=? AND block_revision=? AND block_sha256=?',
+            (self.workspace_id, block.id, block.revision, metadata_sha256(block)),
+        ).fetchone()
+        if row is None:
+            return None
+        try:
+            snapshot = FrozenProvenance.model_validate(strict_json(row['snapshot_json']))
+            if (sha256_bytes(canonical_bytes(snapshot)) != row['snapshot_sha256']
+                    or snapshot.block_ref != reference(block) or snapshot.source.id != row['source_id']
+                    or {item.id for item in snapshot.citations} != set(block.citations)
+                    or len(snapshot.citations) != len(set(block.citations))):
+                raise damaged()
+            return snapshot
+        except (ValueError, TypeError, KeyError, ValidationError):
+            raise damaged() from None
+
+    def original_access(self, identity: SessionIdentity, source: ProvenanceSource) -> Literal['allowed', 'author_required', 'unavailable']:
+        row = self._source(source.id)
+        if row is None or row['blob_sha256'] != source.sha256 or row['size'] != source.size:
+            return 'unavailable'
+        metadata = json_object(row['metadata_json'])
+        artifact = self.connection.execute(
+            'SELECT * FROM artifacts WHERE id=? AND workspace_id=?',
+            (metadata.get('artifact_id'), self.workspace_id),
+        ).fetchone()
+        if artifact is None or artifact['blob_sha256'] != source.sha256 or metadata.get('visibility_verified') is not True:
+            return 'unavailable'
+        manifest = json_object(artifact['manifest_json'])
+        if manifest.get('version') != 1 or manifest.get('sha256') != source.sha256 or manifest.get('size') != source.size:
+            return 'unavailable'
+        if artifact['visibility'] == 'author_private':
+            from ..application.policy import Policy
+
+            try:
+                Policy(self.connection, self.workspace_id).check('private_artifact')
+            except ApiError:
+                # Preserve the safe citation while accurately withholding the
+                # opaque original that the download port would also reject.
+                return 'unavailable'
+            return 'allowed' if identity.role == 'author' else 'author_required'
+        return 'allowed' if artifact['visibility'] == 'learner' else 'unavailable'
+
+    def resolved(self, identity: SessionIdentity, snapshot: FrozenProvenance) -> list[ResolvedCitation]:
+        access = self.original_access(identity, snapshot.source)
+        return [ResolvedCitation(citation=citation, source=snapshot.source, original_access=access)
+                for citation in snapshot.citations]
+
+    def recovery_snapshots(self, import_id: str, *, objects: Sequence[PublishedModel],
+                           citations: Sequence[dm.Citation], warnings: Sequence[dm.Warning],
+                           input_sha256: str, parser_version: str,
+                           read_blob: Callable[[str, int], bytes]) -> list[FrozenProvenance]:
+        """A verified original reparse plus its durable commit receipt must recreate each exact block.
+
+        Called only by explicit startup recovery, never GET. No mutable draft or
+        current citation text is used to infer old source content.
+        """
+        row = self.connection.execute(
+            "SELECT i.* FROM ingestion_imports i JOIN jobs j ON j.id=i.job_id "
+            "WHERE i.id=? AND i.workspace_id=? AND i.status='committed' "
+            "AND j.workspace_id=i.workspace_id AND j.status='completed'", (import_id, self.workspace_id),
+        ).fetchone()
+        if row is None or row['input_sha256'] != input_sha256:
+            raise damaged()
+        preview = json_object(row['preview_json'])
+        result = preview.get('commit_result', {})
+        artifact = self.connection.execute(
+            "SELECT a.*,b.size FROM artifacts a JOIN content_blobs b ON b.sha256=a.blob_sha256 "
+            "WHERE a.id=? AND a.workspace_id=? AND a.job_id=? AND a.profile='import_receipt'",
+            (result.get('migration_receipt_id'), self.workspace_id, row['job_id']),
+        ).fetchone()
+        if artifact is None:
+            raise damaged()
+        manifest = json_object(artifact['manifest_json'])
+        if manifest.get('version') != 1 or manifest.get('sha256') != artifact['blob_sha256'] or manifest.get('size') != artifact['size']:
+            raise damaged()
+        receipt_bytes = read_blob(artifact['blob_sha256'], artifact['size'])
+        if sha256_bytes(receipt_bytes) != artifact['blob_sha256']:
+            raise damaged()
+        receipt = json_object(receipt_bytes.decode('utf-8'))
+        if (receipt.get('kind') != 'import_migration_receipt' or receipt.get('source_id') != row['source_id']
+                or receipt.get('input_sha256') != input_sha256 or receipt.get('parser_version') != parser_version
+                or preview.get('parser_version') != parser_version
+                or receipt.get('course_refs') != result.get('course_refs')):
+            raise damaged()
+        mapping = receipt['id_mapping']
+        request = ImportCommitRequest.model_validate(receipt['commit_request']) if 'commit_request' in receipt else ImportCommitRequest(
+            expected_input_sha256=input_sha256, accepted_warning_codes=receipt['accepted_warning_codes'],
+            id_mapping=[ImportIdMapping(old_id=old, new_id=new) for old, new in mapping.items()])
+        expected = preview.get('commit_request_sha256')
+        if (sha256_bytes(canonical_bytes(request)) != expected
+                or request.expected_input_sha256 != input_sha256
+                or {item.old_id:item.new_id for item in request.id_mapping} != mapping
+                or sorted(set(request.accepted_warning_codes)) != receipt['accepted_warning_codes']):
+            # An idempotent result proves a command ran, not that this mutable
+            # receipt contains that command's mapping. Older receipts lacking
+            # original array order remain unresolved if exact reconstruction fails.
+            raise damaged()
+        original_values = [ENTITY_MODELS[item['entity']].model_validate(item) for item in preview['objects']]
+        expected_objects = {(item.entity,item.id,item.revision): metadata_sha256(item) for item in original_values}
+        actual_objects = {(item.entity,item.id,item.revision): metadata_sha256(item) for item in objects}
+        if len(expected_objects) != len(original_values) or expected_objects != actual_objects:
+            raise damaged()
+        mapped, _ = remap_import(tuple(objects), (), mapping, workspace_id=self.workspace_id, bodies={})
+        source = self._source(row['source_id'])
+        if source is None or source['blob_sha256'] != input_sha256 or source['parser_version'] != parser_version:
+            raise damaged()
+        repository = ContentRepository(self.connection, self.workspace_id)
+        result_snapshots = []
+        for candidate in mapped:
+            if not isinstance(candidate, dm.ContentBlock):
+                continue
+            published = repository.load('block', candidate.id, candidate.revision).value
+            if reference(published) != reference(candidate):
+                raise damaged()
+            result_snapshots.append(self._snapshot(candidate, source, parsed_citations=citations, parsed_warnings=warnings))
+        return result_snapshots
+
+    def recovery_stamp(self, import_id: str) -> str:
+        row = self.connection.execute(
+            'SELECT i.*,j.status AS job_status,j.input_json,s.metadata_json,s.blob_sha256,s.parser_version '
+            'FROM ingestion_imports i JOIN jobs j ON j.id=i.job_id JOIN sources s ON s.id=i.source_id '
+            'WHERE i.id=? AND i.workspace_id=? AND j.workspace_id=i.workspace_id AND s.workspace_id=i.workspace_id',
+            (import_id, self.workspace_id),
+        ).fetchone()
+        if row is None:
+            raise damaged()
+        return sha256_bytes(canonical_bytes(dict(row)))
+
+    def insert_recovered(self, import_id: str, snapshot: FrozenProvenance) -> bool:
+        if not self.connection.in_transaction:
+            raise ApiError(409, 'TRANSACTION_REQUIRED', '来源恢复需要有效事务。')
+        ref = snapshot.block_ref
+        block = ContentRepository(self.connection, self.workspace_id).load('block', ref.id, ref.revision).value
+        if not isinstance(block, dm.ContentBlock) or reference(block) != ref:
+            raise damaged()
+        if self.frozen(block) is not None:
+            return False
+        row = self.connection.execute(
+            "SELECT 1 FROM ingestion_imports WHERE id=? AND workspace_id=? AND source_id=? AND input_sha256=? AND status='committed'",
+            (import_id, self.workspace_id, snapshot.source.id, snapshot.source.sha256),
+        ).fetchone()
+        if row is None:
+            raise damaged()
+        self._insert(import_id, snapshot)
+        return True

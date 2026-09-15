@@ -1,0 +1,126 @@
+{
+  "$comment": "Generated; do not edit.",
+  "$defs": {
+    "ContentRef": {
+      "additionalProperties": false,
+      "properties": {
+        "entity": {
+          "enum": [
+            "course",
+            "lesson",
+            "block",
+            "concept",
+            "route",
+            "question",
+            "practice_set",
+            "assessment",
+            "note"
+          ],
+          "title": "Entity",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entity",
+        "id",
+        "revision",
+        "sha256"
+      ],
+      "title": "ContentRef",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "block_refs": {
+      "items": {
+        "$ref": "#/$defs/ContentRef"
+      },
+      "minItems": 1,
+      "title": "Block Refs",
+      "type": "array"
+    },
+    "entity": {
+      "const": "lesson",
+      "default": "lesson",
+      "title": "Entity",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "objectives": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Objectives",
+      "type": "array"
+    },
+    "prerequisite_ids": {
+      "items": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+        "type": "string"
+      },
+      "title": "Prerequisite Ids",
+      "type": "array"
+    },
+    "proof_policy": {
+      "default": "full",
+      "enum": [
+        "full",
+        "declared_dependencies"
+      ],
+      "title": "Proof Policy",
+      "type": "string"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": "3.0.0",
+      "default": "3.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "title": {
+      "maxLength": 400000,
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "revision",
+    "title",
+    "objectives",
+    "block_refs"
+  ],
+  "title": "Lesson",
+  "type": "object",
+  "x-source-spec": {
+    "source": "PRODUCT_DESIGN.md",
+    "spec_sha256": "a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8",
+    "spec_version": "3.0.3"
+  }
+}

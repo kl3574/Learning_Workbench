@@ -1,0 +1,145 @@
+{
+  "$comment": "Generated; do not edit.",
+  "$defs": {
+    "Citation": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "locator": {
+          "title": "Locator",
+          "type": "string"
+        },
+        "source_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Sha256"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "verification": {
+          "enum": [
+            "verified",
+            "unverified",
+            "user_supplied"
+          ],
+          "title": "Verification",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "locator",
+        "verification"
+      ],
+      "title": "Citation",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "answer_markdown": {
+      "default": "",
+      "title": "Answer Markdown",
+      "type": "string"
+    },
+    "citations": {
+      "items": {
+        "$ref": "#/$defs/Citation"
+      },
+      "title": "Citations",
+      "type": "array"
+    },
+    "context_snapshot_id": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Context Snapshot Id"
+    },
+    "id": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "last_seq": {
+      "minimum": 0,
+      "title": "Last Seq",
+      "type": "integer"
+    },
+    "search_status": {
+      "default": "not_requested",
+      "enum": [
+        "not_requested",
+        "not_executed",
+        "executed",
+        "failed"
+      ],
+      "title": "Search Status",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "queued",
+        "running",
+        "awaiting_approval",
+        "completed",
+        "failed",
+        "cancelled"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "thread_id": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+      "title": "Thread Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "thread_id",
+    "status",
+    "last_seq"
+  ],
+  "title": "RunSnapshot",
+  "type": "object",
+  "x-source-spec": {
+    "source": "PRODUCT_DESIGN.md",
+    "spec_sha256": "a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8",
+    "spec_version": "3.0.3"
+  }
+}

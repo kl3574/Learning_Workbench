@@ -1,0 +1,160 @@
+{
+  "$comment": "Generated; do not edit.",
+  "$defs": {
+    "ContentRef": {
+      "additionalProperties": false,
+      "properties": {
+        "entity": {
+          "enum": [
+            "course",
+            "lesson",
+            "block",
+            "concept",
+            "route",
+            "question",
+            "practice_set",
+            "assessment",
+            "note"
+          ],
+          "title": "Entity",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entity",
+        "id",
+        "revision",
+        "sha256"
+      ],
+      "title": "ContentRef",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "default": "read",
+      "enum": [
+        "read",
+        "practice",
+        "test",
+        "review",
+        "inspect_source"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "decision": {
+      "default": "pending",
+      "enum": [
+        "pending",
+        "accepted",
+        "dismissed"
+      ],
+      "title": "Decision",
+      "type": "string"
+    },
+    "estimated_minutes": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Estimated Minutes"
+    },
+    "evidence_ids": {
+      "items": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+        "type": "string"
+      },
+      "title": "Evidence Ids",
+      "type": "array"
+    },
+    "explanation": {
+      "title": "Explanation",
+      "type": "string"
+    },
+    "generated_at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "prerequisite_gaps": {
+      "items": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+        "type": "string"
+      },
+      "title": "Prerequisite Gaps",
+      "type": "array"
+    },
+    "reason_code": {
+      "enum": [
+        "prerequisite_gap",
+        "assessment_error",
+        "review_due",
+        "next_route_step",
+        "user_goal"
+      ],
+      "title": "Reason Code",
+      "type": "string"
+    },
+    "rule_version": {
+      "default": "rules-1.0.0",
+      "title": "Rule Version",
+      "type": "string"
+    },
+    "staleness": {
+      "default": "current",
+      "enum": [
+        "current",
+        "stale"
+      ],
+      "title": "Staleness",
+      "type": "string"
+    },
+    "target": {
+      "$ref": "#/$defs/ContentRef"
+    }
+  },
+  "required": [
+    "id",
+    "target",
+    "reason_code",
+    "explanation",
+    "evidence_ids",
+    "generated_at"
+  ],
+  "title": "Recommendation",
+  "type": "object",
+  "x-source-spec": {
+    "source": "PRODUCT_DESIGN.md",
+    "spec_sha256": "a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8",
+    "spec_version": "3.0.3"
+  }
+}

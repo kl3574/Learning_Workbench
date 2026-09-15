@@ -1,0 +1,311 @@
+{
+  "$comment": "Generated; do not edit.",
+  "$defs": {
+    "Choice": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "text_markdown": {
+          "maxLength": 400000,
+          "minLength": 1,
+          "title": "Text Markdown",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text_markdown"
+      ],
+      "title": "Choice",
+      "type": "object"
+    },
+    "ContentRef": {
+      "additionalProperties": false,
+      "properties": {
+        "entity": {
+          "enum": [
+            "course",
+            "lesson",
+            "block",
+            "concept",
+            "route",
+            "question",
+            "practice_set",
+            "assessment",
+            "note"
+          ],
+          "title": "Entity",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entity",
+        "id",
+        "revision",
+        "sha256"
+      ],
+      "title": "ContentRef",
+      "type": "object"
+    },
+    "PolicySnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_materials": {
+          "title": "Allow Materials",
+          "type": "boolean"
+        },
+        "allow_web": {
+          "title": "Allow Web",
+          "type": "boolean"
+        },
+        "mode": {
+          "enum": [
+            "independent",
+            "assisted",
+            "open_book"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "policy_version": {
+          "const": "1.0.0",
+          "default": "1.0.0",
+          "title": "Policy Version",
+          "type": "string"
+        },
+        "solution_release": {
+          "const": "after_submit",
+          "default": "after_submit",
+          "title": "Solution Release",
+          "type": "string"
+        },
+        "tutor_scope": {
+          "enum": [
+            "operation_help_only",
+            "academic"
+          ],
+          "title": "Tutor Scope",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode",
+        "tutor_scope",
+        "allow_web",
+        "allow_materials"
+      ],
+      "title": "PolicySnapshot",
+      "type": "object"
+    },
+    "QuestionPublic": {
+      "additionalProperties": false,
+      "properties": {
+        "choices": {
+          "items": {
+            "$ref": "#/$defs/Choice"
+          },
+          "title": "Choices",
+          "type": "array"
+        },
+        "concept_ids": {
+          "items": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Concept Ids",
+          "type": "array"
+        },
+        "entity": {
+          "const": "question",
+          "default": "question",
+          "title": "Entity",
+          "type": "string"
+        },
+        "exposure_group": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Exposure Group",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "input_instructions": {
+          "title": "Input Instructions",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "single_choice",
+            "text_blank",
+            "numeric",
+            "expression",
+            "calculation"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "max_score": {
+          "default": 1,
+          "exclusiveMinimum": 0,
+          "maximum": 100,
+          "title": "Max Score",
+          "type": "number"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "schema_version": {
+          "const": "3.0.0",
+          "default": "3.0.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "skill": {
+          "enum": [
+            "recall",
+            "explain",
+            "compute",
+            "derive",
+            "transfer"
+          ],
+          "title": "Skill",
+          "type": "string"
+        },
+        "stem_markdown": {
+          "maxLength": 400000,
+          "minLength": 1,
+          "title": "Stem Markdown",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "kind",
+        "stem_markdown",
+        "concept_ids",
+        "skill",
+        "exposure_group",
+        "input_instructions"
+      ],
+      "title": "QuestionPublic",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "assessment_ref": {
+      "$ref": "#/$defs/ContentRef"
+    },
+    "created_at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+      "title": "Created At",
+      "type": "string"
+    },
+    "deadline_at": {
+      "anyOf": [
+        {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Deadline At"
+    },
+    "id": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "policy": {
+      "$ref": "#/$defs/PolicySnapshot"
+    },
+    "questions": {
+      "items": {
+        "$ref": "#/$defs/QuestionPublic"
+      },
+      "title": "Questions",
+      "type": "array"
+    },
+    "revision": {
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "status": {
+      "enum": [
+        "active",
+        "submitted",
+        "grading",
+        "graded",
+        "needs_review",
+        "abandoned"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "submitted_at": {
+      "anyOf": [
+        {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Submitted At"
+    },
+    "workspace_id": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "workspace_id",
+    "assessment_ref",
+    "status",
+    "policy",
+    "questions",
+    "revision",
+    "created_at"
+  ],
+  "title": "AttemptPublic",
+  "type": "object",
+  "x-source-spec": {
+    "source": "PRODUCT_DESIGN.md",
+    "spec_sha256": "a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8",
+    "spec_version": "3.0.3"
+  }
+}

@@ -1,0 +1,129 @@
+{
+  "$comment": "Generated; do not edit.",
+  "$defs": {
+    "ContentRef": {
+      "additionalProperties": false,
+      "properties": {
+        "entity": {
+          "enum": [
+            "course",
+            "lesson",
+            "block",
+            "concept",
+            "route",
+            "question",
+            "practice_set",
+            "assessment",
+            "note"
+          ],
+          "title": "Entity",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entity",
+        "id",
+        "revision",
+        "sha256"
+      ],
+      "title": "ContentRef",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "enum": [
+        "learner",
+        "server",
+        "import"
+      ],
+      "title": "Actor",
+      "type": "string"
+    },
+    "attempt_id": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Attempt Id"
+    },
+    "event_id": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "read_marked",
+        "hint_revealed",
+        "solution_revealed",
+        "practice_submitted",
+        "test_submitted",
+        "grade_finalized",
+        "note_created"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "occurred_at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+      "title": "Occurred At",
+      "type": "string"
+    },
+    "origin": {
+      "enum": [
+        "native",
+        "user_supplied_import"
+      ],
+      "title": "Origin",
+      "type": "string"
+    },
+    "ref": {
+      "$ref": "#/$defs/ContentRef"
+    },
+    "workspace_id": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+      "title": "Workspace Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event_id",
+    "workspace_id",
+    "actor",
+    "origin",
+    "kind",
+    "ref",
+    "occurred_at"
+  ],
+  "title": "LearningEvent",
+  "type": "object",
+  "x-source-spec": {
+    "source": "PRODUCT_DESIGN.md",
+    "spec_sha256": "a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8",
+    "spec_version": "3.0.3"
+  }
+}
