@@ -44,7 +44,7 @@ def prepared_inputs(tmp_path, *, adapter='official_responses'):
 @pytest.mark.parametrize('upper', [False, True])
 def test_complete_count_covers_actual_body_not_only_bare_text(tmp_path, adapter, upper):
     material, config, budget = prepared_inputs(tmp_path, adapter=adapter)
-    prepared = test_preparer(upper_bound=upper).prepare(config, material, budget)
+    prepared = test_preparer(config.base_url, upper_bound=upper).prepare(config, material, budget)
     assert input_bound(prepared.input_token_assurance) == len(prepared.body) + (10 if upper else 0)
     request = strict_json(prepared.body)
     messages = request['input' if adapter == 'official_responses' else 'messages']
@@ -58,7 +58,7 @@ def test_complete_count_covers_actual_body_not_only_bare_text(tmp_path, adapter,
 
 def test_exact_input_limit_rejects_one_token_over_without_truncation(tmp_path):
     material, config, budget = prepared_inputs(tmp_path)
-    preparer = test_preparer()
+    preparer = test_preparer(config.base_url)
     original = preparer.prepare(config, material, budget)
     count = input_bound(original.input_token_assurance)
     assert preparer.prepare(config, material, budget.model_copy(update={'max_input_tokens': count})).body == original.body
@@ -70,7 +70,7 @@ def test_exact_input_limit_rejects_one_token_over_without_truncation(tmp_path):
 @pytest.mark.parametrize('change', ['characters', 'messages', 'blocks', 'output_cap', 'context_cap'])
 def test_each_independent_local_shape_or_capacity_limit_is_enforced(tmp_path, change):
     material, config, budget = prepared_inputs(tmp_path)
-    preparer = test_preparer()
+    preparer = test_preparer(config.base_url)
     if change == 'characters':
         material = material.model_copy(update={'messages': [material.messages[0].model_copy(update={'content': '中' * 12001})]})
     elif change == 'messages':
@@ -93,7 +93,7 @@ def test_pricing_proof_hash_is_scoped_to_provider_revision_and_domain(tmp_path):
     material, config, budget = prepared_inputs(tmp_path)
     pricing = ProviderPricing(input_usd_per_million=1.0, output_usd_per_million=2.0, source_note='Synthetic local rate')
     config = config.model_copy(update={'pricing': pricing})
-    prepared = test_preparer().prepare(config, material, budget)
+    prepared = test_preparer(config.base_url).prepare(config, material, budget)
     assert prepared.cost_estimate.pricing_sha256 == sha256_bytes(canonical_bytes({
         'version': 'provider-pricing-v1', 'provider_id': config.id,
         'provider_revision': config.revision, 'pricing': pricing.model_dump(mode='json')}))

@@ -227,7 +227,7 @@ def configured(tutor, tmp_path, url, *, proof=True):
     database, identity, service, _ = tutor
     secrets = FileSecretStore(tmp_path / 'synthetic-tutor-secrets')
     secrets.initialize()
-    preparer = test_preparer() if proof else RequestPreparer(ProofRegistry())
+    preparer = test_preparer(url) if proof else RequestPreparer(ProofRegistry())
     providers = ProviderService(database, secrets, preparer)
     providers.save_config(identity, 'provider_tutor_fixture', ProviderConfigWrite(expected_revision=0,
         adapter='compatible_chat', base_url=url, model=MODEL, embedding_model=None,

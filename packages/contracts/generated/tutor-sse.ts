@@ -1,5 +1,5 @@
-// Generated from PRODUCT_DESIGN.md v3.0.4; do not edit.
-// spec_sha256: 9cc5adbe72edfc993b5d5e99dcb3f9436e475ab2be4dd58e83f72e3104353b9c
+// Generated from PRODUCT_DESIGN.md v3.0.5; do not edit.
+// spec_sha256: 2bfd471933be478a7cac51363a0482a87c81ec113c3e6cbdec88cfd139d43f37
 import type * as Api from "./api-types";
 import { createApiClient } from "./api-client";
 export type TutorSSEEvent = Api.TutorQueuedEvent | Api.TutorContextReadyEvent | Api.TutorRetrievalCompletedEvent | Api.TutorAnswerDeltaEvent | Api.TutorCitationEvent | Api.TutorApprovalRequiredEvent | Api.TutorUsageEvent | Api.TutorCompletedEvent | Api.TutorFailedEvent | Api.TutorCancelledEvent;
