@@ -55,10 +55,17 @@ test('policy hides previously read summaries but preserves only safe revoke iden
   view.rerender(<ProviderSettings workspace={id} paused={true} port={fixture.port} onState={vi.fn()} />)
   expect(screen.queryByRole('region', { name: '授权 consent_test' })).toBeNull()
   expect(screen.queryByText('synthetic-model-1', { exact: true })).toBeNull()
+  // History can arrive before the independent command journal is ready.
+  await waitFor(() => expect(screen.getByRole('button', { name: '准备撤销 consent_test' }).matches(':disabled')).toBe(false))
   fireEvent.click(screen.getByRole('button', { name: '准备撤销 consent_test' }))
   await waitFor(() => expect(screen.getByRole('button', { name: '确认发送撤销授权' }).matches(':disabled')).toBe(false))
   fireEvent.click(screen.getByRole('button', { name: '确认发送撤销授权' }))
   await waitFor(() => expect(fixture.port.revoke).toHaveBeenCalledOnce())
+  // Wait for acknowledgement and its follow-up effects before auditing reads.
+  await waitFor(() => expect(screen.getByText('原命令已确认 · 修订 2。此回执保留当时事实，不替代当前状态。')).toBeTruthy())
+  await waitFor(() => expect(within(screen.getByRole('region', { name: '配置与授权命令' })).getByText('无秘密候选已安全保留在本机')).toBeTruthy())
+  await waitFor(() => expect(fixture.port.capabilities).toHaveBeenCalledTimes(2))
+  expect(screen.queryByRole('region', { name: '授权 consent_test' })).toBeNull()
   expect(fixture.port.consents).toHaveBeenCalledOnce(); expect(fixture.port.preview).not.toHaveBeenCalled(); expect(fixture.port.grant).not.toHaveBeenCalled()
 })
 test('late history after policy change supplies neither summaries nor new revoke identities', async () => {
