@@ -1,5 +1,6 @@
 import { spawn, execFileSync, type ChildProcess } from 'node:child_process'
 import { mkdtempSync, existsSync, statSync, readFileSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
@@ -143,6 +144,12 @@ export class TutorRuntime {
 
   control(): { test_only: true; base_url: string; model: string; adapter: 'compatible_chat'; answer_markdown: string; received_request_count: number; validated_request_count: number; invalid_request_count: number; request_body_sha256: string[] } {
     return JSON.parse(readFileSync(resolve(this.data, 'tutor-native-control.json'), 'utf8'))
+  }
+
+  async diagnosticControl(): Promise<unknown> {
+    const value = JSON.parse(await readFile(resolve(this.data, 'tutor-native-control.json'), 'utf8'))
+    return { test_only: value.test_only, received_request_count: value.received_request_count,
+      validated_request_count: value.validated_request_count, invalid_request_count: value.invalid_request_count }
   }
 
   databaseIdentity() {
