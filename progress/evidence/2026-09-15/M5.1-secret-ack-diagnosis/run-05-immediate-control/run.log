@@ -1,0 +1,41 @@
+
+Running 1 test using 1 worker
+
+(node:440696) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 ../../../.cache/learning-workbench-acceptance/m51-secret-ack-diagnosis/controlled.spec.ts:112:1 › actual independent assessment policy keeps settings controls available and denies subject consent reads (4.6s)
+
+
+  1) ../../../.cache/learning-workbench-acceptance/m51-secret-ack-diagnosis/controlled.spec.ts:112:1 › actual independent assessment policy keeps settings controls available and denies subject consent reads 
+
+    Error: route.fetch: socket hang up
+    Call log:
+      - → GET http://127.0.0.1:41535/api/v1/providers/provider_native_independent/config
+        - user-agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - accept-language: en-US
+        - content-type: application/json
+        - cookie: learning_session=<REDACTED_RUNTIME_SESSION>
+        - referer: http://127.0.0.1:41535/?assessment=%7B%22assessment_ref%22%3A%7B%22entity%22%3A%22assessment%22%2C%22id%22%3A%22assessment_providerpolicynative%22%2C%22revision%22%3A1%2C%22sha256%22%3A%2261e5d7dadbb6f64acb117b8a88d00c2f79857b733322c0fa867dd0aa9a32885e%22%7D%2C%22course_ref%22%3A%7B%22entity%22%3A%22course%22%2C%22id%22%3A%22course_providerpolicynative%22%2C%22revision%22%3A1%2C%22sha256%22%3A%22cef373d703adb0440f455563f1153dcb44e310f79b1e6e87d6802653a62419ac%22%7D%2C%22attempt_id%22%3A%22attempt_2e1191a65a704ec5921d1871202830f6%22%7D
+        - x-csrf-token: <REDACTED_RUNTIME_CSRF>
+        - sec-ch-ua: "Google Chrome";v="153", "Not_A Brand";v="8", "Chromium";v="153"
+        - sec-ch-ua-mobile: ?0
+        - sec-ch-ua-platform: "Linux"
+
+
+       at observer-v2.ts:13
+
+      11 |   await page.route('**/api/v1/providers/provider_native_independent/config', async route=>{
+      12 |     if(route.request().method()!=='GET'||!wrote){await route.continue();return}
+    > 13 |     const ordinal=++configReads, response=await route.fetch(), body=await response.json()
+         |                                                       ^
+      14 |     mark({kind:'upstream-config',ordinal,status:response.status(),revision:body.revision??null,config_sha256:body.config_sha256??null})
+      15 |     if(ordinal===2 && process.env.SECRET_PARENT_READ_DELAY!=='off') {mark({kind:'hold-parent-read',ordinal});await gate}
+      16 |     try{await route.fulfill({response});mark({kind:'delivered-config',ordinal})}catch{mark({kind:'closed-before-config-delivery',ordinal})}
+        at <EVIDENCE_CACHE>/m51-secret-ack-diagnosis/observer-v2.ts:13:55
+
+    Error Context: ../../../.cache/learning-workbench-acceptance/m51-secret-ack-diagnosis/run-05-immediate-control/artifacts/controlled-actual-independ-b0576-enies-subject-consent-reads/error-context.md
+
+  1 failed
+    ../../../.cache/learning-workbench-acceptance/m51-secret-ack-diagnosis/controlled.spec.ts:112:1 › actual independent assessment policy keeps settings controls available and denies subject consent reads 

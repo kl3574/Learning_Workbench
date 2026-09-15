@@ -1,0 +1,51 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/providers/providerSecret.test.tsx
+
+
+ RUN  v5.0.0 <REPO>/apps/web
+
+ ❯ src/features/providers/providerSecret.test.tsx (14 tests | 1 failed) 143ms
+   × explicit 412 correction uses the later actual parent read without changing the original before choice 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/providers/providerSecret.test.tsx > explicit 412 correction uses the later actual parent read without changing the original before choice
+AssertionError: expected { id: 'provider_test', …(10) } to deeply equal { id: 'provider_test', …(10) }
+
+- Expected
++ Received
+
+  {
+    "adapter": "official_responses",
+    "base_url": "https://example.invalid/v1",
+-   "config_sha256": "0000000000000000000000000000000000000000000000000000000000000003",
++   "config_sha256": "0000000000000000000000000000000000000000000000000000000000000002",
+    "configured": true,
+    "embedding_model": null,
+    "endpoint_policy": "public_https",
+    "id": "provider_test",
+-   "model": "synthetic-model-3",
++   "model": "synthetic-model-2",
+    "pricing": null,
+-   "revision": 3,
++   "revision": 2,
+    "secret_present": false,
+  }
+
+ ❯ src/features/providers/providerSecret.test.tsx:155:45
+    153|   expect(hook.result.current.command).toEqual(original)
+    154|   act(() => hook.result.current.correct())
+    155|   expect(hook.result.current.command?.base).toEqual(later)
+       |                                             ^
+    156|   expect(hook.result.current.command?.key).not.toBe(original?.key)
+    157|   expect(hook.result.current.command?.kind === 'write' && hook.result.…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 13 passed (14)
+   Start at  16:25:55
+   Duration  567ms (environment 39%, tests 29%, transform 19%, import 13%)
+

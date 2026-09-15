@@ -1,0 +1,11 @@
+--- run06-native-exact-byte-reconstruction
++++ final-native
+@@ -175,7 +175,7 @@
+     await dialog.getByRole('button', { name: '保存秘密', exact: true }).click()
+     await expect(dialog.getByText('原秘密命令已确认 · r2 · 当时有引用。当前状态另行回读。', { exact: true })).toBeVisible()
+     await held
+-    await expect(dialog.getByText('另行回读当前配置：r2 · 有秘密引用。', { exact: true })).toBeVisible()
++    await expect(dialog.getByText('最近实际读回的配置：r2 · 有秘密引用。', { exact: true })).toBeVisible()
+     await expect(dialog.getByText(`提供商 ${id}：当前读回 r1，无秘密引用`, { exact: true })).toBeVisible()
+     const readbackResponse = await page.request.get(`/api/v1/providers/${id}/config`); expect(readbackResponse.status()).toBe(200)
+     const readback: ProviderConfigView = await readbackResponse.json(); expect(readback.revision).toBe(2)

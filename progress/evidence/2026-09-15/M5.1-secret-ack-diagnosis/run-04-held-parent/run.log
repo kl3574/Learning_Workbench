@@ -1,0 +1,35 @@
+
+Running 1 test using 1 worker
+
+(node:439708) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 ../../../.cache/learning-workbench-acceptance/m51-secret-ack-diagnosis/controlled.spec.ts:112:1 › actual independent assessment policy keeps settings controls available and denies subject consent reads (9.9s)
+
+
+  1) ../../../.cache/learning-workbench-acceptance/m51-secret-ack-diagnosis/controlled.spec.ts:112:1 › actual independent assessment policy keeps settings controls available and denies subject consent reads 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('dialog', { name: '设置', exact: true }).getByText('原秘密命令已确认 · r3 · 当时无引用。当前状态另行回读。', { exact: true })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('dialog', { name: '设置', exact: true }).getByText('原秘密命令已确认 · r3 · 当时无引用。当前状态另行回读。', { exact: true }) with timeout 5000ms
+      - waiting for getByRole('dialog', { name: '设置', exact: true }).getByText('原秘密命令已确认 · r3 · 当时无引用。当前状态另行回读。', { exact: true })
+
+
+      134 |     const rejected = await page.request.get('/api/v1/consents'); expect(rejected.status()).toBe(409)
+      135 |     await createConfig(page, dialog, id); await dialog.getByLabel('新秘密', { exact: true }).fill('synthetic-independent-control-only'); await dialog.getByRole('button', { name: '保存秘密', exact: true }).click(); await expect(dialog.getByText('原秘密命令已确认 · r2 · 当时有引用。当前状态另行回读。', { exact: true })).toBeVisible()
+    > 136 |     await dialog.getByRole('button', { name: '删除秘密引用', exact: true }).click(); await expect(dialog.getByText('原秘密命令已确认 · r3 · 当时无引用。当前状态另行回读。', { exact: true })).toBeVisible()
+          |                                                                                                                                                                   ^
+      137 |     await expect(dialog.getByRole('region', { name: '冻结外发摘要', exact: true })).toHaveCount(0); expect(errors).toEqual([])
+      138 |     writeFileSync(info.outputPath('actual-provider-independent-controls.json'), JSON.stringify({ scope: 'Real author package import with unreviewed reference bindings, explicit return to learner role, and actual independent unscored attempt; actual config and secret controls remain available while subject consent GET is denied. No injected consent, generation job, score, proof or provider dispatch.', authenticated_role: identity.role, attempt_id: attempt.id, attempt_status: attempt.status, attempt_policy: attempt.policy, grading_status: attempt.grading_status, preflight: attempt.preflight, consent_read_status: rejected.status(), config_revision_after_secret_delete: 3, subject_summary_visible: false, runtime_errors: errors }, null, 2))
+      139 |   } finally { await runtime.close() }
+        at <EVIDENCE_CACHE>/m51-secret-ack-diagnosis/controlled.spec.ts:136:163
+
+    Error Context: ../../../.cache/learning-workbench-acceptance/m51-secret-ack-diagnosis/run-04-held-parent/artifacts/controlled-actual-independ-b0576-enies-subject-consent-reads/error-context.md
+
+  1 failed
+    ../../../.cache/learning-workbench-acceptance/m51-secret-ack-diagnosis/controlled.spec.ts:112:1 › actual independent assessment policy keeps settings controls available and denies subject consent reads 

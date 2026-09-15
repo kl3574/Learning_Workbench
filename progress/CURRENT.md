@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-15T07:41:35Z；规范 SHA-256：`537239aa30315170b2a177b74a5dfca026397fdc0e15ab14a094a8b14f7c51d9`
+更新：2026-09-15T08:42:21Z；规范 SHA-256：`537239aa30315170b2a177b74a5dfca026397fdc0e15ab14a094a8b14f7c51d9`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED
 实施：IN_PROGRESS；当前任务：M5.1；下一任务：M5.2
 
-发布0c测试修复及受审RED/GREEN证据；在新发布head回读push/PR完整CI后转review并进入M5.2。
+发布254a4ff及受审证据到现有PR49，回读新head完整push/PR CI；通过后M5.1转review，按规范顺序采用已复审的M5.2候选并实施本地检索，再M5.3 Tutor/Agent。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -27,7 +27,7 @@
 | M3.4 交卷/评分/复盘闭环，评分版本与 evidence | review | [#23](https://github.com/kl3574/Learning_Workbench/issues/23) | 40bd4298f28443ae4dff3c2eb4de987f60df4924 |
 | M4.1 学习事件、概念/技能证据、路线完成 | review | [#24](https://github.com/kl3574/Learning_Workbench/issues/24) | 5bd81576a2a0e2dbb454165eb3bcde5920493b05 |
 | M4.2 先修/补弱/复习/下一步推荐，接受/拒绝 | review | [#25](https://github.com/kl3574/Learning_Workbench/issues/25) | 8d4b36f57b3ace950f9d3f0e750c4810fce9b0ec |
-| M5.1 ProviderPort/能力协商/服务端冻结授权/受控预算/秘密与脱敏 | in_progress | [#26](https://github.com/kl3574/Learning_Workbench/issues/26) | 0c7fc52a177ef36c55d51be61ca373870516cba4 |
+| M5.1 ProviderPort/能力协商/服务端冻结授权/受控预算/秘密与脱敏 | in_progress | [#26](https://github.com/kl3574/Learning_Workbench/issues/26) | 254a4ffe70dcab9db56663cc37245a33ae1495a5 |
 | M5.2 检索权限、中文 FTS、来源和修订哈希 | todo | [#27](https://github.com/kl3574/Learning_Workbench/issues/27) | 未验证提交 |
 | M5.3 Tutor 状态机、SSE/取消/重连/异步上下文 | todo | [#28](https://github.com/kl3574/Learning_Workbench/issues/28) | 未验证提交 |
 | M5.4 真实模型与搜索评测 | todo | [#29](https://github.com/kl3574/Learning_Workbench/issues/29) | 未验证提交 |
@@ -46,7 +46,7 @@
 - contract: PASS_1DB509F_243_CI_PER_WORKFLOW
 - integration: PASS_1DB509F_527_CI_PER_WORKFLOW
 - browser_native: PASS_82_1DB509F
-- real_provider: NOT_RUN
+- real_provider: DIRECT_VENDOR_SMOKE_PASS：2026-09-15 用户明确授权的独立 DeepSeek 最小测试，GET /models 200、单次 POST /chat/completions 200，deepseek-flash 回答合成算术题正确，实际 usage 14 input / 1 output / 15 total；无重试、无资料外发，凭据只在进程内存。PLATFORM_AGENT_NOT_RUN：生产 source/proof 未注册、Tutor/Run 未实现；不等于 M5.3/M5.4 验收。无秘密本地原回执留在仓库外，不提交。
 - real_codex: NOT_RUN
 - learning_effectiveness: NOT_RUN
 - ci: 8d4b36f精确源码12/12success；PR实际checkout0c350b3与head的GitHub tree相同。两browser分别82PASS12.0m/12.1m。后续纯证据提交CI独立记录。
@@ -56,8 +56,10 @@
 - m4_2: 1db509f固定提交七类本地门禁PASS：1197 Python/288 web/82 native；545源码前后一致。精确源码双CI12/12 success，各82 native。独立最终源码/日志/产物/11图审查PASS。待人工review，未合并；证据提交发布与后续CI另报。
 - m4_1_publication_ci: 98f1701仅证据提交实际12/12success已回读；独立于5bd8157源码验收，不推定M4.2 CI。
 - m4_2_publication_ci: 1db完整本地1197Python/288web/82native和精确12CI PASS已归档。42f历史证据CI为10success2backend Ruff失败（132归档错误，pytest跳过），双browser各82PASS。8d仅修Ruff归档范围，固定本地lint/spec、独立审查及精确12CI全部PASS；两workflow各243contract/440backend/527integration/288web/82native，组间不相加。PR48 ready/open/unmerged。 4ed纯证据后续CI实际12/12success，两browser82PASS11.7m/11.3m；轻回执只抽两browser日志，不重复宣称完整本地重跑。
-- m5_1: LOCAL_FIXED_SOURCE_PASS：769ebeb原本地六门禁1494Python/314web/85native；首次6c9发布CI实际10success2frontend FAIL。0c7fc52仅修测试等待真实refresh启用，600源码before/after/current/Git相同，lint/types/spec/build与314web/52files新验收PASS；原RED、观测及卸载缺陷mutation反例保留，独立审查PASS。0c未重跑本地backend/native，生产与native输入未变，前一锚点证据单列。修复尚未推送，新head远端CI NOT_RUN；真实Provider/Codex/学习效果等未验。
-- m5_1_ci: 首次6c9f997精确push34941258740/PR34941331039终态10success2frontend FAIL；每workflow386contract/537backend/584integration PASS（选择范围有重叠，不相加），双browser85PASS9.5m/11.8m。12实际checkout日志与GitHub tree证明push6c9/PR9512cfde树相同。原件/公开91payload双哈希及路径派生root复核归档。新修复0c7fc52五项本地门禁PASS，尚未推送，新head CI NOT_RUN。
+- m5_1: LOCAL_FIXED_SOURCE_PASS：769原本地1494Python/314web/85native保留；6c首次CI10success2frontend FAIL，0c修refresh测试并五门禁PASS。e480新CI的PRfrontend314PASS，push不同revoke准备测试313PASS1FAIL，原件保留。358bf5d仅加7行等待journal/ACK后完整回读，600输入before/after/Git相同，lint/types/spec/build与314web/52files新PASS；原RED/观测/两次guard mutation反例保留，production原字节恢复。358本地未重跑backend/native（输入未变），新提交未推送、远端CI NOT_RUN；真实Provider/Codex/学习效果未验。
+- m5_1_ci: e480 push34943028958 / PR34943033862 全部自然结束：10success2failure。push frontend313PASS1FAIL（revoke journal准备），PR frontend314PASS；push browser85PASS11.8m，PR browser84PASS1FAIL11.9m（独立测试设置删除秘密后r3 ACK等待）。12个checkout实际commit/tree核齐，90公开payload原件/派生SHA与转换root逐项核齐；CI artifacts API实际0。358单元测试修复五门禁PASS，未推送；原生失败正在独立复现诊断，未宣称修好。
+- m5_1_native_repair: PASS at254a4ff：新命令及明确更正采用同owner/provider较高真实readback，ACK不伪造current；unknown原命令不变。真实受控parent-delay DELETE由r1If-Match/412变r2If-Match/200，peer抢先r3仍412再explicit新key成功；原CI只确知r3ACK等待失败，不追认唯一因果。14secret/35Provider定向unit及5native通过；同source新323web/87fullnative通过。
+- m5_1_254a4ff_local: 六项实际命令PASS：lint、types(mypy125+web)、spec(54core/6embedded/106routes结构检查)、build(709modules,chunk警告保留)、323web/52files3.37s、87native6.9m。600source aggregate b00ae17d2d6e87e01aee18c0082ff1eee32c4be891d343fe4bd1b8df48417452；83完整native产物私有留存，当前阶段尚待新发布head CI。
 
 ## 阻塞与待决项
 

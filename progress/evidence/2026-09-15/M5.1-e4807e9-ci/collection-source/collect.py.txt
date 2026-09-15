@@ -1,0 +1,17 @@
+from pathlib import Path
+from datetime import datetime,UTC
+import sys,subprocess,json,hashlib
+sha=sys.argv[1];p=Path('<HOME>/.cache/learning-workbench-acceptance/m51-ci-'+sha[:7]);p.mkdir(exist_ok=True)
+prior=sorted(p.glob('checks-*.json'))
+prior=[path for path in prior if '.raw.' not in path.name]
+if prior:
+ elapsed=(datetime.now(UTC)-datetime.fromisoformat(json.loads(prior[-1].read_text())['read_at'])).total_seconds()
+ if elapsed<60:raise SystemExit('Polling interval less than 60s; no request made')
+name=f'checks-{len(prior)+1:03d}';endpoint=f'repos/kl3574/Learning_Workbench/commits/{sha}/check-runs?per_page=100&filter=all'
+started=datetime.now(UTC).isoformat();result=subprocess.run(['gh','api',endpoint],capture_output=True);ended=datetime.now(UTC).isoformat();(p/(name+'.raw.json')).write_bytes(result.stdout)
+if result.returncode:
+ (p/(name+'.error.json')).write_text(json.dumps({'started_at':started,'read_at':ended,'exit_code':result.returncode,'stderr':result.stderr.decode()},indent=2)+'\n');print(result.stderr.decode());raise SystemExit(result.returncode)
+parsed=json.loads(result.stdout);checks=[{key:check[key] for key in ['id','name','head_sha','status','conclusion','html_url','started_at','completed_at']} for check in parsed['check_runs']]
+receipt={'endpoint':endpoint,'started_at':started,'read_at':ended,'exit_code':result.returncode,'raw_sha256':hashlib.sha256(result.stdout).hexdigest(),'total_count':parsed['total_count'],'checks':checks}
+(p/(name+'.json')).write_text(json.dumps(receipt,indent=2)+'\n')
+print(json.dumps({'head_sha':sha,'read_at':ended,'file':str(p/(name+'.json')),'checks':[{'id':v['id'],'name':v['name'],'status':v['status'],'conclusion':v['conclusion']} for v in checks]}))
