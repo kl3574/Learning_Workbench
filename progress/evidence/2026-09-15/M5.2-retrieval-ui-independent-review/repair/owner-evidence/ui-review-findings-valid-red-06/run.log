@@ -1,0 +1,114 @@
+
+ RUN  v5.0.0 <workspace>/apps/web
+
+ ❯ src/features/retrieval/retrievalCommands.test.ts (6 tests | 6 failed) 19ms
+   × two real stores retry the same unknown key/body without making it unrecoverable 10ms
+   × simultaneous equal original ACKs remain readable after actual IDB CAS conflict 2ms
+   × legacy exact duplicate candidates can advance to ACK without erasing different candidates 2ms
+   × different key candidate stays intact and blocks automatic recovery 3ms
+   × different body candidate stays intact and blocks automatic recovery 1ms
+   × different ack candidate stays intact and blocks automatic recovery 1ms
+ ❯ src/features/retrieval/RetrievalPanel.test.tsx (5 tests | 1 failed) 196ms
+   × complete parent navigation respects local recovery safety (read failure=true) and current Policy 31ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/retrieval/RetrievalPanel.test.tsx > complete parent navigation respects local recovery safety (read failure=true) and current Policy
+AssertionError: expected "vi.fn()" to be called +0 times, but got 1 times
+ ❯ src/features/retrieval/RetrievalPanel.test.tsx:51:16
+     49|   const button = screen.getByRole('button', { name: '沿此完整教材路径打开' }) as…
+     50|   fireEvent.click(button)
+     51|   expect(open).toHaveBeenCalledTimes(readFails ? 0 : 1)
+       |                ^
+     52|   expect(button.disabled).toBe(readFails)
+     53|   if (!readFails) expect(open).toHaveBeenCalledWith({ course, lesson, …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  src/features/retrieval/retrievalCommands.test.ts > two real stores retry the same unknown key/body without making it unrecoverable
+AssertionError: expected [ 'fulfilled', 'rejected' ] to deeply equal [ 'fulfilled', 'fulfilled' ]
+
+- Expected
++ Received
+
+  [
+    "fulfilled",
+-   "fulfilled",
++   "rejected",
+  ]
+
+ ❯ src/features/retrieval/retrievalCommands.test.ts:31:51
+     29|   gateActualReads(a, b)
+     30|   const outcomes = await Promise.allSettled([persistCommand(value, a),…
+     31|   expect(outcomes.map(outcome => outcome.status)).toEqual(['fulfilled'…
+       |                                                   ^
+     32|   expect(await readCommands(value.workspace, b)).toEqual([value])
+     33|   expect((await a.load(value.workspace))[value.command_id].revision).t…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  src/features/retrieval/retrievalCommands.test.ts > simultaneous equal original ACKs remain readable after actual IDB CAS conflict
+AssertionError: expected [ 'fulfilled', 'rejected' ] to deeply equal [ 'fulfilled', 'fulfilled' ]
+
+- Expected
++ Received
+
+  [
+    "fulfilled",
+-   "fulfilled",
++   "rejected",
+  ]
+
+ ❯ src/features/retrieval/retrievalCommands.test.ts:40:51
+     38|   gateActualReads(a, b)
+     39|   const outcomes = await Promise.allSettled([persistCommand(acknowledg…
+     40|   expect(outcomes.map(outcome => outcome.status)).toEqual(['fulfilled'…
+       |                                                   ^
+     41|   expect((await a.load(value.workspace))[value.command_id].conflicts).…
+     42|   expect(await readCommands(value.workspace, b)).toEqual([acknowledged…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  src/features/retrieval/retrievalCommands.test.ts > legacy exact duplicate candidates can advance to ACK without erasing different candidates
+Error: 本机索引命令存在不一致候选，请保留原记录；未自动覆盖。
+ ❯ src/features/retrieval/retrievalCommands.ts:34:40
+     32|   const records = await store.load(workspace)
+     33|   return Object.entries(records).map(([key, record]) => {
+     34|     if (record.conflicts.length) throw new Error('本机索引命令存在不一致候选，请保留原记录…
+       |                                        ^
+     35|     const value = decodeCommand(record.text, workspace)
+     36|     if (value.command_id !== key) throw new Error('命令存储键与冻结身份不符。')
+ ❯ readCommands src/features/retrieval/retrievalCommands.ts:33:34
+ ❯ src/features/retrieval/retrievalCommands.test.ts:49:10
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  src/features/retrieval/retrievalCommands.test.ts > different key candidate stays intact and blocks automatic recovery
+ FAIL  src/features/retrieval/retrievalCommands.test.ts > different body candidate stays intact and blocks automatic recovery
+ FAIL  src/features/retrieval/retrievalCommands.test.ts > different ack candidate stays intact and blocks automatic recovery
+AssertionError: promise resolved "undefined" instead of rejecting
+
+- Expected:
+Error {
+  "message": "rejected promise",
+}
+
++ Received:
+undefined
+
+ ❯ src/features/retrieval/retrievalCommands.test.ts:63:41
+     61|   const original = await a.load(value.workspace)
+     62|   await expect(readCommands(value.workspace, b)).rejects.toThrow()
+     63|   await expect(persistCommand(value, b)).rejects.toThrow()
+       |                                         ^
+     64|   expect(await a.load(value.workspace)).toEqual(original)
+     65| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  7 failed | 4 passed (11)
+   Start at  18:00:13
+   Duration  650ms (environment 42%, tests 23%, transform 21%, import 12%)
+

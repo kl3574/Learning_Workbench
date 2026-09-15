@@ -1,0 +1,99 @@
+import { expect, test, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
+import { execFileSync } from 'node:child_process'
+import { writeFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { RestartRuntime } from './restartRuntime'
+import type { ContentRef, RetrievalQueryView } from '../../packages/contracts/generated/api-types'
+const root = resolve(import.meta.dirname, '../..')
+
+/** Controlled synthetic publication/next-revision injection, not an author workflow or expert review. */
+function material(runtime: RestartRuntime, advance = false): { course: ContentRef; lesson: ContentRef; block: ContentRef } {
+  const script = `import sys,json,hashlib
+from pathlib import Path
+from packages.contracts import domain_models as dm
+from services.api.app.infrastructure.config import Settings
+from services.api.app.infrastructure.database import Database
+from services.api.app.application.content import ContentService
+from services.api.app.infrastructure.content_repository import reference
+input=json.load(sys.stdin)
+db=Database(Settings(data_dir=Path(input['data'])))
+ws=db.initialize()
+def block(id,text,rev=1):
+ body=text.encode('utf-8')
+ value=dm.ContentBlock(id=id,revision=rev,kind='text',title='合成未审 '+id,body_path='content/'+id+'.md',body_sha256=hashlib.sha256(body).hexdigest())
+ return value,body
+normal,normalbody=block('retrieval_native_original','原始 SVD 概率教材；保持完整数学条件。\\n')
+large=[block('retrieval_native_large_'+str(i),'budget '+'x '*199990) for i in range(6)]
+empty,emptybody=block('retrieval_native_empty','... ，；。\\n')
+lesson=dm.Lesson(id='retrieval_native_lesson',revision=1,title='检索合成小节',objectives=[],block_refs=[reference(normal)])
+extra=dm.Lesson(id='retrieval_native_extra',revision=1,title='资源与空词合成小节',objectives=[],block_refs=[reference(value) for value,body in large]+[reference(empty)])
+course=dm.Course(id='retrieval_native_course',revision=1,title='检索未审合成教材',audience='原生工程测试，非专家审核',lesson_refs=[reference(lesson),reference(extra)])
+if input['advance']:
+ newer,body=block(normal.id,'新的修订；旧范围不得偷偷换成此正文。\\n',2)
+ ContentService(db).publish(ws,[newer],{newer.body_path:body})
+else:
+ ContentService(db).publish(ws,[normal,*[value for value,body in large],empty,lesson,extra,course],{normal.body_path:normalbody,**{value.body_path:body for value,body in large},empty.body_path:emptybody})
+print(json.dumps({'course':reference(course).model_dump(mode='json'),'lesson':reference(lesson).model_dump(mode='json'),'block':reference(normal).model_dump(mode='json')}))`
+  return JSON.parse(execFileSync(resolve(root, '.venv/bin/python'), ['-B', '-c', script], {
+    cwd: root, input: JSON.stringify({ data: runtime.data, advance }), encoding: 'utf8', maxBuffer: 1024 * 1024,
+  }))
+}
+async function openRetrieval(page: Page) {
+  await page.getByRole('button', { name: /搜索与命令/ }).click()
+  await page.getByRole('dialog', { name: '命令面板', exact: true }).getByRole('button', { name: '检索材料', exact: false }).click()
+  return page.getByRole('dialog', { name: '检索材料', exact: true })
+}
+
+test('real explicit cold scope, original rebuild Job, complete hits/no match/resource omission and unchanged historical scope', async ({ playwright }, info) => {
+  test.setTimeout(120_000)
+  const runtime = await RestartRuntime.start(), errors: string[] = [], responses: RetrievalQueryView[] = []
+  try {
+    const refs = material(runtime)
+    const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]
+    page.on('pageerror', error => errors.push(error.message))
+    await runtime.authenticateOnly(page)
+    await page.goto(`${runtime.origin}/?reader=${encodeURIComponent(JSON.stringify({ course: refs.course, lesson: refs.lesson, block: refs.block }))}`)
+    await expect(page.getByRole('heading', { name: '合成未审 retrieval_native_original', exact: true })).toBeVisible()
+    const dialog = await openRetrieval(page)
+    await expect(dialog.getByRole('radio', { name: /只查当前内容块/ })).toBeChecked()
+    await expect(dialog.getByRole('region', { name: '所选范围索引状态' })).toContainText('尚无索引')
+    const query = async (text: string) => {
+      await expect(dialog.getByLabel('检索词', { exact: true })).toBeEnabled()
+      await dialog.getByLabel('检索词', { exact: true }).fill(text)
+      const response = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith('/api/v1/retrieval/query'))
+      await dialog.getByRole('button', { name: '查询所选材料', exact: true }).click()
+      const value = await response; expect(value.status()).toBe(200); const body: RetrievalQueryView = await value.json(); responses.push(body); return body
+    }
+    const cold = await query('SVD'); expect(cold.index_state).toBe('missing'); expect(cold.result_state).toBe('not_ready'); expect(cold.scope_refs).toEqual([refs.block])
+    const rebuild = async () => {
+      const response = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith('/api/v1/index/rebuild'))
+      await dialog.getByRole('button', { name: '明确按已读描述重建索引', exact: true }).click()
+      const accepted = await response; expect(accepted.status()).toBe(202); expect(await accepted.json()).toMatchObject({ status: 'queued' })
+      await expect(dialog.getByRole('region', { name: '所选范围索引状态' })).toContainText('索引已就绪', { timeout: 30_000 })
+      await expect(dialog.getByRole('region', { name: '实际索引任务' })).toContainText('任务当前读回：已完成')
+    }
+    await rebuild()
+    const found = await query('SVD'); expect(found.result_state).toBe('matched'); expect(found.hits).toHaveLength(1); expect(found.hits[0].ref).toEqual(refs.block)
+    await expect(dialog.getByLabel('完整原文：合成未审 retrieval_native_original', { exact: true })).toHaveText(found.hits[0].text)
+    await dialog.getByRole('button', { name: '回读此精确块与来源', exact: true }).click()
+    await expect(dialog.getByRole('region', { name: '独立精确块只读查看' })).toContainText('原始 SVD 概率教材')
+    expect((await query('absentwordxyz')).result_state).toBe('no_match')
+    await dialog.getByRole('radio', { name: /明确查找当前完整教材/ }).check()
+    await expect(dialog.getByRole('region', { name: '所选范围索引状态' })).toContainText('尚无索引')
+    await rebuild()
+    const omitted = await query('budget'); expect(omitted.result_state).toBe('matched'); expect(omitted.hits).toHaveLength(5); expect(omitted.matched_count).toBe(6); expect(omitted.omissions.text_byte_budget).toBe(1); expect(omitted.scope_refs).toEqual([refs.course])
+    await expect(dialog.getByText('完整块遗漏：数量限制 0、正文预算 1、响应预算 0。', { exact: true })).toBeVisible()
+    material(runtime, true)
+    await dialog.getByRole('button', { name: '刷新范围与任务', exact: true }).click()
+    await expect(dialog.getByRole('region', { name: '所选范围索引状态' })).toContainText('原索引需要重新核验')
+    const stale = await query('SVD'); expect(stale.index_state).toBe('stale'); expect(stale.hits).toEqual([])
+    await rebuild()
+    const historical = await query('SVD'); expect(historical.result_state).toBe('matched'); expect(historical.scope_refs).toEqual([refs.course]); expect(historical.hits[0].ref).toEqual(refs.block); expect(historical.hits[0].current_ref.revision).toBe(2); expect(historical.hits[0].text).toBe(found.hits[0].text)
+    await expect(dialog.getByText('HISTORICAL_REVISION', { exact: false })).toBeVisible()
+    await page.screenshot({ path: info.outputPath('retrieval-historical-1440.png') })
+    await page.setViewportSize({ width: 390, height: 844 }); expect(await dialog.evaluate(node => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1)
+    await page.screenshot({ path: info.outputPath('retrieval-historical-390.png') })
+    expect(errors).toEqual([])
+    writeFileSync(info.outputPath('actual-retrieval-readback.json'), JSON.stringify({ scope: 'Native browser and actual local HTTP/SQLite/worker over explicitly injected unreviewed synthetic public Content; current revision advance via ContentService fixture is not a formal author publication or expert approval workflow. No Provider calls.', references: refs, query_responses: responses, runtime_errors: errors }, null, 2))
+  } finally { await runtime.close() }
+})

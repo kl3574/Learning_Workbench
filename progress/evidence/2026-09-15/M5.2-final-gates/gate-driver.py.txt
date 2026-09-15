@@ -1,0 +1,23 @@
+from pathlib import Path
+import subprocess,hashlib,json,sys,datetime,shutil
+ROOT=Path('<workspace>')
+OUT=Path('<acceptance-cache>/m52-final-gates')
+def sha(b): return hashlib.sha256(b).hexdigest()
+def inventory():
+    names=subprocess.check_output(['git','ls-files','-z'],cwd=ROOT).decode().split('\0')
+    return {n:sha((ROOT/n).read_bytes()) for n in sorted(names) if n and not n.startswith('progress/')}
+def aggregate(v): return sha(''.join(n+'\0'+s+'\n' for n,s in sorted(v.items())).encode())
+mode=sys.argv[1]
+commands={'web-lint':['bash','scripts/node.sh','npm','--prefix','apps/web','run','lint'], 'web-types':['bash','scripts/node.sh','npm','--prefix','apps/web','run','typecheck'], 'web-unit':['bash','scripts/node.sh','npm','--prefix','apps/web','run','test'], 'build':['make','build'], 'native':['make','test-e2e']}
+before=inventory(); started=datetime.datetime.now(datetime.UTC).isoformat();head=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
+for name,digest in before.items(): assert sha(subprocess.check_output(['git','show',head+':'+name],cwd=ROOT))==digest,name
+untracked=subprocess.check_output(['git','ls-files','--others','--exclude-standard','-z'],cwd=ROOT).decode().split('\0');assert not [n for n in untracked if n and not n.startswith('progress/')], 'uncommitted source files remain'
+folder=OUT/mode;folder.mkdir(exist_ok=False);(folder/'source-before.json').write_text(json.dumps(before,sort_keys=True,indent=2)+'\n')
+if mode=='native':
+    previous=ROOT/'.local_data/e2e-results'
+    if previous.exists():shutil.copytree(previous,OUT/'preexisting-e2e-results')
+r=subprocess.run(['.venv/bin/python','scripts/record_check.py','--id','M5.2-final-'+mode+'-01','--category','fixed-local-frontend-gate','--',*commands[mode]],cwd=ROOT)
+after=inventory()
+if mode=='native' and (ROOT/'.local_data/e2e-results').exists():shutil.copytree(ROOT/'.local_data/e2e-results',folder/'artifacts')
+receipt={'format':'fixed-local-source-gate-v1','started_at':started,'finished_at':datetime.datetime.now(datetime.UTC).isoformat(),'command':commands[mode],'implementation_commit':head,'exit_code':r.returncode,'before':before,'after':after,'input_count':len(before),'before_aggregate_sha256':aggregate(before),'after_aggregate_sha256':aggregate(after),'unchanged':before==after,'changed_inputs':sorted(n for n in set(before)|set(after) if before.get(n)!=after.get(n)),'scope':'All tracked repository inputs outside progress; installed dependency binaries are not inventoried. Only actual executed command; no real Provider/Codex/learning-effectiveness conclusion.'}
+(folder/'receipt.json').write_text(json.dumps(receipt,ensure_ascii=False,sort_keys=True,indent=2)+'\n');print(json.dumps({k:v for k,v in receipt.items() if k not in ('before','after')}));sys.exit(r.returncode)

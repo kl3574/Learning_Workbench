@@ -1,0 +1,78 @@
+
+Running 1 test using 1 worker
+
+(node:510486) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Traceback (most recent call last):
+  File "<string>", line 25, in <module>
+  File "<private-home>/Desktop/learning/Learning_Workbench/services/api/app/application/content.py", line 360, in publish
+    return self.publish_in_transaction(repository.connection, workspace_id, objects, bodies)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<private-home>/Desktop/learning/Learning_Workbench/services/api/app/application/content.py", line 388, in publish_in_transaction
+    staged = self._stage(repository, values, bodies, budgets)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<private-home>/Desktop/learning/Learning_Workbench/services/api/app/application/content.py", line 225, in _stage
+    self._body_bytes(value, body, budgets)
+  File "<private-home>/Desktop/learning/Learning_Workbench/services/api/app/application/content.py", line 200, in _body_bytes
+    raise invalid()
+services.api.app.application.errors.ApiError: (422, 'SCHEMA_INVALID', '内容结构、引用或查询参数无效。')
+  ✘  1 tests/e2e/retrieval.spec.ts:47:1 › real explicit cold scope, original rebuild Job, complete hits/no match/resource omission and unchanged historical scope (927ms)
+
+
+  1) tests/e2e/retrieval.spec.ts:47:1 › real explicit cold scope, original rebuild Job, complete hits/no match/resource omission and unchanged historical scope 
+
+    Error: Command failed: <private-home>/Desktop/learning/Learning_Workbench/.venv/bin/python -B -c import sys,json,hashlib
+    from pathlib import Path
+    from packages.contracts import domain_models as dm
+    from services.api.app.infrastructure.config import Settings
+    from services.api.app.infrastructure.database import Database
+    from services.api.app.application.content import ContentService
+    from services.api.app.infrastructure.content_repository import reference
+    input=json.load(sys.stdin)
+    db=Database(Settings(data_dir=Path(input['data'])))
+    ws=db.initialize()
+    def block(id,text,rev=1):
+     body=text.encode('utf-8')
+     value=dm.ContentBlock(id=id,revision=rev,kind='text',title='合成未审 '+id,body_path='content/'+id+'.md',body_sha256=hashlib.sha256(body).hexdigest())
+     return value,body
+    normal,normalbody=block('retrieval_native_original','原始 SVD 概率教材；保持完整数学条件。\n')
+    large,largebody=block('retrieval_native_large','budget '*350000)
+    empty,emptybody=block('retrieval_native_empty','... ，；。\n')
+    lesson=dm.Lesson(id='retrieval_native_lesson',revision=1,title='检索合成小节',objectives=[],block_refs=[reference(normal)])
+    extra=dm.Lesson(id='retrieval_native_extra',revision=1,title='资源与空词合成小节',objectives=[],block_refs=[reference(large),reference(empty)])
+    course=dm.Course(id='retrieval_native_course',revision=1,title='检索未审合成教材',audience='原生工程测试，非专家审核',lesson_refs=[reference(lesson),reference(extra)])
+    if input['advance']:
+     newer,body=block(normal.id,'新的修订；旧范围不得偷偷换成此正文。\n',2)
+     ContentService(db).publish(ws,[newer],{newer.body_path:body})
+    else:
+     ContentService(db).publish(ws,[normal,large,empty,lesson,extra,course],{normal.body_path:normalbody,large.body_path:largebody,empty.body_path:emptybody})
+    print(json.dumps({'course':reference(course).model_dump(mode='json'),'lesson':reference(lesson).model_dump(mode='json'),'block':reference(normal).model_dump(mode='json')}))
+    Traceback (most recent call last):
+      File "<string>", line 25, in <module>
+      File "<private-home>/Desktop/learning/Learning_Workbench/services/api/app/application/content.py", line 360, in publish
+        return self.publish_in_transaction(repository.connection, workspace_id, objects, bodies)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "<private-home>/Desktop/learning/Learning_Workbench/services/api/app/application/content.py", line 388, in publish_in_transaction
+        staged = self._stage(repository, values, bodies, budgets)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "<private-home>/Desktop/learning/Learning_Workbench/services/api/app/application/content.py", line 225, in _stage
+        self._body_bytes(value, body, budgets)
+      File "<private-home>/Desktop/learning/Learning_Workbench/services/api/app/application/content.py", line 200, in _body_bytes
+        raise invalid()
+    services.api.app.application.errors.ApiError: (422, 'SCHEMA_INVALID', '内容结构、引用或查询参数无效。')
+
+
+      35 |  ContentService(db).publish(ws,[normal,large,empty,lesson,extra,course],{normal.body_path:normalbody,large.body_path:largebody,empty.body_path:emptybody})
+      36 | print(json.dumps({'course':reference(course).model_dump(mode='json'),'lesson':reference(lesson).model_dump(mode='json'),'block':reference(normal).model_dump(mode='json')}))`
+    > 37 |   return JSON.parse(execFileSync(resolve(root, '.venv/bin/python'), ['-B', '-c', script], {
+         |                     ^
+      38 |     cwd: root, input: JSON.stringify({ data: runtime.data, advance }), encoding: 'utf8', maxBuffer: 1024 * 1024,
+      39 |   }))
+      40 | }
+        at material (<private-home>/Desktop/learning/Learning_Workbench/tests/e2e/retrieval.spec.ts:37:21)
+        at <private-home>/Desktop/learning/Learning_Workbench/tests/e2e/retrieval.spec.ts:49:56
+
+    Error Context: ../../../.cache/learning-workbench-acceptance/m52-retrieval-contracts/native-run-01/artifacts/retrieval-real-explicit-co-06e4c--unchanged-historical-scope/error-context.md
+
+  1 failed
+    tests/e2e/retrieval.spec.ts:47:1 › real explicit cold scope, original rebuild Job, complete hits/no match/resource omission and unchanged historical scope 

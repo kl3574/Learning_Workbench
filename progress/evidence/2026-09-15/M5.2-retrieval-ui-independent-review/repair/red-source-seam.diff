@@ -1,0 +1,31 @@
+--- initial-review-snapshot
++++ counterfactual-red06-store-seam
+@@ -28,8 +28,8 @@
+   } else throw new Error('未知本机索引命令类型。')
+   return value
+ }
+-export async function readCommands(workspace: string): Promise<RetrievalCommand[]> {
+-  const records = await retrievalCommandStore.load(workspace)
++export async function readCommands(workspace: string, store = retrievalCommandStore): Promise<RetrievalCommand[]> {
++  const records = await store.load(workspace)
+   return Object.entries(records).map(([key, record]) => {
+     if (record.conflicts.length) throw new Error('本机索引命令存在不一致候选，请保留原记录；未自动覆盖。')
+     const value = decodeCommand(record.text, workspace)
+@@ -37,14 +37,14 @@
+     return value
+   })
+ }
+-export async function persistCommand(value: RetrievalCommand): Promise<void> {
++export async function persistCommand(value: RetrievalCommand, store = retrievalCommandStore): Promise<void> {
+   const text = JSON.stringify(decodeCommand(JSON.stringify(value), value.workspace))
+-  const previous = (await retrievalCommandStore.load(value.workspace))[value.command_id]
++  const previous = (await store.load(value.workspace))[value.command_id]
+   if (previous) {
+     const old = decodeCommand(previous.text, value.workspace)
+     if (canonical({ ...old, ack: null, rejected: false }) !== canonical({ ...value, ack: null, rejected: false })
+         || old.ack !== null && canonical(old.ack) !== canonical(value.ack)) throw new Error('原命令已存在不同事实，未覆盖。')
+   }
+-  const result = await retrievalCommandStore.save(value.workspace, value.command_id, text, previous?.revision ?? 0)
++  const result = await store.save(value.workspace, value.command_id, text, previous?.revision ?? 0)
+   if (result.kind !== 'saved' || result.record.text !== text) throw new Error('本机索引命令未安全保存；未开始新的发送。')
+ }

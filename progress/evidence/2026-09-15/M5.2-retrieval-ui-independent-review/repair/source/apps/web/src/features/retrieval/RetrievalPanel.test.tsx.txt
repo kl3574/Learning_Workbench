@@ -1,0 +1,58 @@
+import 'fake-indexeddb/auto'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, expect, test, vi } from 'vitest'
+import type { ContentRef, RetrievalHitView, RetrievalIndexScopeStatus, RetrievalQueryView } from '../../../../../packages/contracts/generated/api-types'
+import { RetrievalPanel } from './RetrievalPanel'
+import { checkedQuery, digest, scopeHash } from './retrievalModel'
+import type { RetrievalPort } from './retrievalClient'
+import { retrievalCommandStore } from './retrievalCommands'
+import { DraftStorageError } from '../../workbench/DraftStore'
+afterEach(() => { cleanup(); vi.restoreAllMocks() })
+const ref: ContentRef = { entity: 'block', id: 'block_panel', revision: 1, sha256: 'a'.repeat(64) }
+test.each([
+  ['no_match', '所选材料没有匹配'], ['indexed_empty', '索引内没有可检索词'],
+  ['resource_omitted', '存在匹配，但完整材料超出返回预算'],
+] as const)('visible %s preserves its explicit result distinction without a rebuild', async (result, label) => {
+  const workspace = `workspace_${crypto.randomUUID()}`
+  const status: RetrievalIndexScopeStatus = { kind: 'scope', scope_refs: [ref], scope_sha256: scopeHash(workspace, [ref]), corpus_sha256: 'b'.repeat(64), state: 'ready', index_version: 'index_panel', indexed_corpus_sha256: 'b'.repeat(64), last_built_at: '2026-09-15T00:00:00Z', latest_job: null }
+  const view: RetrievalQueryView = { scope_refs: [ref], scope_sha256: status.scope_sha256, corpus_sha256: status.corpus_sha256, index_state: 'ready', indexed_corpus_sha256: status.corpus_sha256, index_version: status.index_version, result_state: result, matched_count: result === 'resource_omitted' ? 1 : 0, hits: [], omissions: { result_limit: 0, text_byte_budget: 0, json_byte_budget: result === 'resource_omitted' ? 1 : 0 }, warnings: result === 'resource_omitted' ? [{ code: 'RETRIEVAL_RESOURCE_OMITTED', message: '整块遗漏', locator: null, severity: 'warning' }] : [] }
+  const unused = vi.fn(async (): Promise<never> => { throw new Error('unexpected command') })
+  const port: RetrievalPort = { status: vi.fn(async () => status), query: vi.fn(async () => view), rebuild: unused, job: unused, cancel: unused, block: unused, overview: unused }
+  render(<RetrievalPanel workspace={workspace} paused={false} choices={[{ label: '当前块', ref }]} initial={ref} open={vi.fn()} onState={vi.fn()} port={port} />)
+  await waitFor(() => expect(screen.getByText('索引已就绪')).toBeTruthy())
+  fireEvent.change(screen.getByLabelText('检索词', { exact: true }), { target: { value: '概率' } })
+  fireEvent.click(screen.getByRole('button', { name: '查询所选材料' }))
+  await waitFor(() => expect(screen.getByRole('heading', { name: label })).toBeTruthy())
+  expect(unused).not.toHaveBeenCalled(); expect(port.query).toHaveBeenCalledWith(workspace, { query: '概率', scope_refs: [ref], limit: 20 })
+})
+test.each([false, true])('complete parent navigation respects local recovery safety (read failure=%s) and current Policy', async readFails => {
+  const workspace = `workspace_${crypto.randomUUID()}`
+  const course: ContentRef = { entity: 'course', id: 'course_panel', revision: 1, sha256: 'c'.repeat(64) }
+  const lesson: ContentRef = { entity: 'lesson', id: 'lesson_panel', revision: 1, sha256: 'd'.repeat(64) }
+  const text = '完整条件。'
+  const hit: RetrievalHitView = { ref, current_ref: ref, title: '安全导航材料', text, score: 1, body_sha256: digest(text), locator: `block:${ref.id}@r1;body:${digest(text)};cp:0-${Array.from(text).length}`, location: { version: 'whole-block-v1', unit: 'unicode_codepoint', start_cp: 0, end_cp: Array.from(text).length }, lifecycle: 'active', material_review: 'unreviewed', provenance: { state: 'unresolved', original: null, citations: [], unresolved_citation_ids: [], warnings: [{ code: 'PROVENANCE_UNRESOLVED', message: '无冻结来源', locator: null, severity: 'warning' }] }, parent_paths: [{ root_ref: course, block_ref: ref, course_ref: course, course_title: '真实教材父链', lesson_ref: lesson, lesson_title: '真实小节父链' }], warnings: [{ code: 'MATERIAL_UNREVIEWED', message: '未审材料', locator: null, severity: 'warning' }] }
+  const status: RetrievalIndexScopeStatus = { kind: 'scope', scope_refs: [course], scope_sha256: scopeHash(workspace, [course]), corpus_sha256: 'b'.repeat(64), state: 'ready', index_version: 'index_panel', indexed_corpus_sha256: 'b'.repeat(64), last_built_at: '2026-09-15T00:00:00Z', latest_job: null }
+  const view: RetrievalQueryView = { scope_refs: [course], scope_sha256: status.scope_sha256, corpus_sha256: status.corpus_sha256, index_state: 'ready', indexed_corpus_sha256: status.corpus_sha256, index_version: status.index_version, result_state: 'matched', matched_count: 1, hits: [hit], omissions: { result_limit: 0, text_byte_budget: 0, json_byte_budget: 0 }, warnings: [] }
+  const unused = vi.fn(async (): Promise<never> => { throw new Error('unexpected command') })
+  const port: RetrievalPort = { status: vi.fn(async () => status), query: vi.fn(async () => view), rebuild: unused, job: unused, cancel: unused, block: unused, overview: unused }
+  if (readFails) vi.spyOn(retrievalCommandStore, 'load').mockRejectedValueOnce(new DraftStorageError('READ_FAILED'))
+  checkedQuery(view, workspace, [course])
+  const open = vi.fn(), onState = vi.fn()
+  const props = { workspace, choices: [{ label: '当前教材', ref: course }], initial: course, open, onState, port }
+  const rendered = render(<RetrievalPanel {...props} paused={false} />)
+  await waitFor(() => expect(screen.getByText('索引已就绪')).toBeTruthy())
+  await waitFor(() => expect(onState).toHaveBeenLastCalledWith({ safe: !readFails }))
+  fireEvent.change(screen.getByLabelText('检索词', { exact: true }), { target: { value: '条件' } })
+  fireEvent.click(screen.getByRole('button', { name: '查询所选材料' }))
+  await waitFor(() => expect(screen.getByRole('heading', { name: '找到相关材料' })).toBeTruthy())
+  fireEvent.click(screen.getByText('精确来源与父链'))
+  const button = screen.getByRole('button', { name: '沿此完整教材路径打开' }) as HTMLButtonElement
+  fireEvent.click(button)
+  expect(open).toHaveBeenCalledTimes(readFails ? 0 : 1)
+  expect(button.disabled).toBe(readFails)
+  if (!readFails) expect(open).toHaveBeenCalledWith({ course, lesson, block: ref })
+  rendered.rerender(<RetrievalPanel {...props} paused />)
+  expect(screen.queryByRole('button', { name: '沿此完整教材路径打开' })).toBeNull()
+  expect(screen.queryByRole('heading', { name: '找到相关材料' })).toBeNull()
+  expect(unused).not.toHaveBeenCalled()
+})

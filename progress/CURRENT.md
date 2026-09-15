@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-15T10:06:09Z；规范 SHA-256：`a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8`
+更新：2026-09-15T10:31:03Z；规范 SHA-256：`a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8`
 
-仓库发布：VERIFIED；Issues 同步：PENDING_LOCAL_UPDATES
-实施：IN_PROGRESS；当前任务：M5.2；下一任务：M5.3
+仓库发布：VERIFIED；Issues 同步：VERIFIED
+实施：IN_PROGRESS；当前任务：None；下一任务：M5.3
 
-冻结并提交检索UI及测试源码；执行完整frontend lint/types/unit/build/native门禁，归档结果后公开M5.2依赖PR并回读精确CI。
+M5.2本地验收并已建PR50；归档最终独立回读并同步，随后依§18.4在3dd75f0已验证源码继续M5.3 Tutor/Run/SSE，真实模型能力仍另验。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -28,7 +28,7 @@
 | M4.1 学习事件、概念/技能证据、路线完成 | review | [#24](https://github.com/kl3574/Learning_Workbench/issues/24) | 5bd81576a2a0e2dbb454165eb3bcde5920493b05 |
 | M4.2 先修/补弱/复习/下一步推荐，接受/拒绝 | review | [#25](https://github.com/kl3574/Learning_Workbench/issues/25) | 8d4b36f57b3ace950f9d3f0e750c4810fce9b0ec |
 | M5.1 ProviderPort/能力协商/服务端冻结授权/受控预算/秘密与脱敏 | review | [#26](https://github.com/kl3574/Learning_Workbench/issues/26) | 254a4ffe70dcab9db56663cc37245a33ae1495a5 |
-| M5.2 检索权限、中文 FTS、来源和修订哈希 | in_progress | [#27](https://github.com/kl3574/Learning_Workbench/issues/27) | 未验证提交 |
+| M5.2 检索权限、中文 FTS、来源和修订哈希 | review | [#27](https://github.com/kl3574/Learning_Workbench/issues/27) | 3dd75f01966bb5dcf0b9ea0855e6b82ce335d814 |
 | M5.3 Tutor 状态机、SSE/取消/重连/异步上下文 | todo | [#28](https://github.com/kl3574/Learning_Workbench/issues/28) | 未验证提交 |
 | M5.4 真实模型与搜索评测 | todo | [#29](https://github.com/kl3574/Learning_Workbench/issues/29) | 未验证提交 |
 | M6.1 教材/例题/题目生成 schema + 数值验证 | todo | [#30](https://github.com/kl3574/Learning_Workbench/issues/30) | 未验证提交 |
@@ -61,11 +61,12 @@
 - m5_1_native_repair: PASS at254a4ff：新命令及明确更正采用同owner/provider较高真实readback，ACK不伪造current；unknown原命令不变。真实受控parent-delay DELETE由r1If-Match/412变r2If-Match/200，peer抢先r3仍412再explicit新key成功；原CI只确知r3ACK等待失败，不追认唯一因果。14secret/35Provider定向unit及5native通过；同source新323web/87fullnative通过。
 - m5_1_254a4ff_local: 六项实际命令PASS：lint、types(mypy125+web)、spec(54core/6embedded/106routes结构检查)、build(709modules,chunk警告保留)、323web/52files3.37s、87native6.9m。600source aggregate b00ae17d2d6e87e01aee18c0082ff1eee32c4be891d343fe4bd1b8df48417452；83完整native产物私有留存，当前阶段尚待新发布head CI。
 - m5_1_ci_current: PASS：发布f0b4ce2精确双workflow12/12success；每组323web/52files、87native（12.0m/11.9m）。6push checkout f0b4ce2、6PR checkout95ff622，全部Git tree c8d7d132相同；600source与254a4ff等同。85payload原件/公开件SHA、size、全部转换与聚合root逐项核验；此CI基于规范3.0.2，不涵盖当前M5.2工作树。
-- m5_2: IN_PROGRESS：本地后端检查点f9a307a，最新完整Python1663PASS/2依赖弃用警告，427声明输入前后与Git一致；Ruff、mypy133源及独立430输入specPASS。输入清单遗漏及补证经独立审查闭合，原件保留。F.1两轮各42响应：38正向macro Recall@5=1.0、4无结果全过，216输入与f9一致，root逐DTO/ref/正文/排序核验。25SQLite及12独立账本定向回归通过；原失败/漂移/修复保留。最终定向23web及native04单条真实闭环通过，UI两处恢复问题经同测试RED→GREEN和独立回读闭合；最终完整前端/native尚未验，不代表整阶段或平台Agent完成。
+- m5_2: LOCAL_PASS_WITH_DECLARED_SCOPES：验证代码3dd75f0，完整346web/57files、88真实native/7.6m及lint/types/build通过；后端相同427输入的f9完整1663Python/2警告与Ruff/mypy133通过，430输入spec及216输入固定gold两轮38正向Recall@5=1.0/4无结果通过。原783清单native仅1张测试输出PNG变化，782执行相关文件不变，新旧图归档且原unchanged=false保留。UI/账本/契约审查问题修复有实测证据。PR50 draft/open，CI尚未终态，未合并/未关闭Issue，不代表真实Agent或整体M5完成。
 - m5_1_358bf5d_historical: LOCAL_FIXED_SOURCE_PASS：769原本地1494Python/314web/85native保留；6c首次CI10success2frontend FAIL，0c修refresh测试并五门禁PASS。e480新CI的PRfrontend314PASS，push不同revoke准备测试313PASS1FAIL，原件保留。358bf5d仅加7行等待journal/ACK后完整回读，600输入before/after/Git相同，lint/types/spec/build与314web/52files新PASS；原RED/观测/两次guard mutation反例保留，production原字节恢复。358本地未重跑backend/native（输入未变），新提交未推送、远端CI NOT_RUN；真实Provider/Codex/学习效果未验。
 - m5_2_input_coverage: 补证PASS：同f9新Python02实际1663PASS/2依赖弃用警告/273.45s，427声明输入与Git及before/after一致，含6个顶层helper；新spec03对430输入实测PASS，另含3个派生docs。Python02不追认这3个docs运行前快照，其内容由套件generate(check=True)及独立spec03核验。原01的1663PASS/421绑定和两条遗漏审查原件保留。
 - m5_2_ui_review: 两处修复有界闭合：同一合法11case在原逻辑快照7FAIL4PASS、修后同测通过，完整检索23web/5filesPASS。相同本机命令/ACK候选可恢复，不同身份/正文/ACK冲突保持拒绝；安全读取失败禁止父链离开。B独立源码/原日志/hash回读无新增阻断，未冒称其另跑测试。默认Reader scope误用practice的独立原RED/GREEN另保留。
 - m5_2_native_development: native04实际1PASS13.5s，root独立看1440/390图，完整r1原文/currentr2/未审与历史warning可见；root另存原04附件。native02的两图和响应附件曾因03测试输出目录误配置被覆盖，原02源码/receipt/log保留，丢失附件明确不可恢复；03产物只归03，04为新正确目录与实际视口内正文截图。不得说所有早期附件仍完整。
+- m5_2_ci: IN_PROGRESS：3dd75f0 push34957539421与PR34957746128，独立初始回读6success/6in_progress；不是最终结果，不外推后续证据提交。
 
 ## 阻塞与待决项
 
