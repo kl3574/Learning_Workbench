@@ -62,6 +62,11 @@ class Settings:
                 raise ValueError("Development UI must use an explicit loopback HTTP origin.")
 
     @property
+    def provider_secret_dir(self) -> Path:
+        """Private runtime storage, excluded from exported database/blob archives."""
+        return self.data_dir / 'provider-secrets'
+
+    @property
     def import_budgets(self) -> ImportBudgets:
         return ImportBudgets(
             max_source_bytes=self.max_upload_bytes,

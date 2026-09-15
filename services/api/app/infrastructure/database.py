@@ -31,8 +31,10 @@ class Database:
         self.path = settings.data_dir / "workspace.sqlite3"
 
     @contextmanager
-    def connect(self) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(self.path, timeout=10, isolation_level=None)
+    def connect(self, *, busy_timeout_ms: int = 10_000) -> Iterator[sqlite3.Connection]:
+        if type(busy_timeout_ms) is not int or not 0 <= busy_timeout_ms <= 10_000:
+            raise ValueError("SQLite busy timeout must be an integer between 0 and 10000 milliseconds.")
+        connection = sqlite3.connect(self.path, timeout=busy_timeout_ms / 1000, isolation_level=None)
         connection.row_factory = sqlite3.Row
         try:
             connection.execute("PRAGMA foreign_keys=ON")
@@ -40,15 +42,15 @@ class Database:
                 raise MigrationError("SQLite foreign keys could not be enabled.")
             if connection.execute("PRAGMA journal_mode=WAL").fetchone()[0] != "wal":
                 raise MigrationError("SQLite WAL could not be enabled.")
-            connection.execute("PRAGMA busy_timeout=10000")
+            connection.execute(f"PRAGMA busy_timeout={busy_timeout_ms}")
             yield connection
         finally:
             connection.close()
 
     @contextmanager
-    def transaction(self) -> Iterator[sqlite3.Connection]:
-        with self.connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
+    def transaction(self, *, busy_timeout_ms: int = 10_000, immediate: bool = True) -> Iterator[sqlite3.Connection]:
+        with self.connect(busy_timeout_ms=busy_timeout_ms) as connection:
+            connection.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
             try:
                 yield connection
                 connection.commit()

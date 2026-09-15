@@ -1,6 +1,6 @@
 # 知径 Learning Workbench：完整产品设计与工程实施规范
 
-**版本：3.0.1｜日期：2026-09-15｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
+**版本：3.0.2｜日期：2026-09-15｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
 
 **本文件（含文末附录）是唯一产品与工程规范。** 将它放入空目录即可开始；不需要旧版设计包、旧 Demo、之前聊天、私有 GitHub 仓库或另一份提示词说明需求。正文定义产品，附录内嵌数据模型、HTTP 字段、数据库设计、模块接口、样例和验收用例。构建 Agent 根据本文生成实现文件、OpenAPI、测试和进度记录；这些是派生产物，不是第二套产品需求。
 
@@ -17,6 +17,14 @@
 - 附录 A—G：内嵌 HTTP 契约、核心类型、存储 DDL、模块端口、可生成样例、验收场景和建仓流程。
 
 优先遵守正文的业务、安全和验收不变量；附录与正文发生冲突必须在同一变更中修正并增加回归测试。实现者不得挑选更宽松的一处绕过要求。必要的技术细化可以新增 ADR，但新产品行为必须同步写入本文。所有稳定需求 ID 保留，新增要求追加编号。
+
+### 规范版本记录
+
+| 版本 | 规范变化 | 不代表的事实 |
+|---|---|---|
+| 3.0.0 | 初始完整产品/工程规范与核心模型、基线 DDL、学习包 | 不代表工程或远端已完成 |
+| 3.0.1 | 推荐严格应用 DTO、只读投影、真实来源与决定历史/CAS | 不改初始事实、54 core 或学习包 3.0.0 |
+| 3.0.2 | M5.1 配置/秘密、服务端冻结授权、单次受控派发、完整输入计量证明、内部终态与安全备份边界 | 不代表生产模型已支持、真实外发已批准或 M5.2/M5.3 已实现；54 core、学习包及数据 schema_version 3.0.0 不变 |
 
 ## 0. 执行摘要与不可变决策
 
@@ -346,10 +354,10 @@ Attempt / Exposure / LearningEvent → Evidence → Recommendation
 | Learning | 可信事件摄入、笔记写入 | 进度、证据、画像 | events、notes、evidence | 接受客户端认证成绩 |
 | Recommendation | 目标、证据、内容可用性 | 排序提案、原因、置信标识 | 推荐快照/接受拒绝记录 | 强制改变路线 |
 | Retrieval | query、授权 scope、修订约束 | RankedEvidence | 派生索引、检索日志 | 越权读取解答 |
-| Context/Policy | 会话、对象引用、选文、授权 | 不可变 ContextSnapshot | 请求快照、审计 | 把教材指令当系统指令 |
+| Context/Policy | 会话、对象引用、选文、授权 | 不可变 ContextSnapshot、受检准备材料 | 请求快照、审计；通过真实来源 owner 核验准备材料 | 把教材指令当系统指令、替未知任务伪造正文 |
 | Tutor | question、intent、context、web flag | Run、回答、引用、建议动作 | 对话、Agent run | 未确认改教材/分数 |
 | Authoring/Quality | 生成要求、审核、发布请求 | Draft、ChangeProposal、Review | 草稿、审校记录 | 自我授予独立教学通过 |
-| Provider/CodexBroker | 受控生成/搜索/工具请求 | 统一事件和产物 | 提供商配置元数据、任务映射 | 向前端暴露密钥/任意路径 |
+| Provider/CodexBroker | 受控生成/搜索/工具请求 | 真实能力、冻结授权摘要、受检事件和产物 | 提供商配置/秘密引用、授权/派发/用量账本与自有终态回执；不代写 consumer Job/Run | 向前端暴露密钥/任意路径、凭任意 consent ID 直接外发 |
 | Workspace/Jobs | 备份、恢复、任务控制 | 快照、任务状态、反馈 | 工作区配置、队列、备份 | 默认公开监听或自动联网 |
 | Connector | 同步/外部写入提案 | Zotero/博客候选与结果 | 外部关联、同步游标 | 未授权改外部资料 |
 
@@ -536,7 +544,7 @@ visibility 取 `learner` 或 `author_private`。导出学习者包不是 CSS 隐
 | Learning | GET `/learning/progress`；POST `/learning/actions`；GET `/learning/evidence` | 动作与可信事件分离 |
 | Notes | GET/POST `/notes`；PATCH `/notes/{id}` | anchor、Markdown、expected_revision |
 | Recommendation | GET `/recommendations`；POST `/recommendations/{id}/decision` | 原因/证据与用户接受拒绝 |
-| Provider | GET `/providers/capabilities`；POST `/consents`；POST `/consents/{id}/revoke` | 能力、目的地、范围、撤回 |
+| Provider | GET `/providers/capabilities`；配置/秘密；POST `/consents/preview`；POST `/consents`；GET `/consents`；POST `/consents/{id}/revoke` | 附录 A 的十个精确操作；本机配置、服务端冻结、明确批准、当前/历史回读、撤回 |
 | Authoring generation | POST `/authoring/jobs`；GET `/jobs/{id}`；POST `/jobs/{id}/cancel` | 固定教学约束、产物引用 |
 | Approval | POST `/approvals/{id}/decision` | 绑定任务、操作哈希、单次/范围审批 |
 | Codex | POST `/codex/sessions`；POST `/codex/sessions/{id}/turns`；POST `/codex/sessions/{id}/interrupt` | Broker 转译、产物限沙盒目录 |
@@ -605,7 +613,7 @@ created → policy_checked → context_frozen → retrieving（可选）
 
 ### 12.3 联网搜索
 
-ProviderCapabilities 明确 chat、structured_output、web_search、streaming、tool_calls。官方 Responses 的搜索工具提供搜索调用和引用结果；是否真的调用工具必须从响应事实确定。通用 OpenAI-compatible 聊天协议不能自动视为支持搜索。[S13]
+ProviderCapabilities 明确 chat、structured_output、web_search、streaming、tool_calls。官方 Responses 的搜索工具提供搜索调用和引用结果；是否真的调用工具必须从响应事实确定。通用 OpenAI-compatible 聊天协议不能自动视为支持搜索。[S13] M5.1 仅开放已核模型/输入形状的文本 chat/streaming；search、tool、structured_output 为 false。配置或秘密引用存在不等于可调度，缺少 §20.5 的完整输入证明时 chat/streaming 也必须为 false；不自动联网探测能力。后续阶段增加能力须同时明确许可、预算与实际协议验证。
 
 需要独立搜索服务时，通过 SearchPort 接入，并保留 query、抓取时间、页面标题、URL、摘要与定位。对授权文件内容发到哪个服务、发多少内容，要在授权摘要中清楚列出。即使用户开启联网，也不代表同意自动把整个私有资料库发给搜索引擎。
 
@@ -913,7 +921,7 @@ CI 建议 job：`spec-contracts`、`backend`、`frontend`、`integration`、`bro
 | M3.4 | 交卷/评分/复盘闭环，评分版本与 evidence | 评分更新不覆盖旧成绩，未审推导不标正确 |
 | M4.1 | 学习事件、概念/技能证据、路线完成 | 自报/阅读/辅助/独立/重复证据分离 |
 | M4.2 | 先修/补弱/复习/下一步推荐，接受/拒绝 | 每条推荐有引用，空数据不伪造画像 |
-| M5.1 | ProviderPort/能力协商/外发授权/预算/脱敏 | 无授权零外发；兼容 chat 不冒充 search |
+| M5.1 | ProviderPort/能力协商/服务端冻结授权/受控预算/秘密与脱敏 | 本地控制面、真实持久授权与受控 HTTP 协议分层验收；无授权或无完整输入证明则零外发；不冒充生产模型贯通或 search |
 | M5.2 | 检索权限、中文 FTS、来源和修订哈希 | 私有答案过滤、旧索引、中文检索基准 |
 | M5.3 | Tutor 状态机、SSE/取消/重连/异步上下文 | 终态唯一、断连不重生成、切标签不串内容 |
 | M5.4 | 真实模型与搜索评测 | 显式授权小预算调用；引用回查；无凭据 NOT_RUN |
@@ -978,15 +986,49 @@ CI 建议 job：`spec-contracts`、`backend`、`frontend`、`integration`、`bro
 
 生产端由 FastAPI 同源托管编译后静态页面及 `/api/v1`；开发端 Vite 通过代理访问，不开放任意 Origin。固定健康检查 `/health` 不返回敏感数据；`/api/v1/readiness` 返回 schema_version、迁移状态、worker状态、提供商是否配置（不验证密钥）。迁移前在线备份，worker和API启动前检查 schema兼容；不自动破坏性降级。SQLite WAL 模式备份用 online backup API 或等价一致性快照，不直接复制活跃 .db 忽略 WAL。
 
-首次本机访问使用 launcher 生成的一次性随机 bootstrap code，经浏览器 fragment 交给同源 POST `/api/v1/session/bootstrap`，成功后建立 HttpOnly、SameSite=Strict 会话 cookie，并清除 fragment。code 不在访问日志、URL query或公库中，过期/重复使用拒绝。Host/Origin 限制与 CSRF 同时生效；默认不让远程网页访问 localhost 启动会话。提供商 key 通过本机设置页的专用 write-only 端点或启动环境变量存储；GET永不回传，secret日志关闭，备份排除。文件 key 存储限制权限，优先系统安全存储；不能把可逆编码当作加密。
+首次本机访问使用 launcher 生成的一次性随机 bootstrap code，经浏览器 fragment 交给同源 POST `/api/v1/session/bootstrap`，成功后建立 HttpOnly、SameSite=Strict 会话 cookie，并清除 fragment。code 不在访问日志、URL query或公库中，过期/重复使用拒绝。Host/Origin 限制与 CSRF 同时生效；默认不让远程网页访问 localhost 启动会话。所有配置和许可操作使用可信 SessionIdentity 的 workspace/actor/role，客户端不能自报权限。应用模块导入、factory 和 OpenAPI 生成不创建数据库、秘密文件、后台任务，不读取凭据或探测外网；仅显式运行生命周期初始化本机存储。
+
+提供商配置、秘密和能力设置在现有辅助“设置”入口。learner/author 两种已认证本机会话均可管理本工作区的提供商控制配置；内容作者权限不因此扩散到学科读取/生成。配置/秘密控制、能力诊断与仅减权 revoke 不返回学科正文，独立测试时仍保留停止入口；proposal/consent 的学科摘要读取、批准、派发与流消费每次核当前 Policy。界面能打开设置不代表可以显示受保护授权摘要。设置读取、保存配置/秘密、能力查询和创建授权预览均不进行远端连接、鉴权或计数。
+
+配置与秘密引用共用一个单调 revision；首次 config expected_revision=0 仅创建未占用的合法 ID，r1 起始，跨工作区记录不可读写。普通配置命令与秘密替换成功推进一次；秘密已无引用且匹配当前基准的删除不推进。config_sha256 对 `{version:"provider-config-v1",workspace_id,id,revision,adapter,base_url,model,embedding_model,endpoint_policy,pricing,secret_present}` 的项目规范 JSON 计算；不含秘密、秘密摘要或 locator。secret_present 表示该修订已提交的秘密引用存在性，不等于秘密介质当前可读取、密钥有效或提供商可调度；实体缺失/损坏时保持原历史，拒绝派发并报告安全诊断，GET 不写新版本或重算成另一配置。配置/秘密轮换改变 revision，从而使旧提案不能授权新请求。历史 ACK 保留当时值，UI 必须另 GET 当前配置。
+
+key 只经专用 write-only 端点进入 Provider 的 SecretStore，优先系统安全存储，fallback 使用公开与备份目录之外的受限文件（目录 0700、文件 0600，防符号链接/路径逃逸，原子写入）。M5.1 不自动扫描或导入环境凭据；将来若接启动环境变量，须走同一秘密版本绑定与安全日志边界。GET、错误、日志、任务输入、config_json、content_blobs、HTTP 回执、浏览器 DraftStore/IDB/localStorage/WorkbenchSession 与公开证据永不包含秘密或其可公开比对的摘要，不能把可逆编码当作加密。locator 只在 Provider 私有存储，不返回浏览器或进入导出备份（仍含敏感个人数据，不得公开）。
+
+秘密写先存不可变版本，再在事务内 CAS 切换引用与配置 revision 并保存安全 ACK；存储失败/DB 回滚不能声称已保存，孤立版本须可恢复清理。删除先使当前引用不可再调度，再清理秘密版本；不承诺介质级擦除或撤回已发生外发。幂等比较使用服务端专用秘密的 HMAC 指纹，指纹与指纹密钥不进 API、日志或导出备份（仍含敏感个人数据，不得公开）；不得将 raw secret 或普通 SHA 作为通用幂等 payload。六个写操作均校验同一完整命令实例：workspace、actor、route、原 key、全部字段及版本条件。相同 key 不同命令 409，同命令回原安全 ACK；secret 丢 ACK 后只凭 secret_present 不能确认“刚输入的 key 已保存”，原命令字节在内存仍有时可原 key 回放，刷新后不能从浏览器持久层恢复秘密。
+
+Provider-owned 备份降权端口仅修改独立备份副本：排除所有秘密字节、HMAC 私密材料和物理 locator，使其中授权不可派发，并保持自有配置 SHA、不可变原历史与降权后的当前投影一致。不得只把 consents.status 改 revoked/locator 改空却留下不一致 hash 或绕过不可变历史。保留历史原事实，通过自有可校验的备份安全投影/降权记录表达不可调度；恢复时不能复活旧许可或把历史 secret_present 当成实际秘密。数据库在线迁移前备份是受限的本机恢复原件；导出备份（仍含敏感个人数据，不得公开）另外经过本端口净化，二者不能混称。此要求不提前实现 M7 完整恢复流程。
+
+目的地策略 public_https 仅允许 HTTPS 公网；explicit_loopback 必须在该配置明确选择，仅允许 localhost/127.0.0.1/::1 的确切端口和 base path，可用 HTTP，不开放 LAN。拒绝 URL userinfo/query/fragment/未支持 scheme；本机 allowed_origins 不是提供商许可。保存时只做本地语法校验。出站在许可与预算准入后才解析并固定地址，检查实际连接 IP、TLS 主机、端口/路径，防 DNS 重绑定；不自动跟随重定向或继承环境代理，不把 3xx 改址后继续外发。每次实际 HTTP 尝试都受同一额度与取消约束。
 
 ### 20.5 上下文、搜索与资源预算
 
-每个外发任务要有 provider、模型、目的、具体引用集合、联网许可、token/调用次数上限、到期时间；批准只覆盖被冻结输入，新增来源或扩大范围需新许可。输入仅带 ref 不足以调用模型：ContextPort 在权限检查后读取正文，创建内部只读 GenerationInput，包含有限 messages/evidence 摘录、摘要 hash、预算及实际 consent；该内部结构不直接下发浏览器，不写入公开日志。ProviderPort 返回提供商事件，应用层映射 run_id/seq，不能让外部服务直接伪造本机 completed 或 approval 状态。
+每个外发任务绑定 provider、模型、目的、具体精确引用与正文摘录、联网许可、token/调用次数/时间上限、到期时间；批准只覆盖服务端冻结输入，新增来源、模板、目的地、模型或范围需要新许可。Context/Policy 与真实 source owner 先从已持久任务读取和核验准备材料，形成无假 consent 的私有快照；用户批准服务端提案后才构造带实际 consent_id 的核心 GenerationInput。正文与准备材料不直接下发普通浏览器 API 或公开日志。Provider 持有许可/派发/用量与自有终态；source owner 持有 Job/Run/回答，外部事件不能自行建立本机 completed/approval。
 
-工程初始超时：普通 DB 查询10秒、文件解析60秒、模型任务180秒、Codex turn 300秒可按任务配置；有可见取消和状态回读。搜索默认最多3次/请求、5个来源，默认远程抓取10 MiB/页面和5次重定向；工具执行默认不自动重试副作用。实际 token 计数与价格通过 provider配置；价格未知时 max_cost不能假称硬保障，仍执行token/次数硬限制并显示未知金额。
+**服务端准备 → 预览 → 批准 → 派发。** HTTP preview 只接已存在 job/provider 的 ID/预览基准版本、预算与到期时间。registered source owner 核真实 workspace、不可变 job input、ContextSnapshot、精确 refs/正文 hash、当前 Policy 和可批准阶段，再冻结真实 messages/evidence、转换版本和请求体；未知 source 返回 OUTBOUND_SOURCE_UNAVAILABLE，不能把 import/grading 冒充生成任务，也不新增任意 prompt 的测试产品入口。source_job_revision 是预览 CAS/审计事实，授权稳定身份是 job ID+原 input hash+准备材料/请求体/上下文 hash；正常 lease/status revision 推进不自动使同输入失效，当前 lease 仍必须单独验证。
 
-推荐与联网事实分开：本地材料可精确引用；搜索候选未抓取或未核查时标 unverified；模型推导无来源可以清晰标“推导尝试”，不能配伪造外部引用。来源更新改hash、索引过期时默认返回旧修订的真实引用或显示重建中，不能把它包装成最新版。
+input_sha256 使用 `{version:"prepared-outbound-v1",workspace_id,job_id,source_input_sha256,purpose,context_snapshot,messages,evidence,preparation_version}` 的规范 JSON，不含 consent_id。request_body_sha256 对适配器已冻结且实际发送的完整规范 JSON 请求字节计算，排除 Authorization 等秘密头；这些字节须原样发送，不能在检查后追加 instructions、工具/schema、历史或默认参数。proposal_sha256 对 `{version:"outbound-proposal-v1",workspace_id,id,summary}` 计算，summary 为附录 A 的完整不可变 FrozenOutboundSummary；动态 validity/warnings/consent_id 不进原 hash。摘要只给真实安全标题/定位、角色、长度与服务端 hash，不泄漏正文、秘密路径或原始工具日志。locator 不得伪装成包含全文的“定位”。全部冻结字节和 hash 需回读核验。
+
+POST consents 只批准原 proposal ID+SHA。事务内核当前 Policy/归属、自有历史、到期、provider revision 和 source 仍一致且允许批准；每个 proposal 至多一份 consent，每个 consent 至多一个 dispatch 实例。不同 key 重复批准同提案 409 CONSENT_ALREADY_GRANTED；更换输入或撤销后再次授权必须新预览、再明确批准。grant 通过 source owner 的事务端口绑定真实 consent，不跨模块改 Tutor/Authoring 状态。原相同命令 ACK 回放先核本工作区/当前允许访问范围和自有历史，不因当前无关材料损坏、provider 已换或 consent 已撤销重新执行；只有新操作才核新业务前置。旧 active ACK 不是当前 active。
+
+M5.1 仅实现一份许可内 `max_provider_calls=1`、`max_search_calls=0`、`max_tool_calls=0`、allow_web=false 的受限文本能力。一次调用失败、连接中断或重启不重置额度；派发开始许可一经持久保留即保守消耗，无法证明未开始也不能释放为第二次调用。远程计数不采用：计数请求本身外发完整内容，也需满足每请求输入硬上限，不能靠事后计数或第二份许可绕过外发前准入。search/codex 目的、工具/结构化输出及未知模型组合在本阶段无实现能力时明确 CAPABILITY_UNSUPPORTED，零传输；品牌与兼容接口名称不能证明能力。
+
+**完整输入准入只允许 local_exact 或有证明的 local_upper_bound。** 两者均绑定固定 model、adapter/checker 版本、完整允许输入形状及实际 request_body_sha256。proof_sha256 对应本机不可变、可核验的依据记录及其证明材料：实际模型/版本、格式开销、适用输入范围、计数方法、上下文/输出能力和失效依据必须明确；不能只填一串 hash 宣称有证明。对 exact 取 U=input_tokens，对 upper_bound 取 U=input_tokens_upper_bound，要求实际完整输入 token≤U≤用户 max_input_tokens。上界不是实际计量；裸文本 tokenizer、固定安全余量、平均误差、字符换算或仅固定模型名都不足以证明完整格式开销。未知/失效/不匹配证明、未注册 model、超出输入形状或不能施加输出限制的组合拒绝可批准预览和派发，不能填 0 或先发再看。安全能力诊断可用 MODEL_NOT_REGISTERED、INPUT_BOUND_UNAVAILABLE、REQUEST_SHAPE_UNSUPPORTED、OUTPUT_LIMIT_UNSUPPORTED；HTTP 使用 CAPABILITY_UNSUPPORTED。官方完整计数范围见 [S26]。
+
+同时按固定模型的真实容量规则验证输入/输出限制；若共享上下文容量为 C，须验证 U+max_output_tokens≤C，不能假定所有模型的容量定义相同。输出硬上限落实到已验证协议参数：Responses 为 max_output_tokens，支持该参数的 Chat 为 max_completion_tokens；字段不支持则拒绝，不能移除限制重试。truncation 不得自动删减已冻结输入。字符预算仍执行 §12.2 的 12,000 字符、8 块、6 条最近对话、5 个外部来源，保留完整块边界；字符上限不能替代 token 证明。[S27][S28]
+
+价格由配置提供并冻结 pricing_sha256（`{version:"provider-pricing-v1",provider_id,provider_revision,pricing}` 的规范 JSON）。pricing=null 为 unknown/price_unknown，绝不写 0；已知时以 U 与最大输出计算 maximum_estimated_cost，仅表示该本机价格下估计，显示 estimate_not_guaranteed，上界不能显示成实际输入费用。设置 max_cost_usd 且已知估计超额时拒绝；未知价格明确金额无硬保证，仍执行 token/次数/时间硬约束。终态 input/output usage 来自提供商累计报告，缺失为 null，cached/reasoning 等组成项不重复累加。rate×tokens 只能 estimated；actual 只在提供商给出可核验实际费用事实时使用，不把估算称账单。真实 usage 超过冻结输入证明 U、用户输入/输出上限或与已记用量矛盾时，记录 OUTBOUND_BUDGET_EXCEEDED/PROVIDER_USAGE_INCONSISTENT 安全错误和原始已核计量，不回写旧证明或隐藏超限为预算成功；远端是否已完成另按事实保留。
+
+工程初始超时：DB 查询 10 秒、文件解析 60 秒、模型任务 180 秒、Codex turn 300 秒可按任务配置。模型 timeout_seconds 从实际 dispatch 开始按单调钟计算，总截止时间不能被每段网络 timeout 重置；排队不消耗运行时长。到期、revoke、取消可以更早停止。GET 只读派生 expired/validity，不写过期状态、排队或幂等行；revoke 保留实际时间和 r+1，已撤销且当前基准一致返回 MutationAck.applied=false，过期许可仍可显式撤销。revoked 优先于派生 expired。
+
+派发事务内核 source 当前 lease/owner、不可变输入/实际请求体、provider/秘密版本、许可未撤销/未过期、Policy、取消和额度，持久记录唯一 dispatch-start 与额度保留；它是与 revoke/轮换竞争的本机线性化边界。撤销先成功则新请求不能启动；开始许可先成功则按在途处理，请求取消并明确可能已外发/计费。网络连接前与接收流时继续复核实时约束，但不能把 SQLite 提交与物理网络动作宣称为原子。不得在长期写事务内等远端；worker 停止、取消与其他队列必须仍可推进，不能靠无限阻塞掩盖恢复。
+
+所有生产传输层关闭自动请求重试、自动工具递归与自动重定向；HTTP 建连、错误状态、流消费、worker 恢复各层均受约束。dispatch-start 后崩溃/超时/未知结果保留原实例、已消耗额度及 PROVIDER_OUTCOME_UNKNOWN，禁止自动重生成；只能回读已知持久结果或结束本机任务。客户端幂等键不等于远端去重，取消/关闭流不证明服务商未执行或退费。只有可证明尚未获得开始许可的本地准备才能重试；不能拿 import 的过期租约恢复规则重放模型。[S31]
+
+Provider 内部采用附录 D 的 delta/usage/finished/error 四类严格事件，保留 answer/refusal、complete/refused/incomplete、部分输出与未知计量。Responses text.done 不是请求结束；Chat choice finish_reason 后继续消费 usage 和 [DONE]；EOF 不是成功。远端终态及当前实际收到的计量一致性核验后，自有终态回执与私有部分产物原子登记，方可投影粗粒度核心事件。core ProviderEvent 保持不变：仅内部 complete 可投影 finished，refused/incomplete 以 PROVIDER_REFUSAL/PROVIDER_INCOMPLETE 错误投影，完整事实仍保存在自有回执；不把 JSON 偷塞进 text/error_code。consumer 读取该回执并完成自己的结果校验/事务后才有本机 completed。Run SSE 与 Tutor 状态机在 M5.3 实现。[S29][S30]
+
+活跃真实 source job 在 queued/running/awaiting_approval 均参加 workspace 独立测试排他；Provider 子步骤不豁免。M5.1 可独立实现并逐项验收本机配置/秘密/严格授权历史、无授权或无证明零传输、测试专属真实 SQLite source 和有明确计量规则的受控 HTTP 流协议。测试 source/model/proof/服务不得进入生产注册表，人工计量规则不能证明真实供应商隐藏开销。无生产 source 时设置显示没有可授权任务；无模型证明时 chat/streaming 显示不可调度。现 core AuthoringRequest 的 consent_id 必填，而 preview 要求先有真实 job，首次 Authoring 准备路径尚未闭合；M6 production source 接入前必须先在本文定义真实 owner 的授权前 prepare-job 入口和独立应用 DTO。现 core AuthoringRequest 不能充首次未授权 job 的创建输入，不能使用假 consent 或其他任务许可绕过。M5.1 不注册此生产来源、不把既有 POST /authoring/jobs 称为已可贯通，也不据本阶段验收标记 M6 已闭合；本次不新增 M6 路由或修改54 core。配置存在、受控协议 PASS 或本地预算 PASS 不能合并为生产生成贯通、模型质量、真实搜索或整个 M5 完成；真实 Provider/Codex 费用测试仍须另外显式授权，未执行为 NOT_RUN，真实模型评测在 M5.4。
+
+推荐与联网事实分开：本地材料可精确引用；搜索候选未抓取或未核查时标 unverified；模型推导无来源可以清晰标“推导尝试”，不能配伪造外部引用。后续已实现搜索默认最多 3 次/请求、5 个来源、抓取 10 MiB/页面、5 次重定向，并逐步重新核权限与预算；这些上限不授予 M5.1 搜索能力。来源更新改 hash、索引过期时只返回旧修订真实引用或明确重建中，不冒充最新版。
 
 ### 20.6 删除、隐私和恢复
 
@@ -1039,6 +1081,12 @@ CI 建议 job：`spec-contracts`、`backend`、`frontend`、`integration`、`bro
 | S23 | [GitHub — About milestones](https://docs.github.com/en/issues/using-labels-and-milestones-to-track-work/about-milestones) | 跟踪里程碑下Issues/PR的闭合情况 |
 | S24 | [GitHub — About Projects](https://docs.github.com/en/issues/planning-and-tracking-with-projects/learning-about-projects/about-projects) | 可选表格/看板/路线图；不是已创建事实 |
 | S25 | [OpenAI — Codex prompting](https://developers.openai.com/codex/prompting/) | 上下文、任务边界与验证说明，可能重定向官方新地址 |
+| S26 | [OpenAI — Token Counting](https://developers.openai.com/api/docs/guides/token-counting) | 完整输入包含消息/格式开销；不是通用本地精确计数证明 |
+| S27 | [OpenAI — Responses Create](https://developers.openai.com/api/reference/python/resources/responses/methods/create) | 输入、max_output_tokens、truncation 与实际 usage 字段 |
+| S28 | [OpenAI — Chat Completions Create](https://developers.openai.com/api/reference/python/resources/chat/subresources/completions/methods/create) | 受支持模型的 max_completion_tokens、stream_options.include_usage；非任意兼容端点保证 |
+| S29 | [OpenAI — Responses Streaming Events](https://developers.openai.com/api/reference/resources/responses/streaming-events) | 文本部分与请求级终态、拒答/失败/不完整事件 |
+| S30 | [OpenAI — Chat Completions Streaming Events](https://developers.openai.com/api/reference/resources/chat/subresources/completions/streaming-events) | choice/usage 流事实与缺失计量边界 |
+| S31 | [OpenAI — Python Library](https://developers.openai.com/api/reference/python) | SDK默认重试/超时需显式收窄；实际采用依赖另行固定 |
 
 外部资料是设计依据与API参考；产品行为由本文件自包含地规定。不需要阅读这些网页才知道本平台要构建什么。参考可访问性改变时应记录，不复制封闭产品未公开实现，不用竞品宣传证明本产品教学效果。
 
@@ -1204,13 +1252,158 @@ warnings 使用闭合 Warning，至少区分 NO_LOCAL_MATERIAL、NO_REVIEWED_ASS
 
 推荐刷新使用自有 dirty generation/恢复记录；源模块通过 application port 在同一成功事务登记，后台在发布结果前比较所冻结输入仍当前。GET 可只读派生 stale，不能写 stale、刷新状态、队列、outbox 或幂等行。重启/失败/重复处理不能丢 dirty、重复创建同依据推荐或丢用户决定；不能清除共享 Content 待复核信号来冒充已完成影响分析。所有本地推荐读写/后台计算受独立测试 guard，不调用 Provider/Search，也不将接受本地建议视为外发 consent。
 
-### 提供商 / 创作 / Codex / 外部连接
+### 提供商配置、冻结授权与回读（M5.1）
+
+以下十个操作均使用可信本机会话；写操作同时核 Origin/CSRF。GET 绝对只读，不调用网络/秘密鉴权/计数，不写派生过期状态。配置/秘密控制与减权撤销适用 §20.4 的控制权限；学科摘要、批准和派发适用 §20.5 的实时 Policy。
 
 | 接口 | 请求 | 响应与业务语义 |
 |---|---|---|
-| GET `/providers/capabilities` | 无 | `{items:ProviderCapabilities[]}`；只返回配置存在性，不返回任何secret |
-| POST `/consents` | `{provider_id,purpose:tutor|search|authoring|codex,allowed_ref_ids:Id[],allow_web:boolean,max_input_tokens:integer,max_output_tokens:integer,max_cost_usd:number|null,expires_at:UTC}` | 201 `{id,revision,status:active,summary}`。未知成本不得宣称可精确保证金额；token/次数仍有硬上限 |
-| POST `/consents/{id}/revoke` | `{expected_revision}` | MutationAck；撤销后阻止新请求，进行中的外部操作需取消并报告不一定可撤回 |
+| GET `/providers/capabilities` | 无；拒未知/重复 query | ProviderCapabilitiesResponse；仅本工作区真实注册配置/可调度能力；零外发 |
+| GET `/providers/{id}/config` | 无；拒未知/重复 query | ProviderConfigView；404 不存在/不可访问；零写 |
+| PUT `/providers/{id}/config` | ProviderConfigWrite；Idempotency-Key | ProviderConfigAck；expected_revision=0 仅创建，成功 r1；更新强 CAS；零外发 |
+| POST `/providers/{id}/secret` | ProviderSecretWrite；Idempotency-Key；write-only 敏感 body | ProviderSecretAck；成功 secret_present=true；空 secret 不覆盖旧值 |
+| DELETE `/providers/{id}/secret` | 单个强 If-Match 与 Idempotency-Key；无 JSON body | ProviderSecretAck；成功 secret_present=false；引用删除不撤回已有请求 |
+| POST `/consents/preview` | ConsentPreviewWrite；Idempotency-Key | 201 ConsentProposalView；服务端从真实持久 source 冻结提案；无真实来源/模型证明则安全拒绝，零外发 |
+| GET `/consents/preview/{id}` | 无；拒未知/重复 query | ConsentProposalView；原不可变摘要及只读当前诊断 |
+| POST `/consents` | ConsentCreate；Idempotency-Key | 201 ConsentCreateAck；只批准原提案，不同步调用模型 |
+| GET `/consents` | ConsentQuery；普通列表 limit 默认20、最大100 | ConsentPage；按原 ID 或稳定创建位置分页回读 |
+| POST `/consents/{id}/revoke` | ConsentRevoke；Idempotency-Key | MutationAck；仅安全控制回执，撤销后拒新派发；在途请求取消但不保证撤回/退款 |
+
+**严格应用 DTO（独立于 54 core）：** Id/Sha256/UTC/ContentRef 使用附录 B；Revision 为严格整数 >=1，ExpectedRevision 为严格整数 >=0；数字拒 bool/非有限数。下列对象均禁止额外字段，除明确 `?` 外字段 required，`|null` 必须显式给出。nonempty string 不接受空白字符串；字符串/数组同时受本机请求/响应安全大小预算约束。safe string 不得包含秘密、完整学科正文或个人绝对路径。ProviderCapabilities 使用原 core 模型，version_evidence 给已固定适配/模型/计量能力依据或安全不可调用原因，configured 不代表联通；chat/streaming 只表示当前配置/秘密可用且有模型计量依据的已实现适配范围，不代表已有生产 source 或该具体请求已获许可。所有枚举为封闭集合。
+
+```text
+ProviderAdapter = official_responses | compatible_chat
+EndpointPolicy = public_https | explicit_loopback
+ProviderPricing = {
+  input_usd_per_million: finite number >=0,
+  output_usd_per_million: finite number >=0,
+  source_note: nonempty safe string
+}
+ProviderCapabilitiesResponse = {items: ProviderCapabilities[]}
+ProviderConfigWrite = {
+  expected_revision: ExpectedRevision, adapter: ProviderAdapter,
+  base_url: nonempty string, model: nonempty string,
+  embedding_model: nonempty string|null, endpoint_policy: EndpointPolicy,
+  pricing: ProviderPricing|null
+}
+ProviderConfigView = {
+  id: Id, revision: Revision, config_sha256: Sha256,
+  adapter: ProviderAdapter, base_url: string, model: string,
+  embedding_model: string|null, endpoint_policy: EndpointPolicy,
+  pricing: ProviderPricing|null, configured: true, secret_present: boolean
+}
+ProviderConfigAck = {
+  id: Id, revision: Revision, config_sha256: Sha256,
+  configured: true, secret_present: boolean
+}
+ProviderSecretWrite = {expected_revision: Revision, secret: nonempty string}
+ProviderSecretAck = {
+  id: Id, revision: Revision, config_sha256: Sha256, secret_present: boolean
+}
+OutboundPurpose = tutor | search | authoring | codex
+OutboundBudget = {
+  max_input_tokens: positive integer, max_output_tokens: positive integer,
+  max_provider_calls: 1, max_search_calls: 0, max_tool_calls: 0,
+  timeout_seconds?: positive integer = 180,
+  max_cost_usd: finite number >=0|null
+}
+FrozenOutboundBudget = {
+  max_input_tokens: positive integer, max_output_tokens: positive integer,
+  max_provider_calls: 1, max_search_calls: 0, max_tool_calls: 0,
+  timeout_seconds: positive integer, max_cost_usd: finite number >=0|null
+}
+ConsentPreviewWrite = {
+  job_id: Id, expected_job_revision: Revision,
+  provider_id: Id, expected_provider_revision: Revision,
+  budget: OutboundBudget, expires_at: UTC
+}
+ReferenceSummary = {
+  ref: ContentRef, title: nonempty safe string, locator: nonempty safe string,
+  character_count: integer >=0, excerpt_sha256: Sha256
+}
+MessageSummary = {
+  role: system | user | assistant,
+  character_count: integer >=0, content_sha256: Sha256
+}
+InputTokenAssurance =
+  {kind: local_exact, input_tokens: integer >=0,
+   checker_version: nonempty string, proof_sha256: Sha256,
+   request_body_sha256: Sha256}
+  | {kind: local_upper_bound, input_tokens_upper_bound: integer >=0,
+     checker_version: nonempty string, proof_sha256: Sha256,
+     request_body_sha256: Sha256}
+CostEstimate =
+  {kind: unknown, currency: USD}
+  | {kind: estimated, currency: USD,
+     maximum_estimated_cost: finite number >=0, pricing_sha256: Sha256}
+FrozenOutboundSummary = {
+  job_id: Id, source_job_revision: Revision, source_input_sha256: Sha256,
+  purpose: OutboundPurpose,
+  provider_id: Id, provider_revision: Revision, config_sha256: Sha256,
+  adapter: ProviderAdapter, adapter_version: nonempty string,
+  base_url: string, endpoint_policy: EndpointPolicy, model: string,
+  context_snapshot_id: Id, context_snapshot_sha256: Sha256,
+  input_sha256: Sha256, messages: MessageSummary[], references: ReferenceSummary[],
+  input_character_count: integer >=0, input_token_assurance: InputTokenAssurance,
+  allow_web: false, budget: FrozenOutboundBudget, cost_estimate: CostEstimate,
+  created_at: UTC, expires_at: UTC
+}
+ProposalWarningCode = price_unknown | estimate_not_guaranteed | provider_changed
+  | source_changed | source_unavailable | job_unavailable | proposal_expired
+  | capability_unavailable
+ProposalWarning = {code: ProposalWarningCode, message: nonempty safe string}
+ConsentProposalView = {
+  id: Id, proposal_sha256: Sha256, summary: FrozenOutboundSummary,
+  validity: current | stale | expired | unavailable,
+  consent_id: Id|null, warnings: ProposalWarning[]
+}
+ConsentCreate = {proposal_id: Id, proposal_sha256: Sha256}
+ConsentCreateAck = {
+  id: Id, revision: 1, status: active, proposal_id: Id, proposal_sha256: Sha256,
+  summary: FrozenOutboundSummary
+}
+ConsentRevoke = {expected_revision: Revision}
+ProviderFailureCode = CAPABILITY_UNSUPPORTED | PROVIDER_CONFIGURATION_CHANGED
+  | PROVIDER_SECRET_UNAVAILABLE | OUTBOUND_SOURCE_CHANGED | OUTBOUND_SOURCE_UNAVAILABLE
+  | CONSENT_REQUIRED | CONSENT_REVOKED | CONSENT_EXPIRED | OUTBOUND_BUDGET_EXCEEDED
+  | PROVIDER_TIMEOUT | PROVIDER_CANCELLED | PROVIDER_TRANSPORT_ERROR
+  | PROVIDER_PROTOCOL_ERROR | PROVIDER_OUTCOME_UNKNOWN | PROVIDER_USAGE_INCONSISTENT
+  | PROVIDER_REFUSAL | PROVIDER_INCOMPLETE
+UsageCost =
+  {kind: unknown, currency: USD}
+  | {kind: estimated, currency: USD, amount: finite number >=0, pricing_sha256: Sha256}
+  | {kind: actual, currency: USD, amount: finite number >=0, source: provider_reported}
+ProviderUsageView = {
+  consumed_provider_calls: integer 0..1, search_calls: 0, tool_calls: 0,
+  input_tokens: integer >=0|null, output_tokens: integer >=0|null,
+  elapsed_ms: integer >=0|null, cost: UsageCost
+}
+ConsentDispatchView = {
+  id: Id, job: JobRef, started_at: UTC|null, finished_at: UTC|null,
+  usage: ProviderUsageView, error_code: ProviderFailureCode|null
+}
+ConsentView = {
+  id: Id, revision: Revision, status: active | revoked | expired,
+  proposal_id: Id, proposal_sha256: Sha256, summary: FrozenOutboundSummary,
+  created_at: UTC, expires_at: UTC, revoked_at: UTC|null,
+  dispatch: ConsentDispatchView|null
+}
+ConsentQuery = {consent_id: Id} | {cursor?: nonempty string, limit?: integer 1..100}
+ConsentPage = {items: ConsentView[], next_cursor: string|null, total_hint?: integer >=0}
+```
+
+timeout_seconds 只在 preview 写入 DTO 可省略，服务端规范化为 180 后参与完整命令身份；持久摘要字段全部显式。 预览创建时 expires_at 必须严格晚于服务端当前 UTC，已到期不能生成新的可批准提案；ConsentView.expires_at 与冻结摘要相同，revoked_at 仅在实际撤销后为非 null，正常状态变更不改写原 summary。预算/证明版本、模型和 endpoint 必须对应同一实际请求字节，upper_bound 不得同时给 exact 字段。ReferenceSummary/MessageSummary 的顺序与长度/hash 对应真实准备材料；input_character_count 按最终请求中实际发送的消息/证据文本出现次数计算 Unicode 码点数，同段实际发送两次就计两次；它不计算 JSON 转义字符或替代 token。M5.1 purpose 字典沿用已有四种，但 search/codex 和未注册来源不可批准，不以扩枚举新增假 consumer。
+
+preview 版本条件不匹配或 grant 的原 proposal SHA 不符为 412；无效 schema/未知 query 为 422；Idempotency-Key 必须是单个 `[A-Za-z0-9_-]{1,128}`，缺少/格式错为 400。secret DELETE 的 If-Match 必须是单个带引号的64位小写 config_sha256，拒弱标签/星号/列表/重复，缺少/格式错400，过期412。所有路由拒重复身份/内容关键 header；不反射原 body/SDK headers。provider/consent/proposal 不存在或跨 workspace 为统一404；配置创建不能占用他工作区同 ID。Provider 自有持久命令历史不能只依赖24小时通用回执过期后重做；原完整命令与原 ACK 保留校验，查询不会新建回执。
+
+GET /consents 的 consent_id 与显式 cursor/limit 互斥，最多一项，未知/不可访问 ID 404。普通列表按创建时间+ID 稳定降序；server-issued cursor 签名绑定 workspace、limit 和创建排序位置，不允许跨 workspace/篡改/改 limit 续页。列表不声称当前状态被冻结为全库快照，新 consent 在新首屏出现，旧行的到期/撤销按读取时刻派生。全部模式先核当前 Policy/归属和冻结自有历史；当前 provider/source 改变可使原提案 stale/unavailable，不改写摘要；自身历史/冻结字节损坏则安全错误，不能用 stale 掩盖。validity 顺序为 expired、已确认 provider/source 改变 stale、能力/来源阶段不可用 unavailable、否则 current；已有 consent_id 即使 current 也不可再次批准。当前 source 完整性不能可靠核验时拒绝读取/批准，不以缺失事实放行。
+
+consumed_provider_calls 是本机保守消耗额度，不声称服务商实际执行次数。未知 token/费用保留 null/unknown。ConsentDispatchView 从 Provider 账本和 source owner 的真实 JobRef 投影；未终结 finished_at=null；受检 refused/incomplete 分别显示 PROVIDER_REFUSAL/PROVIDER_INCOMPLETE，自有完整终态事实见附录 D，不把它们称正常回答成功。原 grant/revoke/config/secret ACK 与当前读模型分开；UI 遇412保留候选做显式比较，丢ACK先回放原key/原命令，不自动发新命令。secret只保临时输入，不能混入其他草稿恢复。
+
+### 创作 / Codex / 外部连接
+
+| 接口 | 请求 | 响应与业务语义 |
+|---|---|---|
 | POST `/authoring/jobs` | AuthoringRequest | 202 JobRef；生成范围/证明策略/引用限制不丢失 |
 | GET `/jobs/{id}` | 无 | JobSnapshot；敏感日志不下发原始完整请求 |
 | POST `/jobs/{id}/cancel` | `{expected_revision}` | JobSnapshot；按任务终态约束 |
@@ -1257,9 +1450,6 @@ warnings 使用闭合 Warning，至少区分 NO_LOCAL_MATERIAL、NO_REVIEWED_ASS
 | POST `/objects/{id}/archive` | `{expected_revision,archived:boolean}` | MutationAck；变更对象lifecycle，不改旧修订正文 |
 | POST `/deletions/preview` | `{target:workspace|course|personal_data,target_id,scope:archive|purge}` | `{proposal_id,operation_sha256,affected_counts,unresolved_dependencies,warnings}` |
 | POST `/deletions/commit` | `{proposal_id,operation_sha256,expected_workspace_revision,confirm_purge:boolean}` | 202 JobRef；执行前可恢复备份；purge需要额外明确确认 |
-| PUT `/providers/{id}/config` | `{expected_revision,adapter:official_responses|compatible_chat,base_url,model,embedding_model:string|null}` | `{id,revision,configured:boolean,secret_present:boolean}`；HTTPS公网地址默认，localhost仅显式本地提供商授权；不自动联网 |
-| POST `/providers/{id}/secret` | `{secret:string}`，write-only敏感body | `{id,secret_present:true}`；禁止日志/回显/备份；空值不覆盖旧key |
-| DELETE `/providers/{id}/secret` | CSRF | `{id,secret_present:false}`；删除不撤回已有提供商请求 |
 | GET `/drafts/{id}` | 无 | `{id,kind,revision,base_ref,state,candidate_sha256,payload,warnings}`；payload按kind专用DTO；测试期受限 |
 | GET `/reviews/{id}` | 无 | ReviewReceipt；candidate绑定确切草稿版本，不返回未授权答案 |
 | POST `/reviews/{id}/decision` | `{expected_revision,candidate_sha256,mathematical:APPROVED|REJECTED|NOT_APPLICABLE,sources:APPROVED|REJECTED|NOT_APPLICABLE,reason,evidence_artifact_ids:Id[]}` | ReviewReceipt；author会话显式人工确认，操作者从会话得出；不允许模型自报人工reviewer |
@@ -1830,6 +2020,8 @@ CREATE VIRTUAL TABLE fts_chunks USING fts5(object_id UNINDEXED,revision UNINDEXE
 <!-- END FILE -->
 
 
+M5.1 以新的 forward migration 补 Provider 自有不可变配置/提案/授权与命令历史、私有准备绑定、唯一 dispatch/额度保留和严格终态回执。上面的原 baseline DDL 字节保持不变，不假装现有几列已经提供这些行为，也不修改已应用迁移。Provider 通过 source/Jobs/Policy/备份公开端口协调，不跨 owner SQL 写任务或学科内容。学习包与数据 schema_version 继续为3.0.0。
+
 # 附录 D：模块端口
 
 本段规定依赖方向。AuthContext只能由可信会话构造；WriteContext不是用户可任意自报的角色。ProviderPort的输入包含正文摘录而不只是ref；外部ProviderEvent经应用映射为RunEvent，只有服务端可以建立终态和审批事件。泛型DTOMap的unknown用于约束适配器类型映射，不是允许HTTP运行接口返回任意unknown。
@@ -1898,6 +2090,26 @@ export interface ProviderPort<D extends DTOMap> {
  capabilities():Promise<D['ProviderCapabilities']>;
  generate(input:D['GenerationInput'],signal:AbortSignal):AsyncIterable<D['ProviderEvent']>;
 }
+export interface ProviderApplicationDTOMap {
+ ProviderCapabilitiesResponse: unknown; ProviderConfigWrite: unknown; ProviderConfigView: unknown;
+ ProviderConfigAck: unknown; ProviderSecretWrite: unknown; ProviderSecretAck: unknown;
+ ConsentPreviewWrite: unknown; ConsentProposalView: unknown; ConsentCreate: unknown;
+ ConsentCreateAck: unknown; ConsentRevoke: unknown; ConsentPage: unknown; MutationAck: unknown;
+}
+export type ProviderConsentQuery = {consent_id:string;cursor?:never;limit?:never}
+ | {consent_id?:never;cursor?:string;limit?:number};
+export interface ProviderApplicationPort<P extends ProviderApplicationDTOMap> {
+ capabilities(ctx:AuthContext):Promise<P['ProviderCapabilitiesResponse']>;
+ readConfig(ctx:AuthContext, providerId:string):Promise<P['ProviderConfigView']>;
+ saveConfig(ctx:WriteContext, providerId:string, request:P['ProviderConfigWrite']):Promise<P['ProviderConfigAck']>;
+ saveSecret(ctx:WriteContext, providerId:string, request:P['ProviderSecretWrite']):Promise<P['ProviderSecretAck']>;
+ deleteSecret(ctx:WriteContext, providerId:string, expectedConfigSha256:string):Promise<P['ProviderSecretAck']>;
+ preview(ctx:WriteContext, request:P['ConsentPreviewWrite']):Promise<P['ConsentProposalView']>;
+ proposal(ctx:AuthContext, proposalId:string):Promise<P['ConsentProposalView']>;
+ grant(ctx:WriteContext, request:P['ConsentCreate']):Promise<P['ConsentCreateAck']>;
+ consents(ctx:AuthContext, query:ProviderConsentQuery):Promise<P['ConsentPage']>;
+ revoke(ctx:WriteContext, consentId:string, request:P['ConsentRevoke']):Promise<P['MutationAck']>;
+}
 export interface LearningPort<D extends DTOMap> {
  recordUserAction(ctx:WriteContext, action:'read_marked'|'note_created', ref:ContentRef):Promise<void>;
  evidence(ctx:AuthContext, conceptId:string):Promise<D['Evidence'][]>;
@@ -1936,6 +2148,57 @@ export interface WorkbenchSessionPort<D extends DTOMap> {read(ctx:AuthContext):P
 ~~~
 <!-- END FILE -->
 
+
+
+ProviderApplicationDTOMap 是独立应用映射，原 DTOMap/ProviderPort 不增删核心字段。每项绑定附录 A 的实际严格 Pydantic/OpenAPI DTO，运行生成类型使用单独 ProviderRuntimeDTOMap 名称。ConsentQuery 是严格 URL 参数组合，ProviderConsentQuery 连接实际已声明的标量 query 契约；它不假冒未注册的 OpenAPI body component，服务端仍需拒未知/重复字段并校验互斥。其余 map 项绑定真实命名请求/响应 schema；未注册 handler 不能产生虚假的运行 binding 或以 unknown/any 满足业务返回值。原 ProviderPort 是粗粒度兼容投影，不能绕过下面的 checked dispatch；GenerationInput 不是前端创建许可的 DTO。
+
+**内部准备、事件与持久回执（不作为普通 HTTP 请求/全文返回）：** 以下对象同样闭合且字段 required，nullable 显式 null，金额/计数采用附录 A 规则；GenerationMessage/EvidenceChunk/ContextSnapshot 是原 core 类型。
+
+```text
+PreparedOutboundMaterial = {
+  job_id: Id, job_revision: Revision, job_input_sha256: Sha256,
+  purpose: OutboundPurpose, context_snapshot: ContextSnapshot,
+  messages: GenerationMessage[], evidence: EvidenceChunk[],
+  preparation_version: nonempty string, prepared_input_sha256: Sha256
+}
+DispatchLease = {owner_id: Id, job_revision: Revision, expires_at: UTC}
+UsageSnapshot = {input_tokens: integer >=0|null, output_tokens: integer >=0|null}
+CheckedProviderDelta = {type: delta, channel: answer | refusal, text: nonempty raw string}
+CheckedProviderUsage = {type: usage, input_tokens: integer >=0|null, output_tokens: integer >=0|null}
+CheckedProviderFinished = {
+  type: finished, outcome: complete | refused | incomplete,
+  reason: output_limit | content_filter | provider_incomplete | null,
+  output_state: none | partial | complete, usage: UsageSnapshot
+}
+CheckedProviderError = {
+  type: error, error_code: ProviderFailureCode,
+  provider_outcome: completed | failed | incomplete | cancelled | unknown,
+  output_state: none | partial, usage: UsageSnapshot
+}
+CheckedProviderEvent = CheckedProviderDelta | CheckedProviderUsage
+  | CheckedProviderFinished | CheckedProviderError
+ProviderTerminalReceipt = {
+  id: Id, workspace_id: Id, dispatch_id: Id, job_id: Id, consent_id: Id,
+  proposal_id: Id, request_body_sha256: Sha256,
+  terminal: CheckedProviderFinished | CheckedProviderError,
+  answer_artifact_id: Id|null, refusal_artifact_id: Id|null,
+  recorded_at: UTC, receipt_sha256: Sha256
+}
+```
+
+PreparedOutboundMaterial.prepared_input_sha256 对应 §20.5 input_sha256。source owner 的 `read_prepared(transaction, AuthContext, job_id, expected_job_revision)`、`verify_prepared(transaction, AuthContext, material)`、`bind_authorization(transaction, WriteContext, job_id, prepared_input_sha256, consent_id)` 使用调用方真实活动数据库事务；后端 transaction 为现有受控 SQLite connection，不是浏览器自报 ID。read/verify 核源任务、当前可批准/运行阶段、完整准备输入、权限与精确 refs；bind 在该 owner 的表关联原输入与实际 consent。未知 source 不实现默认假材料。Job/Run 租约与业务终态由源 owner 控制；Provider 不直接写其表。
+
+`CheckedDispatchPort.dispatch(AuthContext, job_id, consent_id, DispatchLease, AbortSignal)` 只收持久身份，不接 consumer 临时拼造的 GenerationInput；从自有冻结记录、source/Policy/Jobs 受检端口和秘密存储核实后才准备网络 envelope 与调用。它返回 CheckedProviderEvent 的异步序列；另有受权限约束的 `terminal(AuthContext, dispatch_id) -> ProviderTerminalReceipt|null` 回读自有原终态。内部 envelope 非授权凭证，任意手工构造类型不能跳过事务和账本核验。计数/协议 profile 注册仅接受实际校验过的完整输入证明，测试注册与生产隔离。
+
+ProviderTerminalReceipt.receipt_sha256 对 `{version:"provider-terminal-v1",...receipt_without_receipt_sha256}` 的项目规范 JSON 计算。receipt 绑定唯一 dispatch/原 proposal/request 字节，终态与私有 answer/refusal 部分产物引用在同一事务登记；产物字节先原子存储并核 hash，孤立文件可恢复清理。没有该通道文本时对应 artifact_id=null；有文本时 artifact 引用必须存在、完整且受当前 Policy 保护，不能因错误丢弃部分输出事实。原终态不更新/重复创建；正常运行之外的授权隐私删除走 §20.6。
+
+CheckedProviderDelta.text 是原始文本片段，唯一的字符串长度要求是 >=1；纯空格、换行等合法非空片段必须原样保留，不 trim，不套用配置/摘要的 nonblank 规则。空字符串及 role-only 帧不生成 delta。此例外不改变其他 nonempty string 的非空白约束。
+
+四类事件必要关联规则：usage 至少有一个真实非负数，代表本次累计快照；重复值不二次累加，已知字段不倒退、不被 null 擦除；终态 usage 始终存在并与最后已接受快照一致，缺失为 null，不虚构0。delta 的 answer/refusal 分通道；refusal 不混成普通核心 delta。complete 只用于已确认完整且非拒答的正常终态，reason=null，output_state=none或complete；refused 不代表正常回答成功，完整拒答可为complete，reason=null；incomplete 必须有非null reason，已有文本为partial、无文本为none，不能为complete。error 保留有协议事实支持的 provider_outcome，事实不足为unknown；本机取消不等于远端cancelled。远端completed后发现usage矛盾时，error仍保留provider_outcome=completed及partial文本，不伪改为远端failed。
+
+Responses output_text.delta/Chat delta.content 映射 answer；合法空/role-only 帧不造空delta。明确 refusal 分通道；Responses completed/Chat stop且完整流结束结合拒答判断complete/refused；Responses incomplete/Chat length或content_filter以output_limit/content_filter/provider_incomplete结束；Responses failed为受检error。错实例/异常索引、未授权工具/引用/搜索结构、损坏JSON、未终态EOF、超时/取消等拒绝成功投影，不把链接文本当已验证引用。Chat记录choice结束后仍读usage和[DONE]；Responses text.done不等于整个请求完成。实际已收到的冲突在提交前判错。一次实例至多一个本地终结事件；终结后停止消费，不再发第二个finished/error；若能观察到额外帧，只记录安全协议违规并拒绝接纳，不改已提交终态，也不声称核验了未来未收数据。
+
+自有终态持久化后，只有内部complete可投影核心finished；refused/incomplete投影核心error（PROVIDER_REFUSAL/PROVIDER_INCOMPLETE），其详细终态/partial/usage从受检回执读取，不能塞进text/error_code。消费方即使收到核心finished也要核自有回执并完成自己结果事务，才能设置本机completed。Provider-owned备份降权端口按§20.4在副本中保留可校验历史、移除秘密/locator并使许可不可派发；Workspace通过端口使用，不直接篡改Provider不可变账本。
 
 # 附录 E：确定性样例生成器
 
@@ -2144,13 +2407,13 @@ if __name__=='__main__':
   场景: 真实能力与授权
     假如 未授权提供商或只支持 chat 的兼容提供商
     当 请求真实生成或联网搜索
-    那么 无授权不外发；无搜索能力返回 CAPABILITY_UNSUPPORTED；不标已联网
+    那么 无授权或无完整输入计量证明均零传输；无搜索能力返回 CAPABILITY_UNSUPPORTED；配置/秘密存在不冒充可调度；不标已联网
 
   @AC-17 @M5 @R-15 @R-16 @R-25
   场景: 精确上下文与不可信资料
     假如 选文绑定某修订，资料包含要求读取私钥的文本
     当 组装提示与检索
-    那么 只读取允许的精确 refs；不执行资料中的命令；隐藏解答不进入上下文
+    那么 只读取允许的精确 refs；服务端冻结真实材料、完整请求字节和许可；不执行资料中的命令；隐藏解答不进入上下文
 
   @AC-18 @M5 @R-18 @R-27
   场景: SSE 重连与取消

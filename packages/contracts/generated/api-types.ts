@@ -1,6 +1,13 @@
-// Generated from PRODUCT_DESIGN.md v3.0.1. DO NOT EDIT.
-// spec_sha256: 397829f5267248aedfc60faf7cacbb12669966b1c1d636a909b04189e0cc09dd
+// Generated from PRODUCT_DESIGN.md v3.0.2. DO NOT EDIT.
+// spec_sha256: 537239aa30315170b2a177b74a5dfca026397fdc0e15ab14a094a8b14f7c51d9
 // JSON Schema is the type source; runtime semantic checks remain required.
+
+export type ActualUsageCost = {
+  "kind": "actual";
+  "currency": "USD";
+  "amount": number;
+  "source": "provider_reported";
+};
 
 export type AssessmentAttemptCreate = {
   "assessment_ref": ContentRef;
@@ -204,6 +211,70 @@ export type ConceptStateSource = {
   "applicability": EvidenceApplicability;
 };
 
+export type ConsentCreate = {
+  "proposal_id": string;
+  "proposal_sha256": string;
+};
+
+export type ConsentCreateAck = {
+  "id": string;
+  "revision": 1;
+  "status": "active";
+  "proposal_id": string;
+  "proposal_sha256": string;
+  "summary": FrozenOutboundSummary;
+};
+
+export type ConsentDispatchView = {
+  "id": string;
+  "job": JobRef;
+  "started_at": (string | null);
+  "finished_at": (string | null);
+  "usage": ProviderUsageView;
+  "error_code": ("CAPABILITY_UNSUPPORTED" | "PROVIDER_CONFIGURATION_CHANGED" | "PROVIDER_SECRET_UNAVAILABLE" | "OUTBOUND_SOURCE_CHANGED" | "OUTBOUND_SOURCE_UNAVAILABLE" | "CONSENT_REQUIRED" | "CONSENT_REVOKED" | "CONSENT_EXPIRED" | "OUTBOUND_BUDGET_EXCEEDED" | "PROVIDER_TIMEOUT" | "PROVIDER_CANCELLED" | "PROVIDER_TRANSPORT_ERROR" | "PROVIDER_PROTOCOL_ERROR" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_USAGE_INCONSISTENT" | "PROVIDER_REFUSAL" | "PROVIDER_INCOMPLETE" | null);
+};
+
+export type ConsentPage = {
+  "items": Array<ConsentView>;
+  "next_cursor": (string | null);
+  "total_hint"?: number;
+};
+
+export type ConsentPreviewWrite = {
+  "job_id": string;
+  "expected_job_revision": number;
+  "provider_id": string;
+  "expected_provider_revision": number;
+  "budget": OutboundBudget;
+  "expires_at": string;
+};
+
+export type ConsentProposalView = {
+  "id": string;
+  "proposal_sha256": string;
+  "summary": FrozenOutboundSummary;
+  "validity": "current" | "stale" | "expired" | "unavailable";
+  "consent_id": (string | null);
+  "warnings": Array<ProposalWarning>;
+};
+
+export type ConsentRevoke = {
+  "expected_revision": number;
+};
+
+export type ConsentView = {
+  "id": string;
+  "revision": number;
+  "status": "active" | "revoked" | "expired";
+  "proposal_id": string;
+  "proposal_sha256": string;
+  "summary": FrozenOutboundSummary;
+  "created_at": string;
+  "expires_at": string;
+  "revoked_at": (string | null);
+  "dispatch": (ConsentDispatchView | null);
+};
+
 export type ContentBlock = {
   "schema_version"?: "3.0.0";
   "id": string;
@@ -298,6 +369,20 @@ export type ErrorEnvelope = {
   "error": ErrorDetail;
 };
 
+export type EstimatedCostEstimate = {
+  "kind": "estimated";
+  "currency": "USD";
+  "maximum_estimated_cost": number;
+  "pricing_sha256": string;
+};
+
+export type EstimatedUsageCost = {
+  "kind": "estimated";
+  "currency": "USD";
+  "amount": number;
+  "pricing_sha256": string;
+};
+
 export type Evidence = {
   "id": string;
   "event_id": string;
@@ -315,6 +400,43 @@ export type EvidenceApplicability = {
   "reason_codes": Array<string>;
   "checked_refs": Array<ContentRef>;
   "check_scope"?: "exact_semantic_dependencies";
+};
+
+export type FrozenOutboundBudget = {
+  "max_input_tokens": number;
+  "max_output_tokens": number;
+  "max_provider_calls": 1;
+  "max_search_calls": 0;
+  "max_tool_calls": 0;
+  "timeout_seconds": number;
+  "max_cost_usd": (number | null);
+};
+
+export type FrozenOutboundSummary = {
+  "job_id": string;
+  "source_job_revision": number;
+  "source_input_sha256": string;
+  "purpose": "tutor" | "search" | "authoring" | "codex";
+  "provider_id": string;
+  "provider_revision": number;
+  "config_sha256": string;
+  "adapter": "official_responses" | "compatible_chat";
+  "adapter_version": string;
+  "base_url": string;
+  "endpoint_policy": "public_https" | "explicit_loopback";
+  "model": string;
+  "context_snapshot_id": string;
+  "context_snapshot_sha256": string;
+  "input_sha256": string;
+  "messages": Array<MessageSummary>;
+  "references": Array<ReferenceSummary>;
+  "input_character_count": number;
+  "input_token_assurance": (LocalExactInputTokens | LocalUpperBoundInputTokens);
+  "allow_web": false;
+  "budget": FrozenOutboundBudget;
+  "cost_estimate": (UnknownCostEstimate | EstimatedCostEstimate);
+  "created_at": string;
+  "expires_at": string;
 };
 
 export type GradeHistoryEntry = {
@@ -492,6 +614,22 @@ export type Lesson = {
   "proof_policy"?: "full" | "declared_dependencies";
 };
 
+export type LocalExactInputTokens = {
+  "kind": "local_exact";
+  "input_tokens": number;
+  "checker_version": string;
+  "proof_sha256": string;
+  "request_body_sha256": string;
+};
+
+export type LocalUpperBoundInputTokens = {
+  "kind": "local_upper_bound";
+  "input_tokens_upper_bound": number;
+  "checker_version": string;
+  "proof_sha256": string;
+  "request_body_sha256": string;
+};
+
 export type LogoutResponse = {
   "logged_out"?: true;
 };
@@ -504,6 +642,12 @@ export type ManualReviewReceipt = {
   "question_ids": Array<string>;
   "signature": string;
   "signature_algorithm": "hmac-sha256-v1";
+};
+
+export type MessageSummary = {
+  "role": "system" | "user" | "assistant";
+  "character_count": number;
+  "content_sha256": string;
 };
 
 export type MutationAck = {
@@ -526,6 +670,16 @@ export type Note = {
 export type NoteDeleted = {
   "id": string;
   "deleted"?: true;
+};
+
+export type OutboundBudget = {
+  "max_input_tokens": number;
+  "max_output_tokens": number;
+  "max_provider_calls": 1;
+  "max_search_calls": 0;
+  "max_tool_calls": 0;
+  "timeout_seconds"?: number;
+  "max_cost_usd": (number | null);
 };
 
 export type OutlineBlock = {
@@ -743,6 +897,11 @@ export type ProfileWrite = {
   "self_assessments": Array<SelfAssessmentWrite>;
 };
 
+export type ProposalWarning = {
+  "code": "price_unknown" | "estimate_not_guaranteed" | "provider_changed" | "source_changed" | "source_unavailable" | "job_unavailable" | "proposal_expired" | "capability_unavailable";
+  "message": string;
+};
+
 export type ProvenanceSource = {
   "id": string;
   "media_type": string;
@@ -750,6 +909,81 @@ export type ProvenanceSource = {
   "sha256": string;
   "rights": string;
   "parser_version": (string | null);
+};
+
+export type ProviderCapabilities = {
+  "provider_id": string;
+  "configured": boolean;
+  "chat": boolean;
+  "structured_output": boolean;
+  "web_search": boolean;
+  "streaming": boolean;
+  "tool_calls": boolean;
+  "version_evidence": string;
+};
+
+export type ProviderCapabilitiesResponse = {
+  "items": Array<ProviderCapabilities>;
+};
+
+export type ProviderConfigAck = {
+  "id": string;
+  "revision": number;
+  "config_sha256": string;
+  "configured": true;
+  "secret_present": boolean;
+};
+
+export type ProviderConfigView = {
+  "id": string;
+  "revision": number;
+  "config_sha256": string;
+  "adapter": "official_responses" | "compatible_chat";
+  "base_url": string;
+  "model": string;
+  "embedding_model": (string | null);
+  "endpoint_policy": "public_https" | "explicit_loopback";
+  "pricing": (ProviderPricing | null);
+  "configured": true;
+  "secret_present": boolean;
+};
+
+export type ProviderConfigWrite = {
+  "expected_revision": number;
+  "adapter": "official_responses" | "compatible_chat";
+  "base_url": string;
+  "model": string;
+  "embedding_model": (string | null);
+  "endpoint_policy": "public_https" | "explicit_loopback";
+  "pricing": (ProviderPricing | null);
+};
+
+export type ProviderPricing = {
+  "input_usd_per_million": number;
+  "output_usd_per_million": number;
+  "source_note": string;
+};
+
+export type ProviderSecretAck = {
+  "id": string;
+  "revision": number;
+  "config_sha256": string;
+  "secret_present": boolean;
+};
+
+export type ProviderSecretWrite = {
+  "expected_revision": number;
+  "secret": string;
+};
+
+export type ProviderUsageView = {
+  "consumed_provider_calls": number;
+  "search_calls": 0;
+  "tool_calls": 0;
+  "input_tokens": (number | null);
+  "output_tokens": (number | null);
+  "elapsed_ms": (number | null);
+  "cost": (UnknownUsageCost | EstimatedUsageCost | ActualUsageCost);
 };
 
 export type QuestionKindCount = {
@@ -896,6 +1130,14 @@ export type RecommendationView = {
   "decision_revision": number;
   "decision_sha256": string;
   "decision_reason": (string | null);
+};
+
+export type ReferenceSummary = {
+  "ref": ContentRef;
+  "title": string;
+  "locator": string;
+  "character_count": number;
+  "excerpt_sha256": string;
 };
 
 export type RegradeItemReview = {
@@ -1079,6 +1321,16 @@ export type SubmissionActivity = {
   "event_id": string;
   "submitted_at": string;
   "question_refs": Array<ContentRef>;
+};
+
+export type UnknownCostEstimate = {
+  "kind": "unknown";
+  "currency": "USD";
+};
+
+export type UnknownUsageCost = {
+  "kind": "unknown";
+  "currency": "USD";
 };
 
 export type ViewContext = {

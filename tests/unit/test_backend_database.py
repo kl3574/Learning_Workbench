@@ -29,6 +29,22 @@ def test_each_connection_enforces_wal_foreign_keys_and_ten_second_budget(tmp_pat
                 connection.execute("INSERT INTO bootstrap_codes VALUES('hash','missing_workspace','2099-01-01T00:00:00Z',NULL)")
 
 
+def test_short_write_wait_and_read_transaction_work_under_an_actual_writer(tmp_path):
+    database, _ = make_database(tmp_path)
+    with database.transaction() as writer:
+        writer.execute("UPDATE workspace SET title='uncommitted'")
+        with database.transaction(busy_timeout_ms=25, immediate=False) as reader:
+            assert reader.in_transaction
+            assert reader.execute('PRAGMA busy_timeout').fetchone()[0] == 25
+            assert reader.execute('SELECT title FROM workspace').fetchone()[0] != 'uncommitted'
+        with pytest.raises(sqlite3.OperationalError, match='locked'):
+            with database.transaction(busy_timeout_ms=25):
+                pytest.fail('The second writer cannot begin before the first commits.')
+    with database.connect() as connection:
+        assert connection.execute('PRAGMA busy_timeout').fetchone()[0] == 10000
+        assert connection.execute('SELECT title FROM workspace').fetchone()[0] == 'uncommitted'
+
+
 def test_repeat_startup_preserves_workspace_and_migration_receipt(tmp_path):
     database, _ = make_database(tmp_path)
     before = database.workspace_id()

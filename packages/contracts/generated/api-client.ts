@@ -1,6 +1,6 @@
-// Generated from PRODUCT_DESIGN.md v3.0.1 and actual runtime OpenAPI; do not edit.
-// spec_sha256: 397829f5267248aedfc60faf7cacbb12669966b1c1d636a909b04189e0cc09dd
-import type { AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, BlockReadResponse, BootstrapRequest, BootstrapResponse, ConceptStateResponse, ContentRef, Course, DirectorySearchResponse, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearnerProfile, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, OutlineResponse, PageAssessment, PageCourse, PageEvidence, PageNote, PagePracticeSet, PageRevision, PageRoute, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ProfileWrite, ReadinessResponse, RecommendationDecisionWrite, RecommendationPage, RegradeRequest, ResponsesWrite, RoleRequest, Route, RouteCompletionRequest, SessionResponse, SourceResponse, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
+// Generated from PRODUCT_DESIGN.md v3.0.2 and actual runtime OpenAPI; do not edit.
+// spec_sha256: 537239aa30315170b2a177b74a5dfca026397fdc0e15ab14a094a8b14f7c51d9
+import type { AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, BlockReadResponse, BootstrapRequest, BootstrapResponse, ConceptStateResponse, ConsentCreate, ConsentCreateAck, ConsentPage, ConsentPreviewWrite, ConsentProposalView, ConsentRevoke, ContentRef, Course, DirectorySearchResponse, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearnerProfile, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, OutlineResponse, PageAssessment, PageCourse, PageEvidence, PageNote, PagePracticeSet, PageRevision, PageRoute, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ProfileWrite, ProviderCapabilitiesResponse, ProviderConfigAck, ProviderConfigView, ProviderConfigWrite, ProviderSecretAck, ProviderSecretWrite, ReadinessResponse, RecommendationDecisionWrite, RecommendationPage, RegradeRequest, ResponsesWrite, RoleRequest, Route, RouteCompletionRequest, SessionResponse, SourceResponse, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
 
 export interface ApiEndpointMap {
   "GET /api/v1/artifacts/{id}/download": { request: undefined; response: Blob; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
@@ -15,6 +15,11 @@ export interface ApiEndpointMap {
   "POST /api/v1/attempts/{id}/submit": { request: AttemptSubmit; response: AttemptSnapshot; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/blocks/{id}": { request: undefined; response: BlockReadResponse; headers: null; parameters: { path: { "id": string }; query: { "include_provenance"?: boolean; "revision": number } }; parametersRequired: true };
   "GET /api/v1/blocks/{id}/body": { request: undefined; response: string; headers: null; parameters: { path: { "id": string }; query: { "revision": number } }; parametersRequired: true };
+  "GET /api/v1/consents": { request: undefined; response: ConsentPage; headers: null; parameters: { query?: { "consent_id"?: (string | null); "cursor"?: (string | null); "limit"?: number } }; parametersRequired: false };
+  "POST /api/v1/consents": { request: ConsentCreate; response: ConsentCreateAck; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
+  "POST /api/v1/consents/preview": { request: ConsentPreviewWrite; response: ConsentProposalView; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
+  "GET /api/v1/consents/preview/{id}": { request: undefined; response: ConsentProposalView; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
+  "POST /api/v1/consents/{id}/revoke": { request: ConsentRevoke; response: MutationAck; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/courses": { request: undefined; response: PageCourse; headers: null; parameters: { query?: { "cursor"?: (string | null); "limit"?: number; "q"?: (string | null) } }; parametersRequired: false };
   "GET /api/v1/courses/{id}": { request: undefined; response: Course; headers: null; parameters: { path: { "id": string }; query: { "revision": number } }; parametersRequired: true };
   "GET /api/v1/courses/{id}/directory-search": { request: undefined; response: DirectorySearchResponse; headers: null; parameters: { path: { "id": string }; query: { "limit"?: number; "q": string; "revision": number } }; parametersRequired: true };
@@ -46,6 +51,11 @@ export interface ApiEndpointMap {
   "POST /api/v1/practice/sessions/{id}/solutions": { request: PracticeSolutionRequest; response: PracticeSolution; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
   "POST /api/v1/practice/sessions/{id}/submit": { request: PracticeSubmitRequest; response: PracticeSubmitted; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/practice/sets": { request: undefined; response: PagePracticeSet; headers: null; parameters: { query?: { "course_id"?: (string | null); "cursor"?: (string | null); "lesson_id"?: (string | null); "limit"?: number } }; parametersRequired: false };
+  "GET /api/v1/providers/capabilities": { request: undefined; response: ProviderCapabilitiesResponse; headers: null; parameters: Record<string, never>; parametersRequired: false };
+  "GET /api/v1/providers/{id}/config": { request: undefined; response: ProviderConfigView; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
+  "PUT /api/v1/providers/{id}/config": { request: ProviderConfigWrite; response: ProviderConfigAck; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
+  "DELETE /api/v1/providers/{id}/secret": { request: undefined; response: ProviderSecretAck; headers: { "Idempotency-Key": string; "If-Match": string }; parameters: { path: { "id": string } }; parametersRequired: true };
+  "POST /api/v1/providers/{id}/secret": { request: ProviderSecretWrite; response: ProviderSecretAck; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/readiness": { request: undefined; response: ReadinessResponse; headers: null; parameters: Record<string, never>; parametersRequired: false };
   "GET /api/v1/recommendations": { request: undefined; response: RecommendationPage; headers: null; parameters: { query?: { "course_id"?: (string | null); "cursor"?: (string | null); "limit"?: number; "recommendation_id"?: (string | null) } }; parametersRequired: false };
   "POST /api/v1/recommendations/{id}/decision": { request: RecommendationDecisionWrite; response: MutationAck; headers: { "Idempotency-Key": string; "If-Match": string }; parameters: { path: { "id": string } }; parametersRequired: true };
@@ -276,6 +286,81 @@ export const API_ENDPOINTS = {
         "minimum": 1
       }
     ]
+  },
+  "GET /api/v1/consents": {
+    "method": "GET",
+    "path": "/api/v1/consents",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
+    "queryParameters": [
+      {
+        "name": "consent_id",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "name": "cursor",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      }
+    ]
+  },
+  "POST /api/v1/consents": {
+    "method": "POST",
+    "path": "/api/v1/consents",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
+    "queryParameters": []
+  },
+  "POST /api/v1/consents/preview": {
+    "method": "POST",
+    "path": "/api/v1/consents/preview",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
+    "queryParameters": []
+  },
+  "GET /api/v1/consents/preview/{id}": {
+    "method": "GET",
+    "path": "/api/v1/consents/preview/{id}",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
+  "POST /api/v1/consents/{id}/revoke": {
+    "method": "POST",
+    "path": "/api/v1/consents/{id}/revoke",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
   },
   "GET /api/v1/courses": {
     "method": "GET",
@@ -832,6 +917,75 @@ export const API_ENDPOINTS = {
         "maximum": 100
       }
     ]
+  },
+  "GET /api/v1/providers/capabilities": {
+    "method": "GET",
+    "path": "/api/v1/providers/capabilities",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
+    "queryParameters": []
+  },
+  "GET /api/v1/providers/{id}/config": {
+    "method": "GET",
+    "path": "/api/v1/providers/{id}/config",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
+  "PUT /api/v1/providers/{id}/config": {
+    "method": "PUT",
+    "path": "/api/v1/providers/{id}/config",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
+  "DELETE /api/v1/providers/{id}/secret": {
+    "method": "DELETE",
+    "path": "/api/v1/providers/{id}/secret",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
+  "POST /api/v1/providers/{id}/secret": {
+    "method": "POST",
+    "path": "/api/v1/providers/{id}/secret",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
   },
   "GET /api/v1/readiness": {
     "method": "GET",
