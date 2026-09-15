@@ -113,11 +113,24 @@ def test_explicit_confirmation_publishes_once_receipt_and_terminal_event_atomica
 
 
 def test_cancel_queued_and_cancel_parsing_never_publish_and_old_lease_cannot_finish(imports):
+    from services.api.app.application.recommendations import RecommendationService
+
     database, service, worker, identity = imports
+    recommendations = RecommendationService(database)
+    assert recommendations.page(identity.workspace_id).projection_state == "missing"
     staged = service.stage(identity, data=b"synthetic", filename="a.txt", kind="text", key="queued")
     service.cancel(identity, staged.import_id, ImportCancelRequest(expected_input_sha256=staged.input_sha256), "cancel")
+    # This maintenance tick can create the initial empty recommendation snapshot
+    # even though the cancelled import cannot be claimed, parsed or published.
+    assert worker.run_once() is True
+    maintained = recommendations.page(identity.workspace_id)
+    assert maintained.projection_state == "ready" and maintained.snapshot_id is not None
+    assert maintained.items == []
+    cancelled = service.job(identity, staged.job.id)
+    assert cancelled.status == "cancelled" and cancelled.result_refs == []
+    assert sql_count(database, "objects") == sql_count(database, "revisions") == sql_count(database, "drafts") == 0
     assert worker.run_once() is False
-    assert service.job(identity, staged.job.id).status == "cancelled"
+    assert recommendations.page(identity.workspace_id) == maintained
     staged2 = service.stage(identity, data=b"synthetic second", filename="b.txt", kind="text", key="parsing")
     lease = worker.claim()
     assert lease
@@ -127,7 +140,7 @@ def test_cancel_queued_and_cancel_parsing_never_publish_and_old_lease_cannot_fin
     result = service.cancel_job(identity, staged2.job.id, JobCancelRequest(expected_revision=snapshot.revision), "cancel_job")
     assert result.status == "cancelled"
     assert worker.complete_preview(lease, parsed) is False
-    assert sql_count(database, "objects") == sql_count(database, "drafts") == 0
+    assert sql_count(database, "objects") == sql_count(database, "revisions") == sql_count(database, "drafts") == 0
     with database.connect() as connection:
         assert connection.execute("SELECT COUNT(*) FROM job_events WHERE type='cancelled'").fetchone()[0] == 2
 
