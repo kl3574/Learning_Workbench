@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DraftRecord, DraftStore } from '../workbench/DraftStore'
 
 
-type Branch = { text: string; expected: number; dirty: boolean; sequence: number; durable: boolean; pending: number }
+type Branch = { text: string; expected: number; dirty: boolean; sequence: number; durable: boolean; pending: number; writing?: { text: string; expected: number }; resolving?: { text: string; expected: number; sequence: number } }
 type MemoryCandidate = { owner: string; key: string; text: string; expected: number; updatedAt: string }
 type Session = {
   workspace: string; owner: string; epoch: number; active: boolean; ready: boolean
@@ -37,7 +37,10 @@ function project(session: Session): void {
     if (!branch.dirty && branch.durable && !branch.pending && stored) continue
     const now = new Date().toISOString()
     const conflicts = [...(stored?.conflicts ?? [])].filter(value => value.text !== branch.text)
-    if (stored && stored.text !== branch.text && !conflicts.some(value => value.text === stored.text)) {
+    // A known base, or the exact write currently awaiting its receipt, is an
+    // ancestor of this local edit. Loading it is not a second-page conflict.
+    const ownBase = stored && (stored.revision === branch.expected || branch.writing?.expected === stored.revision - 1 && branch.writing.text === stored.text)
+    if (stored && !ownBase && stored.text !== branch.text && !conflicts.some(value => value.text === stored.text)) {
       conflicts.unshift({ id: `primary:${stored.revision}`, expectedRevision: branch.expected, actualRevision: stored.revision, text: stored.text, createdAt: stored.updatedAt })
     }
     for (const [, candidate] of memoryFor(session.workspace)) {
@@ -57,6 +60,15 @@ function remember(session: Session, key: string, branch: Branch): void {
 function acknowledge(workspace: string, key: string, record: DraftRecord): void {
   const durable = new Set([record.text, ...record.conflicts.map(item => item.text)])
   for (const [id, candidate] of memoryFor(workspace)) if (candidate.key === key && durable.has(candidate.text)) memory.delete(id)
+}
+
+function retainObserved(current: DraftRecord | undefined, receipt: DraftRecord): DraftRecord {
+  if (!current || current.revision < receipt.revision) return receipt
+  if (current.revision > receipt.revision) return current
+  // Conflict additions keep the primary revision. A late receipt must retain
+  // additions already read; an explicit resolution creates a newer revision.
+  const known = new Set(current.conflicts.map(value => value.id))
+  return { ...current, conflicts: [...current.conflicts, ...receipt.conflicts.filter(value => !known.has(value.id))] }
 }
 
 return function useResponseDrafts(workspace: string): {
@@ -90,18 +102,31 @@ return function useResponseDrafts(workspace: string): {
     if (!branch) return
     branch.pending += 1; value.busy += 1
     value.queue = value.queue.then(async () => {
+      let completed = false
       try {
-        const result = await practiceDraftStore.save(value.workspace, key, text, fixedExpected ?? branch.expected)
+        const expected = fixedExpected ?? branch.expected
+        branch.writing = { text, expected }
+        const result = await practiceDraftStore.save(value.workspace, key, text, expected)
         value.storageVersion += 1
-        value.persisted[key] = result.record
+        const observed = retainObserved(value.persisted[key], result.record)
+        value.persisted[key] = observed
         if (result.kind === 'saved') branch.expected = result.record.revision
-        branch.durable = [result.record.text, ...result.record.conflicts.map(item => item.text)].includes(branch.text)
-        acknowledge(value.workspace, key, result.record)
+        branch.durable = [observed.text, ...observed.conflicts.map(item => item.text)].includes(branch.text)
+        acknowledge(value.workspace, key, observed)
+        if (!branch.durable) remember(value, key, branch)
+        completed = true
         value.errors.delete(key)
       } catch (error) {
         branch.durable = false; remember(value, key, branch)
         value.errors.set(key, `本机作答草稿尚未保存：${failure(error)} 请保持本页打开。`)
-      } finally { branch.pending -= 1; value.busy -= 1; notify(value) }
+      } finally {
+        delete branch.writing; branch.pending -= 1; value.busy -= 1
+        // Another page can supersede a successful write before its receipt.
+        // Persist our still-active candidate as a conflict without replacing
+        // that page's primary. Failed storage attempts await explicit retry.
+        if (completed && !branch.durable && !branch.pending) enqueue(value, key, branch.text, 0)
+        notify(value)
+      }
     })
     notify(value)
   }, [notify])
@@ -131,17 +156,18 @@ return function useResponseDrafts(workspace: string): {
           value.persisted = records
           for (const [key, branch] of value.branches) {
             const stored = records[key]
+            const ownResolution = stored && branch.resolving && branch.resolving.sequence === branch.sequence && stored.revision === branch.resolving.expected + 1 && stored.text === branch.resolving.text
             const retained = stored && [stored.text, ...stored.conflicts.map(item => item.text)].includes(branch.text)
             if (retained) {
               branch.durable = true; acknowledge(value.workspace, key, stored)
               if (stored.text === branch.text) branch.expected = stored.revision
-            } else if (branch.dirty || !branch.durable) {
+            } else if (!ownResolution && (branch.dirty || !branch.durable)) {
               branch.durable = false; remember(value, key, branch)
             }
             if (!branch.pending) {
               const candidates = memoryFor(value.workspace).map(([, item]) => item).filter(item => item.key === key)
               const durableTexts = new Set(stored ? [stored.text, ...stored.conflicts.map(item => item.text)] : [])
-              for (const text of new Set(candidates.map(item => item.text))) if (!durableTexts.has(text)) enqueue(value, key, text, 0)
+              for (const text of new Set(candidates.map(item => item.text))) if (!durableTexts.has(text) && !(ownResolution && text === branch.text)) enqueue(value, key, text, 0)
             }
           }
           notify(value)
@@ -186,28 +212,63 @@ return function useResponseDrafts(workspace: string): {
     const seenTexts = new Set(displayed ? [displayed.text, ...displayed.conflicts.map(item => item.text)] : [])
     const seenIds = displayed?.conflicts.map(item => item.id) ?? []
     if (!seenTexts.has(text)) return Promise.reject(new Error('候选不在已展示的作答冲突中，请重新读取。'))
+    if (!value.branches.has(key) && displayed) {
+      const original = decodePracticeEnvelope(displayed.text, value.workspace)
+      value.branches.set(key, { text: displayed.text, expected: displayed.revision, dirty: practiceDirty(original), sequence: 0, durable: true, pending: 0 })
+    }
+    const resolvingBranch = value.branches.get(key)
+    // A choice can differ from the editor branch. Keep its own recovery identity
+    // through every await; preserving the editor alone would lose this choice.
+    const selectionOwner = `${value.owner}:selection:${crypto.randomUUID()}`
+    const retainSelection = () => {
+      const stored = value.persisted[key]
+      const retained = stored && [stored.text, ...stored.conflicts.map(item => item.text)].includes(text)
+      if (!retained) memory.set(memoryId(value.workspace, selectionOwner, key), { owner: selectionOwner, key, text, expected: displayed?.revision ?? 0, updatedAt: new Date().toISOString() })
+      return retained
+    }
+    memory.set(memoryId(value.workspace, selectionOwner, key), { owner: selectionOwner, key, text, expected: displayed?.revision ?? 0, updatedAt: new Date().toISOString() })
     value.busy += 1; notify(value)
     const operation = value.queue.then(async () => {
       const latest = (await practiceDraftStore.load(value.workspace))[key]
       if (!value.active || value.epoch !== epoch || current.current !== value) throw new Error('作答工作区已切换；旧候选仍保留。')
       if (!latest) throw new Error('尚无可确认的持久化作答记录，请先重试本机保存。')
-      value.persisted[key] = latest
+      value.persisted[key] = retainObserved(value.persisted[key], latest)
       validateRecord(latest, value.workspace)
       if (!seenTexts.has(latest.text)) throw new Error(conflictMessage)
+      if (resolvingBranch) resolvingBranch.resolving = { text, expected: latest.revision, sequence: resolvingBranch.sequence }
       const result = await practiceDraftStore.save(value.workspace, key, text, latest.revision, seenIds)
       value.storageVersion += 1
-      value.persisted[key] = result.record; acknowledge(value.workspace, key, result.record)
-      if (result.kind === 'conflict') throw new Error(conflictMessage)
+      const observed = retainObserved(value.persisted[key], result.record)
+      value.persisted[key] = observed; acknowledge(value.workspace, key, observed)
+      retainSelection()
       const branch = value.branches.get(key)
+      const changed = result.kind === 'conflict' || observed.revision !== result.record.revision || observed.conflicts.some(item => !result.record.conflicts.some(known => known.id === item.id))
+      if (branch && (changed || branch.pending)) {
+        branch.durable = [observed.text, ...observed.conflicts.map(item => item.text)].includes(branch.text)
+        if (!branch.durable) remember(value, key, branch)
+      }
+      if (changed) throw new Error(conflictMessage)
       if (branch && branch.pending) { branch.expected = result.record.revision; throw new Error('选择期间又有新的本页编辑，较新的候选仍保留。') }
       value.branches.set(key, { text, expected: result.record.revision, dirty: practiceDirty(envelope), sequence: (branch?.sequence ?? 0) + 1, durable: true, pending: 0 })
+      memory.delete(memoryId(value.workspace, value.owner, key))
       value.errors.delete(key)
       if (!value.active || value.epoch !== epoch || current.current !== value) throw new Error('作答工作区已切换；持久化结果仍保留。')
       return envelope
     })
-    value.queue = operation.then(() => undefined, error => { value.errors.set(key, failure(error)) }).finally(() => { value.busy -= 1; notify(value) })
+    value.queue = operation.then(() => undefined, error => { value.errors.set(key, failure(error)) }).finally(() => {
+      if (resolvingBranch) delete resolvingBranch.resolving
+      value.busy -= 1
+      if (!retainSelection()) enqueue(value, key, text, 0)
+      else if (value.persisted[key]) acknowledge(value.workspace, key, value.persisted[key])
+      const branch = value.branches.get(key), stored = value.persisted[key]
+      if (branch && stored && ![stored.text, ...stored.conflicts.map(item => item.text)].includes(branch.text)) {
+        branch.durable = false; remember(value, key, branch)
+        if (!branch.pending) enqueue(value, key, branch.text, 0)
+      }
+      notify(value)
+    })
     return operation
-  }, [session, notify])
+  }, [session, enqueue, notify])
 
   return {
     records: session.records, ready: session.ready, saving: session.busy > 0,

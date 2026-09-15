@@ -51,7 +51,7 @@ const auxiliaryText: Record<string, string> = {
   '创作': '创作、独立审校与发布尚未实现。模型生成不会直接覆盖正式教材。',
 }
 export function Shell() {
-  const { session, set, status, error, drafts, updateDraft, reconnect, draftConflicts, draftSaving, draftErrors, chooseDraft, draftResolving, workspaceId, recoverable, restorePending, comparison, retainLocal, draftBases, draftStored } = useWorkbench()
+  const { session, set, status, uiReady, error, drafts, updateDraft, reconnect, draftConflicts, draftSaving, draftErrors, chooseDraft, draftResolving, workspaceId, recoverable, restorePending, comparison, retainLocal, draftBases, draftStored } = useWorkbench()
   const policy = useWorkspacePolicy(workspaceId)
   const [assessmentStates, setAssessmentStates] = useState<Record<string, AssessmentViewState>>({})
   const assessmentStatesRef = useRef(assessmentStates); assessmentStatesRef.current = assessmentStates
@@ -92,7 +92,7 @@ export function Shell() {
   const activeAssessment = active ? assessmentTarget(active.context) : null
   const subjectLocked = !policy.known || !!policy.independentId
   const activeRoute = active ? routeTarget(active.context) : null
-  const routes = useRoutes(workspaceId, subjectLocked || session.navigation !== 'route', learningVersion)
+  const routes = useRoutes(workspaceId, !uiReady || subjectLocked || session.navigation !== 'route', learningVersion)
   const routeRecord = activeRoute ? routes.records.find(item => sameRef(item.ref, activeRoute)) : null
   const profileConcepts = useConceptStates(workspaceId, subjectLocked || dialog !== '学习目标与基础', undefined, learningVersion)
   const canLeave = () => { if (active && (practiceStatesRef.current[active.id]?.safe === false || assessmentStatesRef.current[active.id]?.safe === false || routeStatesRef.current[active.id]?.safe === false)) { setHistoryWarning('当前作答尚未安全保存到本机，请保持页面打开并重试；未切换对象。'); return false }; return true }
@@ -153,14 +153,14 @@ export function Shell() {
   }
   const navigationCallbacks = useRef({ openReal, openExercise, openTest, openLearningRoute }); navigationCallbacks.current = { openReal, openExercise, openTest, openLearningRoute }
   useEffect(() => {
-    if (!workspaceId || status === 'connecting' || deepOpened.current === workspaceId) return
+    if (!uiReady || !workspaceId || status === 'connecting' || deepOpened.current === workspaceId) return
     deepOpened.current = workspaceId
     try { const assessment = readAssessmentTarget(); const exercise = readPracticeTarget(); const target = readTarget(); const route = readRouteTarget(); if ([assessment, exercise, target, route].filter(Boolean).length > 1) throw new Error('链接同时声明多个学习对象，未猜测目标。'); if (assessment) navigationCallbacks.current.openTest(assessment, true); else if (exercise) navigationCallbacks.current.openExercise(exercise, true); else if (target) navigationCallbacks.current.openReal(target, true); else if (route) navigationCallbacks.current.openLearningRoute(route, true) } catch (reason) { setHistoryWarning((reason as Error).message) }
-  }, [workspaceId, status])
+  }, [workspaceId, status, uiReady])
   useEffect(() => {
-    const read = () => { try { const assessment = readAssessmentTarget(); const exercise = readPracticeTarget(); const target = readTarget(); const route = readRouteTarget(); if ([assessment, exercise, target, route].filter(Boolean).length > 1) throw new Error('链接同时声明多个学习对象，未猜测目标。'); if (assessment) navigationCallbacks.current.openTest(assessment, true); else if (exercise) navigationCallbacks.current.openExercise(exercise, true); else if (target) navigationCallbacks.current.openReal(target, true); else if (route) navigationCallbacks.current.openLearningRoute(route, true) } catch (reason) { setHistoryWarning((reason as Error).message) } }
+    const read = () => { if (!uiReady) return; try { const assessment = readAssessmentTarget(); const exercise = readPracticeTarget(); const target = readTarget(); const route = readRouteTarget(); if ([assessment, exercise, target, route].filter(Boolean).length > 1) throw new Error('链接同时声明多个学习对象，未猜测目标。'); if (assessment) navigationCallbacks.current.openTest(assessment, true); else if (exercise) navigationCallbacks.current.openExercise(exercise, true); else if (target) navigationCallbacks.current.openReal(target, true); else if (route) navigationCallbacks.current.openLearningRoute(route, true) } catch (reason) { setHistoryWarning((reason as Error).message) } }
     addEventListener('popstate', read); return () => removeEventListener('popstate', read)
-  }, [workspaceId])
+  }, [workspaceId, uiReady])
   const openNoteAnchor = async (selection: Selection) => {
     if (!session.course_ref) { setHistoryWarning('请先选择包含此笔记的教材。'); return }
     try { const target = await resolveAnchor(selection.ref, session.course_ref); openReal(target, true); if (noteState.dirty) setClosingNotes(true); else setDialog(null) } catch (reason) { setHistoryWarning((reason as Error).message) }
@@ -172,7 +172,7 @@ export function Shell() {
   const navVisible = width >= 820 && !session.nav_collapsed && !focus
   const agentVisible = desktop && !session.agent_collapsed && !focus
   useEffect(() => { const resize = () => { setWidth(innerWidth); setDrawer(null) }; addEventListener('resize', resize); return () => removeEventListener('resize', resize) }, [])
-  const commandCallback = useRef(() => {}); commandCallback.current = () => { if (protectLearningDialog()) return; if (dialog === '笔记' && (noteState.dirty || !noteState.safe)) { setClosingNotes(true); return }; setDialog('命令面板') }
+  const commandCallback = useRef(() => {}); commandCallback.current = () => { if (!uiReady) return; if (protectLearningDialog()) return; if (dialog === '笔记' && (noteState.dirty || !noteState.safe)) { setClosingNotes(true); return }; setDialog('命令面板') }
   useEffect(() => { const shortcut = (event: KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'p') { event.preventDefault(); commandCallback.current() } if (event.key === 'Escape' && focus) setFocus(false) }; addEventListener('keydown', shortcut); return () => removeEventListener('keydown', shortcut) }, [focus])
   const openLesson = (lesson: SyntheticLesson, pinned = false) => {
     const context: ViewContext = { view_kind: 'lesson', active_ref: fixtureRef(lesson.ref), attached_refs: [], selection: null, attempt_id: null }
@@ -202,6 +202,7 @@ export function Shell() {
     { title: '切换专注模式', action: () => { setDialog(null); setFocus(!focus) } },
     { title: '查看快捷键', action: () => setDialog('快捷键') },
   ]
+  if (!uiReady) return <main id="reader-main" className="empty-content" aria-busy={status === 'connecting'}><h1>{status === 'offline' ? '工作台尚未恢复' : '正在恢复工作台'}</h1><p role="status">{error || '正在读取工作台状态，完成后可继续操作。'}</p>{status === 'offline' && <button onClick={() => void reconnect()}>重试连接</button>}</main>
   return <PreserveReaderViewport owner={readerViewportOwner(workspaceId, active)} conflict={status === 'conflict' && !!comparison} className={`app-shell ${focus ? 'focus-mode' : ''}`}>
     <a href="#reader-main" className="skip-link">跳到学习内容</a>
     <header className="topbar"><a className="brand" href="#" onClick={event => { event.preventDefault(); navigate('route') }}><span className="brand-symbol" aria-hidden="true">径</span><strong>知径</strong><span className="brand-subtitle">学习工作台</span></a><button className="command-trigger" onClick={() => commandCallback.current()}><span aria-hidden="true">⌕</span> 搜索与命令 <kbd>Ctrl ⇧ P</kbd></button><div className="topbar-tools"><button onClick={() => toggleSide('nav')} aria-label="切换导航栏" aria-expanded={width < 820 ? drawer === 'nav' : navVisible}>目录</button><button onClick={() => toggleSide('agent')} aria-label="切换 Agent 栏" aria-expanded={!desktop ? drawer === 'agent' : agentVisible}>Agent</button><button className="focus-trigger" onClick={() => setFocus(!focus)} aria-pressed={focus}>{focus ? '退出专注' : '专注'}</button><button className="import-trigger" onClick={() => openAux('导入')}>导入</button></div></header>

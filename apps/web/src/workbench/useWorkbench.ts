@@ -10,6 +10,8 @@ export function useWorkbench() {
   const cache = useQueryClient()
   const [session, setSession] = useState<Session>(emptySession)
   const [status, setStatus] = useState<SaveState>('connecting')
+  const [uiReady, setUiReady] = useState(false)
+  const usableSession = useRef(false)
   const [error, setError] = useState('')
   const [recoverable, setRecoverable] = useState<PendingSnapshot[]>([])
   const [comparison, setComparison] = useState<{ base: Session | null; local: Session; remote: Session | null; remoteEtag?: string | null } | null>(null)
@@ -25,6 +27,9 @@ export function useWorkbench() {
   const connected = useRef(false)
   const recoveryEpoch = useRef(0)
   const set = useCallback((update: Session | ((old: Session) => Session)) => {
+    // A cold placeholder is not a user candidate. Once a real remote or
+    // recoverable local session is available, later reconnects keep edits open.
+    if (!usableSession.current) { setError('工作台正在恢复，请稍后再操作。'); return }
     const next = typeof update === 'function' ? update(live.current) : update
     if (next === live.current) return
     live.current = next; version.current++; setSession(next)
@@ -62,6 +67,7 @@ export function useWorkbench() {
         ? { session: live.current, base: baseline.current, etag: baselineEtag.current } : null
       const candidate = useServer ? null : memory ?? disk
       if (candidate) {
+        usableSession.current = true; setUiReady(true)
         live.current = normalizeSession(candidate.session); baseline.current = candidate.base; baselineEtag.current = candidate.etag
         setSession(live.current); version.current = 1; savedVersion.current = 0
         pendingSafe.current = writeLocal(pendingKey(authenticatedWorkspace), JSON.stringify({ session: live.current, base: baseline.current, etag: baselineEtag.current }))
@@ -73,6 +79,7 @@ export function useWorkbench() {
         setError(pendingSafe.current ? '' : '浏览器缓存不可用，正在重试保存保留在内存中的 UI；服务端确认前请勿关闭页面。')
         return
       }
+      usableSession.current = true; setUiReady(true)
       live.current = remote; baseline.current = remote; baselineEtag.current = observed.etag; setSession(remote)
       if (useServer) removeLocal(pendingKey(authenticatedWorkspace))
       pendingSafe.current = false; version.current = 0; savedVersion.current = 0
@@ -84,7 +91,7 @@ export function useWorkbench() {
       // an older persisted draft. Only hydrate disk during a clean cold start.
       if (version.current === savedVersion.current && workspace.current) {
         const disk = decodePending(readLocal(pendingKey(workspace.current)))
-        if (disk) { live.current = normalizeSession(disk.session); baseline.current = disk.base; baselineEtag.current = disk.etag; setSession(live.current); version.current = 1; savedVersion.current = 0; pendingSafe.current = true }
+        if (disk) { usableSession.current = true; setUiReady(true); live.current = normalizeSession(disk.session); baseline.current = disk.base; baselineEtag.current = disk.etag; setSession(live.current); version.current = 1; savedVersion.current = 0; pendingSafe.current = true }
       }
     }
   }, [cache])
@@ -136,5 +143,5 @@ export function useWorkbench() {
     const chosen = { ...preserveUntouchedSelections(live.current, comparison.base, comparison.remote), revision: comparison.remote.revision }
     baseline.current = comparison.remote; baselineEtag.current = comparison.remoteEtag ?? null; set(chosen); setComparison(null); setStatus('saving'); setError('正在按您的明确选择保存本地布局；未主动修改的原选文随服务端恢复。')
   }
-  return { session, set, status, error, reconnect, comparison, retainLocal, workspaceId: workspace.current, recoverable, restorePending, ...draftStore }
+  return { session, set, status, uiReady, error, reconnect, comparison, retainLocal, workspaceId: workspace.current, recoverable, restorePending, ...draftStore }
 }
