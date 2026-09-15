@@ -1,0 +1,94 @@
+
+> @learning-workbench/web@0.1.0 test:e2e
+> playwright test --config ../../tests/e2e/playwright.config.ts import-admission.spec.ts reader.spec.ts:209
+
+[WebServer] INFO:     Started server process [741069]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+[WebServer] (node:741090) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 3 tests using 1 worker
+
+(node:741143) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 ../../tests/e2e/import-admission.spec.ts:7:1 › import admission waits for real Policy after UI saved and never replays a rejected click (1.2s)
+  ✘  2 ../../tests/e2e/import-admission.spec.ts:64:1 › real independent Policy preserves an open import selection and restores only explicit admission (8.7s)
+(node:741468) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+  ✘  3 ../../tests/e2e/reader.spec.ts:209:1 › a private original authorized before a cross-profile role decrease cannot trigger a late browser download (1.0m)
+
+
+  1) ../../tests/e2e/import-admission.spec.ts:64:1 › real independent Policy preserves an open import selection and restores only explicit admission 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('独立测试进行中 · 工作区材料受限', { exact: true })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByText('独立测试进行中 · 工作区材料受限', { exact: true }) with timeout 5000ms
+      - waiting for getByText('独立测试进行中 · 工作区材料受限', { exact: true })
+
+
+       98 |     await expect(second.getByText('服务端作答已保存', { exact: true })).toBeVisible()
+       99 |     await page.evaluate(() => window.dispatchEvent(new Event('focus')))
+    > 100 |     await expect(page.getByText('独立测试进行中 · 工作区材料受限', { exact: true })).toBeVisible()
+          |                                                                        ^
+      101 |     await expect(page.locator('.import-trigger')).toBeDisabled()
+      102 |     await expect(dialog).toBeVisible()
+      103 |     await expect(dialog.getByText('当前导入记录、已选择的本机文件与未提交设置仍保留。权限恢复后会重新读取服务端内容。', { exact: true })).toBeVisible()
+        at <private-home>/Desktop/learning/Learning_Workbench/tests/e2e/import-admission.spec.ts:100:72
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../.cache/learning-workbench-acceptance/m52-import-admission-repair-v1/focused-03/artifacts/import-admission-real-inde-c8d41-res-only-explicit-admission/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../.cache/learning-workbench-acceptance/m52-import-admission-repair-v1/focused-03/artifacts/import-admission-real-inde-c8d41-res-only-explicit-admission/error-context.md
+
+  2) ../../tests/e2e/reader.spec.ts:209:1 › a private original authorized before a cross-profile role decrease cannot trigger a late browser download 
+
+    Test timeout of 60000ms exceeded.
+
+    Error: locator.click: Test timeout of 60000ms exceeded.
+    Call log:
+      - waiting for getByRole('button', { name: '导入', exact: true })
+        - locator resolved to <button disabled title="独立测试进行中，暂不可导入" class="import-trigger">导入</button>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not enabled
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not enabled
+        - retrying click action
+          - waiting 100ms
+        115 × waiting for element to be visible, enabled and stable
+            - element is not enabled
+          - retrying click action
+            - waiting 500ms
+
+
+      212 |   const root = resolve(import.meta.dirname, '../..')
+      213 |   const bytes = execFileSync(`${root}/.venv/bin/python`, ['-B', '-c', 'import sys;from tests.document_fixtures import docx_fixture;sys.stdout.buffer.write(docx_fixture())'], { cwd: root })
+    > 214 |   await page.getByRole('button', { name: '导入', exact: true }).click()
+          |                                                               ^
+      215 |   const imported = page.getByRole('dialog', { name: '导入', exact: true })
+      216 |   await imported.getByLabel('解析格式').selectOption('docx')
+      217 |   await imported.getByLabel('选择导入文件').setInputFiles({ name: 'synthetic-reader-source.docx', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', buffer: bytes })
+        at <private-home>/Desktop/learning/Learning_Workbench/tests/e2e/reader.spec.ts:214:63
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../../../.cache/learning-workbench-acceptance/m52-import-admission-repair-v1/focused-03/artifacts/reader-a-private-original--2a96e-ger-a-late-browser-download/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../../../.cache/learning-workbench-acceptance/m52-import-admission-repair-v1/focused-03/artifacts/reader-a-private-original--2a96e-ger-a-late-browser-download/error-context.md
+
+  2 failed
+    ../../tests/e2e/import-admission.spec.ts:64:1 › real independent Policy preserves an open import selection and restores only explicit admission 
+    ../../tests/e2e/reader.spec.ts:209:1 › a private original authorized before a cross-profile role decrease cannot trigger a late browser download 
+  1 passed (1.2m)
