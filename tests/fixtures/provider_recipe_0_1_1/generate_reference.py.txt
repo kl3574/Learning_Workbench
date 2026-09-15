@@ -1,0 +1,52 @@
+"""Generate public synthetic protocol fixtures with a reviewed local wheel.
+
+Run only inside the separate network-disabled, credential-free audit sandbox.
+This is protocol generation from invented backend chunks, never model inference.
+"""
+from pathlib import Path
+import hashlib
+import json
+import sys
+
+import deepseek_recipe
+import deepseek_recipe._native as native
+from deepseek_recipe import (
+    InferenceChunk, InferenceFinishReason, ParsingOptions, PromptUsage,
+    ReasoningStage, ResponsesChunkGenerator, StreamProcessor,
+)
+
+output = Path(sys.argv[1])
+expected_native = sys.argv[2]
+assert hashlib.sha256(Path(native.__file__).read_bytes()).hexdigest() == expected_native
+output.mkdir()
+records = []
+cases = [
+    ('complete', ['原创协议样例：', '42\n'], InferenceFinishReason.Stop, ReasoningStage.Content),
+    ('output-limit', ['实际部分文字'], InferenceFinishReason.Length, ReasoningStage.Content),
+    ('content-filter', ['保留已收到文字'], InferenceFinishReason.ContentFilter, ReasoningStage.Content),
+    ('whitespace', [' ', '\n'], InferenceFinishReason.Stop, ReasoningStage.Content),
+    ('unexpected-reasoning', ['本样例只用于协议拒绝测试。'], InferenceFinishReason.Stop, ReasoningStage.Reasoning),
+]
+for name, fragments, reason, stage in cases:
+    processor = StreamProcessor(
+        ResponsesChunkGenerator('resp_reference_' + name.replace('-', '_'), 'deepseek-flash'),
+        ParsingOptions(parse_tool_calls=False, parse_json_output=False, reasoning_initial_stage=stage),
+    )
+    chunks = [InferenceChunk.ready(prompt_usage=PromptUsage(prompt_tokens=14, prompt_cache_hit_tokens=3))]
+    chunks += [InferenceChunk.text(fragment, content_tokens=2) for fragment in fragments]
+    chunks += [InferenceChunk.finish(reason)]
+    events = []
+    for chunk in chunks:
+        events.extend(event.to_json() for event in processor.push(chunk))
+    assert processor.finished
+    assert processor.finish() == []
+    processor.close()
+    raw = ('\n'.join(events) + '\n').encode('utf-8')
+    (output / (name + '.jsonl')).write_bytes(raw)
+    records.append({'case': name, 'path': name + '.jsonl', 'sha256': hashlib.sha256(raw).hexdigest(),
+                    'bytes': len(raw), 'events': len(events), 'synthetic_fragments': fragments})
+receipt = {'package_version': deepseek_recipe.__version__, 'native_sha256': expected_native,
+           'generator_script_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+           'cases': records, 'scope': 'Actual local official-wheel protocol generator with synthetic backend chunks and invented usage; no model, HTTP service, key, inference, real usage, or hosted protocol equivalence claim.'}
+(output / 'receipt.json').write_text(json.dumps(receipt, ensure_ascii=False, indent=2) + '\n')
+print(json.dumps({'cases': len(records), 'events': sum(item['events'] for item in records), 'scope': receipt['scope']}))

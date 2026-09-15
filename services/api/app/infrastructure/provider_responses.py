@@ -121,7 +121,8 @@ class ResponsesParser(ProtocolState):
                 raise ProtocolFailure()
             if output:
                 item = output[0]
-                if not isinstance(item, dict) or item.get('id') != self.item_id or item.get('type') != 'message':
+                if (not isinstance(item, dict) or item.get('id') != self.item_id
+                        or item.get('type') != 'message' or item.get('role') != 'assistant'):
                     raise ProtocolFailure()
                 self._content(item.get('content'), require_done=status == 'completed')
             if status == 'completed':
