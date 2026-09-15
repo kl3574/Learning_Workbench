@@ -1,0 +1,135 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/tutor/TutorControls.test.tsx
+
+
+ RUN  v5.0.0 <private-home>/.cache/learning-workbench-acceptance/m53-active/apps/web
+
+ ❯ src/features/tutor/TutorControls.test.tsx (3 tests | 2 failed) 2098ms
+   × releases an old pending control read on workspace change and never displays its private fields 1077ms
+   × releases a pending read after session generation changes and suppresses the late same-workspace result 1009ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/tutor/TutorControls.test.tsx > releases an old pending control read on workspace change and never displays its private fields
+AssertionError: expected true to be false // Object.is equality
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div>[39m
+      [36m<section[39m
+        [33maria-label[39m=[32m"问答任务停止控制"[39m
+      [36m>[39m
+        [36m<h3>[39m
+          [0m已有问答任务的停止控制[0m
+        [36m</h3>[39m
+        [36m<p>[39m
+          [0m此处只读取任务 ID、状态与版本。取消请求不等于远端已停止。[0m
+        [36m</p>[39m
+        [36m<button[39m
+          [33mdisabled[39m=[32m""[39m
+        [36m>[39m
+          [0m读取任务控制 [0m
+          [0mrun_controls_b[0m
+        [36m</button>[39m
+        [36m<label>[39m
+          [0m已有 Tutor 任务 ID[0m
+          [36m<input[39m
+            [33mvalue[39m=[32m""[39m
+          [36m/>[39m
+        [36m</label>[39m
+        [36m<button[39m
+          [33mdisabled[39m=[32m""[39m
+        [36m>[39m
+          [0m读取此任务控制[0m
+        [36m</button>[39m
+      [36m</section>[39m
+    [36m</div>[39m
+  [36m</body>[39m
+[36m</html>[39m
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/features/tutor/TutorControls.test.tsx:16:125
+     14|   await waitFor(() => expect(access.request).toHaveBeenCalledTimes(1))
+     15|   view.rerender(<TutorControls {...props} workspace="workspace_control…
+     16|   await waitFor(() => expect((screen.getByRole('button', { name: '读取任务…
+       |                                                                                                                             ^
+     17|   access.request.mockResolvedValueOnce({ id: 'run_controls_b', workspa…
+     18|   fireEvent.click(screen.getByRole('button', { name: '读取任务控制 run_contr…
+ ❯ runWithExpensiveErrorDiagnosticsDisabled ../../../../../Desktop/learning/Learning_Workbench/apps/web/node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback ../../../../../Desktop/learning/Learning_Workbench/apps/web/node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback ../../../../../Desktop/learning/Learning_Workbench/apps/web/node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/features/tutor/TutorControls.test.tsx > releases a pending read after session generation changes and suppresses the late same-workspace result
+AssertionError: expected true to be false // Object.is equality
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div>[39m
+      [36m<section[39m
+        [33maria-label[39m=[32m"问答任务停止控制"[39m
+      [36m>[39m
+        [36m<h3>[39m
+          [0m已有问答任务的停止控制[0m
+        [36m</h3>[39m
+        [36m<p>[39m
+          [0m此处只读取任务 ID、状态与版本。取消请求不等于远端已停止。[0m
+        [36m</p>[39m
+        [36m<button[39m
+          [33mdisabled[39m=[32m""[39m
+        [36m>[39m
+          [0m读取任务控制 [0m
+          [0mrun_controls_a[0m
+        [36m</button>[39m
+        [36m<label>[39m
+          [0m已有 Tutor 任务 ID[0m
+          [36m<input[39m
+            [33mvalue[39m=[32m""[39m
+          [36m/>[39m
+        [36m</label>[39m
+        [36m<button[39m
+          [33mdisabled[39m=[32m""[39m
+        [36m>[39m
+          [0m读取此任务控制[0m
+        [36m</button>[39m
+      [36m</section>[39m
+    [36m</div>[39m
+  [36m</body>[39m
+[36m</html>[39m
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/features/tutor/TutorControls.test.tsx:33:125
+     31|   access.generation++
+     32|   view.rerender(<TutorControls {...props} />)
+     33|   await waitFor(() => expect((screen.getByRole('button', { name: '读取任务…
+       |                                                                                                                             ^
+     34|   await act(async () => finish({ id: 'run_controls_a', workspace_id: p…
+     35|   expect(screen.queryByText('run_controls_a · running · r8')).toBeNull…
+ ❯ runWithExpensiveErrorDiagnosticsDisabled ../../../../../Desktop/learning/Learning_Workbench/apps/web/node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback ../../../../../Desktop/learning/Learning_Workbench/apps/web/node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback ../../../../../Desktop/learning/Learning_Workbench/apps/web/node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  22:02:34
+   Duration  2.52s (tests 86%, environment 8%, transform 4%, import 2%)
+

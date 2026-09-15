@@ -1,0 +1,54 @@
+{
+  "recorded_at": "2026-09-15T14:16:42.258846+00:00",
+  "scope": "D independent read-only diagnosis; no test or browser rerun",
+  "source_inputs": [
+    {
+      "path": "services/api/app/interfaces/import_http.py",
+      "sha256": "ad7fe834f5014ee7295c9cbf0724b5586508d80f313ee3af9c6b28101b63fb09",
+      "bytes": 4726
+    },
+    {
+      "path": "services/api/app/application/jobs.py",
+      "sha256": "f71149cb235da8f8f18c220e4c0295d89affb304bb12c1d6660dca5dba35d50b",
+      "bytes": 4768
+    },
+    {
+      "path": "services/api/app/application/tutor.py",
+      "sha256": "0dd3982d5822dfeb602746a11e90f09a167467cdb2bd1de1f58734a353ec8823",
+      "bytes": 12574
+    },
+    {
+      "path": "apps/web/src/features/tutor/TutorControls.tsx",
+      "sha256": "34ce511c3d62f09c7dafd9be5c7fa4d50d6a45cb717319d1bc14b1ac46df8264",
+      "bytes": 3463
+    },
+    {
+      "path": "apps/web/src/workbench/Tutor.tsx",
+      "sha256": "2af0db1f2af50d2eb43e22bb69fff2fea5706357efc0aceb02e09e864dfbb055",
+      "bytes": 8148
+    },
+    {
+      "path": "apps/web/src/features/tutor/useTutor.ts",
+      "sha256": "16e795f6a9c6d003b7a867c5dc5b4f147e1280dc11450c68b869ee974e364362",
+      "bytes": 15274
+    },
+    {
+      "path": "apps/web/src/workbench/Shell.tsx",
+      "sha256": "0e25bcd6474b91af783cfe0ac4e15c065380e856a5d7e4896b718bc023972cac",
+      "bytes": 48709
+    }
+  ],
+  "actual_observation_sha256": "de6c2ff83b50723e4a2da73c25923f9ddaa10c244e72bfa6b6f34d1ca4c7f6be",
+  "observation_owner": "C native22",
+  "actual_observation": {
+    "status": 500,
+    "error_code": "INTERNAL_ERROR",
+    "safe_controls_section_present": true,
+    "cancel_button_present": false
+  },
+  "finding": "import_http GET/jobs expects JobSnapshot; JobService forwards TutorService.job returning TutorRunControlView. UI sets control value only on successful checked JobSnapshot; actual 500 takes safe error branch.",
+  "also_affected": "Generic POST/jobs/{id}/cancel also forwards TutorRunControlView while response_model remains JobSnapshot.",
+  "no_causal_claim": "No evidence here that UI owner/unmount caused this failure. Actual response shape mismatch is a concrete boundary defect.",
+  "repair_scope": "B owns real safe JobSnapshot for generic GET and independently routed original full JobSnapshot ACK for generic POST cancel. Keep Run-specific ControlView and distinct command route/key identities.",
+  "status": "blocking finding accepted by root; B repair pending independent final review"
+}

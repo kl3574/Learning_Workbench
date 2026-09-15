@@ -1,0 +1,24 @@
+import { useEffect, useRef, useState } from 'react'
+import { getSessionGeneration, request } from '../../api/client'
+import { makeTutorCommand, type TutorCommand } from './tutorCommands'
+import { validIdentity } from '../providers/providerSchema'
+type Control = { id: string; status: string; revision: number }
+/** Policy-safe Job projection only: never render progress labels, refs, warnings,
+ * response bodies, questions, answers, context or original error messages. */
+export function TutorControls({ workspace, commands, known, execute, busy }: { workspace: string; commands: TutorCommand[]; known: string[]; execute: (command: TutorCommand) => void; busy: boolean }) {
+  const [manual, setManual] = useState(''), [value, setValue] = useState<Control | null>(null), [error, setError] = useState(''), [reading, setReading] = useState(false)
+  const owner = `${workspace}:${getSessionGeneration()}`, current = useRef(owner); current.current = owner
+  useEffect(() => { setValue(null); setError(''); return () => { current.current = '' } }, [owner])
+  const candidates = [...new Set([...known, ...commands.flatMap(command => command.kind === 'run' && command.ack ? [command.ack.run.id] : command.kind === 'cancel' ? [command.run_id] : [])])]
+  const read = async (id: string) => {
+    if (!validIdentity(id) || reading) return
+    setReading(true); setError('')
+    try {
+      const result = await request('GET /api/v1/jobs/{id}', undefined, undefined, { path: { id } })
+      if (result.id !== id || result.workspace_id !== workspace || result.kind !== 'tutor') throw new Error('Wrong control identity')
+      if (current.current === owner && getSessionGeneration() === Number(owner.slice(owner.lastIndexOf(':') + 1))) setValue({ id: result.id, status: result.status, revision: result.revision })
+    } catch { if (current.current === owner) setError('未能确认本工作区的 Tutor 任务控制状态；没有读取或显示学科正文。') }
+    finally { if (current.current === owner) setReading(false) }
+  }
+  return <section aria-label="问答任务停止控制"><h3>已有问答任务的停止控制</h3><p>此处只读取任务 ID、状态与版本。取消请求不等于远端已停止。</p>{candidates.map(id => <button disabled={reading || busy} key={id} onClick={() => void read(id)}>读取任务控制 {id}</button>)}<label>已有 Tutor 任务 ID<input value={manual} onChange={event => setManual(event.target.value)} /></label><button disabled={reading || busy || !validIdentity(manual)} onClick={() => void read(manual)}>读取此任务控制</button>{error && <p role="alert">{error}</p>}{value && <><p>{value.id} · {value.status} · r{value.revision}</p><button disabled={busy || reading || ['completed', 'failed', 'cancelled'].includes(value.status)} onClick={() => execute(makeTutorCommand(workspace, 'control-only', { kind: 'cancel', run_id: value.id, body: { expected_revision: value.revision } }))}>明确请求取消此任务</button></>}{commands.filter(command => command.kind === 'cancel' && !command.ack).map(command => <button disabled={busy} key={command.command_id} onClick={() => execute(command)}>回放原取消请求 {command.kind === 'cancel' ? command.run_id : ''}</button>)}{commands.some(command => command.kind === 'cancel' && command.ack) && <p>已有原取消回执；请重新读取实际控制状态，不把回执当作当前或远端终态。</p>}</section>
+}

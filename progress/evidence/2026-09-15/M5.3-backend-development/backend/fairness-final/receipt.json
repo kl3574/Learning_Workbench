@@ -1,0 +1,108 @@
+{
+  "recorded_at": "2026-09-15T14:12:20.074733+00:00",
+  "scope": "Bounded fairness fix only; no browser/paid Provider/full-suite execution.",
+  "files": [
+    {
+      "path": "services/api/app/application/tutor_worker.py",
+      "sha256": "7d60d0432596f3f0ea107d2b3135b9b9d6df1f8522e667c31f8efb7d2cd4bff7",
+      "bytes": 15197
+    },
+    {
+      "path": "services/api/app/infrastructure/tutor_job_repository.py",
+      "sha256": "70111cc323f96e3e72b582955b1d63c1f07ab7c8e31dc7274c909a057633f345",
+      "bytes": 9405
+    },
+    {
+      "path": "tests/integration/test_tutor_worker_fairness.py",
+      "sha256": "fa1c71798d0e3195f4905956d4a729e0cd3f7358d20e740d4d3036efe96fa92b",
+      "bytes": 5952
+    }
+  ],
+  "worker_owned_regions_sha256": {
+    "__init__": "aa8f755f54d8e1a869158c585bb27767b2cad07459d9b8915b2c021aade39557",
+    "claim": "d304ff2d04d826c599c1c5af80e511ec737ea4b8eb18bdfd862027c3028bfc64"
+  },
+  "runs": [
+    {
+      "name": "fairness-red-01",
+      "receipt_sha256": "3aebb7d647a37bb962e76bb0d6688b11c2e71c34eab29ba98e4182e193816a53",
+      "log_sha256": "a4c489f9158bf6a9a9c07734373de311fa39152840a6b6c8c9a6833071ab17e9",
+      "exit_code": 2,
+      "listed_inputs_unchanged": true,
+      "drift": []
+    },
+    {
+      "name": "fairness-red-02",
+      "receipt_sha256": "057010789aeaaa538b0ba968ea936565db42d98b3f2a1488f0be2f93acd75a92",
+      "log_sha256": "69c0d89dee49fd893e4cf94a78dc841cc49c631e22be9174f42454c51722c9f8",
+      "exit_code": 1,
+      "listed_inputs_unchanged": true,
+      "drift": []
+    },
+    {
+      "name": "fairness-control-03",
+      "receipt_sha256": "ace28226cd66cb0d90bf626454dd9a0ae7abfa06aeadaae70f3fc3e4c76dda2b",
+      "log_sha256": "2a28f4c2b363b5a5adb94c660e1ce309cc052214d6d454b6040be0be6ab634bf",
+      "exit_code": 0,
+      "listed_inputs_unchanged": true,
+      "drift": []
+    },
+    {
+      "name": "fairness-green-04",
+      "receipt_sha256": "f041c7bad0dd8898f89e567a3f936710a9fc6ab94f309f60b18c7614c516c9d4",
+      "log_sha256": "ceb3c379fcf2c552c99103f105b6e7677e0525b6c1e246dc02efdc8cdd581ab3",
+      "exit_code": 0,
+      "listed_inputs_unchanged": true,
+      "drift": []
+    },
+    {
+      "name": "fairness-final-05",
+      "receipt_sha256": "18238ef279f1420ee4f7f8d85c388ff3ce557346681a3255cc5307fa6781a93f",
+      "log_sha256": "63004b3559c2cc70418a600c940f69d3923c46c2bae23d11e41ed8e4e8c6c5dc",
+      "exit_code": 0,
+      "listed_inputs_unchanged": true,
+      "drift": []
+    },
+    {
+      "name": "fairness-lint-06",
+      "receipt_sha256": "52bb50f4fd6ea2047c2a66fff3a6ff9d1bc8ffac01f7040a29414ff515447487",
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "exit_code": 0,
+      "listed_inputs_unchanged": true,
+      "drift": []
+    },
+    {
+      "name": "fairness-types-07",
+      "receipt_sha256": "f0a75e305ba257d7589c5932522eeba878eff358eb8ace1a14e61f97c65a7c12",
+      "log_sha256": "f9b031e5c45aa702cd4fef028d465551cb20a2c4698e0913c7b00766b20ac4d8",
+      "exit_code": 0,
+      "listed_inputs_unchanged": true,
+      "drift": []
+    }
+  ],
+  "result": "24 passed, 2 warnings in 9.92s; owned ruff and mypy passed.",
+  "same_regression_case": {
+    "name": "test_oldest_corrupt_job_cannot_starve_another_thread_and_repaired_original_can_reenter",
+    "red_sha256": "90bd1465e9431ec878cc6761de1aef2f868522036d9c6144ff44530fc6b844a9",
+    "green_sha256": "90bd1465e9431ec878cc6761de1aef2f868522036d9c6144ff44530fc6b844a9",
+    "whole_file_identical": false,
+    "difference": "Additional healthy/bounded32/unknown-error controls were added; original target case/decorator bytes unchanged."
+  },
+  "red01_classification": "Test docstring typo caused collection error before product execution; preserved unchanged.",
+  "red02_classification": "Actual two persisted threads: oldest job lost original user record, both old worker ticks rejected it, other intact job remained queued.",
+  "hypotheses_ranked_before_fix": [
+    "Repeated oldest candidate prevents another thread progressing.",
+    "The other thread Context itself is invalid.",
+    "Workspace unexpectedly forbids two active Threads."
+  ],
+  "negative_control": "Two intact Threads both prepared on original implementation (control03); disproves latter two explanations for this fixture.",
+  "fix": "Jobs-owned bounded cyclic keyset candidates (max32). Private worker cursor advances past specifically rejected owned histories; no mutation/quarantine/terminal of bad job; no progress returns original first safety error. Unknown admission errors propagate unchanged.",
+  "negative_controls_verified": [
+    "Original two single-corrupt-history tests still return precise TUTOR_INTEGRITY_ERROR and zero writes.",
+    "32 actual rejected jobs bound first tick; actual 33rd intact job prepares next tick; rejected Jobs/events/Run projections unchanged.",
+    "Restoring exact original message bytes allows the same worker to admit that original job.",
+    "Injected unknown owner error propagates unchanged and does not continue to next candidate.",
+    "Original 20 Tutor integration cases passed in the same 24-case run."
+  ],
+  "ownership": "D concurrently owns consume/finish Practice-help hooks; B only changed worker.__init__/claim and Jobs candidate reader. Whole worker hashes record observed bytes, not a claim that D later changes are frozen."
+}

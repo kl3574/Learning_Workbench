@@ -1,0 +1,41 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_ test_oldest_corrupt_job_cannot_starve_another_thread_and_repaired_original_can_reenter _
+
+state = (<services.api.app.infrastructure.database.Database object at 0x7cace54c77a0>, SessionIdentity(id='session_tutor_fixtu...efs=[], selection=None, attempt_id=None), binding=TutorContextBinding(practice=None, assessment=None), title='原创测试对话'))
+
+    def test_oldest_corrupt_job_cannot_starve_another_thread_and_repaired_original_can_reenter(state):
+        database, identity, service, _ = state
+        bad, good = queue(state, 'bad'), queue(state, 'good')
+        with database.connect() as connection:
+            assert [row[0] for row in connection.execute("SELECT id FROM jobs WHERE kind='tutor' ORDER BY created_at,id")] == [bad.run.id, good.run.id]
+        original, owned = remove_user(database, bad.run.id)
+        before = job_rows(database, bad.run.id)
+        provider = NoTransport()
+        worker = TutorWorker(database, service.context, provider, build_material)
+        errors = []
+        for _ in range(2):
+            try:
+                worker.run_once()
+            except ApiError as error:
+                errors.append(error.code)
+>       assert service.read(identity, good.run.id).run.status == 'awaiting_approval'
+E       AssertionError: assert 'queued' == 'awaiting_approval'
+E         
+E         - awaiting_approval
+E         + queued
+
+tests/integration/test_tutor_worker_fairness.py:56: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  [LOCAL_HOME]/.cache/learning-workbench-acceptance/m53-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  [LOCAL_HOME]/.cache/learning-workbench-acceptance/m53-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_tutor_worker_fairness.py::test_oldest_corrupt_job_cannot_starve_another_thread_and_repaired_original_can_reenter
+1 failed, 2 warnings in 0.35s

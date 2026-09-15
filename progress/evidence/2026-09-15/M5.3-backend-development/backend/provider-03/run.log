@@ -1,0 +1,450 @@
+..........FFFF.                                                          [100%]
+=================================== FAILURES ===================================
+_ test_real_local_protocol_owner_chain_preserves_terminal_channels_and_original_replays[complete] _
+
+tutor = (<services.api.app.infrastructure.database.Database object at 0x71d922d80a70>, SessionIdentity(id='session_tutor_fixtu...efs=[], selection=None, attempt_id=None), binding=TutorContextBinding(practice=None, assessment=None), title='原创测试对话'))
+tmp_path = PosixPath('[LOCAL_HOME]/.cache/lw-tutor/pytest-of-lkx/pytest-2/test_real_local_protocol_owner0')
+outcome = 'complete'
+
+    @pytest.mark.parametrize('outcome', ['complete', 'refusal', 'incomplete', 'eof'])
+    def test_real_local_protocol_owner_chain_preserves_terminal_channels_and_original_replays(tutor, tmp_path, outcome):
+        import asyncio
+        from tests.provider_protocol_fixture import chat_stream, local_provider
+        async def run():
+            payload = None if outcome == 'complete' else chat_stream('保留原输出 \n', refusal=outcome == 'refusal',
+                finish='length' if outcome == 'incomplete' else 'stop', done=outcome != 'eof')
+            async with local_provider(text='模型推导尝试 \n', payload=payload) as server:
+                worker, consents, dispatch = configured(tutor, tmp_path, server.base_url)
+                thread, request, original, consent_request, grant = await asyncio.to_thread(approved, tutor, worker, consents)
+                assert await asyncio.to_thread(worker.run_once)
+                database, identity, service, _ = tutor
+                current = service.read(identity, original.run.id)
+                assert current.run.status == ('completed' if outcome == 'complete' else 'failed')
+                assert current.result.provider is not None
+                assert current.result.provider.outcome == {'complete': 'complete', 'refusal': 'refused', 'incomplete': 'incomplete', 'eof': 'error'}[outcome]
+                assert current.run.citations == []
+                assert current.result.refusal_markdown == ('保留原输出 \n' if outcome == 'refusal' else '')
+                assert current.run.answer_markdown == ('' if outcome == 'refusal' else '模型推导尝试 \n' if outcome == 'complete' else '保留原输出 \n')
+                events = service.events(identity, original.run.id, 0)
+                assert [event.seq for event in events] == list(range(1, current.run.last_seq + 1))
+                assert sum(event.type in {'completed', 'failed', 'cancelled'} for event in events) == 1
+                assert ''.join(event.text for event in events if event.type == 'answer_delta') == current.run.answer_markdown
+                messages = service.messages(identity, thread.id)
+                assert messages.thread.revision == 3 and len(messages.items) == 2
+                assert messages.items[-1].channel == ('refusal' if outcome == 'refusal' else 'answer')
+                before = all_rows(database)
+                assert service.start(identity, request, 'start') == original
+                assert consents.grant(identity, consent_request, 'grant') == grant
+                assert service.events(identity, original.run.id, current.run.last_seq) == []
+                assert all_rows(database) == before
+                assert not await asyncio.to_thread(worker.run_once)
+                assert len(server.requests) == 1
+                with database.transaction(immediate=False) as connection:
+                    checked = dispatch.read_result(connection, identity, original.run.id, grant.id)
+                    assert checked.receipt.id == current.result.provider.receipt_id
+>       asyncio.run(run())
+
+tests/integration/test_tutor_runs.py:300: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/integration/test_tutor_runs.py:273: in run
+    thread, request, original, consent_request, grant = await asyncio.to_thread(approved, tutor, worker, consents)
+                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/concurrent/futures/thread.py:59: in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/test_tutor_runs.py:250: in approved
+    proposal = consents.preview(identity, ConsentPreviewWrite(job_id=original.run.id,
+services/api/app/application/consents.py:102: in preview
+    source.record_proposal(connection, identity, material.job_id, material.prepared_input_sha256, proposal_id)
+services/api/app/application/tutor_source.py:92: in record_proposal
+    view, original, _ = ConsentRepository(transaction, identity.workspace_id).proposal_material(proposal_id)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+services/api/app/infrastructure/consent_repository.py:89: in proposal_material
+    return self._proposal(identifier)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.consent_repository.ConsentRepository object at 0x71d922d80c50>
+identifier = 'proposal_17b681493d174e3994ee6c8604705da3'
+
+    def _proposal(self, identifier: str) -> tuple[ConsentProposalView, PreparedOutboundMaterial, bytes]:
+        row = self.connection.execute('SELECT * FROM provider_proposals WHERE id=? AND workspace_id=?',
+                                       (identifier, self.workspace_id)).fetchone()
+        if row is None:
+            raise ApiError(404, 'PROPOSAL_MISSING', '授权提案不存在或不可访问。')
+        try:
+            summary = FrozenOutboundSummary.model_validate(strict_json(row['summary_json']))
+            material = PreparedOutboundMaterial.model_validate(strict_json(row['material_json']))
+            body = bytes(row['request_body'])
+            command = self.providers.command(row['command_id'])
+            ack = ConsentProposalView.model_validate(strict_json(command['result_json']))
+            proposal_hash = digest({'version': 'outbound-proposal-v1', 'workspace_id': self.workspace_id,
+                                   'id': identifier, 'summary': summary.model_dump(mode='json')})
+            if (canonical_bytes(summary).decode() != row['summary_json']
+                    or canonical_bytes(material).decode() != row['material_json']
+                    or canonical_bytes(strict_json(body)) != body or proposal_hash != row['proposal_sha256']
+                    or row['created_at'] != summary.created_at or ack.id != identifier or ack.proposal_sha256 != proposal_hash
+                    or ack.summary != summary or summary.job_id != material.job_id
+                    or summary.source_job_revision != material.job_revision or summary.source_input_sha256 != material.job_input_sha256
+                    or summary.input_sha256 != material.prepared_input_sha256
+                    or prepared_digest(self.workspace_id, material) != summary.input_sha256
+                    or summary.purpose != material.purpose or summary.context_snapshot_id != material.context_snapshot.id
+                    or summary.context_snapshot_sha256 != material.context_snapshot.snapshot_sha256
+                    or snapshot_sha256(material.context_snapshot) != summary.context_snapshot_sha256
+                    or summary.input_token_assurance.request_body_sha256 != sha256_bytes(body)):
+>               raise integrity_error()
+E               services.api.app.application.errors.ApiError: (503, 'PROVIDER_INTEGRITY_INVALID', '提供商授权历史无法通过完整性校验。')
+
+services/api/app/infrastructure/consent_repository.py:64: ApiError
+_ test_real_local_protocol_owner_chain_preserves_terminal_channels_and_original_replays[refusal] _
+
+tutor = (<services.api.app.infrastructure.database.Database object at 0x71d922c18bf0>, SessionIdentity(id='session_tutor_fixtu...efs=[], selection=None, attempt_id=None), binding=TutorContextBinding(practice=None, assessment=None), title='原创测试对话'))
+tmp_path = PosixPath('[LOCAL_HOME]/.cache/lw-tutor/pytest-of-lkx/pytest-2/test_real_local_protocol_owner1')
+outcome = 'refusal'
+
+    @pytest.mark.parametrize('outcome', ['complete', 'refusal', 'incomplete', 'eof'])
+    def test_real_local_protocol_owner_chain_preserves_terminal_channels_and_original_replays(tutor, tmp_path, outcome):
+        import asyncio
+        from tests.provider_protocol_fixture import chat_stream, local_provider
+        async def run():
+            payload = None if outcome == 'complete' else chat_stream('保留原输出 \n', refusal=outcome == 'refusal',
+                finish='length' if outcome == 'incomplete' else 'stop', done=outcome != 'eof')
+            async with local_provider(text='模型推导尝试 \n', payload=payload) as server:
+                worker, consents, dispatch = configured(tutor, tmp_path, server.base_url)
+                thread, request, original, consent_request, grant = await asyncio.to_thread(approved, tutor, worker, consents)
+                assert await asyncio.to_thread(worker.run_once)
+                database, identity, service, _ = tutor
+                current = service.read(identity, original.run.id)
+                assert current.run.status == ('completed' if outcome == 'complete' else 'failed')
+                assert current.result.provider is not None
+                assert current.result.provider.outcome == {'complete': 'complete', 'refusal': 'refused', 'incomplete': 'incomplete', 'eof': 'error'}[outcome]
+                assert current.run.citations == []
+                assert current.result.refusal_markdown == ('保留原输出 \n' if outcome == 'refusal' else '')
+                assert current.run.answer_markdown == ('' if outcome == 'refusal' else '模型推导尝试 \n' if outcome == 'complete' else '保留原输出 \n')
+                events = service.events(identity, original.run.id, 0)
+                assert [event.seq for event in events] == list(range(1, current.run.last_seq + 1))
+                assert sum(event.type in {'completed', 'failed', 'cancelled'} for event in events) == 1
+                assert ''.join(event.text for event in events if event.type == 'answer_delta') == current.run.answer_markdown
+                messages = service.messages(identity, thread.id)
+                assert messages.thread.revision == 3 and len(messages.items) == 2
+                assert messages.items[-1].channel == ('refusal' if outcome == 'refusal' else 'answer')
+                before = all_rows(database)
+                assert service.start(identity, request, 'start') == original
+                assert consents.grant(identity, consent_request, 'grant') == grant
+                assert service.events(identity, original.run.id, current.run.last_seq) == []
+                assert all_rows(database) == before
+                assert not await asyncio.to_thread(worker.run_once)
+                assert len(server.requests) == 1
+                with database.transaction(immediate=False) as connection:
+                    checked = dispatch.read_result(connection, identity, original.run.id, grant.id)
+                    assert checked.receipt.id == current.result.provider.receipt_id
+>       asyncio.run(run())
+
+tests/integration/test_tutor_runs.py:300: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/integration/test_tutor_runs.py:273: in run
+    thread, request, original, consent_request, grant = await asyncio.to_thread(approved, tutor, worker, consents)
+                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/concurrent/futures/thread.py:59: in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/test_tutor_runs.py:250: in approved
+    proposal = consents.preview(identity, ConsentPreviewWrite(job_id=original.run.id,
+services/api/app/application/consents.py:102: in preview
+    source.record_proposal(connection, identity, material.job_id, material.prepared_input_sha256, proposal_id)
+services/api/app/application/tutor_source.py:92: in record_proposal
+    view, original, _ = ConsentRepository(transaction, identity.workspace_id).proposal_material(proposal_id)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+services/api/app/infrastructure/consent_repository.py:89: in proposal_material
+    return self._proposal(identifier)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.consent_repository.ConsentRepository object at 0x71d922c1a990>
+identifier = 'proposal_352c97c894ab4ff6b658766e30d7f3e3'
+
+    def _proposal(self, identifier: str) -> tuple[ConsentProposalView, PreparedOutboundMaterial, bytes]:
+        row = self.connection.execute('SELECT * FROM provider_proposals WHERE id=? AND workspace_id=?',
+                                       (identifier, self.workspace_id)).fetchone()
+        if row is None:
+            raise ApiError(404, 'PROPOSAL_MISSING', '授权提案不存在或不可访问。')
+        try:
+            summary = FrozenOutboundSummary.model_validate(strict_json(row['summary_json']))
+            material = PreparedOutboundMaterial.model_validate(strict_json(row['material_json']))
+            body = bytes(row['request_body'])
+            command = self.providers.command(row['command_id'])
+            ack = ConsentProposalView.model_validate(strict_json(command['result_json']))
+            proposal_hash = digest({'version': 'outbound-proposal-v1', 'workspace_id': self.workspace_id,
+                                   'id': identifier, 'summary': summary.model_dump(mode='json')})
+            if (canonical_bytes(summary).decode() != row['summary_json']
+                    or canonical_bytes(material).decode() != row['material_json']
+                    or canonical_bytes(strict_json(body)) != body or proposal_hash != row['proposal_sha256']
+                    or row['created_at'] != summary.created_at or ack.id != identifier or ack.proposal_sha256 != proposal_hash
+                    or ack.summary != summary or summary.job_id != material.job_id
+                    or summary.source_job_revision != material.job_revision or summary.source_input_sha256 != material.job_input_sha256
+                    or summary.input_sha256 != material.prepared_input_sha256
+                    or prepared_digest(self.workspace_id, material) != summary.input_sha256
+                    or summary.purpose != material.purpose or summary.context_snapshot_id != material.context_snapshot.id
+                    or summary.context_snapshot_sha256 != material.context_snapshot.snapshot_sha256
+                    or snapshot_sha256(material.context_snapshot) != summary.context_snapshot_sha256
+                    or summary.input_token_assurance.request_body_sha256 != sha256_bytes(body)):
+>               raise integrity_error()
+E               services.api.app.application.errors.ApiError: (503, 'PROVIDER_INTEGRITY_INVALID', '提供商授权历史无法通过完整性校验。')
+
+services/api/app/infrastructure/consent_repository.py:64: ApiError
+_ test_real_local_protocol_owner_chain_preserves_terminal_channels_and_original_replays[incomplete] _
+
+tutor = (<services.api.app.infrastructure.database.Database object at 0x71d922d82300>, SessionIdentity(id='session_tutor_fixtu...efs=[], selection=None, attempt_id=None), binding=TutorContextBinding(practice=None, assessment=None), title='原创测试对话'))
+tmp_path = PosixPath('[LOCAL_HOME]/.cache/lw-tutor/pytest-of-lkx/pytest-2/test_real_local_protocol_owner2')
+outcome = 'incomplete'
+
+    @pytest.mark.parametrize('outcome', ['complete', 'refusal', 'incomplete', 'eof'])
+    def test_real_local_protocol_owner_chain_preserves_terminal_channels_and_original_replays(tutor, tmp_path, outcome):
+        import asyncio
+        from tests.provider_protocol_fixture import chat_stream, local_provider
+        async def run():
+            payload = None if outcome == 'complete' else chat_stream('保留原输出 \n', refusal=outcome == 'refusal',
+                finish='length' if outcome == 'incomplete' else 'stop', done=outcome != 'eof')
+            async with local_provider(text='模型推导尝试 \n', payload=payload) as server:
+                worker, consents, dispatch = configured(tutor, tmp_path, server.base_url)
+                thread, request, original, consent_request, grant = await asyncio.to_thread(approved, tutor, worker, consents)
+                assert await asyncio.to_thread(worker.run_once)
+                database, identity, service, _ = tutor
+                current = service.read(identity, original.run.id)
+                assert current.run.status == ('completed' if outcome == 'complete' else 'failed')
+                assert current.result.provider is not None
+                assert current.result.provider.outcome == {'complete': 'complete', 'refusal': 'refused', 'incomplete': 'incomplete', 'eof': 'error'}[outcome]
+                assert current.run.citations == []
+                assert current.result.refusal_markdown == ('保留原输出 \n' if outcome == 'refusal' else '')
+                assert current.run.answer_markdown == ('' if outcome == 'refusal' else '模型推导尝试 \n' if outcome == 'complete' else '保留原输出 \n')
+                events = service.events(identity, original.run.id, 0)
+                assert [event.seq for event in events] == list(range(1, current.run.last_seq + 1))
+                assert sum(event.type in {'completed', 'failed', 'cancelled'} for event in events) == 1
+                assert ''.join(event.text for event in events if event.type == 'answer_delta') == current.run.answer_markdown
+                messages = service.messages(identity, thread.id)
+                assert messages.thread.revision == 3 and len(messages.items) == 2
+                assert messages.items[-1].channel == ('refusal' if outcome == 'refusal' else 'answer')
+                before = all_rows(database)
+                assert service.start(identity, request, 'start') == original
+                assert consents.grant(identity, consent_request, 'grant') == grant
+                assert service.events(identity, original.run.id, current.run.last_seq) == []
+                assert all_rows(database) == before
+                assert not await asyncio.to_thread(worker.run_once)
+                assert len(server.requests) == 1
+                with database.transaction(immediate=False) as connection:
+                    checked = dispatch.read_result(connection, identity, original.run.id, grant.id)
+                    assert checked.receipt.id == current.result.provider.receipt_id
+>       asyncio.run(run())
+
+tests/integration/test_tutor_runs.py:300: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/integration/test_tutor_runs.py:273: in run
+    thread, request, original, consent_request, grant = await asyncio.to_thread(approved, tutor, worker, consents)
+                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/concurrent/futures/thread.py:59: in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/test_tutor_runs.py:250: in approved
+    proposal = consents.preview(identity, ConsentPreviewWrite(job_id=original.run.id,
+services/api/app/application/consents.py:102: in preview
+    source.record_proposal(connection, identity, material.job_id, material.prepared_input_sha256, proposal_id)
+services/api/app/application/tutor_source.py:92: in record_proposal
+    view, original, _ = ConsentRepository(transaction, identity.workspace_id).proposal_material(proposal_id)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+services/api/app/infrastructure/consent_repository.py:89: in proposal_material
+    return self._proposal(identifier)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.consent_repository.ConsentRepository object at 0x71d922dd1370>
+identifier = 'proposal_1af0645a318e4c069805567a1f16ad85'
+
+    def _proposal(self, identifier: str) -> tuple[ConsentProposalView, PreparedOutboundMaterial, bytes]:
+        row = self.connection.execute('SELECT * FROM provider_proposals WHERE id=? AND workspace_id=?',
+                                       (identifier, self.workspace_id)).fetchone()
+        if row is None:
+            raise ApiError(404, 'PROPOSAL_MISSING', '授权提案不存在或不可访问。')
+        try:
+            summary = FrozenOutboundSummary.model_validate(strict_json(row['summary_json']))
+            material = PreparedOutboundMaterial.model_validate(strict_json(row['material_json']))
+            body = bytes(row['request_body'])
+            command = self.providers.command(row['command_id'])
+            ack = ConsentProposalView.model_validate(strict_json(command['result_json']))
+            proposal_hash = digest({'version': 'outbound-proposal-v1', 'workspace_id': self.workspace_id,
+                                   'id': identifier, 'summary': summary.model_dump(mode='json')})
+            if (canonical_bytes(summary).decode() != row['summary_json']
+                    or canonical_bytes(material).decode() != row['material_json']
+                    or canonical_bytes(strict_json(body)) != body or proposal_hash != row['proposal_sha256']
+                    or row['created_at'] != summary.created_at or ack.id != identifier or ack.proposal_sha256 != proposal_hash
+                    or ack.summary != summary or summary.job_id != material.job_id
+                    or summary.source_job_revision != material.job_revision or summary.source_input_sha256 != material.job_input_sha256
+                    or summary.input_sha256 != material.prepared_input_sha256
+                    or prepared_digest(self.workspace_id, material) != summary.input_sha256
+                    or summary.purpose != material.purpose or summary.context_snapshot_id != material.context_snapshot.id
+                    or summary.context_snapshot_sha256 != material.context_snapshot.snapshot_sha256
+                    or snapshot_sha256(material.context_snapshot) != summary.context_snapshot_sha256
+                    or summary.input_token_assurance.request_body_sha256 != sha256_bytes(body)):
+>               raise integrity_error()
+E               services.api.app.application.errors.ApiError: (503, 'PROVIDER_INTEGRITY_INVALID', '提供商授权历史无法通过完整性校验。')
+
+services/api/app/infrastructure/consent_repository.py:64: ApiError
+_ test_real_local_protocol_owner_chain_preserves_terminal_channels_and_original_replays[eof] _
+
+tutor = (<services.api.app.infrastructure.database.Database object at 0x71d922c1a1b0>, SessionIdentity(id='session_tutor_fixtu...efs=[], selection=None, attempt_id=None), binding=TutorContextBinding(practice=None, assessment=None), title='原创测试对话'))
+tmp_path = PosixPath('[LOCAL_HOME]/.cache/lw-tutor/pytest-of-lkx/pytest-2/test_real_local_protocol_owner3')
+outcome = 'eof'
+
+    @pytest.mark.parametrize('outcome', ['complete', 'refusal', 'incomplete', 'eof'])
+    def test_real_local_protocol_owner_chain_preserves_terminal_channels_and_original_replays(tutor, tmp_path, outcome):
+        import asyncio
+        from tests.provider_protocol_fixture import chat_stream, local_provider
+        async def run():
+            payload = None if outcome == 'complete' else chat_stream('保留原输出 \n', refusal=outcome == 'refusal',
+                finish='length' if outcome == 'incomplete' else 'stop', done=outcome != 'eof')
+            async with local_provider(text='模型推导尝试 \n', payload=payload) as server:
+                worker, consents, dispatch = configured(tutor, tmp_path, server.base_url)
+                thread, request, original, consent_request, grant = await asyncio.to_thread(approved, tutor, worker, consents)
+                assert await asyncio.to_thread(worker.run_once)
+                database, identity, service, _ = tutor
+                current = service.read(identity, original.run.id)
+                assert current.run.status == ('completed' if outcome == 'complete' else 'failed')
+                assert current.result.provider is not None
+                assert current.result.provider.outcome == {'complete': 'complete', 'refusal': 'refused', 'incomplete': 'incomplete', 'eof': 'error'}[outcome]
+                assert current.run.citations == []
+                assert current.result.refusal_markdown == ('保留原输出 \n' if outcome == 'refusal' else '')
+                assert current.run.answer_markdown == ('' if outcome == 'refusal' else '模型推导尝试 \n' if outcome == 'complete' else '保留原输出 \n')
+                events = service.events(identity, original.run.id, 0)
+                assert [event.seq for event in events] == list(range(1, current.run.last_seq + 1))
+                assert sum(event.type in {'completed', 'failed', 'cancelled'} for event in events) == 1
+                assert ''.join(event.text for event in events if event.type == 'answer_delta') == current.run.answer_markdown
+                messages = service.messages(identity, thread.id)
+                assert messages.thread.revision == 3 and len(messages.items) == 2
+                assert messages.items[-1].channel == ('refusal' if outcome == 'refusal' else 'answer')
+                before = all_rows(database)
+                assert service.start(identity, request, 'start') == original
+                assert consents.grant(identity, consent_request, 'grant') == grant
+                assert service.events(identity, original.run.id, current.run.last_seq) == []
+                assert all_rows(database) == before
+                assert not await asyncio.to_thread(worker.run_once)
+                assert len(server.requests) == 1
+                with database.transaction(immediate=False) as connection:
+                    checked = dispatch.read_result(connection, identity, original.run.id, grant.id)
+                    assert checked.receipt.id == current.result.provider.receipt_id
+>       asyncio.run(run())
+
+tests/integration/test_tutor_runs.py:300: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/integration/test_tutor_runs.py:273: in run
+    thread, request, original, consent_request, grant = await asyncio.to_thread(approved, tutor, worker, consents)
+                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/concurrent/futures/thread.py:59: in run
+    result = self.fn(*self.args, **self.kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/test_tutor_runs.py:250: in approved
+    proposal = consents.preview(identity, ConsentPreviewWrite(job_id=original.run.id,
+services/api/app/application/consents.py:102: in preview
+    source.record_proposal(connection, identity, material.job_id, material.prepared_input_sha256, proposal_id)
+services/api/app/application/tutor_source.py:92: in record_proposal
+    view, original, _ = ConsentRepository(transaction, identity.workspace_id).proposal_material(proposal_id)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+services/api/app/infrastructure/consent_repository.py:89: in proposal_material
+    return self._proposal(identifier)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.consent_repository.ConsentRepository object at 0x71d922c1b050>
+identifier = 'proposal_a8c3cc89e1b94e21a72f9841aad396e3'
+
+    def _proposal(self, identifier: str) -> tuple[ConsentProposalView, PreparedOutboundMaterial, bytes]:
+        row = self.connection.execute('SELECT * FROM provider_proposals WHERE id=? AND workspace_id=?',
+                                       (identifier, self.workspace_id)).fetchone()
+        if row is None:
+            raise ApiError(404, 'PROPOSAL_MISSING', '授权提案不存在或不可访问。')
+        try:
+            summary = FrozenOutboundSummary.model_validate(strict_json(row['summary_json']))
+            material = PreparedOutboundMaterial.model_validate(strict_json(row['material_json']))
+            body = bytes(row['request_body'])
+            command = self.providers.command(row['command_id'])
+            ack = ConsentProposalView.model_validate(strict_json(command['result_json']))
+            proposal_hash = digest({'version': 'outbound-proposal-v1', 'workspace_id': self.workspace_id,
+                                   'id': identifier, 'summary': summary.model_dump(mode='json')})
+            if (canonical_bytes(summary).decode() != row['summary_json']
+                    or canonical_bytes(material).decode() != row['material_json']
+                    or canonical_bytes(strict_json(body)) != body or proposal_hash != row['proposal_sha256']
+                    or row['created_at'] != summary.created_at or ack.id != identifier or ack.proposal_sha256 != proposal_hash
+                    or ack.summary != summary or summary.job_id != material.job_id
+                    or summary.source_job_revision != material.job_revision or summary.source_input_sha256 != material.job_input_sha256
+                    or summary.input_sha256 != material.prepared_input_sha256
+                    or prepared_digest(self.workspace_id, material) != summary.input_sha256
+                    or summary.purpose != material.purpose or summary.context_snapshot_id != material.context_snapshot.id
+                    or summary.context_snapshot_sha256 != material.context_snapshot.snapshot_sha256
+                    or snapshot_sha256(material.context_snapshot) != summary.context_snapshot_sha256
+                    or summary.input_token_assurance.request_body_sha256 != sha256_bytes(body)):
+>               raise integrity_error()
+E               services.api.app.application.errors.ApiError: (503, 'PROVIDER_INTEGRITY_INVALID', '提供商授权历史无法通过完整性校验。')
+
+services/api/app/infrastructure/consent_repository.py:64: ApiError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  [LOCAL_HOME]/.cache/learning-workbench-acceptance/m53-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  [LOCAL_HOME]/.cache/learning-workbench-acceptance/m53-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_tutor_runs.py::test_real_local_protocol_owner_chain_preserves_terminal_channels_and_original_replays[complete]
+FAILED tests/integration/test_tutor_runs.py::test_real_local_protocol_owner_chain_preserves_terminal_channels_and_original_replays[refusal]
+FAILED tests/integration/test_tutor_runs.py::test_real_local_protocol_owner_chain_preserves_terminal_channels_and_original_replays[incomplete]
+FAILED tests/integration/test_tutor_runs.py::test_real_local_protocol_owner_chain_preserves_terminal_channels_and_original_replays[eof]
+4 failed, 11 passed, 2 warnings in 1.62s

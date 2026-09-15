@@ -1,0 +1,31 @@
+--- a/PRODUCT_DESIGN.md
++++ b/PRODUCT_DESIGN.md
+@@ -977,6 +977,8 @@
+ | assisted | 允许 | 可调用已授权学科模型 | 经授权可用 | 交卷前不自动释放标准答案 | assisted |
+ | practice | 允许 | 提示或完整解释按请求 | 经授权可用 | 用户主动请求即记录暴露后释放 | practice，记录帮助等级 |
+ 
++M5.3 练习中的真实模型帮助由 Practice 所有者单独记录：仅在本次 Run 首个实际持久化且含非空白文字的 answer_delta 与 Tutor 写入的同一事务中，建立幂等的 model 来源帮助事实、可信 hint_revealed 学习事件及通用 hint exposure；仅排队、授权、空白或拒答不算已获帮助。记录表示回答已在服务器持久化可供读取，不冒称浏览器已展示或内容已核验。取消或不完整输出不抹除已经发生的帮助。它不是 rules 提示级别、不是标准答案释放，不写原 practice_exposures 的 level，不推进作答 revision、不改变本 Run 已冻结输入。恢复时若 Provider 原终态已保存而 Tutor 尚无 delta，在恢复该原回答的同一事务建立同一事实，不重新外发。GET 与原 SSE 回放只读，不补写学习事件。
++
+ 本地学习者/作者是操作角色，不是安全上不同自然人。进入 independent 前，服务端以 workspace 级 guard 排他锁检查是否有活跃学科 Tutor/Authoring/Codex/导出任务：存在则返回 409，要求等待或显式取消；之后每次外发、流事件读取、下载和解答读取再次检查 guard，避免“先启动流，再开始测试”的竞态泄露。活动独立测试最多一个，不能在另一个标签用作者角色、旧对话、笔记、索引或下载链接绕过。应用之外的本机文件/其他工具无法由本产品封锁，文档与 UI 不宣传监考。
+ 
+ M5.3 学科准备、授权预览/批准、派发及 Thread/Run/SSE 正文读取使用明确学科操作权限：活动 independent 或 open_book 均拒绝，open_book 普通材料仍按原规则可读；固定操作帮助不调用模型。assisted 仅允许本工作区真实 question/attempt 绑定和当前已释放材料，不能据此放宽通用 private_artifact。Provider 源专属结果回读同时核实际 Tutor source、job、dispatch/receipt 和当前输出许可，不接受任意 artifact 旁路。既有 independent 启动排他不变；任务中策略变化在下一准备/外发/输出边界再核，不声称已撤回此前内容。
+@@ -1224,6 +1226,8 @@
+ | POST `/attempts/{id}/submit` | AttemptSubmit | 202 AttemptPublic；持久化submitted后排评分任务，不能重复计分 |
+ | POST `/attempts/{id}/abandon` | AttemptSubmit | AttemptPublic；active可弃；已交卷则409 |
+ | GET `/attempts/{id}/result` | 无 | GradingResult；未交卷409；尚未完成评分可返回202 JobRef；needs_review保留不确定项 |
++
++PracticeAssistanceView = {question_id:Id, highest_hint_level:0|1|2|3, solution_revealed:boolean, model_help_received?:boolean=false}。PracticeSession 与 PracticeSubmitted 的 assistance 使用此应用投影；省略 model_help_received 仅兼容真实旧回执，新投影总显式返回该严格布尔值。assisted 同时纳入真实模型帮助，UI 明示“已获 AI 帮助”，不改变 rules 级别或声称已展开标准答案。原持久 PracticeAssistance、StoredSubmission、评分审核和原提交 JSON/hash 保持；当时的 exposure_event_ids/assisted 不由后来的帮助重写。原提交回读仅按原事件集合投影 model_help_received；当前 session 可以反映提交后实际新帮助。
+ 
+ 独立测试跨标签限制按服务端workspace+owner状态判定，不能信任body里的view_kind。业务限制不等于抵御本机管理员。旧成绩重新评分使用新的grading_revision，不覆盖旧结果。
+ 
+@@ -2278,6 +2282,10 @@
+ 
+ # 附录 D：模块端口
+ 
++M5.3 Practice 模型帮助内部口：Tutor-owned read_answer_fact(transaction, workspace_id, run_id) 只返回受检元数据，不返回回答正文。闭合 TutorAnswerFact={workspace_id:Id,run_id:Id,context_snapshot_id:Id,practice:TutorPracticeBinding,event_seq:Revision,event_sha256:Sha256,text_sha256:Sha256,occurred_at:UTC}；event_seq 定位该 Run 首个 text.strip() 非空的持久 answer_delta，event_sha256 对该完整事件规范 JSON，text_sha256 对该段原文 UTF-8，occurred_at 为该原事件时间。非练习或未发生该事件返回 null；原 Run/Jobs/Thread/messages/事件关联与 hash 必须重新核验。
++
++Practice-owned record_model_help(transaction, identity, run_id) 经上口、当前 Policy、真实 session/question 分配建立唯一 Run 帮助关联。闭合 ModelHelpReceipt={version:practice-model-help-v1,source:model,answer:TutorAnswerFact,event_id:Id,exposure_id:Id,exposure_group:Id,occurred_at:UTC}，最后时间为本次 exposure 持久化时间，与原 delta 时间分别保留。读回须同时核 Learning、exposure、Practice 分配与原 Tutor 事实；坏关联不能被忽略成 unassisted。旧独立证据帮助读取口须识别这一真实 model 来源，不将其猜为 ruleslevel；内部 level=0 仅指无 rules 级别。所有变更仍由所属模块事务口执行，失败回滚 Tutor 回答、帮助、事件与终态的同批写入。
++
+ 本段规定依赖方向。AuthContext只能由可信会话构造；WriteContext不是用户可任意自报的角色。ProviderPort的输入包含正文摘录而不只是ref；外部ProviderEvent经应用映射为RunEvent，只有服务端可以建立终态和审批事件。泛型DTOMap的unknown用于约束适配器类型映射，不是允许HTTP运行接口返回任意unknown。
+ 
+ <!-- BEGIN FILE: packages/contracts/module-ports.ts -->

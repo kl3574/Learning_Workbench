@@ -1,0 +1,114 @@
+................F.                                                       [100%]
+=================================== FAILURES ===================================
+_ test_provider_terminal_survives_crash_before_tutor_commit_and_restart_does_not_send _
+
+tutor = (<services.api.app.infrastructure.database.Database object at 0x73e22346b830>, SessionIdentity(id='session_tutor_fixtu...efs=[], selection=None, attempt_id=None), binding=TutorContextBinding(practice=None, assessment=None), title='原创测试对话'))
+tmp_path = PosixPath('[LOCAL_HOME]/.cache/lw-tutor/pytest-of-lkx/pytest-4/test_provider_terminal_survive0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x73e221ed7e00>
+
+    def test_provider_terminal_survives_crash_before_tutor_commit_and_restart_does_not_send(tutor, tmp_path, monkeypatch):
+        import asyncio
+        from services.api.app.application.tutor_worker import TutorWorker
+        from tests.provider_protocol_fixture import local_provider
+        class CrashBeforeTutorCommit(Exception):
+            pass
+        def crash(*args, **kwargs):
+            raise CrashBeforeTutorCommit()
+        async def run():
+            async with local_provider(text='真实已收到并冻结的完整回答。\n') as server:
+                worker, consents, dispatch = configured(tutor, tmp_path, server.base_url)
+                thread, _, original, _, grant = await asyncio.to_thread(approved, tutor, worker, consents)
+                database, identity, service, create = tutor
+                monkeypatch.setattr(worker, '_finish', crash)
+                with pytest.raises(CrashBeforeTutorCommit):
+                    await asyncio.to_thread(worker.run_once)
+                with database.transaction(immediate=False) as connection:
+                    durable = dispatch.read_result(connection, identity, original.run.id, grant.id)
+                    assert durable.receipt.terminal.outcome == 'complete'
+                    assert durable.answer.text == '真实已收到并冻结的完整回答。\n'
+                assert service.read(identity, original.run.id).run.status == 'running'
+                restarted = TutorWorker(database, service.context, dispatch, build_material)
+                assert not await asyncio.to_thread(restarted.run_once), 'a still-live crashed lease is not stolen'
+                expire_crashed_lease(database, original.run.id)
+                assert await asyncio.to_thread(restarted.run_once)
+                current = service.read(identity, original.run.id)
+                assert current.run.status == 'completed' and current.run.answer_markdown == durable.answer.text
+                assert current.result.provider.receipt_id == durable.receipt.id
+                assert [event.type for event in service.events(identity, original.run.id, 0)].count('completed') == 1
+                assert len(server.requests) == 1 and not await asyncio.to_thread(restarted.run_once)
+                messages = service.messages(identity, thread.id)
+                followup = TutorRunCreate(request=dm.TutorRequest(thread_id=thread.id, workspace_id=identity.workspace_id,
+                    message='针对原回答继续解释。', intent='explain', context=create.scope),
+                    expected_thread_revision=messages.thread.revision, binding=create.binding)
+                next_run = service.start(identity, followup, 'followup')
+                with database.transaction(immediate=False) as connection:
+                    history = TutorRepository(connection, identity.workspace_id).source_state(next_run.run.id).input.history
+                    assert [(item.message_id, item.content) for item in history] == [
+                        (message.id, message.content_markdown) for message in messages.items]
+                service.cancel(identity, next_run.run.id, TutorRunCancel(expected_revision=1), 'cancel-followup')
+                assert len(server.requests) == 1
+>       asyncio.run(run())
+
+tests/integration/test_tutor_runs.py:409: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/integration/test_tutor_runs.py:405: in run
+    assert [(item.message_id, item.content) for item in history] == [
+                              ^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = TutorFrozenHistoryItem(message_id='message_26952525317045d0b790c2e537cc5c91', source_run_id='run_84b8181930bf4d5d8b7f6...ser', content_markdown='请解释当前完整材料。', content_sha256='fe7324b747a988c76729c60fb73c16125502481217f6f6593ec81f2b3e088fa8')
+item = 'content'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra and item in pydantic_extra:
+                return pydantic_extra[item]
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'TutorFrozenHistoryItem' object has no attribute 'content'
+
+.venv/lib/python3.12/site-packages/pydantic/main.py:1042: AttributeError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  [LOCAL_HOME]/.cache/learning-workbench-acceptance/m53-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  [LOCAL_HOME]/.cache/learning-workbench-acceptance/m53-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_tutor_runs.py::test_provider_terminal_survives_crash_before_tutor_commit_and_restart_does_not_send
+1 failed, 17 passed, 2 warnings in 6.12s

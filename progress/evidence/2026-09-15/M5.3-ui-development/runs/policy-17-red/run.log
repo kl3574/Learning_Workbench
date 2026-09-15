@@ -1,0 +1,42 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/tutor/useTutor.test.tsx
+
+
+ RUN  v5.0.0 <private-home>/.cache/learning-workbench-acceptance/m53-active/apps/web
+
+ ❯ src/features/tutor/useTutor.test.tsx (10 tests | 3 failed) 787ms
+   ❯ real command journal with controlled Tutor service boundaries (10)
+     × clears already displayed academic state immediately on actual 409 ASSESSMENT_ACTIVE without waiting for a session poll 61ms
+     × clears already displayed academic state immediately on actual 409 POLICY_DENIED without waiting for a session poll 57ms
+     × clears already displayed academic state immediately on actual 409 ASSESSMENT_ANSWER_PROTECTED without waiting for a session poll 57ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/tutor/useTutor.test.tsx > real command journal with controlled Tutor service boundaries > clears already displayed academic state immediately on actual 409 ASSESSMENT_ACTIVE without waiting for a session poll
+ FAIL  src/features/tutor/useTutor.test.tsx > real command journal with controlled Tutor service boundaries > clears already displayed academic state immediately on actual 409 POLICY_DENIED without waiting for a session poll
+ FAIL  src/features/tutor/useTutor.test.tsx > real command journal with controlled Tutor service boundaries > clears already displayed academic state immediately on actual 409 ASSESSMENT_ANSWER_PROTECTED without waiting for a session poll
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/features/tutor/useTutor.test.tsx:131:45
+    129|     vi.mocked(data.port.read).mockRejectedValueOnce(new ApiError(409, …
+    130|     await act(async () => data.view.result.current.refreshRun())
+    131|     expect(data.view.result.current.denied).toBe(true)
+       |                                             ^
+    132|     expect(data.view.result.current.run).toBeNull(); expect(data.view.…
+    133|     expect(data.view.result.current.messages).toEqual([]); expect(data…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 7 passed (10)
+   Start at  22:10:27
+   Duration  1.28s (tests 65%, environment 17%, transform 11%, import 6%)
+
