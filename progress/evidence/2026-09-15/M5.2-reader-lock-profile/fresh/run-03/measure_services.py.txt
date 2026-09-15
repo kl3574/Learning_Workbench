@@ -1,0 +1,114 @@
+"""Bounded synthetic service profile; no HTTP, no user data, no sleeps or product edits."""
+from pathlib import Path
+from hashlib import sha256
+from dataclasses import replace
+from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event, Barrier, local
+from unittest.mock import patch
+from time import perf_counter
+import cProfile, pstats, json, sqlite3, subprocess, datetime, sys, traceback
+ROOT=Path('<PRIVATE_HOME>/Desktop/learning/Learning_Workbench'); sys.path.insert(0,str(ROOT))
+from tests.reader_fixtures import reader_fixture,reader_history_package,ref
+from services.api.app.infrastructure.config import Settings
+from services.api.app.infrastructure.database import Database
+from services.api.app.infrastructure.security import SessionIdentity
+from services.api.app.application.imports import ImportService
+from services.api.app.infrastructure.import_worker import ImportWorker
+from services.api.app.import_dto import ImportCommitRequest
+from services.api.app.application.content import ContentService
+from services.api.app.application.reader import ReaderService
+
+BASE=Path(__file__).parent; OUT=BASE/'run-03'; origin=perf_counter(); state=local(); events=[]; summaries=[]; worker_acquired=Event()
+def tick(): return (perf_counter()-origin)*1000
+class ObservedConnection(sqlite3.Connection):
+ def execute(self,sql,parameters=(),/):
+  started=tick()
+  try:return super().execute(sql,parameters)
+  finally:
+   name=getattr(state,'label','setup'); kind='BEGIN' if sql.startswith('BEGIN') else sql.split()[0]
+   events.append(dict(label=name,kind=kind,start_ms=started,end_ms=tick(),sql_template_sha256=sha256(sql.encode()).hexdigest()))
+   if name=='post_import_worker' and sql=='BEGIN IMMEDIATE':worker_acquired.set()
+ def commit(self):
+  started=tick()
+  try:return super().commit()
+  finally:events.append(dict(label=getattr(state,'label','setup'),kind='COMMIT',start_ms=started,end_ms=tick()))
+ def rollback(self):
+  started=tick()
+  try:return super().rollback()
+  finally:events.append(dict(label=getattr(state,'label','setup'),kind='ROLLBACK',start_ms=started,end_ms=tick()))
+original_connect=sqlite3.connect
+def observed_connect(*args,**kwargs):
+ started=tick();kwargs['factory']=ObservedConnection
+ try:return original_connect(*args,**kwargs)
+ finally:events.append(dict(label=getattr(state,'label','setup'),kind='CONNECT',start_ms=started,end_ms=tick()))
+def invoke(label, operation, barrier=None):
+ state.label=label
+ if barrier is not None:barrier.wait(timeout=5)
+ profile_enabled=label.startswith('serial_') or label=='post_import_worker'
+ profiler=cProfile.Profile();started=tick()
+ if profile_enabled:profiler.enable()
+ result=None;error=None
+ try:result=operation();return result
+ except BaseException as e:error=type(e).__name__;raise
+ finally:
+  if profile_enabled:profiler.disable()
+  elapsed=tick()-started
+  stats=pstats.Stats(profiler).stats if profile_enabled else {}
+  rows=[]
+  for (filename,line,name),(primitive,calls,self_time,cumulative,_callers) in stats.items():
+   if filename.startswith(str(ROOT)) or any(word in name for word in ['execute','fetchall','fetchone','acquire']):
+    rows.append(dict(file=filename,line=line,name=name,primitive_calls=primitive,calls=calls,self_ms=self_time*1000,cumulative_ms=cumulative*1000))
+  rows.sort(key=lambda x:x['cumulative_ms'],reverse=True)
+  info=dict(label=label,start_ms=started,end_ms=tick(),elapsed_ms=elapsed,error=error,result_kind=type(result).__name__,profile=rows)
+  if hasattr(result,'model_dump'):info['result_sha256']=sha256(result.model_dump_json().encode()).hexdigest()
+  elif type(result) is bool:info['result']=result
+  selected=[x for x in events if x['label']==label];info['statement_counts']=dict(Counter(x['kind'] for x in selected));info['begin_wait_ms']=[x['end_ms']-x['start_ms'] for x in selected if x['kind']=='BEGIN']
+  summaries.append(info)
+
+def inventory():
+ paths=subprocess.check_output(['git','ls-files','-z'],cwd=ROOT).decode().split('\0')
+ return [dict(path=p,sha256=sha256((ROOT/p).read_bytes()).hexdigest()) for p in paths if p and not p.startswith('progress/') and (ROOT/p).is_file()]
+
+def main():
+ OUT.mkdir();before=inventory();started=datetime.datetime.now(datetime.UTC).isoformat();(OUT/'source-before.json').write_text(json.dumps(before,indent=2)+'\n')
+ error=None;worker=None;fixture_result={}
+ try:
+  database=Database(Settings(data_dir=OUT/'runtime'));workspace=database.initialize();identity=SessionIdentity('session_profile_synthetic',workspace,'learner','synthetic_profile_csrf','2099-01-01T00:00:00Z')
+  importer=ImportService(database);worker=ImportWorker(database);data=reader_history_package('nativehistory');current=reader_fixture('nativehistory',2)
+  staged=importer.stage(identity,data=data,filename='reader-history.learnpack.zip',kind='learnpack',key='profile_stage')
+  assert worker.run_once()
+  preview=importer.preview(replace(identity,role='author'),staged.import_id);assert preview.status=='preview_ready'
+  command=ImportCommitRequest(expected_input_sha256=staged.input_sha256,accepted_warning_codes=sorted({w.code for w in preview.warnings if w.severity=='warning'}),id_mapping=[])
+  committed=importer.commit(identity,staged.import_id,command,'profile_commit');assert ref(current.course) in committed.course_refs
+  assert importer.job(identity,staged.job.id).status=='completed'
+  fixture_result=dict(archive_sha256=sha256(data).hexdigest(),archive_bytes=len(data),course=ref(current.course).model_dump(),lesson_count=len(current.lessons),block_count=len(current.blocks),revisions=[1,2],import_status=importer.preview(identity,staged.import_id).status,job_status=importer.job(identity,staged.job.id).status)
+  content=ContentService(database);reader=ReaderService(database)
+  lesson=lambda:content.read(workspace,'lesson',current.lessons[0].id,2)
+  outline=lambda:reader.outline(identity,current.course.id,2)
+  with patch.object(sqlite3,'connect',observed_connect):
+   invoke('serial_lesson',lesson);invoke('serial_outline',outline)
+   barrier=Barrier(2)
+   with ThreadPoolExecutor(max_workers=2) as pool:
+    results=[pool.submit(invoke,label,operation,barrier) for label,operation in [('pair_lesson',lesson),('pair_outline',outline)]]
+    for result in results:result.result(timeout=20)
+   # One real queued post-import maintenance tick. The event merely observes its
+   # actual BEGIN completion; the worker is never held waiting for these readers.
+   with ThreadPoolExecutor(max_workers=3) as pool:
+    actual_worker=pool.submit(invoke,'post_import_worker',worker.run_once)
+    assert worker_acquired.wait(timeout=5),'actual worker did not acquire a transaction'
+    get_results=[pool.submit(invoke,label,operation) for label,operation in [('worker_overlap_lesson',lesson),('worker_overlap_outline',outline)]]
+    for result in [actual_worker,*get_results]:result.result(timeout=30)
+  with database.connect() as connection:
+   fixture_result['counts']={name:connection.execute('SELECT COUNT(*) FROM '+name).fetchone()[0] for name in ['objects','revisions','block_provenance','jobs','ingestion_imports']}
+ except BaseException as e:
+  error=type(e).__name__;traceback.print_exc()
+ finally:
+  if worker:worker.stop()
+  after=inventory();(OUT/'source-after.json').write_text(json.dumps(after,indent=2)+'\n')
+  (OUT/'measurements.json').write_text(json.dumps(dict(fixture=fixture_result,events=events,calls=summaries,error=error,scope='Actual synthetic SQLite services and owner worker; no HTTP/browser/full suite; no inserted sleep/lock-hold duration.'),ensure_ascii=False,indent=2)+'\n')
+  receipt=dict(started_at=started,finished_at=datetime.datetime.now(datetime.UTC).isoformat(),exit_code=1 if error else 0,source_unchanged=before==after,source_count=len(before),source_before_sha256=sha256((OUT/'source-before.json').read_bytes()).hexdigest(),source_after_sha256=sha256((OUT/'source-after.json').read_bytes()).hexdigest(),measurements_sha256=sha256((OUT/'measurements.json').read_bytes()).hexdigest(),harness_sha256=sha256(Path(__file__).read_bytes()).hexdigest())
+  (OUT/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n');print(json.dumps(receipt,indent=2))
+  for x in summaries:print(json.dumps({k:x[k] for k in ['label','elapsed_ms','error','begin_wait_ms','statement_counts']}))
+ if error:raise SystemExit(1)
+if __name__=='__main__':main()

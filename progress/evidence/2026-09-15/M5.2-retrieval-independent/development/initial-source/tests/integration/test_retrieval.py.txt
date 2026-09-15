@@ -1,0 +1,416 @@
+"""Real SQLite/Content/Jobs/FTS boundaries; destructive SQL is isolated fault injection.
+
+These service tests are not HTTP/browser tests or the separately frozen Recall run.
+"""
+
+from dataclasses import replace
+import hashlib
+import json
+from pathlib import Path
+import threading
+
+import pytest
+
+from packages.contracts import domain_models as dm
+from packages.contracts.canonical import canonical_bytes
+from services.api.app.application.assessment import AssessmentService
+from services.api.app.application.content import ContentService
+from services.api.app.application.errors import ApiError
+from services.api.app.application.jobs import JobService
+from services.api.app.assessment_dto import AssessmentAttemptCreate
+from services.api.app.import_dto import JobCancelRequest
+from services.api.app.infrastructure.config import Settings
+from services.api.app.infrastructure.content_repository import reference
+from services.api.app.infrastructure.database import Database, utc_now
+from services.api.app.infrastructure.security import SessionIdentity
+from services.api.app.retrieval_dto import RetrievalIndexRebuildWrite, RetrievalQueryWrite
+from tests.assessment_fixtures import assessment_fixture
+from tests.integration.test_assessment_attempts import insert_answer
+
+ROOT = Path(__file__).resolve().parents[2]
+FIXTURE = ROOT / 'fixtures/synthetic/retrieval-m52'
+
+
+def all_rows(database):
+    with database.connect() as connection:
+        names = [row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")]
+        return {name: sorted([tuple(row) for row in connection.execute(f'SELECT * FROM "{name}"')], key=repr)
+                for name in names}
+
+
+@pytest.fixture
+def retrieval(tmp_path):
+    from services.api.app.application.retrieval import RetrievalService, RetrievalWorker
+
+    database = Database(Settings(data_dir=tmp_path / 'data'))
+    workspace = database.initialize()
+    identity = SessionIdentity('session_retrieval_fixture', workspace, 'learner', 'unused', '2099-01-01T00:00:00Z')
+    blocks = tuple(dm.ContentBlock.model_validate_json(path.read_bytes()) for path in sorted((FIXTURE / 'blocks').glob('*.json')))
+    lesson = dm.Lesson.model_validate_json((FIXTURE / 'lessons/m52_lexical_lesson.r1.json').read_bytes())
+    course = dm.Course.model_validate_json((FIXTURE / 'course.json').read_bytes())
+    bodies = {block.body_path: (FIXTURE / block.body_path).read_bytes() for block in blocks}
+    refs = ContentService(database).publish(workspace, (*blocks, lesson, course), bodies)
+    assert set(ref.id for ref in refs) == {item.id for item in (*blocks, lesson, course)}
+    return database, identity, blocks, course, RetrievalService(database), RetrievalWorker(database)
+
+
+def request_for(service, identity, refs):
+    state = service.scope_status(identity, refs)
+    return RetrievalIndexRebuildWrite(scope_refs=refs, expected_corpus_sha256=state.corpus_sha256,
+                                     provider_id=None, consent_id=None)
+
+
+def built(retrieval, refs=None, key='build'):
+    database, identity, _, course, service, worker = retrieval
+    refs = refs or [reference(course)]
+    request = request_for(service, identity, refs)
+    ack = service.rebuild(identity, request, key)
+    for _ in range(5):
+        current = service.job(identity, ack.id)
+        if current.status in {'completed', 'failed', 'cancelled'}:
+            break
+        worker.run_once()
+    assert service.job(identity, ack.id).status == 'completed'
+    state = service.scope_status(identity, refs)
+    assert state.state == 'ready'
+    return request, ack, state
+
+
+def query(retrieval, text='SVD', refs=None, limit=5):
+    _, identity, _, course, service, _ = retrieval
+    return service.query(identity, RetrievalQueryWrite(query=text, scope_refs=refs or [reference(course)], limit=limit))
+
+
+def publish_small(database, identity, prefix, texts, *, title_size=0):
+    blocks = []
+    bodies = {}
+    for number, text in enumerate(texts):
+        body = text.encode()
+        block = dm.ContentBlock(id=f'{prefix}_block_{number:03d}', revision=1, kind='text',
+            title='T' * title_size if title_size else f'公开材料 {number}',
+            body_path=f'content/{prefix}_{number:03d}.md', body_sha256=hashlib.sha256(body).hexdigest())
+        blocks.append(block)
+        bodies[block.body_path] = body
+    lesson = dm.Lesson(id=f'{prefix}_lesson', revision=1, title='L' * title_size if title_size else '公开小节',
+        objectives=[], block_refs=[reference(block) for block in blocks])
+    course = dm.Course(id=f'{prefix}_course', revision=1, title='C' * title_size if title_size else '明确范围',
+        audience='软件测试未审材料', lesson_refs=[reference(lesson)])
+    ContentService(database).publish(identity.workspace_id, (*blocks, lesson, course), bodies)
+    return blocks, lesson, course
+
+
+def test_cold_queries_and_status_are_real_missing_and_zero_write(retrieval):
+    database, identity, _, course, service, _ = retrieval
+    before = all_rows(database)
+    state = service.scope_status(identity, [reference(course)])
+    assert state.state == 'missing' and len(state.corpus_sha256) == 64
+    assert state.index_version is state.indexed_corpus_sha256 is state.last_built_at is state.latest_job is None
+    result = query(retrieval)
+    assert result.index_state == 'missing' and result.result_state == 'not_ready'
+    assert result.hits == [] and result.matched_count is None
+    assert service.overview(identity).items == []
+    assert all_rows(database) == before
+
+
+def test_actual_job_index_and_full_public_hit_survive_service_restart(retrieval):
+    from services.api.app.application.retrieval import RetrievalService
+
+    database, identity, blocks, course, service, _ = retrieval
+    request, ack, state = built(retrieval)
+    job = JobService(database).job(identity, ack.id)
+    assert job.status == 'completed' and job.kind == 'retrieval_index'
+    assert job.result_refs == [reference(block) for block in blocks]
+    before = all_rows(database)
+    result = query(retrieval)
+    assert result.result_state == 'matched' and result.matched_count == 1
+    hit = result.hits[0]
+    assert hit.ref == reference(blocks[19]) and hit.current_ref == hit.ref
+    assert hit.text.encode() == (FIXTURE / blocks[19].body_path).read_bytes()
+    assert hit.score == 1.0 and hit.material_review == 'unreviewed'
+    assert hit.provenance.state == 'unresolved' and hit.provenance.original is None
+    assert 'MATERIAL_UNREVIEWED' in {warning.code for warning in hit.warnings}
+    assert hit.parent_paths[0].course_ref == reference(course)
+    assert hit.location.start_cp == 0 and hit.location.end_cp == len(hit.text)
+    assert hit.locator == f'block:{hit.ref.id}@r1;body:{hit.body_sha256};cp:0-{len(hit.text)}'
+    reopened = RetrievalService(Database(database.settings))
+    assert reopened.query(identity, RetrievalQueryWrite(query='SVD', scope_refs=[reference(course)], limit=5)) == result
+    assert service.rebuild(identity, request, 'build') == ack
+    assert ack.status == 'queued' and service.job(identity, ack.id).status == 'completed'
+    assert service.scope_status(identity, [reference(course)]).index_version == state.index_version
+    assert all_rows(database) == before
+
+
+def test_scope_is_filtered_before_top_k_and_scores_ignore_other_corpora(retrieval):
+    database, identity, _, course, _, _ = retrieval
+    built(retrieval)
+    before = query(retrieval, limit=1)
+    outside, _, other = publish_small(database, identity, 'aaa_outside', ['SVD'] * 12)
+    built(retrieval, [reference(other)], 'other-index')
+    assert query(retrieval, limit=1) == before
+    other_result = query(retrieval, refs=[reference(other)], limit=20)
+    assert {hit.ref.id for hit in other_result.hits} == {block.id for block in outside}
+    assert all(hit.parent_paths[0].root_ref == reference(other) for hit in other_result.hits)
+    assert all(hit.parent_paths[0].root_ref == reference(course) for hit in before.hits)
+
+
+def test_fixed_scope_coverage_and_full_ref_ties_are_stable(retrieval):
+    database, identity, _, _, _, _ = retrieval
+    blocks, _, course = publish_small(database, identity, 'ranking', ['red blue', 'red', 'blue', 'red blue'])
+    refs = [reference(course)]
+    built(retrieval, refs)
+    result = query(retrieval, 'red blue', refs, limit=20)
+    assert [hit.ref.id for hit in result.hits] == [blocks[i].id for i in [0, 3, 1, 2]]
+    assert [hit.score for hit in result.hits] == [1.0, 1.0, 0.5, 0.5]
+    assert query(retrieval, 'red blue', refs, limit=20) == result
+
+
+def test_original_command_replay_and_strong_cas_do_not_enqueue_twice(retrieval):
+    database, identity, _, course, service, _ = retrieval
+    request = request_for(service, identity, [reference(course)])
+    ack = service.rebuild(identity, request, 'original')
+    before = all_rows(database)
+    assert service.rebuild(identity, request, 'original') == ack
+    with pytest.raises(ApiError) as active:
+        service.rebuild(identity, request, 'other-command')
+    assert active.value.code == 'INDEX_REBUILD_ACTIVE'
+    with pytest.raises(ApiError) as changed:
+        service.rebuild(identity, request.model_copy(update={'expected_corpus_sha256': '0' * 64}), 'original')
+    assert changed.value.status == 409
+    with pytest.raises(ApiError) as stale:
+        service.rebuild(identity, request.model_copy(update={'expected_corpus_sha256': '0' * 64}), 'stale-new')
+    assert stale.value.status == 412
+    assert all_rows(database) == before
+
+
+def test_old_scope_becomes_stale_and_rebuild_preserves_old_exact_body(retrieval):
+    database, identity, blocks, course, service, _ = retrieval
+    _, _, first = built(retrieval)
+    old = blocks[19]
+    body = b'new revision replacement'
+    newer = old.model_copy(update={'revision': 2, 'body_path': 'content/svd_r2.md',
+                                  'body_sha256': hashlib.sha256(body).hexdigest()})
+    ContentService(database).publish(identity.workspace_id, [newer], {newer.body_path: body})
+    state = service.scope_status(identity, [reference(course)])
+    assert state.state == 'stale' and state.index_version == first.index_version
+    assert state.corpus_sha256 != state.indexed_corpus_sha256
+    assert query(retrieval).hits == [] and query(retrieval).result_state == 'not_ready'
+    _, _, refreshed = built(retrieval, key='rebuild-historical')
+    assert refreshed.index_version != first.index_version
+    hit = query(retrieval).hits[0]
+    assert hit.ref == reference(old) and hit.current_ref == reference(newer)
+    assert hit.text.encode() == (FIXTURE / old.body_path).read_bytes()
+    assert 'HISTORICAL_REVISION' in {warning.code for warning in hit.warnings}
+
+
+@pytest.mark.parametrize('damage', ['body', 'manifest', 'chunk', 'fts', 'fts_scope'])
+def test_actual_body_manifest_chunk_or_fts_damage_is_never_successful_empty(retrieval, damage):
+    database, _, blocks, _, _, _ = retrieval
+    built(retrieval)
+    if damage == 'body':
+        digest = blocks[19].body_sha256
+        path = database.settings.data_dir / 'blobs' / digest[:2] / digest
+        path.write_bytes(b'tampered public body')
+    else:
+        # Deliberately damage only this test database, bypassing immutable
+        # triggers. These are corruption fixtures, not product edit entry points.
+        with database.transaction() as connection:
+            if damage == 'manifest':
+                connection.execute('DROP TRIGGER retrieval_generations_no_update')
+                connection.execute('UPDATE retrieval_generations SET manifest_sha256=?', ('0' * 64,))
+            elif damage == 'chunk':
+                connection.execute('DROP TRIGGER retrieval_chunks_no_update')
+                connection.execute("UPDATE retrieval_chunks SET tokens='w666f72676564'")
+            elif damage == 'fts':
+                connection.execute("UPDATE retrieval_fts SET tokens='w666f72676564'")
+            else:
+                connection.execute('UPDATE retrieval_fts SET scope_sha256=?', ('0' * 64,))
+    with pytest.raises(ApiError) as failure:
+        query(retrieval)
+    assert failure.value.code == ('CONTENT_HASH_MISMATCH' if damage == 'body' else 'INDEX_INTEGRITY_INVALID')
+
+
+def assessment_material(database, identity):
+    fixture = assessment_fixture('retrievalpolicy')
+    ContentService(database).publish(identity.workspace_id, fixture.public_objects, fixture.bodies)
+    for solution in fixture.solutions:
+        # Real private answer rows with explicit needs_review, never approval.
+        insert_answer(database, solution.model_copy(update={'solution_markdown': 'zzprivateanswercanary'}))
+    return fixture, AssessmentService(database)
+
+
+def test_private_answers_never_enter_ordinary_index_and_active_policy_blocks_author(retrieval):
+    database, identity, _, _, service, _ = retrieval
+    fixture, assessments = assessment_material(database, identity)
+    refs = [reference(fixture.course)]
+    request, ack, _ = built(retrieval, refs)
+    result = query(retrieval, 'zzprivateanswercanary', refs)
+    assert result.result_state == 'no_match' and result.hits == []
+    attempt = assessments.create_attempt(identity, fixture.assessment.id,
+        AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode='independent'), 'independent')
+    for subject in (identity, replace(identity, role='author')):
+        for operation in (lambda: service.query(subject, RetrievalQueryWrite(query='数量', scope_refs=refs, limit=5)),
+                          lambda: service.scope_status(subject, refs), lambda: service.overview(subject),
+                          lambda: service.rebuild(subject, request, 'build'), lambda: service.job(subject, ack.id)):
+            with pytest.raises(ApiError) as failure:
+                operation()
+            assert failure.value.code == 'ASSESSMENT_ACTIVE'
+    assessments.abandon(identity, attempt.id, dm.AttemptSubmit(expected_revision=attempt.revision), 'abandon')
+    assert query(retrieval, 'zzprivateanswercanary', refs).hits == []
+
+
+@pytest.mark.parametrize('running', [False, True])
+def test_public_jobs_cancel_queued_or_running_never_publishes_a_generation(retrieval, running):
+    database, identity, _, course, service, worker = retrieval
+    fixture, assessments = assessment_material(database, identity)
+    request = request_for(service, identity, [reference(course)])
+    ack = service.rebuild(identity, request, 'original')
+    lease = worker.claim() if running else None
+    computed = worker.compute(lease) if lease else None
+    jobs = JobService(database)
+    current = jobs.job(identity, ack.id)
+    assert current.status == ('running' if running else 'queued')
+    with pytest.raises(ApiError) as excluded:
+        assessments.create_attempt(identity, fixture.assessment.id,
+            AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode='independent'), 'blocked')
+    assert excluded.value.code == 'SUBJECT_WORK_ACTIVE'
+    cancel = JobCancelRequest(expected_revision=current.revision)
+    original = jobs.cancel(identity, ack.id, cancel, 'cancel')
+    assert original.status == 'cancelled' and original.result_refs == []
+    assert jobs.cancel(identity, ack.id, cancel, 'cancel') == original
+    if computed:
+        assert not worker.finish(lease, *computed)
+    worker.run_once()  # May consume a real maintenance event; not evidence of publication.
+    assert service.scope_status(identity, [reference(course)]).state == 'missing'
+    assert jobs.job(identity, ack.id).status == 'cancelled'
+    with database.connect() as connection:
+        assert connection.execute('SELECT COUNT(*) FROM retrieval_generations').fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM job_events WHERE job_id=? AND type IN ('completed','failed','cancelled')", (ack.id,)).fetchone()[0] == 1
+    assert assessments.create_attempt(identity, fixture.assessment.id,
+        AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode='independent'), 'after-cancel').status == 'active'
+
+
+def test_expired_lease_recovery_excludes_old_writer_and_commits_one_generation(retrieval):
+    from services.api.app.application.retrieval import RetrievalWorker
+
+    database, identity, _, course, service, worker = retrieval
+    ack = service.rebuild(identity, request_for(service, identity, [reference(course)]), 'build')
+    first = worker.claim()
+    assert first is not None
+    old_material = worker.compute(first)
+    with database.transaction() as connection:
+        connection.execute('UPDATE jobs SET lease_until=? WHERE id=?', ('2000-01-01T00:00:00Z', ack.id))
+    restarted = RetrievalWorker(Database(database.settings))
+    second = restarted.claim()
+    assert second and second.job_id == first.job_id and second.owner != first.owner and second.revision > first.revision
+    new_material = restarted.compute(second)
+    assert worker.finish(first, *old_material) is False
+    assert restarted.finish(second, *new_material) is True
+    assert service.job(identity, ack.id).status == 'completed'
+    with database.connect() as connection:
+        assert connection.execute('SELECT COUNT(*) FROM retrieval_generations').fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM job_events WHERE job_id=? AND type='completed'", (ack.id,)).fetchone()[0] == 1
+
+
+def test_input_changed_after_compute_fails_original_job_and_preserves_old_generation(retrieval):
+    database, identity, blocks, course, service, worker = retrieval
+    _, _, first = built(retrieval)
+    ack = service.rebuild(identity, request_for(service, identity, [reference(course)]), 'redundant')
+    lease = worker.claim()
+    assert lease is not None
+    material = worker.compute(lease)
+    changed = blocks[0].model_copy(update={'revision': 2, 'title': '真实新修订'})
+    ContentService(database).publish(identity.workspace_id, [changed], {changed.body_path: (FIXTURE / changed.body_path).read_bytes()})
+    with pytest.raises(ApiError) as failure:
+        worker.finish(lease, *material)
+    assert failure.value.code == 'INDEX_INPUT_CHANGED'
+    worker.fail(lease, failure.value)
+    assert service.job(identity, ack.id).status == 'failed'
+    assert service.job(identity, ack.id).error.code == 'INDEX_INPUT_CHANGED'
+    state = service.scope_status(identity, [reference(course)])
+    assert state.state == 'stale' and state.index_version == first.index_version
+
+
+def test_stop_after_compute_prevents_publication_and_allows_lease_recovery(retrieval):
+    from services.api.app.application.retrieval import RetrievalWorker
+
+    database, identity, _, course, service, _ = retrieval
+    stop = threading.Event()
+    worker = RetrievalWorker(database, stopping=stop.is_set)
+    ack = service.rebuild(identity, request_for(service, identity, [reference(course)]), 'build')
+    lease = worker.claim()
+    assert lease is not None
+    material = worker.compute(lease)
+    stop.set()
+    assert not worker.finish(lease, *material)
+    assert service.job(identity, ack.id).status == 'running'
+    assert service.scope_status(identity, [reference(course)]).index_version is None
+    with database.transaction() as connection:
+        connection.execute('UPDATE jobs SET lease_until=? WHERE id=?', ('2000-01-01T00:00:00Z', ack.id))
+    resumed = RetrievalWorker(Database(database.settings))
+    assert resumed.run_once()
+    assert service.job(identity, ack.id).status == 'completed'
+
+
+def test_literal_match_grammar_and_query_term_budget_are_enforced_by_service(retrieval):
+    built(retrieval)
+    result = query(retrieval, 'MATCH OR NOT NEAR')
+    assert result.hits[0].ref.id == 'm52_block_23'
+    assert query(retrieval, 'OR').hits[0].ref.id == 'm52_block_23'
+    assert query(retrieval, '菠萝榴莲').result_state == 'no_match'
+    with pytest.raises(ApiError) as no_terms:
+        query(retrieval, '“”（）')
+    assert no_terms.value.code == 'QUERY_NO_TERMS'
+    words = [chr(97 + i // 26) + chr(97 + i % 26) for i in range(65)]
+    with pytest.raises(ApiError) as terms:
+        query(retrieval, ' '.join(words))
+    assert terms.value.code == 'QUERY_TERM_BUDGET_EXCEEDED'
+
+
+@pytest.mark.parametrize('kind', ['text', 'json'])
+def test_actual_full_block_resource_omissions_preserve_text_and_all_parent_fields(retrieval, kind):
+    database, identity, _, _, _, _ = retrieval
+    body = 'needle ' + 'x ' * 199990 if kind == 'text' else 'needle'
+    count = 6 if kind == 'text' else 8
+    blocks, _, course = publish_small(database, identity, f'budget_{kind}', [body] * count,
+                                      title_size=400000 if kind == 'json' else 0)
+    refs = [reference(course)]
+    built(retrieval, refs)
+    result = query(retrieval, 'needle', refs, limit=20)
+    assert result.result_state == 'matched' and result.matched_count == count
+    assert 0 < len(result.hits) < count
+    assert result.omissions.result_limit == 0
+    assert result.omissions.text_byte_budget + result.omissions.json_byte_budget == count - len(result.hits)
+    assert (result.omissions.text_byte_budget > 0) == (kind == 'text')
+    assert (result.omissions.json_byte_budget > 0) == (kind == 'json')
+    assert sum(len(hit.text.encode()) for hit in result.hits) <= 2 * 1024 * 1024
+    assert len(result.model_dump_json().encode()) <= 8 * 1024 * 1024
+    assert all(hit.text == body and hit.location.end_cp == len(body) for hit in result.hits)
+    if kind == 'json':
+        assert all(len(hit.title) == len(hit.parent_paths[0].lesson_title) == len(hit.parent_paths[0].course_title) == 400000 for hit in result.hits)
+    assert {hit.ref.id for hit in result.hits} <= {block.id for block in blocks}
+
+
+def test_whole_expanded_descriptor_budget_rejects_scope_before_enqueuing(retrieval):
+    database, identity, _, _, service, _ = retrieval
+    _, _, course = publish_small(database, identity, 'descriptor_budget', ['needle'] * 14, title_size=400000)
+    before = all_rows(database)
+    with pytest.raises(ApiError) as failure:
+        service.scope_status(identity, [reference(course)])
+    assert failure.value.status == 413 and failure.value.code == 'SCOPE_BUDGET_EXCEEDED'
+    assert all_rows(database) == before
+
+
+def test_other_workspace_refs_and_jobs_are_not_accessible(retrieval):
+    database, identity, _, course, service, _ = retrieval
+    _, ack, _ = built(retrieval)
+    with database.transaction() as connection:
+        connection.execute('INSERT INTO workspace(id,title,preferences_json,created_at) VALUES(?,?,?,?)',
+                           ('workspace_other', '隔离工作区fixture', '{}', utc_now()))
+    other = replace(identity, workspace_id='workspace_other')
+    with pytest.raises(ApiError) as scope:
+        service.scope_status(other, [reference(course)])
+    assert scope.value.status == 404
+    with pytest.raises(ApiError) as job:
+        JobService(database).job(other, ack.id)
+    assert job.value.status == 404
+    assert service.overview(other).items == []

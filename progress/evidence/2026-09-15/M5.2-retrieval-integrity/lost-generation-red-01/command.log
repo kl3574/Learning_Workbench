@@ -1,0 +1,43 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+____ test_completed_job_result_cannot_disappear_behind_an_older_generation _____
+
+ledger = (<services.api.app.infrastructure.database.Database object at 0x7f9f5cddf320>, SessionIdentity(id='session_integrity_s...d_corpus_sha256='d00461c7c4af82167e76b17991e7896f688799a624e8f67825d5265f0b80f8b6', provider_id=None, consent_id=None))
+
+    def test_completed_job_result_cannot_disappear_behind_an_older_generation(ledger):
+        database, identity, service, _, request = ledger
+        _, older = build(ledger, 'build_first')
+        completed, newer = build(ledger, 'build_second')
+        assert service.job(identity, completed.id).status == 'completed'
+        with database.transaction() as conn:
+            # Simulate a torn historical restore: completed Job + immutable result
+            # survive, but the corresponding materialized generation is missing.
+            conn.execute('DROP TRIGGER retrieval_chunks_no_delete')
+            conn.execute('DROP TRIGGER retrieval_generations_no_delete')
+            conn.execute('DELETE FROM retrieval_fts WHERE index_version=?', (newer.index_version,))
+            conn.execute('DELETE FROM retrieval_chunks WHERE index_version=?', (newer.index_version,))
+            conn.execute('DELETE FROM retrieval_generations WHERE index_version=?', (newer.index_version,))
+            conn.execute('UPDATE retrieval_scopes SET index_version=? WHERE workspace_id=? AND scope_sha256=?',
+                (older.index_version, identity.workspace_id, older.scope_sha256))
+>       reject_corruption(lambda: service.scope_status(identity, request.scope_refs))
+
+tests/integration/test_retrieval_integrity.py:115: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+call = <function test_completed_job_result_cannot_disappear_behind_an_older_generation.<locals>.<lambda> at 0x7f9f5dcae980>
+
+    def reject_corruption(call):
+        try:
+            result = call()
+        except ApiError as caught:
+            assert caught.code in {'INDEX_INTEGRITY_INVALID', 'INDEX_JOB_INTEGRITY_INVALID'}
+            return
+        observed = {name: getattr(result, name) for name in ('status', 'revision', 'state', 'workspace_id', 'index_version')
+                    if hasattr(result, name)}
+>       pytest.fail(f'Corrupt ledger was accepted; observed safe fields: {observed}')
+E       Failed: Corrupt ledger was accepted; observed safe fields: {'state': 'ready', 'index_version': 'index_1c551e60b02646fc8d206b0b80d85790'}
+
+tests/integration/test_retrieval_integrity.py:51: Failed
+=========================== short test summary info ============================
+FAILED tests/integration/test_retrieval_integrity.py::test_completed_job_result_cannot_disappear_behind_an_older_generation
+1 failed, 11 deselected in 0.33s

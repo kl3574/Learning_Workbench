@@ -1,0 +1,22 @@
+import { EventEmitter } from 'node:events';
+import { readFile, mkdir } from 'node:fs/promises';
+import { performance } from 'node:perf_hooks';
+import { observeReaderLoad } from '<private-home>/Desktop/learning/Learning_Workbench/tests/e2e/readerDiagnostics.ts';
+const dir='<private-home>/.cache/learning-workbench-acceptance/m52-reader-observer-boundary-01';
+const results=[];
+for (const kind of ['unavailable-page','never-completes','unwritable-target']) {
+ const page=new EventEmitter();
+ page.evaluate=()=>kind==='never-completes'?new Promise(()=>{}):Promise.reject(new Error('controlled unavailable CDP'));
+ const target=dir+'/'+kind;await mkdir(target);
+ const info={outputPath:()=>kind==='unwritable-target'?target+'/absent-parent/reader-load-diagnostic.json':target+'/reader-load-diagnostic.json'};
+ const sentinel=new Error('original assertion sentinel');const start=performance.now();let same=false;
+ const observer=observeReaderLoad(page);
+ try {try {throw sentinel} catch(error){await observer.capture(info);throw error} finally{observer.dispose()}} catch(error){same=error===sentinel}
+ const elapsed=performance.now()-start;
+ if (!same || elapsed>1500 || page.eventNames().length!==0) throw new Error('observer hid the original failure or exceeded the bounded probe allowance');
+ let artifact=null;try{artifact=JSON.parse(await readFile(info.outputPath(),'utf8'))}catch{}
+ if(kind==='never-completes'&&artifact?.state.capture_error!=='PAGE_OBSERVATION_TIMEOUT')throw new Error('timeout was not recorded');
+ if(kind==='unwritable-target'&&artifact!==null)throw new Error('write failure was falsely reported as an artifact');
+ results.push({kind,elapsed_ms:elapsed,same_original_error:same,listeners_remaining:page.eventNames().length,artifact_state:artifact?.state??null});
+}
+console.log(JSON.stringify({status:'PASS',scope:'Controlled diagnostic helper only; EventEmitter stands in for CDP and real local files/timers are used. No browser or product behavior proof.',results},null,2));

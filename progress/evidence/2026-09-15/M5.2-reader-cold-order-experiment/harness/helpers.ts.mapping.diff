@@ -1,0 +1,20 @@
+--- fixed-source/helpers.ts
++++ harness/helpers.ts
+@@ -1,13 +1,13 @@
+-import { expect, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
++import { expect, type Page } from '${ACCEPTANCE_CACHE}/m52-reader-cold-order-experiment-v1/source/apps/web/node_modules/@playwright/test/index.mjs'
+ import { execFileSync } from 'node:child_process'
+ import { resolve } from 'node:path'
+-const root = resolve(import.meta.dirname, '../..')
++const root = "${ACCEPTANCE_CACHE}/m52-reader-cold-order-experiment-v1/source"
+ export async function bootstrap(page: Page) {
+   // Capture only in process memory; never log or attach launcher secrets.
+-  const code = execFileSync(`${root}/.venv/bin/python`, ['-c', 'from services.api.app.config import Settings; from services.api.app.database import Database; from services.api.app.security import issue_bootstrap_code; d=Database(Settings.from_env()); d.initialize(); print(issue_bootstrap_code(d))'], { cwd: root, env: { ...process.env, LEARNING_DATA_DIR: process.env.LEARNING_E2E_DATA_DIR, LEARNING_UI_ORIGIN: 'http://127.0.0.1:5173' }, encoding: 'utf8' }).trim()
++  const code = execFileSync(`${root}/.venv/bin/python`, ['-c', 'from services.api.app.config import Settings; from services.api.app.database import Database; from services.api.app.security import issue_bootstrap_code; d=Database(Settings.from_env()); d.initialize(); print(issue_bootstrap_code(d))'], { cwd: root, env: { ...process.env, LEARNING_DATA_DIR: process.env.LEARNING_E2E_DATA_DIR, LEARNING_UI_ORIGIN: process.env.DIAG_UI_ORIGIN! }, encoding: 'utf8' }).trim()
+   await page.goto(`/#bootstrap=${code}`)
+   await expect(page.getByText('✓ UI 会话已保存')).toBeVisible()
+-  await expect(page).toHaveURL('http://127.0.0.1:5173/')
++  await expect(page).toHaveURL(`${process.env.DIAG_UI_ORIGIN}/`)
+   // Unload the old Shell before resetting its server session and browser cache.
+   const health = await page.goto('/health')
+   expect(health?.status()).toBe(200)

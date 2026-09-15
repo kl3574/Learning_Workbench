@@ -1,0 +1,25 @@
+import 'fake-indexeddb/auto'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, expect, test, vi } from 'vitest'
+import type { ContentRef, RetrievalIndexScopeStatus, RetrievalQueryView } from '../../../../../packages/contracts/generated/api-types'
+import { RetrievalPanel } from './RetrievalPanel'
+import { scopeHash } from './retrievalModel'
+import type { RetrievalPort } from './retrievalClient'
+afterEach(cleanup)
+const ref: ContentRef = { entity: 'block', id: 'block_panel', revision: 1, sha256: 'a'.repeat(64) }
+test.each([
+  ['no_match', '所选材料没有匹配'], ['indexed_empty', '索引内没有可检索词'],
+  ['resource_omitted', '存在匹配，但完整材料超出返回预算'],
+] as const)('visible %s preserves its explicit result distinction without a rebuild', async (result, label) => {
+  const workspace = `workspace_${crypto.randomUUID()}`
+  const status: RetrievalIndexScopeStatus = { kind: 'scope', scope_refs: [ref], scope_sha256: scopeHash(workspace, [ref]), corpus_sha256: 'b'.repeat(64), state: 'ready', index_version: 'index_panel', indexed_corpus_sha256: 'b'.repeat(64), last_built_at: '2026-09-15T00:00:00Z', latest_job: null }
+  const view: RetrievalQueryView = { scope_refs: [ref], scope_sha256: status.scope_sha256, corpus_sha256: status.corpus_sha256, index_state: 'ready', indexed_corpus_sha256: status.corpus_sha256, index_version: status.index_version, result_state: result, matched_count: result === 'resource_omitted' ? 1 : 0, hits: [], omissions: { result_limit: 0, text_byte_budget: 0, json_byte_budget: result === 'resource_omitted' ? 1 : 0 }, warnings: result === 'resource_omitted' ? [{ code: 'RETRIEVAL_RESOURCE_OMITTED', message: '整块遗漏', locator: null, severity: 'warning' }] : [] }
+  const unused = vi.fn(async (): Promise<never> => { throw new Error('unexpected command') })
+  const port: RetrievalPort = { status: vi.fn(async () => status), query: vi.fn(async () => view), rebuild: unused, job: unused, cancel: unused, block: unused, overview: unused }
+  render(<RetrievalPanel workspace={workspace} paused={false} choices={[{ label: '当前块', ref }]} initial={ref} open={vi.fn()} onState={vi.fn()} port={port} />)
+  await waitFor(() => expect(screen.getByText('索引已就绪')).toBeTruthy())
+  fireEvent.change(screen.getByLabelText('检索词', { exact: true }), { target: { value: '概率' } })
+  fireEvent.click(screen.getByRole('button', { name: '查询所选材料' }))
+  await waitFor(() => expect(screen.getByRole('heading', { name: label })).toBeTruthy())
+  expect(unused).not.toHaveBeenCalled(); expect(port.query).toHaveBeenCalledWith(workspace, { query: '概率', scope_refs: [ref], limit: 20 })
+})

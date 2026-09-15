@@ -1,0 +1,175 @@
+"""Independent ledger counterexamples; all material and SQLite faults are synthetic.
+
+Corruption deliberately bypasses immutable triggers in disposable test databases.
+It does not represent an application edit/approval workflow or filesystem attack.
+"""
+
+from dataclasses import replace
+import json
+
+import pytest
+
+from packages.contracts import domain_models as dm
+from packages.contracts.canonical import canonical_bytes, sha256_bytes
+from services.api.app.application.content import ContentService
+from services.api.app.application.errors import ApiError
+from services.api.app.application.imports import ImportService
+from services.api.app.application.retrieval import RetrievalService, RetrievalWorker
+from services.api.app.import_dto import JobCancelRequest
+from services.api.app.infrastructure.config import Settings
+from services.api.app.infrastructure.content_repository import reference
+from services.api.app.infrastructure.database import Database
+from services.api.app.infrastructure.import_worker import ImportWorker
+from services.api.app.infrastructure.security import SessionIdentity
+from services.api.app.retrieval_dto import RetrievalIndexRebuildWrite
+
+
+@pytest.fixture
+def ledger(tmp_path):
+    database = Database(Settings(data_dir=tmp_path / 'data'))
+    identity = SessionIdentity('session_integrity_synthetic', database.initialize(), 'learner', 'unused', '2099-01-01T00:00:00Z')
+    body = b'Original synthetic scalar retrieval material.\n'
+    block = dm.ContentBlock(id='integrity_block', revision=1, kind='worked_example', title='合成未审材料',
+        body_path='content/integrity.md', body_sha256=sha256_bytes(body))
+    ContentService(database).publish(identity.workspace_id, [block], {block.body_path: body})
+    service = RetrievalService(database)
+    refs = [reference(block)]
+    state = service.scope_status(identity, refs)
+    request = RetrievalIndexRebuildWrite(scope_refs=refs, expected_corpus_sha256=state.corpus_sha256,
+        provider_id=None, consent_id=None)
+    return database, identity, service, RetrievalWorker(database), request
+
+
+def reject_corruption(call):
+    try:
+        result = call()
+    except ApiError as caught:
+        assert caught.code in {'INDEX_INTEGRITY_INVALID', 'INDEX_JOB_INTEGRITY_INVALID'}
+        return
+    observed = {name: getattr(result, name) for name in ('status', 'revision', 'state', 'workspace_id', 'index_version')
+                if hasattr(result, name)}
+    pytest.fail(f'Corrupt ledger was accepted; observed safe fields: {observed}')
+
+
+def build(ledger, key):
+    _, identity, service, worker, request = ledger
+    ack = service.rebuild(identity, request, key)
+    assert worker.run_once()
+    assert service.job(identity, ack.id).status == 'completed'
+    return ack, service.scope_status(identity, request.scope_refs)
+
+
+@pytest.mark.parametrize('field', ['revision', 'status', 'workspace_id', 'cancel_base'])
+def test_original_cancel_ack_must_bind_actual_cancellation_history_even_with_matching_hash(ledger, field):
+    database, identity, service, _, request = ledger
+    queued = service.rebuild(identity, request, 'original_build')
+    cancel = JobCancelRequest(expected_revision=1)
+    ack = service.cancel_job(identity, queued.id, cancel, 'original_cancel')
+    assert ack.status == 'cancelled' and ack.revision == 2
+    assert service.cancel_job(identity, queued.id, cancel, 'original_cancel') == ack
+    route = f'POST /jobs/{queued.id}/cancel'
+    with database.transaction() as conn:
+        conn.execute('DROP TRIGGER retrieval_commands_no_update')
+        if field == 'cancel_base':
+            cancel = JobCancelRequest(expected_revision=2)
+            raw = canonical_bytes(cancel)
+            conn.execute('UPDATE retrieval_commands SET request_json=?,request_sha256=? WHERE workspace_id=? AND route=?',
+                (raw.decode(), sha256_bytes(raw), identity.workspace_id, route))
+        else:
+            data = ack.model_dump(mode='json')
+            data[field] = {'revision': 999, 'status': 'completed', 'workspace_id': 'foreign_workspace'}[field]
+            raw = canonical_bytes(data)
+            conn.execute('UPDATE retrieval_commands SET ack_json=?,ack_sha256=? WHERE workspace_id=? AND route=?',
+                (raw.decode(), sha256_bytes(raw), identity.workspace_id, route))
+    reject_corruption(lambda: service.cancel_job(identity, queued.id, cancel, 'original_cancel'))
+
+
+@pytest.mark.parametrize('pointer', ['older', 'null'])
+def test_scope_pointer_cannot_hide_a_later_complete_generation(ledger, pointer):
+    database, identity, service, _, request = ledger
+    _, older = build(ledger, 'build_first')
+    _, newer = build(ledger, 'build_second')
+    assert newer.index_version != older.index_version
+    assert service.scope_status(identity, request.scope_refs).index_version == newer.index_version
+    with database.transaction() as conn:
+        conn.execute('UPDATE retrieval_scopes SET index_version=? WHERE workspace_id=? AND scope_sha256=?',
+            (older.index_version if pointer == 'older' else None, identity.workspace_id, newer.scope_sha256))
+    reject_corruption(lambda: service.scope_status(identity, request.scope_refs))
+
+
+def test_completed_job_result_cannot_disappear_behind_an_older_generation(ledger):
+    database, identity, service, _, request = ledger
+    _, older = build(ledger, 'build_first')
+    completed, newer = build(ledger, 'build_second')
+    assert service.job(identity, completed.id).status == 'completed'
+    with database.transaction() as conn:
+        # Simulate a torn historical restore: completed Job + immutable result
+        # survive, but the corresponding materialized generation is missing.
+        conn.execute('DROP TRIGGER retrieval_chunks_no_delete')
+        conn.execute('DROP TRIGGER retrieval_generations_no_delete')
+        conn.execute('DELETE FROM retrieval_fts WHERE index_version=?', (newer.index_version,))
+        conn.execute('DELETE FROM retrieval_chunks WHERE index_version=?', (newer.index_version,))
+        conn.execute('DELETE FROM retrieval_generations WHERE index_version=?', (newer.index_version,))
+        conn.execute('UPDATE retrieval_scopes SET index_version=? WHERE workspace_id=? AND scope_sha256=?',
+            (older.index_version, identity.workspace_id, older.scope_sha256))
+    reject_corruption(lambda: service.scope_status(identity, request.scope_refs))
+
+
+@pytest.mark.parametrize('fault', ['missing_earlier_allocation', 'sequence_gap'])
+def test_scope_history_cannot_silently_skip_an_original_job(ledger, fault):
+    database, identity, service, _, request = ledger
+    first = service.rebuild(identity, request, 'first')
+    service.cancel_job(identity, first.id, JobCancelRequest(expected_revision=1), 'cancel_first')
+    second = service.rebuild(identity, request, 'second')
+    service.cancel_job(identity, second.id, JobCancelRequest(expected_revision=1), 'cancel_second')
+    assert service.scope_status(identity, request.scope_refs).latest_job.job.id == second.id
+    with database.transaction() as conn:
+        if fault == 'missing_earlier_allocation':
+            conn.execute('DROP TRIGGER retrieval_jobs_no_delete')
+            conn.execute('DELETE FROM retrieval_jobs WHERE job_id=?', (first.id,))
+        else:
+            conn.execute('DROP TRIGGER retrieval_jobs_input_immutable')
+            conn.execute('UPDATE retrieval_jobs SET sequence=9 WHERE job_id=?', (second.id,))
+    reject_corruption(lambda: service.scope_status(identity, request.scope_refs))
+
+
+@pytest.mark.parametrize('fault', [False, True], ids=['fault_off', 'fault_on'])
+def test_damaged_queued_index_does_not_starve_real_import_work(ledger, fault):
+    database, identity, service, _, request = ledger
+    queued = service.rebuild(identity, request, 'damaged_build')
+    if fault:
+        with database.transaction() as conn:
+            conn.execute('DROP TRIGGER retrieval_commands_no_update')
+            conn.execute("UPDATE retrieval_commands SET ack_sha256=? WHERE job_id=? AND route='POST /index/rebuild'",
+                ('0' * 64, queued.id))
+    ingestion = ImportService(database)
+    staged = ingestion.stage(identity, data=b'# Independent queued import\n\nOriginal synthetic material.\n',
+        filename='synthetic.md', kind='markdown', key='unrelated_import')
+    worker = ImportWorker(database)
+    try:
+        # Bounded deterministic maintenance ticks, no timeouts, sleeps or fake
+        # replacement worker callbacks. The ordinary import parses real bytes.
+        for _ in range(2):
+            worker.run_once()
+        with database.connect() as conn:
+            status = conn.execute('SELECT status FROM jobs WHERE id=?', (staged.job.id,)).fetchone()[0]
+        assert status == 'awaiting_approval', f'actual unrelated import job stayed {status}'
+        assert ingestion.preview(replace(identity, role='author'), staged.import_id).status == 'preview_ready'
+    finally:
+        worker.stop()
+
+
+def test_changed_frozen_job_input_cannot_borrow_another_original_command(ledger):
+    database, identity, service, _, request = ledger
+    queued = service.rebuild(identity, request, 'original')
+    with database.transaction() as conn:
+        row = conn.execute('SELECT input_json FROM retrieval_jobs WHERE job_id=?', (queued.id,)).fetchone()
+        data = json.loads(row[0])
+        data['request_sha256'] = '0' * 64
+        raw = canonical_bytes(data)
+        conn.execute('DROP TRIGGER retrieval_jobs_input_immutable')
+        conn.execute('UPDATE retrieval_jobs SET input_json=?,input_sha256=? WHERE job_id=?',
+            (raw.decode(), sha256_bytes(raw), queued.id))
+        conn.execute('UPDATE jobs SET input_json=?,input_sha256=? WHERE id=?',
+            (raw.decode(), sha256_bytes(raw), queued.id))
+    reject_corruption(lambda: service.job(identity, queued.id))

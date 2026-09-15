@@ -1,0 +1,15 @@
+from pathlib import Path
+import hashlib,json,datetime,subprocess
+ROOT=Path('<private-home>/Desktop/learning/Learning_Workbench'); BASE=Path('<private-home>/.cache/learning-workbench-acceptance/m52-worker-recovery-gates');sha=lambda b:hashlib.sha256(b).hexdigest()
+r=json.loads((BASE/'native/receipt.json').read_text()); originals=json.loads((BASE/'native-direct-output-before/manifest.json').read_text());byname={x['path']:x for x in originals['files']};changed=r['changed_inputs']; assert r['exit_code']==0
+# Only known direct test outputs can be restored. Every unexpected change stops.
+allowed={'docs/ui/m1-session-three-way-conflict.png','docs/ui/m1-after-200-percent-native.png','docs/ui/m1-native-zoom-metrics.json','docs/ui/m1-after-390-directory.png','docs/ui/m1-after-390-agent.png','docs/ui/m1-after-390-long-formula.png'}|{f'docs/ui/m1-after-{width}.png' for width in [390,900,1440,1920]}
+assert set(changed)<=allowed,changed
+out=BASE/'native-direct-output-after';out.mkdir(exist_ok=False);records=[]
+# First archive every changed after byte before restoring any file.
+for n in changed:
+ before=(BASE/'native-direct-output-before'/n).read_bytes();after=(ROOT/n).read_bytes();assert sha(before)==byname[n]['sha256']==r['before'][n];assert sha(after)==r['after'][n];assert before==subprocess.check_output(['git','show',r['implementation_commit']+':'+n],cwd=ROOT)
+ p=out/n;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(after);records.append({'path':n,'before_sha256':sha(before),'after_sha256':sha(after),'before_bytes':len(before),'after_bytes':len(after)})
+for v in records:
+ n=v['path'];assert sha((ROOT/n).read_bytes())==v['after_sha256'];(ROOT/n).write_bytes((BASE/'native-direct-output-before'/n).read_bytes());assert sha((ROOT/n).read_bytes())==v['before_sha256']
+result={'read_back_at':datetime.datetime.now(datetime.UTC).isoformat(),'implementation_commit':r['implementation_commit'],'original_gate_unchanged':r['unchanged'],'original_changed_inputs':changed,'before_manifest_sha256':sha((BASE/'native-direct-output-before/manifest.json').read_bytes()),'before_files_archived':len(byname),'changed_outputs':records,'restoration':'Actual changed outputs archived, checked against original fixed input hashes and post-run hashes, then restored only by exact post-run hash guards. No other source writes; original gate unchanged=false is preserved if outputs differed.'};(BASE/'native/known-output-restoration.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result))

@@ -1,0 +1,57 @@
+"""One readback-bound local suite database copy, no source database writes."""
+from pathlib import Path
+from hashlib import sha256
+import sys,json,sqlite3,os,datetime,traceback
+from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import patch
+ROOT=Path('<PRIVATE_HOME>/Desktop/learning/Learning_Workbench');sys.path.insert(0,str(ROOT))
+HARNESS=Path('<PRIVATE_HOME>/.cache/learning-workbench-acceptance/m52-reader-content-latency-preflight-v1');sys.path.insert(0,str(HARNESS))
+import measure_services as observed
+from services.api.app.application.recommendations import RecommendationWorker
+from services.api.app.infrastructure.blobs import BlobStore
+BASE=Path(__file__).parent;OUT=BASE/'run-02';SOURCE=Path('<SYNTHETIC_RUNTIME_CANDIDATE>/workspace.sqlite3')
+ARTIFACT=Path('<PRIVATE_HOME>/.cache/learning-workbench-acceptance/m52-final-gates/native/artifacts/retrieval-real-explicit-co-06e4c--unchanged-historical-scope/actual-retrieval-readback.json')
+
+def original_inventory():
+ return [{'path':str(p),'sha256':sha256(p.read_bytes()).hexdigest(),'bytes':p.stat().st_size,'mtime_ns':p.stat().st_mtime_ns} for p in [SOURCE,Path(str(SOURCE)+'-wal'),Path(str(SOURCE)+'-shm')]]
+
+def main():
+ OUT.mkdir();runtime=OUT/'private-copy';runtime.mkdir(mode=0o700);original_before=original_inventory();assert original_before[1]['bytes']==0
+ source_before=observed.inventory();started=datetime.datetime.now(datetime.UTC).isoformat();error=None;blob_reads=[];binding=[]
+ (OUT/'source-before.json').write_text(json.dumps(source_before,indent=2)+'\n')
+ try:
+  actor=json.loads((BASE/'source-readback.json').read_text());workspace=actor['workspace_id'];original=sqlite3.connect(SOURCE.as_uri()+'?mode=ro&immutable=1',uri=True,isolation_level=None);original.row_factory=sqlite3.Row
+  try:
+   # No direct random artifact-instance binding was established; preserve that result.
+   destination=runtime/'workspace.sqlite3';fd=os.open(destination,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600);os.close(fd)
+   target=sqlite3.connect(destination);original.backup(target);assert target.execute('PRAGMA integrity_check').fetchone()[0]=='ok';target.close()
+  finally:original.close()
+  assert original_before==original_inventory()
+  copy_initial_sha=sha256(destination.read_bytes()).hexdigest();database=observed.Database(observed.Settings(data_dir=runtime))
+  identity=observed.SessionIdentity('session_accumulated_profile',workspace,'learner','synthetic_profile_csrf','2099-01-01T00:00:00Z');fixture=observed.reader_fixture('nativehistory',2)
+  content=observed.ContentService(database);reader=observed.ReaderService(database);worker=RecommendationWorker(database)
+  lesson=lambda:content.read(workspace,'lesson',fixture.lessons[0].id,2)
+  outline=lambda:reader.outline(identity,fixture.course.id,2)
+  original_blob_read=BlobStore.read
+  def observe_blob_read(*args,**kwargs):
+   blob_reads.append({'label':getattr(observed.state,'label','unlabelled')})
+   return original_blob_read(*args,**kwargs)
+  with patch.object(sqlite3,'connect',observed.observed_connect),patch.object(BlobStore,'read',observe_blob_read):
+   observed.invoke('serial_lesson',lesson);observed.invoke('serial_outline',outline)
+   with ThreadPoolExecutor(max_workers=3) as pool:
+    actual_worker=pool.submit(observed.invoke,'post_import_worker',worker.run_once)
+    assert observed.worker_acquired.wait(timeout=5),'real Recommendation BEGIN was not observed'
+    gets=[pool.submit(observed.invoke,label,operation) for label,operation in [('recommendation_overlap_lesson',lesson),('recommendation_overlap_outline',outline)]]
+    for result in [actual_worker,*gets]:result.result(timeout=30)
+  with database.connect() as connection:
+   final_state=dict(connection.execute('SELECT generation,completed_generation,retry_at,failure_json IS NOT NULL AS has_failure FROM recommendation_projection_state WHERE workspace_id=?',(workspace,)).fetchone())
+  data=dict(database_source_scope='Local accumulated synthetic database candidate identified by tmp prefix/end mtime/14 exact fixture refs. No direct random full-suite artifact-instance binding established; not CI failure-time state.',source_database_sha256=original_before[0]['sha256'],copy_initial_sha256=copy_initial_sha,artifact_binding_readback_sha256=sha256((BASE/'artifact-binding.json').read_bytes()).hexdigest(),artifact_binding=binding,final_recommendation_state=final_state,events=observed.events,calls=observed.summaries,blob_reads=blob_reads,blobs_copied=0,concurrent_environment='Root explicitly running a separate complete native suite on the same machine. This is not idle-machine latency or an SLA.',scope='Serial real services, then one real RecommendationWorker tick; launch readers on actual BEGIN-acquired Event without holding the worker or inserting sleeps; no request budgets/guards changed. Process-wide cProfile may include the reader threads; use thread-local SQL labels/outer clocks for operation attribution.')
+  (OUT/'measurements.json').write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n')
+ except BaseException as e:error=type(e).__name__;traceback.print_exc()
+ finally:
+  original_after=original_inventory();after=observed.inventory();(OUT/'source-after.json').write_text(json.dumps(after,indent=2)+'\n')
+  receipt=dict(started_at=started,finished_at=datetime.datetime.now(datetime.UTC).isoformat(),exit_code=1 if error else 0,error=error,source_count=len(source_before),source_before_after_equal=source_before==after,source_changes=[x['path'] for x,y in zip(source_before,after) if x!=y],original_before=original_before,original_after=original_after,original_unchanged=original_before==original_after,harness_sha256=sha256(Path(__file__).read_bytes()).hexdigest(),helper_sha256=sha256((HARNESS/'measure_services.py').read_bytes()).hexdigest(),measurements_sha256=sha256((OUT/'measurements.json').read_bytes()).hexdigest() if (OUT/'measurements.json').exists() else None)
+  (OUT/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n');print(json.dumps(receipt,indent=2))
+  for x in observed.summaries:print(json.dumps({k:x[k] for k in ['label','elapsed_ms','error','begin_wait_ms','statement_counts']}))
+ if error:raise SystemExit(1)
+if __name__=='__main__':main()

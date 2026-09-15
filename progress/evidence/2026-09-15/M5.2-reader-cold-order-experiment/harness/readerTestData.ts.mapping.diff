@@ -1,0 +1,18 @@
+--- fixed-source/readerTestData.ts
++++ harness/readerTestData.ts
+@@ -1,12 +1,12 @@
+ import { execFileSync } from 'node:child_process'
+ import { resolve } from 'node:path'
+-import { expect, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
+-import type { ContentRef } from '../../packages/contracts/generated/types'
++import { expect, type Page } from '${ACCEPTANCE_CACHE}/m52-reader-cold-order-experiment-v1/source/apps/web/node_modules/@playwright/test/index.mjs'
++import type { ContentRef } from '${ACCEPTANCE_CACHE}/m52-reader-cold-order-experiment-v1/source/packages/contracts/generated/types'
+ 
+ export type ReaderPackage = { bytes: Buffer; course: ContentRef; lessons: ContentRef[]; blocks: ContentRef[]; bodies: Record<string, string> }
+ export function originalReaderPackage(prefix: string, revision = 1, history = false): ReaderPackage {
+   if (history && revision !== 2) throw new Error('The history archive has revision 2 as its root course')
+-  const root = resolve(import.meta.dirname, '../..')
++  const root = "${ACCEPTANCE_CACHE}/m52-reader-cold-order-experiment-v1/source"
+   const result = execFileSync(`${root}/.venv/bin/python`, ['-B', '-c', 'import base64,json,sys; from tests.reader_fixtures import reader_fixture,reader_history_package,ref; f=reader_fixture(sys.argv[1],int(sys.argv[2])); archive=reader_history_package(sys.argv[1]) if sys.argv[3]=="history" else f.archive; print(json.dumps(dict(archive=base64.b64encode(archive).decode(),course=ref(f.course).model_dump(),lessons=[ref(v).model_dump() for v in f.lessons],blocks=[ref(v).model_dump() for v in f.blocks],bodies=f.bodies)))', prefix, String(revision), history ? 'history' : 'single'], { cwd: root, encoding: 'utf8' })
+   const value = JSON.parse(result)
+   return { bytes: Buffer.from(value.archive, 'base64'), course: value.course, lessons: value.lessons, blocks: value.blocks, bodies: value.bodies }

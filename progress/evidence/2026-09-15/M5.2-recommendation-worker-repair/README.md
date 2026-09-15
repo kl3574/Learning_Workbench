@@ -1,0 +1,29 @@
+# Recommendation maintenance readiness — bounded repair evidence
+
+This package preserves completed owner runs and the final independent static/evidence review. It does not include temporary databases, runtime blob directories, installed dependencies, the separate c83 frontend gate package or the Reader-lock profile package. No new test, browser run or network request was performed by this packager.
+
+| Original run | Actual interpretation |
+|---|---|
+| red-01 | Driver datetime.UTC error before pytest; no product execution. |
+| red-02 | 3 FAIL (15.46s), context-manager observer precondition error; never reached actual contender-BEGIN observation. |
+| red-03 | 3 actual lock-mechanism failures (3.50s) on original production. |
+| green-04 | 2 PASS / 1 FAIL (0.41s). Read admission passed; source publication/dirty/refresh passed before an incorrect final assertion expecting historical r1 to disappear. Its failing log and test source remain. |
+| focused-05 | 39 PASS (17.75s), 10 new readiness cases plus 29 existing Recommendation cases; both dependency warnings retained. |
+| same-test-red-06 | Final test bytes: selected 3 FAIL (3.49s), 7 deselected, original production. |
+| same-test-green-07 | Same final test bytes and selected cases: 3 PASS (0.39s), 7 deselected, repaired production. |
+| ruff-08 | Ruff PASS on the two owned files. |
+| mypy-09 | mypy PASS on the one owned production file. |
+
+The original generic driver scope text is preserved in receipts. For Ruff and mypy, actual command arguments define static-check scope; those commands are not additional SQLite-test runs. The final three-case selection is the same across 06/07; only the separate basetemp path differs in command arguments. The counterfactual restoration record states that original production was temporarily restored for 06 and repaired production restored afterward. Its original hashes are preserved; the packager did not perform that restoration.
+
+Historical HEAD c83b1d0de34890f66ed950bbaba44de1170ccf9b is a baseline, not a commit containing the repaired production/new test. The declared inventory is exactly 786 files: 785 then-tracked non-progress paths plus the owned new test. Each actual completed run has equal before/after maps within that declared set. Independent Git-blob readback confirms all 784 non-owned paths match c83. The final owned production SHA is 734e19c3077a7e2d63fb3aff0e30401317944cf147c122e8bbe2361f0bd7c8c9; the final test SHA is 709dc3e093db81026c4d2ab14661ed863c5cf05f635360fabf8f09ec020b5393. These test bytes are identical for focused05/red06/green07. The original production SHA 9b7a1d5a7d46da7ce76c7ecc0960e6409b8c39e9801764fa32947046dc544593 is proven equal to the c83 Git blob.
+
+ADR0017 was untracked during these owner runs and is absent from the declared map. This package does not retroactively include it, ignored dependencies or all files added to the evolving working tree. The final two owned archives were independently checked against the later immutable commit d65e08e3c3fd896896f7228f6099ef93b9c3362d; that confirms byte identity, not that these earlier runs executed that later commit or included its new ADR. Root's later fixed-commit combined gates are separate evidence. No claim is made that historical CI Reader timeout has been reproduced or uniquely explained, or that the full platform has passed because of these focused results. The held-snapshot one-second observation tests lock independence, not a production latency SLA. Genuine work still enters the original writer validation; the repair's extra read classification may defer a concurrent change by one tick, with dirty state retained.
+
+Complete source inventories and the two owned source archives are deduplicated by original bytes. Every original alias and its public destination is listed in the manifest and packager-readback.json; all alias bytes were independently compared. All source code and the initial/current private drivers are archived as .txt. The initial driver failure archive is original; the current run.py is bound by post-run readback, without inventing a per-run pre-execution hash.
+
+Only literal private-home-prefix and GitHub-runner-home-prefix substitutions are applied to copied UTF-8 text. No failure, warning, assertion, source logic or ANSI escape is removed. The static SessionIdentity('session_readiness_test', ..., 'unused', ...) fixture in source excerpts/logs is an authored test constant, not a runtime credential, and remains unchanged. Runtime workspace IDs in synthetic SQLite failure locals are not authentication secrets; no session credentials, user provider key, database or raw runtime blob is exported. Every public file is checked with the unchanged repository publication inspector at the proposed progress/evidence path, supplemented by bounded runtime-identity patterns. Such scans are not a universal privacy guarantee.
+
+The independent reviewer's first scanner invocation used bare filenames and was rejected by the path allowlist. Its original scan-attempt-01.json is retained; publication-scan.json lists the six subsequently inspected inputs using the intended progress/evidence prefix. That is a scanner-invocation correction, not a business-test failure or a payload modification. This package separately scans every final payload and its manifest at the final proposed paths.
+
+Manifest aggregate: SHA-256 of UTF-8 json.dumps(path-sorted [{path,sha256:public_sha256,size:public_bytes}], sort_keys=True, ensure_ascii=False, separators=(",", ":")), excluding manifest.json. The owner source-inventory aggregate instead hashes JSON of its path-sorted files entries (path,sha256,bytes), with sort_keys=True and compact separators. Raw/public sizes and SHA-256 are separately recorded; original source hashes inside derived receipts continue to name the original bytes.

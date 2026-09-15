@@ -1,0 +1,1079 @@
+--- PRODUCT_DESIGN.3.0.2.md
++++ PRODUCT_DESIGN.M5.2-candidate-v1.md
+@@ -1,6 +1,6 @@
+ # 知径 Learning Workbench：完整产品设计与工程实施规范
+ 
+-**版本：3.0.2｜日期：2026-09-15｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
++**版本：3.0.3｜日期：2026-09-15｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
+ 
+ **本文件（含文末附录）是唯一产品与工程规范。** 将它放入空目录即可开始；不需要旧版设计包、旧 Demo、之前聊天、私有 GitHub 仓库或另一份提示词说明需求。正文定义产品，附录内嵌数据模型、HTTP 字段、数据库设计、模块接口、样例和验收用例。构建 Agent 根据本文生成实现文件、OpenAPI、测试和进度记录；这些是派生产物，不是第二套产品需求。
+ 
+@@ -25,6 +25,7 @@
+ | 3.0.0 | 初始完整产品/工程规范与核心模型、基线 DDL、学习包 | 不代表工程或远端已完成 |
+ | 3.0.1 | 推荐严格应用 DTO、只读投影、真实来源与决定历史/CAS | 不改初始事实、54 core 或学习包 3.0.0 |
+ | 3.0.2 | M5.1 配置/秘密、服务端冻结授权、单次受控派发、完整输入计量证明、内部终态与安全备份边界 | 不代表生产模型已支持、真实外发已批准或 M5.2/M5.3 已实现；54 core、学习包及数据 schema_version 3.0.0 不变 |
++| 3.0.3 | M5.2 显式精确scope、未审材料标识、Content材料/来源、只读scope状态/CAS、离线词法代际/Jobs、资源和原创基准 | 不代表检索或基准已运行/通过，不开放自动扩范围、embedding或真实外发；54 core、基线DDL、学习包3.0.0不变 |
+ 
+ ## 0. 执行摘要与不可变决策
+ 
+@@ -444,6 +445,8 @@
+ 
+ 章节发布、当前指针更新、依赖失效事件和 outbox 入队在同一数据库事务中完成。索引构建在事务外进行，成功后切换索引清单；索引未就绪时标明状态，不能用旧内容冒充新修订。
+ 
++M5.2 每个已登记显式scope有独立代际；Content的失效意图不清除其他owner的影响复核信号。GET/query只读，不创建scope/任务。新重建由显式POST登记真实Job，worker仅恢复已有任务；其冻结/构建/原子切换和旧scope语义见§20.7及附录A/D。
++
+ 后端正式权威源与浏览器离线草稿分开。离线草稿是待同步命令，不是已经入库的事实。每次恢复检查基准 revision，冲突时显示三方比较，不静默覆盖。
+ 
+ ## 10. 文件格式与学习包规范
+@@ -607,7 +610,9 @@
+ 
+ 先校验权限定范围，再检索和排序；不能先用全库搜索把答案找出来，最后靠提示词让模型“别用”。默认优先：用户主动选文 → 当前内容块 → 必要定义和先修 → 已批准的本教材相关块 → 用户明确允许的外部来源。
+ 
+-初始工程预算：上下文最多 12,000 中文/混合字符、最多 8 个内容块、最多 6 条最近对话摘录、最多 5 个外部来源。实际 Token 上限由提供商 tokenizer/模型上下文能力约束。字符数不是 Token 数；截断必须保留块边界，不能把定理条件截掉只留结论。
++M5.2 的明确选择、未审公开材料与自动补足边界以 §20.7 为准：仅在显式 course/lesson/block 精确范围内做本地词法检索，每hit保留未审/来源事实；当前阶段不实现缺乏批准owner的自动相关扩展，也不把这条优先链当作扩大范围或联网许可。
++
++Context 消费端的初始工程预算：上下文最多 12,000 中文/混合字符、最多 8 个内容块、最多 6 条最近对话摘录、最多 5 个外部来源。M5.2 检索整块返回采用 §20.7 的独立字节预算，不套用这里的8块/12,000字符上限。实际 Token 上限由提供商 tokenizer/模型上下文能力约束。字符数不是 Token 数；截断必须保留块边界，不能把定理条件截掉只留结论。
+ 
+ 回复包含证据类别：教材已给出的陈述、外部来源陈述、模型自行推导、暂时无法核验。对缺证据的问题可以明确说明不足并给推导尝试，不能伪造文献或把缺证据回答伪装成已有教材引用。
+ 
+@@ -922,7 +927,7 @@
+ | M4.1 | 学习事件、概念/技能证据、路线完成 | 自报/阅读/辅助/独立/重复证据分离 |
+ | M4.2 | 先修/补弱/复习/下一步推荐，接受/拒绝 | 每条推荐有引用，空数据不伪造画像 |
+ | M5.1 | ProviderPort/能力协商/服务端冻结授权/受控预算/秘密与脱敏 | 本地控制面、真实持久授权与受控 HTTP 协议分层验收；无授权或无完整输入证明则零外发；不冒充生产模型贯通或 search |
+-| M5.2 | 检索权限、中文 FTS、来源和修订哈希 | 私有答案过滤、旧索引、中文检索基准 |
++| M5.2 | 显式范围/Content材料、中文FTS、来源和修订哈希、scope状态/CAS与持久重建 | 私解/Policy双层阻断、cold与资源诊断、旧scope/损坏hash、Jobs恢复、附录F.1冻结原创基准R@5及真实浏览器 |
+ | M5.3 | Tutor 状态机、SSE/取消/重连/异步上下文 | 终态唯一、断连不重生成、切标签不串内容 |
+ | M5.4 | 真实模型与搜索评测 | 显式授权小预算调用；引用回查；无凭据 NOT_RUN |
+ | M6.1 | 教材/例题/题目生成 schema + 数值验证 | 教学约束保留，缺来源不伪造，结果只入草稿 |
+@@ -1028,13 +1033,58 @@
+ 
+ 活跃真实 source job 在 queued/running/awaiting_approval 均参加 workspace 独立测试排他；Provider 子步骤不豁免。M5.1 可独立实现并逐项验收本机配置/秘密/严格授权历史、无授权或无证明零传输、测试专属真实 SQLite source 和有明确计量规则的受控 HTTP 流协议。测试 source/model/proof/服务不得进入生产注册表，人工计量规则不能证明真实供应商隐藏开销。无生产 source 时设置显示没有可授权任务；无模型证明时 chat/streaming 显示不可调度。现 core AuthoringRequest 的 consent_id 必填，而 preview 要求先有真实 job，首次 Authoring 准备路径尚未闭合；M6 production source 接入前必须先在本文定义真实 owner 的授权前 prepare-job 入口和独立应用 DTO。现 core AuthoringRequest 不能充首次未授权 job 的创建输入，不能使用假 consent 或其他任务许可绕过。M5.1 不注册此生产来源、不把既有 POST /authoring/jobs 称为已可贯通，也不据本阶段验收标记 M6 已闭合；本次不新增 M6 路由或修改54 core。配置存在、受控协议 PASS 或本地预算 PASS 不能合并为生产生成贯通、模型质量、真实搜索或整个 M5 完成；真实 Provider/Codex 费用测试仍须另外显式授权，未执行为 NOT_RUN，真实模型评测在 M5.4。
+ 
+-推荐与联网事实分开：本地材料可精确引用；搜索候选未抓取或未核查时标 unverified；模型推导无来源可以清晰标“推导尝试”，不能配伪造外部引用。后续已实现搜索默认最多 3 次/请求、5 个来源、抓取 10 MiB/页面、5 次重定向，并逐步重新核权限与预算；这些上限不授予 M5.1 搜索能力。来源更新改 hash、索引过期时只返回旧修订真实引用或明确重建中，不冒充最新版。
++推荐与联网事实分开：本地材料可精确引用；搜索候选未抓取或未核查时标 unverified；模型推导无来源可以清晰标“推导尝试”，不能配伪造外部引用。后续已实现搜索默认最多 3 次/请求、5 个来源、抓取 10 MiB/页面、5 次重定向，并逐步重新核权限与预算；这些上限不授予 M5.1 搜索能力。M5.2 来源/current descriptor变化按§20.7使代际待复核；无当前匹配代际时只返回明确状态与空hits，不用旧正文冒充新目标。显式旧scope可重新构建并返回原旧ref的真实正文，不静默迁移到最新版。
+ 
+ ### 20.6 删除、隐私和恢复
+ 
+ 软归档保留可追溯版本；彻底删除是单独的 preview→confirm 工作流，显示课程、笔记、个人事件、备份和引用影响。用户有权删除个人数据；append-only、不可变触发器是常规写入保护，不是永久阻止数据删除。purge仅在维护事务/新工作区重建中执行，留不含原文的删除回执；误删恢复仅从用户保留的独立备份进行。完整备份 profile 与 learner/course包不同，包含必要对象、题解与个人数据，但不含密钥；导出前提示敏感性，不能直接推GitHub。
+ 
+ 备份包含数据库一致性快照、blob清单与字节hash、schema_version、对象数量、UTC时间和不含secret的配置。恢复先校验内容与版本并预览，默认 abort冲突，显式选择恢复到新工作区。原工作区不被覆盖；中断后能识别未完成恢复并清理或继续。
++
++### 20.7 精确范围的本地词法检索（M5.2）
++
++**范围和未审事实。** M5.2 只检索用户显式选择的、本工作区可访问的已发布公开教材块。scope_refs 非空且仅接受 course、lesson、block 的完整 ContentRef：block 仅自身；lesson 仅该精确修订的 block_refs；course 仅该精确修订的 lesson_refs 再展开各自 block_refs。每条边核 entity/id/revision/sha256，展开按完整 ref 去重；不能通过同名、concept、depends_on、当前指针、模型建议或相似度补进其他材料。明确选中课程/小节表示允许本次搜索其固定子引用集合，不表示 UI 可以把“当前块”静默换成整门课程。
++
++显式范围可包含未审核的公开教材，每个命中 material_review=unreviewed，带 MATERIAL_UNREVIEWED 提示“来自所选未审材料，不代表内容已核验”。导入确认、发布、可读正文、来源关联 hash 和高检索分数都不授予专家审核通过。§12.2 的“已批准的本教材相关块”是自动补足的独立门槛；目前没有可核验的教材批准 owner，因此 M5.2 不实现自动补足范围，不借用题解审校状态，不把先修/兄弟块改称显式选择。没有获准额外证据时明确没有补充材料。后续开放自动补足须由 Content owner 提供绑定精确 ref/body hash 的真实批准事实，并同步本文。
++
++R-25 在建索引/检索与 Context 组装分别执行。SolutionPrivate、私有提示/评分规则、私有答案 pin、作答/成绩 trace、作者私有导入原件、Provider 准备或产物均不进入普通语料，author 会话也不豁免。公开 worked_example、proof 等块可以有推导和结果，不按“答案/解答”字样删正文。所有资料内命令都是文本，不能改变权限、读取文件或触发工具。先由 Content owner 在当前 Policy 下确定完整允许范围，再在该范围内匹配和排序；禁止全库 topK 后过滤。索引命中不代替真实正文核验，后续 Context 仍重新核当前 Policy/refs/material。
++
++**三条路由和冷启动。** 保留 POST /retrieval/query、POST /index/rebuild、GET /index/status 三条路由；没有新增 scope 签发端点。GET status 的单个 scope_refs 查询参数是 URL 编码的严格 JSON ContentRef 数组，存在时只允许这个参数；缺少它时只允许 overview 的 cursor/limit。空字符串、[]、重复同名参数、重复 JSON 键、未知参数、混用两种模式均拒绝。有 scope 时只读核当前目标描述并返回 kind=scope，即使没有任何索引/任务也返回真实 corpus_sha256、missing、null index_version/indexed_corpus_sha256/last_built_at。未注册 scope 的 GET/query 不创建登记、Job、outbox 或索引。
++
++无 scope 的 GET 返回 kind=overview 和分页的已登记 scope 摘要；登记只能来自真实已受理的 rebuild 命令。只读枚举这些持久记录和自己的最近代际/Job，不展开任意全工作区语料或读取全库正文。overview 没有全局 ready/stale、没有可用于任意 scope 的目标 corpus SHA；每条冻结代际的 hash 只是该条自己的事实。cursor 由服务器签发、绑定工作区/limit/分页顺序，默认 limit20、范围1..100；以 scope_sha256 升序作稳定 keyset，cursor 无效或过期明确拒绝，重启可要求重取第一页。概况仍属于学科读取，受当前 workspace Policy 限制，不采用提供商设置控制面的豁免。
++
++**三个 hash 域。** 规范化 roots 先拒绝相同 entity/id/revision 的不同 SHA，再按完整 ref 去重、按 entity/id/revision/sha256 排序。scope_sha256=SHA256(本文规范 JSON `{version:"retrieval-scope-v1",workspace_id,scope_refs}`)。corpus_sha256 对附录 D 的完整 RetrievalCorpusDescriptor 计算，代表这个 scope 的当前元数据目标：固定图和 body 登记 hash/size、每个图节点的真实 current_ref/lifecycle、Content 返回的来源 descriptor、显式范围父链和固定词法版本均参与。不含观察时间、Job 状态、秘密或绝对路径。indexed_corpus_sha256 仅指已提交代际自己的冻结 descriptor hash。三者不得互用。
++
++status 为轻量只读元数据目标核验，不宣称已读取每个物理正文文件。ContentRef.sha256 是元数据 hash；body_sha256 是原正文 UTF-8 字节 hash；RetainedSource.sha256 是导入原容器 hash；Citation.source_sha256 可指另一外部被引来源且可为 null，四者不能混同。实际构建和命中返回前必须经 Content owner 读取登记的 public body bytes、核 size/hash 和 UTF-8/LF；文件缺失/改写/逃逸不能因 descriptor SHA 相同而通过。坏元数据、来源快照、索引清单或 chunk hash 是完整性错误，不伪装成 stale/no_match。
++
++ProvenanceSource 关联仅从绑定完整 block ref 的冻结记录取得；不能全局按 citation ID 取第一个来源。有快照叫 frozen，仍保留 Citation.verification 的真实 verified/unverified/user_supplied 值及原 warnings，不升级外部核验或数学审校；没有快照叫 unresolved，original=null、citations=[]、保留 unresolved_citation_ids 和 PROVENANCE_UNRESOLVED，即使原 citation 列表为空也不假称 frozen。读取只用安全来源描述，不读取/下载原件，不返回物理路径；来源 locator 是不可信声明而非文件读取指令。来源 descriptor hash 对完整 RetrievalProvenance 规范 JSON 计算；它不包含会话相关的原件下载权限，不证明原件现在仍可物理读取。
++
++**旧范围与状态。** 显式旧 refs 保持原精确正文；active/archived 对象的已发布旧修订均可在当前 Policy 允许时读取，hit 明示 current_ref 和 lifecycle。任何参与 scope 图的当前指针、生命周期或来源 descriptor 改变都使旧 corpus descriptor 不再匹配，先显示 stale/真实 building；不会自动把 roots 更新为 latest。用户可重建同一旧 scope，冻结新的当前描述而继续索引原旧正文，成功后正常 ready。归档不删旧版本，不把“需重新核验索引”误报成“原文已消失”。
++
++状态优先级：存在完整可核验且匹配当前 corpus 的已提交代际为 ready（冗余重建 Job 仍单独显示）；否则存在为当前 corpus 真正登记且非终态的重建 Job 为 building；否则有旧已提交代际为 stale；否则 missing。building 不表示 worker 正在 CPU 执行，也不能由旧目标的 Job 冒充。失败/取消通过真实 Job 表达并保留旧代际；没有代际时 version/time 为 null。查询仅在 ready 时匹配当前代际，其他状态返回 hits=[]、matched_count=null 和 not_ready；旧代际 version 仍可作为诊断事实返回，但不返回它的正文冒充当前目标。显式历史 scope 重建后 ready 与这种 stale 不矛盾。
++
++**工程预算 retrieval-resource-v1。** roots 输入1..16项（先计输入再去重），最多512个不同展开 block；这些 block 登记 body size 合计最多16 MiB。为避免重复父链绕过去重预算，读取的不同精确公开元数据及不同来源descriptor的规范 JSON 合计最多16 MiB、显式范围路径总数最多8192；元数据按完整ref、来源按descriptor SHA去重计数，路径按完整链身份计数，不靠循环访问制造重复。超出任一 scope 预算整次拒绝 SCOPE_BUDGET_EXCEEDED（413），不静默漏子块/父链后宣称范围完整。查询原文为有效 Unicode、1..512码点，不能全空白；规范化后1..64个不同派生 term，零 term 为 QUERY_NO_TERMS（422），超过为 QUERY_TERM_BUDGET_EXCEEDED（422），不静默取前64个。字符串不得有孤立 surrogate，JSON 写命令未知字段拒绝。
++
++query limit 必填整数1..20，最多返回 limit 个完整块。所有返回 text 的真实 UTF-8 字节合计≤2 MiB，整个实际 HTTP JSON 编码≤8 MiB（包括来源/父链/warnings，不以未转义字符数冒充字节数）。按已声明排名顺序选择完整块；某块会超过正文或 JSON 预算时整块遗漏并继续考虑后续块，不截断条件/结论、不截来源和父链。资源 omissions 按 result_limit/text_byte_budget/json_byte_budget 分别计数，合计=matched_count−len(hits)；最终实际编码若仍超8 MiB，从已选末位整块撤下并计 json_byte_budget，直至符合。超过 limit 的剩余匹配以 result_limit 计；在到达 limit 前实际因资源跳过的块计对应资源原因，text 预算优先于 JSON 预算。完整响应预算不能导致一个明显过大的诊断本身被无声丢弃。
++
++每条 text 是真实完整 body 解码结果；whole-block-v1 码点定位固定 start_cp=0、end_cp=len(text)，locator 精确为 `block:{id}@r{revision};body:{body_sha256};cp:0-{end_cp}`，不拼私有路径，不含全文。ready 且索引中没有任何词法 term 时 result_state=indexed_empty；索引有 term 但匹配数0为 no_match；有匹配且返回至少一块为 matched；有匹配但全因预算遗漏为 resource_omitted。这些情况与 not_ready 分开。§12.2 的8块/12,000字符和对话/外部来源预算只用于 M5.3 Context 消费端；不挪作 M5.2 query 限制。Context 若不能容纳完整块，应另报材料未纳入，不改变这里的正文或定位。
++
++**固定词法算法 lexical-han-gram-v1。** 原正文/hash/定位不做规范化；仅派生 term 使用 Unicode 15.0.0 NFC，字符分类和 casefold 版本固定为 Unicode 15.0.0，不匹配的运行时拒绝构建并报 TOKENIZER_VERSION_UNAVAILABLE。按下列优先级从左至右扫描，分支消费过的字符不再进入后续分支：
++
++1. 反斜杠后紧邻一个或多个 ASCII 字母时，消费完整 TeX 控制词，term 为 `t` 加其包含反斜杠的原 UTF-8 小写十六进制；保留控制词大小写，`\Gamma` 与 `\gamma` 不等同，不执行 TeX。
++2. Han 区间固定为 U+3400..4DBF、4E00..9FFF、F900..FAFF、20000..2FA1F、30000..323AF；每个连续区间串输出各单字 `h`+UTF8hex，及每一对相邻字符 `g`+二字UTF8hex。这里只定义词法范围，不宣称区间内每个位置都有已分配字符；不跨非Han字符拼二元词。
++3. Unicode15中 category 为 Letter 且名称含 LATIN 的连续字母（允许跟随 combining mark）组成 Latin 词；以该词的 Unicode15 casefold 再 NFC 结果形成 `w`+UTF8hex。连续 ASCII 数字另成词，term同为 `w`+原数字UTF8hex；字母与数字边界分词，因此 FTS5 与 FTS 5 具有相同这两项 term。
++4. 数学符号集合 `+-*/=<>≤≥≠≈±×÷∑∏√∞∂∇∈∉⊂⊆∪∩∀∃¬∧∨→↔^_%|!` 中每个字符为 `m`+UTF8hex。其他 Unicode15 Letter/Number 单码点为 `u`+UTF8hex，保留大小写和精确码点。其余标点、空白及未消费的反斜杠作为分隔符，不成为 term；不执行或保留用户 MATCH 控制语法。
++
++每块 term 去重后按 ASCII 排序，FTS tokens 为单空格拼接；query 用同样算法去重。所有 term 仅含安全 ASCII 前缀和十六进制，使用参数化 FTS5 MATCH 的文字 OR 集合，不把原 query 拼为 MATCH/SQL。只对已授权 scope/current generation 的文档匹配。score 固定为 `|Q∩T(block)| / |Q|`，范围(0,1]且有限；按 score 降序、block完整(entity,id,revision,sha256)升序稳定排序，不使用范围外文档频率/全库 topK。FTS5 是词法候选机制，不把共享表的全局 bm25 统计冒充 scope 内统计。词法/排序/定位及资源版本和真实派生 term/chunk hash 进入代际清单。该简单覆盖率不是语义置信度、来源核验率或学习效果，不自动把 α/\alpha、≤/\le 或任何数学别名等同。
++
++**持久重建与消费所有权。** rebuild 使用 Idempotency-Key、会话/CSRF和当前Policy，expected_corpus_sha256 是同一显式 scope 的 server 目标强CAS；新命令不匹配返回412。provider_id/consent_id必须显式null，非null返回CAPABILITY_UNSUPPORTED且零外发，不注册Provider source、不做embedding/远程分词。原同key完整命令回原JobRef，不创建第二任务；同key不同规范命令409；原ACK与当前Job状态分别回读。新任务原子登记scope/冻结descriptor和Jobs输入，Job kind=retrieval_index，由真实Retrieval job owner支持既有GET /jobs/{id}和POST /jobs/{id}/cancel，不能只插一种未知kind。
++
++worker在短事务领取可恢复租约；在事务外逐块读取/核真实正文和派生词法数据，循环中有界检查停止/取消；最后短事务重新核owner租约、取消、当前Policy和完整corpus descriptor，再将清单/chunk集合/当前代际指针、唯一完成事件及Job终态原子提交。新输入/版本不匹配则安全失败 INDEX_INPUT_CHANGED，保留原代际；不能在旧任务中换scope/material后冒称原命令成功。queued/running取消和lease丢失不发布部分代际；恢复只重试未完成的本地确定性工作，不涉及外部请求。Index job的result_refs是实际索引的ContentRef集合（≤512），不造ContentRef来冒充索引ID；实际index_version和scope/corpus hash保存于自己的Job结果账本并由status/overview回读。
++
++Content发布/current pointer/生命周期或来源descriptor变化在owner事务中登记依赖失效意图，已登记scope保留原roots。M5.2不因GET/query或stale状态自动新建任务；只有显式rebuild命令创建新Job，worker启动恢复已经登记的未终态任务。维护可标记自己的旧代际/消费进度，但不能追加未选择的scope，不能替Content/Learning清除共享依赖复核信号。有效性读回仍重算当前descriptor，不能只信dirty标记。所有queued/running/awaiting_approval学科任务参与现有独立测试排他；索引不豁免。worker调度给索引、导入、评分、推荐有界轮次，不能用长期写锁、无界循环或只做fire-and-forget宣称可靠构建。
++
++**基准与验收。** 附录F.1的原创冻结词法语料/gold是M5.2工程基准，实际数据、全部精确ContentRef/body SHA、算法/Unicode/SQLite版本、硬件、规模、冷暖条件、测试命令和逐case排名必须记录；先冻结再运行，不能按结果改gold或删除失败例。正向集合平均 Recall@5≥0.90，Recall@5按每个case的gold完整ref集合中进入前5的比例再算术平均；无匹配、安全与别名诊断单列，不加入该均值凑分。私解/越权scope/旧ref错贴/语法执行/Policy切换/损坏字节与Jobs恢复全部安全断言必须PASS。前端/native需至少真实query冷态→显式rebuild→job完成→准确命中/无结果/资源遗漏及旧scope重建回读，截图和范围说明不冒充真实模型、专家审校或整个M5验收。阈值是本项目首轮工程门槛，不是已测结果或通用RAG质量保证。
+ 
+ ## 21. 旧格式兼容与确定的范围边界
+ 
+@@ -1175,7 +1225,7 @@
+ | GET `/runs/{id}` | 无 | RunSnapshot；只回读，不产生费用 |
+ | GET `/runs/{id}/events` | Last-Event-ID? 或 after_seq?（两者不一致400） | SSE；`id: run_id:seq`，`event: type`，`data: RunEvent JSON`；逾期回读给明确 cursor_expired，客户端再读取snapshot |
+ | POST `/runs/{id}/cancel` | 无body | RunSnapshot；终态重复取消是no-op，不能出现第二终态 |
+-| POST `/retrieval/query` | `{query:string,scope_refs:ContentRef[],limit:integer[1,20]}` | `{hits:{ref,text,locator,score}[],index_version,index_state:ready|stale|building}`；role由会话得出，不接受客户端自报author |
++| POST `/retrieval/query` | RetrievalQueryWrite；会话/Origin/CSRF；不要求写命令幂等键 | RetrievalQueryView；只读精确scope，含scope/corpus hash和missing；完整块/资源遗漏/来源与未审事实明确，零排队/零外发 |
+ | GET `/learning/progress` | `course_id?` | `{revision,readings:{ref,read,read_at}[],route_steps:{route_ref,step_id,completed}[]}`；无掌握概率 |
+ | POST `/learning/actions` | `{kind:read_marked|bookmark_set,ref,expected_revision,value:boolean}` | `{event_id,progress_revision}`；客户端不能上传native grade_finalized事件 |
+ | GET `/learning/evidence` | `concept_id?`,`skill?`,`cursor?`,`limit?` | Page<Evidence>；区分有效、过期、辅助、重复和未知 |
+@@ -1184,6 +1234,100 @@
+ | GET `/notes` | `ref_id?`,`cursor?`,`limit?` | Page<Note>；anchor状态可为stale，不静默迁移到最新版本 |
+ | POST `/notes` | Note | 201 ContentRef；quote/codepoint与正文校验 |
+ | PATCH `/notes/{id}` | Note + If-Match | ContentRef；id一致、revision按新版本处理，冲突412 |
++
++### 精确范围词法检索与索引应用 DTO（M5.2）
++
++这些闭合应用类型独立于附录 B 的54 core及原粗粒度 RetrievalHit/Port。所有对象拒未知字段；除 GET query 中明确 `?` 外所有字段 required，`|null` 不可省略。整数拒bool，number拒非有限值；Id/ContentRef/Sha256/UTC/Citation/Warning/JobRef沿用core。全部字符串是有效Unicode，无孤立surrogate；ref不接受latest或客户端author字段。正文、来源摘要和诊断受§20.7资源预算，安全错误不得带正文、秘密或绝对路径。
++
++```text
++RetrievalScopeRefs = ContentRef[1..16]  // 输入实体仅course|lesson|block
++RetrievalIndexState = ready | stale | building | missing
++RetrievalResultState = matched | no_match | indexed_empty | resource_omitted | not_ready
++RetrievalQueryWrite = {
++  query: string[1..512 Unicode codepoints],
++  scope_refs: RetrievalScopeRefs, limit: integer[1,20]
++}
++RetrievalIndexRebuildWrite = {
++  scope_refs: RetrievalScopeRefs, expected_corpus_sha256: Sha256,
++  provider_id: Id|null, consent_id: Id|null
++}
++RetrievalIndexScopeQuery = {scope_refs: string}
++RetrievalIndexOverviewQuery = {cursor?: string, limit?: integer[1,100]}
++RetrievalIndexStatusQuery = RetrievalIndexScopeQuery | RetrievalIndexOverviewQuery
++RetrievalWholeBlockLocation = {
++  version: whole-block-v1, unit: unicode_codepoint,
++  start_cp: integer=0, end_cp: integer>=0
++}
++RetrievalScopePath = {
++  root_ref: ContentRef, course_ref: ContentRef|null, course_title: string|null,
++  lesson_ref: ContentRef|null, lesson_title: string|null, block_ref: ContentRef
++}
++RetrievalRetainedSource = {
++  id: Id, media_type: string, size: integer>=0, sha256: Sha256,
++  rights: string, parser_version: string|null
++}
++RetrievalProvenance = {
++  state: frozen | unresolved, original: RetrievalRetainedSource|null,
++  citations: Citation[], unresolved_citation_ids: Id[], warnings: Warning[]
++}
++RetrievalHitView = {
++  ref: ContentRef, title: string, text: string,
++  locator: string, score: finite number >0 and <=1,
++  body_sha256: Sha256, location: RetrievalWholeBlockLocation,
++  current_ref: ContentRef, lifecycle: active | archived,
++  material_review: unreviewed, provenance: RetrievalProvenance,
++  parent_paths: RetrievalScopePath[1..8192], warnings: Warning[]
++}
++RetrievalOmissionCounts = {
++  result_limit: integer[0,512], text_byte_budget: integer[0,512],
++  json_byte_budget: integer[0,512]
++}
++RetrievalQueryView = {
++  scope_sha256: Sha256, scope_refs: RetrievalScopeRefs,
++  corpus_sha256: Sha256, indexed_corpus_sha256: Sha256|null,
++  index_version: Id|null, index_state: RetrievalIndexState,
++  result_state: RetrievalResultState, matched_count: integer[0,512]|null,
++  hits: RetrievalHitView[0..20], omissions: RetrievalOmissionCounts,
++  warnings: Warning[]
++}
++RetrievalJobSummary = {
++  job: JobRef, target_corpus_sha256: Sha256,
++  error: {code: string, message: string, retryable: boolean}|null
++}
++RetrievalCommittedIndex = {
++  index_version: Id, corpus_sha256: Sha256, built_at: UTC,
++  block_count: integer[1,512], term_count: integer>=0
++}
++RetrievalIndexScopeStatus = {
++  kind: scope, scope_sha256: Sha256, scope_refs: RetrievalScopeRefs,
++  corpus_sha256: Sha256, state: RetrievalIndexState,
++  indexed_corpus_sha256: Sha256|null, index_version: Id|null,
++  last_built_at: UTC|null, latest_job: RetrievalJobSummary|null
++}
++RetrievalRegisteredScope = {
++  scope_sha256: Sha256, scope_refs: RetrievalScopeRefs,
++  latest_index: RetrievalCommittedIndex|null,
++  latest_job: RetrievalJobSummary|null
++}
++RetrievalIndexOverview = {
++  kind: overview, items: RetrievalRegisteredScope[0..100], next_cursor: string|null
++}
++RetrievalIndexStatusView = RetrievalIndexScopeStatus | RetrievalIndexOverview
++```
++
++RetrievalIndexScopeQuery.scope_refs 只是一层传输编码，严格JSON解码后必须验证RetrievalScopeRefs；不能接受多个同名值或其它参数。overview 默认limit20，无scope_refs字段，不把[]当省略。规范化后的scope_refs回读按§20.7排序去重；scope_sha256与workspace、这些roots一致。任何query/rebuild都有相同的实体、512块/16MiB正文登记、16MiB元数据/来源descriptor和8192路径上限，status并非绕开scope预算的接口。
++
++每条Hit.ref为block，current_ref的entity/id与ref相同但revision/hash可以不同；lifecycle是该对象读取时的事实。text必须是该完整block的实际body，UTF8(text)的SHA等于body_sha256；location.end_cp=len(text)，start_cp=0，locator逐字满足§20.7格式。score使用固定覆盖率，不从客户端提供。title/当前ref/lifecycle/正文/来源/路径须同一受检目标描述与当前Policy一致；不能把元数据正确当成正文已核验。
++
++路径仅描述显式roots里的真实链：root为block时block_ref=root且course/lesson及各title均null；root为lesson时lesson_ref=root、course字段均null，block在该精确lesson；root为course时course_ref=root、lesson_ref非null，按两个完整引用边到block。所有非null course/lesson/block refs实体必须正确，相应title必须实际读取且与null同步；block_ref必须等于Hit.ref，root_ref必须在回读scope_refs中。每个合法命中至少有其一个显式root路径，所有真实不同路径都保留、按(root/course/lesson/block完整ref)排序去重；标题不参与去重身份。直接block路径不是伪造父课程；打开父路径需要明确选择，当前课程/其它历史父链不自动补入。导航必须使用选中的完整ref链，旧hit回读/点击后仍核当前Policy与引用，不把只读点击变为重建或联网。
++
++provenance.state=frozen时original非null、unresolved_citation_ids=[]，citations/warnings保持精确冻结来源事实；空citations可合法，不能凭此称外部核验。state=unresolved时original=null、citations=[]，unresolved_citation_ids等于block原声明citation IDs（可为空），必须有PROVENANCE_UNRESOLVED warning。Citation.verification绝不因state=frozen而改写。每个hit.warnings至少有MATERIAL_UNREVIEWED；旧current_ref不同附HISTORICAL_REVISION，archived附CONTENT_ARCHIVED，信息必须与对应字段一致。以上警告并不授予新版或原件访问。
++
++query ready时index_version/indexed_corpus_sha256非null且后者等于corpus_sha256，matched_count是这个完整scope内实际文字匹配数；hits≤请求limit，总完整text≤2MiB、实际JSON≤8MiB，omissions合计=matched_count−len(hits)。matched要求hits非空；resource_omitted要求matched_count>0且hits为空；no_match要求有已索引term、matched_count=0；indexed_empty要求代际term_count=0、matched_count=0，二者hits为空且omissions全0。非ready仅not_ready、matched_count=null、hits=[]、omissions全0；缺代际时index_version/indexed_corpus_sha256同时null。query顶层warnings在not_ready时使用INDEX_MISSING/INDEX_BUILDING/INDEX_STALE，在资源遗漏时使用RETRIEVAL_RESOURCE_OMITTED，不把未查询当作“没有证据”。
++
++ScopeStatus的index_version/indexed_corpus_sha256/last_built_at必须同时null或同时为对应已提交代际事实；ready要求hash匹配。building需要latest_job是真实非终态Job且target_corpus_sha256等于当前corpus；同scope同时最多一个非终态Job，新增请求不能绕开该约束。failed JobSummary.error必须有实际安全诊断；其它status.error=null。未知/损坏Job关联不造completed或忽略。overview只包含已登记scope，latest_index/latest_job至少一项非null；其最新任务/代际时间不由GET生成。overview没有target corpus_sha256字段，不能从latest_index的旧hash推断当前ready。
++
++IndexRebuildWrite的provider_id/consent_id required；解析为非null合法Id时返回CAPABILITY_UNSUPPORTED，不能悄悄忽略。词法重建无需Provider授权、不创建Provider proposal/grant。请求幂等hash对固定route与规范化roots后的完整body规范JSON计算；语义等价根顺序/完整重复ref不产生第二命令，输入数量限制仍在归一化之前执行。当前Policy、归属与自有历史先于原ACK回放；原key合法回放返当时JobRef，其status不是当前任务读回。新命令stale基准412，same key不同规范命令409。一般字段/schema错误422；资源scope错误413；独立测试409 ASSESSMENT_ACTIVE；损坏Content/索引是安全完整性错误，不用成功空数组掩盖。
+ 
+ ### 推荐应用 DTO、只读投影和决定版本
+ 
+@@ -1454,8 +1598,8 @@
+ | GET `/reviews/{id}` | 无 | ReviewReceipt；candidate绑定确切草稿版本，不返回未授权答案 |
+ | POST `/reviews/{id}/decision` | `{expected_revision,candidate_sha256,mathematical:APPROVED|REJECTED|NOT_APPLICABLE,sources:APPROVED|REJECTED|NOT_APPLICABLE,reason,evidence_artifact_ids:Id[]}` | ReviewReceipt；author会话显式人工确认，操作者从会话得出；不允许模型自报人工reviewer |
+ | POST `/attempts/{id}/regrade` | `{expected_grading_revision,reason,item_reviews:[{question_id,score:finite>=0,feedback_markdown}]}` | 202 JobRef；人工复核已提交项，新grading_revision不改旧结果；score≤max |
+-| POST `/index/rebuild` | `{scope_refs:ContentRef[],expected_corpus_sha256,provider_id:Id|null,consent_id:Id|null}` | 202 JobRef；词法离线；真实embedding需要独立授权；读查询不自动费用重建 |
+-| GET `/index/status` | 无 | `{state:ready|stale|building|missing,index_version,corpus_sha256,last_built_at}` |
++| POST `/index/rebuild` | RetrievalIndexRebuildWrite；Idempotency-Key、会话/Origin/CSRF；expected_corpus_sha256强CAS | 202真实JobRef；provider/consent必须显式null，仅离线词法；同scope最多一个非终态Job，原ACK与当前状态分开 |
++| GET `/index/status` | RetrievalIndexStatusQuery：单个scope_refs严格JSON字符串，或仅overview cursor/limit；两模式互斥 | RetrievalIndexStatusView；有scope只读算目标SHA/coldmissing，无scope分页已登记摘要，不表示全库ready，不读全库正文/写状态 |
+ 
+ 对 `PATCH /notes/{id}` 的 Note body：请求 revision 指新候选 revision，If-Match 对旧hash；服务端生成新修订并核对正好 old+1。草稿 PATCH 允许 field白名单中的 JSON 值，但按kind DTO严格校验后才入库。所有读写例外都不能绕过第20.2节workspace级独立测试guard。
+ 
+@@ -2080,6 +2224,24 @@
+ }
+ export interface RetrievalHit {ref:ContentRef; text:string; locator:string; score:number}
+ export interface RetrievalPort {query(ctx:AuthContext, q:string, scope:ContentRef[], limit:number):Promise<RetrievalHit[]>}
++export interface RetrievalApplicationDTOMap {
++ RetrievalQueryWrite: unknown; RetrievalQueryView: unknown;
++ RetrievalIndexRebuildWrite: unknown; RetrievalIndexStatusQuery: unknown;
++ RetrievalIndexStatusView: unknown;
++}
++export interface RetrievalApplicationPort<R extends RetrievalApplicationDTOMap> {
++ query(ctx:AuthContext, request:R['RetrievalQueryWrite']):Promise<R['RetrievalQueryView']>;
++ indexStatus(ctx:AuthContext, request:R['RetrievalIndexStatusQuery']):Promise<R['RetrievalIndexStatusView']>;
++ rebuild(ctx:WriteContext, request:R['RetrievalIndexRebuildWrite']):Promise<JobRef>;
++}
++export interface ContentRetrievalDTOMap {
++ RetrievalScopeSnapshot: unknown; RetrievalBlockMaterial: unknown;
++}
++export interface ContentRetrievalPort<C extends ContentRetrievalDTOMap, Transaction> {
++ resolveScope(transaction:Transaction, ctx:AuthContext, scope:readonly ContentRef[]):Promise<C['RetrievalScopeSnapshot']>;
++ readMaterial(transaction:Transaction, ctx:AuthContext, scope:C['RetrievalScopeSnapshot'], ref:ContentRef):Promise<C['RetrievalBlockMaterial']>;
++ revalidateScope(transaction:Transaction, ctx:AuthContext, scope:C['RetrievalScopeSnapshot']):Promise<void>;
++}
+ export interface ContextPort<D extends DTOMap> {freeze(ctx:AuthContext, request:D['TutorRequest']):Promise<D['ContextSnapshot']>}
+ export interface TutorPort<D extends DTOMap> {
+  start(ctx:WriteContext, request:D['TutorRequest']):Promise<D['RunSnapshot']>;
+@@ -2151,6 +2313,73 @@
+ 
+ 
+ ProviderApplicationDTOMap 是独立应用映射，原 DTOMap/ProviderPort 不增删核心字段。每项绑定附录 A 的实际严格 Pydantic/OpenAPI DTO，运行生成类型使用单独 ProviderRuntimeDTOMap 名称。ConsentQuery 是严格 URL 参数组合，ProviderConsentQuery 连接实际已声明的标量 query 契约；它不假冒未注册的 OpenAPI body component，服务端仍需拒未知/重复字段并校验互斥。其余 map 项绑定真实命名请求/响应 schema；未注册 handler 不能产生虚假的运行 binding 或以 unknown/any 满足业务返回值。原 ProviderPort 是粗粒度兼容投影，不能绕过下面的 checked dispatch；GenerationInput 不是前端创建许可的 DTO。
++
++RetrievalApplicationDTOMap/ContentRetrievalDTOMap 是M5.2独立应用映射，运行绑定使用实际命名DTO；原RetrievalPort/Hit保持粗粒度目标，不足以承载cold/资源/来源状态，不作为HTTP严格解码器。ContentRetrievalPort的Transaction在后端是调用方真实受控SQLite connection，AuthContext映射可信SessionIdentity，不接受浏览器事务ID或客户端角色。完整内部材料模型如下；真实handler注册后再生成绑定，不能以unknown/any伪装完成。
++
++**M5.2 内部 Content 材料与索引代际（不是 HTTP 全文/文件入口）：** 以下闭合模型同样 required/拒额外字段。bytes只在受控本机内部传递，repr=False，不能写入普通日志或通过status/overview返回；Retrieval不直接读写Content/Provenance/Policy/Jobs所属SQL，调用其真实owner端口。
++
++```text
++RetrievalAlgorithmVersions = {
++  resource: retrieval-resource-v1, normalization: nfc-v1,
++  tokenizer: lexical-han-gram-v1, unicode: "15.0.0",
++  ranking: scope-coverage-v1, locator: whole-block-v1
++}
++RetrievalRefState = {
++  ref: ContentRef, current_ref: ContentRef, lifecycle: active | archived
++}
++RetrievalBlockDescriptor = {
++  ref: ContentRef, title: string, body_sha256: Sha256,
++  body_bytes: integer[0,16777216],
++  provenance: RetrievalProvenance, source_descriptor_sha256: Sha256,
++  parent_paths: RetrievalScopePath[1..8192]
++}
++RetrievalCorpusDescriptor = {
++  version: retrieval-corpus-v1, workspace_id: Id,
++  scope_sha256: Sha256, scope_refs: RetrievalScopeRefs,
++  graph: RetrievalRefState[], blocks: RetrievalBlockDescriptor[1..512],
++  versions: RetrievalAlgorithmVersions
++}
++RetrievalScopeSnapshot = {
++  descriptor: RetrievalCorpusDescriptor, corpus_sha256: Sha256
++}
++RetrievalBlockMaterial = {
++  scope_sha256: Sha256, corpus_sha256: Sha256,
++  ref: ContentRef, body_sha256: Sha256, body: bytes
++}
++RetrievalIndexedBlock = {
++  ref: ContentRef, body_sha256: Sha256, body_bytes: integer>=0,
++  body_codepoints: integer>=0, chunk_id: Id,
++  terms_sha256: Sha256, term_count: integer>=0
++}
++RetrievalIndexManifest = {
++  version: retrieval-index-v1, index_version: Id,
++  scope_sha256: Sha256, corpus_sha256: Sha256,
++  descriptor: RetrievalCorpusDescriptor, built_at: UTC,
++  blocks: RetrievalIndexedBlock[1..512]
++}
++RetrievalIndexJobInput = {
++  version: retrieval-index-job-v1, workspace_id: Id,
++  request_sha256: Sha256, scope_sha256: Sha256,
++  expected_corpus_sha256: Sha256, descriptor: RetrievalCorpusDescriptor
++}
++RetrievalIndexJobResult = {
++  scope_sha256: Sha256, corpus_sha256: Sha256,
++  index_version: Id, manifest_sha256: Sha256,
++  indexed_block_count: integer[1,512], indexed_term_count: integer>=0,
++  built_at: UTC
++}
++```
++
++corpus_sha256=SHA256(规范JSON descriptor)，scope_sha256依§20.7；source_descriptor_sha256=SHA256(规范JSON provenance)。graph包含roots、显式展开的全部中间lesson和block，按完整ref排序且无重复；每项current_ref和ref同entity/id，current pointer指向的元数据也通过Content完整性核验。blocks与graph中的block集合完全相同，body_bytes为登记size且总和≤16MiB；parent_paths完整、不跨roots，总数≤8192；公开元数据及provenance描述总预算依§20.7。归档/旧ref保留，不从current_ref再展开新子节点。descriptor使用的current_ref/lifecycle是当次读取事实，不能按块发布时旧值硬编码。
++
++ContentRetrievalPort.resolveScope使用调用方真实活动SQLite事务，在当前身份/Policy下核精确图与安全来源描述后返回snapshot，无写入。readMaterial再次核scope及block成员身份，从public block-body登记经安全BlobStore读实际bytes/hash/size并返回绑定snapshot的材料；单有调用方组装的snapshot/hash不是权限。revalidateScope重算完整descriptor并核原hash；body实际核验另外由readMaterial承担，不把metadata CAS冒充字节验证。跨事务工作必须在最终交付/代际切换前重新核当前Policy与完整descriptor。
++
++IndexManifest不把manifest_sha256包含在自身哈希输入；自有ledger存SHA256(规范JSON manifest)并严格回读校验。manifest.blocks与descriptor.blocks精确一一对应，无缺块/多块；body字段与实际owner材料相同，body_codepoints为严格UTF8解码长度。每个block只有一个完整块chunk；terms_sha256是词法算法生成、去重ASCII排序、单空格连接、无末尾空白的UTF8字节SHA。FTS和派生tokens/chunk必须与这份清单绑定，不以rowid或object_id/revision猜代际；chunk_id不是内容ref或访问令牌。terms为空仍保留该block的已核记录，成功代际indexed_term_count=各block.term_count之和；这个和为0叫indexed_empty，并非scope为空。scope非空/公开graph合法时不生成虚构零block成功代际。
++
++Job input和result由真实Retrieval/Jobs owner同事务记录：input绑定完整规范命令、workspace、原scope/corpus与descriptor；result只在实际完整代际原子提交后出现，精确引用该index_version/manifest hash，不通过通用result_refs偷塞索引ID。租约、status revision、取消及唯一终态沿Jobs规则；相同scope同时最多一个未终态重建Job，新key请求在该scope已有未终态任务时409 INDEX_REBUILD_ACTIVE（原key合法回放先执行），不在旧Job里换输入。任务回读/cancel基准revision仍使用原GET/POST jobs契约。
++
++生产实现用独立应用DTO生成绑定，不扩54 core；可新增所属模块迁移/自有清单与消费ledger，不改基线DDL或学习包3.0.0。Content publication通过Retrieval的自有失效意图接口在同事务通知，或提供逐消费者owner读取；Retrieval只修改自己的派生状态，不直接标其他模块事件“影响复核已完成”。正常查询/overview不新建材料/任务或修补坏历史。测试fixture可明确注入损坏/归档场景，不能把直接SQL fixture声称已实现正式归档/审核产品入口。
++
+ 
+ **内部准备、事件与持久回执（不作为普通 HTTP 请求/全文返回）：** 以下对象同样闭合且字段 required，nullable 显式 null，金额/计数采用附录 A 规则；GenerationMessage/EvidenceChunk/ContextSnapshot 是原 core 类型。
+ 
+@@ -2515,6 +2744,751 @@
+ <!-- END FILE -->
+ 
+ 
++## F.1 M5.2 原创冻结词法基准 lexical-gold-v1
++
++以下完整语料/gold是本规范的工程fixture，不依赖另一设计包或下载文件，不宣称数学/来源已经独立审校。初始事实为SPEC_FIXTURE_NOT_EXECUTED；实际运行结果只写进度/证据，不反改这里的初始事实。30块均为显式范围中的未审公开教材，其中2块是含完整步骤的worked_example。42条字面查询中q01–q38为正向gold，宏平均Recall@5目标≥0.90；q39–q42必须无匹配，单列、不计免费召回分。算法、词面规则、数据/gold、所有精确refs在运行前冻结；不能按实际结果改gold或补同义词使门槛通过。
++
++建立fixture时，每块使用JSON中的block_id/title/kind，revision=1、schema_version=3.0.0、body_path=`content/{block_id}.md`，concepts/citations/depends_on=[]；body为body_markdown经JSON解码后直接UTF-8编码，不加末尾换行。分别核所列body SHA并据完整ContentBlock规范JSON计算ContentRef。Lesson固定id=m52_lexical_lesson、revision=1、title=原创词法基准小节、objectives/prerequisite_ids=[]、proof_policy=full、block_refs按下列blocks顺序列全30个精确ref。Course固定id=m52_lexical_course、revision=1、title=原创词法基准课程、language=zh-CN、audience=工程验收未审材料、difficulty=beginner、objectives/concept_refs/sections=[]、lesson_refs仅含该精确Lesson；schema_version均3.0.0。使用Content公开发布owner建立这个明确受控软件fixture，不冒称普通导入已获专家批准。公开块无冻结provenance时如实unresolved。
++
++请求scope只为这个完整Course ref，limit=5；gold block IDs在发布前按同一确定性模型转成完整refs，并在检索之前存成passport。评判比较完整entity/id/revision/sha256，不只比较ID。q32/q33两副本若score相同，必须按§20.7完整ref规则稳定排序。原样Greek/TeX查询分别测试字面存在：块26正文同时真实写出α和\alpha，不能借两次命中声称算法做了别名映射。跨表示的∑/\sum、≤/\leq、Δt/\Delta t、Aᵀ/转置TeX不在这42条的计分承诺中；未来扩别名必须另定版本/基准，不事后改这里的gold。
++
++下面的body_utf8_sha256是实际输入字节约束。此表中的score/排名尚未运行，不预填任何PASS。真正私解、范围隔离、旧ref/current描述变化、FTS语法安全、错误hash、Policy与Jobs故障注入另按§20.7逐项验收，不用此小基准冒充这些安全测试。
++
++```json
++{
++  "corpus_version": "m52-original-lexical-v1",
++  "status": "SPEC_FIXTURE_NOT_EXECUTED",
++  "index_field": "body_markdown",
++  "blocks": [
++    {
++      "block_id": "m52_block_01",
++      "kind": "definition",
++      "title": "算术平均数",
++      "body_markdown": "算术平均数把一组数的总和均分给各项。对 n 个实数 x₁,…,xₙ，样本均值写作 $\\bar{x}=\\frac{1}{n}\\sum_{i=1}^{n}x_i$，其中 n 必须为正整数。极端的大值或小值会影响这个平均数，因此汇报它时还应说明数据范围。",
++      "body_utf8_sha256": "d178039d0e51b963c0dfac383d8ba42dadccc5cbcd370161ba8547bbfc31bae1"
++    },
++    {
++      "block_id": "m52_block_02",
++      "kind": "definition",
++      "title": "中位数",
++      "body_markdown": "中位数依据排序后的位置确定。把有限个实数从小到大排列；项数为奇数时取中间一项，项数为偶数时取中间两项的算术平均。例如 1、2、100 的中位数为 2。这个定义要求数据非空。",
++      "body_utf8_sha256": "46dbd0b951c7f93eab54d38892c9cdbff1ef691dc384c68ba401c70155cf4c6e"
++    },
++    {
++      "block_id": "m52_block_03",
++      "kind": "worked_example",
++      "title": "加权平均数例题",
++      "body_markdown": "公开例题：一门课的平时成绩为 80 分，期末成绩为 90 分，权重分别为 0.4 和 0.6。加权平均数等于 0.4×80 + 0.6×90 = 86 分。两项权重之和为 1，因此无需再除以权重总和；若采用未归一化权重，应先除以它们的正总和。",
++      "body_utf8_sha256": "6379b8dd28ed5edd58de96997aeddd55feaee6f1dc362503d4468964d4db999a"
++    },
++    {
++      "block_id": "m52_block_04",
++      "kind": "definition",
++      "title": "描述性方差",
++      "body_markdown": "描述性方差度量一组实数偏离其平均数的平方幅度。数据非空时，令 $v=\\frac{1}{n}\\sum_{i=1}^{n}(x_i-\\bar{x})^2$。这里分母为 n，描述的是这组数据本身；它不是以 n−1 为分母的无偏估计公式。每项平方非负，所以 v 不小于零。",
++      "body_utf8_sha256": "554748c28384de80d2dbb4ff03baf4a7efe786fadeb43f3adff170becefa4959"
++    },
++    {
++      "block_id": "m52_block_05",
++      "kind": "definition",
++      "title": "标准差与单位",
++      "body_markdown": "标准差是方差的非负平方根。若身高以 cm 记录，则方差的单位是 cm²，而标准差仍以 cm 记录。数据全部相等时，方差与标准差都为零；单位不同的数值不能不经换算直接比较离散程度。",
++      "body_utf8_sha256": "1574c2c4569ef31b139da75499110f15873096bcadae0ba5b99d1f69da3d60b9"
++    },
++    {
++      "block_id": "m52_block_06",
++      "kind": "boundary",
++      "title": "概率范围",
++      "body_markdown": "概率范围满足 0 ≤ P(A) ≤ 1。这里 A 是给定概率空间中的事件，P(A) 不是观察一次就必然出现的比例。概率为零也不总能解释为逻辑上不可能，例如连续均匀分布在某个指定点上的取值概率为零。",
++      "body_utf8_sha256": "e3637d6b59d7eccc9aa1e0595620909246a5a9008f84dea07d27e49a63e42e57"
++    },
++    {
++      "block_id": "m52_block_07",
++      "kind": "definition",
++      "title": "独立事件",
++      "body_markdown": "独立事件 A 与 B 满足 P(A∩B)=P(A)P(B)。判断独立需要结合具体概率模型，不能仅凭两个事件名称不同。若两个事件互斥且概率都大于零，它们就不独立，因为交集概率为零而概率乘积大于零。",
++      "body_utf8_sha256": "25b9dbba14b90371787c15bbd7afd6f94037448eefbb3b30e25580973b91ae51"
++    },
++    {
++      "block_id": "m52_block_08",
++      "kind": "definition",
++      "title": "条件概率",
++      "body_markdown": "条件概率以已知事件缩小样本范围。当 P(B)>0 时，定义 P(A|B)=P(A∩B)/P(B)。分母为零时不能直接使用这个比值定义。条件事件应在符号右侧明确写出，不能把 P(A|B) 与 P(B|A) 当成同一个数。",
++      "body_utf8_sha256": "24b772780667ba772953dd4d0c187ddf164c78bbc1ef8ac313dea489cf4846a2"
++    },
++    {
++      "block_id": "m52_block_09",
++      "kind": "theorem",
++      "title": "全概率公式",
++      "body_markdown": "全概率公式把目标事件按互不相交的情形分解。若 B₁,…,Bₖ 构成样本空间的有限划分，且每个 P(Bᵢ)>0，则 P(A)=ΣᵢP(A|Bᵢ)P(Bᵢ)。各个划分事件应覆盖整个空间；遗漏某个情形时，直接相加一般不能得到完整的 P(A)。",
++      "body_utf8_sha256": "33a6dc1fdf5082dcecf4570f8b2f711bea664f41581fcf76a05a063de7ccfd2e"
++    },
++    {
++      "block_id": "m52_block_10",
++      "kind": "theorem",
++      "title": "贝叶斯公式",
++      "body_markdown": "贝叶斯公式交换已知事件的位置：当 P(B)>0 且 P(A)>0 时，P(A|B)=P(B|A)P(A)/P(B)。先验概率 P(A) 与似然 P(B|A) 各有含义，二者不能互换。该公式本身不提供未知先验的数值。",
++      "body_utf8_sha256": "2b35dac86a2c25c1707da1db888f1def42b557a6fa6bda04bba0276b84e087da"
++    },
++    {
++      "block_id": "m52_block_11",
++      "kind": "definition",
++      "title": "放回抽样",
++      "body_markdown": "放回抽样是每次抽出对象、记录后再把它放回。若每次都均匀且独立地抽取，后一次可抽到的对象集合不变。例如从标号 1 到 5 的球中抽两次，同一标号可以重复出现。是否独立还取决于每次抽取规则。",
++      "body_utf8_sha256": "2ca25563cc516f100e7379bf3215163f886a9f68caa167770c48cba76405dc83"
++    },
++    {
++      "block_id": "m52_block_12",
++      "kind": "definition",
++      "title": "不放回抽样",
++      "body_markdown": "不放回抽样会把已抽到的对象留在池外。若从 5 个不同标号的球中均匀抽取两次，第二次只剩 4 个对象可选，同一标号不会再次出现。抽样空间随记录变化，不能直接照搬可重复抽取的概率乘积。",
++      "body_utf8_sha256": "9e6f64e1f4f86761830977f7d5ff559ce178fea265a71322954bb1eff7b1d357"
++    },
++    {
++      "block_id": "m52_block_13",
++      "kind": "definition",
++      "title": "函数极限",
++      "body_markdown": "函数极限描述自变量趋近某点时函数值的趋势。记号 x→a 表示 x 趋近 a，并不要求 x 等于 a。说 f(x) 在该过程趋近 L，讨论的是邻近点的行为；函数在 a 处未定义也可能存在这个极限。",
++      "body_utf8_sha256": "1daf3c64bd9d5bd19ad8d716f1c8a870678b6e34967c9a253af2ce20d0f4d026"
++    },
++    {
++      "block_id": "m52_block_14",
++      "kind": "definition",
++      "title": "导数与差商",
++      "body_markdown": "导数通过差商的极限定义。对实函数，差商为 [f(x+h)−f(x)]/h，其中 h 不等于零；当 h 趋近零且极限存在时，该极限是 f 在 x 处的导数。单个非零步长得到的差商一般不等于精确导数。",
++      "body_utf8_sha256": "febfd42a5609822440f2274b150f6739e0c413548ca5b07c58df00e13e7e0651"
++    },
++    {
++      "block_id": "m52_block_15",
++      "kind": "boundary",
++      "title": "有限差分与步长",
++      "body_markdown": "有限差分用离散记录估计变化率。若时间间隔为 Δt，位移变化为 Δx，则差商 Δx/Δt 只在 Δt 不为零时有定义。缩小步长可能减小离散近似误差，但测量噪声会被除以小步长放大，不能据此保证误差一直下降。",
++      "body_utf8_sha256": "ba82d40228a195078e1e357f53f136f726f9e664ea3dc077c1378765138537b6"
++    },
++    {
++      "block_id": "m52_block_16",
++      "kind": "worked_example",
++      "title": "用定积分求路程",
++      "body_markdown": "公开例题：物体沿直线运动，在 0 s 到 2 s 内速度 v(t)=3t m/s，其中 t 的数值以秒计。因为这段时间速度非负，路程等于定积分 $\\int_0^2 3t\\,dt=[1.5t^2]_0^2=6$，单位为 m，即 6 m。若速度改变符号，路程应积分速度的绝对值，不能把位移直接当作路程。",
++      "body_utf8_sha256": "a85ac1498e575f73289915489f63024b914d6b448d030215495c4187cd20962e"
++    },
++    {
++      "block_id": "m52_block_17",
++      "kind": "definition",
++      "title": "矩阵乘法",
++      "body_markdown": "矩阵乘法要求相邻的内维度相同。若 A 为 m×n 矩阵，B 为 n×p 矩阵，则 AB 为 m×p 矩阵，第 i 行第 j 列等于 A 第 i 行与 B 第 j 列逐项相乘后求和。一般不能交换乘法顺序，甚至 BA 可能没有定义。",
++      "body_utf8_sha256": "04bcbed76f5e761bf4e8e75d1d43e03f08625c8204f0272324453a89d0b170b6"
++    },
++    {
++      "block_id": "m52_block_18",
++      "kind": "definition",
++      "title": "矩阵转置",
++      "body_markdown": "矩阵转置交换行与列，记作 Aᵀ。若 A 有 m 行 n 列，则 Aᵀ 有 n 行 m 列，其第 i 行第 j 列等于 A 的第 j 行第 i 列。对复矩阵，单纯转置不包含复共轭，不能把这两种操作混为一谈。",
++      "body_utf8_sha256": "6983e048b579afb16fd50d33278aced44f75e09ca645f758648dbd9d9453ecfc"
++    },
++    {
++      "block_id": "m52_block_19",
++      "kind": "definition",
++      "title": "最小二乘目标",
++      "body_markdown": "最小二乘把残差的平方和作为目标。给定观测 yᵢ 与预测值 ŷᵢ，目标写作 $\\sum_{i=1}^{n}(y_i-\\hat{y}_i)^2$。求得目标最小值不自动证明估计无偏，也不保证新数据上的误差最小；这些结论还需要模型与数据条件。",
++      "body_utf8_sha256": "af253f7c388fdd961e5b44491a4d58bbb755628cebf3748394050a2a41c74396"
++    },
++    {
++      "block_id": "m52_block_20",
++      "kind": "definition",
++      "title": "SVD 分解",
++      "body_markdown": "SVD 是实矩阵奇异值分解的常用缩写。对实矩阵 A，可写 A=UΣVᵀ，其中 U 与 V 为适当大小的正交矩阵，Σ 的对角元素为非负奇异值。奇异值不是任意方阵的特征值，不能只换名称就把两者等同。",
++      "body_utf8_sha256": "0deffc718e25d53476476764dfcec2200f85310f71e3eb6af5d795fe52987cce"
++    },
++    {
++      "block_id": "m52_block_21",
++      "kind": "code",
++      "title": "Python 列表索引",
++      "body_markdown": "Python 列表索引从 0 开始。例如 values = [4, 7, 9] 时，values[0] 得到 4，values[2] 得到 9。此例只读取已有位置；访问 values[3] 会超出列表长度。代码作为教材文本展示，并不授权检索系统执行它。",
++      "body_utf8_sha256": "316f03af991b75bf58f8f9e4a2e904d3211fa2f9da761b5d1003a1533334cbc3"
++    },
++    {
++      "block_id": "m52_block_22",
++      "kind": "code",
++      "title": "SQLite FTS5 词法索引",
++      "body_markdown": "SQLite 的 FTS5 用于全文词法索引。应用可把预分词后的文本交给索引，并以 MATCH 表达式检索。词项得分只是排序依据，不验证正文正确性；索引结果仍应回到真实正文与修订引用核对。此段不包含数据库操作授权。",
++      "body_utf8_sha256": "60cc7a36f8aa95a4cd413fc62858826810875d6a47799304bd1c4977ea49b255"
++    },
++    {
++      "block_id": "m52_block_23",
++      "kind": "code",
++      "title": "查询语言中的字面词",
++      "body_markdown": "本段讲解查询语言中的字面词：MATCH、OR、NOT 与 NEAR。在普通文字搜索框中输入 OR，应被当作要找的字符词，而不是替用户增加或条件。引号、括号与星号也只是用户文本，不能据此拼接 SQL 或扩大权限。这里没有要执行的查询命令。",
++      "body_utf8_sha256": "f80d64b144d2bb3d9bd8c9697ed79dbdfe20eb2b397fbfb03174a0f83361b43e"
++    },
++    {
++      "block_id": "m52_block_24",
++      "kind": "definition",
++      "title": "对数刻度",
++      "body_markdown": "对数刻度让相同的倍率对应相同的距离。以常用对数为例，1、10、100 在刻度上的相邻间隔相同。取实数对数要求真数为正，零和负数不能直接放进这个定义。对数刻度不表示原数值的差相等。",
++      "body_utf8_sha256": "519d81ebe1353d7e96391488c409f0bcd73a4a0ca5e45b7182ff8861d9066c45"
++    },
++    {
++      "block_id": "m52_block_25",
++      "kind": "boundary",
++      "title": "量纲一致与单位换算",
++      "body_markdown": "量纲一致是相加和建立物理等式的基本检查。长度 2 m 加上 30 cm，应先进行单位换算，得到 2 m + 0.30 m = 2.30 m。长度不能直接与时间相加；单纯把两个数字相加并不会使单位自动一致。",
++      "body_utf8_sha256": "41088195a350968ad5c0cb9f9d79cc6513a0ed2703d7b878b5e45de12e048cfc"
++    },
++    {
++      "block_id": "m52_block_26",
++      "kind": "text",
++      "title": "希腊参数记号",
++      "body_markdown": "希腊字母 α 常被用作参数名；在这份材料里，同一字形的 TeX 源码是 $\\alpha$。这句话显式展示了两个写法，所以按任一原样文字检索都可以找到本段。参数的数学含义由其所在定义决定，不能只凭这个字母断言它一定代表概率。",
++      "body_utf8_sha256": "cffd2d64e3f337651ed3f7d7775f12dc53d3ab5a5cf3c4509344c636c0d13c35"
++    },
++    {
++      "block_id": "m52_block_27",
++      "kind": "definition",
++      "title": "质数与一",
++      "body_markdown": "质数是大于 1 且只有 1 与自身两个正因数的整数。2 是质数，也是唯一的偶质数。整数 1 只有一个正因数，因此不属于质数。判定较大的数是否为质数需要计算或证明，不能只凭它是奇数。",
++      "body_utf8_sha256": "6c2bb93df6295a5186e975f6d31f6449e52d93a67225371b21701bb197983c10"
++    },
++    {
++      "block_id": "m52_block_28",
++      "kind": "worked_example",
++      "title": "最大公约数例题",
++      "body_markdown": "公开例题：用辗转相除法求 18 与 12 的最大公约数。先算 18=1×12+6，再算 12=2×6+0，因此最后一个非零余数 6 是最大公约数。该过程处理正整数，并使用每步带余除法保持公约数集合不变。",
++      "body_utf8_sha256": "a9f1b365ae4c6d5aa9fa7f48594b63d505348039281354a3a93cbf209495651e"
++    },
++    {
++      "block_id": "m52_block_29",
++      "kind": "definition",
++      "title": "区间中点",
++      "body_markdown": "区间中点等于两个有限实数端点的算术平均。对端点 a 与 b，中点为 (a+b)/2；交换端点顺序不会改变结果。本段只给出中点定义，不宣称函数值在中点取得最大值或最小值。",
++      "body_utf8_sha256": "fa9390f2b46cfcdd49f25af6ff919f8edf52d384f99e99b1edaea7b577a396e4"
++    },
++    {
++      "block_id": "m52_block_30",
++      "kind": "definition",
++      "title": "区间中点",
++      "body_markdown": "区间中点等于两个有限实数端点的算术平均。对端点 a 与 b，中点为 (a+b)/2；交换端点顺序不会改变结果。本段只给出中点定义，不宣称函数值在中点取得最大值或最小值。",
++      "body_utf8_sha256": "fa9390f2b46cfcdd49f25af6ff919f8edf52d384f99e99b1edaea7b577a396e4"
++    }
++  ],
++  "cases": [
++    {
++      "case_id": "q01",
++      "suite": "literal_positive_recall",
++      "query": "算术平均数",
++      "expected_block_ids": [
++        "m52_block_01"
++      ],
++      "relevance_reason": "给出算术平均数的总和除以项数定义及适用条件。",
++      "categories": [
++        "chinese_no_spaces"
++      ]
++    },
++    {
++      "case_id": "q02",
++      "suite": "literal_positive_recall",
++      "query": "样本均值",
++      "expected_block_ids": [
++        "m52_block_01"
++      ],
++      "relevance_reason": "正文明确称这个量为样本均值，并给出精确公式。",
++      "categories": [
++        "chinese_word_boundary"
++      ]
++    },
++    {
++      "case_id": "q03",
++      "suite": "literal_positive_recall",
++      "query": "中位数",
++      "expected_block_ids": [
++        "m52_block_02"
++      ],
++      "relevance_reason": "正文同时说明奇数与偶数个数据的中位数定义。",
++      "categories": [
++        "chinese_no_spaces"
++      ]
++    },
++    {
++      "case_id": "q04",
++      "suite": "literal_positive_recall",
++      "query": "加权平均数",
++      "expected_block_ids": [
++        "m52_block_03"
++      ],
++      "relevance_reason": "公开例题展示权重、逐项计算与归一化条件。",
++      "categories": [
++        "public_worked_example"
++      ]
++    },
++    {
++      "case_id": "q05",
++      "suite": "literal_positive_recall",
++      "query": "方差",
++      "expected_block_ids": [
++        "m52_block_04",
++        "m52_block_05"
++      ],
++      "relevance_reason": "块04给描述性方差公式；块05给方差与标准差的关系及单位。",
++      "categories": [
++        "multi_relevant"
++      ]
++    },
++    {
++      "case_id": "q06",
++      "suite": "literal_positive_recall",
++      "query": "标准差",
++      "expected_block_ids": [
++        "m52_block_05"
++      ],
++      "relevance_reason": "正文定义非负平方根并说明单位。",
++      "categories": [
++        "chinese_word_boundary"
++      ]
++    },
++    {
++      "case_id": "q07",
++      "suite": "literal_positive_recall",
++      "query": "概率范围",
++      "expected_block_ids": [
++        "m52_block_06"
++      ],
++      "relevance_reason": "正文给出概率上下界，并避免把概率零解释成逻辑不可能。",
++      "categories": [
++        "chinese_no_spaces"
++      ]
++    },
++    {
++      "case_id": "q08",
++      "suite": "literal_positive_recall",
++      "query": "独立事件",
++      "expected_block_ids": [
++        "m52_block_07"
++      ],
++      "relevance_reason": "正文给乘积定义及与互斥事件的区别。",
++      "categories": [
++        "chinese_no_spaces"
++      ]
++    },
++    {
++      "case_id": "q09",
++      "suite": "literal_positive_recall",
++      "query": "条件概率",
++      "expected_block_ids": [
++        "m52_block_08"
++      ],
++      "relevance_reason": "正文给条件概率的非零分母要求和符号顺序。",
++      "categories": [
++        "chinese_no_spaces"
++      ]
++    },
++    {
++      "case_id": "q10",
++      "suite": "literal_positive_recall",
++      "query": "全概率公式",
++      "expected_block_ids": [
++        "m52_block_09"
++      ],
++      "relevance_reason": "正文给有限划分、正概率条件与完整相加规则。",
++      "categories": [
++        "chinese_no_spaces"
++      ]
++    },
++    {
++      "case_id": "q11",
++      "suite": "literal_positive_recall",
++      "query": "贝叶斯公式",
++      "expected_block_ids": [
++        "m52_block_10"
++      ],
++      "relevance_reason": "正文直接给该公式及先验和似然不可互换的说明。",
++      "categories": [
++        "chinese_no_spaces"
++      ]
++    },
++    {
++      "case_id": "q12",
++      "suite": "literal_positive_recall",
++      "query": "放回抽样",
++      "expected_block_ids": [
++        "m52_block_11"
++      ],
++      "relevance_reason": "本意是抽后放回的规则；块12虽含字面子串但定义相反，不列为相关gold。",
++      "categories": [
++        "chinese_negation_boundary"
++      ]
++    },
++    {
++      "case_id": "q13",
++      "suite": "literal_positive_recall",
++      "query": "不放回抽样",
++      "expected_block_ids": [
++        "m52_block_12"
++      ],
++      "relevance_reason": "完整否定词组对应移出已抽对象及候选集合减少。",
++      "categories": [
++        "chinese_negation_boundary"
++      ]
++    },
++    {
++      "case_id": "q14",
++      "suite": "literal_positive_recall",
++      "query": "函数极限",
++      "expected_block_ids": [
++        "m52_block_13"
++      ],
++      "relevance_reason": "正文区分邻近行为与点值。",
++      "categories": [
++        "chinese_word_boundary"
++      ]
++    },
++    {
++      "case_id": "q15",
++      "suite": "literal_positive_recall",
++      "query": "差商",
++      "expected_block_ids": [
++        "m52_block_14",
++        "m52_block_15"
++      ],
++      "relevance_reason": "块14用差商定义导数；块15说明非零步长差商及噪声边界。",
++      "categories": [
++        "multi_relevant"
++      ]
++    },
++    {
++      "case_id": "q16",
++      "suite": "literal_positive_recall",
++      "query": "定积分 路程",
++      "expected_block_ids": [
++        "m52_block_16"
++      ],
++      "relevance_reason": "同一公开例题包含定积分求路程的步骤和速度非负条件。",
++      "categories": [
++        "spaced_terms",
++        "public_worked_example"
++      ]
++    },
++    {
++      "case_id": "q17",
++      "suite": "literal_positive_recall",
++      "query": "矩阵乘法",
++      "expected_block_ids": [
++        "m52_block_17"
++      ],
++      "relevance_reason": "正文给内维度和行列求和规则。",
++      "categories": [
++        "chinese_no_spaces"
++      ]
++    },
++    {
++      "case_id": "q18",
++      "suite": "literal_positive_recall",
++      "query": "矩阵转置",
++      "expected_block_ids": [
++        "m52_block_18"
++      ],
++      "relevance_reason": "正文给转置的行列交换与复共轭区别。",
++      "categories": [
++        "chinese_word_boundary"
++      ]
++    },
++    {
++      "case_id": "q19",
++      "suite": "literal_positive_recall",
++      "query": "最小二乘",
++      "expected_block_ids": [
++        "m52_block_19"
++      ],
++      "relevance_reason": "正文给残差平方和目标，并限定可作的推断。",
++      "categories": [
++        "chinese_no_spaces"
++      ]
++    },
++    {
++      "case_id": "q20",
++      "suite": "literal_positive_recall",
++      "query": "SVD",
++      "expected_block_ids": [
++        "m52_block_20"
++      ],
++      "relevance_reason": "正文原样出现SVD并解释对应分解。",
++      "categories": [
++        "latin_exact"
++      ]
++    },
++    {
++      "case_id": "q21",
++      "suite": "literal_positive_recall",
++      "query": "svd",
++      "expected_block_ids": [
++        "m52_block_20"
++      ],
++      "relevance_reason": "与q20同一缩写的小写检索；需要语料与query一致的已声明大小写规则。",
++      "categories": [
++        "latin_casefold"
++      ]
++    },
++    {
++      "case_id": "q22",
++      "suite": "literal_positive_recall",
++      "query": "Python",
++      "expected_block_ids": [
++        "m52_block_21"
++      ],
++      "relevance_reason": "正文原样包含Python及列表索引例子。",
++      "categories": [
++        "mixed_latin_chinese"
++      ]
++    },
++    {
++      "case_id": "q23",
++      "suite": "literal_positive_recall",
++      "query": "python 列表索引",
++      "expected_block_ids": [
++        "m52_block_21"
++      ],
++      "relevance_reason": "小写语言名与中文词组指向同一具体索引规则。",
++      "categories": [
++        "latin_casefold",
++        "spaced_terms",
++        "mixed_latin_chinese"
++      ]
++    },
++    {
++      "case_id": "q24",
++      "suite": "literal_positive_recall",
++      "query": "SQLite FTS5",
++      "expected_block_ids": [
++        "m52_block_22"
++      ],
++      "relevance_reason": "正文原样给SQLite与FTS5及其用途。",
++      "categories": [
++        "mixed_latin_digits",
++        "spaced_terms"
++      ]
++    },
++    {
++      "case_id": "q25",
++      "suite": "literal_positive_recall",
++      "query": "MATCH OR NOT NEAR",
++      "expected_block_ids": [
++        "m52_block_23"
++      ],
++      "relevance_reason": "四个原样词在本段同时出现；它们是待检索文本，不是可执行MATCH操作。",
++      "categories": [
++        "match_reserved_words_literal",
++        "spaced_terms"
++      ]
++    },
++    {
++      "case_id": "q26",
++      "suite": "literal_positive_recall",
++      "query": "对数刻度",
++      "expected_block_ids": [
++        "m52_block_24"
++      ],
++      "relevance_reason": "正文说明相同倍率与正真数边界。",
++      "categories": [
++        "chinese_word_boundary"
++      ]
++    },
++    {
++      "case_id": "q27",
++      "suite": "literal_positive_recall",
++      "query": "量纲一致",
++      "expected_block_ids": [
++        "m52_block_25"
++      ],
++      "relevance_reason": "正文包含量纲检查与单位换算的实际例子。",
++      "categories": [
++        "chinese_no_spaces"
++      ]
++    },
++    {
++      "case_id": "q28",
++      "suite": "literal_positive_recall",
++      "query": "\\alpha",
++      "expected_block_ids": [
++        "m52_block_26"
++      ],
++      "relevance_reason": "原样TeX命令真实存在于正文，不需要推断数学别名。",
++      "categories": [
++        "latex_raw_literal"
++      ]
++    },
++    {
++      "case_id": "q29",
++      "suite": "literal_positive_recall",
++      "query": "α",
++      "expected_block_ids": [
++        "m52_block_26"
++      ],
++      "relevance_reason": "原样Unicode字符真实存在于正文；不据此证明TeX与Unicode已自动归一化。",
++      "categories": [
++        "unicode_math_raw_literal"
++      ]
++    },
++    {
++      "case_id": "q30",
++      "suite": "literal_positive_recall",
++      "query": "质数",
++      "expected_block_ids": [
++        "m52_block_27"
++      ],
++      "relevance_reason": "正文给质数定义并区分1与2。",
++      "categories": [
++        "chinese_word_boundary"
++      ]
++    },
++    {
++      "case_id": "q31",
++      "suite": "literal_positive_recall",
++      "query": "最大公约数",
++      "expected_block_ids": [
++        "m52_block_28"
++      ],
++      "relevance_reason": "公开例题逐步计算18与12的最大公约数。",
++      "categories": [
++        "public_worked_example"
++      ]
++    },
++    {
++      "case_id": "q32",
++      "suite": "literal_positive_recall",
++      "query": "区间中点",
++      "expected_block_ids": [
++        "m52_block_29",
++        "m52_block_30"
++      ],
++      "relevance_reason": "两个不同block的公开正文相同且同样相关，不能只把一个副本算gold。",
++      "categories": [
++        "tie_identical_bodies",
++        "multi_relevant"
++      ]
++    },
++    {
++      "case_id": "q33",
++      "suite": "literal_positive_recall",
++      "query": "“区间中点”",
++      "expected_block_ids": [
++        "m52_block_29",
++        "m52_block_30"
++      ],
++      "relevance_reason": "引用符号包围同一中文文字；需先声明引号处理规则，不执行短语查询语法。",
++      "categories": [
++        "punctuation_quotes",
++        "tie_identical_bodies"
++      ]
++    },
++    {
++      "case_id": "q34",
++      "suite": "literal_positive_recall",
++      "query": "6 m",
++      "expected_block_ids": [
++        "m52_block_16"
++      ],
++      "relevance_reason": "正文原样出现6 m，并给该路程数值的完整公开计算。",
++      "categories": [
++        "digits_units",
++        "spaced_terms"
++      ]
++    },
++    {
++      "case_id": "q35",
++      "suite": "literal_positive_recall",
++      "query": "Δt",
++      "expected_block_ids": [
++        "m52_block_15"
++      ],
++      "relevance_reason": "有限差分正文原样包含Δt；不是由LaTeX命令推测来的别名。",
++      "categories": [
++        "unicode_math_raw_literal",
++        "mixed_latin_chinese"
++      ]
++    },
++    {
++      "case_id": "q36",
++      "suite": "literal_positive_recall",
++      "query": "0 ≤ P(A) ≤ 1",
++      "expected_block_ids": [
++        "m52_block_06"
++      ],
++      "relevance_reason": "原样概率不等式在正文中存在；括号不应获得查询控制权限。",
++      "categories": [
++        "unicode_math_raw_literal",
++        "digits",
++        "punctuation_parentheses"
++      ]
++    },
++    {
++      "case_id": "q37",
++      "suite": "literal_positive_recall",
++      "query": "量纲一致，单位换算",
++      "expected_block_ids": [
++        "m52_block_25"
++      ],
++      "relevance_reason": "同一块实际讨论两个字面主题；中文逗号是文本分隔规则的用例。",
++      "categories": [
++        "chinese_punctuation",
++        "multi_terms"
++      ]
++    },
++    {
++      "case_id": "q38",
++      "suite": "literal_positive_recall",
++      "query": "OR",
++      "expected_block_ids": [
++        "m52_block_23"
++      ],
++      "relevance_reason": "单独保留字本身也是搜索文字；正文23原样展示它，不应解析为缺操作数错误。",
++      "categories": [
++        "match_reserved_words_literal"
++      ]
++    },
++    {
++      "case_id": "q39",
++      "suite": "literal_no_result",
++      "query": "菠萝榴莲",
++      "expected_block_ids": [],
++      "relevance_reason": "菠、萝、榴、莲四个汉字在30块正文中逐字均未出现；这是词面无匹配用例，不要求句子整体相等。",
++      "categories": [
++        "no_result_chinese"
++      ]
++    },
++    {
++      "case_id": "q40",
++      "suite": "literal_no_result",
++      "query": "zzqvnonexistent",
++      "expected_block_ids": [],
++      "relevance_reason": "此完整ASCII字母词项未在30块正文中出现；不依靠数字子串分词来判空。",
++      "categories": [
++        "no_result_ascii"
++      ]
++    },
++    {
++      "case_id": "q41",
++      "suite": "literal_no_result",
++      "query": "“麒麟魑魅”",
++      "expected_block_ids": [],
++      "relevance_reason": "麒、麟、魑、魅四个汉字以及包围引号在正文均未出现；这是带引号的真实词面无匹配用例。",
++      "categories": [
++        "no_result_chinese",
++        "punctuation_quotes"
++      ]
++    },
++    {
++      "case_id": "q42",
++      "suite": "literal_no_result",
++      "query": "jkwzabsent",
++      "expected_block_ids": [],
++      "relevance_reason": "此完整ASCII字母词项未在当前30块正文中出现。",
++      "categories": [
++        "no_result_ascii"
++      ]
++    }
++  ]
++}
++```
++
+ # 附录 G：从本文件抽取工程基线与公开发布
+ 
+ ## G.1 抽取工具

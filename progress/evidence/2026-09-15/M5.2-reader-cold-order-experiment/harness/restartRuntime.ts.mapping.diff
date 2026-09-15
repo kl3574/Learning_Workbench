@@ -1,0 +1,25 @@
+--- fixed-source/restartRuntime.ts
++++ harness/restartRuntime.ts
+@@ -4,9 +4,9 @@
+ import { tmpdir } from 'node:os'
+ import { resolve } from 'node:path'
+ import { setTimeout as pause } from 'node:timers/promises'
+-import { expect, type BrowserContext, type BrowserType, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
++import { expect, type BrowserContext, type BrowserType, type Page } from '${ACCEPTANCE_CACHE}/m52-reader-cold-order-experiment-v1/source/apps/web/node_modules/@playwright/test/index.mjs'
+ 
+-const root = resolve(import.meta.dirname, '../..')
++const root = "${ACCEPTANCE_CACHE}/m52-reader-cold-order-experiment-v1/source"
+ type OwnedProcess = { child: ChildProcess; exit: Promise<void>; output: () => string }
+ const ownedGroups = new Set<number>()
+ // Playwright can dispose a timed-out worker before its async finally finishes.
+@@ -87,8 +87,8 @@
+   }
+ 
+   static async start() {
+-    const apiPort = await availablePort()
+-    let uiPort = await availablePort()
++    const apiPort = Number(process.env.DIAG_API_PORT)
++    let uiPort = Number(process.env.DIAG_UI_PORT)
+     while (uiPort === apiPort) uiPort = await availablePort()
+     const runtime = new RestartRuntime(apiPort, uiPort)
+     try {

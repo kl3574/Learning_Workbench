@@ -1,0 +1,16 @@
+{
+  "first": {
+    "path": "profile-run-01.log",
+    "classification": "HARNESS_ERROR before database creation or any measurement",
+    "cause": "Executable basename profile.py shadowed Python stdlib profile during cProfile import",
+    "original_source": "profile-initial.py.txt"
+  },
+  "second": {
+    "path": "profile-run-02.log",
+    "classification": "HARNESS_ERROR after completed real import and serial measurements, before full parallel/control scenario completion",
+    "cause": "Python 3.12 cProfile rejects concurrent profiler enable calls",
+    "original_source": "run-02/measure_services.py.txt",
+    "source_before_after_equal": true
+  },
+  "repair": "The final run profiles serial calls and enables one process-wide cProfile only for the maintenance overlap; thread-local SQL labels and outer invocation clocks remain the basis for per-operation timings. Worker cProfile output demonstrably includes other reader threads and is not claimed as worker-only CPU attribution."
+}

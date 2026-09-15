@@ -1,0 +1,62 @@
+{
+  "recorded_at": "2026-09-15T11:52:39.210191+00:00",
+  "status": "PRE_IMPLEMENTATION_READ_ONLY_REVIEW",
+  "git_head": "c83b1d0de34890f66ed950bbaba44de1170ccf9b",
+  "source_inputs": [
+    {
+      "path": "PRODUCT_DESIGN.md",
+      "bytes": 308005,
+      "sha256": "a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8"
+    },
+    {
+      "path": "services/api/app/application/recommendations.py",
+      "bytes": 18472,
+      "sha256": "9b7a1d5a7d46da7ce76c7ecc0960e6409b8c39e9801764fa32947046dc544593"
+    },
+    {
+      "path": "services/api/app/infrastructure/recommendation_repository.py",
+      "bytes": 19627,
+      "sha256": "53087042974d419ed867d31f65256cd05450fc8d34fe13e35ab2a8cccb614f92"
+    },
+    {
+      "path": "services/api/app/infrastructure/database.py",
+      "bytes": 7864,
+      "sha256": "4afd9e4a60364da9e368121f20a84c9decef402a3db5d12444e7dccccb974d7f"
+    },
+    {
+      "path": "services/api/app/infrastructure/import_worker.py",
+      "bytes": 18254,
+      "sha256": "b0bad1234bfe69f5d7e1b298699cb30e10b18eb4d788d99931fb28ed148bb09c"
+    },
+    {
+      "path": "tests/integration/test_recommendations.py",
+      "bytes": 29612,
+      "sha256": "df32646dceac2657a83ff10860922b50e7f58e4dea7480ab22df82d3ab34b216"
+    }
+  ],
+  "preregistration": {
+    "path": "CACHE/m52-recommendation-readonly-fastpath-preflight-v1/preflight.json",
+    "bytes": 3434,
+    "sha256": "7a1e86a27c591e2d6b7632fbd870f680a73402fe3a9a23e56771cf5440e6406b"
+  },
+  "scope": "Read-only planned RecommendationWorker transaction seam. No test rerun, product change, browser or CI-cause claim.",
+  "constraints": [
+    "Policy then complete checked history before retry/current no-work decision",
+    "No inputs_changed or writes in deferred transaction, including cold startup",
+    "Exit reader completely before new BEGIN IMMEDIATE; all Policy/state/source/parameters/clock checks repeated",
+    "No stale reader inputs or plan transferred to writer publication",
+    "Concurrent source mutation may defer once but dirty and failure signals must remain for next tick",
+    "ASSESSMENT_ACTIVE after reader phase must deny writer and must not record refresh failure",
+    "Original integrity and retry behavior retained; cannot turn read failures into checked current success",
+    "Concurrent worker completion must be rechecked and can make writer phase no-work"
+  ],
+  "tests_to_readback": [
+    "actual Content GET completes while real no-work basis result is gated",
+    "actual source publication while read gated leaves dirty then refreshes next tick",
+    "current Policy deny; Policy begins between phases",
+    "retry future, due and source-cleared retry; complete history before retry",
+    "actual read error and integrity failure behavior",
+    "fresh writer sources and competing worker completion"
+  ],
+  "input_scope_complete": false
+}

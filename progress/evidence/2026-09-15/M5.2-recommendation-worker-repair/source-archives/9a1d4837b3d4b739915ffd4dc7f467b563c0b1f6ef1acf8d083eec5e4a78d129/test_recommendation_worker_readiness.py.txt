@@ -1,0 +1,128 @@
+"""Real WAL snapshots and owner operations at the maintenance admission boundary."""
+
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from threading import Event, current_thread
+
+import pytest
+
+from services.api.app.application import recommendations
+from services.api.app.application.content import ContentService
+from services.api.app.application.reader import ReaderService
+from services.api.app.infrastructure.config import Settings
+from services.api.app.infrastructure.database import Database
+from services.api.app.infrastructure.recommendation_repository import RecommendationRepository
+from services.api.app.infrastructure.security import SessionIdentity
+from tests.integration.test_content_repository import ref, tree
+from tests.integration.test_recommendations import stored_rows
+
+
+@pytest.fixture
+def current_projection(tmp_path):
+    database = Database(Settings(data_dir=tmp_path / 'data'))
+    workspace = database.initialize()
+    content = ContentService(database)
+    values, bodies = tree(concept=False)
+    content.publish(workspace, values, bodies)
+    assert recommendations.RecommendationWorker(database).run_once()
+    return database, workspace, content, values
+
+
+def held_current_basis(monkeypatch, database):
+    """Hold after the real checked basis returns true, still inside its transaction."""
+    held, release, contender_begin = Event(), Event(), Event()
+    original_basis = recommendations.basis_current
+    original_connect = database.connect
+
+    def basis(*args):
+        result = original_basis(*args)
+        if result and not held.is_set():
+            held.set()
+            assert release.wait(10), 'test cleanup did not release the real read snapshot'
+        return result
+
+    @contextmanager
+    def connect(*args, **kwargs):
+        with original_connect(*args, **kwargs) as connection:
+            if current_thread().name.startswith('contender'):
+                connection.set_trace_callback(lambda sql: contender_begin.set()
+                                              if sql == 'BEGIN IMMEDIATE' else None)
+            yield connection
+
+    monkeypatch.setattr(recommendations, 'basis_current', basis)
+    monkeypatch.setattr(database, 'connect', connect)
+    return held, release, contender_begin
+
+
+@pytest.mark.parametrize('read', ['lesson', 'outline'])
+def test_no_work_snapshot_does_not_reserve_writer_while_actual_content_read_completes(
+        current_projection, monkeypatch, read):
+    database, workspace, content, values = current_projection
+    identity = SessionIdentity('session_readiness_test', workspace, 'learner', 'unused', '2099-01-01T00:00:00Z')
+    before = stored_rows(database)
+    held, release, contender_begin = held_current_basis(monkeypatch, database)
+    completed = Event()
+
+    def read_content():
+        try:
+            if read == 'lesson':
+                return content.read(workspace, 'lesson', values[1].id, 1)
+            return ReaderService(database).outline(identity, values[2].id, 1)
+        finally:
+            completed.set()
+
+    with ThreadPoolExecutor(1, thread_name_prefix='maintenance') as maintenance, \
+            ThreadPoolExecutor(1, thread_name_prefix='contender') as reader:
+        worker = maintenance.submit(recommendations.RecommendationWorker(database).run_once)
+        try:
+            assert held.wait(5)
+            result = reader.submit(read_content)
+            assert contender_begin.wait(5), 'actual Content transaction was not attempted'
+            # This measures lock independence at a held snapshot, not a CI latency SLA.
+            assert completed.wait(1), 'actual Content BEGIN remains blocked by a no-work maintenance snapshot'
+            actual = result.result()
+            assert (actual if read == 'lesson' else actual.course_ref) == (values[1] if read == 'lesson' else ref(values[2]))
+        finally:
+            release.set()
+        assert worker.result(timeout=5) is False
+    assert stored_rows(database) == before
+
+
+def test_source_can_commit_during_no_work_snapshot_and_dirty_survives_until_next_tick(
+        current_projection, monkeypatch):
+    database, workspace, content, _ = current_projection
+    held, release, contender_begin = held_current_basis(monkeypatch, database)
+    values, bodies = tree(2, concept=False)
+    completed = Event()
+
+    def publish():
+        try:
+            return content.publish(workspace, values, bodies)
+        finally:
+            completed.set()
+
+    with ThreadPoolExecutor(1, thread_name_prefix='maintenance') as maintenance, \
+            ThreadPoolExecutor(1, thread_name_prefix='contender') as writer:
+        worker = maintenance.submit(recommendations.RecommendationWorker(database).run_once)
+        try:
+            assert held.wait(5)
+            publication = writer.submit(publish)
+            assert contender_begin.wait(5)
+            assert completed.wait(1), 'source publication remains blocked by a no-work maintenance snapshot'
+            assert publication.result() == [ref(value) for value in values]
+        finally:
+            release.set()
+        assert worker.result(timeout=5) is False
+    with database.transaction(immediate=False) as connection:
+        state, snapshots, _ = RecommendationRepository(connection, workspace).checked()
+        assert state['generation'] > state['completed_generation']
+        assert state['failure_json'] is None
+        old_snapshot = snapshots[-1].id
+    assert recommendations.RecommendationWorker(database).run_once() is True
+    with database.transaction(immediate=False) as connection:
+        state, snapshots, _ = RecommendationRepository(connection, workspace).checked()
+        assert state['generation'] == state['completed_generation']
+        assert snapshots[-1].id != old_snapshot
+        assert recommendations.basis_current(snapshots[-1], recommendations.load_inputs(connection, workspace),
+                                             recommendations.parameters(database), recommendations.utc_now())
+        assert recommendations.load_inputs(connection, workspace).catalog.course_refs == [ref(values[2])]

@@ -1,0 +1,262 @@
+"""Run frozen F.1 gold through real Content, Retrieval, Jobs and SQLite FTS.
+
+Creates an isolated synthetic workspace and immutable evidence directory. It does
+not call the tokenizer to rank gold, tune inputs, clear OS caches, or use providers.
+"""
+# Standalone execution first binds the repository import root.
+# ruff: noqa: E402
+from __future__ import annotations
+
+import argparse
+from datetime import UTC, datetime
+import hashlib
+import json
+import os
+from pathlib import Path
+import platform
+import sqlite3
+import sys
+import time
+from typing import Literal
+import unicodedata
+
+from pydantic import Field
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from packages.contracts import domain_models as dm
+from packages.contracts.canonical import canonical_bytes, strict_json
+from scripts.generate_retrieval_fixture import generate
+from services.api.app.application.content import ContentService
+from services.api.app.application.errors import ApiError
+from services.api.app.application.jobs import JobService
+from services.api.app.application.retrieval import RetrievalService, RetrievalWorker
+from services.api.app.application.retrieval_models import algorithm_versions
+from services.api.app.infrastructure.config import Settings
+from services.api.app.infrastructure.content_repository import reference
+from services.api.app.infrastructure.database import Database
+from services.api.app.infrastructure.security import SessionIdentity
+from services.api.app.retrieval_dto import RetrievalIndexRebuildWrite, RetrievalQueryWrite
+
+FIXTURE = ROOT / 'fixtures/synthetic/retrieval-m52'
+
+
+class _Case(dm.StrictModel):
+    case_id: str
+    suite: Literal['literal_positive_recall', 'literal_no_result']
+    query: str
+    expected_block_ids: list[dm.Id]
+    relevance_reason: str
+    categories: list[str]
+    scope_refs: list[dm.ContentRef]
+    limit: Literal[5]
+    expected_refs: list[dm.ContentRef]
+
+
+class _Gold(dm.StrictModel):
+    corpus_version: Literal['m52-original-lexical-v1']
+    status: Literal['SPEC_FIXTURE_NOT_EXECUTED']
+    cases: list[_Case] = Field(min_length=42, max_length=42)
+
+
+def _sha(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _now() -> str:
+    return datetime.now(UTC).isoformat().replace('+00:00', 'Z')
+
+
+def _write(path: Path, value: object) -> None:
+    with path.open('xb') as stream:
+        stream.write((json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False) + '\n').encode())
+
+
+def _inputs() -> dict[str, str]:
+    paths = {ROOT / 'PRODUCT_DESIGN.md', Path(__file__).resolve(), ROOT / 'scripts/generate_retrieval_fixture.py'}
+    for directory in ('services/api', 'packages/contracts', 'migrations'):
+        paths.update(path for path in (ROOT / directory).rglob('*')
+                     if path.is_file() and path.suffix in {'.py', '.sql'} and '__pycache__' not in path.parts)
+    paths.update(path for path in FIXTURE.rglob('*') if path.is_file())
+    return {path.relative_to(ROOT).as_posix(): _sha(path.read_bytes()) for path in sorted(paths)}
+
+
+def _aggregate(inventory: dict[str, str]) -> str:
+    return _sha(b''.join((path + '\0' + digest + '\n').encode() for path, digest in sorted(inventory.items())))
+
+
+def _ref_key(ref: dm.ContentRef) -> tuple[str, str, int, str]:
+    return ref.entity, ref.id, ref.revision, ref.sha256
+
+
+def _hardware() -> dict[str, object]:
+    cpu = None
+    cpuinfo = Path('/proc/cpuinfo')
+    if cpuinfo.is_file():
+        cpu = next((line.partition(':')[2].strip() for line in cpuinfo.read_text().splitlines()
+                    if line.startswith('model name')), None)
+    try:
+        memory = os.sysconf('SC_PHYS_PAGES') * os.sysconf('SC_PAGE_SIZE')
+    except (ValueError, OSError):
+        memory = None
+    return {'system': platform.system(), 'release': platform.release(), 'machine': platform.machine(),
+            'cpu_model': cpu, 'logical_cpu_count': os.cpu_count(), 'physical_memory_bytes': memory}
+
+
+def benchmark(output: Path) -> bool:
+    """Return the actual frozen-run outcome, preserving every observation on disk."""
+    output = output.absolute()
+    if any(path.is_symlink() for path in (output, *output.parents)):
+        raise ValueError('Evidence output must not traverse a symlink.')
+    output.mkdir(parents=True, exist_ok=False)
+    started = _now()
+    try:
+        # Check, never regenerate or overwrite the frozen source-derived fixture.
+        generate(ROOT / 'PRODUCT_DESIGN.md', FIXTURE, check=True)
+        before = _inputs()
+        gold = _Gold.model_validate(strict_json((FIXTURE / 'gold.json').read_bytes()))
+        blocks = [dm.ContentBlock.model_validate_json(path.read_bytes()) for path in sorted((FIXTURE / 'blocks').glob('*.json'))]
+        lesson = dm.Lesson.model_validate_json((FIXTURE / 'lessons/m52_lexical_lesson.r1.json').read_bytes())
+        course = dm.Course.model_validate_json((FIXTURE / 'course.json').read_bytes())
+        objects: list[dm.ContentBlock | dm.Lesson | dm.Course] = [*blocks, lesson, course]
+        bodies = {block.body_path: (FIXTURE / block.body_path).read_bytes() for block in blocks}
+        database = Database(Settings(data_dir=output / 'runtime'))
+        workspace = database.initialize()
+        identity = SessionIdentity('session_frozen_lexical_benchmark', workspace, 'learner', 'unused', '2099-01-01T00:00:00Z')
+        published = ContentService(database).publish(workspace, objects, bodies)
+        if {_ref_key(ref) for ref in published} != {_ref_key(reference(value)) for value in objects}:
+            raise ValueError('Published fixture references differ from the frozen metadata.')
+        refs = [reference(course)]
+        if any(case.scope_refs != refs or [ref.id for ref in case.expected_refs] != case.expected_block_ids for case in gold.cases):
+            raise ValueError('Gold is not bound to the published exact scope.')
+        with database.connect() as connection:
+            compile_options = [row[0] for row in connection.execute('PRAGMA compile_options')]
+        passport = {
+            'format': 'retrieval-benchmark-passport-v1', 'frozen_at': _now(), 'started_at': started,
+            'method': 'Real Content publication followed by RetrievalService queries and RetrievalWorker/Jobs/SQLite FTS. No direct tokenizer scoring.',
+            'synthetic_fixture_only': True, 'workspace_id': workspace,
+            'command': ['.venv/bin/python', 'scripts/benchmark_retrieval.py', '--output', '<NEW_EVIDENCE_DIRECTORY>'],
+            'hardware': _hardware(), 'runtime': {'python': sys.version, 'sqlite': sqlite3.sqlite_version,
+                'sqlite_compile_options': compile_options, 'unicode': unicodedata.unidata_version},
+            'algorithm_versions': algorithm_versions().model_dump(mode='json'),
+            'conditions': {'scope': 'Frozen explicit course and its exact 30 public blocks',
+                'missing_probe': 'Fresh workspace before any retrieval index or rebuild command',
+                'first_ready_pass': 'First sequential queries after actual index completion',
+                'repeat_ready_pass': 'Second identical sequential pass with a new RetrievalService instance',
+                'os_cache_cleared': False, 'cold_cache_claim': False,
+                'scope_body_bytes': sum(map(len, bodies.values())), 'scope_blocks': len(blocks), 'query_cases': len(gold.cases)},
+            'scope_refs': [ref.model_dump(mode='json') for ref in refs],
+            'published_refs': [ref.model_dump(mode='json') for ref in published],
+            'gold': gold.model_dump(mode='json'), 'fixture_passport_sha256': _sha((FIXTURE / 'passport.json').read_bytes()),
+            'metric': {'name': 'macro Recall@5', 'positive_cases': 38, 'threshold': 0.90,
+                'empty_cases': 4, 'empty_cases_included_in_recall': False,
+                'formula': 'Mean of |exact gold refs intersect first5 returned refs|/|exact gold refs| over q01-q38'},
+            'inputs': before, 'inputs_aggregate_sha256': _aggregate(before),
+            'aggregate_algorithm': 'SHA256 of sorted UTF8 relative path + NUL + lowercase ASCII SHA256 + LF.',
+            'retrieval_calls_before_this_passport': 0,
+        }
+        _write(output / 'passport-before-query.json', passport)
+        service = RetrievalService(database)
+        cold_status = service.scope_status(identity, refs)
+        cold_query = service.query(identity, RetrievalQueryWrite(query=gold.cases[0].query, scope_refs=refs, limit=5))
+        _write(output / 'missing-probe.json', {'status': cold_status.model_dump(mode='json'),
+                                             'query': cold_query.model_dump(mode='json')})
+        if cold_status.state != 'missing' or cold_query.result_state != 'not_ready' or cold_query.hits:
+            raise ValueError('Fresh actual scope did not report missing without hits.')
+        request = RetrievalIndexRebuildWrite(scope_refs=refs, expected_corpus_sha256=cold_status.corpus_sha256,
+                                            provider_id=None, consent_id=None)
+        ack = service.rebuild(identity, request, 'frozen-benchmark-index')
+        jobs = JobService(database)
+        worker = RetrievalWorker(database)
+        job = jobs.job(identity, ack.id)
+        _write(output / 'rebuild-original-ack.json', ack.model_dump(mode='json'))
+        ticks = 0
+        while job.status not in {'completed', 'failed', 'cancelled'} and ticks < 5:
+            worker.run_once()
+            ticks += 1
+            job = jobs.job(identity, ack.id)
+        ready = service.scope_status(identity, refs)
+        _write(output / 'index-completion.json', {'job': job.model_dump(mode='json'),
+            'status': ready.model_dump(mode='json'), 'worker_ticks': ticks})
+        if job.status != 'completed' or ready.state != 'ready':
+            raise ValueError('The real index job did not complete with a ready generation.')
+        with database.connect() as connection:
+            row = connection.execute('SELECT manifest_json FROM retrieval_generations WHERE index_version=? AND workspace_id=?',
+                                     (ready.index_version, workspace)).fetchone()
+            if row is None:
+                raise ValueError('Completed generation manifest is missing.')
+            manifest = strict_json(row[0])
+        _write(output / 'actual-generation-manifest.json', manifest)
+        passes = []
+        previous_ranks = None
+        for phase in ('first_ready', 'repeat_ready'):
+            reader = service if phase == 'first_ready' else RetrievalService(Database(database.settings))
+            positives: list[float] = []
+            empty_results: list[bool] = []
+            ranks = []
+            errors = []
+            with (output / f'{phase}-cases.jsonl').open('xb') as stream:
+                for case in gold.cases:
+                    begin = time.perf_counter()
+                    try:
+                        response = reader.query(identity, RetrievalQueryWrite(query=case.query, scope_refs=case.scope_refs, limit=5))
+                        actual = [_ref_key(hit.ref) for hit in response.hits]
+                        expected = {_ref_key(ref) for ref in case.expected_refs}
+                        recall = len(expected.intersection(actual[:5])) / len(expected) if expected else None
+                        empty_ok = response.result_state == 'no_match' and not actual if not expected else None
+                        ranks.append([(ref, hit.score) for ref, hit in zip(actual, response.hits)])
+                        record = {'case_id': case.case_id, 'query': case.query, 'phase': phase,
+                            'elapsed_seconds': time.perf_counter() - begin, 'recall_at_5': recall,
+                            'literal_empty_pass': empty_ok, 'response': response.model_dump(mode='json')}
+                    except ApiError as error:
+                        recall, empty_ok = (0.0, None) if case.expected_refs else (None, False)
+                        errors.append({'case_id': case.case_id, 'code': error.code, 'status': error.status})
+                        ranks.append([])
+                        record = {'case_id': case.case_id, 'query': case.query, 'phase': phase,
+                            'elapsed_seconds': time.perf_counter() - begin, 'recall_at_5': recall,
+                            'literal_empty_pass': empty_ok, 'error': {'code': error.code, 'status': error.status}}
+                    if recall is not None:
+                        positives.append(recall)
+                    if empty_ok is not None:
+                        empty_results.append(empty_ok)
+                    stream.write(canonical_bytes(record) + b'\n')
+                    stream.flush()
+            mean = sum(positives) / len(positives)
+            tie_cases = [ranks[i] for i, case in enumerate(gold.cases) if case.case_id in {'q32', 'q33'}]
+            ties_stable = all(items == sorted(items, key=lambda item: (-item[1], item[0])) for items in tie_cases)
+            passes.append({'phase': phase, 'positive_cases': len(positives), 'macro_recall_at_5': mean,
+                'recall_threshold_pass': mean >= 0.90, 'literal_empty_cases': len(empty_results),
+                'literal_empty_passes': sum(empty_results), 'all_literal_empty_pass': all(empty_results),
+                'q32_q33_full_ref_order_pass': ties_stable,
+                'ranks_equal_previous_pass': None if previous_ranks is None else ranks == previous_ranks, 'errors': errors})
+            previous_ranks = ranks
+        after = _inputs()
+        passed = before == after and all(p['recall_threshold_pass'] and p['all_literal_empty_pass']
+            and p['q32_q33_full_ref_order_pass'] and not p['errors'] and p['ranks_equal_previous_pass'] is not False for p in passes)
+        summary = {'format': 'retrieval-benchmark-result-v1', 'started_at': started, 'ended_at': _now(),
+            'passed': passed, 'passes': passes, 'inputs_before_after_equal': before == after,
+            'inputs_after': after, 'inputs_after_aggregate_sha256': _aggregate(after),
+            'passport_sha256': _sha((output / 'passport-before-query.json').read_bytes()),
+            'boundary': 'Small frozen literal F.1 fixture. This does not establish private-answer isolation, HTTP/browser acceptance, general retrieval quality, pedagogy, performance SLA, M5.2 stage completion or provider connectivity.'}
+        _write(output / 'result.json', summary)
+        return passed
+    except BaseException as error:
+        _write(output / 'failure.json', {'started_at': started, 'failed_at': _now(), 'type': type(error).__name__,
+            'safe_code': error.code if isinstance(error, ApiError) else None,
+            'message': 'The controlled benchmark did not finish; preserve its existing evidence and original process log.'})
+        raise
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--output', type=Path, required=True, help='New isolated evidence directory; existing output is rejected.')
+    args = parser.parse_args()
+    result = benchmark(args.output)
+    print(f'Frozen real-service lexical benchmark {"PASS" if result else "FAIL"}; see result.json for scope and actual metrics.')
+    raise SystemExit(0 if result else 1)
+
+
+if __name__ == '__main__':
+    main()

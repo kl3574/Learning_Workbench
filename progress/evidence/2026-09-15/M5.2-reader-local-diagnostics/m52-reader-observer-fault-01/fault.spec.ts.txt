@@ -1,0 +1,6 @@
+import {test} from '<private-home>/Desktop/learning/Learning_Workbench/apps/web/node_modules/@playwright/test/index.mjs'
+import '<private-home>/Desktop/learning/Learning_Workbench/tests/e2e/reader.spec.ts'
+// Explicit observer validation fault, NOT a replay or explanation of the CI failure.
+test.beforeEach(async ({page})=>{
+ await page.route(url=>url.pathname==='/api/v1/blocks/block_nativehistory_definition'&&url.searchParams.get('revision')==='2',route=>route.abort('internetdisconnected'))
+})

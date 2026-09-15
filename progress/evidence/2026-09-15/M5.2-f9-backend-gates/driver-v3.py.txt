@@ -1,0 +1,23 @@
+from pathlib import Path
+import subprocess,hashlib,json,sys,datetime
+ROOT=Path('<repository>')
+OUT=Path('<acceptance-cache>/m52-f9-backend-gates-v3')
+def sha(b): return hashlib.sha256(b).hexdigest()
+def inventory():
+    names=subprocess.check_output(['git','ls-files','-z'],cwd=ROOT).decode().split('\0')
+    names=[n for n in names if n and ((n.startswith('tests/') and n.endswith('.py')) or n.startswith(('docs/requirements/', 'services/','packages/','migrations/','fixtures/','scripts/','tests/unit/','tests/contract/','tests/security/','tests/integration/')) or n in ('PRODUCT_DESIGN.md','pyproject.toml','uv.lock','Makefile','.python-version','.node-version','tests/conftest.py','apps/web/package.json','apps/web/package-lock.json'))]
+    return {n:sha((ROOT/n).read_bytes()) for n in sorted(names)}
+def aggregate(v): return sha(''.join(n+'\0'+s+'\n' for n,s in sorted(v.items())).encode())
+mode=sys.argv[1]
+commands={'python':['.venv/bin/python','-m','pytest'], 'ruff':['.venv/bin/ruff','check','.'], 'mypy':['.venv/bin/mypy'], 'spec':['.venv/bin/python','scripts/verify_spec.py']}
+before=inventory(); start=datetime.datetime.now(datetime.UTC).isoformat()
+head=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
+for n,d in before.items():
+    assert sha(subprocess.check_output(['git','show',head+':'+n],cwd=ROOT))==d, n
+(OUT/(mode+'-before.json')).write_text(json.dumps(before,sort_keys=True,indent=2)+'\n')
+r=subprocess.run(['.venv/bin/python','scripts/record_check.py','--id','M5.2-f9-backend-'+mode+'-03','--category','local-backend-gate','--',*commands[mode]],cwd=ROOT)
+after=inventory()
+receipt={'format':'same-inputs-check-v1','command':commands[mode],'started_at':start,'finished_at':datetime.datetime.now(datetime.UTC).isoformat(),'implementation_commit':head,'exit_code':r.returncode,'input_count':len(before),'before':before,'after':after,'before_aggregate_sha256':aggregate(before),'after_aggregate_sha256':aggregate(after),'unchanged':before==after,'different_inputs':sorted(n for n in set(before)|set(after) if before.get(n)!=after.get(n)),'scope':'Backend, fixture, contract, Python test and declared toolchain inputs match the committed source; frontend implementation and native tests excluded.'}
+(OUT/(mode+'-receipt.json')).write_text(json.dumps(receipt,sort_keys=True,indent=2)+'\n')
+print(json.dumps({k:v for k,v in receipt.items() if k not in ('before','after')}))
+sys.exit(r.returncode)

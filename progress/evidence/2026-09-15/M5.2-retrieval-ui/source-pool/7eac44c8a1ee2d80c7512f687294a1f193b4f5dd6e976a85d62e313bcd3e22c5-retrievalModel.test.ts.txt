@@ -1,0 +1,21 @@
+import { describe, expect, it } from 'vitest'
+import { checkedQuery, checkedStatus, scopeHash } from './retrievalModel'
+import type { RetrievalIndexScopeStatus, RetrievalQueryView } from '../../../../../packages/contracts/generated/api-types'
+const ref = { entity: 'block' as const, id: 'block_retrieval', revision: 1, sha256: 'a'.repeat(64) }
+const workspace = 'workspace_retrieval'
+const status = (): RetrievalIndexScopeStatus => ({ kind: 'scope', scope_refs: [ref], scope_sha256: scopeHash(workspace, [ref]), corpus_sha256: 'b'.repeat(64), state: 'missing', indexed_corpus_sha256: null, index_version: null, last_built_at: null, latest_job: null })
+const query = (): RetrievalQueryView => ({ scope_refs: [ref], scope_sha256: scopeHash(workspace, [ref]), corpus_sha256: 'b'.repeat(64), index_state: 'missing', indexed_corpus_sha256: null, index_version: null, result_state: 'not_ready', matched_count: null, hits: [], omissions: { result_limit: 0, text_byte_budget: 0, json_byte_budget: 0 }, warnings: [{ code: 'INDEX_MISSING', message: '尚无索引', locator: null, severity: 'warning' }] })
+describe('retrieval exact public model', () => {
+  it('binds the explicit full scope and keeps no_match separate from not_ready', () => {
+    expect(checkedStatus(status(), workspace, [ref]).state).toBe('missing')
+    expect(checkedQuery(query(), workspace, [ref]).result_state).toBe('not_ready')
+    expect(() => checkedQuery({ ...query(), result_state: 'no_match', matched_count: 0 }, workspace, [ref])).toThrow()
+  })
+  it('rejects another workspace, revision, extra wire field and false ready', () => {
+    expect(() => checkedStatus(status(), 'workspace_other', [ref])).toThrow()
+    expect(() => checkedStatus(status(), workspace, [{ ...ref, revision: 2 }])).toThrow()
+    expect(() => checkedStatus({ ...status(), fake: true }, workspace, [ref])).toThrow()
+    expect(() => checkedStatus({ ...status(), state: 'ready' }, workspace, [ref])).toThrow()
+    expect(() => checkedStatus({ ...status(), state: 'building' }, workspace, [ref])).toThrow()
+  })
+})

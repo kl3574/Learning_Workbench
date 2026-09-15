@@ -1,0 +1,14 @@
+import { defineConfig } from 'vitest/config'
+import react from '@vitejs/plugin-react'
+export default defineConfig({ root: "<private-home>/Desktop/learning/Learning_Workbench/apps/web", plugins: [{name:'debug-nav-boundaries',enforce:'pre',transform(code,id){
+if(id !== "<private-home>/Desktop/learning/Learning_Workbench/apps/web/src/features/recommendations/useRecommendationNavigation.ts") return null
+const patches=[
+["  useEffect(() => { ++epoch.current;", "  trace('render', {owner,paused,closeSafe,epoch:epoch.current}); useEffect(() => { trace('effect', {owner,paused,closeSafe,epoch:epoch.current}); ++epoch.current;"],
+["return () => { ++epoch.current }", "return () => { trace('cleanup', {owner,epoch:epoch.current}); ++epoch.current }"],
+["    if (scope.current.paused", "    trace('navigate-enter', {owner,scope:scope.current,busy:state.busy,epoch:epoch.current}); if (scope.current.paused"],
+["      if (!current()) return", "      trace('inspect-return', {owner,scope:scope.current,current:current(),sequence,epoch:epoch.current}); if (!current()) return"],
+["      callback.current(exact)", "      trace('open', {owner}); callback.current(exact)"]
+]
+for(const [a,b] of patches){ if(!code.includes(a)) throw new Error('missing instrumentation seam'); code=code.replace(a,b) }
+return `const trace=(event:string,fields:unknown)=>{const target=globalThis as typeof globalThis & {__navTrace?: {event:string,fields:unknown}[]};target.__navTrace?.push({event,fields})};\n`+code
+}}, react()],test:{ environment:'jsdom',include:["<private-home>/.cache/learning-workbench-acceptance/m52-recommendation-navigation-diagnosis-v1/harness/observed.test.tsx"],reporters:['verbose']}})

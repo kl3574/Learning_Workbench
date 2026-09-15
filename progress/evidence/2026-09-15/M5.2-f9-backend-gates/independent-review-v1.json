@@ -1,0 +1,148 @@
+{
+  "actual_log_results": {
+    "mypy": "133 source files PASS",
+    "python": "1663 passed, 2 dependency deprecation warnings in 273.41s",
+    "ruff": "All checks passed",
+    "spec": "54 core / 6 embedded / 70 generated / 106 declared routes; structural product_acceptance NOT_RUN"
+  },
+  "all_421_current_git_before_after_match": true,
+  "checks": [
+    {
+      "before_after_inputs_equal": true,
+      "command": ".venv/bin/python -m pytest",
+      "exit_code": 0,
+      "log_sha256": "a3aaf4fced8188e798381cf2ebbc0b399a8106849c891fb3a5f781dd6820358b",
+      "name": "python",
+      "raw_capture_receipt_sha256": "486d207b17114d4b63e50e4af53929aa1f57551580fd4339b7ea7f4895d7b296",
+      "receipt_sha256": "4290c13580d8b6aaf244c2edd74a7ebecf0cd61ab1c9db7b6a3cdedc71880269"
+    },
+    {
+      "before_after_inputs_equal": true,
+      "command": ".venv/bin/ruff check .",
+      "exit_code": 0,
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "name": "ruff",
+      "raw_capture_receipt_sha256": "32475b0cefa43cabe94173abc665fa2a691cce54c6fb7795f4d976e2bab68b2b",
+      "receipt_sha256": "44d1c4acf2eeb917609025b4d1cddf13f5eb0a305bee7285a936958781a66ade"
+    },
+    {
+      "before_after_inputs_equal": true,
+      "command": ".venv/bin/mypy",
+      "exit_code": 0,
+      "log_sha256": "f22722ad615746b653b99513b65b320be88ca4dea31fb80dd9c9945aaae1b984",
+      "name": "mypy",
+      "raw_capture_receipt_sha256": "2cc38ec41123a05917851759f9a3aefc926e3b8ee83c5680c5e0fbd95d815f29",
+      "receipt_sha256": "70f22498d1a013d3fb06d5e6fb3df5ee964d050aad2c241550c3e7867f908b5a"
+    },
+    {
+      "before_after_inputs_equal": true,
+      "command": ".venv/bin/python scripts/verify_spec.py",
+      "exit_code": 0,
+      "log_sha256": "c326bb7c609cc4ae00246ff08ac733b83a39437ac79625b301cb1cf2d5617184",
+      "name": "spec",
+      "raw_capture_receipt_sha256": "35dc97f1fd19c786f5440b76353afd8b568d28ce9d42bd21483d30af5d9d4d30",
+      "receipt_sha256": "627078322c3077cb8703cd596b073b8450172237d55e0191bce3579727dd7f7b"
+    }
+  ],
+  "declared_aggregate_sha256": "00e970ea14979edf9503fa3a170ffbf9144355e88e529b045c244adfba00f7df",
+  "declared_input_count": 421,
+  "findings": [
+    {
+      "files": [
+        {
+          "before_after_recorded_by_v1": false,
+          "current_and_commit_sha256": "901d1d03ec0e569874b3f41572eaaad4565c50b4da547cc56505b6c3570a7b48",
+          "path": "tests/assessment_fixtures.py"
+        },
+        {
+          "before_after_recorded_by_v1": false,
+          "current_and_commit_sha256": "87fb6521fd32a1e57409760aa3e9a2163ca013af269c4f27c9c6ce80562bb86c",
+          "path": "tests/document_fixtures.py"
+        },
+        {
+          "before_after_recorded_by_v1": false,
+          "current_and_commit_sha256": "4ef1e0c42c4cf28a1ff2fee476190c5520090dc90773c3c3eca6eb3ca79dc4b9",
+          "path": "tests/practice_fixtures.py"
+        },
+        {
+          "before_after_recorded_by_v1": false,
+          "current_and_commit_sha256": "866a5c72af684bb4e35f3f77ed71cba886273859023a84d6200f2abd00d2e1b5",
+          "path": "tests/provider_fixture.py"
+        },
+        {
+          "before_after_recorded_by_v1": false,
+          "current_and_commit_sha256": "353087fe6c84283ae3777bb0b93c9a098c1d334b87d2b223878baab7e9ed902c",
+          "path": "tests/provider_protocol_fixture.py"
+        },
+        {
+          "before_after_recorded_by_v1": false,
+          "current_and_commit_sha256": "805c6a076798cf384b67b92ed10545e3eb3262d222e671cc5b4cb6370aeb1cb1",
+          "path": "tests/reader_fixtures.py"
+        }
+      ],
+      "id": "R1",
+      "kind": "snapshot_coverage",
+      "status": "CONFIRMED; parent independently found same issue and is executing a new 427-input Python gate without overwriting v1.",
+      "summary": "Six actual imported top-level test fixtures are omitted from original 421 source set. Their current bytes equal f9, but v1 has no before/after capture for them."
+    },
+    {
+      "evidence": [
+        "scripts/generate_contracts.py:298",
+        "scripts/generate_contracts.py:323",
+        "scripts/generate_contracts.py:332",
+        "tests/unit/test_spec_catalog.py:32",
+        "scripts/verify_spec.py:79"
+      ],
+      "files": [
+        "docs/requirements/README.md",
+        "docs/requirements/routes.json",
+        "docs/requirements/traceability.json"
+      ],
+      "id": "R2",
+      "kind": "non_python_check_inputs",
+      "status": "CONFIRMED; parent will retain 427 Python scope and separately run a 430-input spec gate. No retrospective before snapshot may be invented.",
+      "summary": "generate(check=True), used by pytest and verify_spec, reads three docs/requirements artifacts omitted from 421 and 427. Old spec PASS remains actual; it is not a complete before/after dependency snapshot."
+    }
+  ],
+  "format": "m52-f9-backend-evidence-independent-review-v1",
+  "helper_raw_public_derivation_verified": true,
+  "implementation_commit": "f9a307a9f52f2951f73a4de3ab35ffeaf223a0df",
+  "log_boundary": "record_check.py captures the command and deliberately normalizes repository/home/temp paths before writing the public hashed log. Raw helper receipts retain full before/after inventories; they are not separately preserved original unsanitized stdout. No claim of byte-identical raw stdout is made.",
+  "original_acceptance_sha256": "f60f8955433f24c51ef0bb9e8c6180f6478648fb42892b2830ee8aa607ae5fb1",
+  "publication_packages": [
+    {
+      "extra_files_outside_original_payload_manifest": [
+        "benchmark/root-benchmark-readback.json",
+        "root-import.json"
+      ],
+      "manifest_payloads_verified": 33,
+      "manifest_sha256": "0955c2b0d764db4a424e3a57f1adcfbe9076534941a54c6cd6d83fd697740d1a",
+      "path": "progress/evidence/2026-09-15/M5.2-retrieval-independent"
+    },
+    {
+      "extra_files_outside_original_payload_manifest": [
+        "root-import.json"
+      ],
+      "manifest_payloads_verified": 194,
+      "manifest_sha256": "a6073d3ab90a9146f5637f22325cc7860b2a7d6d0d34d824dd4a946bb4a53b8c",
+      "path": "progress/evidence/2026-09-15/M5.2-retrieval-integrity"
+    }
+  ],
+  "publication_scan": {
+    "aggregate_sha256": "09fde55f2457b3fe55c51703d3fa294d98602e4e51e6c70781f31f60e066a256",
+    "checked_files": 243,
+    "passed": true,
+    "tool": "scripts.check_publication.inspect"
+  },
+  "review_type": "Independent read-only evidence/implementation-input review; no command under review or business test reexecuted.",
+  "reviewed_at": "2026-09-15T09:51:36.410962+00:00",
+  "scope_assessment": [
+    "No alteration or deletion of failed development results was found in bounded package readback. Integrity README distinguishes initial wrong completed expectation, collection error, corrected old-source mirror/control, actual GREEN in scheduler-red-02, and final 12 PASS/13 declared inputs.",
+    "Service-integration/benchmark package is my own authored work: this review checks imported bytes and stated boundaries only, not independent endorsement of my test design. Its 216 inputs are a declared subset, not a claim that all test helpers or runtime dependencies were captured.",
+    "Independent benchmark reports two real 42-case rounds, 38 positive exact-ref macro Recall@5=1.0, four empty checks each, and no full stage/browser/provider/general-quality claim.",
+    "Lockfiles declare dependencies; these snapshots do not hash the complete installed virtualenv or node_modules. Pytest log separately reports actual Python/pytest/plugin versions.",
+    "421 original PASS, later 427 Python and separate 430 spec must retain distinct scopes and times. Full frontend/native/M5.2 stage and remote Provider/Codex acceptance remain outside this review."
+  ],
+  "spec_sha256": "a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8",
+  "status": "PASS_WITH_SCOPE_FINDINGS_PENDING_ROOT_ADDENDUM"
+}

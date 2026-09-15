@@ -1,0 +1,108 @@
+{
+  "recorded_at": "2026-09-15T11:18:06.830641+00:00",
+  "head": "73d65af4bae237e72fb9a0a6294028cfbad62823",
+  "ci_log": {
+    "path": "<private-home>/.cache/learning-workbench-acceptance/m52-ci-73d65af/job-104356883402.log",
+    "sha256": "45e352e3bef5f782856b3b57828caf8fccaacfb552581fd60e033032b47a719d",
+    "bytes": 55594
+  },
+  "source": [
+    {
+      "path": "apps/web/src/features/recommendations/recommendations.test.tsx",
+      "sha256": "689438fa447e87ba52488944336c38b94028af88bad6feab51f34e65be54255a",
+      "bytes": 8015
+    },
+    {
+      "path": "apps/web/src/features/recommendations/RecommendationsPanel.tsx",
+      "sha256": "27fc771cd864ae4fb4ee97a05f794341fed7e3efde0397d055d2c1361088921d",
+      "bytes": 9488
+    },
+    {
+      "path": "apps/web/src/features/recommendations/useRecommendationNavigation.ts",
+      "sha256": "0fd420389f9708b0cca54558509a336352f1c5900f149a32d07c0b41141f0c2b",
+      "bytes": 3417
+    },
+    {
+      "path": "apps/web/src/features/recommendations/useRecommendations.ts",
+      "sha256": "cff6f67721596f019f5030179d12599eae3b3e0bd2198d5d182878595a0a32b9",
+      "bytes": 3528
+    },
+    {
+      "path": "apps/web/src/features/recommendations/useDecisions.ts",
+      "sha256": "66469feac15fb1f5eb9eb9fc90f9d1697c5086fafb2dd16c480684a9a2ed39ce",
+      "bytes": 9680
+    },
+    {
+      "path": "apps/web/src/features/recommendations/decisionDrafts.ts",
+      "sha256": "668300907688b409fd6044b6d6bc0d217d8021b3931b52aa0266e5002cbe56fd",
+      "bytes": 4595
+    },
+    {
+      "path": "apps/web/src/features/recommendations/testFixtures.ts",
+      "sha256": "a24a1a7bb60a95a6ec73724e4350582a7f4ce141b8f4a524b412eb99662a6a94",
+      "bytes": 3719
+    },
+    {
+      "path": "apps/web/src/features/recommendations/recommendationModel.ts",
+      "sha256": "5df86b7dbee11435259c58b20b33752ff7ffcfac642a604ff0c32083e476813d",
+      "bytes": 5651
+    },
+    {
+      "path": "apps/web/src/shared/createResponseDraftJournal.ts",
+      "sha256": "e24982ac1da83e32b3a993d8dfc01d29827f4365422139d31686f62edb06d419",
+      "bytes": 17575
+    },
+    {
+      "path": "apps/web/src/workbench/DraftStore.ts",
+      "sha256": "dcbdf2d89d81e485335ee2167ddc48c20482dd1183b90c9bcfa2f3cb5402796b",
+      "bytes": 10626
+    },
+    {
+      "path": "apps/web/src/api/client.ts",
+      "sha256": "1e39413dcd63ac19bdcd802f2550632365cf8bb70bd83805ed63b13f3bf4e49b",
+      "bytes": 3757
+    },
+    {
+      "path": "apps/web/vite.config.ts",
+      "sha256": "bb215749c0b27f047b4039311b7ee4447b536f9b055eb6d5939878bb70315cf7",
+      "bytes": 515
+    },
+    {
+      "path": "apps/web/package.json",
+      "sha256": "10cd5786ae6d17d513859917e2527884c833cbe53c20281459f084be81424aa1",
+      "bytes": 1111
+    }
+  ],
+  "hypotheses": [
+    {
+      "rank": 1,
+      "id": "H1",
+      "claim": "The test locates an article/status before the actual navigation button is enabled; click is discarded. Final failure DOM may show later ready state.",
+      "prediction": "At the single click, disabled=true; inspect=0/open=0. Holding real initial journal load until immediately after click reproduces the unchanged navigation assertion."
+    },
+    {
+      "rank": 2,
+      "id": "H2",
+      "claim": "A pending navigation epoch effect from initial owner/closeSafe transition invalidates inspect after the click.",
+      "prediction": "Click enabled=true and inspect starts/finishes; no callback despite current owner and policy. Explicit stable readiness completion before click eliminates this controlled case."
+    },
+    {
+      "rank": 3,
+      "id": "H3",
+      "claim": "An external access/owner change intentionally invalidates pending navigation.",
+      "prediction": "Captured access generation/context differs before inspect resolves, or effect dependency changes; merely waiting the original button cannot override the protection."
+    },
+    {
+      "rank": 4,
+      "id": "H4",
+      "claim": "The fixture response is rejected or inspection never finishes.",
+      "prediction": "Inspect rejects/hangs or validation alert persists, instead of a silent pre-click readiness mismatch."
+    }
+  ],
+  "scope": "Ranked before any local execution of this failure. Static and CI DOM observations do not prove original CI cause. Controlled cases use actual component/hooks and fake-indexeddb application-port fixtures, not browser/API verification.",
+  "plan": [
+    "Run original single case once unchanged.",
+    "Use bounded controlled actual journal load/list delivery and click-time observer without changing the original post-click assertion.",
+    "Only if proved, synchronize actionable button in owned test; preserve original assertion timeout and application safeguards."
+  ]
+}

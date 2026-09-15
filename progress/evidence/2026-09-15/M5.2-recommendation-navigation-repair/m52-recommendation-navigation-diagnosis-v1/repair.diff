@@ -1,0 +1,48 @@
+diff --git a/apps/web/src/features/recommendations/recommendations.test.tsx b/apps/web/src/features/recommendations/recommendations.test.tsx
+index e6918cf..b7c8ebc 100644
+--- a/apps/web/src/features/recommendations/recommendations.test.tsx
++++ b/apps/web/src/features/recommendations/recommendations.test.tsx
+@@ -43,6 +43,22 @@ test('acceptance saves only after the explicit command action and never opens co
+   await waitFor(() => expect(state.current().decision).toBe('accepted')); expect(open).not.toHaveBeenCalled()
+   view.rerender(<RecommendationsPanel {...props} paused />); expect(screen.queryByText('合成建议目标 · 记录选择')).toBeNull(); expect(screen.queryByText('合成单测目标')).toBeNull(); expect(screen.queryByRole('article')).toBeNull()
+ })
++test('the first enabled parent-chain click survives initial local storage readiness', async () => {
++  const item = testRecommendation(), state = decisionFixture(item), port = { ...state.port, list: vi.fn(async () => testPage([item])) }, open = vi.fn()
++  let clicked = false
++  // Observe the real DOM commit before pending passive effects, without delaying
++  // storage, replacing the hook, or waiting for a second user action.
++  const observer = new MutationObserver(() => {
++    const button = screen.queryByRole('button', { name: '从教材 course_b · r2 / 小节 lesson_original · r1 打开材料' })
++    if (!clicked && button && !button.hasAttribute('disabled')) { clicked = true; fireEvent.click(button) }
++  })
++  observer.observe(document.body, { subtree: true, childList: true, attributes: true })
++  try {
++    render(<RecommendationsPanel workspace="workspace_panel_first_enabled" paused={false} course={null} port={port} open={open} onState={() => {}} />)
++    await waitFor(() => expect(open).toHaveBeenCalledExactlyOnceWith(item.navigation_options[1]))
++    expect(state.inspect).toHaveBeenCalledExactlyOnceWith(item.id); expect(state.save).not.toHaveBeenCalled(); expect(state.current().decision).toBe('pending')
++  } finally { observer.disconnect() }
++})
+ test('an actual empty projection warning remains visible without fabricated local targets or a personalized score', async () => {
+   const state = decisionFixture(), empty: RecommendationPage = { ...testPage([]), warnings: [{ code: 'NO_LOCAL_MATERIAL', severity: 'warning', message: '缺少对应教材：已记录目标概念没有匹配的本地内容。', locator: 'concept_original' }] }
+   render(<RecommendationsPanel workspace="workspace_panel_missing" paused={false} course={null} port={{ ...state.port, list: vi.fn(async () => empty) }} open={vi.fn()} onState={() => {}} />)
+diff --git a/apps/web/src/features/recommendations/useRecommendationNavigation.ts b/apps/web/src/features/recommendations/useRecommendationNavigation.ts
+index 17d2702..f716f4f 100644
+--- a/apps/web/src/features/recommendations/useRecommendationNavigation.ts
++++ b/apps/web/src/features/recommendations/useRecommendationNavigation.ts
+@@ -1,4 +1,4 @@
+-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
++import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
+ import type { RecommendationPage, RecommendationView } from '../../../../../packages/contracts/generated/api-types'
+ import { getSessionGeneration, subscribeSessionAccess } from '../../api/client'
+ import { refKey, sameRef } from '../reader/target'
+@@ -10,7 +10,9 @@ export function useRecommendationNavigation(workspace: string, paused: boolean,
+   const owner = JSON.stringify([workspace, access, context]), scope = useRef({ owner, paused, closeSafe }); scope.current = { owner, paused, closeSafe }
+   const callback = useRef(open); callback.current = open
+   const epoch = useRef(0), [state, setState] = useState({ owner, busy: false, error: '', staleIds: [] as string[] })
+-  useEffect(() => { ++epoch.current; setState(old => ({ owner, busy: false, error: '', staleIds: old.owner === owner ? old.staleIds : [] })); return () => { ++epoch.current } }, [owner, paused, closeSafe])
++  // Commit the guard epoch before an enabled button can be clicked. A passive
++  // readiness effect could otherwise invalidate that first valid navigation.
++  useLayoutEffect(() => { ++epoch.current; setState(old => ({ owner, busy: false, error: '', staleIds: old.owner === owner ? old.staleIds : [] })); return () => { ++epoch.current } }, [owner, paused, closeSafe])
+   const navigate = async (item: RecommendationView, option: RecommendationNavigation) => {
+     if (scope.current.paused || !scope.current.closeSafe || state.busy || item.staleness !== 'current') return
+     const captured = owner, sequence = ++epoch.current

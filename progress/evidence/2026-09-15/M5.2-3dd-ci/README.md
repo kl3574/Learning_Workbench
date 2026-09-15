@@ -1,0 +1,26 @@
+# Exact 3dd75f0 CI readback — NOT PASSED
+
+Source head: 3dd75f01966bb5dcf0b9ea0855e6b82ce335d814. Both workflow runs naturally finished; 10 success / 2 failure. This is the CI for that exact source commit, not the subsequent e08833a progress publication or any later repair. No rerun, cancellation, push, PR mutation or local test was performed by the collector.
+
+| Scope | Push 34957539421 | PR 34957746128 |
+|---|---|---|
+| spec-contracts | success; 456 passed, 2 warnings, 171.03s | success; 456 passed, 2 warnings, 156.84s |
+| backend | success; 576 passed, 2 warnings, 19.58s; Ruff and mypy 133 files | success; 576 passed, 2 warnings, 24.12s; Ruff and mypy 133 files |
+| frontend | success; 346 tests / 57 files; declared lint/typecheck/build | success; 346 tests / 57 files; declared lint/typecheck/build |
+| integration | success; 644 passed, 2 warnings, 465.41s | success; 644 passed, 2 warnings, 493.87s |
+| browser | failure; 87 passed / 1 failed, 10.7m | failure; 87 passed / 1 failed, 12.9m |
+| security-publication | success; actual declared publication check job | success; actual declared publication check job |
+
+These are separately executed workflow groups with some overlap; do not sum them as a unique full-suite count. Original dependency/build warnings remain in the logs.
+
+Both browser failures are the same case: tests/e2e/reader.spec.ts:170, historical course revisions stay in separate exact tabs and hash-mismatched links preserve unresolved reference. After page.goto of the current revision Reader URL, line 178:46 expected .real-reader to contain the synthetic second-revision text. The original expectation timed out after 5000ms with element(s) not found. This is the assertion's 5-second timeout, not a claimed 30-second whole-test timeout. Push details are original log lines 707–734; PR details are 719–746. Actual browser progress records cover ordinals 1..88 once each and match each 87/1 summary. No DOM cause is inferred from these logs.
+
+Both workflow artifacts API responses have total_count=0. The logs mention a local error-context.md path, but there is no downloadable uploaded artifact in those actual responses; no trace, screenshot or reconstructed context is supplied as original CI evidence.
+
+Every job checkout is bound to its actual git log -1 --format=%H command/result lines. Six push jobs checked out the exact source head. Six PR jobs checked out b945694a2f871552cb82ca2e3df4f3dfdfe4b8bb, the PR synthetic merge commit. GitHub Git commit API readbacks show both commits have the same full tree c4c5dfd7584ffc8694b37163fa258f6f18ce94f8. Their trees are equal; their commit identities are different. The receipt does not relabel PR execution as the head commit. The workflow and failing test additionally have SHA-256 bindings read from immutable 3dd Git blobs; their already published source files are not duplicated here.
+
+PR50 was read as draft/open/unmerged, with head 3dd75f0 and base feat/M5.1-provider-consent, at the timestamp in pr50-final.raw.json.receipt.json. This is an observed historical state, not a promise that a later PR head will remain unchanged. The two status cycles were more than 60 seconds apart; the first unfinished PR workflow is retained alongside the final observation. Raw metadata and all 12 complete job logs have original/private and public SHA-256/size records.
+
+Version 1 is preserved unchanged. Its custom scan reported no findings, but the repository publication inspector subsequently rejected 14 payloads (12 complete job logs and 2 structured summaries) because standard GitHub runner home paths also match its absolute-home-path rule. This version applies the fixed literal runner-home prefix replacement `/home/runner` to `<github-runner-home>` to those public derivatives, in addition to the original private-home-prefix substitution. Private raw files and their hashes are unchanged. All other raw-derived bytes, including ANSI and every failed assertion and result, are retained. README and manifest describe this correction; each payload records its raw, version-1 and version-2 hashes and sizes. Structured excerpts in final-ci-readback.json and browser-case-readback.json explicitly remove ANSI SGR escapes only; their line numbers still refer to the original complete logs. They are not claimed byte-identical to ANSI-decorated log lines. Neither user credentials nor private provider diagnostic directories were accessed.
+
+Manifest aggregate: SHA-256 of UTF-8 json.dumps(path-sorted [{path,sha256:public_sha256,size:public_bytes}], sort_keys=True, ensure_ascii=False, separators=(",", ":")). manifest.json itself is excluded. The complete version-2 package is checked with the unchanged repository scripts/check_publication.inspect function using its intended progress/evidence publication paths, and with additional runtime secret/session/CSRF patterns. Exact raw/version-1/version-2 hashes, transformations and file sets are read back. The version-1 rejection is retained as a packaging failure; it is not a CI rerun or a change to the 10-success/2-failure result. Pattern scanning is bounded, not a universal secret detector. This package records a failed source validation and does not mark M5.2 complete or close an Issue.

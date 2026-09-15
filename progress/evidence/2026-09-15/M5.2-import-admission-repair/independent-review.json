@@ -1,0 +1,130 @@
+{
+  "recorded_at": "2026-09-15T13:22:45.596029+00:00",
+  "review_type": "Independent read-only source and existing execution evidence review; no tests, browser, network or repository writes performed.",
+  "base_commit": "0484a4ccea8b0dcb17c87743dc512b78e5633dd5",
+  "reviewed_commit": "69e54478ae3c3604a925f2cdb905ce03ddda2b8b",
+  "result": "NO_NEW_BLOCKING_FINDING_IN_BOUNDED_SCOPE",
+  "blocking_findings": [],
+  "sources": [
+    {
+      "path": "apps/web/src/workbench/Shell.tsx",
+      "sha256": "d8e03fed1f9e15c29b6ec03a77be83d7c080be31d1b7119e0936257b06d331d7",
+      "bytes": 48368,
+      "matches_reviewed_commit": true
+    },
+    {
+      "path": "tests/e2e/import-admission.spec.ts",
+      "sha256": "970f472f78e33aca187367b9b8d585d841d2762fc111aedb524b361eeedc2a67",
+      "bytes": 8544,
+      "matches_reviewed_commit": true
+    },
+    {
+      "path": "tests/e2e/reader.spec.ts",
+      "sha256": "8f8b522e8ae9158433b263445497e405ea8aaebfc912d6bc1ba64504a60fa892",
+      "bytes": 19765,
+      "matches_reviewed_commit": true
+    },
+    {
+      "path": "tests/e2e/restartRuntime.ts",
+      "sha256": "f45757408a834ae36d2714c679226f645142fa635913ca130329eb5f30c21ad8",
+      "bytes": 7508,
+      "matches_reviewed_commit": true
+    },
+    {
+      "path": "apps/web/src/features/assessment/useWorkspacePolicy.ts",
+      "sha256": "b2234493c6c089393b7f65b873a76229fea1d41fe12535134bf357c57594c292",
+      "bytes": 2241,
+      "matches_reviewed_commit": true
+    },
+    {
+      "path": "apps/web/src/features/imports/ImportWorkflow.tsx",
+      "sha256": "360d4d916dc695c5d047e3624e7ad8c671a8ce3d31afb236946dea104eb6fb06",
+      "bytes": 11584,
+      "matches_reviewed_commit": true
+    },
+    {
+      "path": "apps/web/src/features/imports/UploadForm.tsx",
+      "sha256": "aafac080da83c860ca1220327342594e3b2f890620b4fe9b3d8f2af27886c0cb",
+      "bytes": 3526,
+      "matches_reviewed_commit": true
+    },
+    {
+      "path": "tests/e2e/helpers.ts",
+      "sha256": "42561e2de857c1d7c8d05551b40a63ed0c545b3c1bafe668386fdfd17640149b",
+      "bytes": 2724,
+      "matches_reviewed_commit": true
+    },
+    {
+      "path": "tests/e2e/playwright.config.ts",
+      "sha256": "f1b231efde09e9b4e896ba5167fc10b4b602be34d7592d44b634f79ba6cadd29",
+      "bytes": 1370,
+      "matches_reviewed_commit": true
+    },
+    {
+      "path": "PRODUCT_DESIGN.md",
+      "sha256": "a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8",
+      "bytes": 308005,
+      "matches_reviewed_commit": true
+    }
+  ],
+  "source_checks": {
+    "shell_exactly_one_button_disabled_and_title_addition": true,
+    "existing_openAux_subjectLocked_guard_unchanged": true,
+    "existing_ImportWorkflow_paused_and_File_state_retention_unchanged": true,
+    "old_reader_entire_file_equals_base": true,
+    "red_green_complete_test_bytes_equal": true,
+    "red_final_first_test_body_equal": true
+  },
+  "review_conclusions": [
+    "The disabled expression is exactly the pre-existing guard predicate: unknown Policy or an actual independent attempt. Policy owner matching and response invalidation remain unchanged. No permission bypass or queued automatic replay was added.",
+    "The delayed-response test uses real unchanged HTTP 200 session responses and records both UI-saved and Policy-unknown. Its RED captures a real enabled click rejected by the old guard; the same single-test source passes after the repair.",
+    "The final negative control starts and abandons an actual ungraded independent attempt in a private RestartRuntime. It checks disabled admission, retained dialog, hidden material/file-name DOM, recovered selected filename and parser choice, and new explicit admission. The runtime is closed in finally, isolating its assessment state from the normal suite runtime.",
+    "UploadForm remains mounted while suspended and retains its File and parser state in React; only its rendered controls disappear. This change does not clear the existing dialog."
+  ],
+  "evidence": [
+    {
+      "path": "m52-import-admission-repair-v1/red-01",
+      "receipt_sha256": "cd3cc9f95340a19351321b81c09b7b94e5f6b1039dc1086f43efc2238e187339",
+      "log_sha256": "692241f8447e20f87ecd7f6c0bba7b6b993f0b22f01a00e15cf68e91c5dad73a",
+      "exit_code": 1,
+      "declared_input_count": 6,
+      "declared_before_after_equal": true,
+      "classification": "Target admission RED: enabled entry while Policy unknown; real guard rejected click; release alone did not replay it."
+    },
+    {
+      "path": "m52-import-admission-repair-v1/green-02",
+      "receipt_sha256": "0ba19716bb66116126626017989c941c7fcfaa2b995d488153d92ddb78abdf51",
+      "log_sha256": "bb359c9afeb4e5667ff597cc50338cf192a4be9763ab4ce5941087c77a026a7d",
+      "exit_code": 0,
+      "declared_input_count": 6,
+      "declared_before_after_equal": true,
+      "classification": "Same complete single-test bytes GREEN after only disabled/title repair."
+    },
+    {
+      "path": "m52-import-admission-repair-v1/focused-03",
+      "receipt_sha256": "485a3c679abfc04eb34489210227412ea98044312862732be9c9458058927602",
+      "log_sha256": "5421e7df3c6eec7a3a89adc2a121705f0c66b4b67d7584c49c5df0628c6a0649",
+      "exit_code": 1,
+      "declared_input_count": 6,
+      "declared_before_after_equal": true,
+      "classification": "One PASS and two failures: wrong exact footer expectation, then shared active assessment contaminated the following original Reader test. Not additional product RED."
+    },
+    {
+      "path": "m52-import-admission-repair-v1/focused-04",
+      "receipt_sha256": "e8cb5244eda205c7552f7fd5f4870d39a3921587847d5355e8b2a64096690cec",
+      "log_sha256": "ef36177876bc900877674c032e60a656bf2cc08029f37f474e82f15ce46afd90",
+      "exit_code": 0,
+      "declared_input_count": 6,
+      "declared_before_after_equal": true,
+      "classification": "Final isolated independent assessment control plus admission and unchanged original Reader: three PASS, suite 16.9 seconds."
+    }
+  ],
+  "owner_manifest_payloads_verified": 18,
+  "owner_final_receipt_sha256": "272c231919837f4cfdaac710e526d9641b8fb0e7418f3453866183ed878b2070",
+  "limitations": [
+    "This review does not establish the unique historical cause of the ab6 CI failure; the controlled experiment establishes one sufficient path. The later unchanged-software 0484 CI PASS does not erase that failure.",
+    "Each owner run binds six declared input paths before and after, not the full repository. The additional RestartRuntime and ImportWorkflow dependency checks here are post-run static bindings to the reviewed commit, not retroactive complete execution inventories.",
+    "The selected-file control checks recovered filename, parser selection and upload eligibility. It does not upload the recovered file or claim a server readback proving its bytes.",
+    "All execution results belong to the owner runs. This review does not claim a full-suite run or visual screenshot inspection."
+  ]
+}

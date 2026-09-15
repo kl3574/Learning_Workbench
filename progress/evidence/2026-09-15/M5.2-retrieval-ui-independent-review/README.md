@@ -1,0 +1,15 @@
+# M5.2 Retrieval UI independent review
+
+Public artifact base: `progress/evidence/2026-09-15/M5.2-retrieval-ui-independent-review`.
+
+This package contains a read-only independent initial review and repair readback of M52-UI-B-01 (equivalent original command/ACK races in IndexedDB) and M52-UI-B-02 (result navigation bypassing local recovery safety). Both findings are closed in the bounded reviewed source and owner-evidence scope. The reviewer did not run tests, a browser, network, or product mutations for this UI review. No final native or full-platform acceptance is claimed here. The separate DeepSeek document investigation is excluded.
+
+`input-manifest.json` resolves all 17 initial reviewed files under `reviewed-source/`. `repair/source-manifest.json` resolves seven final source files, the counterfactual Commands source, the unchanged original Panel, and two test files. Source files retain exact raw bytes and use `.txt`. `repair/red-source-seam.diff` shows only the added real-DraftStore injection in the counterfactual Commands. `repair/fix.diff` shows the repaired command/Panel behavior and the Shell navigation guard change. Full runner source inventories in the copied owner receipts are retained attestations; this minimal package is not a complete executable checkout.
+
+`repair/owner-evidence/ui-review-findings-valid-red-06/` records 7 FAIL / 4 PASS on 11 valid-fixture cases. `ui-unit-final-05/` records 23 PASS across five retrieval test files including the same two test-file byte sequences. `ui-lint-08/` is exactly `tsc -b apps/web/tsconfig.json` with exit 0 and an empty log, not an ESLint run. Reports distinguish real owner execution from independent readback. Early invalid-fixture runs remain in the owner's original evidence package and are not substituted for this valid-fixture RED.
+
+Only two log lines contain the original workspace prefix. Each occurrence is replaced by `<workspace>`; timestamps, assertions, results and other bytes are preserved. Original owner receipts intentionally retain hashes of original logs. The publication manifest maps original and public log hashes, sizes and the exact prefix-rule count so they must not be confused. All other copied source/report/receipt bytes are unchanged. The original private snapshot harness error is retained and explicitly not a product failure.
+
+The publication manifest lists every payload with its raw root/path, raw/public SHA-256 and sizes, transformations, and generated-input provenance. Named raw roots are sibling private cache directories, not embedded personal absolute paths. Aggregate algorithm: sort entries by public path, project to objects with keys `path` and `sha256` (public SHA), serialize with Python json.dumps(..., sort_keys=True, separators=(',', ':'), ensure_ascii=True), UTF-8 encode with no trailing newline, then SHA-256. The publication manifest itself is excluded from this aggregate.
+
+No compiled caches, bytecode, databases, runtime files, credentials, private Provider material, or screenshots are included. Publication scanning supplements the bounded source/provenance review and is not a universal privacy guarantee.

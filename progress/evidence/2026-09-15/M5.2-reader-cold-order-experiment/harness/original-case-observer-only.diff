@@ -1,0 +1,13 @@
+--- original-case-body
++++ observed-case-body
+@@ -4,8 +4,10 @@
+   const imported = await importReaderPackage(page, current)
+   await imported.dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
+   const target = { course: current.course, lesson: current.lessons[0], block: current.blocks[0], view: 'lesson' }
++  observation = await observe(page, mode, name => info.outputPath(name))
+   await page.goto(`/?reader=${encodeURIComponent(JSON.stringify(target))}`)
+   await expect(page.locator('.real-reader')).toContainText('第二修订选文')
++  await observation.firstAssertionPassed()
+   const oldTarget = { course: old.course, lesson: old.lessons[0], block: old.blocks[0], view: 'lesson' }
+   await expect(page.getByText('✓ UI 会话已保存')).toBeVisible()
+   await page.goto(`/?reader=${encodeURIComponent(JSON.stringify(oldTarget))}`)

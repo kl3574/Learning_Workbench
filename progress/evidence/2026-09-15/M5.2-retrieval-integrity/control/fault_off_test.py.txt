@@ -1,0 +1,26 @@
+from dataclasses import replace
+import json
+from services.api.app.application.imports import ImportService
+from services.api.app.infrastructure.import_worker import ImportWorker
+from tests.integration.test_retrieval_integrity import ledger
+
+
+def test_same_queue_without_retrieval_corruption(ledger):
+    database, identity, service, _, request = ledger
+    indexed = service.rebuild(identity, request, 'undamaged_build')
+    ingestion = ImportService(database)
+    staged = ingestion.stage(identity, data=b'# Independent queued import\n\nOriginal synthetic material.\n',
+        filename='synthetic.md', kind='markdown', key='unrelated_import')
+    worker = ImportWorker(database)
+    try:
+        for _ in range(2):
+            worker.run_once()
+        with database.connect() as conn:
+            status = conn.execute('SELECT status FROM jobs WHERE id=?', (staged.job.id,)).fetchone()[0]
+        preview = ingestion.preview(replace(identity, role='author'), staged.import_id)
+        observed = {'fault':'off', 'import_job_status':status, 'import_preview_status':preview.status,
+            'retrieval_job_status':service.job(identity,indexed.id).status,'ticks':2}
+        print('OBSERVATION '+json.dumps(observed,sort_keys=True))
+        assert status == 'awaiting_approval' and preview.status == 'preview_ready'
+    finally:
+        worker.stop()

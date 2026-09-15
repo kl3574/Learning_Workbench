@@ -1,0 +1,143 @@
+{
+  "base_commit": "f0b4ce2e39a3bc374751379051553108ad6a57ed",
+  "conclusion": "No remaining blocking finding in this bounded reviewed scope after the recorded repairs.",
+  "created_at": "2026-09-15T09:34:30.789744+00:00",
+  "final_result": "12 passed in 1.54s; final 13 captured input files unchanged during run",
+  "findings": [
+    {
+      "id": "M52-B-01",
+      "red": "red-01: revision/status/workspace/cancel_base variants accepted after coherent JSON+SHA mutation",
+      "repair": "Full JobSnapshot equality, actual cancelled event revision and original expected_revision, workspace/kind/progress/time and scope binding",
+      "severity": "P2",
+      "status": "CLOSED",
+      "title": "Cancellation ACK not bound to actual immutable cancellation history"
+    },
+    {
+      "id": "M52-B-02",
+      "red": "red-01: older pointer returned ready; null pointer returned missing despite committed generations",
+      "repair": "Current pointer must match the latest committed generation by owned job sequence",
+      "severity": "P2",
+      "status": "CLOSED",
+      "title": "Mutable scope pointer could hide an already committed newer generation"
+    },
+    {
+      "id": "M52-B-03",
+      "red": "red-01: earlier allocation deletion and sequence gap accepted",
+      "repair": "Scope sequence, original rebuild command set and at-most-one final active allocation are checked together",
+      "severity": "P2",
+      "status": "CLOSED",
+      "title": "Scope status skipped missing or reordered original allocations"
+    },
+    {
+      "id": "M52-B-04",
+      "red": "Original fault-on observed queued import, but initial expected completed was wrong. Corrected exact scheduler test in explicitly derived old-source mirror: fault-off PASS, fault-on FAIL queued versus awaiting_approval.",
+      "repair": "Retrieval error is retained as safe failure_code, contributes indexed=False and allows grading/import to continue; idle loop can wait instead of reporting work",
+      "severity": "P1",
+      "status": "CLOSED",
+      "title": "Corrupt queued retrieval could starve unrelated real import/grading maintenance"
+    },
+    {
+      "id": "M52-B-05",
+      "red": "lost-generation-red-01: latest completed result survived, artifacts removed by torn-restore fixture, status accepted older ready generation",
+      "repair": "All completed results and actual scope generation identities/corpus/manifestSHA/built_at must form the same one-to-one set",
+      "severity": "P2",
+      "status": "CLOSED",
+      "title": "Completed Job result could outlive lost generation and be hidden by old pointer"
+    }
+  ],
+  "implementation_commit": null,
+  "limits": [
+    "All SQL corruption is explicit disposable synthetic fault injection, with required triggers deliberately bypassed. No claim of an ordinary HTTP route performing these mutations.",
+    "The review and 12 tests do not prove all adversarial database rewrites, full-suite acceptance, physical permission hardening, p95/512-block performance, Recall@5, native UI or entire M5.2 completion.",
+    "Final migration is still an uncommitted new 0011 under parent ownership; each earlier run preserves the exact migration bytes it executed.",
+    "No databases, actual imports, private provider files, user keys, network traffic or browser artifacts are included."
+  ],
+  "owner_boundary": "Reviewer only added tests/integration/test_retrieval_integrity.py; parent repaired production and migration. Earlier Content owner implementation is a separate package and test scope.",
+  "readback": [
+    "Actual source read: Retrieval application, own ledger, Jobs adapter, 0011, Jobs dispatch and ImportWorker/main integration. DDL boundaries do not modify baseline or clear shared Content outbox.",
+    "Current Policy precedes subject read/write/replay, Content owns scope/material, Jobs owns event/lease/terminal SQL; no Provider source or paid dispatch introduced.",
+    "New rebuild CAS binds normalized full request and frozen descriptor; valid original rebuild ACK remains queued while separately read Job may complete. Fault control with mutually consistent changed input/hash but wrong original request hash is rejected.",
+    "Compute checks current material and lease in bounded loops; tokenization is outside write transaction. Finish rechecks lease/Policy/full scope before generation, pointer, result and unique completed event commit together.",
+    "Generation/chunks/FTS are checked against the owned manifest and exact scope. This review did not repeat D ordinary corruption/HTTP/Recall tests or claim they were independently run here."
+  ],
+  "reviewed_final_source": [
+    {
+      "bytes": 308005,
+      "path": "PRODUCT_DESIGN.md",
+      "sha256": "a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8"
+    },
+    {
+      "bytes": 23700,
+      "path": "services/api/app/application/retrieval.py",
+      "sha256": "80971e53a1eba4895ff2e1427a5b1cfd20f15dd6f13ca9f05e0539467f10f1b6"
+    },
+    {
+      "bytes": 21473,
+      "path": "services/api/app/infrastructure/retrieval_repository.py",
+      "sha256": "60efc9a018f5b1413e26290d305054d5bc4c52c47cc4f6bccd5947876ff2aa2b"
+    },
+    {
+      "bytes": 8092,
+      "path": "services/api/app/infrastructure/retrieval_job_repository.py",
+      "sha256": "53bd62f6630f7b7f7dd64ca63c5ee657821befac3dbedf4efb7d3e467d4e9259"
+    },
+    {
+      "bytes": 4257,
+      "path": "migrations/0011_local_retrieval.sql",
+      "sha256": "58237826deed88a01b61dc22c4e229024f6b70c0fbdff73a4469d9669be92277"
+    },
+    {
+      "bytes": 4557,
+      "path": "services/api/app/application/jobs.py",
+      "sha256": "9c18536751a09a14c410a066074711f2681afa2375c28cd171d822e3a07677c3"
+    },
+    {
+      "bytes": 18254,
+      "path": "services/api/app/infrastructure/import_worker.py",
+      "sha256": "b0bad1234bfe69f5d7e1b298699cb30e10b18eb4d788d99931fb28ed148bb09c"
+    },
+    {
+      "bytes": 5210,
+      "path": "services/api/app/main.py",
+      "sha256": "f6be242413b5829b203c590aefafb7f27dcf7db59154dc72f8c2672f7366f45f"
+    },
+    {
+      "bytes": 15419,
+      "path": "services/api/app/application/content_retrieval.py",
+      "sha256": "f79678874ec35077bf9edb8bda5b72ab0600627ad364ba5f1509da2c49067fb8"
+    },
+    {
+      "bytes": 8961,
+      "path": "services/api/app/application/retrieval_models.py",
+      "sha256": "5f5a0ef8316f8333cf53918a6509675d6c156eec0adecf12f7e3335ca180fc5c"
+    },
+    {
+      "bytes": 14334,
+      "path": "services/api/app/retrieval_dto.py",
+      "sha256": "1af8505d543572edf9fdd6b87ed0988549463bbe531ea559a292b8828ad97e2c"
+    },
+    {
+      "bytes": 5572,
+      "path": "services/api/app/application/retrieval_lexical.py",
+      "sha256": "8f0fecf9cd0bf9951742452afffc6c94f105061907c4ae7c187f8102eb32b5bc"
+    },
+    {
+      "bytes": 9806,
+      "path": "tests/integration/test_retrieval_integrity.py",
+      "sha256": "01807b71fadc89c831fd10073b256026602a94198f6902e6c13c653f941a9937"
+    }
+  ],
+  "runs": {
+    "fault-off-01": "HARNESS COLLECTION ERROR: external pytest path omitted project config, services import unavailable; no product result.",
+    "fault-off-02": "1 passed in 0.62s: two real ticks, index completed, import awaiting_approval and preview_ready.",
+    "lost-generation-red-01": "1 failed, 11 deselected in 0.33s on fixed first-round source; bad completed result/generation association still accepted.",
+    "red-01": "9 failed, 1 passed in 0.79s; 8 ledger assertions failed plus observed import queued. Scheduler test initial expected completed was incorrect and is not presented as the corrected assertion RED.",
+    "repaired-01": "11 passed in 1.43s after first production repair, before lost-generation counterexample was added.",
+    "repaired-final-01": "12 passed in 1.54s; 13 captured inputs unchanged.",
+    "scheduler-original-mirror": "1 passed, 1 failed, 9 deselected in 0.75s; exact corrected scheduler test matches scheduler-red-02. Explicit derived source mirror overlays 12 original red-01 inputs on other captured current public dependencies; 457 mirror files unchanged. Not an original whole-repo execution snapshot.",
+    "scheduler-red-02": "Despite preselected directory name, actual result is 2 PASS in 0.97s on already repaired production. Input before/after equal; production changed before this run began relative to red-01. Not a RED."
+  },
+  "scope": "Independent bounded M5.2 Retrieval/Jobs ledger and scheduling review",
+  "spec_sha256": "a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8",
+  "spec_version": "3.0.3"
+}

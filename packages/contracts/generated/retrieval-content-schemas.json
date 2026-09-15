@@ -1,0 +1,605 @@
+{
+  "byte_binding": {
+    "RetrievalBlockMaterial.body": "Python bytes / TypeScript Uint8Array"
+  },
+  "schemas": {
+    "RetrievalBlockMaterial": {
+      "$defs": {
+        "ContentRef": {
+          "additionalProperties": false,
+          "properties": {
+            "entity": {
+              "enum": [
+                "course",
+                "lesson",
+                "block",
+                "concept",
+                "route",
+                "question",
+                "practice_set",
+                "assessment",
+                "note"
+              ],
+              "title": "Entity",
+              "type": "string"
+            },
+            "id": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            },
+            "revision": {
+              "minimum": 1,
+              "title": "Revision",
+              "type": "integer"
+            },
+            "sha256": {
+              "pattern": "^[a-f0-9]{64}$",
+              "title": "Sha256",
+              "type": "string"
+            }
+          },
+          "required": [
+            "entity",
+            "id",
+            "revision",
+            "sha256"
+          ],
+          "title": "ContentRef",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "format": "binary",
+          "title": "Body",
+          "type": "string"
+        },
+        "body_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Body Sha256",
+          "type": "string"
+        },
+        "corpus_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Corpus Sha256",
+          "type": "string"
+        },
+        "ref": {
+          "$ref": "#/$defs/ContentRef"
+        },
+        "scope_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Scope Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "scope_sha256",
+        "corpus_sha256",
+        "ref",
+        "body_sha256",
+        "body"
+      ],
+      "title": "RetrievalBlockMaterial",
+      "type": "object"
+    },
+    "RetrievalScopeSnapshot": {
+      "$defs": {
+        "Citation": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            },
+            "locator": {
+              "title": "Locator",
+              "type": "string"
+            },
+            "source_sha256": {
+              "anyOf": [
+                {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Source Sha256"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            },
+            "url": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Url"
+            },
+            "verification": {
+              "enum": [
+                "verified",
+                "unverified",
+                "user_supplied"
+              ],
+              "title": "Verification",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "locator",
+            "verification"
+          ],
+          "title": "Citation",
+          "type": "object"
+        },
+        "ContentRef": {
+          "additionalProperties": false,
+          "properties": {
+            "entity": {
+              "enum": [
+                "course",
+                "lesson",
+                "block",
+                "concept",
+                "route",
+                "question",
+                "practice_set",
+                "assessment",
+                "note"
+              ],
+              "title": "Entity",
+              "type": "string"
+            },
+            "id": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            },
+            "revision": {
+              "minimum": 1,
+              "title": "Revision",
+              "type": "integer"
+            },
+            "sha256": {
+              "pattern": "^[a-f0-9]{64}$",
+              "title": "Sha256",
+              "type": "string"
+            }
+          },
+          "required": [
+            "entity",
+            "id",
+            "revision",
+            "sha256"
+          ],
+          "title": "ContentRef",
+          "type": "object"
+        },
+        "RetrievalAlgorithmVersions": {
+          "additionalProperties": false,
+          "properties": {
+            "locator": {
+              "const": "whole-block-v1",
+              "title": "Locator",
+              "type": "string"
+            },
+            "normalization": {
+              "const": "nfc-v1",
+              "title": "Normalization",
+              "type": "string"
+            },
+            "ranking": {
+              "const": "scope-coverage-v1",
+              "title": "Ranking",
+              "type": "string"
+            },
+            "resource": {
+              "const": "retrieval-resource-v1",
+              "title": "Resource",
+              "type": "string"
+            },
+            "tokenizer": {
+              "const": "lexical-han-gram-v1",
+              "title": "Tokenizer",
+              "type": "string"
+            },
+            "unicode": {
+              "const": "15.0.0",
+              "title": "Unicode",
+              "type": "string"
+            }
+          },
+          "required": [
+            "resource",
+            "normalization",
+            "tokenizer",
+            "unicode",
+            "ranking",
+            "locator"
+          ],
+          "title": "RetrievalAlgorithmVersions",
+          "type": "object"
+        },
+        "RetrievalBlockDescriptor": {
+          "additionalProperties": false,
+          "properties": {
+            "body_bytes": {
+              "maximum": 16777216,
+              "minimum": 0,
+              "title": "Body Bytes",
+              "type": "integer"
+            },
+            "body_sha256": {
+              "pattern": "^[a-f0-9]{64}$",
+              "title": "Body Sha256",
+              "type": "string"
+            },
+            "parent_paths": {
+              "items": {
+                "$ref": "#/$defs/RetrievalScopePath"
+              },
+              "maxItems": 8192,
+              "minItems": 1,
+              "title": "Parent Paths",
+              "type": "array"
+            },
+            "provenance": {
+              "$ref": "#/$defs/RetrievalProvenance"
+            },
+            "ref": {
+              "$ref": "#/$defs/ContentRef"
+            },
+            "source_descriptor_sha256": {
+              "pattern": "^[a-f0-9]{64}$",
+              "title": "Source Descriptor Sha256",
+              "type": "string"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            }
+          },
+          "required": [
+            "ref",
+            "title",
+            "body_sha256",
+            "body_bytes",
+            "provenance",
+            "source_descriptor_sha256",
+            "parent_paths"
+          ],
+          "title": "RetrievalBlockDescriptor",
+          "type": "object"
+        },
+        "RetrievalCorpusDescriptor": {
+          "additionalProperties": false,
+          "properties": {
+            "blocks": {
+              "items": {
+                "$ref": "#/$defs/RetrievalBlockDescriptor"
+              },
+              "maxItems": 512,
+              "minItems": 1,
+              "title": "Blocks",
+              "type": "array"
+            },
+            "graph": {
+              "items": {
+                "$ref": "#/$defs/RetrievalRefState"
+              },
+              "title": "Graph",
+              "type": "array"
+            },
+            "scope_refs": {
+              "items": {
+                "$ref": "#/$defs/ContentRef"
+              },
+              "maxItems": 16,
+              "minItems": 1,
+              "title": "Scope Refs",
+              "type": "array"
+            },
+            "scope_sha256": {
+              "pattern": "^[a-f0-9]{64}$",
+              "title": "Scope Sha256",
+              "type": "string"
+            },
+            "version": {
+              "const": "retrieval-corpus-v1",
+              "title": "Version",
+              "type": "string"
+            },
+            "versions": {
+              "$ref": "#/$defs/RetrievalAlgorithmVersions"
+            },
+            "workspace_id": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Workspace Id",
+              "type": "string"
+            }
+          },
+          "required": [
+            "version",
+            "workspace_id",
+            "scope_sha256",
+            "scope_refs",
+            "graph",
+            "blocks",
+            "versions"
+          ],
+          "title": "RetrievalCorpusDescriptor",
+          "type": "object"
+        },
+        "RetrievalProvenance": {
+          "additionalProperties": false,
+          "properties": {
+            "citations": {
+              "items": {
+                "$ref": "#/$defs/Citation"
+              },
+              "title": "Citations",
+              "type": "array"
+            },
+            "original": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RetrievalRetainedSource"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "state": {
+              "enum": [
+                "frozen",
+                "unresolved"
+              ],
+              "title": "State",
+              "type": "string"
+            },
+            "unresolved_citation_ids": {
+              "items": {
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+                "type": "string"
+              },
+              "title": "Unresolved Citation Ids",
+              "type": "array"
+            },
+            "warnings": {
+              "items": {
+                "$ref": "#/$defs/Warning"
+              },
+              "title": "Warnings",
+              "type": "array"
+            }
+          },
+          "required": [
+            "state",
+            "original",
+            "citations",
+            "unresolved_citation_ids",
+            "warnings"
+          ],
+          "title": "RetrievalProvenance",
+          "type": "object"
+        },
+        "RetrievalRefState": {
+          "additionalProperties": false,
+          "properties": {
+            "current_ref": {
+              "$ref": "#/$defs/ContentRef"
+            },
+            "lifecycle": {
+              "enum": [
+                "active",
+                "archived"
+              ],
+              "title": "Lifecycle",
+              "type": "string"
+            },
+            "ref": {
+              "$ref": "#/$defs/ContentRef"
+            }
+          },
+          "required": [
+            "ref",
+            "current_ref",
+            "lifecycle"
+          ],
+          "title": "RetrievalRefState",
+          "type": "object"
+        },
+        "RetrievalRetainedSource": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            },
+            "media_type": {
+              "title": "Media Type",
+              "type": "string"
+            },
+            "parser_version": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Parser Version"
+            },
+            "rights": {
+              "title": "Rights",
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[a-f0-9]{64}$",
+              "title": "Sha256",
+              "type": "string"
+            },
+            "size": {
+              "minimum": 0,
+              "title": "Size",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "id",
+            "media_type",
+            "size",
+            "sha256",
+            "rights",
+            "parser_version"
+          ],
+          "title": "RetrievalRetainedSource",
+          "type": "object"
+        },
+        "RetrievalScopePath": {
+          "additionalProperties": false,
+          "properties": {
+            "block_ref": {
+              "$ref": "#/$defs/ContentRef"
+            },
+            "course_ref": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ContentRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "course_title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Course Title"
+            },
+            "lesson_ref": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ContentRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "lesson_title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Lesson Title"
+            },
+            "root_ref": {
+              "$ref": "#/$defs/ContentRef"
+            }
+          },
+          "required": [
+            "root_ref",
+            "course_ref",
+            "course_title",
+            "lesson_ref",
+            "lesson_title",
+            "block_ref"
+          ],
+          "title": "RetrievalScopePath",
+          "type": "object"
+        },
+        "Warning": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "title": "Code",
+              "type": "string"
+            },
+            "locator": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Locator"
+            },
+            "message": {
+              "title": "Message",
+              "type": "string"
+            },
+            "severity": {
+              "enum": [
+                "info",
+                "warning",
+                "error"
+              ],
+              "title": "Severity",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "severity"
+          ],
+          "title": "Warning",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "corpus_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Corpus Sha256",
+          "type": "string"
+        },
+        "descriptor": {
+          "$ref": "#/$defs/RetrievalCorpusDescriptor"
+        }
+      },
+      "required": [
+        "descriptor",
+        "corpus_sha256"
+      ],
+      "title": "RetrievalScopeSnapshot",
+      "type": "object"
+    }
+  },
+  "scope": "internal_content_port_not_http_transport",
+  "source": "PRODUCT_DESIGN.md",
+  "spec_sha256": "a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8",
+  "spec_version": "3.0.3"
+}

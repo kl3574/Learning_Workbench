@@ -1,0 +1,25 @@
+# Fixed c83 local frontend gates — five completed commands
+
+Software commit c83b1d0de34890f66ed950bbaba44de1170ccf9b is the historical input anchor. This candidate contains only the five completed frontend gates, their complete declared source inventories, the private driver as a source archive, the one known tracked test-output change and its restoration record, and the final independent readback. It does not copy earlier Policy/recommendation repair or 73d CI packages and does not export the other native runtime artifacts.
+
+| Gate | Actual result |
+|---|---|
+| web-lint | PASS; tsc --noEmit --noUnusedLocals --noUnusedParameters |
+| web-types | PASS; tsc --noEmit |
+| web-unit | 355 tests / 58 files passed; Vitest 3.22s |
+| build | PASS; original large-chunk warning retained |
+| native | 88 tests passed (7.6m); all 88 actual unique case ordinals checked |
+
+Native driver start/end: 2026-09-15T11:35:24.725363+00:00 to 2026-09-15T11:43:02.198349+00:00. Its command log records the historical Reader case passing in 7.9s for the entire case; this is not a duration measurement of the first assertion alone. These local results do not identify the cause of the earlier 73d PR Reader failure, make that failed CI green, or imply a future CI result.
+
+Each gate's full before inventory contains all 785 tracked non-progress Git blobs, including documentation and tooling, and matches the immutable c83 commit. Their common initial aggregate is ab71c41845221d2505899718f61bd17706360322c3297eedc2040a43137afc7b. The four non-native gates also have every after hash unchanged. Native's original after inventory instead has exactly one change: docs/ui/m1-session-three-way-conflict.png, directly written by the existing workbench test despite the Playwright output-directory override. Its original unchanged=false is retained; restoring an output afterward does not rewrite the historical run as wholly unchanged.
+
+The tracked PNG before hash is 4eb8a0555dcd6ef74600e58233d6c1708f68b4c8123402230963db5d26440e35; after is efccb827d109b380870eb25b83745c16d5a1073c30d56dd304e0149a7fb893bb. Both archived originals were actually viewed: they show synthetic empty-workspace UI-session comparisons (versions 88/89 before, 93/94 after), without visible user content or credentials. Both images are included byte-identically. The before image equals the c83 Git blob, the after image equals the native receipt's hash, and the independently read restored repository image equals before. No pixel-identity claim is made between the two different outputs.
+
+The owner's original known-output-restoration.json explicitly records that guarded restoration happened before an initial system-Python datetime.UTC failure while creating its receipt. The later project-Python record at 11:49:52 UTC read the restored bytes without rewriting. That boundary is preserved. The reviewer checked all stored hash relationships and the current restored image but did not execute or independently observe the original restoration command; no separate original traceback file was supplied or invented.
+
+The private driver explicitly passes LEARNING_E2E_OUTPUT_DIR to native execution and saves tracked-output before/after. Its archived source is bound by post-run independent SHA readback, also equal to the earlier independent read; no pre-run driver hash is fabricated. Source maps cover tracked repository inputs, not ignored installed dependency binaries or arbitrary inherited environment contents. The record_check.py logs are the original sanitized command-output files; they are not represented as separate raw stdout archives. Public receipt commands, timestamps, log hashes and c83 bindings were checked against the private gate receipts. Their original nonempty progress-inclusive Git-diff hashes are retained rather than relabeled as an empty working tree.
+
+Manifest entries map every public path to its original cache/repository path and record raw/public SHA-256 and byte counts. Text derivation performs only literal private-home-prefix and GitHub-runner-home-prefix substitutions. Original run files and receipts are unchanged; no warning, failure line or ANSI escape was removed. The PNG files are unchanged. README is authored packaging metadata. The complete candidate is checked using the unchanged repository publication inspector at its intended progress/evidence paths, plus bounded runtime-identity patterns; pattern scanning is not a universal privacy guarantee.
+
+Manifest aggregate: SHA-256 of UTF-8 json.dumps(path-sorted [{path,sha256:public_sha256,size:public_bytes}], sort_keys=True, ensure_ascii=False, separators=(",", ":")), excluding manifest.json. The source-inventory aggregate is a different, explicitly documented algorithm: SHA-256 of sorted path + NUL + SHA-256 + LF records. Neither aggregate is silently substituted for the other. The packager ran no tests, browser, network request or source/image mutation. No backend, real provider, Codex, model-quality or learning-effectiveness acceptance is inferred from these frontend gates.
