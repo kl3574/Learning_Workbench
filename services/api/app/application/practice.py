@@ -165,7 +165,8 @@ class PracticeService:
         return PracticeSession(id=record.id, revision=record.revision, practice_ref=record.practice_ref,
             lesson_ref=content.practice(record.practice_ref).lesson_ref,
             questions=questions, responses=record.responses, status=record.status, exposure_event_ids=events,
-            assisted=bool(events), assistance=assistance, results=record.submission.results if record.submission else None)
+            assisted=bool(events), assistance=repository.assistance_view(record, questions, assistance, events),
+            results=record.submission.results if record.submission else None)
 
     @staticmethod
     def _question(record: PracticeRecord, questions: list[dm.QuestionPublic], question_id: str) -> tuple[dm.ContentRef, dm.QuestionPublic]:
@@ -230,7 +231,8 @@ class PracticeService:
                                               grading_audit_sha256=metadata_sha256(audit))
                 persist_audit(repository, audit, outbox_id, snapshot.submitted_at)
                 return PracticeSubmitted(id=id, revision=snapshot.revision, results=results, evidence_label="practice",
-                    exposure_event_ids=events, assisted=bool(events), assistance=assistance).model_dump(mode="json")
+                    exposure_event_ids=events, assisted=bool(events),
+                    assistance=repository.assistance_view(record, questions, assistance, events)).model_dump(mode="json")
 
             result = execute_idempotent(repository.connection, actor=identity.workspace_id, route=f"POST /practice/sessions/{id}/submit",
                 key=key, payload=request.model_dump(mode="json"), operation=operation)
@@ -239,7 +241,8 @@ class PracticeService:
             if snapshot is None:
                 raise invalid_snapshot()
             expected = PracticeSubmitted(id=id, revision=snapshot.revision, results=snapshot.results, evidence_label="practice",
-                exposure_event_ids=snapshot.exposure_event_ids, assisted=snapshot.assisted, assistance=snapshot.assistance)
+                exposure_event_ids=snapshot.exposure_event_ids, assisted=snapshot.assisted,
+                assistance=repository.assistance_view(current, current_questions, snapshot.assistance, snapshot.exposure_event_ids))
             try:
                 if PracticeSubmitted.model_validate(result) != expected:
                     raise invalid_snapshot()

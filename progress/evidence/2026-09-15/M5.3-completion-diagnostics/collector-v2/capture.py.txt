@@ -1,0 +1,342 @@
+"""One read-only GitHub observation. Preparation never implies a new CI result."""
+
+import argparse
+import concurrent.futures
+import datetime as dt
+import hashlib
+import io
+import json
+import pathlib
+import re
+import stat
+import subprocess
+import time
+import zipfile
+
+CACHE = pathlib.Path('<private-home>/.cache/learning-workbench-acceptance').resolve()
+REPO = 'kl3574/Learning_Workbench'
+WORKFLOW = '.github/workflows/ci.yml'
+JOBS = {'spec-contracts', 'backend', 'security-publication', 'integration', 'browser', 'frontend'}
+SHA = re.compile(r'[0-9a-f]{40}')
+ANSI = re.compile(r'\x1b\[[0-?]*[ -/]*[@-~]')
+
+
+def now():
+    return dt.datetime.now(dt.timezone.utc).isoformat()
+
+
+def digest(data):
+    return {'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()}
+
+
+def write_json(path, value):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open('x', encoding='utf-8') as handle:
+        handle.write(json.dumps(value, ensure_ascii=False, indent=2) + '\n')
+
+
+class Capture:
+    def __init__(self, root):
+        self.root = root
+
+    def get(self, name, endpoint):
+        """Only GET. Preserve stdout/stderr privately; report no matched bytes."""
+        target = self.root / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        started, clock = now(), time.monotonic()
+        try:
+            result = subprocess.run(
+                ['gh', 'api', '--method', 'GET', f'repos/{REPO}/{endpoint}'],
+                capture_output=True, timeout=55, check=False,
+            )
+            output, error, code = result.stdout, result.stderr, result.returncode
+        except subprocess.TimeoutExpired as exc:
+            output, error, code = exc.stdout or b'', exc.stderr or b'', 'TIMEOUT'
+        except OSError as exc:
+            output, error, code = b'', type(exc).__name__.encode(), 'EXEC_ERROR'
+        with target.open('xb') as handle:
+            handle.write(output)
+        receipt = {
+            'method': 'GET', 'endpoint': endpoint, 'started_at': started,
+            'finished_at': now(), 'elapsed_seconds': time.monotonic() - clock,
+            'exit_code': code, 'path': name, **digest(output),
+        }
+        if error:
+            error_path = target.with_name(target.name + '.stderr')
+            with error_path.open('xb') as handle:
+                handle.write(error)
+            receipt['stderr'] = {'path': str(error_path.relative_to(self.root)), **digest(error)}
+        write_json(target.with_name(target.name + '.receipt.json'), receipt)
+        if code != 0:
+            raise RuntimeError(f'GET_FAILED: {name}; inspect private receipt')
+        return output
+
+    def json(self, name, endpoint):
+        return json.loads(self.get(name, endpoint))
+
+    def pages(self, stem, endpoint, key):
+        values, expected = [], None
+        for page in range(1, 21):
+            sep = '&' if '?' in endpoint else '?'
+            data = self.json(f'{stem}-page-{page}.json', f'{endpoint}{sep}per_page=100&page={page}')
+            expected = data['total_count'] if expected is None else expected
+            values.extend(data[key])
+            if len(data[key]) < 100:
+                if len(values) != data['total_count'] or expected != data['total_count']:
+                    raise RuntimeError(f'UNSTABLE_OR_TRUNCATED_PAGINATION: {stem}')
+                return values
+        raise RuntimeError(f'PAGE_LIMIT: {stem}')
+
+
+def log_readback(raw):
+    lines = raw.decode('utf-8', errors='replace').splitlines()
+    plain = [ANSI.sub('', line) for line in lines]
+    checkouts = []
+    for index, line in enumerate(plain):
+        if '[command]' in line and 'git log -1 --format=%H' in line:
+            for following in range(index + 1, min(index + 4, len(lines))):
+                match = re.fullmatch(r'\S+Z\s+([0-9a-f]{40})\s*', plain[following])
+                if match:
+                    checkouts.append({'sha': match[1], 'command_line': index + 1,
+                                      'line': following + 1, 'raw_line': lines[following]})
+                    break
+    evidence = []
+    cases = []
+    declared = []
+    for index, line in enumerate(plain):
+        if re.search(r'\b\d+ (?:passed|failed|skipped|deselected)\b|Test Files|Tests\s+\d|Success: no issues|All checks passed|Generated \d+|Running \d+ tests', line):
+            evidence.append({'line': index + 1, 'raw_line': lines[index]})
+        match = re.search(r'Running (\d+) tests using', line)
+        if match:
+            declared.append(int(match[1]))
+        match = re.search(r'\s([✓✘×-])\s+(\d+)\s+.*?tests/e2e/', line)
+        if match:
+            cases.append({'ordinal': int(match[2]), 'marker': match[1],
+                          'line': index + 1, 'raw_line': lines[index]})
+    return {
+        **digest(raw), 'checkout_observations': checkouts, 'summary_lines': evidence,
+        'browser_declared_counts': declared, 'browser_cases': cases,
+        'browser_ordinals_complete_once': bool(declared) and len(declared) == 1 and
+            [case['ordinal'] for case in cases] == list(range(1, declared[0] + 1)),
+        'raw_logs_unchanged': True, 'parsing_only_ansi_removal': True,
+    }
+
+
+def extract_diagnostics(raw, destination):
+    """Enumerate all entries before extraction; no ZIP member is executed."""
+    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        infos = archive.infolist()
+        if len(infos) > 1000 or sum(item.file_size for item in infos) > 256 * 1024 * 1024:
+            raise ValueError('ZIP_RESOURCE_LIMIT')
+        seen, records, selected = set(), [], []
+        for item in infos:
+            name = pathlib.PurePosixPath(item.filename)
+            mode = item.external_attr >> 16
+            if (not item.filename or '\\' in item.filename or name.is_absolute() or
+                    '..' in name.parts or ':' in item.filename or '\x00' in item.filename or
+                    str(name) in seen or stat.S_ISLNK(mode) or
+                    (stat.S_IFMT(mode) not in (0, stat.S_IFREG, stat.S_IFDIR))):
+                raise ValueError('UNSAFE_ZIP_MEMBER')
+            seen.add(str(name))
+            allowed = not item.is_dir() and (
+                name.name in ('error-context.md', 'reader-load-diagnostic.json', 'tutor-completion-diagnostic.json') or
+                re.fullmatch(r'test-failed[^/]*\.png', name.name) is not None
+            )
+            records.append({'path': item.filename, 'bytes': item.file_size,
+                            'compressed_bytes': item.compress_size, 'selected': allowed})
+            if allowed and name.name == 'tutor-completion-diagnostic.json':
+                case = name.parent.name
+                records[-1]['tutor_diagnostic_role'] = (
+                    'ORIGINAL_TUTOR_SAME_RUN_COMPLETION_CASE' if case.startswith('tutor-explicit-same-Run-') else
+                    'DIAGNOSTIC_NEGATIVE_CONTROL_EXPECTS_INNER_ASSERTION_FAILURE' if case.startswith('tutor-diagnostic-') else
+                    'UNCLASSIFIED_REQUIRES_MANUAL_CASE_BINDING')
+                records[-1]['classification_basis'] = 'Playwright artifact case-directory prefix; does not replace actual job-log case verdict. Negative-control inner assertion failure is not a Tutor product failure.'
+            if allowed:
+                selected.append((item, name))
+        destination.mkdir(parents=True, exist_ok=False)
+        write_json(destination / 'zip-enumeration.json', records)
+        for item, name in selected:
+            data = archive.read(item)  # zipfile verifies CRC and decompressed size.
+            target = destination.joinpath(*name.parts)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with target.open('xb') as handle:
+                handle.write(data)
+            records[infos.index(item)].update(digest(data))
+        write_json(destination / 'extracted-readback.json', records)
+        return records
+
+
+def capture_run(capture, run, head, pr, prefix):
+    run_id, attempt = run['id'], run['run_attempt']
+    exact = capture.json(f'{prefix}/run-attempt.json', f'actions/runs/{run_id}/attempts/{attempt}')
+    if (exact['id'], exact['run_attempt'], exact['head_sha'], exact['event'], exact['path']) != (
+            run_id, attempt, head, run['event'], WORKFLOW):
+        raise RuntimeError(f'RUN_BINDING_MISMATCH: {prefix}')
+    if exact['event'] == 'pull_request' and not any(
+            value['number'] == pr and value['head']['sha'] == head for value in exact['pull_requests']):
+        raise RuntimeError('PR_RUN_BINDING_UNPROVEN')
+    jobs = capture.pages(f'{prefix}/jobs', f'actions/runs/{run_id}/attempts/{attempt}/jobs', 'jobs')
+    if any(value['run_id'] != run_id or value.get('run_attempt') != attempt or
+           value.get('head_sha') != head for value in jobs):
+        raise RuntimeError(f'JOB_BINDING_MISMATCH: {prefix}')
+    result = {
+        'event': exact['event'], 'run_id': run_id, 'attempt': attempt,
+        'head_sha': head, 'status': exact['status'], 'conclusion': exact['conclusion'],
+        'created_at': exact['created_at'], 'run_started_at': exact['run_started_at'],
+        'updated_at': exact['updated_at'], 'url': exact['html_url'],
+        'exact_six_job_names': len(jobs) == 6 and {job['name'] for job in jobs} == JOBS,
+        'jobs': [], 'artifacts': {'state': 'NOT_QUERIED_UNTIL_RUN_TERMINAL'},
+    }
+
+    def read_job(job):
+        value = {key: job.get(key) for key in (
+            'id', 'name', 'run_id', 'run_attempt', 'head_sha', 'status', 'conclusion',
+            'started_at', 'completed_at', 'html_url', 'steps')}
+        if job['status'] == 'completed':
+            name = f'{prefix}/job-{job["id"]}.log'
+            try:
+                value['log'] = {'path': name, **log_readback(capture.get(name, f'actions/jobs/{job["id"]}/logs'))}
+            except (RuntimeError, ValueError) as exc:
+                value['log_error'] = type(exc).__name__  # Full GET receipt remains private.
+        return value
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        result['jobs'] = list(pool.map(read_job, jobs))
+    if exact['status'] == 'completed':
+        artifacts = capture.pages(f'{prefix}/artifacts', f'actions/runs/{run_id}/artifacts', 'artifacts')
+        result['artifacts'] = {'state': 'OBSERVED_ZERO' if not artifacts else 'OBSERVED_NONZERO',
+                               'total_count': len(artifacts), 'items': []}
+        expected_name = f'browser-failure-{exact["event"]}-{run_id}-{attempt}'
+        for artifact in artifacts:
+            entry = dict(artifact)
+            binding = artifact.get('workflow_run') or {}
+            entry['matches_exact_attempt_name'] = artifact['name'] == expected_name
+            entry['matches_run_and_head'] = binding.get('id') == run_id and binding.get('head_sha') == head
+            if (entry['matches_exact_attempt_name'] and entry['matches_run_and_head'] and
+                    not artifact['expired']):
+                archive_name = f'{prefix}/artifact-{artifact["id"]}.zip'
+                try:
+                    raw = capture.get(archive_name, f'actions/artifacts/{artifact["id"]}/zip')
+                    entry['download'] = {'path': archive_name, **digest(raw)}
+                    entry['members'] = extract_diagnostics(raw, capture.root / prefix / f'artifact-{artifact["id"]}')
+                    entry['publication_review'] = 'PENDING_TEXT_SECRET_SCAN_AND_ACTUAL_PNG_VIEW'
+                except (RuntimeError, ValueError, zipfile.BadZipFile) as exc:
+                    entry['download_or_extract_error'] = type(exc).__name__
+            else:
+                entry['download'] = 'NOT_DOWNLOADED_UNBOUND_OTHER_ATTEMPT_OR_EXPIRED'
+            result['artifacts']['items'].append(entry)
+    return result
+
+
+def observe(args, output):
+    capture = Capture(output)
+    summary = {'head': args.head, 'pr': args.pr, 'repository': REPO,
+               'observed_at': now(), 'workflow': WORKFLOW, 'runs': [], 'errors': [],
+               'publication_status': 'PRIVATE_RAW_REVIEW_REQUIRED'}
+    pr = capture.json('pr.json', f'pulls/{args.pr}')
+    summary['pr_state'] = {key: pr.get(key) for key in ('number', 'state', 'draft', 'merged', 'merged_at', 'merge_commit_sha', 'html_url')}
+    summary['pr_state'].update(head_sha=pr['head']['sha'], base_sha=pr['base']['sha'],
+                               base_ref=pr['base']['ref'], head_matches_target=pr['head']['sha'] == args.head)
+    head = capture.json(f'git-{args.head}.json', f'git/commits/{args.head}')
+    if head['sha'] != args.head:
+        raise RuntimeError('HEAD_GIT_BINDING_MISMATCH')
+    summary['head_tree'] = head['tree']['sha']
+    for event, explicit in [('push', args.push_run), ('pull_request', args.pr_run)]:
+        try:
+            if explicit:
+                candidates = [capture.json(f'{event}/run-selected.json', f'actions/runs/{explicit}')]
+            else:
+                candidates = capture.pages(f'{event}/discover', f'actions/runs?head_sha={args.head}&event={event}', 'workflow_runs')
+                candidates = [run for run in candidates if run['path'] == WORKFLOW]
+            if not candidates:
+                summary['runs'].append({'event': event, 'state': 'NOT_CREATED_OR_NOT_VISIBLE'})
+                continue
+            if len(candidates) != 1:
+                raise RuntimeError('AMBIGUOUS_RUN_SELECTION_REQUIRE_EXPLICIT_RUN_ID')
+            run = candidates[0]
+            if run['head_sha'] != args.head or run['event'] != event or run['path'] != WORKFLOW:
+                raise RuntimeError('SELECTED_RUN_TARGET_MISMATCH')
+            summary['runs'].append(capture_run(capture, run, args.head, args.pr, event))
+        except (RuntimeError, ValueError, KeyError) as exc:
+            summary['errors'].append({'event': event, 'error': str(exc)})
+    commits = {args.head: head}
+    for run in summary['runs']:
+        for job in run.get('jobs', []):
+            checks = job.get('log', {}).get('checkout_observations', [])
+            if len(checks) != 1:
+                job['checkout_binding'] = 'UNKNOWN_OR_AMBIGUOUS'
+                continue
+            sha = checks[0]['sha']
+            try:
+                if sha not in commits:
+                    commits[sha] = capture.json(f'git-{sha}.json', f'git/commits/{sha}')
+                commit = commits[sha]
+                if commit['sha'] != sha:
+                    raise RuntimeError('CHECKOUT_GIT_BINDING_MISMATCH')
+                job['checkout_binding'] = {
+                    'actual_commit': sha, 'actual_tree': commit['tree']['sha'],
+                    'commit_equals_head': sha == args.head,
+                    'tree_equals_head': commit['tree']['sha'] == summary['head_tree'],
+                    'parents': [parent['sha'] for parent in commit['parents']],
+                    'head_is_direct_parent': args.head in [parent['sha'] for parent in commit['parents']],
+                    'pr_live_merge_sha_equals_actual_checkout': pr['merge_commit_sha'] == sha,
+                    'log_sha256': job['log']['sha256'], 'log_line': checks[0]['line'],
+                }
+            except (RuntimeError, ValueError, KeyError) as exc:
+                job['checkout_binding'] = {'error': str(exc)}
+    all_jobs = [job for run in summary['runs'] for job in run.get('jobs', [])]
+    summary['job_conclusions'] = {key: sum((job['conclusion'] or 'pending') == key for job in all_jobs)
+                                  for key in sorted({job['conclusion'] or 'pending' for job in all_jobs})}
+    summary['jobs_in_progress_or_queued'] = sum(job['status'] != 'completed' for job in all_jobs)
+    summary['two_runs_terminal'] = len(summary['runs']) == 2 and all(run.get('status') == 'completed' for run in summary['runs'])
+    summary['all_twelve_logs_downloaded'] = len(all_jobs) == 12 and all('log' in job for job in all_jobs)
+    summary['finished_at'] = now()
+    write_json(output / 'observation.json', summary)
+    return summary
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--head', required=True, help='Exact published 40-character lowercase Git head')
+    parser.add_argument('--pr', required=True, type=int)
+    parser.add_argument('--output', required=True, type=pathlib.Path, help='Private cache directory, unique to this target')
+    parser.add_argument('--push-run', type=int)
+    parser.add_argument('--pr-run', type=int)
+    parser.add_argument('--execute', action='store_true', help='Perform one GET-only observation; absent means no network or writes')
+    args = parser.parse_args()
+    output = args.output.resolve()
+    if (not SHA.fullmatch(args.head) or args.pr <= 0 or
+            any(value is not None and value <= 0 for value in (args.push_run, args.pr_run)) or
+            output == CACHE or not output.is_relative_to(CACHE)):
+        parser.error('Require exact head, positive IDs and an output below the private acceptance cache')
+    if not args.execute:
+        print(json.dumps({'status': 'NOT_RUN', 'head': args.head, 'pr': args.pr,
+                          'output': str(output), 'mode': 'one observation, GET only'}))
+        return
+    output.mkdir(parents=True, exist_ok=True)
+    target = output / 'target.json'
+    binding = {'head': args.head, 'pr': args.pr, 'repository': REPO, 'workflow': WORKFLOW}
+    if target.exists():
+        if json.loads(target.read_text()) != binding:
+            parser.error('Existing output directory belongs to another exact target')
+    else:
+        write_json(target, binding)
+    stamp = output / 'last-start.json'
+    if stamp.exists() and time.time() - json.loads(stamp.read_text())['epoch'] < 60:
+        parser.error('Wait at least 60 seconds between observation starts; no automatic sleep or retry')
+    stamp.write_text(json.dumps({'epoch': time.time(), 'at': now()}) + '\n')
+    observation = output / dt.datetime.now(dt.timezone.utc).strftime('observation-%Y%m%dT%H%M%S.%fZ')
+    observation.mkdir()
+    script = pathlib.Path(__file__).read_bytes()
+    write_json(observation / 'collector-binding.json', {'collector_sha256': digest(script)['sha256'], 'target': binding, 'started_at': now()})
+    try:
+        summary = observe(args, observation)
+        print(json.dumps({key: summary[key] for key in ('head', 'pr', 'job_conclusions', 'jobs_in_progress_or_queued', 'two_runs_terminal', 'all_twelve_logs_downloaded', 'errors')}))
+        print(str(observation / 'observation.json'))
+    except Exception as exc:
+        write_json(observation / 'observation-failure.json', {'error_type': type(exc).__name__, 'at': now(), 'target': binding})
+        raise SystemExit(f'Observation incomplete: {type(exc).__name__}; private receipts preserved') from None
+
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,108 @@
+...............F....                                                     [100%]
+=================================== FAILURES ===================================
+_ test_cancel_during_actual_http_stops_once_and_preserves_real_dispatch_facts __
+
+tutor = (<services.api.app.infrastructure.database.Database object at 0x74f1d04e9c70>, SessionIdentity(id='session_tutor_fixtu...efs=[], selection=None, attempt_id=None), binding=TutorContextBinding(practice=None, assessment=None), title='原创测试对话'))
+tmp_path = PosixPath('[LOCAL_HOME]/.cache/lw-tutor/pytest-of-lkx/pytest-7/test_cancel_during_actual_http0')
+
+    def test_cancel_during_actual_http_stops_once_and_preserves_real_dispatch_facts(tutor, tmp_path):
+        import asyncio
+        from tests.provider_protocol_fixture import local_provider
+        async def run():
+            async with local_provider(hold=True) as server:
+                worker, consents, dispatch = configured(tutor, tmp_path, server.base_url)
+                _, _, original, _, grant = await asyncio.to_thread(approved, tutor, worker, consents)
+                database, identity, service, _ = tutor
+                running = asyncio.create_task(asyncio.to_thread(worker.run_once))
+                try:
+                    await asyncio.wait_for(server.request_seen.wait(), 5)
+                    current = service.read(identity, original.run.id)
+                    with database.transaction(immediate=False) as connection:
+                        before = TutorRepository(connection, identity.workspace_id).source_state(original.run.id)
+                    control = service.cancel(identity, original.run.id,
+                        TutorRunCancel(expected_revision=current.job_revision), 'cancel-actual-http')
+                    assert control.status == 'running' and control.cancel_requested
+                    with database.transaction(immediate=False) as connection:
+                        after = TutorRepository(connection, identity.workspace_id).source_state(original.run.id)
+                        assert after.lease_owner == before.lease_owner and after.lease_until == before.lease_until
+                    assert await asyncio.wait_for(running, 5)
+                finally:
+                    server.release.set()
+                    if not running.done():
+                        await asyncio.wait_for(running, 5)
+                current = service.read(identity, original.run.id)
+                assert current.run.status == 'cancelled'
+                assert current.result.provider.provider_outcome == 'unknown'
+                assert current.run.answer_markdown == ''
+                assert [event.type for event in service.events(identity, original.run.id, 0)].count('cancelled') == 1
+                with database.transaction(immediate=False) as connection:
+                    checked = dispatch.read_result(connection, identity, original.run.id, grant.id)
+                    assert checked.receipt.id == current.result.provider.receipt_id
+                    assert checked.receipt.terminal.error_code == 'PROVIDER_CANCELLED'
+                assert not await asyncio.to_thread(worker.run_once)
+                assert len(server.requests) == 1
+>       asyncio.run(run())
+
+tests/integration/test_tutor_runs.py:365: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    async def run():
+        async with local_provider(hold=True) as server:
+            worker, consents, dispatch = configured(tutor, tmp_path, server.base_url)
+            _, _, original, _, grant = await asyncio.to_thread(approved, tutor, worker, consents)
+            database, identity, service, _ = tutor
+            running = asyncio.create_task(asyncio.to_thread(worker.run_once))
+            try:
+                await asyncio.wait_for(server.request_seen.wait(), 5)
+                current = service.read(identity, original.run.id)
+                with database.transaction(immediate=False) as connection:
+                    before = TutorRepository(connection, identity.workspace_id).source_state(original.run.id)
+                control = service.cancel(identity, original.run.id,
+                    TutorRunCancel(expected_revision=current.job_revision), 'cancel-actual-http')
+                assert control.status == 'running' and control.cancel_requested
+                with database.transaction(immediate=False) as connection:
+                    after = TutorRepository(connection, identity.workspace_id).source_state(original.run.id)
+                    assert after.lease_owner == before.lease_owner and after.lease_until == before.lease_until
+                assert await asyncio.wait_for(running, 5)
+            finally:
+                server.release.set()
+                if not running.done():
+                    await asyncio.wait_for(running, 5)
+            current = service.read(identity, original.run.id)
+            assert current.run.status == 'cancelled'
+            assert current.result.provider.provider_outcome == 'unknown'
+            assert current.run.answer_markdown == ''
+            assert [event.type for event in service.events(identity, original.run.id, 0)].count('cancelled') == 1
+            with database.transaction(immediate=False) as connection:
+                checked = dispatch.read_result(connection, identity, original.run.id, grant.id)
+                assert checked.receipt.id == current.result.provider.receipt_id
+>               assert checked.receipt.terminal.error_code == 'PROVIDER_CANCELLED'
+E               AssertionError: assert 'OUTBOUND_SOURCE_UNAVAILABLE' == 'PROVIDER_CANCELLED'
+E                 
+E                 - PROVIDER_CANCELLED
+E                 + OUTBOUND_SOURCE_UNAVAILABLE
+
+tests/integration/test_tutor_runs.py:362: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  [LOCAL_HOME]/.cache/learning-workbench-acceptance/m53-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  [LOCAL_HOME]/.cache/learning-workbench-acceptance/m53-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_tutor_runs.py::test_cancel_during_actual_http_stops_once_and_preserves_real_dispatch_facts
+1 failed, 19 passed, 2 warnings in 8.99s

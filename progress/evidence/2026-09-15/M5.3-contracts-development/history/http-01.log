@@ -1,0 +1,196 @@
+..FFFF                                                                   [100%]
+=================================== FAILURES ===================================
+_ test_real_test_policy_precedes_bad_cursors_but_safe_control_survives[independent] _
+
+http_tutor = (<services.api.app.infrastructure.database.Database object at 0x7d06f0574470>, SessionIdentity(id='session_04d26ff4f7e...in': 'http://127.0.0.1:8765', 'X-CSRF-Token': '<SYNTHETIC_TEST_AUTH_REDACTED>'}, ...)
+mode = 'independent'
+
+    @pytest.mark.parametrize('mode', ['independent', 'open_book'])
+    def test_real_test_policy_precedes_bad_cursors_but_safe_control_survives(http_tutor, mode):
+        database, identity, _, _, client, headers, block, _ = http_tutor
+        _, thread, _, ack = start(http_tutor)
+        cancel(http_tutor, ack)
+>       fixture = assessment_fixture('tutor_policy_' + mode)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_tutor_http.py:138: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/assessment_fixtures.py:27: in assessment_fixture
+    original = practice_fixture(prefix, profile=profile, revision=revision)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+prefix = 'tutor_policy_independent', profile = 'author', revision = 1
+
+    def practice_fixture(prefix: str = 'practice', *, profile: Literal['learner', 'author'] = 'author', revision: int = 1) -> PracticeFixture:
+        if not prefix.isascii() or not prefix.isalpha() or revision not in {1, 2}:
+>           raise ValueError('Use an ASCII alphabetic prefix and revision 1 or 2')
+E           ValueError: Use an ASCII alphabetic prefix and revision 1 or 2
+
+tests/practice_fixtures.py:34: ValueError
+_ test_real_test_policy_precedes_bad_cursors_but_safe_control_survives[open_book] _
+
+http_tutor = (<services.api.app.infrastructure.database.Database object at 0x7d06f1a782f0>, SessionIdentity(id='session_b5cadadb529...in': 'http://127.0.0.1:8765', 'X-CSRF-Token': '<SYNTHETIC_TEST_AUTH_REDACTED>'}, ...)
+mode = 'open_book'
+
+    @pytest.mark.parametrize('mode', ['independent', 'open_book'])
+    def test_real_test_policy_precedes_bad_cursors_but_safe_control_survives(http_tutor, mode):
+        database, identity, _, _, client, headers, block, _ = http_tutor
+        _, thread, _, ack = start(http_tutor)
+        cancel(http_tutor, ack)
+>       fixture = assessment_fixture('tutor_policy_' + mode)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_tutor_http.py:138: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/assessment_fixtures.py:27: in assessment_fixture
+    original = practice_fixture(prefix, profile=profile, revision=revision)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+prefix = 'tutor_policy_open_book', profile = 'author', revision = 1
+
+    def practice_fixture(prefix: str = 'practice', *, profile: Literal['learner', 'author'] = 'author', revision: int = 1) -> PracticeFixture:
+        if not prefix.isascii() or not prefix.isalpha() or revision not in {1, 2}:
+>           raise ValueError('Use an ASCII alphabetic prefix and revision 1 or 2')
+E           ValueError: Use an ASCII alphabetic prefix and revision 1 or 2
+
+tests/practice_fixtures.py:34: ValueError
+_ test_actual_session_change_between_deliveries_stops_observer_without_new_event[logout] _
+
+http_tutor = (<services.api.app.infrastructure.database.Database object at 0x7d06ebeb2930>, SessionIdentity(id='session_eb669ad3ade...in': 'http://127.0.0.1:8765', 'X-CSRF-Token': '<SYNTHETIC_TEST_AUTH_REDACTED>'}, ...)
+change = 'logout'
+
+    @pytest.mark.parametrize('change', ['logout', 'role'])
+    def test_actual_session_change_between_deliveries_stops_observer_without_new_event(http_tutor, change):
+        database, identity, token, app, _, _, _, _ = http_tutor
+        _, _, _, ack = start(http_tutor)
+        cancel(http_tutor, ack)
+        id = ack['run']['id']
+        endpoint = next(context.original_route.endpoint for context in iter_route_contexts(app.routes)
+                        if isinstance(context.original_route, APIRoute)
+                        and context.path == '/api/v1/runs/{id}/events')
+    
+        async def observe():
+            request = Request({'type': 'http', 'method': 'GET', 'path': '/api/v1/runs/' + id + '/events',
+                               'app': app, 'query_string': b'', 'headers': [(b'cookie', (COOKIE_NAME + '=' + token).encode())]})
+            request.state.identity = identity
+            response = await endpoint(id, request)
+            iterator = response.body_iterator
+            first = await anext(iterator)
+            assert b'event: queued' in first
+            sessions = SessionService(database)
+            if change == 'logout':
+                sessions.logout(identity)
+            else:
+                sessions.switch_role(identity, RoleRequest(role='author'), 'role')
+            before = all_rows(database)
+            with pytest.raises(StopAsyncIteration):
+                await anext(iterator)
+            assert all_rows(database) == before
+>       asyncio.run(observe())
+
+tests/integration/test_tutor_http.py:184: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/integration/test_tutor_http.py:173: in observe
+    first = await anext(iterator)
+            ^^^^^^^^^^^^^^^^^^^^^
+services/api/app/interfaces/tutor_http.py:196: in observe
+    while not await request.is_disconnected():
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/requests.py:335: in is_disconnected
+    message = await self._receive()
+              ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    async def empty_receive() -> NoReturn:
+>       raise RuntimeError("Receive channel has not been made available")
+E       RuntimeError: Receive channel has not been made available
+
+.venv/lib/python3.12/site-packages/starlette/requests.py:207: RuntimeError
+_ test_actual_session_change_between_deliveries_stops_observer_without_new_event[role] _
+
+http_tutor = (<services.api.app.infrastructure.database.Database object at 0x7d06f053d340>, SessionIdentity(id='session_67706b390e4...in': 'http://127.0.0.1:8765', 'X-CSRF-Token': '<SYNTHETIC_TEST_AUTH_REDACTED>'}, ...)
+change = 'role'
+
+    @pytest.mark.parametrize('change', ['logout', 'role'])
+    def test_actual_session_change_between_deliveries_stops_observer_without_new_event(http_tutor, change):
+        database, identity, token, app, _, _, _, _ = http_tutor
+        _, _, _, ack = start(http_tutor)
+        cancel(http_tutor, ack)
+        id = ack['run']['id']
+        endpoint = next(context.original_route.endpoint for context in iter_route_contexts(app.routes)
+                        if isinstance(context.original_route, APIRoute)
+                        and context.path == '/api/v1/runs/{id}/events')
+    
+        async def observe():
+            request = Request({'type': 'http', 'method': 'GET', 'path': '/api/v1/runs/' + id + '/events',
+                               'app': app, 'query_string': b'', 'headers': [(b'cookie', (COOKIE_NAME + '=' + token).encode())]})
+            request.state.identity = identity
+            response = await endpoint(id, request)
+            iterator = response.body_iterator
+            first = await anext(iterator)
+            assert b'event: queued' in first
+            sessions = SessionService(database)
+            if change == 'logout':
+                sessions.logout(identity)
+            else:
+                sessions.switch_role(identity, RoleRequest(role='author'), 'role')
+            before = all_rows(database)
+            with pytest.raises(StopAsyncIteration):
+                await anext(iterator)
+            assert all_rows(database) == before
+>       asyncio.run(observe())
+
+tests/integration/test_tutor_http.py:184: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/integration/test_tutor_http.py:173: in observe
+    first = await anext(iterator)
+            ^^^^^^^^^^^^^^^^^^^^^
+services/api/app/interfaces/tutor_http.py:196: in observe
+    while not await request.is_disconnected():
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/starlette/requests.py:335: in is_disconnected
+    message = await self._receive()
+              ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    async def empty_receive() -> NoReturn:
+>       raise RuntimeError("Receive channel has not been made available")
+E       RuntimeError: Receive channel has not been made available
+
+.venv/lib/python3.12/site-packages/starlette/requests.py:207: RuntimeError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <WORKTREE>/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <WORKTREE>/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_tutor_http.py::test_real_test_policy_precedes_bad_cursors_but_safe_control_survives[independent]
+FAILED tests/integration/test_tutor_http.py::test_real_test_policy_precedes_bad_cursors_but_safe_control_survives[open_book]
+FAILED tests/integration/test_tutor_http.py::test_actual_session_change_between_deliveries_stops_observer_without_new_event[logout]
+FAILED tests/integration/test_tutor_http.py::test_actual_session_change_between_deliveries_stops_observer_without_new_event[role]
+4 failed, 2 passed, 2 warnings in 2.19s

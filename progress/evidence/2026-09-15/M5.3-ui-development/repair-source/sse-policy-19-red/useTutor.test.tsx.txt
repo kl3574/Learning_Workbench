@@ -1,0 +1,146 @@
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { IDBFactory } from 'fake-indexeddb'
+import type { TutorMessagePage, TutorRunView } from '../../../../../packages/contracts/generated/api-types'
+import { DraftStore } from '../../workbench/DraftStore'
+import { useTutor } from './useTutor'
+import type { TutorPort } from './tutorClient'
+import { tutorBinding, tutorRun, tutorScope, tutorThread } from './tutorFixtures'
+import { makeTutorCommand } from './tutorCommands'
+const access = vi.hoisted(() => ({ generation: 0, listeners: new Set<() => void>() }))
+vi.mock('../../api/client', async importOriginal => ({ ...await importOriginal<typeof import('../../api/client')>(), getSessionGeneration: () => access.generation, subscribeSessionAccess: (listener: () => void) => { access.listeners.add(listener); return () => { access.listeners.delete(listener) } } }))
+import { ApiError } from '../../api/client'
+import { TutorStreamHTTPError } from '../../../../../packages/contracts/generated/tutor-sse'
+const location = { context: tutorScope }
+const bound = { scope: tutorScope, binding: tutorBinding }
+const messagePage = (): TutorMessagePage => ({ thread: tutorThread(), items: [], next_cursor: null })
+const emptyEvents = async function* () { /* Actual EOF, never a fabricated terminal. */ }
+function setup() {
+  const disk = new DraftStore({ name: crypto.randomUUID(), factory: new IDBFactory() })
+  const port: TutorPort = { threads: vi.fn().mockResolvedValue({ items: [tutorThread()], next_cursor: null }), create: vi.fn().mockResolvedValue(tutorThread()), messages: vi.fn().mockImplementation(async () => messagePage()), start: vi.fn().mockResolvedValue(tutorRun()), read: vi.fn().mockResolvedValue(tutorRun()), cancel: vi.fn().mockResolvedValue({ id: tutorRun().run.id, status: 'cancelled', job_revision: 2, cancel_requested: true }), events: vi.fn(emptyEvents) }
+  const bind = vi.fn().mockResolvedValue(bound)
+  const view = renderHook(({ workspace, paused, context }) => useTutor(workspace, context, paused, port, bind, disk), { initialProps: { workspace: 'workspace_tutor_test', paused: false, context: location } })
+  return { disk, port, bind, view }
+}
+async function prepared(data: ReturnType<typeof setup>) {
+  await waitFor(() => expect(data.view.result.current.bound).not.toBeNull())
+  await waitFor(() => expect(data.view.result.current.ready).toBe(true))
+  await act(async () => data.view.result.current.select(tutorThread()))
+}
+beforeEach(() => { access.generation = 0 })
+afterEach(() => { cleanup(); access.listeners.clear() })
+describe('real command journal with controlled Tutor service boundaries', () => {
+  it('replays a lost creation ACK with the original key/body, then reads current instead of showing ACK status', async () => {
+    const data = setup(); await prepared(data)
+    vi.mocked(data.port.start).mockRejectedValueOnce(new Error('Synthetic ACK delivery interrupted')).mockResolvedValueOnce(tutorRun())
+    const ended = tutorRun(); ended.run.status = 'cancelled'; ended.run.last_seq = 2; ended.job_revision = 3
+    vi.mocked(data.port.read).mockResolvedValue(ended)
+    await act(async () => data.view.result.current.start('原问题，不替换为后来的草稿', 'derive'))
+    await waitFor(() => expect(data.view.result.current.commands.some(value => value.kind === 'run')).toBe(true))
+    const original = data.view.result.current.commands.find(value => value.kind === 'run')!
+    expect(original.ack).toBeNull(); expect(original.rejection).toBeNull()
+    const before = (await data.disk.load('workspace_tutor_test'))[original.command_id]
+    expect(before.text).toContain('原问题')
+    await act(async () => data.view.result.current.execute(original))
+    expect(vi.mocked(data.port.start).mock.calls[0]).toEqual(vi.mocked(data.port.start).mock.calls[1])
+    expect(data.view.result.current.run?.run.status).toBe('cancelled')
+    expect(data.port.read).toHaveBeenCalledWith(ended.run.id)
+    expect(data.port.events).not.toHaveBeenCalled()
+  })
+  it('does not invent a selected thread and restores a real run from server message IDs without POST', async () => {
+    const data = setup()
+    const page = messagePage(); page.thread = tutorThread(2); page.items = [{ id: 'message_unit', seq: 1, run_id: tutorRun().run.id, role: 'user', channel: null, status: 'stored', content_markdown: '真实恢复问题', context_snapshot_id: null, citations: [], created_at: '2026-09-15T00:00:00Z' }]
+    vi.mocked(data.port.messages).mockResolvedValue(page)
+    await waitFor(() => expect(data.view.result.current.threads).toHaveLength(1))
+    expect(data.view.result.current.thread).toBeNull()
+    await act(async () => data.view.result.current.select(tutorThread()))
+    expect(data.view.result.current.messages[0].content_markdown).toBe('真实恢复问题')
+    expect(data.port.read).toHaveBeenCalledWith(tutorRun().run.id)
+    expect(data.port.start).not.toHaveBeenCalled(); expect(data.port.create).not.toHaveBeenCalled()
+  })
+  it('keeps partial whitespace output on EOF and resumes only after explicit snapshot GET', async () => {
+    const data = setup(); await prepared(data)
+    const after = tutorRun(); after.run.last_seq = 2; after.run.answer_markdown = ' \n部分原文'
+    vi.mocked(data.port.events).mockImplementationOnce(async function* () { yield { run_id: after.run.id, seq: 2, occurred_at: '2026-09-15T00:00:00Z', type: 'answer_delta', text: ' \n部分原文' } })
+    await act(async () => data.view.result.current.start('合成问题', 'explain'))
+    await waitFor(() => expect(data.view.result.current.streamState).toContain('状态未知'))
+    expect(data.view.result.current.run?.run.answer_markdown).toBe(' \n部分原文')
+    expect(data.view.result.current.run?.run.status).toBe('queued')
+    vi.mocked(data.port.read).mockResolvedValue(after)
+    await act(async () => data.view.result.current.refreshRun())
+    expect(data.port.start).toHaveBeenCalledTimes(1)
+    expect(data.port.read).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(data.port.events).mock.calls[1][1]).toBe(2)
+  })
+  it('discards a pending run response on workspace or policy invalidation and does not subscribe it', async () => {
+    const data = setup(); await prepared(data)
+    let resolve!: (value: TutorRunView) => void
+    vi.mocked(data.port.read).mockImplementation(() => new Promise(done => { resolve = done }))
+    let starting!: Promise<void>
+    act(() => { starting = data.view.result.current.start('不得串入另一工作区', 'hint') })
+    await waitFor(() => expect(data.port.read).toHaveBeenCalled())
+    data.view.rerender({ workspace: 'workspace_other', paused: true, context: location })
+    const old = tutorRun(); old.run.answer_markdown = '旧工作区原文'
+    await act(async () => { resolve(old); await starting })
+    expect(data.view.result.current.run).toBeNull(); expect(data.view.result.current.messages).toEqual([])
+    expect(data.port.events).not.toHaveBeenCalled()
+  })
+  it('keeps cancellation available under paused academic access and reads no run body', async () => {
+    const data = setup(); await prepared(data)
+    data.view.rerender({ workspace: 'workspace_tutor_test', paused: true, context: location })
+    await waitFor(() => expect(data.view.result.current.ready).toBe(true))
+    const command = makeTutorCommand('workspace_tutor_test', 'control-only', { kind: 'cancel', run_id: tutorRun().run.id, body: { expected_revision: 1 } })
+    await act(async () => data.view.result.current.execute(command))
+    expect(data.port.cancel).toHaveBeenCalledWith(command.kind === 'cancel' ? command.run_id : '', { expected_revision: 1 }, command.command_id)
+    expect(data.port.read).not.toHaveBeenCalled(); expect(data.port.start).not.toHaveBeenCalled()
+    expect(data.view.result.current.commands.find(value => value.command_id === command.command_id)?.ack).not.toBeNull()
+  })
+  it('rejects late response after session generation changes even before the next effect', async () => {
+    const data = setup(); await prepared(data)
+    let resolve!: (value: TutorRunView) => void
+    vi.mocked(data.port.read).mockImplementation(() => new Promise(done => { resolve = done }))
+    let starting!: Promise<void>
+    act(() => { starting = data.view.result.current.start('原会话问题', 'explain') })
+    await waitFor(() => expect(data.port.read).toHaveBeenCalled())
+    await act(async () => { access.generation++; access.listeners.forEach(listener => listener()); resolve(tutorRun()); await starting })
+    expect(data.view.result.current.run).toBeNull(); expect(data.port.events).not.toHaveBeenCalled()
+  })
+  it('keeps a definite CAS rejection and allows only an explicit new command with refreshed binding', async () => {
+    const data = setup(); await prepared(data)
+    vi.mocked(data.port.start).mockRejectedValueOnce(new ApiError(412, 'Synthetic revision rejection', 'REVISION_MISMATCH'))
+    await act(async () => data.view.result.current.start('第一候选', 'explain'))
+    await waitFor(() => expect(data.view.result.current.commands.find(value => value.kind === 'run')?.rejection?.status).toBe(412))
+    const secondPage = messagePage(); secondPage.thread = tutorThread(3)
+    vi.mocked(data.port.messages).mockResolvedValue(secondPage)
+    const ack = tutorRun(); ack.thread_revision = 4
+    vi.mocked(data.port.start).mockResolvedValue(ack); vi.mocked(data.port.read).mockResolvedValue(ack)
+    await act(async () => data.view.result.current.start('明确更正后的新问题', 'research'))
+    expect(data.port.start).toHaveBeenCalledTimes(2)
+    const [first, second] = vi.mocked(data.port.start).mock.calls
+    expect(first[1]).not.toBe(second[1]); expect(second[0].expected_thread_revision).toBe(3)
+    expect(second[0].request.consent_id).toBeNull(); expect(second[0].request.web_search).toBe(false)
+    expect(data.view.result.current.commands.filter(value => value.kind === 'run')).toHaveLength(2)
+  })
+  it.each(['ASSESSMENT_ACTIVE', 'POLICY_DENIED', 'ASSESSMENT_ANSWER_PROTECTED'])('clears already displayed academic state immediately on actual 409 %s without waiting for a session poll', async code => {
+    const data = setup(); await prepared(data)
+    const snapshot = tutorRun(); snapshot.run.answer_markdown = '已显示且即将受限的模型原文'
+    vi.mocked(data.port.read).mockResolvedValueOnce(snapshot)
+    await act(async () => data.view.result.current.start('原问题正文', 'explain'))
+    expect(data.view.result.current.run?.run.answer_markdown).toBe(snapshot.run.answer_markdown)
+    vi.mocked(data.port.read).mockRejectedValueOnce(new ApiError(409, '当前策略禁止学科读取', code))
+    await act(async () => data.view.result.current.refreshRun())
+    expect(data.view.result.current.denied).toBe(true)
+    expect(data.view.result.current.run).toBeNull(); expect(data.view.result.current.bound).toBeNull()
+    expect(data.view.result.current.messages).toEqual([]); expect(data.view.result.current.threads).toEqual([])
+    expect(data.view.result.current.knownRunIds).toContain(snapshot.run.id)
+    expect(access.generation).toBe(0) // No parent Policy polling or session change was needed.
+  })
+  it('clears academic content on a status-only SSE 409, without inventing a failed Run or losing safe IDs', async () => {
+    const data = setup(); await prepared(data)
+    vi.mocked(data.port.events).mockImplementation(async function* () { throw new TutorStreamHTTPError(409) })
+    await act(async () => data.view.result.current.start('原问题', 'explain'))
+    await waitFor(() => expect(data.view.result.current.denied).toBe(true))
+    expect(data.view.result.current.run).toBeNull(); expect(data.view.result.current.knownRunIds).toEqual([tutorRun().run.id])
+    expect(data.port.cancel).not.toHaveBeenCalled()
+  })
+})

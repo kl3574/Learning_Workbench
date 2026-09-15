@@ -13,7 +13,7 @@ from packages.contracts.canonical import canonical_bytes, metadata_sha256, sha25
 from ..application.errors import ApiError
 from ..application.learning import validate_practice_event
 from ..application.practice_content import FrozenSolution
-from ..practice_dto import PracticeAssistance
+from ..practice_dto import PracticeAssistance, PracticeAssistanceView
 from .database import utc_now
 
 
@@ -150,7 +150,18 @@ class PracticeRepository:
                 events.append(row["event_id"])
             except (ValueError, TypeError, KeyError):
                 raise invalid_snapshot() from None
+        from .practice_model_help_repository import PracticeModelHelpRepository
+        events.extend(item.event_id for item in PracticeModelHelpRepository(self.connection, self.workspace_id).facts(record, questions))
         return events, [assistance[ref.id] for ref in record.question_refs]
+
+    def assistance_view(self, record: PracticeRecord, questions: list[dm.QuestionPublic],
+                        assistance: list[PracticeAssistance], event_ids: list[str]) -> list[PracticeAssistanceView]:
+        from .practice_model_help_repository import PracticeModelHelpRepository
+        model_questions = {item.answer.practice.question_ref.id
+            for item in PracticeModelHelpRepository(self.connection, self.workspace_id).facts(record, questions)
+            if item.event_id in event_ids}
+        return [PracticeAssistanceView(**item.model_dump(), model_help_received=item.question_id in model_questions)
+                for item in assistance]
 
     def help(self, record: PracticeRecord, question_id: str, kind: Literal["hint", "solution"], level: int) -> tuple[str, StoredHelp] | None:
         row = self.connection.execute(

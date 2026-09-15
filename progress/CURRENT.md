@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-15T13:42:54Z；规范 SHA-256：`a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8`
+更新：2026-09-15T15:50:07Z；规范 SHA-256：`9cc5adbe72edfc993b5d5e99dcb3f9436e475ab2be4dd58e83f72e3104353b9c`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED
 实施：IN_PROGRESS；当前任务：M5.3；下一任务：M5.3
 
-继续M5.3：在已有feat/M5.3-tutor-runs隔离分支落实唯一规范3.0.4的真实Thread/Run/Context/Provider source/SSE/取消和前端恢复；分别验收，不把直连DeepSeek成功当平台Agent完成。M5.2修复新提交本地已验收，推送后按实际head读取CI；PR50仍需审查、不得自动合并。
+发布e30c519诊断及本轮原失败证据，采集新CI实际时序；保持原5s断言与原业务验收，不据本地PASS宣称修复。 M5.4在独立分支按3.0.5继续本地proof与离线计数，生产模型仍NOT_RUN。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -29,7 +29,7 @@
 | M4.2 先修/补弱/复习/下一步推荐，接受/拒绝 | review | [#25](https://github.com/kl3574/Learning_Workbench/issues/25) | 8d4b36f57b3ace950f9d3f0e750c4810fce9b0ec |
 | M5.1 ProviderPort/能力协商/服务端冻结授权/受控预算/秘密与脱敏 | review | [#26](https://github.com/kl3574/Learning_Workbench/issues/26) | 254a4ffe70dcab9db56663cc37245a33ae1495a5 |
 | M5.2 检索权限、中文 FTS、来源和修订哈希 | review | [#27](https://github.com/kl3574/Learning_Workbench/issues/27) | 69e54478ae3c3604a925f2cdb905ce03ddda2b8b |
-| M5.3 Tutor 状态机、SSE/取消/重连/异步上下文 | in_progress | [#28](https://github.com/kl3574/Learning_Workbench/issues/28) | 未验证提交 |
+| M5.3 Tutor 状态机、SSE/取消/重连/异步上下文 | review | [#28](https://github.com/kl3574/Learning_Workbench/issues/28) | 919a00532b499cff604ef2be4e90c88cc6378490 |
 | M5.4 真实模型与搜索评测 | todo | [#29](https://github.com/kl3574/Learning_Workbench/issues/29) | 未验证提交 |
 | M6.1 教材/例题/题目生成 schema + 数值验证 | todo | [#30](https://github.com/kl3574/Learning_Workbench/issues/30) | 未验证提交 |
 | M6.2 审校/发布/版本对比/影响分析/恢复旧内容 | todo | [#31](https://github.com/kl3574/Learning_Workbench/issues/31) | 未验证提交 |
@@ -41,12 +41,12 @@
 
 ## 验证边界
 
-- spec_checks: PASS_d65e08e_54CORE_70GENERATED_106DECLARED；结构和派生一致性，不冒充106真实HTTP实现。
-- unit: 1673_FULL_PYTHON_PASS_d65e08e；355_WEB_PASS_c83b1d0_CARRIED_BY_IDENTICAL_INPUTS；测试组不混加。
-- contract: PASS_1DB509F_243_CI_PER_WORKFLOW
-- integration: PASS_1DB509F_527_CI_PER_WORKFLOW
-- browser_native: 88_PASS_d65e08e_7.4m；真实浏览器本地验收，不代表远端CI或平台Agent。
-- real_provider: DIRECT_VENDOR_SMOKE_PASS：2026-09-15 用户明确授权的独立 DeepSeek 最小测试，GET /models 200、单次 POST /chat/completions 200，deepseek-flash 回答合成算术题正确，实际 usage 14 input / 1 output / 15 total；无重试、无资料外发，凭据只在进程内存。PLATFORM_AGENT_NOT_RUN：生产 source/proof 未注册、Tutor/Run 未实现；不等于 M5.3/M5.4 验收。无秘密本地原回执留在仓库外，不提交。
+- spec_checks: 919a005：6嵌入/54 core/72生成/38需求/33场景/27任务/107声明路由；结构PASS不等于107条已实现。
+- unit: 919a005固定Python全量1807PASS（含单元/契约/集成/安全），三个类别共享此总数，不重复累计；详见M5.3-final-python-01。
+- contract: 919a005固定Python全量1807PASS（含单元/契约/集成/安全），三个类别共享此总数，不重复累计；详见M5.3-final-python-01。
+- integration: 919a005固定Python全量1807PASS（含单元/契约/集成/安全），三个类别共享此总数，不重复累计；详见M5.3-final-python-01。
+- browser_native: 919a005全量93PASS8.2m，包括3新增Tutor真实持久化/控制/受控Provider浏览器用例；不含生产模型验收。
+- real_provider: DIRECT_VENDOR_SMOKE_PASS：2026-09-15 用户明确授权的独立 DeepSeek 最小测试，GET /models 200、单次 POST /chat/completions 200，deepseek-flash 回答合成算术题正确，实际 usage 14 input / 1 output / 15 total；无重试、无资料外发，凭据只在进程内存。PLATFORM_AGENT_NOT_RUN：真实Tutor/source现已实现并有受控链定向证据；production InputProof为空，平台实际DeepSeek/模型质量仍未验收。
 - real_codex: NOT_RUN
 - learning_effectiveness: NOT_RUN
 - ci: 8d4b36f精确源码12/12success；PR实际checkout0c350b3与head的GitHub tree相同。两browser分别82PASS12.0m/12.1m。后续纯证据提交CI独立记录。
@@ -61,7 +61,7 @@
 - m5_1_native_repair: PASS at254a4ff：新命令及明确更正采用同owner/provider较高真实readback，ACK不伪造current；unknown原命令不变。真实受控parent-delay DELETE由r1If-Match/412变r2If-Match/200，peer抢先r3仍412再explicit新key成功；原CI只确知r3ACK等待失败，不追认唯一因果。14secret/35Provider定向unit及5native通过；同source新323web/87fullnative通过。
 - m5_1_254a4ff_local: 六项实际命令PASS：lint、types(mypy125+web)、spec(54core/6embedded/106routes结构检查)、build(709modules,chunk警告保留)、323web/52files3.37s、87native6.9m。600source aggregate b00ae17d2d6e87e01aee18c0082ff1eee32c4be891d343fe4bd1b8df48417452；83完整native产物私有留存，当前阶段尚待新发布head CI。
 - m5_1_ci_current: PASS：发布f0b4ce2精确双workflow12/12success；每组323web/52files、87native（12.0m/11.9m）。6push checkout f0b4ce2、6PR checkout95ff622，全部Git tree c8d7d132相同；600source与254a4ff等同。85payload原件/公开件SHA、size、全部转换与聚合root逐项核验；此CI基于规范3.0.2，不涵盖当前M5.2工作树。
-- m5_2: LOCAL_VERIFIED_REVIEW_PENDING：69e5447导入入口与原Policy guard一致，原实现场景1RED→同测试1GREEN，独立Policy/保留选择及原Reader共3PASS；最终355web/58files、lint/types/build、90native7.5m通过。788非progress源逐项同Git，native仅已知PNG直接输出，82原件预存/after归档/精确恢复，原unchanged=false保留。后端代码/测试/配置相对d65未改，沿用原1673Python而非重跑。0484双CI12success（各88browser）另列；新修复head远端CI待实际读取，不抹旧ab6失败。
+- m5_2: LOCAL_VERIFIED_REVIEW_PENDING：69e5447导入入口与原Policy guard一致，原实现场景1RED→同测试1GREEN，独立Policy/保留选择及原Reader共3PASS；最终355web/58files、lint/types/build、90native7.5m通过。788非progress源逐项同Git，native仅已知PNG直接输出，82原件预存/after归档/精确恢复，原unchanged=false保留。后端代码/测试/配置相对d65未改，沿用原1673Python而非重跑。0484双CI12success（各88browser）另列；新修复head CI实际结果如下；旧ab6失败保留。 b895实际attempt1双CI12/12success，两个browser各90PASS11.0m/10.8m；push b895、PR merge f8c699e 同tree dff2a3f6但不同commit；12原日志及零artifact已回读。不改旧ab6失败。
 - m5_1_358bf5d_historical: LOCAL_FIXED_SOURCE_PASS：769原本地1494Python/314web/85native保留；6c首次CI10success2frontend FAIL，0c修refresh测试并五门禁PASS。e480新CI的PRfrontend314PASS，push不同revoke准备测试313PASS1FAIL，原件保留。358bf5d仅加7行等待journal/ACK后完整回读，600输入before/after/Git相同，lint/types/spec/build与314web/52files新PASS；原RED/观测/两次guard mutation反例保留，production原字节恢复。358本地未重跑backend/native（输入未变），新提交未推送、远端CI NOT_RUN；真实Provider/Codex/学习效果未验。
 - m5_2_input_coverage: 补证PASS：同f9新Python02实际1663PASS/2依赖弃用警告/273.45s，427声明输入与Git及before/after一致，含6个顶层helper；新spec03对430输入实测PASS，另含3个派生docs。Python02不追认这3个docs运行前快照，其内容由套件generate(check=True)及独立spec03核验。原01的1663PASS/421绑定和两条遗漏审查原件保留。
 - m5_2_ui_review: 两处修复有界闭合：同一合法11case在原逻辑快照7FAIL4PASS、修后同测通过，完整检索23web/5filesPASS。相同本机命令/ACK候选可恢复，不同身份/正文/ACK冲突保持拒绝；安全读取失败禁止父链离开。B独立源码/原日志/hash回读无新增阻断，未冒称其另跑测试。默认Reader scope误用practice的独立原RED/GREEN另保留。
@@ -81,9 +81,14 @@
 - m5_3_implementation: IMPLEMENTING_NOT_ACCEPTED：已有e088分支保留history并FF69e5447；隔离工作树及外层采用唯一规范3.0.4，core54/0001/F.1不变。DTO/Provider受检输出及真实Tutor owner/UI正在实施，尚未整链验收。无生产InputProof注册，平台Agent真实模型端到端NOT_RUN。
 - m5_2_0484_ci: ACTUAL_PASS：0484 push34972052054/PR34972056900均attempt1成功，12/12success；各browser88PASS（12.5m/9.2m），12实际checkout同treef9156ba8，push0484/PR83374449不是同commit，真实artifact均0。相对ab6仅97progress路径，此PASS不算源修复。
 - m5_2_import_admission: CONTROLLED_RED_TO_GREEN_AND_FINAL_GATES_PASS：原UI saved/Policy unknown真实响应hold/release复现guard拒绝，修后disabled，无自动重放；新增真实independent start/abandon保留dialog/file/format负控。focused03测试locator错误和active污染保留，final改own RestartRuntime隔离。原Reader字节/60s不变，未认定旧CI唯一原因。
+- m5_3: IMPLEMENTING_NOT_ACCEPTED：真实Thread/Run/Jobs/Context/Provider source及7条HTTP/SSE已实现。受控loopback完整Provider链、恢复/取消及原回执校验定向通过；根12项真实Practice/assisted/复盘Context通过，旧ACK缺失消息2项RED修复后同case+相关组34PASS。浏览器本地prepare/空生产proof诊断/cancel/reload1PASS；受控模型浏览器链已到真实completed，移动布局测试修正中。Practice AI帮助事实和坏Job公平性修复仍在测试。未固定整阶段门禁/发布M5.3；平台DeepSeek E2E仍NOT_RUN。 后续真实浏览器lostACK同key回放、openbook跨页清正文已过；安全停止GET jobs实证500，正在修契约投影，第三native未通过。练习AI帮助11项和有界调度24相关项已实际通过，不能替代固定全阶段验收。
+- m5_2_b895_ci: PASS：attempt1 push34977114033/PR34977119117共12success；各90native；原12logs与实际checkout/tree均核。
+- m5_3_local: LOCAL_VERIFIED_REVIEW_PENDING：固定919a005实跑1807 Python/328.07s、383 web/64files、93 native/8.2m，ruff、mypy148源、web lint/build及规范6嵌入/54core/72生成均PASS。838非progress输入逐项与Git一致；native仅4张已有PNG直接输出改变，44个顶层UI原文件预存、after归档及精确hash恢复，原unchanged=false保留。三新增浏览器用例包含实际SQLite/HTTP/IndexedDB/Policy与test-only loopback Provider；生产ProofRegistry仍空，真实DeepSeek平台E2E、外部搜索、Codex与教学效果NOT_RUN。原失败和修复回执完整保留；M5.3远端CI尚未运行，不关闭Issue。
+- m5_3_ci: FAIL：70b0278 attempt1双CI实际11success/1failure。push34984643765 browser93PASS11.1m；PR34984703682 browser92PASS1FAIL14.8m。原Tutor批准后completed heading在5000ms内未出现，实际上下文仅证明UI queued；backend当时状态和流时序未知。12原日志、两失败附件及相同tree/不同commit核验保留。
+- m5_3_completion_diagnostics: DIAGNOSTICS_IMPLEMENTED_NOT_ROOT_CAUSE_FIXED：e30c519仅5个测试/CI诊断文件，产品/原三case业务断言/5s不变。诊断自己的部分回读丢失1RED→同test1GREEN；原第三case加被动观察1PASS10.9s，真实queued GET保留至同Runcompleted后原样交付对照1PASS11.9s；均未复现原CI。No-tests-found、ESM及adhoc类型解析前置失败保留。新诊断CI待实际发布运行。
 
 ## 阻塞与待决项
 
-- 暂无已确认阻塞。
+- M5_3_CI_TUTOR_COMPLETION_OBSERVATION_FAILED: 70b PR51原5s completed断言失败；UI queued已核，实际backend当时状态未知。补充诊断已本地验证，原CI原因未定位。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。

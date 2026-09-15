@@ -36,7 +36,7 @@ PRIVATE_FIELDS = {
     "solution_refs", "solution_refs_json", "solution_refs_private_json", "solution_revision", "solution_sha256",
     "private_json", "rubric_private", "answer_key",
 }
-CONTRACTS = [dto.PagePracticeSet, dto.PracticeSetSummary, dto.PracticeSessionCreate, dto.PracticeAssistance,
+CONTRACTS = [dto.PagePracticeSet, dto.PracticeSetSummary, dto.PracticeSessionCreate, dto.PracticeAssistanceView,
              dto.PracticeSession, dto.PracticeSessionCreated, dto.PracticeResponsesSaved, dto.PracticeSubmitRequest,
              dto.PracticeSubmitted, dto.PracticeHintRequest, dto.PracticeHint, dto.PracticeSolutionRequest, dto.PracticeSolution]
 
@@ -226,7 +226,7 @@ def test_only_explicit_reveal_releases_unreviewed_solution_and_records_assistanc
     no_private_values(restored)
     assert restored["assisted"]
     state = next(item for item in restored["assistance"] if item["question_id"] == question_id)
-    assert state == {"question_id": question_id, "highest_hint_level": 2, "solution_revealed": True}
+    assert state == {"question_id": question_id, "highest_hint_level": 2, "solution_revealed": True, "model_help_received": False}
     assert {hint.json()["exposure_event_id"], reveal.json()["exposure_event_id"]} <= set(restored["exposure_event_ids"])
     with database.connect() as connection:
         assert connection.execute("SELECT COUNT(*) FROM exposures WHERE kind IN ('hint','solution')").fetchone()[0] == 2

@@ -102,8 +102,8 @@ test('open-book and assisted freeze actual policies; explicit abandon retains sa
   await expect(page.locator('.assessment-content')).toContainText('不计为独立测试零分')
   const { attempt: assisted } = await start(page, 'nativeassessmentassist', 'assisted')
   expect(assisted.policy).toMatchObject({ mode: 'assisted', allow_materials: true, allow_web: false, tutor_scope: 'academic' })
-  await expect(page.getByText('未配置模型', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: '发送 ↑', exact: true })).toBeDisabled()
+  await expect(page.getByText('本地任务 · 明确授权', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '创建本次问答任务 ↑', exact: true })).toBeDisabled()
 })
 
 test('two profiles retain a real server CAS conflict with three-way comparison and reject forged same-identity parent', async ({ page, browser }) => {

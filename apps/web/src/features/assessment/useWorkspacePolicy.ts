@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { request, subscribeSessionAccess } from '../../api/client'
 export function useWorkspacePolicy(workspace: string | null) {
-  const [value, setValue] = useState<{ workspace: string | null; known: boolean; independentId: string | null; error: string }>({ workspace: null, known: false, independentId: null, error: '' })
+  const [value, setValue] = useState<{ workspace: string | null; known: boolean; independentId: string | null; openBookId: string | null; error: string }>({ workspace: null, known: false, independentId: null, openBookId: null, error: '' })
   const refresh = useRef<() => void>(() => {})
   useEffect(() => {
     let live = true, epoch = 0, sequence = 0, applied = 0
@@ -14,8 +14,9 @@ export function useWorkspacePolicy(workspace: string | null) {
       const current = () => live && owner === epoch && requestSequence > applied
       try {
         const session = await request('GET /api/v1/session', undefined)
+        if (!('active_open_book_attempt_id' in session)) throw new Error('服务端测试策略信息不完整，暂不提供学科内容。')
         if (session.workspace_id !== workspace) throw new Error('工作区会话已变化，请重新连接。')
-        if (current()) { applied = requestSequence; setValue({ workspace, known: true, independentId: session.active_independent_attempt_id, error: '' }) }
+        if (current()) { applied = requestSequence; setValue({ workspace, known: true, independentId: session.active_independent_attempt_id, openBookId: session.active_open_book_attempt_id, error: '' }) }
       } catch (reason) { if (current()) { applied = requestSequence; setValue(old => ({ ...old, workspace, known: false, error: reason instanceof Error ? reason.message : '尚未核验当前测试策略。' })) } }
     }
     refresh.current = () => void read(true)
@@ -28,5 +29,5 @@ export function useWorkspacePolicy(workspace: string | null) {
     return () => { live = false; ++epoch; clearInterval(timer); unsubscribe(); window.removeEventListener('focus', focus) }
   }, [workspace])
   const known = value.workspace === workspace && value.known
-  return { known, independentId: value.workspace === workspace ? value.independentId : null, error: value.error, refresh: () => refresh.current() }
+  return { known, independentId: value.workspace === workspace ? value.independentId : null, openBookId: value.workspace === workspace ? value.openBookId : null, error: value.error, refresh: () => refresh.current() }
 }

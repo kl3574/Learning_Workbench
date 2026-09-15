@@ -58,6 +58,9 @@ class PersistedProviderSource:
             connection.execute('''CREATE TABLE test_provider_preparations(
                 job_id TEXT NOT NULL, material_sha256 TEXT NOT NULL, material_json TEXT NOT NULL,
                 PRIMARY KEY(job_id, material_sha256))''')
+            connection.execute('''CREATE TABLE test_provider_proposals(
+                proposal_id TEXT PRIMARY KEY, job_id TEXT NOT NULL,
+                prepared_input_sha256 TEXT NOT NULL)''')
 
     def create_job(self, identity: SessionIdentity, *, message: str = '说明示例中的量与单位。') -> str:
         fixture = practice_fixture('providersource', profile='learner')
@@ -205,6 +208,29 @@ class PersistedProviderSource:
             raise source_invalid()
         transaction.execute('UPDATE test_provider_sources SET consent_id=? WHERE job_id=? AND workspace_id=?',
                             (consent_id, job_id, identity.workspace_id))
+
+    def record_proposal(self, transaction: sqlite3.Connection, identity: SessionIdentity,
+                        job_id: str, prepared_input_sha256: str, proposal_id: str) -> None:
+        row, material = self._checked(transaction, identity, job_id)
+        self._available(row)
+        if material.prepared_input_sha256 != prepared_input_sha256:
+            raise source_invalid()
+        from services.api.app.infrastructure.consent_repository import ConsentRepository
+        view, prepared, _ = ConsentRepository(transaction, identity.workspace_id).proposal_material(proposal_id)
+        if prepared.prepared_input_sha256 != prepared_input_sha256 or view.summary.job_id != job_id:
+            raise source_invalid()
+        transaction.execute('INSERT OR IGNORE INTO test_provider_proposals VALUES(?,?,?)',
+                            (proposal_id, job_id, prepared_input_sha256))
+
+    def verify_output(self, transaction: sqlite3.Connection, identity: SessionIdentity,
+                      job_id: str, dispatch_id: str) -> None:
+        from services.api.app.application.policy import Policy
+        from services.api.app.infrastructure.consent_repository import ConsentRepository
+        Policy(transaction, identity.workspace_id).check('private_artifact')
+        row, _ = self._checked(transaction, identity, job_id)
+        record = ConsentRepository(transaction, identity.workspace_id).read_dispatch(dispatch_id)
+        if record.job_id != job_id or record.consent_id != row['consent_id']:
+            raise source_invalid()
 
     def claim(self, identity: SessionIdentity, job_id: str) -> DispatchLease:
         until = (datetime.now(UTC) + timedelta(minutes=5)).isoformat().replace('+00:00', 'Z')

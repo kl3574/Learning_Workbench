@@ -1,6 +1,6 @@
 # 知径 Learning Workbench：完整产品设计与工程实施规范
 
-**版本：3.0.3｜日期：2026-09-15｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
+**版本：3.0.4｜日期：2026-09-15｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
 
 **本文件（含文末附录）是唯一产品与工程规范。** 将它放入空目录即可开始；不需要旧版设计包、旧 Demo、之前聊天、私有 GitHub 仓库或另一份提示词说明需求。正文定义产品，附录内嵌数据模型、HTTP 字段、数据库设计、模块接口、样例和验收用例。构建 Agent 根据本文生成实现文件、OpenAPI、测试和进度记录；这些是派生产物，不是第二套产品需求。
 
@@ -26,6 +26,7 @@
 | 3.0.1 | 推荐严格应用 DTO、只读投影、真实来源与决定历史/CAS | 不改初始事实、54 core 或学习包 3.0.0 |
 | 3.0.2 | M5.1 配置/秘密、服务端冻结授权、单次受控派发、完整输入计量证明、内部终态与安全备份边界 | 不代表生产模型已支持、真实外发已批准或 M5.2/M5.3 已实现；54 core、学习包及数据 schema_version 3.0.0 不变 |
 | 3.0.3 | M5.2 显式精确scope、未审材料标识、Content材料/来源、只读scope状态/CAS、离线词法代际/Jobs、资源和原创基准 | 不代表检索或基准已运行/通过，不开放自动扩范围、embedding或真实外发；54 core、基线DDL、学习包3.0.0不变 |
+| 3.0.4 | M5.3 真实 Thread/Run/Jobs、上下文身份、授权衔接、受检输出、严格 SSE 与取消恢复 | 不代表生产模型可调度或已授权费用测试；54 core、基线 DDL、学习包 3.0.0 不变 |
 
 ## 0. 执行摘要与不可变决策
 
@@ -541,7 +542,7 @@ visibility 取 `learner` 或 `author_private`。导出学习者包不是 CSS 隐
 | Practice reveal | POST `/practice/sessions/{id}/hints`；POST `/practice/sessions/{id}/solutions` | policy 检查、暴露事件与解答 |
 | Assessment | GET `/assessments`；POST `/assessments/{id}/attempts` | 蓝图与公开题面；冻结策略 |
 | Attempt | GET `/attempts/{id}`；PUT `/attempts/{id}/responses`；POST `/attempts/{id}/submit`；POST `/attempts/{id}/abandon`；GET `/attempts/{id}/result` | 活动态不返回私有解答 |
-| Tutor | POST `/threads`；GET `/threads/{id}/messages`；POST `/tutor/runs` | 引用+问题，不信任客户端全篇上下文 |
+| Tutor | POST `/threads`；GET `/threads`；GET `/threads/{id}/messages`；POST `/tutor/runs` | 严格应用 DTO、真实任务/上下文身份，不信任客户端全文 |
 | Run | GET `/runs/{id}`；GET `/runs/{id}/events`；POST `/runs/{id}/cancel` | 快照、SSE、取消 |
 | Retrieval | POST `/retrieval/query` | query、scope、revision；role从服务端会话取得 |
 | Learning | GET `/learning/progress`；POST `/learning/actions`；GET `/learning/evidence` | 动作与可信事件分离 |
@@ -561,33 +562,34 @@ visibility 取 `learner` 或 `author_private`。导出学习者包不是 CSS 隐
 
 ```json
 {
-  "thread_id": "thread_ols",
-  "workspace_id": "workspace_local",
-  "message": "为什么 A 必须大于零？",
-  "intent": "derive",
-  "context": {
-    "view_kind": "lesson",
-    "active_ref": {
-      "entity": "lesson",
-      "id": "lesson_ols",
-      "revision": 1,
-      "sha256": "由服务端已读取对象提供的64位小写十六进制哈希"
+  "request": {
+    "thread_id": "thread_ols",
+    "workspace_id": "workspace_local",
+    "message": "为什么 A 必须大于零？",
+    "intent": "derive",
+    "context": {
+      "view_kind": "lesson",
+      "active_ref": {
+        "entity": "lesson", "id": "lesson_ols", "revision": 1,
+        "sha256": "由服务端已读取对象提供的64位小写十六进制哈希"
+      },
+      "attached_refs": [], "selection": null, "attempt_id": null
     },
-    "attached_refs": [],
-    "selection": null
+    "web_search": false,
+    "consent_id": null
   },
-  "web_search": false,
-  "consent_id": "consent_provider_local"
+  "expected_thread_revision": 1,
+  "binding": {"practice": null, "assessment": null}
 }
 ```
 
-示例中的哈希说明文本不是有效生产值；附录 E 的确定性生成器会产生具有真实哈希的完整合法样例，不需其他文件。后端根据 refs 读取正文，并校验其工作区、权限、revision、hash。客户端不得通过伪造 “lesson” 类型把未公开答案作为默认上下文读取。
+这是附录 A 的 TutorRunCreate 应用请求；内层 TutorRequest 保持原 core 形状。哈希说明文本不是生产值；附录 E 仍生成合法核心请求样例。真实线程由 POST threads 创建/GET threads 回读，revision 不照抄示例。首次创建只建立本地任务，consent_id 必须 null；后续以实际 Run/Job ID 和当前 revision 使用现有授权预览/批准接口，不能改 body 再 POST 原 Run。后端按 refs 和 owner 身份读取、校验工作区、权限、版本与 hash，不能借 lesson 类型读取未释放答案。
 
 ### 11.4 事件协议与错误
 
 SSE 每个事件包含 `run_id`、递增 `seq`、`type`、UTC 时间和受约束 payload。类型至少包括 queued、context_ready、retrieval_completed、answer_delta、citation、approval_required、usage、completed、failed、cancelled。终态只能出现一次；消费端按 `(run_id, seq)` 去重。
 
-重连用 `Last-Event-ID` 或 `after_seq` 回读；读事件不重新启动模型生成，不重复计费。保存最终回答和来源之后才能发 completed。网络中断时显示“连接中断，任务状态未知”，查询快照后再决定恢复，不自动从头请求。
+重连用 `Last-Event-ID` 或 `after_seq` 回读；读事件不重新启动模型生成，不重复计费。保存最终回答和来源之后才能发 completed。M5.3 严格字段、持久化、游标与安全回读以附录 A 为准，流不能伪装成 JSON 响应。网络中断时显示“连接中断，任务状态未知”，查询快照后再决定恢复，不自动从头请求。
 
 错误形状：`{error:{code,message,request_id,retryable,details}}`，不含密钥、绝对私有路径、原始请求全文。常见 code：SCHEMA_INVALID、REFERENCE_MISSING、REVISION_MISMATCH、POLICY_DENIED、ASSESSMENT_ACTIVE、PROVIDER_UNCONFIGURED、CAPABILITY_UNSUPPORTED、BUDGET_EXCEEDED、SOURCE_UNVERIFIED、INDEX_STALE、JOB_CANCELLED。
 
@@ -615,6 +617,12 @@ M5.2 的明确选择、未审公开材料与自动补足边界以 §20.7 为准�
 Context 消费端的初始工程预算：上下文最多 12,000 中文/混合字符、最多 8 个内容块、最多 6 条最近对话摘录、最多 5 个外部来源。M5.2 检索整块返回采用 §20.7 的独立字节预算，不套用这里的8块/12,000字符上限。实际 Token 上限由提供商 tokenizer/模型上下文能力约束。字符数不是 Token 数；截断必须保留块边界，不能把定理条件截掉只留结论。
 
 回复包含证据类别：教材已给出的陈述、外部来源陈述、模型自行推导、暂时无法核验。对缺证据的问题可以明确说明不足并给推导尝试，不能伪造文献或把缺证据回答伪装成已有教材引用。
+
+M5.3 全部生成回答/拒答原文明确标为“模型输出／推导尝试，未逐项核验”，单列本次实际输入的精确 ref、正文/摘录 SHA 与未审事实。材料只证明输入了什么，不证明答案、相邻论断或推导受其支持。四类证据中，教材栏只列真实输入原文，外部栏明确“未检索/无受检外部来源”，模型输出与不能核验明确展示；不能用图例假称每段已分类。模型自报链接/引文/标记及原未审 Citation 不自动升级为已核引用。此阶段不要求额外包装语言、文本区间或评分器；无受检来源时 citations=[]，原模型文字仍保留。
+
+Context 仅用当前精确对象与显式 attached_refs，经 Content/Route/Practice/Assessment owner 取得真实材料；不自动补先修/相关范围，不偷偷重建 missing/stale 索引。选文先按原 block/正文 SHA 与 codepoint 核验，优先其所属完整块，其次当前块，再按显式范围的既定顺序/检索结果纳入完整块；不能截选文前提或块正文。route/practice/assessment 非 block 材料由 owner 冻结为完整有界单位，不信任客户端显示文本。原作答、已获提示、已释放反馈按真实 session/attempt/question/评分版本读取，未释放标准答案不得纳入。
+
+12,000 字符按最终 messages 内容总和计，包括系统模板、当前问题、真实历史、题目/作答/反馈及每项完整 `<reference>\n{规范JSON的ref、locator、text}\n</reference>` 包装，与 Provider RequestPreparer 同算法，以 Unicode codepoint 计数，绝非 token 证明。保留 material.messages≤6，系统模板与本次问题占两条，因此历史最多四条（也满足本节最多六条上限）；evidence≤8。历史只取本线程已完成轮次的真实 user/answer 消息，按时间顺序冻结 ID/字节；拒答/失败部分输出不自动当教学历史。可选块/历史只能整项省略并明示理由；系统、本次问题、当前交互必需的完整题目/作答等本身超预算时明确 TUTOR_CONTEXT_BUDGET_EXCEEDED，不裁条件或返回虚假空成功。材料是数据角色，无系统指令权；模板意图/版本冻结。§20.5 完整输入证明与零外发边界不变。
 
 ### 12.3 联网搜索
 
@@ -928,7 +936,7 @@ CI 建议 job：`spec-contracts`、`backend`、`frontend`、`integration`、`bro
 | M4.2 | 先修/补弱/复习/下一步推荐，接受/拒绝 | 每条推荐有引用，空数据不伪造画像 |
 | M5.1 | ProviderPort/能力协商/服务端冻结授权/受控预算/秘密与脱敏 | 本地控制面、真实持久授权与受控 HTTP 协议分层验收；无授权或无完整输入证明则零外发；不冒充生产模型贯通或 search |
 | M5.2 | 显式范围/Content材料、中文FTS、来源和修订哈希、scope状态/CAS与持久重建 | 私解/Policy双层阻断、cold与资源诊断、旧scope/损坏hash、Jobs恢复、附录F.1冻结原创基准R@5及真实浏览器 |
-| M5.3 | Tutor 状态机、SSE/取消/重连/异步上下文 | 终态唯一、断连不重生成、切标签不串内容 |
+| M5.3 | Tutor 状态机、真实 Thread/Run/Jobs、冻结上下文/授权、SSE/取消/重连 | 终态唯一、恢复不重外发、切标签不串内容；本地/受控适配器/真实费用验证分别记录 |
 | M5.4 | 真实模型与搜索评测 | 显式授权小预算调用；引用回查；无凭据 NOT_RUN |
 | M6.1 | 教材/例题/题目生成 schema + 数值验证 | 教学约束保留，缺来源不伪造，结果只入草稿 |
 | M6.2 | 审校/发布/版本对比/影响分析/恢复旧内容 | 旧笔记标 stale，旧题/成绩不覆盖 |
@@ -969,7 +977,13 @@ CI 建议 job：`spec-contracts`、`backend`、`frontend`、`integration`、`bro
 | assisted | 允许 | 可调用已授权学科模型 | 经授权可用 | 交卷前不自动释放标准答案 | assisted |
 | practice | 允许 | 提示或完整解释按请求 | 经授权可用 | 用户主动请求即记录暴露后释放 | practice，记录帮助等级 |
 
+M5.3 练习中的真实模型帮助由 Practice 所有者单独记录：仅在本次 Run 首个实际持久化且含非空白文字的 answer_delta 与 Tutor 写入的同一事务中，建立幂等的 model 来源帮助事实、可信 hint_revealed 学习事件及通用 hint exposure；仅排队、授权、空白或拒答不算已获帮助。记录表示回答已在服务器持久化可供读取，不冒称浏览器已展示或内容已核验。取消或不完整输出不抹除已经发生的帮助。它不是 rules 提示级别、不是标准答案释放，不写原 practice_exposures 的 level，不推进作答 revision、不改变本 Run 已冻结输入。恢复时若 Provider 原终态已保存而 Tutor 尚无 delta，在恢复该原回答的同一事务建立同一事实，不重新外发。GET 与原 SSE 回放只读，不补写学习事件。
+
 本地学习者/作者是操作角色，不是安全上不同自然人。进入 independent 前，服务端以 workspace 级 guard 排他锁检查是否有活跃学科 Tutor/Authoring/Codex/导出任务：存在则返回 409，要求等待或显式取消；之后每次外发、流事件读取、下载和解答读取再次检查 guard，避免“先启动流，再开始测试”的竞态泄露。活动独立测试最多一个，不能在另一个标签用作者角色、旧对话、笔记、索引或下载链接绕过。应用之外的本机文件/其他工具无法由本产品封锁，文档与 UI 不宣传监考。
+
+M5.3 学科准备、授权预览/批准、派发及 Thread/Run/SSE 正文读取使用明确学科操作权限：活动 independent 或 open_book 均拒绝，open_book 普通材料仍按原规则可读；固定操作帮助不调用模型。assisted 仅允许本工作区真实 question/attempt 绑定和当前已释放材料，不能据此放宽通用 private_artifact。Provider 源专属结果回读同时核实际 Tutor source、job、dispatch/receipt 和当前输出许可，不接受任意 artifact 旁路。既有 independent 启动排他不变；任务中策略变化在下一准备/外发/输出边界再核，不声称已撤回此前内容。
+
+纯取消/撤销授权及不含正文的任务控制回读按工作区归属允许，不能被学科读取锁卡死；其返回不含 thread scope、问题、回答、引用、上下文摘要或原错误全文。GET 不执行取消/写 failed；worker 负责停止与唯一终态。客户端策略未知停止新学科读取/显示，跨 workspace/session/上下文变化废弃旧异步结果。
 
 评分固定私有 solution_revision，不从“最新答案”临时读取。提交与最后草稿快照、submitted_at、评分 outbox 同一事务；关闭页面不隐式提交。timed attempt 由服务端 deadline job 提交最后已保存草稿，UI 清楚显示截止时间和剩余值；时间到的网络迟到写入拒绝并保留客户端待恢复副本。重复提交同键同载荷返回原回执，不触发第二计分；同键不同载荷409。
 
@@ -1213,18 +1227,21 @@ Content发布/current pointer/生命周期或来源descriptor变化在owner事�
 | POST `/attempts/{id}/abandon` | AttemptSubmit | AttemptPublic；active可弃；已交卷则409 |
 | GET `/attempts/{id}/result` | 无 | GradingResult；未交卷409；尚未完成评分可返回202 JobRef；needs_review保留不确定项 |
 
+PracticeAssistanceView = {question_id:Id, highest_hint_level:0|1|2|3, solution_revealed:boolean, model_help_received?:boolean=false}。PracticeSession 与 PracticeSubmitted 的 assistance 使用此应用投影；省略 model_help_received 仅兼容真实旧回执，新投影总显式返回该严格布尔值。assisted 同时纳入真实模型帮助，UI 明示“已获 AI 帮助”，不改变 rules 级别或声称已展开标准答案。原持久 PracticeAssistance、StoredSubmission、评分审核和原提交 JSON/hash 保持；当时的 exposure_event_ids/assisted 不由后来的帮助重写。原提交回读仅按原事件集合投影 model_help_received；当前 session 可以反映提交后实际新帮助。
+
 独立测试跨标签限制按服务端workspace+owner状态判定，不能信任body里的view_kind。业务限制不等于抵御本机管理员。旧成绩重新评分使用新的grading_revision，不覆盖旧结果。
 
 ### Thread / Tutor / RAG / 学习画像
 
 | 接口 | 请求 | 响应与业务语义 |
 |---|---|---|
-| POST `/threads` | `{scope:ViewContext,title:string}` | 201 `{id,scope,title,created_at}`；scope中refs校验 |
-| GET `/threads/{id}/messages` | `cursor?`,`limit?` | Page<{id,role:user|assistant,content_markdown,context_snapshot_id,run_id?,status,citations:Citation[],created_at}>；测试期学科thread按策略拒绝 |
-| POST `/tutor/runs` | TutorRequest | 202 RunSnapshot；context只是请求意图，服务端验证、解析、冻结 |
-| GET `/runs/{id}` | 无 | RunSnapshot；只回读，不产生费用 |
-| GET `/runs/{id}/events` | Last-Event-ID? 或 after_seq?（两者不一致400） | SSE；`id: run_id:seq`，`event: type`，`data: RunEvent JSON`；逾期回读给明确 cursor_expired，客户端再读取snapshot |
-| POST `/runs/{id}/cancel` | 无body | RunSnapshot；终态重复取消是no-op，不能出现第二终态 |
+| POST `/threads` | TutorThreadCreate；Idempotency-Key | 201 TutorThreadView；核实际 scope/binding，只建立本地线程 |
+| GET `/threads` | TutorPageQuery | TutorThreadPage；本工作区真实列表，恢复本机映射，不猜当前线程 |
+| GET `/threads/{id}/messages` | TutorPageQuery | TutorMessagePage；真实顺序/通道/状态，当前学科 Policy 先行 |
+| POST `/tutor/runs` | TutorRunCreate；Idempotency-Key | 202 TutorRunView；原 key 回原创建回执，GET 回当前 |
+| GET `/runs/{id}` | 无 | TutorRunView；只读，核归属、当前输出权限、自有历史 |
+| GET `/runs/{id}/events` | TutorEventsQuery；Last-Event-ID? | text/event-stream；标准 SSE + 严格 TutorSSEEvent |
+| POST `/runs/{id}/cancel` | TutorRunCancel；Idempotency-Key | TutorRunControlView；取消请求不等于远端已停，终态取消 no-op |
 | POST `/retrieval/query` | RetrievalQueryWrite；会话/Origin/CSRF；不要求写命令幂等键 | RetrievalQueryView；只读精确scope，含scope/corpus hash和missing；完整块/资源遗漏/来源与未审事实明确，零排队/零外发 |
 | GET `/learning/progress` | `course_id?` | `{revision,readings:{ref,read,read_at}[],route_steps:{route_ref,step_id,completed}[]}`；无掌握概率 |
 | POST `/learning/actions` | `{kind:read_marked|bookmark_set,ref,expected_revision,value:boolean}` | `{event_id,progress_revision}`；客户端不能上传native grade_finalized事件 |
@@ -1234,6 +1251,103 @@ Content发布/current pointer/生命周期或来源descriptor变化在owner事�
 | GET `/notes` | `ref_id?`,`cursor?`,`limit?` | Page<Note>；anchor状态可为stale，不静默迁移到最新版本 |
 | POST `/notes` | Note | 201 ContentRef；quote/codepoint与正文校验 |
 | PATCH `/notes/{id}` | Note + If-Match | ContentRef；id一致、revision按新版本处理，冲突412 |
+
+### Tutor 应用 DTO、真实上下文与事件恢复（M5.3）
+
+本组是独立严格应用 DTO，不扩54 core，不改变原粗粒度核心端口。对象闭合、拒未知字段；除 query 明确 `?` 外字段 required，nullable 显式null；整数拒bool，数字有限，字符串合法Unicode。Id/Revision/Sha256/UTC/ContentRef/Citation/Warning/ViewContext/TutorRequest/RunSnapshot/ContextSnapshot/ReferenceSummary/UsageSnapshot 沿本文定义。标题/错误文案 nonblank，正文/delta 原样保留空白；嵌套 core 请求同样严格校验类型/关联，不能因core默认值省略本表要求字段。
+
+```text
+TutorPracticeBinding = {session_id: Id, session_revision: Revision, question_ref: ContentRef}
+TutorAssessmentBinding = {
+  attempt_revision: Revision, question_ref: ContentRef, grading_revision: Revision|null
+}
+TutorContextBinding = {practice: TutorPracticeBinding|null, assessment: TutorAssessmentBinding|null}
+TutorThreadCreate = {scope: ViewContext, binding: TutorContextBinding, title: nonblank string[1,200]}
+TutorThreadView = {
+  id: Id, scope: ViewContext, binding: TutorContextBinding, title: nonblank string[1,200],
+  revision: Revision, created_at: UTC
+}
+TutorPageQuery = {cursor?: nonblank string, limit?: integer[1,100]}
+TutorThreadPage = {items: TutorThreadView[], next_cursor: string|null}
+TutorMessage = {
+  id: Id, seq: integer>=1, run_id: Id, role: user|assistant,
+  channel: answer|refusal|null, status: stored|completed|failed|cancelled,
+  content_markdown: string, context_snapshot_id: Id|null,
+  citations: Citation[], created_at: UTC
+}
+TutorMessagePage = {thread: TutorThreadView, items: TutorMessage[], next_cursor: string|null}
+TutorRunCreate = {
+  request: TutorRequest, expected_thread_revision: Revision, binding: TutorContextBinding
+}
+TutorInputMaterial = {
+  reference: ReferenceSummary, body_sha256: Sha256|null,
+  material_review: unreviewed|not_applicable
+}
+TutorContextOmission = {
+  ref: ContentRef|null,
+  reason: character_budget|block_budget|history_budget|adapter_shape|
+    index_missing|index_stale|index_building|no_match|not_released|unavailable,
+  message: nonblank safe string
+}
+TutorContextSummary = {
+  snapshot: ContextSnapshot, included: TutorInputMaterial[],
+  history_message_ids: Id[0..4], omissions: TutorContextOmission[], warnings: Warning[]
+}
+TutorFailureCode = ProviderFailureCode | POLICY_DENIED | ASSESSMENT_ACTIVE |
+  TUTOR_CONTEXT_INVALID | TUTOR_CONTEXT_CHANGED | TUTOR_CONTEXT_UNAVAILABLE |
+  TUTOR_CONTEXT_BUDGET_EXCEEDED | TUTOR_OUTPUT_INVALID | TUTOR_OUTPUT_EMPTY |
+  TUTOR_INTEGRITY_ERROR | TUTOR_OUTCOME_UNKNOWN
+TutorProviderResult = {
+  receipt_id: Id, receipt_sha256: Sha256,
+  outcome: complete|refused|incomplete|error,
+  provider_outcome: completed|failed|incomplete|cancelled|unknown,
+  output_state: none|partial|complete
+}
+TutorResultSummary = {
+  refusal_markdown: string, usage: UsageSnapshot,
+  provider: TutorProviderResult|null, error_code: TutorFailureCode|null
+}
+TutorRunView = {
+  run: RunSnapshot, job_revision: Revision, thread_revision: Revision,
+  context: TutorContextSummary|null, latest_proposal_id: Id|null,
+  consent_id: Id|null, result: TutorResultSummary
+}
+TutorRunCancel = {expected_revision: Revision}
+TutorRunControlView = {
+  id: Id, status: queued|running|awaiting_approval|completed|failed|cancelled,
+  job_revision: Revision, cancel_requested: boolean
+}
+TutorEventsQuery = {after_seq?: integer>=0}
+```
+
+Thread.scope 与每次 Run.request.context 的会话根身份为 view_kind、完整 active_ref、attempt_id、真实 practice.session_id；必须一致，不按同对象ID暗换 revision/hash。selection、attached_refs、本次 question 与 session/attempt/评分基准可随显式新轮次变化，每次重核 owner。practice 要求 active_ref 是所属 practice_set、practice 非null、assessment/attempt_id 为null，question_ref 是该真实session的精确question。assessment_help/review 要求所属 assessment、attempt_id/assessment 非null、practice=null；help 仅真实 assisted 活动attempt且grading_revision=null，review要求本人可复盘attempt和实际grading_revision。route 对应 route，lesson 对应精确 lesson 或当前 block（block 仅自身，不静默提升父小节），worked_example 对应实际例题 block，两个binding与attempt_id均null；worked_example 核真实block类型。authoring 上下文留M6，本阶段422 TUTOR_CONTEXT_INVALID，不能猜假任务。不可解析绑定拒绝，不从practice_set/最近attempt/浏览器文字猜会话。
+
+Run.id 就是同工作区实际 Jobs.id，kind=tutor；job_revision为真实Jobs版本，事件seq不是该revision。线程revision从1开始，成功接纳新user轮次与最终assistant结果事务各前进一次。同线程至多一个未终态Run，新命令遇其存在409 THREAD_RUN_ACTIVE。先核身份/当前允许操作/自有历史，再同key原载荷回放；新命令核expected_thread_revision，不符412 REVISION_MISMATCH；线程根不符409 TUTOR_THREAD_SCOPE_MISMATCH。workspace_id必须等于会话；web_search必须false、consent_id必须null，当前上下文字段显式提交。四intent可用，research不隐式联网。同key不同载荷409，不借旧ACK重新生成或代替当前GET。
+
+列表/消息分页只读，默认limit20；签名cursor绑定workspace、会话身份、具体列表/线程、limit和首次高水位，稳定无重漏，后续新轮次不混旧页。未知/重复query、不合法cursor400，越权先拒。ThreadPage按created_at/id，MessagePage按线程不可变连续seq；返回thread为当次当前版本，items仍遵原高水位。user消息channel=null/status=stored/citations=[]；assistant为answer或refusal、status为Run真实终态，两通道不合并。真实线程/消息必须可从服务器恢复，不依赖浏览器唯一映射。
+
+Context未冻结时context和run.context_snapshot_id均null，冻结后ID相等。included与actual evidence一一对应，完整ref/locator/字符数/摘录SHA一致。block的body_sha256非null且为完整正文SHA（不同于ContentRef元数据SHA），material_review=unreviewed；其他owner完整交互单位body_sha256=null、material_review=not_applicable，excerpt_sha256仍绑定其实际字节，不能称已审教材。snapshot.resolved_refs按实际解析对象冻结；history_message_ids只含实际纳入项。summary不返回完整私有准备prompt、未释放解答或秘密；omissions.ref=null可表示整体历史/资源遗漏，不能造材料缺口。
+
+创建事务建立user消息、Run、tutor Job、不可变输入与原命令回执。本地worker冻结Context后awaiting_approval。以实际run.id/job_revision调用现有consent preview；Provider成功持久proposal的同一事务经source记录latest_proposal_id和approval_required（approval_id=真实proposal，不是consent或伪Approvals）。该记录不改变冻结Jobs revision，避免使proposal自己失效；未有真实proposal时不造事件。预览失败不造授权/重准备/外发。grant经source同事务核原输入、绑定唯一真实consent，恢复同一Run可调度状态；不能另POST Run或把第二授权替换到原已授权Run。历史approval事件/旧grant ACK不是当前可批准证明，UI回读current validity和同Run状态。无完整生产InputProof时如实验收本地prepare、不可授权诊断和cancel，不能称真实模型贯通。
+
+answer_delta只接Provider answer通道逐字累计，refusal单独保留。result.provider来自实际回执：finished的complete/refused/incomplete映射同名outcome，error映射error；provider_outcome真实保留（complete/refused→completed，incomplete→incomplete，error沿原字段）。终态回执尚无时provider=null，不造receipt/usage。usage是实际累计快照，null表未知，已知不倒退/被null擦除。Run completed须完整非拒答Provider终态+非空经本机结构校验answer；不代表数学/事实已核验。refused/incomplete/空输出/本机校验失败保留原文与远端事实，Run failed给对应有限error_code。失败/取消保留已有answer、refusal、usage和回执；远端已completed不能因本机失败/取消被改写。
+
+最终原answer/refusal、actual citations（本阶段为空）、受检receipt关联、消息、Run snapshot/last_seq、唯一terminal event与Jobs终态在owner协作同一事务提交。Provider终态后崩溃只回读原产物/ledger，不二次派发；缺失/重复/顺序损坏明确完整性失败，不伪造修复。取消持久化真实请求；非终态新命令expected_revision不符412，同key回原控制ACK；已终态取消no-op，即使带旧合法revision也不追加事件。外发已开始时保留真实dispatch/lease，等待受检停止/恢复；cancel_requested=true不是远端cancelled/退款证明。GET jobs的tutor控制投影及通用cancel回执不含正文、引用和敏感错误，但状态/revision仍来自真实Jobs owner。
+
+TutorSSEEvent是闭合判别union，各分支共有{run_id:Id,seq:integer>=1,type,occurred_at:UTC}，只允许对应额外字段：
+- queued、completed、cancelled：无payload。
+- context_ready：context_snapshot_id:Id。
+- retrieval_completed：无payload，只在实际本地检索已执行后产生；missing/stale/未执行明示在summary，不声称找到来源。
+- answer_delta：text:string，长度≥1，纯空格/换行原样保留。
+- citation：citation:Citation，只允许受检来源owner；本阶段无该能力不产生。
+- approval_required：approval_id:Id，为上述真实proposal。
+- usage：input_tokens:integer>=0|null、output_tokens:integer>=0|null，至少一项真实计数，累计规则同上。
+- failed：error_code:TutorFailureCode。
+由真实应用模型/OpenAPI生成严格decoder，不能直接以宽core RunEvent的可空字段袋代替；无关payload字段禁止。
+
+GET events是真正text/event-stream，每帧 `id: {run_id}:{seq}`、`event: {type}`、单行 `data: {规范JSON TutorSSEEvent}`、空行分隔；JSON转义换行但不改解码原文，可发无data注释心跳。after_seq缺省0，URL只接受无符号/小数/指数的十进制非负整数；Last-Event-ID为当前run_id:十进制seq，两者均给不一致400，未知/重复参数400。先核当前归属/学科权限/完整自有历史，再核游标；未来seq409 CURSOR_AHEAD。客户端核framing/type/run_id/连续seq并去重，解析错误不当completed，旧事件不改变当前workspace内容。
+
+seq从1连续，持久snapshot.last_seq覆盖所有已提交事件及对应累计answer/usage；可同事务合并连续同通道delta，但拼接字节文本相同，不跨其他事件/终态换序。GET/重连/心跳零写、零排队、零模型调用，每批输出及连接中权限变化再核，失权停止。初期无自动修剪，水位0；§20.6明确删除后404，缺失/损坏不伪称逾期。只有未来真实受检checkpoint水位才对较旧cursor返回410 CURSOR_EXPIRED并GET完整snapshot恢复，不为模拟逾期先造GC。断线只断观察；先GET当前快照，再从last_seq续读；创建/批准/取消丢ACK先原key回放，禁止自动二次生成/重授权。
 
 ### 精确范围词法检索与索引应用 DTO（M5.2）
 
@@ -1574,7 +1688,7 @@ consumed_provider_calls 是本机保守消耗额度，不声称服务商实际�
 | GET `/readiness` | 已有本机会话 | `{database_ready:boolean,worker_ready:boolean,data_schema_version:string,migrations_pending:boolean}`；不联网、不测试密钥 |
 | POST `/session/bootstrap` | `{one_time_code:string}`，同源且有效Host | `{workspace_id,csrf_token,expires_at}`，设HttpOnly/SameSite cookie；一次性code消耗后禁止重用 |
 | POST `/session/logout` | 空对象+CSRF | `{logged_out:true}`；使会话失效，不删除学习数据 |
-| GET `/session` | 无 | `{workspace_id,role:learner|author,csrf_token,active_independent_attempt_id:Id|null}` |
+| GET `/session` | 无 | `{workspace_id,role:learner|author,csrf_token,active_independent_attempt_id:Id|null,active_open_book_attempt_id:Id|null}`；两个活动 ID 来自服务端 Policy，开卷只限制学科 Agent，不锁普通材料或导入 |
 | POST `/session/role` | `{role:learner|author}` | 同GET session；切author不绕过active测试策略 |
 | GET `/workbench/session` | 无 | WorkbenchSession；对象缺失显示unresolved且不丢原始快照 |
 | PUT `/workbench/session` | `{expected_revision,session:WorkbenchSession}` | WorkbenchSession；会话revision由服务端递增，包含布局/展开/滚动/标签，成绩不在其中 |
@@ -2168,6 +2282,10 @@ M5.1 以新的 forward migration 补 Provider 自有不可变配置/提案/授�
 
 # 附录 D：模块端口
 
+M5.3 Practice 模型帮助内部口：Tutor-owned read_answer_fact(transaction, workspace_id, run_id) 只返回受检元数据，不返回回答正文。闭合 TutorAnswerFact={workspace_id:Id,run_id:Id,context_snapshot_id:Id,practice:TutorPracticeBinding,event_seq:Revision,event_sha256:Sha256,text_sha256:Sha256,occurred_at:UTC}；event_seq 定位该 Run 首个 text.strip() 非空的持久 answer_delta，event_sha256 对该完整事件规范 JSON，text_sha256 对该段原文 UTF-8，occurred_at 为该原事件时间。非练习或未发生该事件返回 null；原 Run/Jobs/Thread/messages/事件关联与 hash 必须重新核验。
+
+Practice-owned record_model_help(transaction, identity, run_id) 经上口、当前 Policy、真实 session/question 分配建立唯一 Run 帮助关联。闭合 ModelHelpReceipt={version:practice-model-help-v1,source:model,answer:TutorAnswerFact,event_id:Id,exposure_id:Id,exposure_group:Id,occurred_at:UTC}，最后时间为本次 exposure 持久化时间，与原 delta 时间分别保留。读回须同时核 Learning、exposure、Practice 分配与原 Tutor 事实；坏关联不能被忽略成 unassisted。旧独立证据帮助读取口须识别这一真实 model 来源，不将其猜为 ruleslevel；内部 level=0 仅指无 rules 级别。所有变更仍由所属模块事务口执行，失败回滚 Tutor 回答、帮助、事件与终态的同批写入。
+
 本段规定依赖方向。AuthContext只能由可信会话构造；WriteContext不是用户可任意自报的角色。ProviderPort的输入包含正文摘录而不只是ref；外部ProviderEvent经应用映射为RunEvent，只有服务端可以建立终态和审批事件。泛型DTOMap的unknown用于约束适配器类型映射，不是允许HTTP运行接口返回任意unknown。
 
 <!-- BEGIN FILE: packages/contracts/module-ports.ts -->
@@ -2248,6 +2366,22 @@ export interface TutorPort<D extends DTOMap> {
  events(ctx:AuthContext, runId:string, afterSeq:number, signal:AbortSignal):AsyncIterable<D['RunEvent']>;
  cancel(ctx:WriteContext, runId:string):Promise<D['RunSnapshot']>;
 }
+export interface TutorApplicationDTOMap {
+ TutorThreadCreate: unknown; TutorThreadView: unknown; TutorPageQuery: unknown;
+ TutorThreadPage: unknown; TutorMessagePage: unknown; TutorRunCreate: unknown;
+ TutorRunView: unknown; TutorRunCancel: unknown; TutorRunControlView: unknown;
+ TutorEventsQuery: unknown; TutorSSEEvent: unknown;
+}
+export interface TutorApplicationPort<T extends TutorApplicationDTOMap> {
+ createThread(ctx:WriteContext, request:T['TutorThreadCreate']):Promise<T['TutorThreadView']>;
+ threads(ctx:AuthContext, query:T['TutorPageQuery']):Promise<T['TutorThreadPage']>;
+ messages(ctx:AuthContext, threadId:string, query:T['TutorPageQuery']):Promise<T['TutorMessagePage']>;
+ start(ctx:WriteContext, request:T['TutorRunCreate']):Promise<T['TutorRunView']>;
+ read(ctx:AuthContext, runId:string):Promise<T['TutorRunView']>;
+ events(ctx:AuthContext, runId:string, query:T['TutorEventsQuery'], signal:AbortSignal):AsyncIterable<T['TutorSSEEvent']>;
+ cancel(ctx:WriteContext, runId:string, request:T['TutorRunCancel']):Promise<T['TutorRunControlView']>;
+}
+
 export interface ProviderPort<D extends DTOMap> {
  capabilities():Promise<D['ProviderCapabilities']>;
  generate(input:D['GenerationInput'],signal:AbortSignal):AsyncIterable<D['ProviderEvent']>;
@@ -2428,6 +2562,42 @@ CheckedProviderDelta.text 是原始文本片段，唯一的字符串长度要求
 Responses output_text.delta/Chat delta.content 映射 answer；合法空/role-only 帧不造空delta。明确 refusal 分通道；Responses completed/Chat stop且完整流结束结合拒答判断complete/refused；Responses incomplete/Chat length或content_filter以output_limit/content_filter/provider_incomplete结束；Responses failed为受检error。错实例/异常索引、未授权工具/引用/搜索结构、损坏JSON、未终态EOF、超时/取消等拒绝成功投影，不把链接文本当已验证引用。Chat记录choice结束后仍读usage和[DONE]；Responses text.done不等于整个请求完成。实际已收到的冲突在提交前判错。一次实例至多一个本地终结事件；终结后停止消费，不再发第二个finished/error；若能观察到额外帧，只记录安全协议违规并拒绝接纳，不改已提交终态，也不声称核验了未来未收数据。
 
 自有终态持久化后，只有内部complete可投影核心finished；refused/incomplete投影核心error（PROVIDER_REFUSAL/PROVIDER_INCOMPLETE），其详细终态/partial/usage从受检回执读取，不能塞进text/error_code。消费方即使收到核心finished也要核自有回执并完成自己结果事务，才能设置本机completed。Provider-owned备份降权端口按§20.4在副本中保留可校验历史、移除秘密/locator并使许可不可派发；Workspace通过端口使用，不直接篡改Provider不可变账本。
+
+**M5.3 owner协作与受检结果：** 原DTOMap/ContextPort/TutorPort和54 core不变；HTTP用新增TutorApplicationDTOMap/Port。仅真实handler注册后生成runtime binding及SSE transport，不能把未注册DTO冒充OpenAPI能力。以下内部模型同样闭合：
+
+```text
+TutorFrozenHistoryItem = {
+  message_id: Id, source_run_id: Id, role: user|assistant,
+  content_markdown: string, content_sha256: Sha256
+}
+TutorJobInput = {
+  version: tutor-job-v1, workspace_id: Id, run_id: Id,
+  request: TutorRunCreate, history: TutorFrozenHistoryItem[0..4]
+}
+PreparedTutorContext = {
+  version: tutor-context-v1, run_id: Id, snapshot: ContextSnapshot,
+  binding: TutorContextBinding, template_version: nonblank string,
+  messages: GenerationMessage[2..6], evidence: EvidenceChunk[0..8],
+  included: TutorInputMaterial[], history_message_ids: Id[0..4],
+  omissions: TutorContextOmission[], warnings: Warning[]
+}
+CheckedProviderArtifact = {
+  id: Id, channel: answer|refusal, text: nonempty raw string,
+  utf8_bytes: integer>=1, sha256: Sha256
+}
+CheckedProviderResult = {
+  receipt: ProviderTerminalReceipt,
+  answer: CheckedProviderArtifact|null, refusal: CheckedProviderArtifact|null
+}
+```
+
+TutorJobInput是Jobs不可变输入，规范JSON SHA即job_input_sha256；history由owner创建事务从真实已完成消息冻结，不信任浏览器历史，content_sha256为原UTF-8字节SHA。Context的 `prepare(transaction, AuthContext, TutorJobInput) -> PreparedTutorContext` 和 `verify(transaction, AuthContext, PreparedTutorContext) -> None` 使用调用方真实SQLite事务；Context写/核自有冻结记录，经owner端口读材料，不跨表读私题解。snapshot.request_sha256=SHA256(规范JSON TutorRunCreate)；snapshot.snapshot_sha256=SHA256(规范JSON PreparedTutorContext，唯一排除snapshot.snapshot_sha256字段)。调用方自报hash不能代替真实持久记录/Policy/材料核验。PreparedOutboundMaterial取同一Context/messages/evidence、实际job input SHA与当前revision；prepared_input_sha256仍依§20.5。变化/损坏明确拒绝或另建新任务/授权，不在原授权里暗换文本。
+
+OutboundSourcePort新增 `record_proposal(transaction, AuthContext, job_id, prepared_input_sha256, proposal_id) -> None`，由Provider preview成功事务调用，源owner核真实绑定并记录，同proposal不重事件。原bind_authorization负责同源同输入衔接，verify_dispatch继续核实际租约/Policy。新增 `verify_output(transaction, AuthContext, job_id, dispatch_id) -> None` 核真实源上下文与当前输出许可，不要求历史lease活动或consent仍active，不因无关provider配置改变丢原结果。仅Provider在核真实job/consent/dispatch后调用，非任意artifact许可，不放宽通用private_artifact。
+
+Provider-owned `read_result(transaction, AuthContext, job_id, consent_id) -> CheckedProviderResult|null` 定位真实源/唯一dispatch，先核归属、自有历史、源verify_output，再核receipt SHA、原请求/授权关联、artifact membership/通道/实际UTF-8字节/size/SHA。null仅确无终态；已登记产物缺失/损坏拒绝，不造空答案。零外发/零重复dispatch，不接文件/URL/任意artifact，不向浏览器暴露路径。原terminal对已注册source使用同一源专属输出许可，其他private_artifact保护不变。Provider只写自己的dispatch/receipt/artifact，Tutor只经此端口消费原answer/refusal，不从粗粒度finished或恢复流猜正文。 内部停止/恢复另可用 `read_control_result(transaction, AuthContext, job_id, consent_id) -> ProviderTerminalReceipt|null`：核真实工作区、Jobs、许可/dispatch/receipt关联，仅返回已核终态元数据、不返回artifact正文；学科失权时仍可保留实际远端事实并结束本机任务。该口不向浏览器新增接口、不解除正文读取权限。
+
+Tutor/Jobs owner管claim/lease/cancel/唯一终态/命令回执；Context/Provider各经自己端口参与调用方事务。新增所属迁移，不改0001。租约公平性、事件读取批量/合并的普通工程细节用ADR，不另造规范。验收分开真实SQLite/受控适配器完整链、浏览器恢复/权限/停止、生产proof/费用调用是否实跑；缺生产证明/本次费用授权标NOT_RUN，不把测试注册当生产能力。
 
 # 附录 E：确定性样例生成器
 

@@ -84,7 +84,12 @@ class PracticeHistory:
                         (record.id, row['id'], ref.id, row['kind']),
                     ).fetchone()
                     if linked is None:
-                        raise ValueError('exposure receipt missing')
+                        from ..infrastructure.practice_model_help_repository import PracticeModelHelpRepository
+                        model_help = PracticeModelHelpRepository(self.connection, self.workspace_id).by_exposure(row['id'])
+                        if (model_help is None or row['kind'] != 'hint'
+                                or model_help.answer.practice.session_id != record.id
+                                or model_help.answer.practice.question_ref != ref):
+                            raise ValueError('exposure receipt missing')
                 elif row['kind'] == 'prior_attempt':
                     from .assessment_access import AssessmentAccess
                     if event.kind != 'test_submitted' or event.attempt_id is None:

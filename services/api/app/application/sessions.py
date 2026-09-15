@@ -7,6 +7,7 @@ from ..dto import RoleRequest, SessionResponse
 from ..infrastructure.database import Database, utc_now
 from ..infrastructure.idempotency import execute_idempotent
 from ..infrastructure.security import SessionIdentity, active_independent_attempt, guard_subject_access
+from .assessment_access import AssessmentAccess
 
 
 class SessionService:
@@ -14,7 +15,10 @@ class SessionService:
         self.database = database
 
     def _read(self, identity: SessionIdentity, connection: sqlite3.Connection, role: Literal["learner", "author"] | None = None) -> SessionResponse:
-        return SessionResponse(workspace_id=identity.workspace_id, role=role or identity.role, csrf_token=identity.csrf_token, active_independent_attempt_id=active_independent_attempt(connection, identity.workspace_id))
+        return SessionResponse(workspace_id=identity.workspace_id, role=role or identity.role,
+            csrf_token=identity.csrf_token,
+            active_independent_attempt_id=active_independent_attempt(connection, identity.workspace_id),
+            active_open_book_attempt_id=AssessmentAccess(connection, identity.workspace_id).active_open_book())
 
     def read(self, identity: SessionIdentity) -> SessionResponse:
         with self.database.connect() as connection:

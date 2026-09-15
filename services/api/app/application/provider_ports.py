@@ -73,6 +73,9 @@ class OutboundSourcePort(Protocol):
     def reference_summaries(self, transaction: sqlite3.Connection, identity: SessionIdentity,
                             material: PreparedOutboundMaterial) -> list[ReferenceSummary]: ...
 
+    def record_proposal(self, transaction: sqlite3.Connection, identity: SessionIdentity,
+                        job_id: str, prepared_input_sha256: str, proposal_id: str) -> None: ...
+
     def bind_authorization(self, transaction: sqlite3.Connection, identity: SessionIdentity,
                            job_id: str, prepared_input_sha256: str, consent_id: str) -> None: ...
 
@@ -82,6 +85,9 @@ class OutboundSourcePort(Protocol):
 
     def read_job(self, transaction: sqlite3.Connection, identity: SessionIdentity,
                  job_id: str) -> JobRef: ...
+
+    def verify_output(self, transaction: sqlite3.Connection, identity: SessionIdentity,
+                      job_id: str, dispatch_id: str) -> None: ...
 
 
 class OutboundSourceRegistry:
@@ -108,6 +114,11 @@ class OutboundSourceRegistry:
     @property
     def has_sources(self) -> bool:
         return bool(self._sources)
+
+    def with_source(self, kind: str, source: OutboundSourcePort) -> 'OutboundSourceRegistry':
+        if kind in self._sources:
+            raise ValueError('production source identity cannot be silently replaced')
+        return OutboundSourceRegistry({**self._sources, kind: source})
 
 
 class AbortSignal(Protocol):

@@ -47,6 +47,7 @@ class SessionResponse(StrictModel):
     role: Literal["learner", "author"]
     csrf_token: str
     active_independent_attempt_id: Id | None
+    active_open_book_attempt_id: Id | None
 
 
 class WorkspacePreferences(StrictModel):

@@ -99,6 +99,7 @@ class ConsentsService:
             cid = command_id()
             repo.add_proposal(view, material, prepared.body, cid)
             providers.record_command(cid, route, key, request, fingerprint, view)
+            source.record_proposal(connection, identity, material.job_id, material.prepared_input_sha256, proposal_id)
             return view
 
     def _current(self, connection: sqlite3.Connection, identity: SessionIdentity, proposal_id: str) -> ConsentProposalView:

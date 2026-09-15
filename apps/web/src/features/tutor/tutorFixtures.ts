@@ -1,0 +1,5 @@
+import type { TutorRunView, TutorThreadView } from '../../../../../packages/contracts/generated/api-types'
+export const tutorScope = { view_kind: 'lesson' as const, active_ref: { entity: 'lesson' as const, id: 'lesson_tutor_test', revision: 1, sha256: 'a'.repeat(64) }, attached_refs: [], selection: null, attempt_id: null }
+export const tutorBinding = { practice: null, assessment: null }
+export const tutorThread = (revision = 1): TutorThreadView => ({ id: 'thread_tutor_test', scope: tutorScope, binding: tutorBinding, title: '原创合成测试线程', revision, created_at: '2026-09-15T00:00:00Z' })
+export const tutorRun = (): TutorRunView => ({ run: { id: 'run_tutor_test', thread_id: 'thread_tutor_test', status: 'queued', context_snapshot_id: null, last_seq: 1, answer_markdown: '', citations: [], search_status: 'not_requested' }, job_revision: 1, thread_revision: 2, context: null, latest_proposal_id: null, consent_id: null, result: { refusal_markdown: '', usage: { input_tokens: null, output_tokens: null }, provider: null, error_code: null } })

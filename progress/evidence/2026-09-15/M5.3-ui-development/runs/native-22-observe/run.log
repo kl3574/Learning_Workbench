@@ -1,0 +1,46 @@
+
+> @learning-workbench/web@0.1.0 test:e2e
+> playwright test --config ../../tests/e2e/playwright.config.ts tutor.spec.ts -g lost Run ACK
+
+[WebServer] INFO:     Started server process [816384]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+[WebServer] (node:816422) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:816475) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 ../../tests/e2e/tutor.spec.ts:77:1 › lost Run ACK replays original bytes and cross-page open-book hides academic content while retaining cancellation (7.0s)
+
+
+  1) ../../tests/e2e/tutor.spec.ts:77:1 › lost Run ACK replays original bytes and cross-page open-book hides academic content while retaining cancellation 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 500
+
+      130 |     const controlResponse = await readingControl, controlBody = await controlResponse.json()
+      131 |     writeFileSync(info.outputPath('control-read-observation.json'), JSON.stringify({ status: controlResponse.status(), value: { id: controlBody.id, workspace_id: controlBody.workspace_id, kind: controlBody.kind, revision: controlBody.revision, status: controlBody.status }, error_code: controlBody.error?.code ?? null, controls_text: await controls.innerText() }, null, 2))
+    > 132 |     expect(controlResponse.status()).toBe(200)
+          |                                      ^
+      133 |     await controls.getByRole('button', { name: '明确请求取消此任务', exact: true }).click()
+      134 |     await expect(controls.getByText('已有原取消回执；请重新读取实际控制状态，不把回执当作当前或远端终态。', { exact: true })).toBeVisible()
+      135 |     await controls.getByRole('button', { name: `读取任务控制 ${id}`, exact: true }).click()
+        at <private-home>/.cache/learning-workbench-acceptance/m53-active/tests/e2e/tutor.spec.ts:132:38
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../m53-ui-development/native-22-artifacts/tutor-lost-Run-ACK-replays-f849d-hile-retaining-cancellation/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../m53-ui-development/native-22-artifacts/tutor-lost-Run-ACK-replays-f849d-hile-retaining-cancellation/test-failed-2.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../m53-ui-development/native-22-artifacts/tutor-lost-Run-ACK-replays-f849d-hile-retaining-cancellation/error-context.md
+
+  1 failed
+    ../../tests/e2e/tutor.spec.ts:77:1 › lost Run ACK replays original bytes and cross-page open-book hides academic content while retaining cancellation 

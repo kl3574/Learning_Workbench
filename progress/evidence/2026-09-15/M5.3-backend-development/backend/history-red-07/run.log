@@ -1,0 +1,64 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_worker_must_not_prepare_a_run_whose_original_conversation_is_incomplete[missing_user_message] _
+
+tutor = (<services.api.app.infrastructure.database.Database object at 0x76ba68956780>, SessionIdentity(id='session_tutor_fixtu...efs=[], selection=None, attempt_id=None), binding=TutorContextBinding(practice=None, assessment=None), title='原创测试对话'))
+fault = 'missing_user_message'
+
+    @pytest.mark.parametrize('fault', ['missing_user_message', 'missing_thread_command'])
+    def test_worker_must_not_prepare_a_run_whose_original_conversation_is_incomplete(tutor, fault):
+        from services.api.app.application.tutor_worker import TutorWorker
+        database, identity, service, _ = tutor
+        _, _, original = started(tutor)
+        with database.transaction() as connection:
+            if fault == 'missing_user_message':
+                connection.execute('DELETE FROM tutor_messages WHERE message_id IN (SELECT id FROM messages WHERE run_id=?)',
+                    (original.run.id,))
+                connection.execute('DELETE FROM messages WHERE run_id=?', (original.run.id,))
+            else:
+                connection.execute("DELETE FROM tutor_commands WHERE route='POST /threads'")
+        before = all_rows(database)
+        worker = TutorWorker(database, service.context, NoTransport(), build_material)
+>       with pytest.raises(ApiError) as corrupt:
+             ^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ApiError
+
+tests/integration/test_tutor_runs.py:453: Failed
+_ test_worker_must_not_prepare_a_run_whose_original_conversation_is_incomplete[missing_thread_command] _
+
+tutor = (<services.api.app.infrastructure.database.Database object at 0x76ba68e50290>, SessionIdentity(id='session_tutor_fixtu...efs=[], selection=None, attempt_id=None), binding=TutorContextBinding(practice=None, assessment=None), title='原创测试对话'))
+fault = 'missing_thread_command'
+
+    @pytest.mark.parametrize('fault', ['missing_user_message', 'missing_thread_command'])
+    def test_worker_must_not_prepare_a_run_whose_original_conversation_is_incomplete(tutor, fault):
+        from services.api.app.application.tutor_worker import TutorWorker
+        database, identity, service, _ = tutor
+        _, _, original = started(tutor)
+        with database.transaction() as connection:
+            if fault == 'missing_user_message':
+                connection.execute('DELETE FROM tutor_messages WHERE message_id IN (SELECT id FROM messages WHERE run_id=?)',
+                    (original.run.id,))
+                connection.execute('DELETE FROM messages WHERE run_id=?', (original.run.id,))
+            else:
+                connection.execute("DELETE FROM tutor_commands WHERE route='POST /threads'")
+        before = all_rows(database)
+        worker = TutorWorker(database, service.context, NoTransport(), build_material)
+>       with pytest.raises(ApiError) as corrupt:
+             ^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ApiError
+
+tests/integration/test_tutor_runs.py:453: Failed
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  [LOCAL_HOME]/.cache/learning-workbench-acceptance/m53-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  [LOCAL_HOME]/.cache/learning-workbench-acceptance/m53-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_tutor_runs.py::test_worker_must_not_prepare_a_run_whose_original_conversation_is_incomplete[missing_user_message]
+FAILED tests/integration/test_tutor_runs.py::test_worker_must_not_prepare_a_run_whose_original_conversation_is_incomplete[missing_thread_command]
+2 failed, 18 deselected, 2 warnings in 0.47s

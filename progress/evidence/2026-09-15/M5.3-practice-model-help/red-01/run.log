@@ -1,0 +1,152 @@
+FF.                                                                      [100%]
+=================================== FAILURES ===================================
+_ test_model_answer_marks_current_assisted_without_rewriting_original_submission[False] _
+
+tmp_path = PosixPath('/tmp/pytest-of-lkx/pytest-35/test_model_answer_marks_curren0')
+submitted_before = False
+
+    @pytest.mark.parametrize('submitted_before', [False, True])
+    def test_model_answer_marks_current_assisted_without_rewriting_original_submission(tmp_path, submitted_before):
+        tutor, practice, original, old_submit = setup_practice(tmp_path, submitted=submitted_before)
+        db, identity, service, _ = tutor
+        async def run():
+            async with local_provider(text='先识别题目中的两个加数，再尝试计算。\n') as server:
+                worker, consents, _ = configured(tutor, tmp_path, server.base_url)
+                _, _, run, _, _ = await asyncio.to_thread(approved, tutor, worker, consents)
+                with db.connect() as conn:
+                    raw_before = tuple(conn.execute('SELECT revision,submission_json,submission_sha256 FROM practice_sessions WHERE id=?', (original.id,)).fetchone())
+                assert not practice.get_session(identity, original.id).assisted
+                assert await asyncio.to_thread(worker.run_once)
+                assert service.read(identity, run.run.id).run.status == 'completed'
+                current = practice.get_session(identity, original.id)
+                assert current.assisted, 'actual model output must not remain unassisted'
+                assert current.revision == original.revision
+                assert current.assistance[0].model_help_received
+                assert current.assistance[0].highest_hint_level == 0
+                assert not current.assistance[0].solution_revealed
+                assert all(not item.model_help_received for item in current.assistance[1:])
+                assert len(current.exposure_event_ids) == 1
+                with db.connect() as conn:
+                    assert tuple(conn.execute('SELECT revision,submission_json,submission_sha256 FROM practice_sessions WHERE id=?', (original.id,)).fetchone()) == raw_before
+                    assert conn.execute('SELECT COUNT(*) FROM practice_exposures').fetchone()[0] == 0
+                if submitted_before:
+                    assert old_submit is not None and not old_submit.assisted
+                    assert practice.submit(identity, original.id, PracticeSubmitRequest(expected_revision=1), 'submit') == old_submit
+                else:
+                    result = practice.submit(identity, original.id, PracticeSubmitRequest(expected_revision=original.revision), 'submit')
+                    assert result.assisted and result.assistance[0].model_help_received
+                    assert result.exposure_event_ids == current.exposure_event_ids
+                assert not await asyncio.to_thread(worker.run_once) and len(server.requests) == 1
+>       asyncio.run(run())
+
+tests/integration/test_practice_model_help.py:78: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    async def run():
+        async with local_provider(text='先识别题目中的两个加数，再尝试计算。\n') as server:
+            worker, consents, _ = configured(tutor, tmp_path, server.base_url)
+            _, _, run, _, _ = await asyncio.to_thread(approved, tutor, worker, consents)
+            with db.connect() as conn:
+                raw_before = tuple(conn.execute('SELECT revision,submission_json,submission_sha256 FROM practice_sessions WHERE id=?', (original.id,)).fetchone())
+            assert not practice.get_session(identity, original.id).assisted
+            assert await asyncio.to_thread(worker.run_once)
+            assert service.read(identity, run.run.id).run.status == 'completed'
+            current = practice.get_session(identity, original.id)
+>           assert current.assisted, 'actual model output must not remain unassisted'
+E           AssertionError: actual model output must not remain unassisted
+E           assert False
+E            +  where False = PracticeSession(id='practice_session_6d17fb731b1241f69cd50ca2fbfb3316', revision=1, practice_ref=ContentRef(entity='pr..., PracticeAssistance(question_id='question_modelhelp_4', highest_hint_level=0, solution_revealed=False)], results=None).assisted
+
+tests/integration/test_practice_model_help.py:60: AssertionError
+_ test_model_answer_marks_current_assisted_without_rewriting_original_submission[True] _
+
+tmp_path = PosixPath('/tmp/pytest-of-lkx/pytest-35/test_model_answer_marks_curren1')
+submitted_before = True
+
+    @pytest.mark.parametrize('submitted_before', [False, True])
+    def test_model_answer_marks_current_assisted_without_rewriting_original_submission(tmp_path, submitted_before):
+        tutor, practice, original, old_submit = setup_practice(tmp_path, submitted=submitted_before)
+        db, identity, service, _ = tutor
+        async def run():
+            async with local_provider(text='先识别题目中的两个加数，再尝试计算。\n') as server:
+                worker, consents, _ = configured(tutor, tmp_path, server.base_url)
+                _, _, run, _, _ = await asyncio.to_thread(approved, tutor, worker, consents)
+                with db.connect() as conn:
+                    raw_before = tuple(conn.execute('SELECT revision,submission_json,submission_sha256 FROM practice_sessions WHERE id=?', (original.id,)).fetchone())
+                assert not practice.get_session(identity, original.id).assisted
+                assert await asyncio.to_thread(worker.run_once)
+                assert service.read(identity, run.run.id).run.status == 'completed'
+                current = practice.get_session(identity, original.id)
+                assert current.assisted, 'actual model output must not remain unassisted'
+                assert current.revision == original.revision
+                assert current.assistance[0].model_help_received
+                assert current.assistance[0].highest_hint_level == 0
+                assert not current.assistance[0].solution_revealed
+                assert all(not item.model_help_received for item in current.assistance[1:])
+                assert len(current.exposure_event_ids) == 1
+                with db.connect() as conn:
+                    assert tuple(conn.execute('SELECT revision,submission_json,submission_sha256 FROM practice_sessions WHERE id=?', (original.id,)).fetchone()) == raw_before
+                    assert conn.execute('SELECT COUNT(*) FROM practice_exposures').fetchone()[0] == 0
+                if submitted_before:
+                    assert old_submit is not None and not old_submit.assisted
+                    assert practice.submit(identity, original.id, PracticeSubmitRequest(expected_revision=1), 'submit') == old_submit
+                else:
+                    result = practice.submit(identity, original.id, PracticeSubmitRequest(expected_revision=original.revision), 'submit')
+                    assert result.assisted and result.assistance[0].model_help_received
+                    assert result.exposure_event_ids == current.exposure_event_ids
+                assert not await asyncio.to_thread(worker.run_once) and len(server.requests) == 1
+>       asyncio.run(run())
+
+tests/integration/test_practice_model_help.py:78: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    async def run():
+        async with local_provider(text='先识别题目中的两个加数，再尝试计算。\n') as server:
+            worker, consents, _ = configured(tutor, tmp_path, server.base_url)
+            _, _, run, _, _ = await asyncio.to_thread(approved, tutor, worker, consents)
+            with db.connect() as conn:
+                raw_before = tuple(conn.execute('SELECT revision,submission_json,submission_sha256 FROM practice_sessions WHERE id=?', (original.id,)).fetchone())
+            assert not practice.get_session(identity, original.id).assisted
+            assert await asyncio.to_thread(worker.run_once)
+            assert service.read(identity, run.run.id).run.status == 'completed'
+            current = practice.get_session(identity, original.id)
+>           assert current.assisted, 'actual model output must not remain unassisted'
+E           AssertionError: actual model output must not remain unassisted
+E           assert False
+E            +  where False = PracticeSession(id='practice_session_5d2053a95f444463b36b8e2fc9703909', revision=2, practice_ref=ContentRef(entity='pr...core=1.0, status='needs_review', feedback_markdown='开始本次练习时没有可用的固定答案；作答已保留，需要人工复核。无分数不等于零分。', solution_markdown=None)]).assisted
+
+tests/integration/test_practice_model_help.py:60: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <WORKTREE>/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <WORKTREE>/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_practice_model_help.py::test_model_answer_marks_current_assisted_without_rewriting_original_submission[False]
+FAILED tests/integration/test_practice_model_help.py::test_model_answer_marks_current_assisted_without_rewriting_original_submission[True]
+2 failed, 1 passed, 2 warnings in 3.54s

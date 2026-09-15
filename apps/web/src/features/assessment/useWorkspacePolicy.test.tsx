@@ -8,7 +8,7 @@ vi.mock('../../api/client', () => ({
   request: api.request,
   subscribeSessionAccess: (listener: () => void) => { api.listeners.add(listener); return () => { api.listeners.delete(listener) } },
 }))
-const session = (workspace = 'workspace_policy', independentId: string | null = null): SessionResponse => ({ workspace_id: workspace, role: 'learner', csrf_token: 'synthetic-policy-test', active_independent_attempt_id: independentId })
+const session = (workspace = 'workspace_policy', independentId: string | null = null): SessionResponse => ({ workspace_id: workspace, role: 'learner', csrf_token: 'synthetic-policy-test', active_independent_attempt_id: independentId, active_open_book_attempt_id: null })
 let replies: { resolve: (value: SessionResponse) => void; reject: (reason: Error) => void }[]
 beforeEach(() => {
   vi.useFakeTimers(); replies = []; api.request.mockReset()
@@ -94,4 +94,28 @@ test('late responses cannot cross workspace or survive unmount and all observers
   await act(() => vi.advanceTimersByTimeAsync(6000))
   expect(replies).toHaveLength(requestsBefore)
   expect(api.listeners.size).toBe(0)
+})
+
+
+test('open-book is a distinct real policy fact and cannot be undone by an older learning reply', async () => {
+  const view = renderHook(() => useWorkspacePolicy('workspace_policy'))
+  await act(() => vi.advanceTimersByTimeAsync(2000))
+  await act(async () => { replies[1].resolve({ ...session(), active_open_book_attempt_id: 'attempt_open_book' }) })
+  expect(view.result.current.known).toBe(true)
+  expect(view.result.current.independentId).toBeNull()
+  expect(view.result.current.openBookId).toBe('attempt_open_book')
+  await act(async () => { replies[0].resolve(session()) })
+  expect(view.result.current.openBookId).toBe('attempt_open_book')
+  await act(() => vi.advanceTimersByTimeAsync(2000))
+  await act(async () => { replies[2].resolve(session()) })
+  expect(view.result.current.openBookId).toBeNull()
+})
+
+test('a response missing the new required open-book projection fails closed', async () => {
+  const view = renderHook(() => useWorkspacePolicy('workspace_policy'))
+  const incomplete = { ...session() } as Partial<SessionResponse>
+  delete incomplete.active_open_book_attempt_id
+  await act(async () => { replies[0].resolve(incomplete as SessionResponse) })
+  expect(view.result.current.known).toBe(false)
+  expect(view.result.current.error).toContain('不完整')
 })

@@ -15,6 +15,10 @@ from .application.provider_dispatch import CheckedDispatch
 from .application.provider_ports import OutboundSourceRegistry, ProviderRequestPreparer
 from .application.providers import ProviderService
 from .application.reader import backfill_provenance
+from .application.tutor import TutorService
+from .application.tutor_context import ContextService
+from .application.tutor_source import TutorOutboundSource, build_outbound
+from .application.tutor_worker import TutorWorker
 from .config import Settings
 from .database import Database
 from .interfaces.boundary import install_boundary
@@ -30,6 +34,7 @@ from .interfaces.provider_http import create_provider_router
 from .interfaces.recommendation_http import create_recommendation_router
 from .interfaces.retrieval_http import create_retrieval_router
 from .interfaces.route_http import create_route_router
+from .interfaces.tutor_http import create_tutor_router
 from .infrastructure.import_worker import ImportWorker
 from .infrastructure.provider_secret_store import preferred_secret_store
 
@@ -41,14 +46,19 @@ def create_app(settings: Settings | None = None, *,
     database = Database(settings)
     import_service = ImportService(database)
     import_worker = ImportWorker(database)
+    tutor_context = ContextService(database)
+    tutor_service = TutorService(database, tutor_context)
     # Registrations are explicit trusted Python composition, never HTTP or
-    # environment data. M5.1 has no production source or model proof entry.
-    provider_sources = outbound_sources if outbound_sources is not None else OutboundSourceRegistry()
+    # environment data. The production Tutor source owns real jobs; production
+    # model proofs remain unavailable until their separate verification.
+    provider_sources = (outbound_sources if outbound_sources is not None else OutboundSourceRegistry()).with_source(
+        'tutor', TutorOutboundSource(tutor_context))
     provider_preparer = request_preparer if request_preparer is not None else RequestPreparer(ProofRegistry())
     provider_secrets = preferred_secret_store(settings.provider_secret_dir)
     providers = ProviderService(database, provider_secrets, provider_preparer)
     consents = ConsentsService(database, provider_secrets, provider_sources, provider_preparer)
     provider_dispatch = CheckedDispatch(database, provider_secrets, provider_sources, provider_preparer)
+    tutor_worker = TutorWorker(database, tutor_context, provider_dispatch, build_outbound)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
@@ -60,9 +70,11 @@ def create_app(settings: Settings | None = None, *,
         application.state.provider_recovered_count = len(recovered)
         application.state.provenance_backfill = backfill_provenance(database)
         import_worker.start()
+        tutor_worker.start()
         try:
             yield
         finally:
+            tutor_worker.stop()
             import_worker.stop()
 
     application = FastAPI(
@@ -79,6 +91,8 @@ def create_app(settings: Settings | None = None, *,
     application.state.provider_service = providers
     application.state.consent_service = consents
     application.state.provider_dispatch = provider_dispatch
+    application.state.tutor_service = tutor_service
+    application.state.tutor_worker = tutor_worker
     application.state.outbound_sources = provider_sources
     application.state.request_preparer = provider_preparer
     install_boundary(application, settings, database)
@@ -94,6 +108,7 @@ def create_app(settings: Settings | None = None, *,
     application.include_router(create_concept_state_router(database))
     application.include_router(create_recommendation_router(database))
     application.include_router(create_retrieval_router(database))
+    application.include_router(create_tutor_router(tutor_service))
     if settings.static_dir.is_dir():
         application.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="workbench")
     return application

@@ -74,6 +74,22 @@ export interface TutorPort<D extends DTOMap> {
  events(ctx:AuthContext, runId:string, afterSeq:number, signal:AbortSignal):AsyncIterable<D['RunEvent']>;
  cancel(ctx:WriteContext, runId:string):Promise<D['RunSnapshot']>;
 }
+export interface TutorApplicationDTOMap {
+ TutorThreadCreate: unknown; TutorThreadView: unknown; TutorPageQuery: unknown;
+ TutorThreadPage: unknown; TutorMessagePage: unknown; TutorRunCreate: unknown;
+ TutorRunView: unknown; TutorRunCancel: unknown; TutorRunControlView: unknown;
+ TutorEventsQuery: unknown; TutorSSEEvent: unknown;
+}
+export interface TutorApplicationPort<T extends TutorApplicationDTOMap> {
+ createThread(ctx:WriteContext, request:T['TutorThreadCreate']):Promise<T['TutorThreadView']>;
+ threads(ctx:AuthContext, query:T['TutorPageQuery']):Promise<T['TutorThreadPage']>;
+ messages(ctx:AuthContext, threadId:string, query:T['TutorPageQuery']):Promise<T['TutorMessagePage']>;
+ start(ctx:WriteContext, request:T['TutorRunCreate']):Promise<T['TutorRunView']>;
+ read(ctx:AuthContext, runId:string):Promise<T['TutorRunView']>;
+ events(ctx:AuthContext, runId:string, query:T['TutorEventsQuery'], signal:AbortSignal):AsyncIterable<T['TutorSSEEvent']>;
+ cancel(ctx:WriteContext, runId:string, request:T['TutorRunCancel']):Promise<T['TutorRunControlView']>;
+}
+
 export interface ProviderPort<D extends DTOMap> {
  capabilities():Promise<D['ProviderCapabilities']>;
  generate(input:D['GenerationInput'],signal:AbortSignal):AsyncIterable<D['ProviderEvent']>;

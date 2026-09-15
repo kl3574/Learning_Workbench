@@ -1,5 +1,5 @@
-// Generated from PRODUCT_DESIGN.md v3.0.3. DO NOT EDIT.
-// spec_sha256: a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8
+// Generated from PRODUCT_DESIGN.md v3.0.4. DO NOT EDIT.
+// spec_sha256: 9cc5adbe72edfc993b5d5e99dcb3f9436e475ab2be4dd58e83f72e3104353b9c
 // JSON Schema is the type source; runtime semantic checks remain required.
 
 export type ActualUsageCost = {
@@ -294,6 +294,16 @@ export type ContentRef = {
   "id": string;
   "revision": number;
   "sha256": string;
+};
+
+export type ContextSnapshot = {
+  "id": string;
+  "created_at": string;
+  "request_sha256": string;
+  "resolved_refs": Array<ContentRef>;
+  "policy": "learning" | "practice" | "test_help" | "review" | "authoring";
+  "character_count": number;
+  "snapshot_sha256": string;
 };
 
 export type Course = {
@@ -752,10 +762,11 @@ export type PolicySnapshot = {
   "solution_release"?: "after_submit";
 };
 
-export type PracticeAssistance = {
+export type PracticeAssistanceView = {
   "question_id": string;
   "highest_hint_level": 0 | 1 | 2 | 3;
   "solution_revealed": boolean;
+  "model_help_received"?: boolean;
 };
 
 export type PracticeHelpActivity = {
@@ -798,7 +809,7 @@ export type PracticeSession = {
   "status": "active" | "submitted" | "abandoned";
   "exposure_event_ids": Array<string>;
   "assisted": boolean;
-  "assistance": Array<PracticeAssistance>;
+  "assistance": Array<PracticeAssistanceView>;
   "results": (Array<ItemGrade> | null);
 };
 
@@ -816,7 +827,7 @@ export type PracticeSessionCreated = {
   "status": "active";
   "exposure_event_ids": Array<string>;
   "assisted": boolean;
-  "assistance": Array<PracticeAssistance>;
+  "assistance": Array<PracticeAssistanceView>;
   "results": (Array<ItemGrade> | null);
 };
 
@@ -861,7 +872,7 @@ export type PracticeSubmitted = {
   "evidence_label": "practice";
   "exposure_event_ids": Array<string>;
   "assisted": boolean;
-  "assistance": Array<PracticeAssistance>;
+  "assistance": Array<PracticeAssistanceView>;
 };
 
 export type PreferencesPatch = {
@@ -1390,6 +1401,17 @@ export type RouteTargetBinding = {
   "unresolved_reason": ("NO_EXACT_COURSE_PARENT" | null);
 };
 
+export type RunSnapshot = {
+  "id": string;
+  "thread_id": string;
+  "status": "queued" | "running" | "awaiting_approval" | "completed" | "failed" | "cancelled";
+  "context_snapshot_id"?: (string | null);
+  "last_seq": number;
+  "answer_markdown"?: string;
+  "citations"?: Array<Citation>;
+  "search_status"?: "not_requested" | "not_executed" | "executed" | "failed";
+};
+
 export type SavedTab = {
   "id": string;
   "context": ViewContext;
@@ -1429,6 +1451,7 @@ export type SessionResponse = {
   "role": "learner" | "author";
   "csrf_token": string;
   "active_independent_attempt_id": (string | null);
+  "active_open_book_attempt_id": (string | null);
 };
 
 export type SourceResponse = {
@@ -1450,6 +1473,219 @@ export type SubmissionActivity = {
   "question_refs": Array<ContentRef>;
 };
 
+export type TutorAnswerDeltaEvent = {
+  "run_id": string;
+  "seq": number;
+  "occurred_at": string;
+  "type": "answer_delta";
+  "text": string;
+};
+
+export type TutorApprovalRequiredEvent = {
+  "run_id": string;
+  "seq": number;
+  "occurred_at": string;
+  "type": "approval_required";
+  "approval_id": string;
+};
+
+export type TutorAssessmentBinding = {
+  "attempt_revision": number;
+  "question_ref": ContentRef;
+  "grading_revision": (number | null);
+};
+
+export type TutorCancelledEvent = {
+  "run_id": string;
+  "seq": number;
+  "occurred_at": string;
+  "type": "cancelled";
+};
+
+export type TutorCitationEvent = {
+  "run_id": string;
+  "seq": number;
+  "occurred_at": string;
+  "type": "citation";
+  "citation": Citation;
+};
+
+export type TutorCompletedEvent = {
+  "run_id": string;
+  "seq": number;
+  "occurred_at": string;
+  "type": "completed";
+};
+
+export type TutorContextBinding = {
+  "practice": (TutorPracticeBinding | null);
+  "assessment": (TutorAssessmentBinding | null);
+};
+
+export type TutorContextOmission = {
+  "ref": (ContentRef | null);
+  "reason": "character_budget" | "block_budget" | "history_budget" | "adapter_shape" | "index_missing" | "index_stale" | "index_building" | "no_match" | "not_released" | "unavailable";
+  "message": string;
+};
+
+export type TutorContextReadyEvent = {
+  "run_id": string;
+  "seq": number;
+  "occurred_at": string;
+  "type": "context_ready";
+  "context_snapshot_id": string;
+};
+
+export type TutorContextSummary = {
+  "snapshot": ContextSnapshot;
+  "included": Array<TutorInputMaterial>;
+  "history_message_ids": Array<string>;
+  "omissions": Array<TutorContextOmission>;
+  "warnings": Array<Warning>;
+};
+
+export type TutorFailedEvent = {
+  "run_id": string;
+  "seq": number;
+  "occurred_at": string;
+  "type": "failed";
+  "error_code": ("CAPABILITY_UNSUPPORTED" | "PROVIDER_CONFIGURATION_CHANGED" | "PROVIDER_SECRET_UNAVAILABLE" | "OUTBOUND_SOURCE_CHANGED" | "OUTBOUND_SOURCE_UNAVAILABLE" | "CONSENT_REQUIRED" | "CONSENT_REVOKED" | "CONSENT_EXPIRED" | "OUTBOUND_BUDGET_EXCEEDED" | "PROVIDER_TIMEOUT" | "PROVIDER_CANCELLED" | "PROVIDER_TRANSPORT_ERROR" | "PROVIDER_PROTOCOL_ERROR" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_USAGE_INCONSISTENT" | "PROVIDER_REFUSAL" | "PROVIDER_INCOMPLETE" | "POLICY_DENIED" | "ASSESSMENT_ACTIVE" | "TUTOR_CONTEXT_INVALID" | "TUTOR_CONTEXT_CHANGED" | "TUTOR_CONTEXT_UNAVAILABLE" | "TUTOR_CONTEXT_BUDGET_EXCEEDED" | "TUTOR_OUTPUT_INVALID" | "TUTOR_OUTPUT_EMPTY" | "TUTOR_INTEGRITY_ERROR" | "TUTOR_OUTCOME_UNKNOWN");
+};
+
+export type TutorInputMaterial = {
+  "reference": ReferenceSummary;
+  "body_sha256": (string | null);
+  "material_review": "unreviewed" | "not_applicable";
+};
+
+export type TutorMessage = {
+  "id": string;
+  "seq": number;
+  "run_id": string;
+  "role": "user" | "assistant";
+  "channel": ("answer" | "refusal" | null);
+  "status": "stored" | "completed" | "failed" | "cancelled";
+  "content_markdown": string;
+  "context_snapshot_id": (string | null);
+  "citations": Array<Citation>;
+  "created_at": string;
+};
+
+export type TutorMessagePage = {
+  "thread": TutorThreadView;
+  "items": Array<TutorMessage>;
+  "next_cursor": (string | null);
+};
+
+export type TutorPracticeBinding = {
+  "session_id": string;
+  "session_revision": number;
+  "question_ref": ContentRef;
+};
+
+export type TutorProviderResult = {
+  "receipt_id": string;
+  "receipt_sha256": string;
+  "outcome": "complete" | "refused" | "incomplete" | "error";
+  "provider_outcome": "completed" | "failed" | "incomplete" | "cancelled" | "unknown";
+  "output_state": "none" | "partial" | "complete";
+};
+
+export type TutorQueuedEvent = {
+  "run_id": string;
+  "seq": number;
+  "occurred_at": string;
+  "type": "queued";
+};
+
+export type TutorRequestInput = {
+  "thread_id": string;
+  "workspace_id": string;
+  "message": string;
+  "intent": "explain" | "hint" | "derive" | "research";
+  "context": TutorViewContext;
+  "web_search": false;
+  "consent_id": null;
+};
+
+export type TutorResultSummary = {
+  "refusal_markdown": string;
+  "usage": UsageSnapshot;
+  "provider": (TutorProviderResult | null);
+  "error_code": ("CAPABILITY_UNSUPPORTED" | "PROVIDER_CONFIGURATION_CHANGED" | "PROVIDER_SECRET_UNAVAILABLE" | "OUTBOUND_SOURCE_CHANGED" | "OUTBOUND_SOURCE_UNAVAILABLE" | "CONSENT_REQUIRED" | "CONSENT_REVOKED" | "CONSENT_EXPIRED" | "OUTBOUND_BUDGET_EXCEEDED" | "PROVIDER_TIMEOUT" | "PROVIDER_CANCELLED" | "PROVIDER_TRANSPORT_ERROR" | "PROVIDER_PROTOCOL_ERROR" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_USAGE_INCONSISTENT" | "PROVIDER_REFUSAL" | "PROVIDER_INCOMPLETE" | "POLICY_DENIED" | "ASSESSMENT_ACTIVE" | "TUTOR_CONTEXT_INVALID" | "TUTOR_CONTEXT_CHANGED" | "TUTOR_CONTEXT_UNAVAILABLE" | "TUTOR_CONTEXT_BUDGET_EXCEEDED" | "TUTOR_OUTPUT_INVALID" | "TUTOR_OUTPUT_EMPTY" | "TUTOR_INTEGRITY_ERROR" | "TUTOR_OUTCOME_UNKNOWN" | null);
+};
+
+export type TutorRetrievalCompletedEvent = {
+  "run_id": string;
+  "seq": number;
+  "occurred_at": string;
+  "type": "retrieval_completed";
+};
+
+export type TutorRunCancel = {
+  "expected_revision": number;
+};
+
+export type TutorRunControlView = {
+  "id": string;
+  "status": "queued" | "running" | "awaiting_approval" | "completed" | "failed" | "cancelled";
+  "job_revision": number;
+  "cancel_requested": boolean;
+};
+
+export type TutorRunCreate = {
+  "request": TutorRequestInput;
+  "expected_thread_revision": number;
+  "binding": TutorContextBinding;
+};
+
+export type TutorRunView = {
+  "run": RunSnapshot;
+  "job_revision": number;
+  "thread_revision": number;
+  "context": (TutorContextSummary | null);
+  "latest_proposal_id": (string | null);
+  "consent_id": (string | null);
+  "result": TutorResultSummary;
+};
+
+export type TutorThreadCreate = {
+  "scope": TutorViewContext;
+  "binding": TutorContextBinding;
+  "title": string;
+};
+
+export type TutorThreadPage = {
+  "items": Array<TutorThreadView>;
+  "next_cursor": (string | null);
+};
+
+export type TutorThreadView = {
+  "scope": TutorViewContext;
+  "binding": TutorContextBinding;
+  "title": string;
+  "id": string;
+  "revision": number;
+  "created_at": string;
+};
+
+export type TutorUsageEvent = {
+  "run_id": string;
+  "seq": number;
+  "occurred_at": string;
+  "type": "usage";
+  "input_tokens": (number | null);
+  "output_tokens": (number | null);
+};
+
+export type TutorViewContext = {
+  "view_kind": "route" | "lesson" | "worked_example" | "practice" | "assessment_help" | "assessment_review" | "authoring";
+  "active_ref": ContentRef;
+  "attached_refs": Array<ContentRef>;
+  "selection": (Selection | null);
+  "attempt_id": (string | null);
+};
+
 export type UnknownCostEstimate = {
   "kind": "unknown";
   "currency": "USD";
@@ -1458,6 +1694,11 @@ export type UnknownCostEstimate = {
 export type UnknownUsageCost = {
   "kind": "unknown";
   "currency": "USD";
+};
+
+export type UsageSnapshot = {
+  "input_tokens": (number | null);
+  "output_tokens": (number | null);
 };
 
 export type ViewContext = {
