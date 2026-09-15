@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-15T14:51:38Z；规范 SHA-256：`9cc5adbe72edfc993b5d5e99dcb3f9436e475ab2be4dd58e83f72e3104353b9c`
+更新：2026-09-15T15:50:07Z；规范 SHA-256：`9cc5adbe72edfc993b5d5e99dcb3f9436e475ab2be4dd58e83f72e3104353b9c`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED
 实施：IN_PROGRESS；当前任务：M5.3；下一任务：M5.3
 
-发布依赖PR50的M5.3 draft PR并回读精确head CI；保持review待审不自动合并。继续M5.4生产准入绑定、Responses形状和离线完整计量审计。
+发布e30c519诊断及本轮原失败证据，采集新CI实际时序；保持原5s断言与原业务验收，不据本地PASS宣称修复。 M5.4在独立分支按3.0.5继续本地proof与离线计数，生产模型仍NOT_RUN。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -84,9 +84,11 @@
 - m5_3: IMPLEMENTING_NOT_ACCEPTED：真实Thread/Run/Jobs/Context/Provider source及7条HTTP/SSE已实现。受控loopback完整Provider链、恢复/取消及原回执校验定向通过；根12项真实Practice/assisted/复盘Context通过，旧ACK缺失消息2项RED修复后同case+相关组34PASS。浏览器本地prepare/空生产proof诊断/cancel/reload1PASS；受控模型浏览器链已到真实completed，移动布局测试修正中。Practice AI帮助事实和坏Job公平性修复仍在测试。未固定整阶段门禁/发布M5.3；平台DeepSeek E2E仍NOT_RUN。 后续真实浏览器lostACK同key回放、openbook跨页清正文已过；安全停止GET jobs实证500，正在修契约投影，第三native未通过。练习AI帮助11项和有界调度24相关项已实际通过，不能替代固定全阶段验收。
 - m5_2_b895_ci: PASS：attempt1 push34977114033/PR34977119117共12success；各90native；原12logs与实际checkout/tree均核。
 - m5_3_local: LOCAL_VERIFIED_REVIEW_PENDING：固定919a005实跑1807 Python/328.07s、383 web/64files、93 native/8.2m，ruff、mypy148源、web lint/build及规范6嵌入/54core/72生成均PASS。838非progress输入逐项与Git一致；native仅4张已有PNG直接输出改变，44个顶层UI原文件预存、after归档及精确hash恢复，原unchanged=false保留。三新增浏览器用例包含实际SQLite/HTTP/IndexedDB/Policy与test-only loopback Provider；生产ProofRegistry仍空，真实DeepSeek平台E2E、外部搜索、Codex与教学效果NOT_RUN。原失败和修复回执完整保留；M5.3远端CI尚未运行，不关闭Issue。
+- m5_3_ci: FAIL：70b0278 attempt1双CI实际11success/1failure。push34984643765 browser93PASS11.1m；PR34984703682 browser92PASS1FAIL14.8m。原Tutor批准后completed heading在5000ms内未出现，实际上下文仅证明UI queued；backend当时状态和流时序未知。12原日志、两失败附件及相同tree/不同commit核验保留。
+- m5_3_completion_diagnostics: DIAGNOSTICS_IMPLEMENTED_NOT_ROOT_CAUSE_FIXED：e30c519仅5个测试/CI诊断文件，产品/原三case业务断言/5s不变。诊断自己的部分回读丢失1RED→同test1GREEN；原第三case加被动观察1PASS10.9s，真实queued GET保留至同Runcompleted后原样交付对照1PASS11.9s；均未复现原CI。No-tests-found、ESM及adhoc类型解析前置失败保留。新诊断CI待实际发布运行。
 
 ## 阻塞与待决项
 
-- 暂无已确认阻塞。
+- M5_3_CI_TUTOR_COMPLETION_OBSERVATION_FAILED: 70b PR51原5s completed断言失败；UI queued已核，实际backend当时状态未知。补充诊断已本地验证，原CI原因未定位。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。

@@ -1,0 +1,144 @@
+import { performance } from 'node:perf_hooks'
+import { rename, writeFile } from 'node:fs/promises'
+import type { Page, Request, Response, TestInfo } from '../../apps/web/node_modules/@playwright/test/index.mjs'
+
+type ReadResult = { state: 'complete'; value: unknown } | { state: 'timeout' | 'failed' }
+type SafeDOM = { run_status: string | null; tutor_present: boolean; observing: boolean; answer_present: boolean; grant_ack_present: boolean; consent_linked: boolean }
+type ReadPort = { readRun?: (id: string) => Promise<unknown>; readRuntime: () => Promise<unknown> }
+const states = new Set(['queued', 'running', 'awaiting_approval', 'completed', 'failed', 'cancelled'])
+const integer = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
+
+async function within<T>(operation: Promise<T>, milliseconds: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try { return await Promise.race([operation, new Promise<T>(resolve => { timer = setTimeout(() => resolve(fallback), milliseconds) })]) }
+  finally { clearTimeout(timer) }
+}
+
+/** Pick safe facts only; never serialize the Run response body or result text. */
+export function safeRun(value: unknown, expected: string) {
+  const outer = value as Record<string, unknown> | null, run = outer?.run as Record<string, unknown> | undefined
+  if (!run || run.id !== expected || typeof run.status !== 'string' || !states.has(run.status)
+    || integer(run.last_seq) === null || integer(outer?.job_revision) === null) throw new Error('INVALID_SAFE_PROJECTION')
+  const result = outer?.result as Record<string, unknown> | undefined, provider = result?.provider as Record<string, unknown> | null
+  const usage = result?.usage as Record<string, unknown> | undefined
+  return { id: expected, status: run.status, last_seq: run.last_seq, job_revision: outer?.job_revision,
+    consent_present: typeof outer?.consent_id === 'string', answer_present: typeof run.answer_markdown === 'string' && run.answer_markdown.length > 0,
+    provider_receipt_present: typeof provider?.receipt_id === 'string',
+    provider_outcome: typeof provider?.outcome === 'string' && ['complete', 'refused', 'incomplete', 'error'].includes(provider.outcome) ? provider.outcome : null,
+    input_tokens: integer(usage?.input_tokens), output_tokens: integer(usage?.output_tokens) }
+}
+
+export function safeRuntime(value: unknown) {
+  const item = value as Record<string, unknown> | null
+  if (!item || item.test_only !== true) throw new Error('INVALID_RUNTIME_OBSERVATION')
+  const names = ['received_request_count', 'validated_request_count', 'invalid_request_count'] as const
+  if (names.some(name => integer(item[name]) === null)) throw new Error('INVALID_RUNTIME_OBSERVATION')
+  return { test_only: true, received_request_count: item.received_request_count,
+    validated_request_count: item.validated_request_count, invalid_request_count: item.invalid_request_count }
+}
+
+/** Passive metadata only. Request identity is the actual Playwright Request object.
+ * SSE request cursors are observed; streamed frames/bodies are deliberately not read. */
+export async function observeTutorCompletion(page: Page, ports: ReadPort) {
+  const started = performance.now(), startedAt = new Date().toISOString()
+  const requests = new WeakMap<Request, number>(), events: object[] = []
+  let serial = 0, omitted = 0, active = true, runId: string | null = null
+  let lastDOM: { elapsed_ms: number; state: SafeDOM } | null = null
+  const elapsed = () => performance.now() - started
+  const add = (value: object) => { if (!active) return; if (events.length < 2000) events.push({ elapsed_ms: elapsed(), ...value }); else omitted++ }
+  const requestStarted = (request: Request) => {
+    const url = new URL(request.url())
+    if (!url.pathname.startsWith('/api/v1/')) return
+    const id = ++serial; requests.set(request, id)
+    const cursor = url.pathname.endsWith('/events') ? url.searchParams.get('after_seq') : null
+    add({ kind: 'request', id, method: request.method(), path: url.pathname,
+      ...(cursor !== null && /^\d{1,16}$/.test(cursor) && Number.isSafeInteger(Number(cursor)) ? { after_seq: Number(cursor) } : {}) })
+  }
+  const responseReceived = (response: Response) => { const id = requests.get(response.request()); if (id !== undefined) add({ kind: 'response', id, status: response.status() }) }
+  const requestFinished = (request: Request) => { const id = requests.get(request); if (id !== undefined) add({ kind: 'finished', id }) }
+  const requestFailed = (request: Request) => {
+    const id = requests.get(request), raw = request.failure()?.errorText ?? ''
+    if (id !== undefined) add({ kind: 'failed', id, failure: /^net::ERR_[A-Z_]+$/.test(raw) ? raw : 'REQUEST_FAILED' })
+  }
+  page.on('request', requestStarted); page.on('response', responseReceived)
+  page.on('requestfinished', requestFinished); page.on('requestfailed', requestFailed)
+  // Only this binding's arrival gets a Node-clock timestamp. Browser-clock values
+  // are never subtracted from it. No arbitrary DOM text crosses the binding.
+  await page.exposeBinding('__tutorDiagnosticDOM', (_source, value: SafeDOM) => {
+    if (!active) return
+    if (value.run_status !== null && !states.has(value.run_status)) return
+    lastDOM = { elapsed_ms: elapsed(), state: { run_status: value.run_status,
+      tutor_present: value.tutor_present === true, observing: value.observing === true,
+      answer_present: value.answer_present === true, grant_ack_present: value.grant_ack_present === true,
+      consent_linked: value.consent_linked === true } }
+    add({ kind: 'dom', state: lastDOM.state })
+  })
+  const install = () => {
+    const host = window as unknown as { __tutorDiagnosticDOM?: (value: object) => Promise<void>; __tutorDiagnosticInstalled?: boolean }
+    if (host.__tutorDiagnosticInstalled) return
+    host.__tutorDiagnosticInstalled = true
+    let previous = ''
+    const inspect = () => {
+      const region = document.querySelector('[aria-label="真实问答线程与任务"]')
+      const status = region?.querySelector('[aria-label="当前问答任务"] h3')?.textContent?.match(/^真实任务状态：(queued|running|awaiting_approval|completed|failed|cancelled)$/)?.[1] ?? null
+      const statuses = [...(region?.querySelectorAll('[role="status"]') ?? [])].map(node => node.textContent ?? '')
+      const state = { run_status: status, tutor_present: !!region,
+        observing: statuses.some(text => text.startsWith('正在观察任务')),
+        answer_present: !!region?.querySelector('[aria-label="本次模型回答原文"]')?.textContent,
+        grant_ack_present: [...(region?.querySelectorAll('[aria-label="当前原命令"]') ?? [])].some(node => node.querySelector('h4')?.textContent === '批准授权' && [...node.querySelectorAll('[role="status"]')].some(item => item.textContent?.startsWith('原命令已确认'))),
+        consent_linked: [...(region?.querySelectorAll('p') ?? [])].some(node => node.textContent?.startsWith('此 Run 已关联授权 ')) }
+      const serialized = JSON.stringify(state)
+      if (serialized !== previous) { previous = serialized; void host.__tutorDiagnosticDOM?.(state).catch(() => undefined) }
+    }
+    new MutationObserver(inspect).observe(document, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['aria-label', 'role'] })
+    inspect()
+  }
+  await page.addInitScript(install)
+  await page.evaluate(install)
+  const readRun = ports.readRun ?? (async (id: string) => {
+    const response = await page.request.get(`/api/v1/runs/${id}`, { timeout: 400 })
+    if (!response.ok()) throw new Error('RUN_READ_NOT_OK')
+    return response.json()
+  })
+  const read = async (operation: () => Promise<unknown>): Promise<ReadResult> => {
+    try { return { state: 'complete', value: await operation() } }
+    catch { return { state: 'failed' } }
+  }
+  return {
+    bindRun(id: string) { if (!/^run_[A-Za-z0-9_-]+$/.test(id)) throw new Error('INVALID_RUN_ID'); runId = id },
+    mark(label: 'grant_click' | 'completion_assertion_start') { add({ kind: 'mark', label }) },
+    async around(info: TestInfo, assertion: () => Promise<unknown>) {
+      let original: unknown, failed = false
+      add({ kind: 'mark', label: 'completion_assertion_start' })
+      try { await assertion() } catch (error) { original = error; failed = true }
+      // Freeze already received metadata synchronously, before starting any
+      // post-assertion request. Late callbacks cannot alter this snapshot.
+      const frozenAt = elapsed(), frozen = { events: [...events], last_dom_delivered: lastDOM, omitted_events: omitted }
+      active = false
+      const postStarted = elapsed()
+      const post = await within(Promise.all([
+        read(async () => { if (!runId) throw new Error('RUN_NOT_BOUND'); return safeRun(await readRun(runId), runId) }),
+        read(async () => safeRuntime(await ports.readRuntime())),
+      ]).then(([run, runtime]) => ({ run, runtime })), 500,
+      { run: { state: 'timeout' } as ReadResult, runtime: { state: 'timeout' } as ReadResult })
+      // Individual settled observations survive a slow peer; no timeout is
+      // converted to a null/zero/success result.
+      const record = { version: 1, started_at: startedAt, clock: 'Node performance.now, milliseconds since observer start',
+        assertion: { verdict: failed ? 'failed' : 'passed', frozen_at_ms: frozenAt, original_expect_timeout_ms: 5000 },
+        frozen_observation: frozen,
+        post_assertion: { phase: failed ? 'post-failure' : 'post-success', started_ms: postStarted, finished_ms: elapsed(), wait_limit_ms: 500, ...post },
+        scope: 'Only already delivered metadata is frozen at the assertion boundary. Last DOM receipt is not a synchronous browser-deadline snapshot. Later reads cannot establish earlier backend state. No headers, cookies, keys, request/answer bodies or SSE frames captured.' }
+      const target = info.outputPath('tutor-completion-diagnostic.json'), pending = target + '.pending', abort = new AbortController()
+      const saved = await within((async () => {
+        await writeFile(pending, JSON.stringify(record, null, 2) + '\n', { signal: abort.signal })
+        if (abort.signal.aborted) return false
+        await rename(pending, target)
+        await info.attach('tutor-completion-diagnostic', { path: target, contentType: 'application/json' })
+        return true
+      })().catch(() => false), 250, false)
+      if (!saved) { abort.abort(); console.error('Tutor completion diagnostic incomplete; original assertion verdict is unchanged.') }
+      if (failed) throw original
+    },
+    dispose() { active = false; page.off('request', requestStarted); page.off('response', responseReceived); page.off('requestfinished', requestFinished); page.off('requestfailed', requestFailed) },
+  }
+}

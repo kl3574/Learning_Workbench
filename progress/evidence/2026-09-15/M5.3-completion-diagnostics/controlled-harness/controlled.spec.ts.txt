@@ -1,0 +1,110 @@
+import { expect, test, type Page } from '<private-home>/Desktop/learning/Learning_Workbench/apps/web/node_modules/@playwright/test/index.mjs'
+import { writeFileSync } from 'node:fs'
+import type { AttemptSnapshot, ProviderConfigWrite, SessionResponse, TutorMessagePage, TutorRunCreate, TutorRunView, TutorThreadView } from '<private-home>/.cache/learning-workbench-acceptance/m53-active/packages/contracts/generated/api-types'
+import { RestartRuntime } from '<private-home>/.cache/learning-workbench-acceptance/m53-active/tests/e2e/restartRuntime'
+import { TutorRuntime } from '<private-home>/.cache/learning-workbench-acceptance/m53-active/tests/e2e/tutorRuntime'
+import { observeTutorCompletion } from '<private-home>/.cache/learning-workbench-acceptance/m53-active/tests/e2e/tutorDiagnostic'
+import { importAssessmentPackage, originalAssessmentPackage } from '<private-home>/.cache/learning-workbench-acceptance/m53-active/tests/e2e/assessmentTestData'
+
+test('controlled actual queued Run GET held until same Run completed then delivered unchanged', async ({ playwright }, info) => {
+  test.setTimeout(90_000)
+  const runtime = await TutorRuntime.start(), errors: string[] = []
+  let diagnostic: Awaited<ReturnType<typeof observeTutorCompletion>> | undefined
+  try {
+    const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]
+    diagnostic = await observeTutorCompletion(page, { readRuntime: () => runtime.diagnosticControl() })
+    page.on('pageerror', error => errors.push(error.message))
+    await runtime.authenticateOnly(page)
+    await expect(page.locator('.import-trigger')).toBeEnabled()
+    const fixture = originalAssessmentPackage('tutornativeapproved')
+    const imported = await importAssessmentPackage(page, fixture)
+    await imported.dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
+    const initialControl = runtime.control()
+    expect(initialControl.test_only).toBe(true); expect(initialControl.received_request_count).toBe(0)
+    const session: SessionResponse = await page.request.get('/api/v1/session').then(value => value.json())
+    const headers = { Origin: runtime.origin, 'X-CSRF-Token': session.csrf_token }
+    const config: ProviderConfigWrite = { expected_revision: 0, adapter: initialControl.adapter, base_url: initialControl.base_url, model: initialControl.model, embedding_model: null, endpoint_policy: 'explicit_loopback', pricing: null }
+    expect((await page.request.put('/api/v1/providers/provider_tutor_loopback/config', { data: config, headers: { ...headers, 'Idempotency-Key': 'synthetic-loopback-config' } })).status()).toBe(200)
+    expect((await page.request.post('/api/v1/providers/provider_tutor_loopback/secret', { data: { expected_revision: 1, secret: 'synthetic-loopback-native-constant' }, headers: { ...headers, 'Idempotency-Key': 'synthetic-loopback-secret' } })).status()).toBe(200)
+    await page.goto(`${runtime.origin}/?reader=${encodeURIComponent(JSON.stringify({ course: fixture.course, lesson: fixture.lesson }))}`)
+    await expect(page.locator('.real-reader > h1')).toBeVisible()
+    const tutor = page.getByRole('region', { name: '真实问答线程与任务', exact: true })
+    const creating = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith('/api/v1/threads'))
+    await tutor.getByRole('button', { name: '明确创建本地线程', exact: true }).click()
+    const thread: TutorThreadView = await (await creating).json()
+    await page.getByLabel('问题草稿', { exact: true }).fill('请解释原创材料，并保留未经验证的边界。')
+    await expect(page.getByRole('button', { name: '创建本次问答任务 ↑', exact: true })).toBeEnabled()
+    const starting = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith('/api/v1/tutor/runs'))
+    await page.getByRole('button', { name: '创建本次问答任务 ↑', exact: true }).click()
+    const ack: TutorRunView = await (await starting).json()
+    diagnostic.bindRun(ack.run.id)
+    await expect(tutor.getByRole('heading', { name: '真实任务状态：awaiting_approval', exact: true })).toBeVisible()
+    expect(runtime.control().received_request_count).toBe(0)
+    const preview = tutor.getByRole('region', { name: '准备授权预览', exact: true })
+    await preview.getByLabel('最大输入 token', { exact: true }).fill('20000')
+    await preview.getByLabel('最大输出 token', { exact: true }).fill('2000')
+    await preview.getByLabel('到期时间 UTC', { exact: true }).fill(new Date(Date.now() + 600_000).toISOString())
+    await preview.getByRole('button', { name: '准备服务端预览命令', exact: true }).click()
+    await tutor.getByRole('button', { name: '确认发送授权预览', exact: true }).click()
+    await expect(tutor.getByLabel('我已核对本次冻结范围、目的地、预算与到期时间', { exact: true })).toBeVisible()
+    expect(runtime.control().received_request_count).toBe(0)
+    await tutor.getByLabel('我已核对本次冻结范围、目的地、预算与到期时间', { exact: true }).check()
+    await tutor.getByRole('button', { name: '准备批准本次授权命令', exact: true }).click()
+    let gated = false
+    const gate: object[] = []
+    await page.route(`**/api/v1/runs/${ack.run.id}`, async route => {
+      const response = await route.fetch()
+      const actual: TutorRunView = await response.json()
+      if (!gated && route.request().method() === 'GET' && actual.run.id === ack.run.id && actual.run.status === 'queued' && actual.consent_id !== null) {
+        gated = true
+        const start = performance.now()
+        gate.push({ kind: 'held_real_queued_response', node_ms: start, id: actual.run.id, status: actual.run.status, last_seq: actual.run.last_seq, job_revision: actual.job_revision })
+        const until = start + 4000
+        while (performance.now() < until) {
+          const currentResponse = await page.request.get(`/api/v1/runs/${ack.run.id}`, { timeout: 1000 })
+          const current: TutorRunView = await currentResponse.json()
+          gate.push({ kind: 'actual_direct_read', node_ms: performance.now(), status: current.run.status, last_seq: current.run.last_seq, job_revision: current.job_revision })
+          if (current.run.status === 'completed') break
+          await new Promise(resolve => setTimeout(resolve, 25))
+        }
+        gate.push({ kind: 'unchanged_queued_response_release', node_ms: performance.now() })
+      }
+      await route.fulfill({ response })
+    })
+    diagnostic.mark('grant_click')
+    await tutor.getByRole('button', { name: '确认发送批准授权', exact: true }).click()
+    try { await diagnostic.around(info, async () => {
+      await expect(tutor.getByRole('heading', { name: '真实任务状态：completed', exact: true })).toBeVisible()
+    }) } finally { writeFileSync(info.outputPath('queued-delivery-control.json'), JSON.stringify({ scope: 'Separate controlled experiment; real response unchanged. No CI cause inference.', gated, gate }, null, 2)) }
+    writeFileSync(info.outputPath('queued-delivery-control.json'), JSON.stringify({ scope: 'Separate controlled experiment, not reproduction or attribution of original CI. Real queued response held until actual same Run completion, response bytes unchanged; original 5000ms assertion and business checks preserved.', gated, gate }, null, 2))
+    expect(gated, 'Actual post-consent queued response must be captured to exercise the control').toBe(true)
+    expect(gate.some(value => (value as {status?:string}).status === 'completed')).toBe(true)
+    const complete: TutorRunView = await page.request.get(`/api/v1/runs/${ack.run.id}`).then(value => value.json())
+    expect(complete.run.id).toBe(ack.run.id); expect(complete.run.thread_id).toBe(thread.id)
+    expect(complete.consent_id).toBeTruthy(); expect(complete.latest_proposal_id).toBeTruthy()
+    expect(complete.run.answer_markdown).toBe(initialControl.answer_markdown)
+    expect(complete.run.citations).toEqual([]); expect(complete.result.provider?.outcome).toBe('complete')
+    expect(complete.result.usage.input_tokens).toBeGreaterThan(0); expect(complete.result.usage.output_tokens).toBeGreaterThan(0)
+    await expect.poll(() => runtime.control().validated_request_count).toBe(1)
+    expect(runtime.control().received_request_count).toBe(1); expect(runtime.control().invalid_request_count).toBe(0)
+    await expect(tutor.getByLabel('本次模型回答原文', { exact: true })).toHaveText(initialControl.answer_markdown)
+    await expect(tutor.getByText('这些记录仅证明输入了什么，不证明答案或推导受到这些材料支持。', { exact: true })).toBeVisible()
+    await expect(tutor.getByText('尚未外部搜索，没有受检外部来源；模型自报链接不作为已核引文。', { exact: true })).toBeVisible()
+    await page.reload()
+    await tutor.getByRole('button', { name: `${thread.title} · r${complete.thread_revision}`, exact: true }).click()
+    await expect(tutor.getByRole('heading', { name: '真实任务状态：completed', exact: true })).toBeVisible()
+    await expect(tutor.getByLabel('本次模型回答原文', { exact: true })).toHaveText(initialControl.answer_markdown)
+    expect(runtime.control().received_request_count).toBe(1)
+    await tutor.getByLabel('本次模型回答原文', { exact: true }).scrollIntoViewIfNeeded()
+    await page.screenshot({ path: info.outputPath('tutor-loopback-answer-1440.png') })
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.getByRole('button', { name: '切换 Agent 栏', exact: true }).click()
+    await expect(page.getByRole('dialog', { name: 'Agent 助教', exact: true })).toBeVisible()
+    await tutor.getByRole('button', { name: `${thread.title} · r${complete.thread_revision}`, exact: true }).click()
+    await expect(tutor.getByLabel('本次模型回答原文', { exact: true })).toHaveText(initialControl.answer_markdown)
+    await tutor.getByLabel('本次模型回答原文', { exact: true }).scrollIntoViewIfNeeded()
+    await page.screenshot({ path: info.outputPath('tutor-loopback-answer-390.png') })
+    expect(errors).toEqual([])
+    writeFileSync(info.outputPath('actual-tutor-loopback.json'), JSON.stringify({ scope: 'Test-only complete-byte model, synthetic secret and original material; actual loopback HTTP, provider ledger, Tutor worker/SSE and native UI. No production input proof, vendor call or answer-quality acceptance.', thread, create_ack: ack, final: complete, observation: runtime.control(), runtime_errors: errors }, null, 2))
+  } finally { diagnostic?.dispose(); await runtime.close() }
+})

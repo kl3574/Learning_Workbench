@@ -1,0 +1,57 @@
+
+> @learning-workbench/web@0.1.0 test:e2e
+> playwright test --config ../../tests/e2e/playwright.config.ts tutor-diagnostic.spec.ts
+
+[WebServer] INFO:     Started server process [898340]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+[WebServer] (node:898362) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:898415) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 ../../tests/e2e/tutor-diagnostic.spec.ts:5:1 › diagnostic retains the original five-second failure and a completed peer read without collecting private text (5.6s)
+
+
+  1) ../../tests/e2e/tutor-diagnostic.spec.ts:5:1 › diagnostic retains the original five-second failure and a completed peer read without collecting private text 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 7
+    + Received  + 1
+
+      Object {
+    -   "state": "complete",
+    -   "value": Object {
+    -     "invalid_request_count": 0,
+    -     "received_request_count": 0,
+    -     "test_only": true,
+    -     "validated_request_count": 0,
+    -   },
+    +   "state": "timeout",
+      }
+
+      27 |     expect(value.post_assertion.wait_limit_ms).toBe(500)
+      28 |     expect(value.post_assertion.run).toEqual({ state: 'timeout' })
+    > 29 |     expect(value.post_assertion.runtime).toEqual({ state: 'complete', value: { test_only: true, received_request_count: 0, validated_request_count: 0, invalid_request_count: 0 } })
+         |                                          ^
+      30 |   } finally { observer.dispose() }
+      31 | })
+      32 |
+        at <private-home>/.cache/learning-workbench-acceptance/m53-active/tests/e2e/tutor-diagnostic.spec.ts:29:42
+
+    attachment #1: tutor-completion-diagnostic (application/json) ──────────────────────────────────
+    ../../../m53-tutor-completion-diagnosis-v1/diagnostic-negative-red-01/artifacts/tutor-diagnostic-diagnosti-42651-out-collecting-private-text/attachments/tutor-completion-diagnostic-56cdb61816a4db8f1a74799edc8deb260277cee7.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../m53-tutor-completion-diagnosis-v1/diagnostic-negative-red-01/artifacts/tutor-diagnostic-diagnosti-42651-out-collecting-private-text/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../m53-tutor-completion-diagnosis-v1/diagnostic-negative-red-01/artifacts/tutor-diagnostic-diagnosti-42651-out-collecting-private-text/error-context.md
+
+  1 failed
+    ../../tests/e2e/tutor-diagnostic.spec.ts:5:1 › diagnostic retains the original five-second failure and a completed peer read without collecting private text 

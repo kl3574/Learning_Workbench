@@ -4,7 +4,7 @@
   "spec_version": "3.0.4",
   "spec_sha256": "9cc5adbe72edfc993b5d5e99dcb3f9436e475ab2be4dd58e83f72e3104353b9c",
   "original_spec_sha256": "ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c",
-  "updated_at": "2026-09-15T14:51:38Z",
+  "updated_at": "2026-09-15T15:50:07Z",
   "repository": {
     "expected": "kl3574/Learning_Workbench",
     "url": "https://github.com/kl3574/Learning_Workbench",
@@ -975,7 +975,7 @@
       "issue_url": "https://github.com/kl3574/Learning_Workbench/issues/28",
       "branch": "feat/M5.3-tutor-runs",
       "implementation_commit": "919a00532b499cff604ef2be4e90c88cc6378490",
-      "verification": "LOCAL_VERIFIED_REVIEW_PENDING：固定919a005实跑1807 Python/328.07s、383 web/64files、93 native/8.2m，ruff、mypy148源、web lint/build及规范6嵌入/54core/72生成均PASS。838非progress输入逐项与Git一致；native仅4张已有PNG直接输出改变，44个顶层UI原文件预存、after归档及精确hash恢复，原unchanged=false保留。三新增浏览器用例包含实际SQLite/HTTP/IndexedDB/Policy与test-only loopback Provider；生产ProofRegistry仍空，真实DeepSeek平台E2E、外部搜索、Codex与教学效果NOT_RUN。原失败和修复回执完整保留；M5.3远端CI尚未运行，不关闭Issue。",
+      "verification": "LOCAL_VERIFIED_REVIEW_PENDING：固定919a005实跑1807 Python/328.07s、383 web/64files、93 native/8.2m，ruff、mypy148源、web lint/build及规范6嵌入/54core/72生成均PASS。838非progress输入逐项与Git一致；native仅4张已有PNG直接输出改变，44个顶层UI原文件预存、after归档及精确hash恢复，原unchanged=false保留。三新增浏览器用例包含实际SQLite/HTTP/IndexedDB/Policy与test-only loopback Provider；生产ProofRegistry仍空，真实DeepSeek平台E2E、外部搜索、Codex与教学效果NOT_RUN。原失败和修复回执完整保留；M5.3远端CI尚未运行，不关闭Issue。 FAIL：70b0278 attempt1双CI实际11success/1failure。push34984643765 browser93PASS11.1m；PR34984703682 browser92PASS1FAIL14.8m。原Tutor批准后completed heading在5000ms内未出现，实际上下文仅证明UI queued；backend当时状态和流时序未知。12原日志、两失败附件及相同tree/不同commit核验保留。 DIAGNOSTICS_IMPLEMENTED_NOT_ROOT_CAUSE_FIXED：e30c519仅5个测试/CI诊断文件，产品/原三case业务断言/5s不变。诊断自己的部分回读丢失1RED→同test1GREEN；原第三case加被动观察1PASS10.9s，真实queued GET保留至同Runcompleted后原样交付对照1PASS11.9s；均未复现原CI。No-tests-found、ESM及adhoc类型解析前置失败保留。新诊断CI待实际发布运行。 两份独立限定静态审查均无新增阻断，未冒称审查者重跑测试。",
       "evidence_paths": [
         "progress/M5.3-next.md",
         "progress/evidence/2026-09-15/M5.3-agent-implementation-readback",
@@ -995,12 +995,22 @@
         "progress/evidence/2026-09-15/M5.3-independent-review",
         "progress/evidence/2026-09-15/M5.3-fixed-source-gates",
         "progress/evidence/2026-09-15/M5.3-final-python-01.json",
-        "progress/evidence/2026-09-15/M5.3-final-native-01.json"
+        "progress/evidence/2026-09-15/M5.3-final-native-01.json",
+        "progress/evidence/2026-09-15/M5.3-70b-ci",
+        "progress/evidence/2026-09-15/M5.3-completion-diagnostics",
+        "progress/evidence/2026-09-15/M5.3-diagnostic-root-review",
+        "progress/evidence/2026-09-15/M5.3-diagnostic-independent-review"
       ],
-      "blockers": [],
-      "next_action": "发布依赖PR50的M5.3 draft PR并回读精确head CI；保持review待审不自动合并。继续M5.4生产准入绑定、Responses形状和离线完整计量审计。",
+      "blockers": [
+        {
+          "code": "M5_3_CI_TUTOR_COMPLETION_OBSERVATION_FAILED",
+          "description": "70b PR51原5s completed断言失败；UI queued已核，实际backend当时状态未知。补充诊断已本地验证，原CI原因未定位。"
+        }
+      ],
+      "next_action": "发布e30c519诊断及本轮原失败证据，采集新CI实际时序；保持原5s断言与原业务验收，不据本地PASS宣称修复。",
       "expected_evidence": "终态唯一、断连不重生成、切标签不串内容",
-      "dependency_pull_request": "https://github.com/kl3574/Learning_Workbench/pull/50"
+      "dependency_pull_request": "https://github.com/kl3574/Learning_Workbench/pull/50",
+      "diagnostic_source_commit": "e30c519b2d205c48177ac72ccb335205e932f237"
     },
     {
       "id": "M5.4",
@@ -1198,12 +1208,17 @@
     }
   ],
   "task_sync": "VERIFIED",
-  "blockers": [],
+  "blockers": [
+    {
+      "code": "M5_3_CI_TUTOR_COMPLETION_OBSERVATION_FAILED",
+      "description": "70b PR51原5s completed断言失败；UI queued已核，实际backend当时状态未知。补充诊断已本地验证，原CI原因未定位。"
+    }
+  ],
   "governance": {
     "license": "PENDING_OWNER_SELECTION",
     "merge": "REVIEW_REQUIRED"
   },
-  "next_action": "发布依赖PR50的M5.3 draft PR并回读精确head CI；保持review待审不自动合并。继续M5.4生产准入绑定、Responses形状和离线完整计量审计。",
+  "next_action": "发布e30c519诊断及本轮原失败证据，采集新CI实际时序；保持原5s断言与原业务验收，不据本地PASS宣称修复。 M5.4在独立分支按3.0.5继续本地proof与离线计数，生产模型仍NOT_RUN。",
   "verification": {
     "spec_checks": "919a005：6嵌入/54 core/72生成/38需求/33场景/27任务/107声明路由；结构PASS不等于107条已实现。",
     "unit": "919a005固定Python全量1807PASS（含单元/契约/集成/安全），三个类别共享此总数，不重复累计；详见M5.3-final-python-01。",
@@ -1247,12 +1262,14 @@
     "m5_2_import_admission": "CONTROLLED_RED_TO_GREEN_AND_FINAL_GATES_PASS：原UI saved/Policy unknown真实响应hold/release复现guard拒绝，修后disabled，无自动重放；新增真实independent start/abandon保留dialog/file/format负控。focused03测试locator错误和active污染保留，final改own RestartRuntime隔离。原Reader字节/60s不变，未认定旧CI唯一原因。",
     "m5_3": "IMPLEMENTING_NOT_ACCEPTED：真实Thread/Run/Jobs/Context/Provider source及7条HTTP/SSE已实现。受控loopback完整Provider链、恢复/取消及原回执校验定向通过；根12项真实Practice/assisted/复盘Context通过，旧ACK缺失消息2项RED修复后同case+相关组34PASS。浏览器本地prepare/空生产proof诊断/cancel/reload1PASS；受控模型浏览器链已到真实completed，移动布局测试修正中。Practice AI帮助事实和坏Job公平性修复仍在测试。未固定整阶段门禁/发布M5.3；平台DeepSeek E2E仍NOT_RUN。 后续真实浏览器lostACK同key回放、openbook跨页清正文已过；安全停止GET jobs实证500，正在修契约投影，第三native未通过。练习AI帮助11项和有界调度24相关项已实际通过，不能替代固定全阶段验收。",
     "m5_2_b895_ci": "PASS：attempt1 push34977114033/PR34977119117共12success；各90native；原12logs与实际checkout/tree均核。",
-    "m5_3_local": "LOCAL_VERIFIED_REVIEW_PENDING：固定919a005实跑1807 Python/328.07s、383 web/64files、93 native/8.2m，ruff、mypy148源、web lint/build及规范6嵌入/54core/72生成均PASS。838非progress输入逐项与Git一致；native仅4张已有PNG直接输出改变，44个顶层UI原文件预存、after归档及精确hash恢复，原unchanged=false保留。三新增浏览器用例包含实际SQLite/HTTP/IndexedDB/Policy与test-only loopback Provider；生产ProofRegistry仍空，真实DeepSeek平台E2E、外部搜索、Codex与教学效果NOT_RUN。原失败和修复回执完整保留；M5.3远端CI尚未运行，不关闭Issue。"
+    "m5_3_local": "LOCAL_VERIFIED_REVIEW_PENDING：固定919a005实跑1807 Python/328.07s、383 web/64files、93 native/8.2m，ruff、mypy148源、web lint/build及规范6嵌入/54core/72生成均PASS。838非progress输入逐项与Git一致；native仅4张已有PNG直接输出改变，44个顶层UI原文件预存、after归档及精确hash恢复，原unchanged=false保留。三新增浏览器用例包含实际SQLite/HTTP/IndexedDB/Policy与test-only loopback Provider；生产ProofRegistry仍空，真实DeepSeek平台E2E、外部搜索、Codex与教学效果NOT_RUN。原失败和修复回执完整保留；M5.3远端CI尚未运行，不关闭Issue。",
+    "m5_3_ci": "FAIL：70b0278 attempt1双CI实际11success/1failure。push34984643765 browser93PASS11.1m；PR34984703682 browser92PASS1FAIL14.8m。原Tutor批准后completed heading在5000ms内未出现，实际上下文仅证明UI queued；backend当时状态和流时序未知。12原日志、两失败附件及相同tree/不同commit核验保留。",
+    "m5_3_completion_diagnostics": "DIAGNOSTICS_IMPLEMENTED_NOT_ROOT_CAUSE_FIXED：e30c519仅5个测试/CI诊断文件，产品/原三case业务断言/5s不变。诊断自己的部分回读丢失1RED→同test1GREEN；原第三case加被动观察1PASS10.9s，真实queued GET保留至同Runcompleted后原样交付对照1PASS11.9s；均未复现原CI。No-tests-found、ESM及adhoc类型解析前置失败保留。新诊断CI待实际发布运行。"
   },
   "task_sync_readback_at": "2026-09-15T14:51:37Z",
   "task_sync_issue_count": 36,
   "checkpoint": {
-    "reason": "M5.3固定本地整阶段门禁通过，正在发布draft PR并回读远端CI。",
+    "reason": "M5.3真实CI失败待定位，发布补充诊断；独立M5.4 source64b5db9完整Python运行中。",
     "last_verified_task_id": "M5.3",
     "next_task_id": "M5.3",
     "resume_branch": "feat/M5.3-tutor-runs",
@@ -1277,7 +1294,7 @@
     "resume_from": "Latest synchronized resume_branch HEAD; implementation commit is only the verified source anchor.",
     "resumed_from": "3cf2c343849ecf29bcc80b0d589ffa5efc264047",
     "previous_goal_turn": "M5.1 fixed local lint/types/spec/build, 1494 Python, 314 web and 85 native checks passed; current publication candidate contains only README, evidence/progress and an attributed native screenshot.",
-    "working_tree": "M5.3实现源已固定；测试直接UI输出按预存hash恢复。仅progress公开证据待提交。",
+    "working_tree": "当前分支M5.3源码e30c519只增加测试诊断，待提交本轮progress后发布；M5.4独立worktree包含3.0.5与64b5db9源码，保留不覆盖。",
     "local_verified_code_commit": "919a00532b499cff604ef2be4e90c88cc6378490",
     "local_verified_task_id": "M5.3",
     "publication_head": "b8952a3ec0cc9c2bbbaf9ed41cbd9a9e1eb81ce2",
