@@ -1,0 +1,23 @@
+import { test } from '<private-home>/Desktop/learning/Learning_Workbench/apps/web/node_modules/@playwright/test/index.mjs'
+import { writeFileSync } from 'node:fs'
+import '<private-home>/Desktop/learning/Learning_Workbench/tests/e2e/reader.spec.ts'
+const ledger: object[]=[]
+const starts=new WeakMap<object,number>()
+let sequence=0
+const safeUrl=(s:string)=>{const u=new URL(s);return u.pathname+u.search}
+test.beforeEach(async ({page})=>{
+ ledger.length=0; sequence=0
+ page.on('request',q=>{const id=++sequence;starts.set(q,id);if(q.url().includes('/api/v1/'))ledger.push({at:Date.now(),kind:'request',id,method:q.method(),url:safeUrl(q.url())})})
+ page.on('response',r=>{if(r.url().includes('/api/v1/'))ledger.push({at:Date.now(),kind:'response',id:starts.get(r.request()),status:r.status(),url:safeUrl(r.url())})})
+ page.on('requestfailed',q=>ledger.push({at:Date.now(),kind:'requestfailed',id:starts.get(q),url:safeUrl(q.url()),error:q.failure()?.errorText}))
+ page.on('pageerror',e=>ledger.push({at:Date.now(),kind:'pageerror',message:e.message}))
+})
+test.afterEach(async ({page},info)=>{
+ const observedAt=Date.now()
+ const dom=await page.locator('body').innerText().catch(()=>'<page-unavailable>')
+ const facts=await page.evaluate(async()=>{
+  const response=await fetch('/api/v1/workbench/session');return {status:response.status,body:response.ok?await response.json():null}
+ }).catch(()=>null)
+ writeFileSync(info.outputPath('observer.json'),JSON.stringify({observedAt,status:info.status,expected:info.expectedStatus,scope:'Post-test observation only, no response/header/body edits; original assertions unchanged',dom,workbench:facts,ledger},null,2))
+ await page.screenshot({path:info.outputPath('observed-final.png')}).catch(()=>{})
+})

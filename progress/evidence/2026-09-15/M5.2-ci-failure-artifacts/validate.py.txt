@@ -1,0 +1,55 @@
+from pathlib import Path
+import subprocess,json,hashlib,datetime,os
+import yaml
+repo=Path('<REPO>');out=Path(__file__).resolve().parent
+paths=['.github/workflows/ci.yml','tests/e2e/playwright.config.ts']
+def hashes():return {p:hashlib.sha256((repo/p).read_bytes()).hexdigest() for p in paths}
+before=hashes();start=datetime.datetime.now(datetime.timezone.utc).isoformat()
+workflow=yaml.load((repo/paths[0]).read_text(),Loader=yaml.BaseLoader)
+assert workflow['permissions']=={'contents':'read'}
+steps=workflow['jobs']['browser']['steps'];native=next(s for s in steps if s.get('id')=='native');upload=steps[steps.index(native)+1]
+assert native['run']=='make test-e2e' and 'continue-on-error' not in native
+assert native['env']=={'LEARNING_E2E_OUTPUT_DIR':'${{ runner.temp }}/learning-workbench-e2e-results'}
+assert upload['if']=="${{ failure() && steps.native.outcome == 'failure' }}"
+assert upload['uses']=='actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a'
+expected=['${{ runner.temp }}/learning-workbench-e2e-results/**/error-context.md','${{ runner.temp }}/learning-workbench-e2e-results/**/test-failed*.png','${{ runner.temp }}/learning-workbench-e2e-results/**/reader-load-diagnostic.json']
+assert upload['with']['path'].splitlines()==expected
+assert upload['with']['retention-days']=='3' and upload['with']['if-no-files-found']=='warn' and upload['with']['include-hidden-files']=='false'
+assert 'continue-on-error' not in upload
+assert upload['with']['name']=='browser-failure-${{ github.event_name }}-${{ github.run_id }}-${{ github.run_attempt }}'
+action=yaml.load((out/'action.yml.txt').read_text(),Loader=yaml.BaseLoader)
+assert action['runs']['using']=='node24'
+assert all(k in action['inputs'] for k in upload['with'])
+original=yaml.load((out/'source-before/.github/workflows/ci.yml.txt').read_text(),Loader=yaml.BaseLoader)
+for name,job in original['jobs'].items():
+ if name!='browser':assert workflow['jobs'][name]==job
+assert workflow['jobs']['browser']['runs-on']==original['jobs']['browser']['runs-on']=='ubuntu-26.04'
+assert steps[:-2]==original['jobs']['browser']['steps'][:-1]
+assert original['jobs']['browser']['steps'][-1]=={'run':'make test-e2e'}
+node_script="""import config from './tests/e2e/playwright.config.ts';
+import assert from 'node:assert/strict';
+import {resolve} from 'node:path';
+const expected=process.env.LEARNING_E2E_OUTPUT_DIR ?? resolve('.local_data/e2e-results');
+assert.equal(config.outputDir,expected);assert.equal(config.use.trace,'off');
+assert.equal(config.use.screenshot,'only-on-failure');assert.equal(config.workers,1);
+assert.equal(config.timeout,30000);assert.equal(config.webServer.length,2);
+console.log(JSON.stringify({status:'PASS',node:process.version,scope:'configuration only',trace:config.use.trace,screenshot:config.use.screenshot,output_override:!!process.env.LEARNING_E2E_OUTPUT_DIR,output_path_matches:true}));
+"""
+records=[]
+for override in (False,True):
+ env=os.environ.copy();env['LEARNING_E2E_DATA_DIR']=str(out/'unused-config-only-data')
+ if override:env['LEARNING_E2E_OUTPUT_DIR']=str(out/'unused-config-only-output')
+ else:env.pop('LEARNING_E2E_OUTPUT_DIR',None)
+ p=subprocess.run(['bash','scripts/node.sh','node','--input-type=module'],cwd=repo,env=env,input=node_script,text=True,capture_output=True,timeout=30)
+ records.append({'override':override,'exit_code':p.returncode,'stdout':p.stdout,'stderr':p.stderr})
+ assert p.returncode==0,p.stderr
+# Narrow fixture demonstrates the literal file allowlist, not the remote Action runtime.
+fixture=out/'allowlist-fixture';fixture.mkdir();case=fixture/'synthetic-case';case.mkdir()
+for name in ['error-context.md','test-failed-1.png','reader-load-diagnostic.json','trace.zip','headers.json','state.sqlite','session.json','success.png','provider.key']:(case/name).write_bytes(b'synthetic-placeholder')
+selected=sorted({str(p.relative_to(fixture)) for pattern in ['**/error-context.md','**/test-failed*.png','**/reader-load-diagnostic.json'] for p in fixture.glob(pattern)})
+assert selected==['synthetic-case/error-context.md','synthetic-case/reader-load-diagnostic.json','synthetic-case/test-failed-1.png']
+after=hashes();assert before==after
+value={'status':'PASS','started_at':start,'ended_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'scope':'YAML structure, actual Playwright config imports, explicit path fixture; no tests, browser, servers or artifact upload run','source_before':before,'source_after':after,'source_unchanged':True,'node_config_checks':records,'allowlist_selected':selected,'no_files_behavior':'warn; original native failure not suppressed','remote_action_execution':'NOT_RUN'}
+(out/'structure-check.json').write_text(json.dumps(value,ensure_ascii=False,indent=2)+'\n')
+(out/'structure-check.log').write_text('\n'.join(r['stdout'].strip() for r in records)+'\nPASS: YAML pin/runtime, native failure condition, three-pattern allowlist, 3-day retention, unchanged other jobs, unchanged source inputs.\nNOT_RUN: browser, server, business suite, remote artifact action.\n')
+print(json.dumps({'status':'PASS','source':after,'allowlist_selected':selected,'scope':value['scope']},ensure_ascii=False))

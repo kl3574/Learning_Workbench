@@ -1,0 +1,45 @@
+[WebServer] INFO:     Started server process [591423]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+[WebServer] (node:591444) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:591497) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/e2e/reader.spec.ts:171:1 › historical course revisions stay in separate exact tabs and hash-mismatched links preserve unresolved reference (8.2s)
+
+
+  1) tests/e2e/reader.spec.ts:171:1 › historical course revisions stay in separate exact tabs and hash-mismatched links preserve unresolved reference 
+
+    Error: expect(locator).toContainText(expected) failed
+
+    Locator: locator('.real-reader')
+    Expected substring: "第二修订选文"
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toContainText" locator('.real-reader') with timeout 5000ms
+      - waiting for locator('.real-reader')
+
+
+      179 |   try {
+      180 |     await page.goto(`/?reader=${encodeURIComponent(JSON.stringify(target))}`)
+    > 181 |     await expect(page.locator('.real-reader')).toContainText('第二修订选文')
+          |                                                ^
+      182 |   } catch (error) {
+      183 |     await diagnostic.capture(info).catch(() => console.error('Historical Reader failure diagnostic could not be saved.'))
+      184 |     throw error
+        at <private-home>/Desktop/learning/Learning_Workbench/tests/e2e/reader.spec.ts:181:48
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../.cache/learning-workbench-acceptance/m52-reader-observer-fault-01/artifacts/fault-historical-course-re-c6072-eserve-unresolved-reference/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../.cache/learning-workbench-acceptance/m52-reader-observer-fault-01/artifacts/fault-historical-course-re-c6072-eserve-unresolved-reference/error-context.md
+
+  1 failed
+    tests/e2e/reader.spec.ts:171:1 › historical course revisions stay in separate exact tabs and hash-mismatched links preserve unresolved reference 

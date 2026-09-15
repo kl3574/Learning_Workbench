@@ -1,0 +1,119 @@
+import { expect, test, type Page, type Route } from "${ACCEPTANCE_CACHE}/m52-reader-cold-order-experiment-v1/source/apps/web/node_modules/@playwright/test/index.mjs"
+import { createHash } from 'node:crypto'
+import { writeFileSync } from 'node:fs'
+import { RestartRuntime } from './restartRuntime'
+import { bootstrap } from './helpers'
+import { importReaderPackage, originalReaderPackage } from './readerTestData'
+const sha = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex')
+type ColdWindow = Window & { __readerColdObserved?: { sessionJsonCount: number; sessionJsonTimes: number[] } }
+async function observe(page: Page, mode: 'immediate' | 'controlled', outputPath: (name: string) => string) {
+  const start = performance.now()
+  const events: Record<string, unknown>[] = []
+  const errors: string[] = []
+  let active = true, claimed = false
+  const stamp = (kind: string, data: Record<string, unknown> = {}) => events.push({ ms: performance.now() - start, kind, ...data })
+  const allowed = (url: string) => { const value = new URL(url); return value.pathname.startsWith('/api/v1/') && /^\/api\/v1\/(session|workbench\/session|courses\/|lessons\/|blocks\/|objects\/|learning\/progress)/.test(value.pathname) ? value.pathname + value.search : null }
+  page.on('request', request => { const path = allowed(request.url()); if (active && path && request.method() === 'GET') stamp('request', { path }) })
+  page.on('response', response => { const path = allowed(response.url()); if (active && path && response.request().method() === 'GET') stamp('response', { path, status: response.status() }) })
+  page.on('requestfinished', request => { const path = allowed(request.url()); if (active && path && request.method() === 'GET') stamp('finished', { path }) })
+  page.on('requestfailed', request => { const path = allowed(request.url()); if (active && path && request.method() === 'GET') stamp('failed', { path, error: request.failure()?.errorText }) })
+  page.on('pageerror', error => { if (active) errors.push(error.message) })
+  await page.addInitScript(() => {
+    const observed = { sessionJsonCount: 0, sessionJsonTimes: [] as number[] }
+    ;(window as ColdWindow).__readerColdObserved = observed
+    const originalFetch = window.fetch.bind(window)
+    window.fetch = async (...args) => {
+      const response = await originalFetch(...args)
+      const target = args[0] instanceof Request ? args[0].url : String(args[0])
+      if (new URL(target, location.href).pathname === '/api/v1/session') {
+        const originalJson = response.json.bind(response)
+        response.json = async () => { const result = await originalJson(); observed.sessionJsonCount++; observed.sessionJsonTimes.push(performance.now()); return result }
+      }
+      return response
+    }
+  })
+  const snapshot = () => page.evaluate(() => ({
+    title: document.title, real_reader_count: document.querySelectorAll('.real-reader').length,
+    headings: Array.from(document.querySelectorAll('#reader-main h1')).map(node => node.textContent),
+    statuses: Array.from(document.querySelectorAll('#reader-main [role=status],.statusbar')).map(node => node.textContent),
+    alerts: Array.from(document.querySelectorAll('#reader-main [role=alert]')).map(node => node.textContent),
+    tabs: Array.from(document.querySelectorAll('[role=tab]')).map(node => ({ text: node.textContent, selected: node.getAttribute('aria-selected') })),
+    session_json_observer: (window as ColdWindow).__readerColdObserved ?? null,
+  }))
+  const routeHandler = async (route: Route) => {
+    if (claimed || route.request().method() !== 'GET') { await route.continue(); return }
+    claimed = true; stamp('workbench-upstream-fetch')
+    const response = await route.fetch()
+    const body = await response.body()
+    writeFileSync(outputPath('real-workbench-response.bin'), body)
+    stamp('workbench-upstream-ready', { status: response.status(), bytes: body.length, sha256: sha(body), etag: response.headers()['etag'] ?? null })
+    try {
+      if (mode === 'controlled') {
+        await expect(page.getByRole('heading', { name: '正在恢复工作台', exact: true })).toBeVisible({ timeout: 2000 })
+        await page.waitForFunction(() => ((window as ColdWindow).__readerColdObserved?.sessionJsonCount ?? 0) >= 2, undefined, { timeout: 2000 })
+        stamp('cold-recovery-and-two-session-json-observed', { dom: await snapshot() })
+      }
+    } catch (error) { errors.push(`CONTROL_GATE: ${error instanceof Error ? error.message : String(error)}`) }
+    finally { stamp('workbench-delivery-start'); await route.fulfill({ response, body }); stamp('workbench-delivery-complete') }
+  }
+  await page.route('**/api/v1/workbench/session', routeHandler)
+  return {
+    async firstAssertionPassed() { stamp('original-first-reader-assertion-passed', { dom: await snapshot() }); active = false },
+    async finish() {
+      let dom: unknown = null
+      try { dom = await snapshot() } catch { /* A terminated page is an explicit missing observation. */ }
+      writeFileSync(outputPath('observations.json'), JSON.stringify({ mode, events, errors, final_dom: dom, original_assertion_timeout_ms: 5000, runtime_status: 'synthetic-only' }, null, 2))
+      await page.unroute('**/api/v1/workbench/session', routeHandler)
+      return errors
+    }
+  }
+}
+
+for (const [mode, api, ui] of [['immediate', 52601, 50149], ['controlled', 58901, 45135]] as const) {
+  test(`original historical case with ${mode} first workbench delivery`, async ({ playwright }, info) => {
+    process.env.DIAG_API_PORT = String(api); process.env.DIAG_UI_PORT = String(ui)
+    process.env.DIAG_UI_ORIGIN = `http://127.0.0.1:${ui}`
+    const runtime = await RestartRuntime.start()
+    process.env.LEARNING_E2E_DATA_DIR = runtime.data
+    let observation: Awaited<ReturnType<typeof observe>> | null = null
+    let observedErrors: string[] = []
+    try {
+      const browser = await runtime.openBrowser(playwright.chromium)
+      const page = browser.pages()[0]
+  await bootstrap(page)
+  const current = originalReaderPackage('nativehistory', 2, true)
+  const old = originalReaderPackage('nativehistory', 1)
+  const imported = await importReaderPackage(page, current)
+  await imported.dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
+  const target = { course: current.course, lesson: current.lessons[0], block: current.blocks[0], view: 'lesson' }
+  observation = await observe(page, mode, name => info.outputPath(name))
+  await page.goto(`/?reader=${encodeURIComponent(JSON.stringify(target))}`)
+  await expect(page.locator('.real-reader')).toContainText('第二修订选文')
+  await observation.firstAssertionPassed()
+  const oldTarget = { course: old.course, lesson: old.lessons[0], block: old.blocks[0], view: 'lesson' }
+  await expect(page.getByText('✓ UI 会话已保存')).toBeVisible()
+  await page.goto(`/?reader=${encodeURIComponent(JSON.stringify(oldTarget))}`)
+  await expect(page.locator('.real-reader')).toContainText('正在阅读旧修订')
+  await expect(page.locator('.real-reader')).toContainText('选文甲')
+  await expect(page.getByRole('tab', { name: /定义：残差与损失 · r1/ })).toBeVisible()
+  await expect(page.getByRole('tab', { name: /block_nativehistory_definition · r2/ })).toBeVisible()
+  await page.getByRole('tab', { name: /block_nativehistory_definition · r2/ }).click()
+  await expect(page.locator('.real-reader')).toContainText('第二修订选文')
+  await page.getByRole('button', { name: '查看教材修订', exact: true }).click()
+  const revisions = page.getByRole('dialog', { name: '教材修订', exact: true })
+  await expect(revisions.getByRole('button', { name: /教材修订 1/ })).toBeVisible()
+  await expect(revisions.getByRole('button', { name: /教材修订 2/ })).toBeVisible()
+  await revisions.getByRole('button', { name: '关闭教材修订', exact: true }).click()
+  await expect(page.getByText('✓ UI 会话已保存')).toBeVisible()
+  const invalid = { ...oldTarget, block: { ...oldTarget.block, sha256: 'b'.repeat(64) } }
+  await page.goto(`/?reader=${encodeURIComponent(JSON.stringify(invalid))}`)
+  await expect(page.getByRole('heading', { name: '无法打开此精确链接', exact: true })).toBeVisible()
+  await expect(page.getByRole('alert')).toContainText('不一致')
+  await expect.poll(async () => { const value = await page.request.get('/api/v1/workbench/session').then(response => response.json()); return value.tabs.find((tab: {id:string}) => tab.id === value.active_tab_id)?.context.active_ref }).toEqual(current.blocks[0])
+    } finally {
+      try { if (observation) observedErrors = await observation.finish() }
+      finally { await runtime.close() }
+    }
+    expect(observedErrors).toEqual([])
+  })
+}

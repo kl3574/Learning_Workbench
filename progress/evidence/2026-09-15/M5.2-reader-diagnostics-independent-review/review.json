@@ -1,0 +1,62 @@
+{
+  "recorded_at": "2026-09-15T10:54:52.458118+00:00",
+  "scope": "Independent bounded static review and hash/byte readback only; no product tests, browser, server, network or upload execution; no repository edits.",
+  "result": "NO_NEW_BLOCKING_FINDING_WITHIN_REVIEWED_SCOPE",
+  "files": [
+    {
+      "path": "tests/e2e/readerDiagnostics.ts",
+      "sha256": "ef325d744bafb4e980d6f6e3700d5a573978717a78b572350d901f8614970835",
+      "bytes": 4231,
+      "snapshot": "source/tests/e2e/readerDiagnostics.ts.txt"
+    },
+    {
+      "path": "tests/e2e/reader.spec.ts",
+      "sha256": "8f8b522e8ae9158433b263445497e405ea8aaebfc912d6bc1ba64504a60fa892",
+      "bytes": 19765,
+      "snapshot": "source/tests/e2e/reader.spec.ts.txt"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "27f1deef3123fa83731ce384c871599ed815ae350b36f6127cce56cf02c02009",
+      "bytes": 5520,
+      "snapshot": "source/.github/workflows/ci.yml.txt"
+    },
+    {
+      "path": "tests/e2e/playwright.config.ts",
+      "sha256": "f1b231efde09e9b4e896ba5167fc10b4b602be34d7592d44b634f79ba6cadd29",
+      "bytes": 1370,
+      "snapshot": "source/tests/e2e/playwright.config.ts.txt"
+    }
+  ],
+  "prior_review": {
+    "path": "m52-reader-diagnostics-independent-review-v1/review.json",
+    "sha256": "69bd8dbf82b44ef59e19c93bfb281bfb236f96370bc6e756115c739676e0cb62",
+    "preserved_unchanged": true,
+    "archival_limit": "The initial helper body was read but was not archived before the owner repair. The initial receipt explicitly records snapshot_saved=false for that helper. This review archives the actual repaired helper and the other three current source files; it does not reconstruct or claim an initial helper snapshot."
+  },
+  "closed_finding": {
+    "id": "OBSERVATION_FINALIZE_UNBOUNDED",
+    "status": "CLOSED_BY_STATIC_CONTROL_FLOW_REVIEW",
+    "basis": "DOM read and file-save chain each have a 250 ms Promise.race observer wait bound. DOM rejection or timeout yields an explicit state marker. File rejection or timeout emits a static incomplete message, aborts the write signal and returns to the caller, which rethrows the same caught error. The reviewer did not execute the owner-reported boundary cases."
+  },
+  "original_test_binding": {
+    "commit": "3dd75f01966bb5dcf0b9ea0855e6b82ce335d814",
+    "baseline_sha256": "0bed78fe37d6a6b88011dc0efe89300c49df0e53cb835388a07d9bbb19b5e331",
+    "current_reader_sha256": "8f8b522e8ae9158433b263445497e405ea8aaebfc912d6bc1ba64504a60fa892",
+    "checked": "Removing only the observer import, TestInfo parameter and try/catch/finally observation wrapper makes the entire current reader.spec.ts byte-identical to the immutable baseline. The original page.goto, expectation text, remaining historical/hash-conflict assertions and their timeouts are unchanged."
+  },
+  "checks": [
+    "Observation is installed before the original first page.goto and disposed in finally on success or failure. Event callbacks read only GET path/revision/status/completion/failure; no route interception, additional application requests, headers, cookies, request or response bodies, fragment reads or application state mutation.",
+    "One Node monotonic clock timestamps observed request notifications and capture start. Events are capped at 2000 and omissions counted. DOM state is explicitly post-failure, not an assertion-time snapshot or causal proof.",
+    "A complete JSON string is written to an excluded .pending path before rename to the exact whitelisted artifact filename; incomplete writes do not intentionally publish truncated JSON. The original error is rethrown after observation handling.",
+    "Workflow retains make test-e2e without continue-on-error. The artifact step requires both failure() and native.outcome=failure; only the three exact filename families within the dedicated runner-temp output are allowed. Three-day retention, missing-file warning, hidden-file exclusion and trace off remain explicit.",
+    "The Playwright change only permits the output-directory override and failure-only screenshots. Test timeout, workers, headless mode, viewport, web servers and trace off remain unchanged.",
+    "The upload action uses a fixed commit. Official tag/action correspondence and owner structural checks are owner-supplied evidence; this reviewer did not repeat network verification or configuration execution."
+  ],
+  "limitations": [
+    "The two 250 ms limits bound awaiting by scheduled timers, not a hard real-time wall-clock guarantee under a blocked Node event loop or an already exhausted overall test budget.",
+    "Promise.race does not cancel page.evaluate. writeFile uses an AbortSignal, but a rename already underway can complete after the save wait timed out. Such a late final file still derives from a completed write; the incomplete console message truthfully records the observer wait limit, not guaranteed I/O cancellation.",
+    "No claim of zero observer timing overhead or original CI root cause. DOM can change before post-failure observation.",
+    "Actual CI artifact production/download and the original historical Reader CI failure remain unverified by this static review. Synthetic deliberately blocked-request checks, if performed by the owner, are diagnostic-path validation rather than reproduction of the original CI cause."
+  ]
+}
