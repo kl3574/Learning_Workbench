@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-14T21:12:52Z；规范 SHA-256：`ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
+更新：2026-09-15T01:56:02Z；规范 SHA-256：`ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED
 实施：IN_PROGRESS；当前任务：M4.1；下一任务：M4.2
 
-定位390px测验提交说明可见性，保持原断言/超时，完成必要修复和固定源码复验；M4.2保持只读准备。
+发布并回读本轮证据，PR47进入人工review；按5bd已验证基线继续M4.2，明确依赖PR47，不自动合并。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -25,8 +25,8 @@
 | M3.2 独立/辅助/开卷 policy snapshot，自动保存、并发版本 | review | [#21](https://github.com/kl3574/Learning_Workbench/issues/21) | 25501799321c621bec4999c6c684c6a13106771c |
 | M3.3 单选、文本填空、数值/计算容差、人工复核 | review | [#22](https://github.com/kl3574/Learning_Workbench/issues/22) | 452138bdf70147c84108aeab382b45e6a2e42278 |
 | M3.4 交卷/评分/复盘闭环，评分版本与 evidence | review | [#23](https://github.com/kl3574/Learning_Workbench/issues/23) | 40bd4298f28443ae4dff3c2eb4de987f60df4924 |
-| M4.1 学习事件、概念/技能证据、路线完成 | in_progress | [#24](https://github.com/kl3574/Learning_Workbench/issues/24) | 未验证提交 |
-| M4.2 先修/补弱/复习/下一步推荐，接受/拒绝 | todo | [#25](https://github.com/kl3574/Learning_Workbench/issues/25) | 未验证提交 |
+| M4.1 学习事件、概念/技能证据、路线完成 | review | [#24](https://github.com/kl3574/Learning_Workbench/issues/24) | 5bd81576a2a0e2dbb454165eb3bcde5920493b05 |
+| M4.2 先修/补弱/复习/下一步推荐，接受/拒绝 | ready | [#25](https://github.com/kl3574/Learning_Workbench/issues/25) | 未验证提交 |
 | M5.1 ProviderPort/能力协商/外发授权/预算/脱敏 | todo | [#26](https://github.com/kl3574/Learning_Workbench/issues/26) | 未验证提交 |
 | M5.2 检索权限、中文 FTS、来源和修订哈希 | todo | [#27](https://github.com/kl3574/Learning_Workbench/issues/27) | 未验证提交 |
 | M5.3 Tutor 状态机、SSE/取消/重连/异步上下文 | todo | [#28](https://github.com/kl3574/Learning_Workbench/issues/28) | 未验证提交 |
@@ -41,17 +41,18 @@
 
 ## 验证边界
 
-- spec_checks: PASS_M3_4_40BD429
-- unit: PASS_212_WEB_40BD429_938_PYTHON_47E02D9_BYTE_EQUIVALENT_PYTHON_SCOPE
-- contract: PASS_M3_4_SCOPE_51_REAL_ROUTES
-- integration: PASS_M3_4_SOURCE_40BD429_CI
-- browser_native: PASS_67_40BD429
+- spec_checks: PASS_M4_1_5BD8157
+- unit: 247_WEB_5BD8157;HISTORICAL1040_PYTHON_9A803C2_294INPUT_EQUAL;CURRENT5_GOVERNANCE_PASS
+- contract: PASS_M4_1_54CORE_58REAL_ROUTES
+- integration: PASS_M4_1_5BD8157_CI_459_PER_WORKFLOW
+- browser_native: PASS_74_5BD8157
 - real_provider: NOT_RUN
 - real_codex: NOT_RUN
 - learning_effectiveness: NOT_RUN
-- ci: 3cb28c9: actual 12/12 success; push and PR browser each 72 PASS (8.4m/9.1m). PR47 draft/open/unmerged. Earlier 9a803c2 10 success/2 failure retained.
-- m4_1_development: 开发结果及独立原失败/修复回执已保留；9a803c2实测1040 Python/236 web通过。3cb28c9 CI通过，剩余本地窄屏失败继续诊断。
-- m4_1_exact: 9a803c2六非浏览器门禁PASS，首次native47PASS/25FAIL；3cb28c9只改四个E2E入口，第二次本地native71PASS/1FAIL(5.7m)，两次501源码前后分别一致。新失败为390px测验提交说明不在视口，尚未验收。
+- ci: 5bd8157 exact12/12success；PR74PASS9.1m，push74PASS9.8m；证据提交本身的后续CI需另报，不视为本次源码CI。
+- m4_1_development: 开发和独立审查的所有原失败/修复、环境诊断已保留；最终源码新验收通过，不覆盖历史失败。
+- m4_1_exact: 5bd8157新lint/types/spec/247web/build/74native均PASS，504源码前后相同；同SHA双workflow12checks成功。
+- m4_1_layout_repair: PASS:真实412布局及焦点回归；原失败保留，限定机制归因；新74完整套件通过。
 
 ## 阻塞与待决项
 

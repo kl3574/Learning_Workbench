@@ -1,0 +1,131 @@
+{
+  "reviewed_at": "2026-09-15T01:23:18.957547+00:00",
+  "scope": "Independent read-only static review of the three uncommitted viewport repair files. No source edits, test execution, browser/service startup, CI mutation or publication performed.",
+  "source_inventory": {
+    "read_at": "2026-09-15T01:22:17.198566+00:00",
+    "files": [
+      {
+        "path": "apps/web/src/workbench/PreserveReaderViewport.tsx",
+        "sha256": "fc9e40c0ae8d9c865ad52fe45d22da675bca9a15815b9e634c6a75a9c2bf8043",
+        "bytes": 2849,
+        "snapshot": "<PRIVATE_ACCEPTANCE>/m41-viewport-independent-review-source/PreserveReaderViewport.tsx.txt"
+      },
+      {
+        "path": "apps/web/src/workbench/Shell.tsx",
+        "sha256": "34da087226607084ca299b2e302444203b72da864be762de4430c04cb89516b4",
+        "bytes": 43524,
+        "snapshot": "<PRIVATE_ACCEPTANCE>/m41-viewport-independent-review-source/Shell.tsx.txt"
+      },
+      {
+        "path": "apps/web/src/workbench/PreserveReaderViewport.test.tsx",
+        "sha256": "4187676eb572f23377c052774808133291790022d555a064d49e14115ad799c8",
+        "bytes": 5543,
+        "snapshot": "<PRIVATE_ACCEPTANCE>/m41-viewport-independent-review-source/PreserveReaderViewport.test.tsx.txt"
+      }
+    ]
+  },
+  "shell_diff": {
+    "path": "<PRIVATE_ACCEPTANCE>/m41-viewport-independent-review-source/Shell-wrapper.diff.txt",
+    "sha256": "e430a307f0c6bde860d901c7deb2e3bd8335cd45a244cc73e8dfa169ad616cc7",
+    "observed_delta": "One import plus outer div replaced with PreserveReaderViewport, passing full owner, actual status/comparison presence, and original className. Child tree and onScroll callbacks unchanged."
+  },
+  "diagnostic_evidence": [
+    {
+      "path": "<PRIVATE_ACCEPTANCE>/m41-assessment-viewport-diagnosis/controlled-geometry-summary.json",
+      "sha256": "c5f719380f62ea34c6071dc943b79f07b27eda6203a8acc7ff97a6ed33fd7b61"
+    },
+    {
+      "path": "<PRIVATE_ACCEPTANCE>/m41-assessment-viewport-diagnosis/receipt.json",
+      "sha256": "d1ebb30af945f74f532bca54f3486e97963ccffd32ee4cbd37f35f22e11359aa"
+    }
+  ],
+  "confirmed_static_properties": [
+    {
+      "property": "Before/after DOM ordering",
+      "assessment": "getSnapshotBeforeUpdate reads the existing root/node before React applies child DOM mutations; previous Props contain the old conflict state and this.props the incoming state. componentDidUpdate reads the new geometry. This directly addresses the sealed 94 to 493.46875 pane displacement and unchanged scrollTop958."
+    },
+    {
+      "property": "Owner binding",
+      "assessment": "Owner encodes workspace, tab id, view_kind, all four fields of active and attached ContentRefs, and attempt id. Scroll offsets are excluded, so the later ordinary onScroll update cannot cause a second compensation. Missing owner or identity changes skip capture; no delayed custom scroll callback survives an owner change."
+    },
+    {
+      "property": "DOM binding",
+      "assessment": "The selector is restricted to the direct main Reader path. An unmounted/replaced/disconnected node fails the same-node guard. Existing synthetic Reader, ReaderDocument, PracticeView, AssessmentView and RouteView are beneath that path."
+    },
+    {
+      "property": "Restoration and resize guards",
+      "assessment": "Changed child scrollTop or activeElement skips compensation. Browser viewport/visualViewport signature changes skip it; same width/left/bottom and positive remaining height restrict compensation to a vertical top contraction. Width reflow and native anchoring are intentionally not combined with another offset adjustment."
+    },
+    {
+      "property": "Persistence and CAS",
+      "assessment": "The wrapper assigns DOM scrollTop only; it does not rewrite Workbench state, ETags, attempts or server data. Existing Reader scroll handlers remain unchanged. useWorkbench.set preserves conflict status and writes the normal pending UI candidate; retainLocal still requires explicit choice and uses the current live candidate. Native dispatch and persistence are not established by this static review."
+    },
+    {
+      "property": "Repeated render",
+      "assessment": "Only false to true conflict insertion is eligible. Existing comparison rerenders and compensation-triggered session renders are skipped; initial mount and scrollTop<=1 acquire no synthetic offset."
+    }
+  ],
+  "findings": [
+    {
+      "id": "VIEWPORT_FOCUS_OCCLUSION",
+      "priority": "P2",
+      "status": "OPEN_STATIC_GEOMETRY_COUNTEREXAMPLE",
+      "path": "apps/web/src/workbench/PreserveReaderViewport.tsx",
+      "lines": [
+        35,
+        39
+      ],
+      "title": "Compensation can hide the unchanged focused editor behind the newly inserted panel",
+      "trigger": "Same owner/node, scrollTop958, unchanged activeElement inside the Reader, and a focused control originally visible at y200..250. Insert the sealed 399px conflict panel while that control keeps focus and its scrollTop remains unchanged.",
+      "reason": "All current guards pass. Before compensation the control moves to y599..649 inside the new pane493..818. Assigning scrollTop1357 returns it to y200..250, which is entirely above the new scroll viewport. The guard only tests focus identity changes, so it does not protect a focused element that was already focused before insertion.",
+      "impact": "An asynchronous real Workbench412 while editing/using the Reader can make the still-focused control disappear from the visible Reader, despite keeping document.activeElement unchanged.",
+      "verification_scope": "Static arithmetic and source-control-flow inference. No native reproduction or runtime assertion was executed by this reviewer.",
+      "suggested_fix_boundary": "Capture visible in-pane focus geometry and avoid or bound compensation when it would move that already-visible focused control outside the remaining pane. Preserve the full comparison UI and same-owner/child-restoration guards; do not broadly disable the submitted-paragraph compensation."
+    }
+  ],
+  "high_value_additional_tests": [
+    {
+      "priority": 1,
+      "test": "Same focus before and after insertion, focused child initially in the old top region that the conflict panel will occupy. Assert compensation does not hide it; pair with a focused child already within the remaining pane to avoid unnecessarily disabling valid compensation."
+    },
+    {
+      "priority": 2,
+      "test": "Actual held-genuine412 native control must retain comparison visibility and original submitted explanation viewport assertion, then verify the ordinary scroll event updates the same tab candidate and does not auto-resolve conflict or write a different tab."
+    },
+    {
+      "priority": 3,
+      "test": "Viewport height / visualViewport scale or offset change during commit skips compensation. Current unit coverage exercises width reflow but does not directly prove these signature guards."
+    }
+  ],
+  "test_status": {
+    "reviewer_tests": "NOT_RUN; task is read-only review",
+    "owner_report": "Root reports 10 unit tests and app lint passed; not replayed or independently reclassified as native acceptance",
+    "native": "Pending separate owner; no acceptance claimed"
+  },
+  "limitations": [
+    "This review addresses the captured insertion repair, not every historical browser failure or a complete accessibility audit.",
+    "Owner key covers supplied tab refs; legacy Reader context can fall back to session.course_ref, which is outside this owner key. Current normal explicit navigation builds attached course refs or clears active_tab_id; no reachable cross-course mis-compensation was established here.",
+    "A parent rerender with same boolean conflict while comparison content expands again is intentionally not eligible; the sealed bug is its initial insertion.",
+    "No claim is made that a getBoundingClientRect-based jsdom unit passes genuine browser layout, event dispatch or persisted scroll restoration."
+  ],
+  "source_current_readback": [
+    {
+      "path": "apps/web/src/workbench/PreserveReaderViewport.tsx",
+      "reviewed_sha256": "fc9e40c0ae8d9c865ad52fe45d22da675bca9a15815b9e634c6a75a9c2bf8043",
+      "current_sha256": "fc9e40c0ae8d9c865ad52fe45d22da675bca9a15815b9e634c6a75a9c2bf8043",
+      "unchanged": true
+    },
+    {
+      "path": "apps/web/src/workbench/Shell.tsx",
+      "reviewed_sha256": "34da087226607084ca299b2e302444203b72da864be762de4430c04cb89516b4",
+      "current_sha256": "34da087226607084ca299b2e302444203b72da864be762de4430c04cb89516b4",
+      "unchanged": true
+    },
+    {
+      "path": "apps/web/src/workbench/PreserveReaderViewport.test.tsx",
+      "reviewed_sha256": "4187676eb572f23377c052774808133291790022d555a064d49e14115ad799c8",
+      "current_sha256": "4187676eb572f23377c052774808133291790022d555a064d49e14115ad799c8",
+      "unchanged": true
+    }
+  ]
+}

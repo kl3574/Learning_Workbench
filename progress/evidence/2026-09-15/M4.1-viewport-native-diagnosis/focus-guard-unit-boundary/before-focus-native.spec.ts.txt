@@ -1,0 +1,125 @@
+import { writeFileSync } from 'node:fs'
+import { expect, test as base, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
+import type { AttemptSnapshot } from '../../packages/contracts/generated/api-types'
+import type { WorkbenchSession } from '../../packages/contracts/generated/types'
+import { importAssessmentPackage, originalAssessmentPackage } from './assessmentTestData'
+import { RestartRuntime } from './restartRuntime'
+
+const test = base.extend<{ runtime: RestartRuntime }>({
+  runtime: async ({}, use) => { const runtime = await RestartRuntime.start(); try { await use(runtime) } finally { await runtime.close() } },
+  page: async ({ runtime, playwright }, use) => {
+    const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]
+    await runtime.authenticateOnly(page); await use(page)
+  },
+})
+
+async function read(page: Page, path: string) {
+  const response = await page.request.get(`/api/v1/${path}`)
+  expect(response.status()).toBe(200)
+  return response.json()
+}
+
+async function geometry(page: Page) {
+  return page.evaluate(() => {
+    const rect = (selector: string) => {
+      const element = document.querySelector(selector)!, value = element.getBoundingClientRect()
+      return { top: value.top, bottom: value.bottom, width: value.width, height: value.height, scrollTop: element.scrollTop, scrollHeight: element.scrollHeight }
+    }
+    return { viewport: [innerWidth, innerHeight], reader: rect('.reader-main'), scroll: rect('.assessment-scroll'), paragraph: rect('.practice-submit > p') }
+  })
+}
+
+test('real session conflict preserves the scrolled submitted explanation and requires an explicit comparison choice', async ({ page }, info) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  const fixture = originalAssessmentPackage('nativereaderconflict'), imported = await importAssessmentPackage(page, fixture)
+  await imported.dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
+  await page.goto(`${new URL(page.url()).origin}/?assessment=${encodeURIComponent(JSON.stringify({ assessment_ref: fixture.assessment, course_ref: fixture.course }))}`)
+  await page.getByRole('checkbox', { name: '我已核对内容状态与模式，确认开始未评分测试', exact: true }).check()
+  const creating = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith(`/assessments/${fixture.assessment.id}/attempts`))
+  await page.getByRole('button', { name: '明确开始本次测试', exact: true }).click()
+  const created = await creating; expect(created.status()).toBe(201)
+  const attempt: AttemptSnapshot = await created.json()
+  await page.getByRole('radio', { name: '5', exact: true }).check()
+  await expect(page.getByText('服务端作答已保存', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: '提交本次测试', exact: true }).click()
+  const submitting = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith(`/attempts/${attempt.id}/submit`))
+  await page.getByRole('button', { name: '确认提交已保存作答', exact: true }).click()
+  expect((await submitting).status()).toBe(202)
+  await expect(page.getByRole('region', { name: '当前评分结果', exact: true })).toBeVisible()
+  await expect.poll(async () => (await read(page, `attempts/${attempt.id}`)).status).toBe('needs_review')
+  const ended = await read(page, `attempts/${attempt.id}`)
+  const responses = await read(page, `attempts/${attempt.id}/responses`)
+  const result = await read(page, `attempts/${attempt.id}/result`)
+  expect(ended.grading_status).toBe('needs_review')
+  expect(ended.submitted_at).not.toBeNull()
+  expect(result.items).toHaveLength(5)
+  expect(result.items.every((item: { score: number | null; solution_markdown?: string | null }) => item.score === null && item.solution_markdown == null)).toBe(true)
+  await expect(page.getByText('✓ UI 会话已保存')).toBeVisible()
+
+  let enterRequest = () => {}, continueRequest = () => {}, captureResponse = () => {}, deliverResponse = () => {}
+  const requestEntered = new Promise<void>(resolve => { enterRequest = resolve })
+  const requestGate = new Promise<void>(resolve => { continueRequest = resolve })
+  const responseCaptured = new Promise<void>(resolve => { captureResponse = resolve })
+  const responseGate = new Promise<void>(resolve => { deliverResponse = resolve })
+  let gated = false, expectedRevision = 0, actualStatus = 0
+  const observations: { stage: string; geometry: Awaited<ReturnType<typeof geometry>> }[] = []
+  await page.route('**/api/v1/workbench/session', async route => {
+    if (route.request().method() !== 'PUT' || gated) { await route.continue(); return }
+    gated = true
+    expectedRevision = (route.request().postDataJSON() as { expected_revision: number }).expected_revision
+    enterRequest()
+    await requestGate
+    const actual = await route.fetch()
+    actualStatus = actual.status()
+    captureResponse()
+    await responseGate
+    // Deliver the server's original response without inventing a status, body or conflict.
+    await route.fulfill({ response: actual })
+  })
+  try {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.locator('.practice-submit').scrollIntoViewIfNeeded()
+    await expect(page.locator('.practice-submit > p')).toBeInViewport()
+    await requestEntered
+    const baseline: WorkbenchSession = await read(page, 'workbench/session')
+    const auth: { csrf_token: string } = await read(page, 'session')
+    const concurrent = await page.request.put('/api/v1/workbench/session', {
+      headers: { Origin: new URL(page.url()).origin, 'X-CSRF-Token': auth.csrf_token },
+      data: { expected_revision: baseline.revision, session: { ...baseline, nav_width: baseline.nav_width === 300 ? 301 : 300 } },
+    })
+    expect(concurrent.status()).toBe(200)
+    const remote: WorkbenchSession = await concurrent.json()
+    expect(remote.revision).toBeGreaterThan(expectedRevision)
+    continueRequest()
+    await responseCaptured
+    expect(actualStatus).toBe(412)
+    observations.push({ stage: 'scrolled-before-real-412-delivery', geometry: await geometry(page) })
+    const delivered = page.waitForResponse(response => response.request().method() === 'PUT' && response.url().endsWith('/api/v1/workbench/session') && response.status() === 412)
+    deliverResponse()
+    await delivered
+    const comparison = page.getByRole('region', { name: '会话三方比较', exact: true })
+    await expect(comparison).toBeVisible()
+    await expect(comparison).toBeInViewport()
+    await expect(comparison.locator('details')).toHaveJSProperty('open', true)
+    await expect(comparison).toContainText('原基准')
+    await expect(comparison).toContainText('本地待同步')
+    await expect(comparison).toContainText('服务端')
+    await expect(comparison.getByRole('button', { name: '采用本地会话并重新保存', exact: true })).toBeEnabled()
+    await expect(page.locator('.practice-submit > p')).toBeInViewport()
+    expect(await page.locator('.assessment-scroll').evaluate(node => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+    observations.push({ stage: 'real-conflict-visible-without-choice', geometry: await geometry(page) })
+    expect(await read(page, 'workbench/session')).toEqual(remote)
+    expect(await read(page, `attempts/${attempt.id}`)).toEqual(ended)
+    expect(await read(page, `attempts/${attempt.id}/responses`)).toEqual(responses)
+    expect(await read(page, `attempts/${attempt.id}/result`)).toEqual(result)
+    await expect(comparison).toBeVisible()
+    await expect(page.getByText('会话版本冲突', { exact: true })).toBeVisible()
+    expect(errors).toEqual([])
+    await page.screenshot({ path: info.outputPath('reader-conflict-submitted-390.png') })
+  } finally {
+    continueRequest(); deliverResponse()
+    writeFileSync(info.outputPath('reader-conflict-layout-geometry.json'), JSON.stringify({ expectedRevision, actualStatus, observations }, null, 2) + '\n')
+  }
+})
