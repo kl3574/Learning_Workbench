@@ -1,0 +1,125 @@
+FFF                                                                      [100%]
+=================================== FAILURES ===================================
+_ test_no_work_snapshot_does_not_reserve_writer_while_actual_content_read_completes[lesson] _
+
+current_projection = (<services.api.app.infrastructure.database.Database object at 0x7b6754dddd90>, 'workspace_e643570f638e405cb70375f545ce...ee38f51b43d89b11aabd3ecf10979d6777d6997099f4d')], concept_refs=[], sections=[], objectives=[], difficulty='beginner')])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7b6754eb2de0>
+read = 'lesson'
+
+    @pytest.mark.parametrize('read', ['lesson', 'outline'])
+    def test_no_work_snapshot_does_not_reserve_writer_while_actual_content_read_completes(
+            current_projection, monkeypatch, read):
+        database, workspace, content, values = current_projection
+        identity = SessionIdentity('session_readiness_test', workspace, 'learner', 'unused', '2099-01-01T00:00:00Z')
+        before = stored_rows(database)
+        held, release, contender_begin = held_current_basis(monkeypatch, database)
+        completed = Event()
+    
+        def read_content():
+            try:
+                if read == 'lesson':
+                    return content.read(workspace, 'lesson', values[1].id, 1)
+                return ReaderService(database).outline(identity, values[2].id, 1)
+            finally:
+                completed.set()
+    
+        with ThreadPoolExecutor(1, thread_name_prefix='maintenance') as maintenance, \
+                ThreadPoolExecutor(1, thread_name_prefix='contender') as reader:
+            worker = maintenance.submit(recommendations.RecommendationWorker(database).run_once)
+            try:
+                assert held.wait(5)
+                result = reader.submit(read_content)
+                assert contender_begin.wait(5), 'actual Content transaction was not attempted'
+                # This measures lock independence at a held snapshot, not a CI latency SLA.
+>               assert completed.wait(1), 'actual Content BEGIN remains blocked by a no-work maintenance snapshot'
+E               AssertionError: actual Content BEGIN remains blocked by a no-work maintenance snapshot
+E               assert False
+E                +  where False = wait(1)
+E                +    where wait = <threading.Event at 0x7b6754ddd070: unset>.wait
+
+tests/integration/test_recommendation_worker_readiness.py:82: AssertionError
+_ test_no_work_snapshot_does_not_reserve_writer_while_actual_content_read_completes[outline] _
+
+current_projection = (<services.api.app.infrastructure.database.Database object at 0x7b6754ddffe0>, 'workspace_09d3bc3c15c549ba955240a36c59...ee38f51b43d89b11aabd3ecf10979d6777d6997099f4d')], concept_refs=[], sections=[], objectives=[], difficulty='beginner')])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7b6754ddf5f0>
+read = 'outline'
+
+    @pytest.mark.parametrize('read', ['lesson', 'outline'])
+    def test_no_work_snapshot_does_not_reserve_writer_while_actual_content_read_completes(
+            current_projection, monkeypatch, read):
+        database, workspace, content, values = current_projection
+        identity = SessionIdentity('session_readiness_test', workspace, 'learner', 'unused', '2099-01-01T00:00:00Z')
+        before = stored_rows(database)
+        held, release, contender_begin = held_current_basis(monkeypatch, database)
+        completed = Event()
+    
+        def read_content():
+            try:
+                if read == 'lesson':
+                    return content.read(workspace, 'lesson', values[1].id, 1)
+                return ReaderService(database).outline(identity, values[2].id, 1)
+            finally:
+                completed.set()
+    
+        with ThreadPoolExecutor(1, thread_name_prefix='maintenance') as maintenance, \
+                ThreadPoolExecutor(1, thread_name_prefix='contender') as reader:
+            worker = maintenance.submit(recommendations.RecommendationWorker(database).run_once)
+            try:
+                assert held.wait(5)
+                result = reader.submit(read_content)
+                assert contender_begin.wait(5), 'actual Content transaction was not attempted'
+                # This measures lock independence at a held snapshot, not a CI latency SLA.
+>               assert completed.wait(1), 'actual Content BEGIN remains blocked by a no-work maintenance snapshot'
+E               AssertionError: actual Content BEGIN remains blocked by a no-work maintenance snapshot
+E               assert False
+E                +  where False = wait(1)
+E                +    where wait = <threading.Event at 0x7b6754c2da30: unset>.wait
+
+tests/integration/test_recommendation_worker_readiness.py:82: AssertionError
+_ test_source_can_commit_during_no_work_snapshot_and_dirty_survives_until_next_tick _
+
+current_projection = (<services.api.app.infrastructure.database.Database object at 0x7b6754c2cfe0>, 'workspace_71d67f9034ad472aa4006591c009...ee38f51b43d89b11aabd3ecf10979d6777d6997099f4d')], concept_refs=[], sections=[], objectives=[], difficulty='beginner')])
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7b6754c2e990>
+
+    def test_source_can_commit_during_no_work_snapshot_and_dirty_survives_until_next_tick(
+            current_projection, monkeypatch):
+        database, workspace, content, _ = current_projection
+        held, release, contender_begin = held_current_basis(monkeypatch, database)
+        values, bodies = tree(2, concept=False)
+        completed = Event()
+    
+        def publish():
+            try:
+                return content.publish(workspace, values, bodies)
+            finally:
+                completed.set()
+    
+        with ThreadPoolExecutor(1, thread_name_prefix='maintenance') as maintenance, \
+                ThreadPoolExecutor(1, thread_name_prefix='contender') as writer:
+            worker = maintenance.submit(recommendations.RecommendationWorker(database).run_once)
+            try:
+                assert held.wait(5)
+                publication = writer.submit(publish)
+                assert contender_begin.wait(5)
+>               assert completed.wait(1), 'source publication remains blocked by a no-work maintenance snapshot'
+E               AssertionError: source publication remains blocked by a no-work maintenance snapshot
+E               assert False
+E                +  where False = wait(1)
+E                +    where wait = <threading.Event at 0x7b6754c2f7a0: unset>.wait
+
+tests/integration/test_recommendation_worker_readiness.py:111: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <private-home>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <private-home>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_recommendation_worker_readiness.py::test_no_work_snapshot_does_not_reserve_writer_while_actual_content_read_completes[lesson]
+FAILED tests/integration/test_recommendation_worker_readiness.py::test_no_work_snapshot_does_not_reserve_writer_while_actual_content_read_completes[outline]
+FAILED tests/integration/test_recommendation_worker_readiness.py::test_source_can_commit_during_no_work_snapshot_and_dirty_survives_until_next_tick
+3 failed, 2 warnings in 3.50s

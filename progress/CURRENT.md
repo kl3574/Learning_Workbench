@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-15T11:08:40Z；规范 SHA-256：`a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8`
+更新：2026-09-15T12:21:23Z；规范 SHA-256：`a9ad5cd57913630ef5cdf4781ae5f9155d44c7a7d8169bfec8ae4811be6481c8`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED
 实施：IN_PROGRESS；当前任务：M5.2；下一任务：M5.3
 
-发布已审查的四文件诊断和原CI失败证据，回读新head双CI；若复现则提取真实现场定位，保留5s断言，不把受控故障或一次通过当根因修复。M5.3依赖实施暂停。
+发布d65修复和完整证据，同步PR50/Issue27；核对精确新发布head的双CI实际终态。若新CI失败保留现场继续定位；通过后按未合并依赖流程继续M5.3。平台Agent目前仍未实现/未验，独立DeepSeek最小生成成功单列。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -28,7 +28,7 @@
 | M4.1 学习事件、概念/技能证据、路线完成 | review | [#24](https://github.com/kl3574/Learning_Workbench/issues/24) | 5bd81576a2a0e2dbb454165eb3bcde5920493b05 |
 | M4.2 先修/补弱/复习/下一步推荐，接受/拒绝 | review | [#25](https://github.com/kl3574/Learning_Workbench/issues/25) | 8d4b36f57b3ace950f9d3f0e750c4810fce9b0ec |
 | M5.1 ProviderPort/能力协商/服务端冻结授权/受控预算/秘密与脱敏 | review | [#26](https://github.com/kl3574/Learning_Workbench/issues/26) | 254a4ffe70dcab9db56663cc37245a33ae1495a5 |
-| M5.2 检索权限、中文 FTS、来源和修订哈希 | in_progress | [#27](https://github.com/kl3574/Learning_Workbench/issues/27) | 3dd75f01966bb5dcf0b9ea0855e6b82ce335d814 |
+| M5.2 检索权限、中文 FTS、来源和修订哈希 | in_progress | [#27](https://github.com/kl3574/Learning_Workbench/issues/27) | d65e08e3c3fd896896f7228f6099ef93b9c3362d |
 | M5.3 Tutor 状态机、SSE/取消/重连/异步上下文 | todo | [#28](https://github.com/kl3574/Learning_Workbench/issues/28) | 未验证提交 |
 | M5.4 真实模型与搜索评测 | todo | [#29](https://github.com/kl3574/Learning_Workbench/issues/29) | 未验证提交 |
 | M6.1 教材/例题/题目生成 schema + 数值验证 | todo | [#30](https://github.com/kl3574/Learning_Workbench/issues/30) | 未验证提交 |
@@ -41,11 +41,11 @@
 
 ## 验证边界
 
-- spec_checks: PASS_1DB509F_54CORE_66GENERATED_102DECLARED_60REAL
-- unit: 1197_FULL_PYTHON_AND_288_WEB_PASS_1DB509F
+- spec_checks: PASS_d65e08e_54CORE_70GENERATED_106DECLARED；结构和派生一致性，不冒充106真实HTTP实现。
+- unit: 1673_FULL_PYTHON_PASS_d65e08e；355_WEB_PASS_c83b1d0_CARRIED_BY_IDENTICAL_INPUTS；测试组不混加。
 - contract: PASS_1DB509F_243_CI_PER_WORKFLOW
 - integration: PASS_1DB509F_527_CI_PER_WORKFLOW
-- browser_native: PASS_82_1DB509F
+- browser_native: 88_PASS_d65e08e_7.4m；真实浏览器本地验收，不代表远端CI或平台Agent。
 - real_provider: DIRECT_VENDOR_SMOKE_PASS：2026-09-15 用户明确授权的独立 DeepSeek 最小测试，GET /models 200、单次 POST /chat/completions 200，deepseek-flash 回答合成算术题正确，实际 usage 14 input / 1 output / 15 total；无重试、无资料外发，凭据只在进程内存。PLATFORM_AGENT_NOT_RUN：生产 source/proof 未注册、Tutor/Run 未实现；不等于 M5.3/M5.4 验收。无秘密本地原回执留在仓库外，不提交。
 - real_codex: NOT_RUN
 - learning_effectiveness: NOT_RUN
@@ -61,16 +61,23 @@
 - m5_1_native_repair: PASS at254a4ff：新命令及明确更正采用同owner/provider较高真实readback，ACK不伪造current；unknown原命令不变。真实受控parent-delay DELETE由r1If-Match/412变r2If-Match/200，peer抢先r3仍412再explicit新key成功；原CI只确知r3ACK等待失败，不追认唯一因果。14secret/35Provider定向unit及5native通过；同source新323web/87fullnative通过。
 - m5_1_254a4ff_local: 六项实际命令PASS：lint、types(mypy125+web)、spec(54core/6embedded/106routes结构检查)、build(709modules,chunk警告保留)、323web/52files3.37s、87native6.9m。600source aggregate b00ae17d2d6e87e01aee18c0082ff1eee32c4be891d343fe4bd1b8df48417452；83完整native产物私有留存，当前阶段尚待新发布head CI。
 - m5_1_ci_current: PASS：发布f0b4ce2精确双workflow12/12success；每组323web/52files、87native（12.0m/11.9m）。6push checkout f0b4ce2、6PR checkout95ff622，全部Git tree c8d7d132相同；600source与254a4ff等同。85payload原件/公开件SHA、size、全部转换与聚合root逐项核验；此CI基于规范3.0.2，不涵盖当前M5.2工作树。
-- m5_2: LOCAL_PASS_WITH_DECLARED_SCOPES：验证代码3dd75f0，完整346web/57files、88真实native/7.6m及lint/types/build通过；后端相同427输入的f9完整1663Python/2警告与Ruff/mypy133通过，430输入spec及216输入固定gold两轮38正向Recall@5=1.0/4无结果通过。原783清单native仅1张测试输出PNG变化，782执行相关文件不变，新旧图归档且原unchanged=false保留。UI/账本/契约审查问题修复有实测证据。PR50 draft/open/unmerged。 FAIL：3dd75f0 push34957539421与PR34957746128均completed/failure；两workflow合计10success/2failure，各browser 87PASS/1FAIL（10.7m/12.9m）。同一historical Reader首个真实r2页面的.real-reader断言5000ms element(s) not found。旧CI未上传DOM/截图，artifacts实际为0，根因未知。六push checkout3dd，六PR checkoutb945694，全部tree c4c5dfd7相同；原12日志与精确回读已保留。
+- m5_2: LOCAL_PASS_WITH_DECLARED_SCOPES：最新验证代码d65e08e，1673Python/88native与Ruff/mypy/spec新PASS；355web/lint/types/build按相同c83执行输入沿用。原3dd检索gold42两轮通过及完整UI/源码审查保留。最新已发布73d远端10success/2failure；新修复待发布/CI，PR50仍draft/open/unmerged。
 - m5_1_358bf5d_historical: LOCAL_FIXED_SOURCE_PASS：769原本地1494Python/314web/85native保留；6c首次CI10success2frontend FAIL，0c修refresh测试并五门禁PASS。e480新CI的PRfrontend314PASS，push不同revoke准备测试313PASS1FAIL，原件保留。358bf5d仅加7行等待journal/ACK后完整回读，600输入before/after/Git相同，lint/types/spec/build与314web/52files新PASS；原RED/观测/两次guard mutation反例保留，production原字节恢复。358本地未重跑backend/native（输入未变），新提交未推送、远端CI NOT_RUN；真实Provider/Codex/学习效果未验。
 - m5_2_input_coverage: 补证PASS：同f9新Python02实际1663PASS/2依赖弃用警告/273.45s，427声明输入与Git及before/after一致，含6个顶层helper；新spec03对430输入实测PASS，另含3个派生docs。Python02不追认这3个docs运行前快照，其内容由套件generate(check=True)及独立spec03核验。原01的1663PASS/421绑定和两条遗漏审查原件保留。
 - m5_2_ui_review: 两处修复有界闭合：同一合法11case在原逻辑快照7FAIL4PASS、修后同测通过，完整检索23web/5filesPASS。相同本机命令/ACK候选可恢复，不同身份/正文/ACK冲突保持拒绝；安全读取失败禁止父链离开。B独立源码/原日志/hash回读无新增阻断，未冒称其另跑测试。默认Reader scope误用practice的独立原RED/GREEN另保留。
 - m5_2_native_development: native04实际1PASS13.5s，root独立看1440/390图，完整r1原文/currentr2/未审与历史warning可见；root另存原04附件。native02的两图和响应附件曾因03测试输出目录误配置被覆盖，原02源码/receipt/log保留，丢失附件明确不可恢复；03产物只归03，04为新正确目录与实际视口内正文截图。不得说所有早期附件仍完整。
 - m5_2_ci: FAIL：3dd75f0 push34957539421与PR34957746128均completed/failure；两workflow合计10success/2failure，各browser 87PASS/1FAIL（10.7m/12.9m）。同一historical Reader首个真实r2页面的.real-reader断言5000ms element(s) not found。旧CI未上传DOM/截图，artifacts实际为0，根因未知。六push checkout3dd，六PR checkoutb945694，全部tree c4c5dfd7相同；原12日志与精确回读已保留。
-- m5_2_reader_diagnostics: DIAGNOSTIC_ONLY：仅四处测试/CI观察改动，保持原goto、5s expect与其余测试字节。原案例本地1PASS/7.7s，独立冷恢复对照2PASS/13.5s均未复现。新增helper三个受控边界通过；实际带helper正常路径1PASS/7.8s；合成GET阻断运行真实exit1/1FAIL，原5s断言重抛并生成JSON/页面上下文/截图，只验证诊断路径。初始私有ESM harness失败保留；诊断两等待各250ms非硬实时。尚未发布新增改动，未验证GitHub真实上传，未宣称产品根因已修复。
+- m5_2_reader_diagnostics: DIAGNOSTIC_ONLY：仅四处测试/CI观察改动，保持原goto、5s expect与其余测试字节。原案例本地1PASS/7.7s，独立冷恢复对照2PASS/13.5s均未复现。新增helper三个受控边界通过；实际带helper正常路径1PASS/7.8s；合成GET阻断运行真实exit1/1FAIL，原5s断言重抛并生成JSON/页面上下文/截图，只验证诊断路径。初始私有ESM harness失败保留；诊断两等待各250ms非硬实时。诊断改动已实际发布73d65af并回读PR50；73d新CI已终态失败，GitHub实际failure artifact上传step success、ZIP digest/下载/安全枚举3文件及真实JSON/PNG已核，诊断能力已实际验证，未宣称产品根因已修复。
+- m5_2_ci_diagnostic_head: FAIL：73d65af精确双workflow最终10success/2failure。push34961802654 frontend345PASS1FAIL、browser88PASS9.6m；PR34961806202 frontend346PASS、browser87PASS1FAIL13.2m。PR仍同Reader首5s断言失败，真实JSON显示known策略后Reader loading，小节/outline两GET在5.4s观察结束仍未response、未发block GET。原12日志/checkout同tree已核；不能据此断言服务端、数据库或浏览器的具体延迟层。
+- m5_2_policy_repair: LOCAL_FIXED_SOURCE atc83b1d0：条件性慢response/poll饥饿受控原6例4FAIL2PASS；coalesce候选6PASS但新挂起反例2FAIL6PASS，被否决保留。最终明确权限epoch+已完成request序号，8例PASS；独立静态审无新增阻断。并非73d Reader loading失败原因，该实际现场不在Policy unknown。
+- m5_2_recommendation_navigation_repair: LOCAL_FIXED_SOURCE atc83b1d0：真实DOM首enabled点击可被迟到passive cleanup取消；同无插桩两例1FAIL1PASS→2PASS，同永久test1FAIL→1PASS。仅guard重置改layout effect，原guard函数/原7Panel断言及5种延迟失效负控不变。推荐29例PASS及独立review无新增阻断；原CI没有click时序，未认定唯一因果。
+- m5_2_c83_gates: LOCAL_FIXED_SOURCE_PASS：c83b1d0完整355web/58files、lint/typecheck/build及88native/7.6m均PASS。五门禁785个声明输入before逐项同Git；四项before/after一致，native仅已知测试输出PNG变化，原unchanged=false保留且两图归档、精确hash保护恢复。初次恢复命令在完成恢复后因系统Python datetime.UTC写回执失败，后以项目Python真实读回；未冒称第一命令成功。独立终态读回已完成。仅此代码与命令范围，不宣称当前后端修复已测或远端CI通过。
+- m5_2_reader_lock_profile: MECHANISM_OBSERVED_NOT_CI_REPRODUCTION：真实累计合成数据库候选副本中一次RecommendationWorker no-work检查持写锁169.81ms；实际Content lesson/outline BEGIN等待178.69/228.71ms，返回均正常。原库/785源码不变，零blob读取；候选库有14精确fixture refs但缺随机全套artifact绑定，不是CI数据库。新建小库与累计库分别保留；线程SQL单时钟核验，CPU profile跨线程不误归因。无人工睡眠/数据放大/断言超时改动，未复现数秒等待。
+- m5_2_worker_repair: FOCUSED_PASS：最终生产734e19c3与test709dc3e0；同test旧逻辑3FAIL→新3PASS，另7负控未在此选择运行。完整新10+旧29相关integration共39PASS/2原警告；owned Ruff/mypy通过，原writer/catch后缀逐字相同，D独立8完整run读回无阻断。B786清单为原785tracked+owned新test，不含当时root新增untracked ADR，未追认全仓不变。red01/02 harness问题、green04错误历史catalog期望与最终同bytes闭合均保留。
+- m5_2_d65_gates: LOCAL_FIXED_SOURCE_PASS：d65e08e新完整Python1673PASS/2依赖弃用警告/291.76s，native88PASS/7.4m，完整Ruff、mypy133、spec均PASS。五门禁787before逐项同Git，四非nativeafter全同aggregate fcc585248ac016f6817d380962eb391b8fea3294ec23e154a287460815fdde02；native仅已知直接输出PNG改变，原unchanged=false保留，82界面文件预存原件、实际after归档后按精确hash恢复。前端c83的355web/58files、lint/types/build依377保守执行输入同字节与全Git仅三源变更的独立回读沿用，不称重跑。新远端CI NOT_RUN，不能用本地通过抹去73d原失败。
 
 ## 阻塞与待决项
 
-- 暂无已确认阻塞。
+- M5_2_CI_REGRESSION: 原73d双CI10success/2failure，Reader耗时层未唯一定位。三项独立机制修复已在d65新完整本地1673Python/88native与同输入355web范围通过；新远端CI待发布/运行，不能提前解除远端验收阻断。非权限或凭据阻塞。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。

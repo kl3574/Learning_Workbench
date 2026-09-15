@@ -1,0 +1,36 @@
+import 'fake-indexeddb/auto'
+import { act, cleanup, fireEvent as realFireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, expect, test, vi } from 'vitest'
+import { writeFileSync } from 'node:fs'
+import { RecommendationsPanel } from '<private-home>/Desktop/learning/Learning_Workbench/apps/web/src/features/recommendations/RecommendationsPanel'
+import { navigationHref } from '<private-home>/Desktop/learning/Learning_Workbench/apps/web/src/features/recommendations/recommendationModel'
+import { decisionFixture, testPage, testRecommendation } from '<private-home>/Desktop/learning/Learning_Workbench/apps/web/src/features/recommendations/testFixtures'
+import { decisionStore } from '<private-home>/Desktop/learning/Learning_Workbench/apps/web/src/features/recommendations/decisionDrafts'
+const events: unknown[]=[]; (globalThis as typeof globalThis & {__navTrace?:unknown[]}).__navTrace=events
+const fireEvent={click:(button:HTMLElement)=>{events.push({event:'click',disabled:button.hasAttribute('disabled'),text:button.textContent});return realFireEvent.click(button)}}
+afterEach(context=>{ events.push({event:'final-dom',text:document.body.textContent}); writeFileSync(`<private-home>/.cache/learning-workbench-acceptance/m52-recommendation-navigation-diagnosis-v1/harness/${context.task.name.replace(/[^a-z0-9]/gi,'_')}.json`,JSON.stringify(events,null,2)+'\n');cleanup();vi.restoreAllMocks();events.length=0 })
+test('opening either real parent chain is explicit, preserves all full refs and does not accept the recommendation', async () => {
+  const item = testRecommendation(), state = decisionFixture(item), port = { ...state.port, list: vi.fn(async () => testPage([item])) }, open = vi.fn()
+  render(<RecommendationsPanel workspace="workspace_panel_navigation" paused={false} course={null} port={port} open={open} onState={() => {}} />)
+  await screen.findByRole('article', { name: `学习建议：${item.target_title}` }); await screen.findByText('本机推荐候选存储可用')
+  expect(screen.getByText('此目标有多个真实教材父链，请明确选择从哪条路径打开。')).toBeTruthy()
+  const button = screen.getByRole('button', { name: '从教材 course_b · r2 / 小节 lesson_original · r1 打开材料' })
+  expect(screen.queryByRole('link')).toBeNull(); expect(button.getAttribute('href')).toBeNull(); expect(new URL(navigationHref(item.navigation_options[1]), 'http://localhost').searchParams.get('reader')).toBe(JSON.stringify({ course: item.navigation_options[1].course_ref, lesson: item.target_ref }))
+  fireEvent.click(button); await waitFor(() => expect(open).toHaveBeenCalledExactlyOnceWith(item.navigation_options[1])); expect(state.inspect).toHaveBeenCalledExactlyOnceWith(item.id); expect(state.save).not.toHaveBeenCalled(); expect(state.current().decision).toBe('pending')
+  expect(screen.getByText(/预计用时：未知/)).toBeTruthy(); expect(screen.getByText(/复习提醒间隔 3 天 · 未校准/)).toBeTruthy(); expect(screen.getByText(/尚未审核/)).toBeTruthy()
+})
+
+test('earliest enabled DOM click with real store readiness', async () => {
+ const item=testRecommendation(), state=decisionFixture(item), port={...state.port,list:vi.fn(async()=>testPage([item]))},open=vi.fn()
+ let clicked=false
+ const observer=new MutationObserver(()=>{
+  const button=screen.queryByRole('button',{name:'从教材 course_b · r2 / 小节 lesson_original · r1 打开材料'})
+  if(!clicked&&button&&!button.hasAttribute('disabled')){clicked=true;fireEvent.click(button)}
+ })
+ observer.observe(document.body,{subtree:true,childList:true,attributes:true})
+ try {
+  render(<RecommendationsPanel workspace="workspace_earliest_ready" paused={false} course={null} port={port} open={open} onState={()=>{}} />)
+  await waitFor(() => expect(open).toHaveBeenCalledExactlyOnceWith(item.navigation_options[1]))
+  expect(state.inspect).toHaveBeenCalledExactlyOnceWith(item.id);expect(state.save).not.toHaveBeenCalled()
+ } finally {observer.disconnect()}
+})

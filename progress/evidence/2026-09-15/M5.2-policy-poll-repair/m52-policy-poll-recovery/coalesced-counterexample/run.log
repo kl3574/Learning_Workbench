@@ -1,0 +1,57 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/assessment/useWorkspacePolicy.test.tsx
+
+
+ RUN  v5.0.0 <private-home>/Desktop/learning/Learning_Workbench/apps/web
+
+ ❯ src/features/assessment/useWorkspacePolicy.test.tsx (8 tests | 2 failed) 22ms
+   × a hung older read does not prevent a subsequent poll from observing restricted access 4ms
+   × an older successful read cannot undo a newer policy read failure 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/assessment/useWorkspacePolicy.test.tsx > a hung older read does not prevent a subsequent poll from observing restricted access
+AssertionError: expected [ { resolve: [Function], …(1) } ] to have a length of 2 but got 1
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ src/features/assessment/useWorkspacePolicy.test.tsx:65:19
+     63|   const view = renderHook(() => useWorkspacePolicy('workspace_policy'))
+     64|   await act(() => vi.advanceTimersByTimeAsync(2000))
+     65|   expect(replies).toHaveLength(2)
+       |                   ^
+     66|   await act(async () => { replies[1].resolve(session('workspace_policy…
+     67|   expect(view.result.current.known).toBe(true)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/features/assessment/useWorkspacePolicy.test.tsx > an older successful read cannot undo a newer policy read failure
+AssertionError: expected [ { resolve: [Function], …(1) } ] to have a length of 2 but got 1
+
+- Expected
++ Received
+
+- 2
++ 1
+
+ ❯ src/features/assessment/useWorkspacePolicy.test.tsx:76:19
+     74|   const view = renderHook(() => useWorkspacePolicy('workspace_policy'))
+     75|   await act(() => vi.advanceTimersByTimeAsync(2000))
+     76|   expect(replies).toHaveLength(2)
+       |                   ^
+     77|   await act(async () => { replies[1].reject(new Error('Synthetic sessi…
+     78|   await act(async () => { replies[0].resolve(session()) })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 6 passed (8)
+   Start at  19:17:03
+   Duration  363ms (environment 68%, import 15%, transform 9%, tests 8%, worker 1%)
+

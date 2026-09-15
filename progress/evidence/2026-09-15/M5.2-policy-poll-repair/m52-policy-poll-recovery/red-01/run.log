@@ -1,0 +1,61 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/assessment/useWorkspacePolicy.test.tsx
+
+
+ RUN  v5.0.0 <private-home>/Desktop/learning/Learning_Workbench/apps/web
+
+ ❯ src/features/assessment/useWorkspacePolicy.test.tsx (6 tests | 4 failed) 21ms
+   × a slow policy response can establish access even after multiple background poll ticks 13ms
+   × access invalidation supersedes a pending read and cannot be undone by its late response 2ms
+   × focus invalidation supersedes a pending read and cannot be undone by its late response 1ms
+   × refresh invalidation supersedes a pending read and cannot be undone by its late response 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/assessment/useWorkspacePolicy.test.tsx > a slow policy response can establish access even after multiple background poll ticks
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/features/assessment/useWorkspacePolicy.test.tsx:24:37
+     22|   await act(() => vi.advanceTimersByTimeAsync(4000))
+     23|   await act(async () => { replies[0].resolve(session()) })
+     24|   expect(view.result.current.known).toBe(true)
+       |                                     ^
+     25|   expect(view.result.current.independentId).toBeNull()
+     26|   await act(() => vi.advanceTimersByTimeAsync(2000))
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  src/features/assessment/useWorkspacePolicy.test.tsx > access invalidation supersedes a pending read and cannot be undone by its late response
+ FAIL  src/features/assessment/useWorkspacePolicy.test.tsx > focus invalidation supersedes a pending read and cannot be undone by its late response
+ FAIL  src/features/assessment/useWorkspacePolicy.test.tsx > refresh invalidation supersedes a pending read and cannot be undone by its late response
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/features/assessment/useWorkspacePolicy.test.tsx:43:37
+     41|   await act(() => vi.advanceTimersByTimeAsync(4000))
+     42|   await act(async () => { replies[1].resolve(session('workspace_policy…
+     43|   expect(view.result.current.known).toBe(true)
+       |                                     ^
+     44|   expect(view.result.current.independentId).toBe('attempt_active')
+     45| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed | 2 passed (6)
+   Start at  19:15:24
+   Duration  354ms (environment 69%, import 14%, transform 9%, tests 8%, worker 1%)
+

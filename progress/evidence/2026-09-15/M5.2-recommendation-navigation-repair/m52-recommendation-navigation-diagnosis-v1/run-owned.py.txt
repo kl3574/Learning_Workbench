@@ -1,0 +1,16 @@
+from pathlib import Path
+from hashlib import sha256
+import sys,datetime,json,subprocess
+root=Path('<private-home>/Desktop/learning/Learning_Workbench');base=Path(__file__).parent;dest=base/sys.argv[1];dest.mkdir()
+files=[x['path'] for x in json.loads((base/'preflight.json').read_text())['source']]
+inv=lambda:[{'path':p,'sha256':sha256((root/p).read_bytes()).hexdigest()} for p in files]
+harness=lambda:[{'path':str(p.relative_to(base)), 'sha256':sha256(p.read_bytes()).hexdigest()} for p in sorted((base/'harness').glob('*.ts*'))]
+cmd=['bash','scripts/node.sh','npm','--prefix','apps/web','test','--']+sys.argv[2:]
+for p in (base/'harness').glob('*.ts*'):(dest/(p.name+'.txt')).write_bytes(p.read_bytes())
+for p in files:
+ source=dest/'source'/Path(p+'.txt');source.parent.mkdir(parents=True,exist_ok=True);source.write_bytes((root/p).read_bytes())
+before=inv(); inputs=harness();start=datetime.datetime.now(datetime.UTC).isoformat()
+with (dest/'run.log').open('wb') as f:r=subprocess.run(cmd,cwd=root,stdout=f,stderr=subprocess.STDOUT)
+after=inv();record=dict(started_at=start,finished_at=datetime.datetime.now(datetime.UTC).isoformat(),command=cmd,exit_code=r.returncode,source_before=before,source_after=after,source_unchanged=before==after,harness_before=inputs,harness_after=harness(),log_sha256=sha256((dest/'run.log').read_bytes()).hexdigest())
+for p in (base/'harness').glob('*.json'):(dest/p.name).write_bytes(p.read_bytes())
+(dest/'receipt.json').write_text(json.dumps(record,indent=2)+'\n');print((dest/'run.log').read_text());print(json.dumps({'exit_code':r.returncode,'source_unchanged':before==after}))

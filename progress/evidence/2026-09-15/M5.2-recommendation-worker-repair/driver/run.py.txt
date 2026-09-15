@@ -1,0 +1,31 @@
+import datetime, hashlib, json, os, pathlib, subprocess, sys
+root=pathlib.Path('<private-home>/Desktop/learning/Learning_Workbench')
+base=pathlib.Path(__file__).parent
+run=base/sys.argv[1]
+run.mkdir()
+owned=['services/api/app/application/recommendations.py','tests/integration/test_recommendation_worker_readiness.py']
+def inventory():
+    paths=sorted(set(subprocess.check_output(['git','ls-files'],cwd=root,text=True).splitlines()+owned))
+    entries=[]
+    for path in paths:
+        if path.startswith('progress/') or not (root/path).is_file(): continue
+        data=(root/path).read_bytes()
+        entries.append({'path':path,'sha256':hashlib.sha256(data).hexdigest(),'bytes':len(data)})
+    return {'files':entries,'aggregate_sha256':hashlib.sha256(json.dumps(entries,sort_keys=True,separators=(',',':')).encode()).hexdigest()}
+before=inventory()
+(run/'source-before.json').write_text(json.dumps(before,indent=2)+'\n')
+for path in owned:
+    target=run/'source'/f'{path}.txt'
+    target.parent.mkdir(parents=True,exist_ok=True)
+    target.write_bytes((root/path).read_bytes())
+command=sys.argv[2:]
+env=os.environ.copy(); env['TMPDIR']='<private-home>/.cache/lw-m42-root'
+started=datetime.datetime.now(datetime.timezone.utc).isoformat()
+with (run/'run.log').open('wb') as log:
+    result=subprocess.run(command,cwd=root,env=env,stdout=log,stderr=subprocess.STDOUT)
+finished=datetime.datetime.now(datetime.timezone.utc).isoformat()
+after=inventory();(run/'source-after.json').write_text(json.dumps(after,indent=2)+'\n')
+receipt={'started_at':started,'finished_at':finished,'command':command,'cwd':str(root),'head':subprocess.check_output(['git','rev-parse','HEAD'],cwd=root,text=True).strip(),'exit_code':result.returncode,'before_aggregate':before['aggregate_sha256'],'after_aggregate':after['aggregate_sha256'],'source_unchanged':before==after,'changed_paths':[a['path'] for a,b in zip(before['files'],after['files']) if a!=b],'log_sha256':hashlib.sha256((run/'run.log').read_bytes()).hexdigest(),'scope':'Focused actual SQLite service tests; not browser or original CI root-cause proof.'}
+(run/'receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
+print(json.dumps(receipt,indent=2));print((run/'run.log').read_text())
+sys.exit(result.returncode)
