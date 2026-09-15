@@ -1,0 +1,18 @@
+def test_changed_model_binding_makes_old_proposal_unavailable_without_rewriting_it(tmp_path):
+    from tests.integration.test_retrieval import all_rows
+
+    async def run():
+        async with local_provider(adapter='official_responses') as server:
+            db, identity, _, _, _, _, preparer, consents, request, proof = prepared_source(tmp_path, server.base_url)
+            original = consents.preview(identity, request, 'preview')
+            # A trusted composition update records a different reviewed model
+            # version for the same request alias; the old proof is not reused.
+            preparer.registry = ProofRegistry([replace(proof, model_versions=('synthetic-byte-model-revision-2',))])
+            before = all_rows(db)
+            current = consents.proposal(identity, original.id)
+            assert current.validity == 'unavailable'
+            assert current.summary == original.summary and current.proposal_sha256 == original.proposal_sha256
+            assert consents.preview(identity, request, 'preview') == original
+            assert all_rows(db) == before
+            assert server.connections == server.headers_received == 0 and not server.requests
+    asyncio.run(run())

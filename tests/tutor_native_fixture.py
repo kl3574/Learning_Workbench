@@ -16,6 +16,7 @@ from fastapi import FastAPI
 
 from services.api.app.infrastructure.config import Settings
 from services.api.app.main import create_app
+from services.api.app.application.provider_budget import RequestPreparer
 from tests.provider_protocol_fixture import MODEL, complete_byte_count, local_provider, test_preparer
 
 
@@ -28,12 +29,16 @@ def create_test_app() -> FastAPI:
     scenario = os.environ.get('TUTOR_NATIVE_SCENARIO', 'complete')
     if scenario not in {'complete', 'hold'}:
         raise ValueError('Unknown explicit Tutor test scenario')
-    application = create_app(settings, request_preparer=test_preparer())
+    preparer = RequestPreparer()
+    application = create_app(settings, request_preparer=preparer)
     production_lifespan = application.router.lifespan_context
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         async with local_provider(text=ANSWER, hold=scenario == 'hold') as provider:
+            # The test server's actual allocated address is the only admitted
+            # endpoint; construction and production registration remain empty.
+            preparer.registry = test_preparer(provider.base_url).registry
             async with production_lifespan(app) as state:
                 target = settings.data_dir / 'tutor-native-control.json'
                 pending = target.with_suffix('.pending')

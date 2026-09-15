@@ -1,0 +1,9 @@
+def test_responses_freezes_explicit_non_thinking_shape_before_counting(exact_profile):
+    from packages.contracts.canonical import sha256_bytes, strict_json
+
+    material, config, budget, preparer = exact_profile
+    prepared = preparer.prepare(config, material, budget)
+    body = strict_json(prepared.body)
+    assert body.get('reasoning') == {'effort': 'none'}
+    assert prepared.input_token_assurance.request_body_sha256 == sha256_bytes(prepared.body)
+    assert prepared.input_token_assurance.input_tokens == len(prepared.body)

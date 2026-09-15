@@ -1,0 +1,9 @@
+def test_same_model_name_on_another_endpoint_cannot_inherit_proof(exact_profile, url):
+    material, config, budget, preparer = exact_profile
+    assert preparer.prepare(config, material, budget).body
+    other = config.model_copy(update={'base_url': url})
+    with pytest.raises(ApiError) as refused:
+        preparer.prepare(other, material, budget)
+    assert refused.value.code == 'CAPABILITY_UNSUPPORTED'
+    caps = preparer.capabilities(other, secret_available=True)
+    assert not caps.chat and not caps.streaming

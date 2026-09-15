@@ -1,6 +1,6 @@
 # 知径 Learning Workbench：完整产品设计与工程实施规范
 
-**版本：3.0.4｜日期：2026-09-15｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
+**版本：3.0.5｜日期：2026-09-15｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
 
 **本文件（含文末附录）是唯一产品与工程规范。** 将它放入空目录即可开始；不需要旧版设计包、旧 Demo、之前聊天、私有 GitHub 仓库或另一份提示词说明需求。正文定义产品，附录内嵌数据模型、HTTP 字段、数据库设计、模块接口、样例和验收用例。构建 Agent 根据本文生成实现文件、OpenAPI、测试和进度记录；这些是派生产物，不是第二套产品需求。
 
@@ -27,6 +27,7 @@
 | 3.0.2 | M5.1 配置/秘密、服务端冻结授权、单次受控派发、完整输入计量证明、内部终态与安全备份边界 | 不代表生产模型已支持、真实外发已批准或 M5.2/M5.3 已实现；54 core、学习包及数据 schema_version 3.0.0 不变 |
 | 3.0.3 | M5.2 显式精确scope、未审材料标识、Content材料/来源、只读scope状态/CAS、离线词法代际/Jobs、资源和原创基准 | 不代表检索或基准已运行/通过，不开放自动扩范围、embedding或真实外发；54 core、基线DDL、学习包3.0.0不变 |
 | 3.0.4 | M5.3 真实 Thread/Run/Jobs、上下文身份、授权衔接、受检输出、严格 SSE 与取消恢复 | 不代表生产模型可调度或已授权费用测试；54 core、基线 DDL、学习包 3.0.0 不变 |
+| 3.0.5 | M5.4 完整输入证明的精确目的地、模型/格式/有效性绑定及显式无思考 Responses 请求 | 不代表托管完整计量证明、真实模型/搜索或教学验收已通过；54 core、基线 DDL、学习包 3.0.0 不变 |
 
 ## 0. 执行摘要与不可变决策
 
@@ -1033,7 +1034,13 @@ M5.1 仅实现一份许可内 `max_provider_calls=1`、`max_search_calls=0`、`m
 
 **完整输入准入只允许 local_exact 或有证明的 local_upper_bound。** 两者均绑定固定 model、adapter/checker 版本、完整允许输入形状及实际 request_body_sha256。proof_sha256 对应本机不可变、可核验的依据记录及其证明材料：实际模型/版本、格式开销、适用输入范围、计数方法、上下文/输出能力和失效依据必须明确；不能只填一串 hash 宣称有证明。对 exact 取 U=input_tokens，对 upper_bound 取 U=input_tokens_upper_bound，要求实际完整输入 token≤U≤用户 max_input_tokens。上界不是实际计量；裸文本 tokenizer、固定安全余量、平均误差、字符换算或仅固定模型名都不足以证明完整格式开销。未知/失效/不匹配证明、未注册 model、超出输入形状或不能施加输出限制的组合拒绝可批准预览和派发，不能填 0 或先发再看。安全能力诊断可用 MODEL_NOT_REGISTERED、INPUT_BOUND_UNAVAILABLE、REQUEST_SHAPE_UNSUPPORTED、OUTPUT_LIMIT_UNSUPPORTED；HTTP 使用 CAPABILITY_UNSUPPORTED。官方完整计数范围见 [S26]。
 
+生产证明还必须绑定受信目的地，不能仅按 `(adapter, model)` 匹配。使用与实际传输相同的本地 URL 解析规则取得 `endpoint_policy、scheme、host、effective_port、base_path`，并与该 adapter/请求格式版本生成的最终请求路径一起精确核验；默认端口、主机大小写与尾斜杠只能按同一既定规范化处理，不进行 DNS/联网探测。另一 host、端口、路径或 endpoint_policy 不得继承同名模型证明，禁止通配 host/后缀域名/任意端口或代理转发推定；多个已核目的地须逐项明确登记。§20.4 的 DNS 固定、实际连接 IP/TLS/Host/路径检查和禁止自动重定向继续独立执行，URL 安全可连接不等于已证明模型能力。
+
+证明的可信本机不可变依据必须明确实际模型版本；使用 API 别名时，须有依据列出该目的地下被覆盖的实际版本范围及别名变化的失效条件，不能用某次返回名、usage 或本地配置中的字符串代替。请求格式/profile、tokenizer或完整计数方法、checker、容量规则、目的地绑定和失效依据全部进入 proof_sha256；不是只把这些条件写成未执行的说明。能力、预览、批准与派发重核当前配置和当前有效证明；目的地/模型映射/格式/证明版本不符，已确认供应商改变，或超过依据明确的有效期限时，按现有 CAPABILITY_UNSUPPORTED 拒绝新准入。未能覆盖别名可能对应的实际格式时本就不得登记，任意自行设置的短有效期不能替代证明。失效不得修改原 proof/提案/许可/终态字节；原 ACK 和已持久结果按原身份、完整历史及当前读取权限回放，不把证明失效当成重新外发或抹去已发生事实的理由。
+
 同时按固定模型的真实容量规则验证输入/输出限制；若共享上下文容量为 C，须验证 U+max_output_tokens≤C，不能假定所有模型的容量定义相同。输出硬上限落实到已验证协议参数：Responses 为 max_output_tokens，支持该参数的 Chat 为 max_completion_tokens；字段不支持则拒绝，不能移除限制重试。truncation 不得自动删减已冻结输入。字符预算仍执行 §12.2 的 12,000 字符、8 块、6 条最近对话、5 个外部来源，保留完整块边界；字符上限不能替代 token 证明。[S27][S28]
+
+M5.4 首个生产文本-only Responses profile 明确关闭 thinking：服务端构造的实际完整请求必须包含 `reasoning: {effort: "none"}`，与 model、input、stream、max_output_tokens、truncation、store 一起在本地检查前冻结并纳入 request_body_sha256 和证明适用形状。不得依赖供应商默认值、在检查后补字段，或把未识别的 reasoning 当作 answer。该模型/目的地必须有此设置及输出硬限的支持依据；若设置不支持或可能被忽略而无法证明实际行为，则该窄 profile 不准入。请求格式变化推进 adapter/profile 版本，旧证明和旧冻结请求不能静默套用新形状，必须重新准备、预览和明确批准；正常原回执读取仍保留。此条不授予 Chat max_tokens 别名、工具、图像、思考链展示或搜索能力，也不宣称已取得任何生产模型证明。
 
 价格由配置提供并冻结 pricing_sha256（`{version:"provider-pricing-v1",provider_id,provider_revision,pricing}` 的规范 JSON）。pricing=null 为 unknown/price_unknown，绝不写 0；已知时以 U 与最大输出计算 maximum_estimated_cost，仅表示该本机价格下估计，显示 estimate_not_guaranteed，上界不能显示成实际输入费用。设置 max_cost_usd 且已知估计超额时拒绝；未知价格明确金额无硬保证，仍执行 token/次数/时间硬约束。终态 input/output usage 来自提供商累计报告，缺失为 null，cached/reasoning 等组成项不重复累加。rate×tokens 只能 estimated；actual 只在提供商给出可核验实际费用事实时使用，不把估算称账单。真实 usage 超过冻结输入证明 U、用户输入/输出上限或与已记用量矛盾时，记录 OUTBOUND_BUDGET_EXCEEDED/PROVIDER_USAGE_INCONSISTENT 安全错误和原始已核计量，不回写旧证明或隐藏超限为预算成功；远端是否已完成另按事实保留。
 
@@ -2552,6 +2559,8 @@ ProviderTerminalReceipt = {
 PreparedOutboundMaterial.prepared_input_sha256 对应 §20.5 input_sha256。source owner 的 `read_prepared(transaction, AuthContext, job_id, expected_job_revision)`、`verify_prepared(transaction, AuthContext, material)`、`bind_authorization(transaction, WriteContext, job_id, prepared_input_sha256, consent_id)` 使用调用方真实活动数据库事务；后端 transaction 为现有受控 SQLite connection，不是浏览器自报 ID。read/verify 核源任务、当前可批准/运行阶段、完整准备输入、权限与精确 refs；bind 在该 owner 的表关联原输入与实际 consent。未知 source 不实现默认假材料。Job/Run 租约与业务终态由源 owner 控制；Provider 不直接写其表。
 
 `CheckedDispatchPort.dispatch(AuthContext, job_id, consent_id, DispatchLease, AbortSignal)` 只收持久身份，不接 consumer 临时拼造的 GenerationInput；从自有冻结记录、source/Policy/Jobs 受检端口和秘密存储核实后才准备网络 envelope 与调用。它返回 CheckedProviderEvent 的异步序列；另有受权限约束的 `terminal(AuthContext, dispatch_id) -> ProviderTerminalReceipt|null` 回读自有原终态。内部 envelope 非授权凭证，任意手工构造类型不能跳过事务和账本核验。计数/协议 profile 注册仅接受实际校验过的完整输入证明，测试注册与生产隔离。
+
+本机 InputProof/registry 是内部可信工程端口，不是配置或 HTTP 可提交的新授权 DTO。注册时对目的地绑定和 §20.5 的模型/格式/有效性依据作严格校验；`resolve(config)` 必须在无网络/秘密读取的情况下匹配规范化目的地、adapter、模型及当前有效 profile，`prepare/verify` 仍校验完整实际请求字节与冻结 proof SHA。不新增浏览器自报“可信 endpoint/模型版本/proof”的字段。测试专属任意端口服务只能在建立受控本机服务后，将其确切 endpoint 与人工模型规则显式注入测试工厂；该便利不能成为生产通配注册或环境变量准入开关。内部字段和实现可以细化，但不能遗漏这些实际匹配与失效判定。
 
 ProviderTerminalReceipt.receipt_sha256 对 `{version:"provider-terminal-v1",...receipt_without_receipt_sha256}` 的项目规范 JSON 计算。receipt 绑定唯一 dispatch/原 proposal/request 字节，终态与私有 answer/refusal 部分产物引用在同一事务登记；产物字节先原子存储并核 hash，孤立文件可恢复清理。没有该通道文本时对应 artifact_id=null；有文本时 artifact 引用必须存在、完整且受当前 Policy 保护，不能因错误丢弃部分输出事实。原终态不更新/重复创建；正常运行之外的授权隐私删除走 §20.6。
 

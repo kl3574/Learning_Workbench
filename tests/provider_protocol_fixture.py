@@ -30,11 +30,12 @@ MODEL = 'test-only-complete-byte-model-v1'
 def complete_byte_count(body: bytes) -> int:
     value = strict_json(body)
     responses = 'input' in value
-    allowed = ({'model', 'stream', 'input', 'max_output_tokens', 'truncation', 'store'} if responses
+    allowed = ({'model', 'stream', 'input', 'max_output_tokens', 'truncation', 'store', 'reasoning'} if responses
                else {'model', 'stream', 'messages', 'max_completion_tokens', 'n', 'stream_options'})
     if set(value) != allowed or value['model'] != MODEL or value['stream'] is not True or canonical_bytes(value) != body:
         raise ValueError('Outside the complete artificial protocol.')
-    if responses and (value['store'] is not False or value['truncation'] != 'disabled'):
+    if responses and (value['store'] is not False or value['truncation'] != 'disabled'
+                      or value['reasoning'] != {'effort': 'none'}):
         raise ValueError('Automatic truncation or storage is outside this profile.')
     if not responses and (value['n'] != 1 or value['stream_options'] != {'include_usage': True}):
         raise ValueError('Only one choice and explicit usage are supported.')
@@ -45,11 +46,13 @@ def complete_byte_count(body: bytes) -> int:
     return len(body)
 
 
-def test_preparer(*, upper_bound: bool = False) -> RequestPreparer:
+def test_preparer(base_url: str, *, upper_bound: bool = False) -> RequestPreparer:
     evidence = (__doc__ + '\nBoth adapters support a 200000-byte shared context, 190000 input and 10000 output. '
-                'Version 1 rejects every field outside the exact allowlist; changing the rule invalidates this proof.').encode()
+                'Version 2 includes explicit nonthinking Responses and rejects every field outside the exact allowlist; changing the rule invalidates this proof.').encode()
     return RequestPreparer(ProofRegistry(InputProof(model=MODEL, adapter=adapter,
-        checker_version='test-complete-byte-counter-v1', kind='local_upper_bound' if upper_bound else 'local_exact',
+        base_url=base_url, endpoint_policy='explicit_loopback',
+        model_versions=(MODEL,), validity_evidence=b'Test-only literal immutable byte model; no vendor alias. Only this exact endpoint and v2 request grammar are covered. A rule or endpoint change requires a new registration; no time expiry is claimed or needed for this artificial immutable definition.',
+        checker_version='test-complete-byte-counter-v2', kind='local_upper_bound' if upper_bound else 'local_exact',
         max_input_tokens=190000, max_output_tokens=10000, shared_context_tokens=200000,
         evidence=evidence, check=(lambda body: complete_byte_count(body) + 10) if upper_bound else complete_byte_count)
         for adapter in ('official_responses', 'compatible_chat')))
@@ -162,7 +165,7 @@ def authorized_source(tmp_path: Path, base_url: str, *, adapter: str = 'compatib
     db, identity, source, registry, job_id = provider_source(tmp_path)
     secrets = FileSecretStore(tmp_path / 'isolated-test-secrets')
     secrets.initialize()
-    preparer = test_preparer()
+    preparer = test_preparer(base_url)
     providers = ProviderService(db, secrets, preparer)
     config = providers.save_config(identity, 'provider_test', ProviderConfigWrite(expected_revision=0,
         adapter=adapter, base_url=base_url, model=MODEL, embedding_model=None,

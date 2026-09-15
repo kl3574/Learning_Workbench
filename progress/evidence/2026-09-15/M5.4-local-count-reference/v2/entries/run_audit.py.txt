@@ -1,0 +1,28 @@
+"""Host launcher: readonly public materials into a no-network namespace.
+This program does not import downloaded code on the host.
+"""
+from pathlib import Path
+from datetime import datetime,UTC
+import json,hashlib,subprocess,sys,os
+O=Path(__file__).parent
+S=Path('[HOME]/.cache/learning-workbench-acceptance/m54-v41-offline-audit-material-v1/source')
+P=Path('[HOME]/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu')
+run=O/sys.argv[1];run.mkdir()
+def h(p):return hashlib.sha256(p.read_bytes()).hexdigest()
+def inventory():
+ files=[*S.rglob('*'),*(O/'wheel-inspection').rglob('*'),*(O/'cases').rglob('*'),O/'cases-manifest.json',O/'audit.py',O/'run_audit.py',O/'wheel-acquisition.json',*P.rglob('*')]
+ for q in ['/lib/x86_64-linux-gnu/libc.so.6','/lib/x86_64-linux-gnu/libm.so.6','/lib/x86_64-linux-gnu/libgcc_s.so.1','/lib/x86_64-linux-gnu/libstdc++.so.6','/lib64/ld-linux-x86-64.so.2','/usr/bin/bwrap']:
+  if Path(q).exists():files.append(Path(q))
+ rows=[{'path':str(p),'sha256':h(p),'bytes':p.stat().st_size} for p in sorted(set(files)) if p.is_file()]
+ return {'files':rows,'aggregate':hashlib.sha256(''.join(x['path']+'\0'+x['sha256']+'\n' for x in rows).encode()).hexdigest(),'algorithm':'sorted absolute path + NUL + sha256 + LF; path strings retained as raw, public mapping separate'}
+before=inventory();(run/'inputs-before.json').write_text(json.dumps(before,indent=2)+'\n')
+# Preserve exact driver bytes from before first invocation; output directory only writable audit mount.
+(run/'audit.py.txt').write_bytes((O/'audit.py').read_bytes())
+cmd=['/usr/bin/bwrap','--unshare-all','--die-with-parent','--new-session','--ro-bind','/usr','/usr','--ro-bind','/lib','/lib','--ro-bind','/lib64','/lib64','--proc','/proc','--dev','/dev','--tmpfs','/tmp','--ro-bind',str(P),'/python','--ro-bind',str(O/'wheel-inspection'),'/wheel','--ro-bind',str(S),'/materials','--ro-bind',str(O),'/audit','--bind',str(run),'/output','--chdir','/output','--clearenv','--setenv','PATH','/python/bin:/usr/bin:/bin','--setenv','PYTHONPATH','/wheel','--setenv','PYTHONDONTWRITEBYTECODE','1','/python/bin/python3.12','/audit/audit.py']
+r={'started_at':datetime.now(UTC).isoformat(),'command':cmd,'network_isolation':'bwrap --unshare-all (including new network namespace)','environment':'--clearenv; only explicit variables above','timeout_seconds':90,'credentials_mounted':False,'model_call':False,'production_modified':False}
+try:
+ with (run/'run.log').open('wb') as log:p=subprocess.run(cmd,stdout=log,stderr=subprocess.STDOUT,timeout=90,check=False)
+ r['exit_code']=p.returncode
+except Exception as e:r.update(error_type=type(e).__name__,error=str(e))
+r['ended_at']=datetime.now(UTC).isoformat();after=inventory();(run/'inputs-after.json').write_text(json.dumps(after,indent=2)+'\n');r.update(inputs_before_aggregate=before['aggregate'],inputs_after_aggregate=after['aggregate'],inputs_identical=before==after,log_sha256=h(run/'run.log'))
+(run/'execution-receipt.json').write_text(json.dumps(r,indent=2)+'\n');print(json.dumps(r,indent=2))
