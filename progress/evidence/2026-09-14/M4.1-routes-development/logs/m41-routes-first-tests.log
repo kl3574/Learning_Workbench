@@ -1,0 +1,72 @@
+....F....FF........                                                      [100%]
+=================================== FAILURES ===================================
+_______ test_invalid_route_never_publishes_or_records_progress[bad_hash] _______
+
+http = (<starlette.testclient.TestClient object at <process-address>>, {'Origin': 'http://127.0.0.1:8765', 'X-CSRF-Token': '<TEST_CSRF_01>...d': b'\xe9\xa6\x96\xf0\x9f\xa7\xa0\xe5\xad\x97 e\xcc\x81 \xe4\xb8\xad\xe6\x96\x87\n\n$x^2$ \xe5\xb0\xbe\xe5\xa3\xb0'}))
+mutation = 'bad_hash'
+
+    @pytest.mark.parametrize('mutation', ['cycle', 'wrong_rule', 'bad_hash', 'next_revision'])
+    def test_invalid_route_never_publishes_or_records_progress(http, mutation):
+        client, headers, (database, _, _, objects, _) = http
+        value = route_for(objects).model_dump(mode='json')
+        if mutation == 'cycle':
+            value['steps'][0]['requires_steps'] = ['step_second']
+        elif mutation == 'wrong_rule':
+            value['steps'][0]['completion_rule'] = 'assessment_submitted'
+        elif mutation == 'bad_hash':
+            value['steps'][0]['target']['sha256'] = '0' * 64
+        else:
+            value['revision'] = 2
+        before = {table: count(database, table) for table in ['revisions', 'learning_events', 'outbox', 'idempotency']}
+>       assert client.post('/api/v1/routes', json=value, headers=headers).status_code == 422
+E       AssertionError: assert 409 == 422
+E        +  where 409 = <Response [409 Conflict]>.status_code
+E        +    where <Response [409 Conflict]> = post('/api/v1/routes', json={'schema_version': '3.0.0', 'id': 'route_commands', 'revision': 1, 'entity': 'route', ...}, headers={'Origin': 'http://127.0.0.1:8765', 'X-CSRF-Token': '<TEST_CSRF_01>', 'Idempotency-Key': 'create-route'})
+E        +      where post = <starlette.testclient.TestClient object at <process-address>>.post
+
+tests/integration/test_routes_commands.py:96: AssertionError
+_ test_workspace_and_active_independent_policy_apply_before_cached_route_receipt _
+
+storage = (<services.api.app.infrastructure.database.Database object at <process-address>>, 'workspace_153d79fd2e51433698677314adfd...md': b'\xe9\xa6\x96\xf0\x9f\xa7\xa0\xe5\xad\x97 e\xcc\x81 \xe4\xb8\xad\xe6\x96\x87\n\n$x^2$ \xe5\xb0\xbe\xe5\xa3\xb0'})
+
+    def test_workspace_and_active_independent_policy_apply_before_cached_route_receipt(storage):
+        database, workspace, identity, objects, _ = storage
+        service = RouteService(database); route = route_for(objects)
+        service.create(identity, route, 'create')
+        with database.transaction() as connection:
+>           connection.execute('INSERT INTO workspace(id,created_at) VALUES(?,?)', ('workspace_other', utc_now()))
+E           sqlite3.IntegrityError: NOT NULL constraint failed: workspace.title
+
+tests/integration/test_routes_commands.py:144: IntegrityError
+_ test_scope_keeps_all_actual_concept_revisions_and_excludes_unreferenced_same_id _
+
+storage = (<services.api.app.infrastructure.database.Database object at <process-address>>, 'workspace_9d9f9094eede4534a821daa1842c...422603b6b2110540f8dba3bbd47debac')], allowed_modes=['independent', 'open_book', 'assisted'], time_limit_seconds=None)))
+
+    def test_scope_keeps_all_actual_concept_revisions_and_excludes_unreferenced_same_id(storage):
+        database, workspace, fixture = storage
+        service = ContentService(database)
+        second = assessment_fixture('scope', revision=2)
+        service.publish(workspace, [value for value in second.public_objects if value.entity != 'course'], second.bodies)
+>       standalone = dm.Concept(id='concept_standalone', revision=1, title='Standalone concept', skill_dimensions=['model'])
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for Concept
+E       skill_dimensions.0
+E         Input should be 'recall', 'explain', 'compute', 'derive' or 'transfer' [type=literal_error, input_value='model', input_type=str]
+E           For further information visit https://errors.pydantic.dev/2.13/v/literal_error
+
+tests/integration/test_learning_content_scope.py:29: ValidationError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <repository>/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <repository>/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_routes_commands.py::test_invalid_route_never_publishes_or_records_progress[bad_hash]
+FAILED tests/integration/test_routes_commands.py::test_workspace_and_active_independent_policy_apply_before_cached_route_receipt
+FAILED tests/integration/test_learning_content_scope.py::test_scope_keeps_all_actual_concept_revisions_and_excludes_unreferenced_same_id
+3 failed, 16 passed, 2 warnings in 0.98s

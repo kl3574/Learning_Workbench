@@ -1,0 +1,31 @@
+--- <ACCEPTANCE_ARTIFACTS>/m41-assessment-viewport-diagnosis/controlled/observed.spec.ts
++++ <ACCEPTANCE_ARTIFACTS>/m41-assessment-viewport-focus-validation/original-probe-replay/observed.spec.ts
+@@ -1,8 +1,8 @@
+ import { beginObservation, finishObservation, installGate, releaseAfterOriginalScroll } from './observer'
+ import { expect, test as base, type Page } from '<REPOSITORY>/apps/web/node_modules/@playwright/test/index.mjs'
+-import { RestartRuntime } from '<ACCEPTANCE_ARTIFACTS>/m41-3cb28c9/tests/e2e/restartRuntime'
+-import { importAssessmentPackage, originalAssessmentPackage, type AssessmentPackage } from '<ACCEPTANCE_ARTIFACTS>/m41-3cb28c9/tests/e2e/assessmentTestData'
+-import type { AssessmentGradingResult, AttemptSnapshot, AttemptResponses } from '<ACCEPTANCE_ARTIFACTS>/m41-3cb28c9/packages/contracts/generated/api-types'
++import { RestartRuntime } from '<REPOSITORY>/tests/e2e/restartRuntime'
++import { importAssessmentPackage, originalAssessmentPackage, type AssessmentPackage } from '<REPOSITORY>/tests/e2e/assessmentTestData'
++import type { AssessmentGradingResult, AttemptSnapshot, AttemptResponses } from '<REPOSITORY>/packages/contracts/generated/api-types'
+ const test = base.extend<{ runtime: RestartRuntime }>({
+   runtime: async ({}, use) => { const runtime = await RestartRuntime.start(); try { await use(runtime) } finally { await runtime.close() } },
+   page: async ({ runtime, playwright }, use) => { const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]; await beginObservation(page); await installGate(page); await runtime.authenticateOnly(page); await use(page) },
+--- <ACCEPTANCE_ARTIFACTS>/m41-assessment-viewport-diagnosis/controlled/observer.ts
++++ <ACCEPTANCE_ARTIFACTS>/m41-assessment-viewport-focus-validation/original-probe-replay/observer.ts
+@@ -1,6 +1,6 @@
+ import { writeFileSync } from 'node:fs'
+ import type { Page } from '<REPOSITORY>/apps/web/node_modules/@playwright/test/index.mjs'
+-const out = '<ACCEPTANCE_ARTIFACTS>/m41-assessment-viewport-diagnosis/controlled'
++const out = '<ACCEPTANCE_ARTIFACTS>/m41-assessment-viewport-focus-validation/original-probe-replay'
+ const rows: unknown[] = []
+ export async function beginObservation(page: Page) {
+   await page.exposeBinding('__recordViewport', (_source, row: unknown) => { if (rows.length < 1400) rows.push(row) })
+--- <ACCEPTANCE_ARTIFACTS>/m41-assessment-viewport-diagnosis/controlled/playwright.config.ts
++++ <ACCEPTANCE_ARTIFACTS>/m41-assessment-viewport-focus-validation/original-probe-replay/playwright.config.ts
+@@ -1,2 +1,2 @@
+-import { defineConfig } from '<ACCEPTANCE_ARTIFACTS>/m41-3cb28c9/apps/web/node_modules/@playwright/test/index.mjs'
+-export default defineConfig({testDir:'.',testMatch:'observed.spec.ts',workers:1,fullyParallel:false,timeout:30000,reporter:[['list']],outputDir:'<ACCEPTANCE_ARTIFACTS>/m41-assessment-viewport-diagnosis/controlled/results',use:{trace:'off',screenshot:'off'},webServer:[]})
++import { defineConfig } from '<REPOSITORY>/apps/web/node_modules/@playwright/test/index.mjs'
++export default defineConfig({testDir:'.',testMatch:'observed.spec.ts',workers:1,fullyParallel:false,timeout:30000,reporter:[['list']],outputDir:'<ACCEPTANCE_ARTIFACTS>/m41-assessment-viewport-focus-validation/original-probe-replay/results',use:{trace:'off',screenshot:'off'},webServer:[]})

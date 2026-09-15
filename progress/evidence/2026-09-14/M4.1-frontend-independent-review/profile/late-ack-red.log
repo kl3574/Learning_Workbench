@@ -1,0 +1,30 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (profile/vitest.config.ts.txt:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+Both esbuild and oxc options were set. oxc options will be used and esbuild options will be ignored. The following esbuild options were set: `{ jsx: 'automatic' }`
+
+ RUN  v5.0.0 <repository>/apps/web
+
+ ❯ profile/late-ack.test.tsx.txt (1 test | 1 failed) 380ms
+   × a late acknowledged old command cannot erase a newer durable profile candidate after policy resume 380ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  profile/late-ack.test.tsx.txt > a late acknowledged old command cannot erase a newer durable profile candidate after policy resume
+AssertionError: expected [ Array(1) ] to include '{"version":1,"workspace_id":"workspac…'
+ ❯ profile/late-ack.test.tsx.txt:37:65
+     35|   expect(view.result.current.fields?.goals).toEqual(['Newer durable ca…
+     36|   const disk = (await profileStore.load(workspace))[profileDraftKey]
+     37|   expect([disk.text, ...disk.conflicts.map(item => item.text)]).toCont…
+       |                                                                 ^
+     38| })
+     39|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  04:14:45
+   Duration  881ms (tests 51%, environment 31%, import 9%, transform 9%)
+

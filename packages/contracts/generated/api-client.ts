@@ -1,6 +1,6 @@
 // Generated from PRODUCT_DESIGN.md v3.0.0 and actual runtime OpenAPI; do not edit.
 // spec_sha256: ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c
-import type { AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, BlockReadResponse, BootstrapRequest, BootstrapResponse, ContentRef, Course, DirectorySearchResponse, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, OutlineResponse, PageAssessment, PageCourse, PageEvidence, PageNote, PagePracticeSet, PageRevision, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ReadinessResponse, RegradeRequest, ResponsesWrite, RoleRequest, SessionResponse, SourceResponse, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
+import type { AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, BlockReadResponse, BootstrapRequest, BootstrapResponse, ConceptStateResponse, ContentRef, Course, DirectorySearchResponse, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearnerProfile, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, OutlineResponse, PageAssessment, PageCourse, PageEvidence, PageNote, PagePracticeSet, PageRevision, PageRoute, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ProfileWrite, ReadinessResponse, RegradeRequest, ResponsesWrite, RoleRequest, Route, RouteCompletionRequest, SessionResponse, SourceResponse, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
 
 export interface ApiEndpointMap {
   "GET /api/v1/artifacts/{id}/download": { request: undefined; response: Blob; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
@@ -26,7 +26,10 @@ export interface ApiEndpointMap {
   "POST /api/v1/imports/{id}/commit": { request: ImportCommitRequest; response: ImportCommitResponse; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/jobs/{id}": { request: undefined; response: JobSnapshot; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
   "POST /api/v1/jobs/{id}/cancel": { request: JobCancelRequest; response: JobSnapshot; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
+  "GET /api/v1/learner/profile": { request: undefined; response: LearnerProfile; headers: null; parameters: Record<string, never>; parametersRequired: false };
+  "PUT /api/v1/learner/profile": { request: ProfileWrite; response: LearnerProfile; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
   "POST /api/v1/learning/actions": { request: LearningActionRequest; response: LearningActionResponse; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
+  "GET /api/v1/learning/concept-states": { request: undefined; response: ConceptStateResponse; headers: null; parameters: { query?: { "course_id"?: (string | null) } }; parametersRequired: false };
   "GET /api/v1/learning/evidence": { request: undefined; response: PageEvidence; headers: null; parameters: { query?: { "concept_id"?: (string | null); "cursor"?: (string | null); "limit"?: number; "skill"?: ("recall" | "explain" | "compute" | "derive" | "transfer" | null) } }; parametersRequired: false };
   "GET /api/v1/learning/progress": { request: undefined; response: LearningProgress; headers: null; parameters: { query?: { "course_id"?: (string | null) } }; parametersRequired: false };
   "GET /api/v1/lessons/{id}": { request: undefined; response: Lesson; headers: null; parameters: { path: { "id": string }; query: { "revision": number } }; parametersRequired: true };
@@ -44,6 +47,10 @@ export interface ApiEndpointMap {
   "POST /api/v1/practice/sessions/{id}/submit": { request: PracticeSubmitRequest; response: PracticeSubmitted; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/practice/sets": { request: undefined; response: PagePracticeSet; headers: null; parameters: { query?: { "course_id"?: (string | null); "cursor"?: (string | null); "lesson_id"?: (string | null); "limit"?: number } }; parametersRequired: false };
   "GET /api/v1/readiness": { request: undefined; response: ReadinessResponse; headers: null; parameters: Record<string, never>; parametersRequired: false };
+  "GET /api/v1/routes": { request: undefined; response: PageRoute; headers: null; parameters: { query?: { "cursor"?: (string | null); "limit"?: number } }; parametersRequired: false };
+  "POST /api/v1/routes": { request: Route; response: ContentRef; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
+  "PUT /api/v1/routes/{id}": { request: Route; response: ContentRef; headers: { "Idempotency-Key": string; "If-Match"?: (string | null) }; parameters: { path: { "id": string } }; parametersRequired: true };
+  "POST /api/v1/routes/{id}/steps/{step_id}/complete": { request: RouteCompletionRequest; response: LearningActionResponse; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string; "step_id": string } }; parametersRequired: true };
   "GET /api/v1/session": { request: undefined; response: SessionResponse; headers: null; parameters: Record<string, never>; parametersRequired: false };
   "POST /api/v1/session/bootstrap": { request: BootstrapRequest; response: BootstrapResponse; headers: null; parameters: Record<string, never>; parametersRequired: false };
   "POST /api/v1/session/logout": { request: EmptyRequest; response: LogoutResponse; headers: null; parameters: Record<string, never>; parametersRequired: false };
@@ -488,6 +495,24 @@ export const API_ENDPOINTS = {
     ],
     "queryParameters": []
   },
+  "GET /api/v1/learner/profile": {
+    "method": "GET",
+    "path": "/api/v1/learner/profile",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
+    "queryParameters": []
+  },
+  "PUT /api/v1/learner/profile": {
+    "method": "PUT",
+    "path": "/api/v1/learner/profile",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
+    "queryParameters": []
+  },
   "POST /api/v1/learning/actions": {
     "method": "POST",
     "path": "/api/v1/learning/actions",
@@ -496,6 +521,21 @@ export const API_ENDPOINTS = {
     "multipartFields": [],
     "pathParameters": [],
     "queryParameters": []
+  },
+  "GET /api/v1/learning/concept-states": {
+    "method": "GET",
+    "path": "/api/v1/learning/concept-states",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
+    "queryParameters": [
+      {
+        "name": "course_id",
+        "required": false,
+        "type": "string"
+      }
+    ]
   },
   "GET /api/v1/learning/evidence": {
     "method": "GET",
@@ -798,6 +838,72 @@ export const API_ENDPOINTS = {
     "requestKind": "json",
     "multipartFields": [],
     "pathParameters": [],
+    "queryParameters": []
+  },
+  "GET /api/v1/routes": {
+    "method": "GET",
+    "path": "/api/v1/routes",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
+    "queryParameters": [
+      {
+        "name": "cursor",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      }
+    ]
+  },
+  "POST /api/v1/routes": {
+    "method": "POST",
+    "path": "/api/v1/routes",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [],
+    "queryParameters": []
+  },
+  "PUT /api/v1/routes/{id}": {
+    "method": "PUT",
+    "path": "/api/v1/routes/{id}",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
+  "POST /api/v1/routes/{id}/steps/{step_id}/complete": {
+    "method": "POST",
+    "path": "/api/v1/routes/{id}/steps/{step_id}/complete",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "name": "step_id",
+        "required": true,
+        "type": "string"
+      }
+    ],
     "queryParameters": []
   },
   "GET /api/v1/session": {

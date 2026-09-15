@@ -1,0 +1,19 @@
+--- before/tests/integration/test_learning_content_scope.py
++++ after/tests/integration/test_learning_content_scope.py
+@@ -127,3 +127,16 @@
+         connection.execute('INSERT INTO outbox(id,event_type,payload_json) VALUES(?,?,?)', ('outbox_malformed', 'content.dependencies_invalidated', raw))
+         result = evidence_applicability(connection, workspace, reference(fixture.questions[0]), reference(fixture.concept))
+     assert result.status == 'pending_review' and result.reason_codes == ['CONTENT_CHANGE_SCOPE_UNKNOWN']
++
++
++@pytest.mark.parametrize('affected', [['concept_scope'], []])
++def test_invalidation_bad_hash_for_known_semantic_identity_requires_review(storage, affected):
++    database, workspace, fixture = storage
++    wrong = reference(fixture.concept).model_copy(update={'sha256': '0' * 64})
++    with database.transaction() as connection:
++        payload = {'workspace_id': workspace, 'old_ref': wrong.model_dump(mode='json'), 'affected_ids': affected}
++        connection.execute('INSERT INTO outbox(id,event_type,payload_json) VALUES(?,?,?)',
++            ('outbox_bad_hash', 'content.dependencies_invalidated', canonical_bytes(payload).decode()))
++        result = evidence_applicability(connection, workspace, reference(fixture.questions[0]), reference(fixture.concept))
++    assert result.status == 'pending_review'
++    assert 'CONTENT_CHANGE_SCOPE_UNKNOWN' in result.reason_codes

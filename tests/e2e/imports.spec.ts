@@ -184,7 +184,7 @@ test('real Markdown upload stays staged, previews and downloads exact bytes, res
   await page.screenshot({ path: testInfo.outputPath('imports-committed-result-1440.png') })
   await dialog.getByRole('button', { name: '完成并关闭导入' }).click()
   await expect(dialog).toBeHidden()
-  await expect(page.getByRole('heading', { name: '从一个学习目标开始' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '从学习目标开始', exact: true })).toBeVisible()
 })
 
 test('safe HTML warning requires explicit acceptance and native cancel leaves courses untouched', async ({ page }, testInfo) => {

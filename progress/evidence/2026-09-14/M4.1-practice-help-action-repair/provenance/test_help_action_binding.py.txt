@@ -1,0 +1,28 @@
+"""Actual help, unsubmitted session: missing Learning outbox must not become a count."""
+import pytest
+from services.api.app.application.concept_states import ConceptStateService
+from services.api.app.application.errors import ApiError
+from services.api.app.application.practice import PracticeService
+from services.api.app.application.practice_activity_access import practice_participation
+from services.api.app.infrastructure.content_repository import reference
+from services.api.app.practice_dto import PracticeHintRequest, PracticeSessionCreate, PracticeSolutionRequest
+from tests.integration.test_learning_evidence import storage
+
+
+@pytest.mark.parametrize('kind', ['hint', 'solution'])
+def test_unsubmitted_help_missing_learning_action_receipt_is_rejected(storage, kind):
+    database, identity, fixture, _ = storage
+    practice = PracticeService(database)
+    session = practice.create_session(identity, PracticeSessionCreate(practice_ref=reference(fixture.practice)), 'practice')
+    if kind == 'hint':
+        help = practice.hint(identity, session.id, PracticeHintRequest(question_id=fixture.questions[0].id, expected_revision=1, level=1), 'help')
+    else:
+        help = practice.solution(identity, session.id, PracticeSolutionRequest(question_id=fixture.questions[0].id, expected_revision=1), 'help')
+    with database.transaction() as connection:
+        original = practice_participation(connection, identity.workspace_id)
+        assert len(original.help) == 1 and original.submissions == []
+        deleted = connection.execute("DELETE FROM outbox WHERE event_type='learning.action_recorded' AND json_extract(payload_json,'$.event_id')=?", (help.exposure_event_id,))
+        assert deleted.rowcount == 1
+    # The actual public Concept projection must fail closed, not retain a source-less help count.
+    with pytest.raises(ApiError):
+        ConceptStateService(database).read(identity.workspace_id)

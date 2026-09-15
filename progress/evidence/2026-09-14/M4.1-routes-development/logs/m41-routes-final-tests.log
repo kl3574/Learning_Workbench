@@ -1,0 +1,29 @@
+.....................F................                                   [100%]
+=================================== FAILURES ===================================
+__________ test_malformed_invalidation_intent_never_returns_usable[{] __________
+
+storage = (<services.api.app.infrastructure.database.Database object at <process-address>>, 'workspace_aaa3eb7d615b464fae23262cf06b...422603b6b2110540f8dba3bbd47debac')], allowed_modes=['independent', 'open_book', 'assisted'], time_limit_seconds=None)))
+raw = '{'
+
+    @pytest.mark.parametrize('raw', ['{', '[]', '{"workspace_id":null}', '{"workspace_id":"same","affected_ids":[42]}'])
+    def test_malformed_invalidation_intent_never_returns_usable(storage, raw):
+        database, workspace, fixture = storage
+        raw = raw.replace('"same"', '"' + workspace + '"')
+        with database.transaction() as connection:
+>           connection.execute('INSERT INTO outbox(id,event_type,payload_json) VALUES(?,?,?)', ('outbox_malformed', 'content.dependencies_invalidated', raw))
+E           sqlite3.IntegrityError: CHECK constraint failed: json_valid(payload_json)
+
+tests/integration/test_learning_content_scope.py:126: IntegrityError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <repository>/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <repository>/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_learning_content_scope.py::test_malformed_invalidation_intent_never_returns_usable[{]
+1 failed, 37 passed, 2 warnings in 2.77s

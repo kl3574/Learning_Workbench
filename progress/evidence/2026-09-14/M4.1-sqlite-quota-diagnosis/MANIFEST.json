@@ -1,0 +1,208 @@
+{
+  "schema_version": 1,
+  "raw_inputs": [
+    {
+      "input_id": "bootstrap-stage-one",
+      "raw_sha256": "4981d92a1d8a3759014bccb2bfa5d2d9dec14e8c05f4696a2b2e89bcaa1ab5d3",
+      "raw_size_bytes": 5395
+    },
+    {
+      "input_id": "sqlite-boundary",
+      "raw_sha256": "53dd4488c1de00ba17ed7b2e11c3f756777a4d2a9037f0efb6d021c11d2512c4",
+      "raw_size_bytes": 1214
+    },
+    {
+      "input_id": "sqlite-write-log",
+      "raw_sha256": "ee8236806e36fd96cf9aca5a90a35d621d40ce0f5b478a701a7bf1cf7f01c526",
+      "raw_size_bytes": 858
+    },
+    {
+      "input_id": "sqlite-write-script",
+      "raw_sha256": "665d7c1d734138a4a784e61cdf42e4505de6c5f60038320455955a5648221f1f",
+      "raw_size_bytes": 584
+    },
+    {
+      "input_id": "sqlite-write-strace",
+      "raw_sha256": "64592e8d00b5df3b3ce6153fb3c1de2612a6699f069cbc2340e39344b633bbcd",
+      "raw_size_bytes": 83278
+    }
+  ],
+  "entries": [
+    {
+      "published_path": "PUBLICATION_RECEIPT.json",
+      "published_sha256": "122d2bce87c5a8faaa2261ae470c2a232a939820c83b4690b631b4a28c80fb18",
+      "published_size_bytes": 1269,
+      "raw_inputs": [
+        {
+          "input_id": "bootstrap-stage-one",
+          "raw_sha256": "4981d92a1d8a3759014bccb2bfa5d2d9dec14e8c05f4696a2b2e89bcaa1ab5d3"
+        },
+        {
+          "input_id": "sqlite-boundary",
+          "raw_sha256": "53dd4488c1de00ba17ed7b2e11c3f756777a4d2a9037f0efb6d021c11d2512c4"
+        },
+        {
+          "input_id": "sqlite-write-script",
+          "raw_sha256": "665d7c1d734138a4a784e61cdf42e4505de6c5f60038320455955a5648221f1f"
+        },
+        {
+          "input_id": "sqlite-write-strace",
+          "raw_sha256": "64592e8d00b5df3b3ce6153fb3c1de2612a6699f069cbc2340e39344b633bbcd"
+        },
+        {
+          "input_id": "sqlite-write-log",
+          "raw_sha256": "ee8236806e36fd96cf9aca5a90a35d621d40ce0f5b478a701a7bf1cf7f01c526"
+        }
+      ],
+      "transforms": [
+        {
+          "operation": "bounded synthesis; preserve missing source/command provenance as unknown rather than inventing it"
+        }
+      ]
+    },
+    {
+      "published_path": "README.md",
+      "published_sha256": "b85f256d08a5959e5ac4ed55534fa6e5ea443af25281b0a56e9d17069a71b874",
+      "published_size_bytes": 2873,
+      "raw_inputs": [],
+      "transforms": [
+        {
+          "operation": "new publication explanation; not a new experimental result"
+        }
+      ]
+    },
+    {
+      "published_path": "bootstrap-inconclusive-scope.json",
+      "published_sha256": "ab9cd97c1a54cf10a1e7d496ae67abf6f8867d5384cc0aafaedf4ca4754b81ad",
+      "published_size_bytes": 1994,
+      "raw_inputs": [
+        {
+          "input_id": "bootstrap-stage-one",
+          "raw_sha256": "4981d92a1d8a3759014bccb2bfa5d2d9dec14e8c05f4696a2b2e89bcaa1ab5d3"
+        }
+      ],
+      "transforms": [
+        {
+          "operation": "select only scoped failure/cleanup/source-binding facts; omit private artifact inventory and browser material"
+        }
+      ]
+    },
+    {
+      "published_path": "edquot-failed-syscalls.json",
+      "published_sha256": "0d8045376a8e47ce7124fb04a804d6e745d78a41d3c523a937103393f1a86862",
+      "published_size_bytes": 1015,
+      "raw_inputs": [
+        {
+          "input_id": "sqlite-write-strace",
+          "raw_sha256": "64592e8d00b5df3b3ce6153fb3c1de2612a6699f069cbc2340e39344b633bbcd"
+        }
+      ],
+      "transforms": [
+        {
+          "operation": "structurally extract failed EDQUOT calls only; discard all write buffers, process IDs, private paths and other trace lines"
+        }
+      ]
+    },
+    {
+      "published_path": "edquot-failed-syscalls.log",
+      "published_sha256": "70712d4bbdee5183147cbc0974ac579a5c499a6281faec8104c8306f3c84cade",
+      "published_size_bytes": 105,
+      "raw_inputs": [
+        {
+          "input_id": "sqlite-write-strace",
+          "raw_sha256": "64592e8d00b5df3b3ce6153fb3c1de2612a6699f069cbc2340e39344b633bbcd"
+        }
+      ],
+      "transforms": [
+        {
+          "operation": "render only extracted safe syscall metadata; synthetic marker replaces every write buffer"
+        }
+      ]
+    },
+    {
+      "published_path": "sqlite-boundary-receipt.json",
+      "published_sha256": "9166fe680e8cb8ae04002ecbbcec4d6d797922da88c785dc903a1b4ec30a45bd",
+      "published_size_bytes": 1064,
+      "raw_inputs": [
+        {
+          "input_id": "sqlite-boundary",
+          "raw_sha256": "53dd4488c1de00ba17ed7b2e11c3f756777a4d2a9037f0efb6d021c11d2512c4"
+        }
+      ],
+      "transforms": [
+        {
+          "operation": "replace exact observed private path",
+          "replacement": "<REPOSITORY>",
+          "occurrences": 2
+        },
+        {
+          "operation": "replace exact observed private path",
+          "replacement": "<PYTHON_RUNTIME>",
+          "occurrences": 1
+        },
+        {
+          "operation": "replace exact observed private path",
+          "replacement": "<TMP_BOUNDARY_DIR>",
+          "occurrences": 1
+        },
+        {
+          "operation": "replace exact observed private path",
+          "replacement": "<HOME_CACHE_BOUNDARY_DIR>",
+          "occurrences": 1
+        }
+      ]
+    },
+    {
+      "published_path": "sqlite-write-probe.py.txt",
+      "published_sha256": "665d7c1d734138a4a784e61cdf42e4505de6c5f60038320455955a5648221f1f",
+      "published_size_bytes": 584,
+      "raw_inputs": [
+        {
+          "input_id": "sqlite-write-script",
+          "raw_sha256": "665d7c1d734138a4a784e61cdf42e4505de6c5f60038320455955a5648221f1f"
+        }
+      ],
+      "transforms": [
+        {
+          "operation": "archive unchanged Python bytes as .py.txt"
+        }
+      ]
+    },
+    {
+      "published_path": "sqlite-write.log",
+      "published_sha256": "a4009c14a0d849a09a04966a1122ddb90ed68504b1f0ef40665369b0a9495dcc",
+      "published_size_bytes": 723,
+      "raw_inputs": [
+        {
+          "input_id": "sqlite-write-log",
+          "raw_sha256": "ee8236806e36fd96cf9aca5a90a35d621d40ce0f5b478a701a7bf1cf7f01c526"
+        }
+      ],
+      "transforms": [
+        {
+          "operation": "replace exact observed private path",
+          "replacement": "<REPOSITORY>",
+          "occurrences": 2
+        },
+        {
+          "operation": "replace exact observed private path",
+          "replacement": "<PYTHON_RUNTIME>",
+          "occurrences": 1
+        },
+        {
+          "operation": "replace exact observed private path",
+          "replacement": "<DIAGNOSTIC_SCRIPT>",
+          "occurrences": 1
+        },
+        {
+          "operation": "replace exact observed private path",
+          "replacement": "<TMP_WRITE_PROBE_DIR>",
+          "occurrences": 1
+        }
+      ]
+    }
+  ],
+  "payload_count": 8,
+  "payload_digest": "dff49a442a7d325497c0e648cf11b4899b1354cb06a7816790654c0857ebdea1",
+  "digest_formula": "sha256(UTF8 path + space + sha256, sorted by path and LF-joined without final LF)"
+}

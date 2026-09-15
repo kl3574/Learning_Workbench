@@ -1,0 +1,30 @@
+# M4.1 frontend development evidence
+
+This package records frontend development, not the root agent's complete fixed-commit gates or M4.1 acceptance. All original raw files remain at their local locations. `manifest.json` records each original hash separately from the public derivative hash. Archived source/config files end in `.ts.txt` or `.tsx.txt` and are not runnable test discovery inputs.
+
+## Checks and failures
+
+- Initial frontend model/hook checks progressed through 4, 8, 12 and 18 passing tests. The sixth typecheck failed on an unused `ContentRef` import in RouteView (`TS6196`); that import was removed and the subsequent Shell/type checks passed. These early checks have logs but no invented full-source before/after hash claim.
+- Native first round: **2 passed, 1 failed / 14.5s**. The profile test's global button locator matched three valid entry points (directory, page body and Settings dialog); it failed before profile editing. Scoping that action to the actual Settings dialog fixed the test setup. The same original profile lost-ACK case then passed **1 / 4.5s total**. No server protection, assertion or timeout was relaxed.
+- Independent Profile probes found two actual bugs: clean editor claims made nonselectable local conflicts; an old acknowledged command could replace a newer durable candidate after policy resume. Permanent tests reproduced **2 failed, 4 passed** before repair, then **6 passed**, and **7 passed** including the already-claimed peer-draft protection. Clean branches remain stored, actual foreign dirty branches require an explicit choice, and old ACKs cannot overwrite a different command.
+- Route recovery first setup run failed because this Vitest configuration does not include the `toBeEnabled` matcher. That is a harness failure, not product RED. Replacing only the matcher with native `HTMLButtonElement.disabled` exposed the real stuck-busy boundary. The corrected single case failed, followed by **2 failed** for recovery and newer-candidate preservation. The actual saved old RouteEditor source and before hashes are included. The same two-case test bytes then passed **2** after the minimal epoch/command repair.
+- A final same-command Profile acknowledgement regression produced **1 failed, 7 passed**: the disk receipt had been confirmed while the still-current editor remained unacknowledged after policy resume. The same command's editor is now confirmed together with its journal receipt; different/newer commands remain untouched. Paused projections stay hidden and remote reads still use access ownership.
+- Before that final Route/Profile delta: **233 unit tests / 39 files**, lint and build passed; **4 native passed / 17.8s**. Those four native cases cover real lost-ACK replay; actual unreviewed evidence and late policy-restricted sources; profile-only IndexedDB quota failure with real Ctrl+Shift+P, unsafe-close and beforeunload protection, explicit durable close/reload; and actual route create/edit/reorder, manual false, reminders and exact navigation.
+- Final source: **236 unit tests / 40 files / 3.04s**, lint and build exit 0. The two affected original Profile and Route native cases passed again **2 / 9.4s** after the final delta. This does not claim all four cases or the complete native suite were rerun at the final source. Root owns complete gates and actual browser/API restart verification separately.
+- Build warning remains: chunks exceed 500 kB. Native logs retain the `NO_COLOR`/`FORCE_COLOR` warning with process IDs redacted. Vitest's environment performance suggestion is retained, not treated as a functional failure.
+
+## Actual interface review
+
+All eight included screenshots are original synthetic interfaces and were actually viewed. The route repair is feature-local CSS: directory titles and revision labels are separated, and route task headings override inherited Reader heading spacing/borders. The 390-pixel route task controls and reminders fit without horizontal overflow. The route screenshots show UI-session saving, so they do not prove completed Workbench persistence.
+
+The original 390 concept capture scrolled the dialog heading to the top and did not show the opened source. The new test scrolls the real expanded source into view, preserves the source-content/hash assertions, checks dialog width and header close visibility, and captures both widths. At 1440 the real original submission time, unreviewed/null-score reasons and full question reference are visible; at 390 the fixed header, concept reference and source beginning are visible. A single 390 image does not show all long source metadata simultaneously.
+
+Profile screenshot follows an actual acknowledged r2 save and IndexedDB-safe state, with user self-report visibly separate from independent evidence. The displayed r1 editing baseline is the original command baseline, not a claim that the server remains r1.
+
+## Provenance and boundaries
+
+`freeze.json` contains 31 owned final file hashes. Its capture occurred while the last checks ran, followed by a byte-for-byte readback; it is not represented as a pre-run capture. Earlier images/logs without captured source manifests are explicitly development observations. No core/generated models, global CSS, shared draft-journal algorithm or old native tests were edited by this task.
+
+No real user learning records, private workspace databases, browser profiles, full DOM dumps, traces, cookies or capability tokens are published. Error-context publication extracts only the first Error details fenced block. Log derivatives remove personal repository paths, ANSI controls, runtime process IDs and attached HTML DOM dumps, while preserving actual errors, stack context and counts. Synthetic content/event/attempt identifiers in the images are object metadata, not authorization capabilities.
+
+The publication scanner is a bounded check; manual provenance review remains necessary. Provider/model quality, mastery calibration, approved-reference import, recommendation behavior and a complete fixed-commit gate are not established by this package.

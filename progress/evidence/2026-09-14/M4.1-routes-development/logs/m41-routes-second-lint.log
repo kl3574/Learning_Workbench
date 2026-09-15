@@ -1,0 +1,56 @@
+E702 Multiple statements on one line (semicolon)
+  --> tests/integration/test_learning_content_scope.py:18:62
+   |
+16 | @pytest.fixture
+17 | def storage(tmp_path):
+18 |     database = Database(Settings(data_dir=tmp_path / 'data')); workspace = database.initialize()
+   |                                                              ^
+19 |     fixture = assessment_fixture('scope')
+20 |     ContentService(database).publish(workspace, fixture.public_objects, fixture.bodies)
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/integration/test_routes_commands.py:60:44
+   |
+58 |     assert next_page['item_refs'] == [saved.json()] and next_page['next_cursor'] is None
+59 |     assert client.get('/api/v1/routes', params={'limit': 2, 'cursor': page['next_cursor']}).status_code == 422
+60 |     restarted = Database(database.settings); restarted.initialize()
+   |                                            ^
+61 |     before = {table: count(database, table) for table in ['revisions', 'learning_events', 'learning_progress', 'outbox', 'evidence']}
+62 |     restored = RouteService(restarted).list(workspace)
+   |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/integration/test_routes_commands.py:124:37
+    |
+122 | def test_completion_replay_rejects_damaged_original_binding(storage, part):
+123 |     database, _, identity, objects, _ = storage
+124 |     service = RouteService(database); value = route_for(objects)
+    |                                     ^
+125 |     service.create(identity, value, 'create')
+126 |     request = RouteCompletionRequest(route_revision=1, expected_progress_revision=1, completed=True, origin='manual')
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/integration/test_routes_commands.py:141:37
+    |
+139 | def test_workspace_and_active_independent_policy_apply_before_cached_route_receipt(storage):
+140 |     database, workspace, identity, objects, _ = storage
+141 |     service = RouteService(database); route = route_for(objects)
+    |                                     ^
+142 |     service.create(identity, route, 'create')
+143 |     with database.transaction() as connection:
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/integration/test_routes_commands.py:152:47
+    |
+150 |     from tests.integration.test_assessment_attempts import import_fixture, start
+151 |     from services.api.app.application.assessment import AssessmentService
+152 |     fixture = assessment_fixture('routeguard'); import_fixture(database, identity, fixture, 'guard-source')
+    |                                               ^
+153 |     start((database, identity, fixture, AssessmentService(database)))
+154 |     for actor in [identity, replace(identity, role='author')]:
+    |
+
+Found 5 errors.

@@ -1,0 +1,27 @@
+--- before/services/api/app/application/assessment_activity_access.py
++++ after/services/api/app/application/assessment_activity_access.py
+@@ -2,6 +2,7 @@
+ 
+ import sqlite3
+ 
++from ..infrastructure.assessment_repository import AssessmentRepository
+ from ..infrastructure.content_repository import damaged, reference
+ from .assessment_content import AssessmentContent
+ from .assessment_evidence_access import submission_witness
+@@ -14,8 +15,14 @@
+     content.public.require_workspace()
+     Policy(connection, workspace_id).check('subject_read')
+     output = []
+-    for row in connection.execute('SELECT id FROM attempts WHERE workspace_id=? AND submission_json IS NOT NULL ORDER BY id', (workspace_id,)):
+-        witness = submission_witness(connection, workspace_id, row['id'])
++    repository = AssessmentRepository(connection, workspace_id)
++    for identifier in repository.history_ids():
++        record = repository.load(identifier)
++        # Validate every allocation before filtering; a damaged submitted snapshot
++        # must not become indistinguishable from a real unsubmitted attempt.
++        if record.submission is None:
++            continue
++        witness = submission_witness(connection, workspace_id, identifier)
+         blueprint = content.blueprint(witness.assessment_ref)
+         questions = content.questions(blueprint)
+         if [reference(value) for value in questions] != witness.question_refs:

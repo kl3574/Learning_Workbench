@@ -1,0 +1,75 @@
+{
+  "observed_at": "2026-09-14T20:00:53.840276+00:00",
+  "review_scope": "Independent read-only M4.1 Learning and route completion review; not full gate or milestone acceptance",
+  "normative_basis": {
+    "PRODUCT_DESIGN.md": {
+      "sha256": "ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c",
+      "lines": [
+        33,
+        343,
+        644,
+        696,
+        907,
+        1047,
+        1088
+      ]
+    },
+    "engineering_decisions": "docs/adr/0013-learning-state-profile-and-routes.md"
+  },
+  "source_before": {
+    "services/api/app/application/route_progress.py": "a99c5fdcadf11d38df433e339c5d0a209a333d8f7fe0065e33f9bf542261070a",
+    "services/api/app/application/learning_state_models.py": "68dbbd9506468c7c5cde5078093984a9880af542512f23720984c83788f03f87",
+    "services/api/app/application/learning.py": "0bc9b688cb3179c760e7d2910f7b75df5001c3741377d27f86e2feb14a063552",
+    "services/api/app/application/evidence.py": "7791c5fd99c071b0cba3fc267991711a51f8bcb3d7d0f490652025615acba40e",
+    "services/api/app/infrastructure/learning_repository.py": "af3980f5f4bace6b6fbe53c1ff5ed4789ecf89e977ab17a8e6c54e7c07cddd8c",
+    "services/api/app/learning_dto.py": "4e84bb0cd7f40c10c1edff9f21748a537c25de99078492ff927293de46b01a6e",
+    "tests/integration/test_learning_state_observations.py": "f19d8fc5a26e4f4c2940c992445f628b0d9d7926ea74f90f4cecd11e48bd75d7",
+    "tests/integration/test_route_completion_sources.py": "03f12adf6a5cd5e4e2b0719c6be4736531298ad2f64fb83514ad41700c05c6b2",
+    "services/api/app/application/practice_activity_access.py": "5a82796467fc4d0ff63b5fa9534c7c4fa4ab947030543f5b7be8e10b0524c57c"
+  },
+  "source_after": {
+    "services/api/app/application/route_progress.py": "a99c5fdcadf11d38df433e339c5d0a209a333d8f7fe0065e33f9bf542261070a",
+    "services/api/app/application/learning_state_models.py": "68dbbd9506468c7c5cde5078093984a9880af542512f23720984c83788f03f87",
+    "services/api/app/application/learning.py": "0bc9b688cb3179c760e7d2910f7b75df5001c3741377d27f86e2feb14a063552",
+    "services/api/app/application/evidence.py": "7791c5fd99c071b0cba3fc267991711a51f8bcb3d7d0f490652025615acba40e",
+    "services/api/app/infrastructure/learning_repository.py": "af3980f5f4bace6b6fbe53c1ff5ed4789ecf89e977ab17a8e6c54e7c07cddd8c",
+    "services/api/app/learning_dto.py": "4e84bb0cd7f40c10c1edff9f21748a537c25de99078492ff927293de46b01a6e",
+    "tests/integration/test_learning_state_observations.py": "f19d8fc5a26e4f4c2940c992445f628b0d9d7926ea74f90f4cecd11e48bd75d7",
+    "tests/integration/test_route_completion_sources.py": "03f12adf6a5cd5e4e2b0719c6be4736531298ad2f64fb83514ad41700c05c6b2",
+    "services/api/app/application/practice_activity_access.py": "5a82796467fc4d0ff63b5fa9534c7c4fa4ab947030543f5b7be8e10b0524c57c"
+  },
+  "unchanged": true,
+  "command": "PYTHONPATH=. uv run --frozen pytest -q ./test_source_integrity.py",
+  "exit_code": 1,
+  "results": {
+    "passed": 1,
+    "failed": 2,
+    "seconds": 0.56
+  },
+  "script_sha256": "fdcfb5001c8e82c68da83d5b113e08729d866cb97448ba014520fd664f45e18d",
+  "log_sha256": "095f27eab321f529756fb07726127743bb851bff42aebedc539516b0f979f74d",
+  "findings": [
+    {
+      "id": "original-route-revision-link",
+      "location": "services/api/app/application/route_progress.py:_binding",
+      "reproduction": "Actual manual true progress2 then false progress3; change only first outbox progress_revision from2 to3; route_step_projection accepts history instead of rejecting its now duplicated revision association.",
+      "impact": "Full source-history checks accept an inconsistent original revision; latest false remains false, so this is integrity failure, not demonstrated normal API loss or privilege bypass."
+    },
+    {
+      "id": "practice-learning-outbox-missing",
+      "location": "services/api/app/application/learning.py:practice_submission_event",
+      "reproduction": "Actual imported Practice submission; delete only its learning.action_recorded outbox. practice.submitted audit and event remain. practice_participation still admits original submission.",
+      "impact": "The new Learning read port verifies event identity but omits its own atomic progress/outbox receipt."
+    }
+  ],
+  "controls": [
+    "Normal latest manual false retains original event identity, null completed time and zero read mutation.",
+    "Reviewed policy guard before manual replay and full successful-grade bindings before latest selection; no additional finding in bounded read."
+  ],
+  "limitations": [
+    "Controlled SQLite fault injection, not claims of normal HTTP ability to alter server rows.",
+    "No browser/default-port service, full suite, provider, or M4.2 tests.",
+    "No production/test/repository mutations by review; source snapshots, probe and raw log stored only under temporary private directory."
+  ],
+  "raw_publication": "Raw traceback is private; no auth cookie/token emitted by this service-only probe, but process/temp paths require redaction before publishing."
+}

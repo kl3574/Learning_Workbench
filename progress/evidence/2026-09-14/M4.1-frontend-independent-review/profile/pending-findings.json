@@ -1,0 +1,58 @@
+{
+  "status": "findings handed to frontend owner; awaiting repair, not acceptance",
+  "runtime": "React hooks + real DraftStore implementation with fake-indexeddb transaction engine; no browser/native/HTTP server",
+  "tests": [
+    {
+      "script": "profile/ownership.test.tsx.txt",
+      "raw": "profile/red-first.log",
+      "receipt": "profile/red-first-receipt.json",
+      "result": "one failed assertion: empty candidate list with nonempty clean baseline conflicts",
+      "source_stable": true
+    },
+    {
+      "script": "profile/late-ack.test.tsx.txt",
+      "raw": "profile/late-ack-red.log",
+      "receipt": "profile/late-ack-red-receipt.json",
+      "result": "one failed assertion: newer durable B absent from disk after late ACK of A; live B still visible and safe",
+      "source_stable": true
+    }
+  ],
+  "static_only": [
+    {
+      "path": "apps/web/src/features/learning/ConceptStates.tsx",
+      "claim": "unknown_count label should include independence unknown as well as freshness unknown; backend OR count is broader than label"
+    },
+    {
+      "path": "apps/web/src/workbench/Shell.tsx",
+      "claim": "global command shortcut directly replaces profile/route dialog without dirty/safe closeDialog protection; journal beforeunload handler is removed on unmount; no independent Shell execution yet"
+    }
+  ],
+  "read_scope": [
+    "apps/web/src/features/learning/useProfile.ts",
+    "apps/web/src/features/learning/profileDrafts.ts",
+    "apps/web/src/features/learning/profileClient.ts",
+    "apps/web/src/features/learning/useConceptStates.ts",
+    "apps/web/src/features/learning/conceptModel.ts",
+    "apps/web/src/features/learning/ProfilePanel.tsx",
+    "apps/web/src/features/learning/ProfileFields.tsx",
+    "apps/web/src/features/learning/ConceptStates.tsx",
+    "apps/web/src/features/routes/RouteEditor.tsx",
+    "apps/web/src/features/routes/RouteView.tsx",
+    "apps/web/src/features/routes/routeDrafts.ts",
+    "apps/web/src/features/routes/completionDrafts.ts",
+    "apps/web/src/features/routes/useRoutes.ts",
+    "apps/web/src/features/routes/target.ts",
+    "apps/web/src/features/routes/routeClient.ts",
+    "apps/web/src/workbench/Shell.tsx",
+    "apps/web/src/shared/createResponseDraftJournal.ts",
+    "apps/web/src/workbench/DraftStore.ts",
+    "apps/web/src/api/client.ts"
+  ],
+  "probe_hashes": {
+    "profile/ownership.test.tsx.txt": "3bee5940592609cf58f968da29d2867a63aa138420e8e6312b3b81b262e8c83e",
+    "profile/late-ack.test.tsx.txt": "5ba7c98492371970beacf24de62770cb4f281f542d90fdb4bceb9b38838ae3f9",
+    "profile/vitest.config.ts.txt": "c09627bf161a16a5e7dfbe6b8f3423fe7fe04412d6f397c0328b59fff126d9a4"
+  },
+  "source_content_snapshot_limit": "Source SHA values and executed outputs preserved. No pre-repair source-text snapshot was copied; the reviewer made no production edits.",
+  "_publication_note": "This is a transformed historical record. Embedded source/probe/log/artifact hashes still identify the ORIGINAL recorded bytes, not this package derivative. The package manifest maps raw_sha256 to published_sha256. Artifact references use package-root relative paths. Historical states and results are not relabelled as current."
+}

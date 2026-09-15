@@ -1,0 +1,5 @@
+# Unsubmitted Practice help action binding
+
+A bounded adjacent source-integrity repair. Actual hint and solution flows are tested in an unsubmitted session, then only the native Learning outbox is removed in a test-owned SQLite transaction. The original two probes failed before repair and pass after repair without test edits. Five relevant sources stayed unchanged during the green probe/regression sequence. The additional 43-pass regression is scoped separately; it is not full-stage acceptance.
+
+Red and green source snapshots, original probe, raw-to-public hashes and exact production diffs are retained. Only known repository/probe paths and process addresses are redacted. No CSRF/auth/cookie value is present in these service-only logs. The raw path input mapping remains private outside this package. Prior public development packages are not overwritten. No database, browser profile, DOM or private study input is included. Automated publication inspection supplements manual review and is not an arbitrary-secret detector.

@@ -22,6 +22,7 @@ from .eligibility import evidence_reason, finalize_eligibility, validate_prerequ
 from .eligibility_models import ItemPrerequisites, Skill
 from .errors import ApiError
 from .evidence_models import BoundItem, FrozenItem, FrozenPrerequisites, GradeBinding, SubmissionBasis
+from .learning_state_models import EvidenceObservation
 from .practice_help_access import HelpFacts, help_witnesses, instant, validate_help_witnesses
 from .question_qualification import question_qualification_facts
 
@@ -186,6 +187,34 @@ def history(connection: sqlite3.Connection, workspace_id: str, attempt_id: str):
     return output
 
 
+def _latest_checked_bindings(connection: sqlite3.Connection, workspace_id: str) -> list[GradeBinding]:
+    """Validate the whole successful history before choosing any current version."""
+    _transaction(connection)
+    guard_subject_access(connection, workspace_id)
+    latest: dict[str, GradeBinding] = {}
+    for key in completed_grade_keys(connection, workspace_id):
+        value = _checked_binding(connection, workspace_id, key.attempt_id, key.grading_revision)
+        prior = latest.get(key.attempt_id)
+        if prior is None or value.grading_revision > prior.grading_revision:
+            latest[key.attempt_id] = value
+    return [latest[key] for key in sorted(latest)]
+
+
+def latest_checked_observations(connection: sqlite3.Connection, workspace_id: str) -> list[EvidenceObservation]:
+    """Learning-owned metadata port; retains original submission time and exact refs."""
+    output = []
+    for binding in _latest_checked_bindings(connection, workspace_id):
+        submission = submission_witness(connection, workspace_id, binding.attempt_id)
+        for item in binding.items:
+            for concept, evidence in zip(item.decision.concept_refs, item.evidence, strict=True):
+                output.append(EvidenceObservation(evidence=evidence, question_ref=item.decision.question_ref,
+                    concept_ref=concept, assessment_ref=submission.assessment_ref, attempt_id=binding.attempt_id,
+                    grading_revision=binding.grading_revision, submitted_at=submission.submitted_at,
+                    exposure_group=item.prerequisites.exposure_group, qualification_basis=binding.qualification_basis,
+                    reason_codes=item.decision.reason_codes))
+    return sorted(output, key=lambda value: value.evidence.id)
+
+
 class EvidenceService:
     def __init__(self, database: Database):
         self.database = database
@@ -222,16 +251,10 @@ class EvidenceService:
         context = sha256_bytes(canonical_bytes({'workspace_id': workspace_id, 'concept_id': concept_id, 'skill': skill, 'limit': limit}))
         try:
             with self.database.transaction() as connection:
-                guard_subject_access(connection, workspace_id)
-                keys = completed_grade_keys(connection, workspace_id)
-                # Validate every real persisted version, including a legacy version
-                # without a binding. Reads do not hide incomplete history or repair it.
-                latest = {}
-                for key in keys:
-                    latest[key.attempt_id] = _checked_binding(connection, workspace_id, key.attempt_id, key.grading_revision)
+                latest = _latest_checked_bindings(connection, workspace_id)
                 watermark = connection.execute('SELECT COALESCE(MAX(sequence),0) FROM learning_grade_bindings WHERE workspace_id=?', (workspace_id,)).fetchone()[0]
                 position = self._position(cursor, context, watermark)
-                items = sorted((evidence for value in latest.values() for item in value.items for evidence in item.evidence
+                items = sorted((evidence for value in latest for item in value.items for evidence in item.evidence
                     if (concept_id is None or evidence.concept_id == concept_id) and (skill is None or evidence.skill == skill)
                     and (position is None or evidence.id > position)), key=lambda item: item.id)
                 page = items[:limit]

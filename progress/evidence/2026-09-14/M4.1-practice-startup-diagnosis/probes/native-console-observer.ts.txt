@@ -1,0 +1,40 @@
+import { writeFileSync } from 'node:fs'
+import type { Page } from '<EXACT_REPO>/apps/web/node_modules/@playwright/test/index.mjs'
+const ledgers = new Map<Page, unknown[]>()
+const pending = new Set<Promise<unknown>>()
+function clean(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(clean)
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).filter(([key]) => !/csrf|token|bootstrap|cookie|signature/i.test(key)).map(([key,value]) => [key,clean(value)]))
+  return value
+}
+export async function observe(page: Page, name: string) {
+ const rows: unknown[]=[]; ledgers.set(page,rows)
+ ;(globalThis as unknown as {observedPages:Page[]}).observedPages=[page]
+ await page.exposeBinding('__practiceObserver', (_,data) => { rows.push({kind:'ui',at:Date.now(),data}) })
+ await page.addInitScript(() => {
+  let previous=''
+  const sample=() => {
+   const state={path:location.pathname+location.search,headings:[...document.querySelectorAll('h1,h2,h3')].map(x=>x.textContent),footer:document.querySelector('.status-bar')?.textContent,practice:[...document.querySelectorAll('.practice-status,.practice-recovery,[role="alert"]')].map(x=>x.textContent),hasPractice:!!document.querySelector('.practice-content'),bodyTail:document.body?.innerText.slice(-1400)}
+   const data=JSON.stringify(state);if(data!==previous){previous=data;(window as unknown as {__practiceObserver:(value:unknown)=>void}).__practiceObserver(state)}
+  }
+  document.addEventListener('DOMContentLoaded',()=>{new MutationObserver(sample).observe(document.body,{childList:true,subtree:true,characterData:true});sample()})
+ })
+ page.on('response', response => {
+  const path=new URL(response.url()).pathname
+  if(!/^\/api\/v1\/(session$|workbench\/session$|practice\/sessions)/.test(path))return
+  const task=(async()=>{const req=response.request();let body: unknown;try{body=await response.json()}catch{body=null}
+   if(path==='/api/v1/session' && body && typeof body==='object'){const b=body as Record<string,unknown>;body={workspace_id:b.workspace_id,role:b.role,active_independent_attempt_id:b.active_independent_attempt_id}}
+   let sent: unknown;try{sent=req.postDataJSON()}catch{sent=null}
+   rows.push({kind:'http',at:Date.now(),path,method:req.method(),status:response.status(),etag:response.headers()['etag'],request:clean(sent),response:clean(body)})
+  })();pending.add(task);task.finally(()=>pending.delete(task))
+ })
+ page.on('console',m=>{if(m.type()==='error'||m.type()==='warning') rows.push({kind:'console',at:Date.now(),type:m.type(),text:m.text()})});
+ page.on('requestfailed',r=>rows.push({kind:'requestfailed',at:Date.now(),path:new URL(r.url()).pathname,error:r.failure()}));
+ page.on('pageerror',e=>rows.push({kind:'pageerror',at:Date.now(),message:e.message}))
+ rows.push({kind:'start',name})
+}
+export async function finish(page: Page, name: string) {
+ const rows=ledgers.get(page);if(!rows)return
+ try{rows.push({kind:'final',at:Date.now(),data:await page.evaluate(()=>({path:location.pathname+location.search,text:document.body.innerText,local:Object.fromEntries(Object.entries(localStorage).filter(([key])=>/workbench/.test(key)))}))});await page.screenshot({path:`<DIAGNOSTIC_ROOT>/native-console/${name}-final.png`})}catch(e){rows.push({kind:'finish-error',error:String(e)})}
+ await Promise.allSettled([...pending]);writeFileSync(`<DIAGNOSTIC_ROOT>/native-console/${name}-ledger.json`,JSON.stringify(rows,null,2));ledgers.delete(page)
+}

@@ -1,0 +1,41 @@
+[WebServer] INFO:     Started server process [<PID>]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+[WebServer] (node:<PID>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:<PID>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 ../m41-practice-readonly-diagnosis/native-console/practice-restart.spec.ts:21:1 › same practice tab identity rejects changed frozen parent or child hashes and preserves the original session (9.4s)
+
+
+  1) ../m41-practice-readonly-diagnosis/native-console/practice-restart.spec.ts:21:1 › same practice tab identity rejects changed frozen parent or child hashes and preserves the original session 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('heading', { name: '无法打开此精确链接', exact: true })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('heading', { name: '无法打开此精确链接', exact: true }) with timeout 5000ms
+      - waiting for getByRole('heading', { name: '无法打开此精确链接', exact: true })
+
+
+      49 |     ]) {
+      50 |       await page.goto(`${runtime.origin}/?practice=${encodeURIComponent(JSON.stringify(altered))}`)
+    > 51 |       await expect(page.getByRole('heading', { name: '无法打开此精确链接', exact: true })).toBeVisible()
+         |                                                                                   ^
+      52 |       const rejected = await workbench(page)
+      53 |       expect(rejected.course_ref).toEqual(before.course_ref)
+      54 |       expect(rejected.active_tab_id).toBe(active.id)
+        at <DIAGNOSTIC_ROOT>/native-console/practice-restart.spec.ts:51:83
+
+    Error Context: ../m41-practice-readonly-diagnosis/native-console/results/practice-restart-same-prac-c1139-serves-the-original-session/error-context.md
+
+  1 failed
+    ../m41-practice-readonly-diagnosis/native-console/practice-restart.spec.ts:21:1 › same practice tab identity rejects changed frozen parent or child hashes and preserves the original session 

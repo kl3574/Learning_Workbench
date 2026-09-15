@@ -1,0 +1,51 @@
+[WebServer] INFO:     Started server process [<PID>]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+[WebServer] (node:<PID>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:<PID>) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[observer: Chrome launch command omitted; private runtime profile path]
+  pw:browser <launched> pid=<PID> +2ms
+  pw:browser [pid=<PID>] <gracefully close start> +5s
+  pw:browser [pid=<PID>] <process did exit: exitCode=0, signal=null> +34ms
+  pw:browser [pid=<PID>] starting temporary directories cleanup +1ms
+  pw:browser [pid=<PID>] finished temporary directories cleanup +0ms
+  pw:browser [pid=<PID>] <gracefully close end> +0ms
+  ✘  1 ../m41-practice-readonly-diagnosis/native-process/practice-restart.spec.ts:21:1 › same practice tab identity rejects changed frozen parent or child hashes and preserves the original session (6.1s)
+
+
+  1) ../m41-practice-readonly-diagnosis/native-process/practice-restart.spec.ts:21:1 › same practice tab identity rejects changed frozen parent or child hashes and preserves the original session 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator:  getByRole('dialog', { name: '导入', exact: true }).getByText(/操作角色：(作者|学习者)$/)
+    Expected: visible
+    Received: undefined
+
+    Call log:
+      - Expect "toBeVisible" getByRole('dialog', { name: '导入', exact: true }).getByText(/操作角色：(作者|学习者)$/) with timeout 5000ms
+      - waiting for getByRole('dialog', { name: '导入', exact: true }).getByText(/操作角色：(作者|学习者)$/)
+      - Protocol error (Runtime.callFunctionOn): Page crashed.
+
+
+       at ../../learning-workbench-m41-final-exact/tests/e2e/practiceTestData.ts:26
+
+      24 |   await page.getByRole('dialog', { name: '命令面板', exact: true }).getByRole('button', { name: /^导入/ }).click()
+      25 |   const dialog = page.getByRole('dialog', { name: '导入', exact: true })
+    > 26 |   await expect(dialog.getByText(/操作角色：(作者|学习者)$/)).toBeVisible()
+         |                                                    ^
+      27 |   const desiredRole = value.profile === 'author' ? '作者' : '学习者'
+      28 |   const switchRole = dialog.getByRole('button', { name: `切换为${desiredRole}角色`, exact: true })
+      29 |   if (await switchRole.count()) await switchRole.click()
+        at importPracticePackage (<EXACT_REPO>/tests/e2e/practiceTestData.ts:26:52)
+        at <DIAGNOSTIC_ROOT>/native-process/practice-restart.spec.ts:30:22
+
+    Error Context: ../m41-practice-readonly-diagnosis/native-process/results/practice-restart-same-prac-c1139-serves-the-original-session/error-context.md
+
+  1 failed
+    ../m41-practice-readonly-diagnosis/native-process/practice-restart.spec.ts:21:1 › same practice tab identity rejects changed frozen parent or child hashes and preserves the original session 

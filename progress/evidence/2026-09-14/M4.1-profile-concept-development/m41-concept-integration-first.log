@@ -1,0 +1,68 @@
+.....F.F.                                                                [100%]
+=================================== FAILURES ===================================
+_ test_practice_counts_real_submitted_sessions_and_help_events_separately_from_question_attempts _
+
+[synthetic fixture representation omitted]
+
+    def test_practice_counts_real_submitted_sessions_and_help_events_separately_from_question_attempts(storage):
+        database, identity, fixture, _ = storage
+        practice = PracticeService(database)
+        active = practice.create_session(identity, PracticeSessionCreate(practice_ref=reference(fixture.practice)), 'practice')
+        service = ConceptStateService(database)
+        assert all(row.practice_submission_count == 0 for row in service.read(identity.workspace_id).items)
+        hint = practice.hint(identity, active.id, PracticeHintRequest(question_id=fixture.questions[0].id,
+            expected_revision=1, level=1), 'hint')
+        solution = practice.solution(identity, active.id, PracticeSolutionRequest(question_id=fixture.questions[0].id,
+            expected_revision=hint.revision), 'solution')
+        practice.submit(identity, active.id, PracticeSubmitRequest(expected_revision=solution.revision), 'submit')
+        result = service.read(identity.workspace_id, fixture.course.id)
+        assert all(row.practice_submission_count == 1 for row in result.items)  # Two recall questions are one session.
+        recall = next(row for row in result.items if row.skill == 'recall')
+        assert recall.hint_count == recall.solution_count == 1
+        assert recall.hint_sources[0].event_id == hint.exposure_event_id
+        assert recall.solution_sources[0].event_id == solution.exposure_event_id
+        assert all(row.independent_count == 0 and not row.sources for row in result.items)
+        # Another real course shares the concept, but not this practice's exact lesson.
+>       other = dm.Course(id='course_other', revision=1, title='Same concept, distinct course', audience='Synthetic',
+                          concept_refs=[reference(fixture.concept)], lesson_refs=[])
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for Course
+E       lesson_refs
+E         List should have at least 1 item after validation, not 0 [type=too_short, input_value=[], input_type=list]
+E           For further information visit https://errors.pydantic.dev/2.13/v/too_short
+
+tests/integration/test_concept_states.py:128: ValidationError
+_ test_guard_and_damaged_history_cannot_be_hidden_by_a_different_course_filter _
+
+[synthetic fixture representation omitted]
+
+    def test_guard_and_damaged_history_cannot_be_hidden_by_a_different_course_filter(storage):
+        database, identity, fixture, _ = storage
+        service = ConceptStateService(database)
+        attempt = start(storage)
+        with pytest.raises(ApiError) as denied:
+            service.read(identity.workspace_id, fixture.course.id)
+        assert denied.value.status == 409
+        storage[3].submit(identity, attempt.id, dm.AttemptSubmit(expected_revision=1), 'guard-submit')
+        assert GradingWorker(database).run_once()
+>       other = dm.Course(id='course_empty', revision=1, title='Other empty course', audience='Synthetic')
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for Course
+E       lesson_refs
+E         Field required [type=missing, input_value={'id': 'course_empty', 'r...'audience': 'Synthetic'}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.13/v/missing
+
+tests/integration/test_concept_states.py:162: ValidationError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <repository>/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <repository>/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_concept_states.py::test_practice_counts_real_submitted_sessions_and_help_events_separately_from_question_attempts
+FAILED tests/integration/test_concept_states.py::test_guard_and_damaged_history_cannot_be_hidden_by_a_different_course_filter
+2 failed, 7 passed, 2 warnings in 3.30s

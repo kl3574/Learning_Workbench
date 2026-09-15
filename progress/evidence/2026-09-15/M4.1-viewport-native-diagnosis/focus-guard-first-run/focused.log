@@ -1,0 +1,41 @@
+
+Running 4 tests using 1 worker
+
+(node:42110) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/e2e/assessments.spec.ts:41:1 › real unreviewed independent assessment saves five types and submits without fabricated grades or answer calls (6.1s)
+  ✘  2 tests/e2e/reader-conflict-layout.spec.ts:79:1 › real session conflict preserves the scrolled submitted explanation and requires an explicit comparison choice (11.1s)
+(node:42603) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  3 tests/e2e/reader-conflict-layout.spec.ts:142:1 › real session conflict keeps the same enabled assessment input focused and visible in the shortened reader (5.4s)
+  ✓  4 tests/e2e/responsive-layout.spec.ts:43:1 › narrow layout and submitted explanation remain visible before React resize listeners run (5.4s)
+
+
+  1) tests/e2e/reader-conflict-layout.spec.ts:79:1 › real session conflict preserves the scrolled submitted explanation and requires an explicit comparison choice 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('✓ UI 会话已保存')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByText('✓ UI 会话已保存') with timeout 5000ms
+      - waiting for getByText('✓ UI 会话已保存')
+
+
+      103 |   expect(result.items).toHaveLength(5)
+      104 |   expect(result.items.every((item: { score: number | null; solution_markdown?: string | null }) => item.score === null && item.solution_markdown == null)).toBe(true)
+    > 105 |   await expect(page.getByText('✓ UI 会话已保存')).toBeVisible()
+          |                                              ^
+      106 |
+      107 |   const gate = await holdRealSessionConflict(page)
+      108 |   const observations: { stage: string; geometry: Awaited<ReturnType<typeof geometry>> }[] = []
+        at <REPOSITORY>/tests/e2e/reader-conflict-layout.spec.ts:105:46
+
+    Error Context: ../../../.cache/learning-workbench-acceptance/m41-assessment-viewport-focus-validation/focused-results/reader-conflict-layout-rea-dfee7--explicit-comparison-choice/error-context.md
+
+  1 failed
+    tests/e2e/reader-conflict-layout.spec.ts:79:1 › real session conflict preserves the scrolled submitted explanation and requires an explicit comparison choice 
+  3 passed (28.6s)

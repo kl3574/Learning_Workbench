@@ -1,0 +1,89 @@
+import { writeFileSync } from 'node:fs'
+import type { Page } from '<REPOSITORY>/apps/web/node_modules/@playwright/test/index.mjs'
+const out = '<ACCEPTANCE_ARTIFACTS>/m41-assessment-viewport-fix-validation/original-probe-replay'
+const rows: unknown[] = []
+export async function beginObservation(page: Page) {
+  await page.exposeBinding('__recordViewport', (_source, row: unknown) => { if (rows.length < 1400) rows.push(row) })
+  await page.addInitScript(() => {
+    type Detail = Record<string, unknown>
+    const win = window as Window & { __recordViewport: (row: Detail) => Promise<void>; __viewportMetrics?: (event: string) => Detail }
+    let armed = false, sequence = 0, previous = '', scheduled = false
+    function element(node: Element | null) {
+      if (!(node instanceof HTMLElement)) return null
+      const rect = node.getBoundingClientRect(), css = getComputedStyle(node)
+      return { tag: node.tagName, class: node.className, id: node.id, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height, bottom: rect.bottom }, clientWidth: node.clientWidth, clientHeight: node.clientHeight, scrollWidth: node.scrollWidth, scrollHeight: node.scrollHeight, scrollTop: node.scrollTop, scrollLeft: node.scrollLeft, display: css.display, overflowX: css.overflowX, overflowY: css.overflowY, height: css.height, minHeight: css.minHeight, flexShrink: css.flexShrink, gridTemplateColumns: css.gridTemplateColumns, overflowAnchor: css.overflowAnchor }
+    }
+    const metrics = (event: string) => {
+      const paragraph = document.querySelector('.practice-submit > p'), ancestors: unknown[] = []
+      let ancestor = paragraph?.parentElement
+      while (ancestor) { ancestors.push(element(ancestor)); ancestor = ancestor.parentElement }
+      return { event, sequence: ++sequence, time: performance.now(), documentTime: performance.timeOrigin, width: innerWidth, height: innerHeight, visualViewport: visualViewport ? {width: visualViewport.width, height: visualViewport.height, offsetTop: visualViewport.offsetTop, offsetLeft: visualViewport.offsetLeft} : null, root: element(document.documentElement), body: element(document.body), paragraph: element(paragraph), ancestors, scroll: element(document.querySelector('.assessment-scroll')), reader: element(document.querySelector('.reader-main')), grid: element(document.querySelector('.workbench-grid')), alerts: [...document.querySelectorAll('.save-alert,.conflict-comparison')].map(element), grading: [...document.querySelectorAll('.assessment-result h2,.assessment-result h3,[aria-label="当前评分结果"]')].map(node => ({tag: node.tagName, label: node.getAttribute('aria-label'), text: node.textContent?.slice(0,100), geometry: element(node)})), active: document.activeElement ? {tag: document.activeElement.tagName, id: document.activeElement.id, class: document.activeElement.className} : null }
+    }
+    win.__viewportMetrics = metrics
+    const record = (event: string, force = false) => {
+      if (!armed && innerWidth >= 820) return
+      const row = metrics(event), serialized = JSON.stringify({...row, sequence: 0, time: 0, event: ''})
+      if (force || serialized !== previous) { previous = serialized; void win.__recordViewport(row) }
+    }
+    document.addEventListener('click', event => {
+      const target = event.target instanceof Element ? event.target.closest('button') : null
+      if (target?.textContent?.includes('提交')) armed = true
+      if (armed) record(`click:${target?.textContent?.slice(0,70) ?? event.target?.constructor.name}`, true)
+    }, true)
+    document.addEventListener('scroll', event => record(`scroll:${event.target instanceof Element ? event.target.className : 'document'}`, true), true)
+    const nativeAdd = window.addEventListener.bind(window), nativeRemove = window.removeEventListener.bind(window)
+    const callbacks = new WeakMap<object, EventListener>()
+    window.addEventListener = function(type, listener, options) {
+      if (type === 'resize' && listener) {
+        const wrapped: EventListener = event => { record('resize-listener-before', true); if (typeof listener === 'function') listener.call(window, event); else listener.handleEvent(event); record('resize-listener-after', true) }
+        callbacks.set(listener, wrapped); nativeAdd(type, wrapped, options)
+      } else nativeAdd(type, listener, options)
+    }
+    window.removeEventListener = function(type, listener, options) { nativeRemove(type, type === 'resize' && listener ? callbacks.get(listener) ?? listener : listener, options) }
+    nativeAdd('resize', () => record('native-resize', true))
+    new MutationObserver(() => { if (scheduled || (!armed && innerWidth >= 820)) return; scheduled = true; queueMicrotask(() => { scheduled = false; record('mutation') }) }).observe(document, {subtree: true, childList: true, attributes: true})
+  })
+  page.on('response', async response => {
+    const url = new URL(response.url())
+    if (!/^\/api\/v1\/(?:workbench\/session|session|attempts\/[^/]+(?:\/result|\/submit|\/responses)?)$/.test(url.pathname)) return
+    try {
+      const value = await response.json()
+      rows.push({event:'http', time: Date.now(), path: url.pathname, method: response.request().method(), status: response.status(), etag: response.headers()['etag'], data: { revision: value.revision, status: value.status, grading_status: value.grading_status, grading_revision: value.grading_revision, active_tab: value.active_tab_id, tabs: value.tabs?.map((tab: {id: string; scroll_offset?: number}) => ({id: tab.id, scroll_offset: tab.scroll_offset})), error_code: value.error?.code ?? value.code }})
+    } catch { rows.push({event:'http-body-unavailable', time:Date.now(), path:url.pathname, status:response.status()}) }
+  })
+  page.on('pageerror', error => rows.push({event:'pageerror', message:error.message}))
+  page.on('requestfailed', request => rows.push({event:'requestfailed', path:new URL(request.url()).pathname, error:request.failure()?.errorText}))
+}
+export async function finishObservation(page: Page, status: string | undefined) {
+  try {
+    rows.push(await page.evaluate(() => (window as Window & {__viewportMetrics?: (event:string)=>unknown}).__viewportMetrics?.('after-test')))
+    await page.screenshot({path:`${out}/observed-${status}.png`, timeout:5000})
+  } catch (error) { rows.push({event:'observer-after-failure', error:String(error)}) }
+  writeFileSync(`${out}/observations.json`, JSON.stringify({status, rows}, null, 2)+'\n')
+}
+
+let releaseGate: (()=>void) | undefined, heldReady: (()=>void) | undefined, didHold = false
+const ready = new Promise<void>(resolve => { heldReady = resolve })
+export async function installGate(page: Page) {
+  const gate = new Promise<void>(resolve => { releaseGate = resolve })
+  await page.route('**/api/v1/workbench/session', async route => {
+    const actual = await route.fetch()
+    if (route.request().method() === 'PUT' && actual.status() === 412 && !didHold) {
+      didHold = true
+      rows.push({event:'held-real-412',time:Date.now(),status:actual.status()})
+      heldReady?.()
+      await gate
+      rows.push({event:'release-real-412',time:Date.now()})
+    }
+    await route.fulfill({response:actual})
+  })
+}
+export async function releaseAfterOriginalScroll(page: Page) {
+  await Promise.race([ready, new Promise((_,reject)=>setTimeout(()=>reject(new Error('Observer schedule did not receive a real 412')),2000))])
+  rows.push(await page.evaluate(() => (window as Window & {__viewportMetrics?: (event:string)=>unknown}).__viewportMetrics?.('before-controlled-release-after-original-scroll')))
+  const delivered = page.waitForResponse(response=>response.url().endsWith('/api/v1/workbench/session') && response.request().method()==='PUT' && response.status()===412)
+  releaseGate?.()
+  await delivered
+  await page.locator('.conflict-comparison').waitFor({state:'visible'})
+  rows.push(await page.evaluate(() => (window as Window & {__viewportMetrics?: (event:string)=>unknown}).__viewportMetrics?.('controlled-conflict-visible')))
+}

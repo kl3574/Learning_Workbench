@@ -14,10 +14,13 @@ from .database import Database
 from .interfaces.boundary import install_boundary
 from .interfaces.assessment_http import create_assessment_router
 from .interfaces.content_http import create_content_router
+from .interfaces.concept_state_http import create_concept_state_router
 from .interfaces.http import create_router
 from .interfaces.import_http import create_import_router
 from .interfaces.learning_http import create_learning_router
 from .interfaces.practice_http import create_practice_router
+from .interfaces.profile_http import create_profile_router
+from .interfaces.route_http import create_route_router
 from .infrastructure.import_worker import ImportWorker
 
 
@@ -55,6 +58,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(create_learning_router(database))
     application.include_router(create_practice_router(database))
     application.include_router(create_assessment_router(database))
+    application.include_router(create_route_router(database))
+    application.include_router(create_profile_router(database))
+    application.include_router(create_concept_state_router(database))
     if settings.static_dir.is_dir():
         application.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="workbench")
     return application

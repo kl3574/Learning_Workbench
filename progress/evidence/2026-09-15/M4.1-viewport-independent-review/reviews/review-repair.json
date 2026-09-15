@@ -1,0 +1,83 @@
+{
+  "reviewed_at": "2026-09-15T01:26:16.090606+00:00",
+  "scope": "Read-only independent follow-up of VIEWPORT_FOCUS_OCCLUSION. No tests, browser, service or source edits performed.",
+  "original_review": {
+    "path": "<PRIVATE_ACCEPTANCE>/m41-viewport-independent-review.json",
+    "sha256": "7108ad93cf92d0e8c923f23c61b6b45ffcc016eb6dc174042f4e32819680f7b6",
+    "matches_original": true
+  },
+  "source_files": [
+    {
+      "path": "apps/web/src/workbench/PreserveReaderViewport.tsx",
+      "sha256": "7889f23146384733a9ac7dd5cec6e6b37b0b5117e59f9c62b9e4dd6b7e72a4aa",
+      "expected_sha256": "7889f23146384733a9ac7dd5cec6e6b37b0b5117e59f9c62b9e4dd6b7e72a4aa",
+      "matches_expected": true,
+      "bytes": 3507
+    },
+    {
+      "path": "apps/web/src/workbench/PreserveReaderViewport.test.tsx",
+      "sha256": "489303303e5fee0db33a4f143b16af5288259f4255d11b5541777b12a62d4364",
+      "expected_sha256": "489303303e5fee0db33a4f143b16af5288259f4255d11b5541777b12a62d4364",
+      "matches_expected": true,
+      "bytes": 6563
+    },
+    {
+      "path": "apps/web/src/workbench/Shell.tsx",
+      "sha256": "34da087226607084ca299b2e302444203b72da864be762de4430c04cb89516b4",
+      "expected_sha256": "34da087226607084ca299b2e302444203b72da864be762de4430c04cb89516b4",
+      "matches_expected": true,
+      "bytes": 43524
+    }
+  ],
+  "repair_boundary": {
+    "before_manifest_sha256": "84bebfdc8cd134cd9f8071c1d8821d0db924348d23c2e4ca978373274dc01ea3",
+    "after_manifest_sha256": "d2e03e2269408f3ee35df8e688bd39d6a5f41ed6071891484fd5e28e4f32659e",
+    "test_source_identical_across_red_green": true,
+    "shell_source_identical_across_red_green": true,
+    "before_helper_matches_original_review": true,
+    "before_archived_helper_sha256": "fc9e40c0ae8d9c865ad52fe45d22da675bca9a15815b9e634c6a75a9c2bf8043",
+    "before_archived_test_sha256": "489303303e5fee0db33a4f143b16af5288259f4255d11b5541777b12a62d4364"
+  },
+  "finding_resolution": {
+    "id": "VIEWPORT_FOCUS_OCCLUSION",
+    "status": "RESOLVED_IN_STATIC_REVIEW_AND_OWNER_UNIT_READBACK_NATIVE_PENDING",
+    "analysis": "The pre-commit snapshot now records whether the unchanged focused descendant intersected the old Reader viewport. The post-commit adjustment is bounded by max(0, current focus top minus new pane top), capped at the original pane displacement. For the original counterexample, focus top599 and pane top493 allow106px rather than399px, leaving the control at493..533 inside493..818. Focus identity and node/viewport/scroll restoration checks still run before this calculation. When the same focused control already lies in the remaining viewport, its available distance permits the full required compensation. No focus movement or direct state/CAS operation is introduced."
+  },
+  "verification_readback": [
+    {
+      "receipt_path": "progress/evidence/2026-09-15/M4.1-viewport-focus-first.json",
+      "receipt_sha256": "dbd8d547a255b460a75078aae2ffb48e207a2b135f972e045fc8eb647e0affd3",
+      "status": "FAIL",
+      "exit_code": 1,
+      "output_path": "progress/evidence/2026-09-15/M4.1-viewport-focus-first.log",
+      "output_sha256": "568b055bc6ec9819b353395ee19926cc5a59d2b0bda68e2138bd6b54c7207027",
+      "output_hash_matches": true,
+      "observed_tests": "10 passed / 1 failed: expected200>=493",
+      "scope": "Owner-executed jsdom controlled geometry suite; independently read back, not rerun by reviewer."
+    },
+    {
+      "receipt_path": "progress/evidence/2026-09-15/M4.1-viewport-focus-second.json",
+      "receipt_sha256": "15fa23d8d701eae66cdc817135fa3b43d7b3c1e02e643377576c30a1631d72d4",
+      "status": "PASS",
+      "exit_code": 0,
+      "output_path": "progress/evidence/2026-09-15/M4.1-viewport-focus-second.log",
+      "output_sha256": "08aa28c6c3b70dd8f1226a150c0f01ac42c5bc82561a0ef4fea996d11c2e929a",
+      "output_hash_matches": true,
+      "observed_tests": "11 passed",
+      "scope": "Owner-executed jsdom controlled geometry suite; independently read back, not rerun by reviewer."
+    }
+  ],
+  "new_findings": [],
+  "retained_properties": [
+    "Exact owner key and direct same-node query unchanged.",
+    "Before-commit DOM capture and synchronous post-commit application unchanged.",
+    "Changed child scroll/focus and browser/Reader resize guards unchanged.",
+    "Initial mount, unscrolled pane, unrelated owner and already-visible conflict rerenders remain excluded.",
+    "Shell only supplies wrapper identity/conflict/className; original Reader event handlers and Workbench CAS path remain unchanged."
+  ],
+  "limitations": [
+    "Owner unit RED/GREEN uses controlled jsdom geometry; it does not establish actual browser clipping, text caret visibility, scroll event delivery or persisted state.",
+    "The guard protects a previously visible focused descendant from being scrolled above the new pane; it cannot make an element taller than the remaining viewport fully visible.",
+    "Separate native held-genuine412 focus case and full stage gates remain pending; this report is not M4.1 acceptance."
+  ]
+}

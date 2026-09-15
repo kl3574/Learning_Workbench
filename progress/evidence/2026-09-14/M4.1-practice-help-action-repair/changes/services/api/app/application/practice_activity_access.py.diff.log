@@ -1,0 +1,31 @@
+--- red/services/api/app/application/practice_activity_access.py
++++ green/services/api/app/application/practice_activity_access.py
+@@ -11,10 +11,11 @@
+ 
+ 
+ def practice_participation(connection: sqlite3.Connection, workspace_id: str) -> PracticeParticipation:
+-    from .learning import practice_submission_event
++    from .learning import checked_action_revisions, practice_submission_event
+     content = PracticeContent(connection, workspace_id)
+     content.public.require_workspace()
+     Policy(connection, workspace_id).check('subject_read')
++    action_revisions = checked_action_revisions(connection, workspace_id)
+     repository = PracticeRepository(connection, workspace_id)
+     output = PracticeParticipation()
+     for row in connection.execute('SELECT id FROM practice_sessions WHERE workspace_id=? ORDER BY id', (workspace_id,)):
+@@ -22,12 +23,14 @@
+         event_ids, _ = repository.exposure_facts(record, questions)
+         for identifier in event_ids:
+             event = read_learning_event(connection, workspace_id, identifier)
+-            if event.kind not in {'hint_revealed', 'solution_revealed'}:
++            if event.kind not in {'hint_revealed', 'solution_revealed'} or event.event_id not in action_revisions:
+                 raise invalid_snapshot()
+             output.help.append(PracticeHelpActivity(practice_session_id=record.id, practice_set_ref=record.practice_ref,
+                 question_ref=event.ref, event_id=event.event_id, occurred_at=event.occurred_at, kind=event.kind))
+         if record.submission is not None:
+             event = practice_submission_event(connection, workspace_id, record.practice_ref, record.id)
++            if event.event_id not in action_revisions:
++                raise invalid_snapshot()
+             output.submissions.append(SubmissionActivity(target_ref=record.practice_ref, source_id=record.id,
+                 event_id=event.event_id, submitted_at=record.submission.submitted_at, question_refs=record.question_refs))
+     return output

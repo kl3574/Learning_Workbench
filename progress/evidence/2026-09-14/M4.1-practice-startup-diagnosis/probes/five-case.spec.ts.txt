@@ -1,0 +1,91 @@
+import { observe, finish } from './observer'
+import { expect, test, type Page } from '<REPO>/apps/web/node_modules/@playwright/test/index.mjs'
+import { bootstrap } from '<EXACT_REPO>/tests/e2e/helpers'
+import { importPracticePackage, originalPracticePackage, type PracticePackage } from '<EXACT_REPO>/tests/e2e/practiceTestData'
+import type { PracticeSession } from '<EXACT_REPO>/packages/contracts/generated/api-types'
+async function openSession(page: Page, prefix: string, profile: PracticePackage['profile'] = 'author') {
+  await bootstrap(page)
+  const fixture = originalPracticePackage(prefix, profile)
+  const imported = await importPracticePackage(page, fixture)
+  await imported.dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
+  await page.goto(`/?reader=${encodeURIComponent(JSON.stringify({ course: fixture.course, lesson: fixture.lesson }))}`)
+  await expect(page.locator('.real-reader > h1')).toBeVisible()
+  await page.getByRole('button', { name: '本节习题', exact: true }).click()
+  await page.getByRole('dialog', { name: '本节习题', exact: true }).getByRole('button', { name: /五类参考练习/ }).click()
+  const creating = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith('/api/v1/practice/sessions'))
+  await page.getByRole('button', { name: '开始此练习', exact: true }).click()
+  const created = await creating
+  expect(created.status()).toBe(201)
+  const session: PracticeSession = await created.json()
+  await expect(page.getByText('服务端作答已保存', { exact: true })).toBeVisible()
+  return { fixture, id: session.id, session }
+}
+async function read(page: Page, id: string): Promise<PracticeSession> { const response = await page.request.get(`/api/v1/practice/sessions/${id}`); expect(response.status()).toBe(200); return response.json() }
+async function question(page: Page, number: number) { await page.getByRole('navigation', { name: '本次练习题目', exact: true }).getByRole('button', { name: new RegExp(`^第 ${number} 题`) }).click() }
+async function saved(page: Page) { await expect(page.getByText('服务端作答已保存', { exact: true })).toBeVisible(); await expect(page.getByText('本机草稿存储可用', { exact: true })).toBeVisible() }
+
+test('five real question kinds save and refresh; hints and solutions require explicit exposure; submit is ungraded', async ({ page }, info) => {
+  await observe(page, 'five');
+  const errors: string[] = [], reveals: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  page.on('request', value => { if (/\/practice\/sessions\/[^/]+\/solutions$/.test(value.url())) reveals.push(value.method()) })
+  const { fixture, id } = await openSession(page, 'nativepracticeall')
+  await page.getByRole('radio', { name: '5', exact: true }).check()
+  await page.getByLabel('第 1 题推导步骤').fill('将两个数量相加。')
+  for (const [number, answer] of [[2, '加法交换律'], [3, '0.5 m'], [4, '2 + 3 = 5'], [5, 'x+x']] as const) {
+    await question(page, number)
+    await page.getByLabel(`第 ${number} 题答案`, { exact: true }).fill(answer)
+    await page.getByLabel(`第 ${number} 题推导步骤`, { exact: true }).fill(`原创合成步骤 ${number} 🧠 é`)
+  }
+  await expect.poll(async () => (await read(page, id)).responses.length).toBe(5)
+  await saved(page)
+  const before = await read(page, id)
+  expect(before.responses.map(item => item.question_id).sort()).toEqual(fixture.questions.map(item => item.id).sort())
+  expect(before.results).toBeNull(); expect(before.exposure_event_ids).toEqual([]); expect(before.assisted).toBe(false)
+  expect(reveals).toEqual([])
+  await page.reload()
+  await saved(page)
+  await expect(page.getByLabel('第 5 题答案', { exact: true })).toHaveValue('x+x')
+  expect(reveals).toEqual([])
+  await question(page, 1)
+  const hinting = page.waitForResponse(value => value.url().endsWith(`/practice/sessions/${id}/hints`))
+  await page.getByRole('button', { name: '获取 2 级规则提示', exact: true }).click()
+  expect((await hinting).status()).toBe(200)
+  await expect(page.getByRole('heading', { name: '本机规则提示 · 2 级', exact: true })).toBeVisible()
+  await saved(page)
+  expect((await read(page, id)).assistance[0].highest_hint_level).toBe(2)
+  const revealing = page.waitForResponse(value => value.url().endsWith(`/practice/sessions/${id}/solutions`))
+  await page.getByRole('button', { name: '明确展开参考解答并记录暴露', exact: true }).click()
+  expect((await revealing).status()).toBe(200)
+  await expect(page.getByRole('heading', { name: '参考解答 · 需审查', exact: true })).toBeVisible()
+  await expect(page.locator('.practice-solution svg').first()).toBeVisible()
+  await saved(page)
+  expect((await read(page, id)).assistance[0].solution_revealed).toBe(true)
+  expect(reveals).toEqual(['POST'])
+  await page.locator('.practice-solution').scrollIntoViewIfNeeded()
+  await page.screenshot({ path: info.outputPath('practice-real-assisted-1440.png') })
+  await page.getByRole('button', { name: '收起参考解答', exact: true }).click()
+  await page.reload(); await saved(page)
+  expect(reveals).toEqual(['POST'])
+  await expect(page.getByRole('heading', { name: '参考解答 · 需审查', exact: true })).toHaveCount(0)
+  const submitting = page.waitForResponse(value => value.url().endsWith(`/practice/sessions/${id}/submit`))
+  await page.getByRole('button', { name: '提交本次练习', exact: true }).click()
+  expect((await submitting).status()).toBe(200)
+  await expect(page.getByRole('heading', { name: '提交结果', exact: true })).toBeVisible()
+  const submitted = await read(page, id)
+  expect(submitted.status).toBe('submitted'); expect(submitted.responses).toEqual(before.responses)
+  expect(submitted.results).toHaveLength(5)
+  for (const result of submitted.results!) { expect(result.status).toBe('needs_review'); expect(result.score).toBeNull(); expect(result.solution_markdown).toBeNull() }
+  await expect(page.getByRole('radio', { name: '5', exact: true })).toBeDisabled()
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(await page.locator('.practice-scroll').evaluate(node => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+  await page.getByRole('heading', { name: '提交结果', exact: true }).scrollIntoViewIfNeeded()
+  await expect(page.getByText('未评分 · 分数为空').first()).toBeInViewport()
+  await page.screenshot({ path: info.outputPath('practice-real-submitted-390.png') })
+  expect(errors).toEqual([])
+})
+
+
+// The actual observer-only afterEach was originally after unrelated cases.
+test.afterEach(async ({page}) => { await finish(page, 'five') })

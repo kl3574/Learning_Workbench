@@ -1,0 +1,18 @@
+--- before/tests/integration/test_learning_activity_access.py
++++ after/tests/integration/test_learning_activity_access.py
+@@ -92,3 +92,15 @@
+         with database.transaction() as connection, pytest.raises(ApiError) as denied:
+             reader(connection, identity.workspace_id)
+         assert denied.value.status == 409
++
++
++def test_missing_submitted_snapshot_is_not_silently_filtered_out(storage):
++    database, identity, _, service = storage
++    attempt = start(storage)
++    service.submit(identity, attempt.id, dm.AttemptSubmit(expected_revision=1), 'submit')
++    with database.transaction() as connection:
++        assert len(assessment_submissions(connection, identity.workspace_id)) == 1
++        connection.execute('DROP TRIGGER immutable_assessment_submission')
++        connection.execute('UPDATE attempts SET submission_json=NULL WHERE id=?', (attempt.id,))
++    with database.transaction() as connection, pytest.raises(ApiError):
++        assessment_submissions(connection, identity.workspace_id)

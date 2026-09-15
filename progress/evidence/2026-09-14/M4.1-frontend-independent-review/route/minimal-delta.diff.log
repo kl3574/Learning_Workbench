@@ -1,0 +1,67 @@
+--- RouteEditor.before.tsx
++++ RouteEditor.after.tsx
+@@ -24,6 +24,7 @@
+   useEffect(() => { callback.current({ dirty, safe }) }, [dirty, safe])
+   useEffect(() => {
+     const sequence = ++epoch.current
++    setBusy(false)
+     if (paused) return
+     void readRouteChoices().then(items => { if (sequence === epoch.current) setChoices({ owner: identity, items }) }).catch(reason => { if (sequence === epoch.current) setError(`任务目录尚未读回：${reason instanceof Error ? reason.message : ''}`) })
+     return () => { ++epoch.current }
+@@ -32,39 +33,44 @@
+   const begin = () => { if (paused || !safe || busy) return; persist(newRouteDraft(workspace, initial?.route ?? null, initial?.ref ?? null)); setError('') }
+   const change = (candidate: Route) => { if (!editor || paused || busy || record?.conflicts.length) return; persist({ ...editor, candidate, command_id: `route_command_${crypto.randomUUID()}`, acknowledged: null }); setError('') }
+   const restore = async (candidate: { text: string; value: RouteEnvelope }) => {
+-    const captured = identity
++    const captured = identity, sequence = epoch.current
+     if (paused || busy || !safe) return
+     setBusy(true)
+     try {
+       const key = routeDraftKey(candidate.value), disk = (await routeStore.load(workspace))[key]
+       if (!disk || ![disk.text, ...disk.conflicts.map(item => item.text)].includes(candidate.text)) throw new Error('候选尚未从本机存储读回。')
+       const value = disk.conflicts.length ? await journal.resolve(key, candidate.text) : decodeRouteDraft(candidate.text, workspace)
+-      if (owner.current !== captured || !active.current) return
++      if (owner.current !== captured || !active.current || sequence !== epoch.current) return
+       live.current = value; setEditor(value); setError('')
+-    } catch (reason) { if (owner.current === captured) setError(reason instanceof Error ? reason.message : '候选恢复失败。') } finally { if (owner.current === captured) setBusy(false) }
++    } catch (reason) { if (owner.current === captured && sequence === epoch.current) setError(reason instanceof Error ? reason.message : '候选恢复失败。') } finally { if (owner.current === captured && sequence === epoch.current) setBusy(false) }
+   }
+   const submit = async () => {
+-    const value = live.current, captured = identity
++    const value = live.current, captured = identity, sequence = epoch.current
+     if (!value || paused || busy || !safe || record?.conflicts.length) return
+     const invalid = routeValidation(value.candidate); if (invalid) { setError(invalid); return }
+     setBusy(true); setError('')
+     try {
+       const disk = (await routeStore.load(workspace))[routeDraftKey(value)]
+       if (!disk || ![disk.text, ...disk.conflicts.map(item => item.text)].includes(JSON.stringify(value))) throw new Error('当前路线命令尚未持久化，不发送。')
+-      if (owner.current !== captured || !active.current) return
++      if (owner.current !== captured || !active.current || sequence !== epoch.current) return
+       const headers = { 'Idempotency-Key': value.command_id }
+       const ref = value.base_ref ? await request('PUT /api/v1/routes/{id}', value.candidate, { ...headers, 'If-Match': `"${value.base_ref.sha256}"` }, { path: { id: value.base_ref.id } }) : await request('POST /api/v1/routes', value.candidate, headers)
+-      const acknowledged = decodeRouteDraft(JSON.stringify({ ...value, acknowledged: ref }), workspace); journal.save(acknowledged)
+-      if (owner.current !== captured || !active.current) return
+-      live.current = acknowledged; setEditor(acknowledged); setRemote(null)
++      const acknowledged = decodeRouteDraft(JSON.stringify({ ...value, acknowledged: ref }), workspace)
++      // This receipt confirms only its original command. A policy refresh can
++      // allow a newer local branch before it arrives; never replace that branch.
++      if (live.current?.workspace_id === workspace && live.current.command_id === value.command_id) {
++        journal.save(acknowledged); live.current = acknowledged; setEditor(acknowledged)
++      }
++      if (owner.current !== captured || !active.current || sequence !== epoch.current) return
++      setRemote(null)
+     } catch (reason) {
+-      if (owner.current !== captured || !active.current) return
++      if (owner.current !== captured || !active.current || sequence !== epoch.current) return
+       if (reason instanceof ApiError && reason.status === 412) {
+         setRemote(null)
+-        try { const items = await readRoutes(); if (owner.current === captured) setRemote(items.filter(item => item.ref.id === value.candidate.id).sort((a, b) => b.ref.revision - a.ref.revision)[0] ?? null) } catch { /* keep unknown rather than fabricate a current revision */ }
++        try { const items = await readRoutes(); if (owner.current === captured && sequence === epoch.current) setRemote(items.filter(item => item.ref.id === value.candidate.id).sort((a, b) => b.ref.revision - a.ref.revision)[0] ?? null) } catch { /* keep unknown rather than fabricate a current revision */ }
+       }
+-      if (owner.current === captured) setError(`路线未确认保存，候选与原命令保留。${reason instanceof Error ? reason.message : ''}`)
+-    } finally { if (owner.current === captured) setBusy(false) }
++      if (owner.current === captured && sequence === epoch.current) setError(`路线未确认保存，候选与原命令保留。${reason instanceof Error ? reason.message : ''}`)
++    } finally { if (owner.current === captured && sequence === epoch.current) setBusy(false) }
+   }
+   if (paused) return <p>当前策略尚未核验或限制路线操作。编辑候选保留，恢复权限后继续。</p>
+   return <section className="learning-panel route-editor" aria-label="路线编辑"><p>任务绑定真实内容的精确修订。保存生成新路线修订；旧路线与旧人工完成记录保留，先修只作提醒。</p><p role="status">{journal.saving ? '路线草稿保存中…' : safe ? '本机路线草稿存储可用' : '路线草稿尚未安全保存'}</p>{[error, journal.error, decodeError].filter(Boolean).map((message, index) => <p role="alert" key={index}>{message}</p>)}{journal.error && editor && <button onClick={() => journal.save(editor)}>重试本机路线保存</button>}

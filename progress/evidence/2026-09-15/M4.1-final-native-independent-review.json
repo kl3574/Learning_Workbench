@@ -1,0 +1,142 @@
+{
+  "reviewed_at": "2026-09-15T01:40:50.864525+00:00",
+  "scope": "Independent read-only static review of final added native test plus three previously reviewed frontend files. No tests, browser or service executed; no repo writes.",
+  "source_files": [
+    {
+      "path": "tests/e2e/reader-conflict-layout.spec.ts",
+      "bytes": 16161,
+      "sha256": "072eda5be9ac5a13af761811f0056def9c97307914319c4972ae95f2b6a5bc88",
+      "matches_expected": true
+    },
+    {
+      "path": "apps/web/src/workbench/PreserveReaderViewport.tsx",
+      "bytes": 3507,
+      "sha256": "7889f23146384733a9ac7dd5cec6e6b37b0b5117e59f9c62b9e4dd6b7e72a4aa",
+      "matches_expected": true
+    },
+    {
+      "path": "apps/web/src/workbench/PreserveReaderViewport.test.tsx",
+      "bytes": 6563,
+      "sha256": "489303303e5fee0db33a4f143b16af5288259f4255d11b5541777b12a62d4364",
+      "matches_expected": true
+    },
+    {
+      "path": "apps/web/src/workbench/Shell.tsx",
+      "bytes": 43524,
+      "sha256": "34da087226607084ca299b2e302444203b72da864be762de4430c04cb89516b4",
+      "matches_expected": true
+    }
+  ],
+  "unchanged_supporting_files": [
+    {
+      "path": "tests/e2e/assessments.spec.ts",
+      "sha256": "4bdde8c2bd67d3d100469807c0c771f76cffdbd66d4d711dcf19e38725c8c7bb",
+      "byte_equal_to_fbc388c": true
+    },
+    {
+      "path": "tests/e2e/playwright.config.ts",
+      "sha256": "674d573a25957762fe0fbdc6e45a22bab01f46ecd0080aac57e26e39deefebc4",
+      "byte_equal_to_fbc388c": true
+    },
+    {
+      "path": "tests/e2e/restartRuntime.ts",
+      "sha256": "f45757408a834ae36d2714c679226f645142fa635913ca130329eb5f30c21ad8",
+      "byte_equal_to_fbc388c": true
+    },
+    {
+      "path": "apps/web/src/workbench/useWorkbench.ts",
+      "sha256": "175dabe63ad7e428d8a845dbde52fea993d81490ea30f970a55e20359d91c2a8",
+      "byte_equal_to_fbc388c": true
+    }
+  ],
+  "checks": [
+    {
+      "subject": "Real HTTP412 precondition",
+      "lines": [
+        54,
+        94
+      ],
+      "assessment": "The page route holds the first actual browser PUT without changing its payload. captureConflict requires a captured PUT, reads the actual current WorkbenchSession, performs a separate APIRequestContext PUT with current expected_revision and a changed nav_width, requires HTTP200 and remote.revision>captured expectedRevision, then route.fetch executes the stale original browser request and must return412. route.fulfill passes that original APIResponse; no manufactured412 body/status or state injection is used. Actual backend WorkbenchService rejects mismatched expected_revision before applying the save."
+    },
+    {
+      "subject": "Explicit comparison choice is setup only",
+      "lines": [
+        32,
+        51
+      ],
+      "assessment": "confirmSessionBeforeControlledConflict is called before installing the controlled route. It optionally clicks the real explicit retain-local control if setup itself produced a comparison, then requires saved status, absent comparison, and server active attempt/ref/course equality. Once the controlled gate exists, neither case selects local/server conflict resolution."
+    },
+    {
+      "subject": "Pinning creates a real UI mutation",
+      "lines": [
+        123,
+        135
+      ],
+      "assessment": "Shell tab-pin callback toggles !tab.pinned through the original useWorkbench.set, so it changes the current tab whether initially pinned or unpinned. The test gates an actual resulting UI-session PUT rather than relying on scroll producing a new offset. A later scroll update may also exist; the test does not claim its recorded request body uniquely attributes the captured first PUT to pinning."
+    },
+    {
+      "subject": "Response sequencing",
+      "lines": [
+        71,
+        91
+      ],
+      "assessment": "Server version advancement happens while the original browser PUT is held; it is then fetched and confirmed412 before delivery is permitted. deliver registers waitForResponse before releasing the response gate. Therefore viewport/scroll placement is established before the new comparison can render, and the browser still runs its actual412 handler."
+    },
+    {
+      "subject": "Cleanup and ownership",
+      "lines": [
+        8,
+        13,
+        172,
+        175,
+        241,
+        244
+      ],
+      "assessment": "Each test has its own RestartRuntime with owned private data/profile and ports. Both gates resolve in finally, avoiding retained unresolved promises on assertion failure. Runtime fixture closes its browser context and owned UI/API groups in finally. The route is scoped to that isolated page; no shared user/default server is stopped or altered. Failure cleanup can still race an in-flight route.fetch/fulfill with context close, so an eventual failure log must retain any secondary teardown error rather than replace the primary failure."
+    },
+    {
+      "subject": "Original assertions and timeouts",
+      "assessment": "Original assessments.spec.ts and Playwright config are byte-identical to fbc388c. The added tests have no timeout override, retries, waitForTimeout, mock geometry or DOM scrollTop assignment. Installed Playwright expect implementation declares defaultExpectTimeout=5e3; global config supplies no expect override. Existing 30s test timeout and existing RestartRuntime action/navigation timeouts remain unchanged."
+    },
+    {
+      "subject": "Submitted explanation visibility",
+      "lines": [
+        131,
+        170
+      ],
+      "assessment": "Actual wheel and scrollIntoViewIfNeeded place the paragraph in the lower Reader before412 delivery. After the genuine comparison is visible/in-viewport with details open, real column labels and an enabled explicit-choice button, the original paragraph viewport assertion is retained. Additional geometry requires paragraph top>=pane top and bottom<=pane bottom+1, plus no horizontal overflow. Thus partial intersection alone cannot satisfy the tested Reader containment."
+    },
+    {
+      "subject": "Focused input counterexample coverage",
+      "lines": [
+        187,
+        239
+      ],
+      "assessment": "The second case uses a real enabled answer input, actual typing/save, click and wheel. It requires pre-delivery input visible near the old pane top and preserves focus. After real412, before.input.bottom<after.pane.top proves this is the risky geometry that full399px compensation would hide. It then checks same focus, enabled state, viewport intersection and full vertical input containment in the new pane and screen."
+    },
+    {
+      "subject": "Data and conflict remain unchanged during observation",
+      "lines": [
+        164,
+        169,
+        236,
+        239
+      ],
+      "assessment": "Both tests compare current WorkbenchSession to the real concurrent-write result; they do not require a fabricated remote snapshot. Submitted case also compares full attempt/responses/result against stable needs_review records with original submitted_at and null unreleased grade data. Active case compares attempt and responses after confirming active/not_graded. Conflict status remains displayed, so test success cannot be obtained by explicitly resolving the controlled comparison."
+    },
+    {
+      "subject": "Previously reviewed repair remains the same",
+      "assessment": "Helper, unit tests and Shell match the independent repair review exactly. Owner/ref/attempt and same-node guards, child scroll/focus restoration checks, resize guards and capped visible-focus adjustment remain unchanged. No source/CAS changes were introduced while authoring the native test."
+    }
+  ],
+  "findings": [],
+  "verdict": "No blocking static findings in the pinned source. Native execution and complete-stage acceptance remain separate evidence.",
+  "limitations": [
+    "No browser was run for this review; the test source does not itself prove that either native case or the74-case suite passes.",
+    "Remote equality and persistent visible conflict establish no automatic write within the observed assertion interval; they are not a proof about arbitrary future delayed behavior.",
+    "The test does not reload a retained or explicitly resolved candidate, inspect local pending storage, or certify later synchronization of the compensated scroll offset. Existing onScroll/CAS source remains unchanged, but this test should not be described as full persistence acceptance.",
+    "Pinning is statically verified as an actual state toggle. The gate intentionally captures the first real UI PUT; the receipt records revision/status, not a complete request-body attribution ledger.",
+    "Scope is the actual supplied final files and their preserved preconditions; no claim is made that a controlled delivery schedule uniquely reconstructs the original uninstrumented failure."
+  ],
+  "sources_unchanged_at_final_readback": true
+}

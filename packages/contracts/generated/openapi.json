@@ -866,6 +866,327 @@
         "title": "Concept",
         "type": "object"
       },
+      "ConceptState": {
+        "additionalProperties": false,
+        "properties": {
+          "assisted_count": {
+            "minimum": 0.0,
+            "title": "Assisted Count",
+            "type": "integer"
+          },
+          "concept_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Concept Id",
+            "type": "string"
+          },
+          "concept_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "evidence_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "evidence_state": {
+            "enum": [
+              "none",
+              "preliminary",
+              "needs_support",
+              "consistent"
+            ],
+            "title": "Evidence State",
+            "type": "string"
+          },
+          "hint_count": {
+            "minimum": 0.0,
+            "title": "Hint Count",
+            "type": "integer"
+          },
+          "hint_sources": {
+            "items": {
+              "$ref": "#/components/schemas/PracticeHelpActivity"
+            },
+            "title": "Hint Sources",
+            "type": "array"
+          },
+          "independent_count": {
+            "minimum": 0.0,
+            "title": "Independent Count",
+            "type": "integer"
+          },
+          "null_count": {
+            "minimum": 0.0,
+            "title": "Null Count",
+            "type": "integer"
+          },
+          "pending_review_count": {
+            "minimum": 0.0,
+            "title": "Pending Review Count",
+            "type": "integer"
+          },
+          "practice_submission_count": {
+            "minimum": 0.0,
+            "title": "Practice Submission Count",
+            "type": "integer"
+          },
+          "practice_submission_sources": {
+            "items": {
+              "$ref": "#/components/schemas/SubmissionActivity"
+            },
+            "title": "Practice Submission Sources",
+            "type": "array"
+          },
+          "repeated_count": {
+            "minimum": 0.0,
+            "title": "Repeated Count",
+            "type": "integer"
+          },
+          "rule_version": {
+            "const": "learning-state-v1",
+            "default": "learning-state-v1",
+            "title": "Rule Version",
+            "type": "string"
+          },
+          "self_report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SelfAssessment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "skill": {
+            "enum": [
+              "recall",
+              "explain",
+              "compute",
+              "derive",
+              "transfer"
+            ],
+            "title": "Skill",
+            "type": "string"
+          },
+          "solution_count": {
+            "minimum": 0.0,
+            "title": "Solution Count",
+            "type": "integer"
+          },
+          "solution_sources": {
+            "items": {
+              "$ref": "#/components/schemas/PracticeHelpActivity"
+            },
+            "title": "Solution Sources",
+            "type": "array"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/ConceptStateSource"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "stale_count": {
+            "minimum": 0.0,
+            "title": "Stale Count",
+            "type": "integer"
+          },
+          "state_input_evidence_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "maxItems": 3,
+            "title": "State Input Evidence Ids",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "unknown_count": {
+            "minimum": 0.0,
+            "title": "Unknown Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "concept_id",
+          "concept_ref",
+          "title",
+          "skill",
+          "evidence_state",
+          "independent_count",
+          "assisted_count",
+          "stale_count",
+          "repeated_count",
+          "unknown_count",
+          "null_count",
+          "pending_review_count",
+          "self_report",
+          "evidence_ids",
+          "state_input_evidence_ids",
+          "sources",
+          "practice_submission_count",
+          "hint_count",
+          "solution_count",
+          "practice_submission_sources",
+          "hint_sources",
+          "solution_sources"
+        ],
+        "title": "ConceptState",
+        "type": "object"
+      },
+      "ConceptStateResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "calibration": {
+            "const": "uncalibrated",
+            "default": "uncalibrated",
+            "title": "Calibration",
+            "type": "string"
+          },
+          "concepts": {
+            "items": {
+              "$ref": "#/components/schemas/ScopedConcept"
+            },
+            "title": "Concepts",
+            "type": "array"
+          },
+          "course_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ContentRef"
+            },
+            "title": "Course Refs",
+            "type": "array"
+          },
+          "evidence_count_unit": {
+            "const": "question_attempts",
+            "default": "question_attempts",
+            "title": "Evidence Count Unit",
+            "type": "string"
+          },
+          "help_count_unit": {
+            "const": "events",
+            "default": "events",
+            "title": "Help Count Unit",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ConceptState"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "practice_submission_count_unit": {
+            "const": "sessions",
+            "default": "sessions",
+            "title": "Practice Submission Count Unit",
+            "type": "string"
+          },
+          "rule_version": {
+            "const": "learning-state-v1",
+            "default": "learning-state-v1",
+            "title": "Rule Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "course_refs",
+          "concepts"
+        ],
+        "title": "ConceptStateResponse",
+        "type": "object"
+      },
+      "ConceptStateSource": {
+        "additionalProperties": false,
+        "properties": {
+          "applicability": {
+            "$ref": "#/components/schemas/EvidenceApplicability"
+          },
+          "assessment_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "attempt_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Attempt Id",
+            "type": "string"
+          },
+          "concept_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "evidence": {
+            "$ref": "#/components/schemas/Evidence"
+          },
+          "exposure_group": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Exposure Group",
+            "type": "string"
+          },
+          "grading_revision": {
+            "minimum": 1.0,
+            "title": "Grading Revision",
+            "type": "integer"
+          },
+          "qualification_basis": {
+            "enum": [
+              "submission_frozen",
+              "history_not_frozen"
+            ],
+            "title": "Qualification Basis",
+            "type": "string"
+          },
+          "question_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "reason_codes": {
+            "items": {
+              "enum": [
+                "MODE_OPEN_BOOK",
+                "MODE_ASSISTED",
+                "HELP_BEFORE_SUBMIT",
+                "ANSWER_UNREVIEWED",
+                "GRADE_UNRESOLVED",
+                "CONCEPT_MAPPING_UNRESOLVED",
+                "PREVIOUSLY_SEEN",
+                "PRIOR_SEEN_UNKNOWN",
+                "HELP_HISTORY_UNKNOWN",
+                "SOURCE_NOT_TRUSTED",
+                "HISTORY_PREREQUISITES_NOT_FROZEN"
+              ],
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "submitted_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Submitted At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "evidence",
+          "question_ref",
+          "concept_ref",
+          "assessment_ref",
+          "attempt_id",
+          "grading_revision",
+          "submitted_at",
+          "exposure_group",
+          "qualification_basis",
+          "reason_codes",
+          "applicability"
+        ],
+        "title": "ConceptStateSource",
+        "type": "object"
+      },
       "ContentBlock": {
         "additionalProperties": false,
         "properties": {
@@ -1435,6 +1756,47 @@
           "freshness"
         ],
         "title": "Evidence",
+        "type": "object"
+      },
+      "EvidenceApplicability": {
+        "additionalProperties": false,
+        "properties": {
+          "check_scope": {
+            "const": "exact_semantic_dependencies",
+            "default": "exact_semantic_dependencies",
+            "title": "Check Scope",
+            "type": "string"
+          },
+          "checked_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ContentRef"
+            },
+            "title": "Checked Refs",
+            "type": "array"
+          },
+          "reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "usable",
+              "pending_review",
+              "confirmed_stale"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "reason_codes",
+          "checked_refs"
+        ],
+        "title": "EvidenceApplicability",
         "type": "object"
       },
       "GradeHistoryEntry": {
@@ -2240,6 +2602,71 @@
         "title": "JobSnapshot",
         "type": "object"
       },
+      "LearnerProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "goal_concept_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "title": "Goal Concept Ids",
+            "type": "array"
+          },
+          "goals": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Goals",
+            "type": "array"
+          },
+          "language": {
+            "default": "zh-CN",
+            "title": "Language",
+            "type": "string"
+          },
+          "preferred_difficulty": {
+            "default": "beginner",
+            "enum": [
+              "beginner",
+              "intermediate",
+              "advanced"
+            ],
+            "title": "Preferred Difficulty",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "self_assessments": {
+            "items": {
+              "$ref": "#/components/schemas/SelfAssessment"
+            },
+            "title": "Self Assessments",
+            "type": "array"
+          },
+          "weekly_minutes": {
+            "default": 120,
+            "maximum": 10080.0,
+            "minimum": 1.0,
+            "title": "Weekly Minutes",
+            "type": "integer"
+          },
+          "workspace_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Workspace Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspace_id",
+          "revision"
+        ],
+        "title": "LearnerProfile",
+        "type": "object"
+      },
       "LearningActionRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2881,6 +3308,51 @@
         "title": "PageRevision",
         "type": "object"
       },
+      "PageRoute": {
+        "additionalProperties": false,
+        "properties": {
+          "item_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ContentRef"
+            },
+            "title": "Item Refs",
+            "type": "array"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Route"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/RouteTargetBinding"
+            },
+            "title": "Targets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "item_refs",
+          "targets",
+          "next_cursor"
+        ],
+        "title": "PageRoute",
+        "type": "object"
+      },
       "PolicySnapshot": {
         "additionalProperties": false,
         "properties": {
@@ -2960,6 +3432,50 @@
           "solution_revealed"
         ],
         "title": "PracticeAssistance",
+        "type": "object"
+      },
+      "PracticeHelpActivity": {
+        "additionalProperties": false,
+        "properties": {
+          "event_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "hint_revealed",
+              "solution_revealed"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "occurred_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "practice_session_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Practice Session Id",
+            "type": "string"
+          },
+          "practice_set_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "question_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          }
+        },
+        "required": [
+          "practice_session_id",
+          "practice_set_ref",
+          "question_ref",
+          "event_id",
+          "occurred_at",
+          "kind"
+        ],
+        "title": "PracticeHelpActivity",
         "type": "object"
       },
       "PracticeHint": {
@@ -3589,6 +4105,68 @@
           "reason_codes"
         ],
         "title": "PriorSeenQuestion",
+        "type": "object"
+      },
+      "ProfileWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "goal_concept_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "title": "Goal Concept Ids",
+            "type": "array"
+          },
+          "goals": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Goals",
+            "type": "array"
+          },
+          "language": {
+            "title": "Language",
+            "type": "string"
+          },
+          "preferred_difficulty": {
+            "enum": [
+              "beginner",
+              "intermediate",
+              "advanced"
+            ],
+            "title": "Preferred Difficulty",
+            "type": "string"
+          },
+          "self_assessments": {
+            "items": {
+              "$ref": "#/components/schemas/SelfAssessmentWrite"
+            },
+            "title": "Self Assessments",
+            "type": "array"
+          },
+          "weekly_minutes": {
+            "maximum": 10080.0,
+            "minimum": 1.0,
+            "title": "Weekly Minutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "goals",
+          "goal_concept_ids",
+          "weekly_minutes",
+          "language",
+          "preferred_difficulty",
+          "self_assessments"
+        ],
+        "title": "ProfileWrite",
         "type": "object"
       },
       "ProvenanceSource": {
@@ -4237,6 +4815,129 @@
         "title": "Route",
         "type": "object"
       },
+      "RouteAssessmentOption": {
+        "additionalProperties": false,
+        "properties": {
+          "assessment_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "course_ref": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContentRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "const": "assessment",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "assessment_ref",
+          "course_ref"
+        ],
+        "title": "RouteAssessmentOption",
+        "type": "object"
+      },
+      "RouteCompletionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "completed": {
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "expected_progress_revision": {
+            "minimum": 1.0,
+            "title": "Expected Progress Revision",
+            "type": "integer"
+          },
+          "origin": {
+            "const": "manual",
+            "title": "Origin",
+            "type": "string"
+          },
+          "route_revision": {
+            "minimum": 1.0,
+            "title": "Route Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "route_revision",
+          "expected_progress_revision",
+          "completed",
+          "origin"
+        ],
+        "title": "RouteCompletionRequest",
+        "type": "object"
+      },
+      "RoutePracticeOption": {
+        "additionalProperties": false,
+        "properties": {
+          "course_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "kind": {
+            "const": "practice",
+            "title": "Kind",
+            "type": "string"
+          },
+          "lesson_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "practice_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          }
+        },
+        "required": [
+          "kind",
+          "course_ref",
+          "lesson_ref",
+          "practice_ref"
+        ],
+        "title": "RoutePracticeOption",
+        "type": "object"
+      },
+      "RouteReaderOption": {
+        "additionalProperties": false,
+        "properties": {
+          "block_ref": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContentRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "course_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "kind": {
+            "const": "reader",
+            "title": "Kind",
+            "type": "string"
+          },
+          "lesson_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          }
+        },
+        "required": [
+          "kind",
+          "course_ref",
+          "lesson_ref",
+          "block_ref"
+        ],
+        "title": "RouteReaderOption",
+        "type": "object"
+      },
       "RouteStep": {
         "additionalProperties": false,
         "properties": {
@@ -4287,13 +4988,76 @@
             "title": "Completed",
             "type": "boolean"
           },
+          "completed_at": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "completion_origin": {
+            "default": "none",
+            "enum": [
+              "none",
+              "manual",
+              "read",
+              "practice_submitted",
+              "assessment_submitted"
+            ],
+            "title": "Completion Origin",
+            "type": "string"
+          },
+          "manual_override": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Override"
+          },
           "route_ref": {
             "$ref": "#/components/schemas/ContentRef"
+          },
+          "source_event_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "title": "Source Event Ids",
+            "type": "array"
           },
           "step_id": {
             "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
             "title": "Step Id",
             "type": "string"
+          },
+          "unmet_requires_steps": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "title": "Unmet Requires Steps",
+            "type": "array"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
           }
         },
         "required": [
@@ -4302,6 +5066,68 @@
           "completed"
         ],
         "title": "RouteStepState",
+        "type": "object"
+      },
+      "RouteTargetBinding": {
+        "additionalProperties": false,
+        "properties": {
+          "navigation_options": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "assessment": "#/components/schemas/RouteAssessmentOption",
+                  "practice": "#/components/schemas/RoutePracticeOption",
+                  "reader": "#/components/schemas/RouteReaderOption"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/RouteReaderOption"
+                },
+                {
+                  "$ref": "#/components/schemas/RoutePracticeOption"
+                },
+                {
+                  "$ref": "#/components/schemas/RouteAssessmentOption"
+                }
+              ]
+            },
+            "title": "Navigation Options",
+            "type": "array"
+          },
+          "route_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "step_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Step Id",
+            "type": "string"
+          },
+          "target_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "unresolved_reason": {
+            "anyOf": [
+              {
+                "const": "NO_EXACT_COURSE_PARENT",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unresolved Reason"
+          }
+        },
+        "required": [
+          "route_ref",
+          "step_id",
+          "target_ref",
+          "navigation_options",
+          "unresolved_reason"
+        ],
+        "title": "RouteTargetBinding",
         "type": "object"
       },
       "SavedTab": {
@@ -4332,6 +5158,39 @@
           "pinned"
         ],
         "title": "SavedTab",
+        "type": "object"
+      },
+      "ScopedConcept": {
+        "additionalProperties": false,
+        "properties": {
+          "ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "skill_dimensions": {
+            "items": {
+              "enum": [
+                "recall",
+                "explain",
+                "compute",
+                "derive",
+                "transfer"
+              ],
+              "type": "string"
+            },
+            "title": "Skill Dimensions",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "title",
+          "skill_dimensions"
+        ],
+        "title": "ScopedConcept",
         "type": "object"
       },
       "Selection": {
@@ -4373,6 +5232,68 @@
           "end_codepoint"
         ],
         "title": "Selection",
+        "type": "object"
+      },
+      "SelfAssessment": {
+        "additionalProperties": false,
+        "properties": {
+          "concept_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Concept Id",
+            "type": "string"
+          },
+          "level": {
+            "enum": [
+              "not_learned",
+              "encountered",
+              "independent_use"
+            ],
+            "title": "Level",
+            "type": "string"
+          },
+          "origin": {
+            "const": "self_report",
+            "default": "self_report",
+            "title": "Origin",
+            "type": "string"
+          },
+          "updated_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "concept_id",
+          "level",
+          "updated_at"
+        ],
+        "title": "SelfAssessment",
+        "type": "object"
+      },
+      "SelfAssessmentWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "concept_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Concept Id",
+            "type": "string"
+          },
+          "level": {
+            "enum": [
+              "not_learned",
+              "encountered",
+              "independent_use"
+            ],
+            "title": "Level",
+            "type": "string"
+          }
+        },
+        "required": [
+          "concept_id",
+          "level"
+        ],
+        "title": "SelfAssessmentWrite",
         "type": "object"
       },
       "SessionResponse": {
@@ -4476,6 +5397,45 @@
           "artifact"
         ],
         "title": "SourceResponse",
+        "type": "object"
+      },
+      "SubmissionActivity": {
+        "additionalProperties": false,
+        "properties": {
+          "event_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "question_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ContentRef"
+            },
+            "title": "Question Refs",
+            "type": "array"
+          },
+          "source_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Source Id",
+            "type": "string"
+          },
+          "submitted_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Submitted At",
+            "type": "string"
+          },
+          "target_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          }
+        },
+        "required": [
+          "target_ref",
+          "source_id",
+          "event_id",
+          "submitted_at",
+          "question_refs"
+        ],
+        "title": "SubmissionActivity",
         "type": "object"
       },
       "ViewContext": {
@@ -8731,6 +9691,315 @@
         ]
       }
     },
+    "/api/v1/learner/profile": {
+      "get": {
+        "operationId": "read_api_v1_learner_profile_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearnerProfile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Read",
+        "tags": [
+          "learner-profile"
+        ]
+      },
+      "put": {
+        "operationId": "write_api_v1_learner_profile_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "title": "Origin",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearnerProfile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Write",
+        "tags": [
+          "learner-profile"
+        ]
+      }
+    },
     "/api/v1/learning/actions": {
       "post": {
         "operationId": "action_api_v1_learning_actions_post",
@@ -8913,6 +10182,161 @@
         "summary": "Action",
         "tags": [
           "learning"
+        ]
+      }
+    },
+    "/api/v1/learning/concept-states": {
+      "get": {
+        "operationId": "read_api_v1_learning_concept_states_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "course_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Course Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConceptStateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Read",
+        "tags": [
+          "learning-state"
         ]
       }
     },
@@ -11973,6 +13397,798 @@
         "summary": "Readiness",
         "tags": [
           "runtime"
+        ]
+      }
+    },
+    "/api/v1/routes": {
+      "get": {
+        "operationId": "routes_api_v1_routes_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1024,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageRoute"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "428": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Required"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Routes",
+        "tags": [
+          "routes"
+        ]
+      },
+      "post": {
+        "operationId": "create_api_v1_routes_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "title": "Origin",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Route"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentRef"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "ETag": {
+                "description": "Quoted SHA-256 of the exact stored bytes.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "428": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Required"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Create",
+        "tags": [
+          "routes"
+        ]
+      }
+    },
+    "/api/v1/routes/{id}": {
+      "put": {
+        "operationId": "update_api_v1_routes__id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "If-Match",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "If-Match"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "title": "Origin",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Route"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentRef"
+                }
+              }
+            },
+            "description": "Successful Response",
+            "headers": {
+              "ETag": {
+                "description": "Quoted SHA-256 of the exact stored bytes.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "428": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Required"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Update",
+        "tags": [
+          "routes"
+        ]
+      }
+    },
+    "/api/v1/routes/{id}/steps/{step_id}/complete": {
+      "post": {
+        "operationId": "complete_api_v1_routes__id__steps__step_id__complete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "step_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Step Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "title": "Origin",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RouteCompletionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LearningActionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "428": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Required"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Complete",
+        "tags": [
+          "routes"
         ]
       }
     },

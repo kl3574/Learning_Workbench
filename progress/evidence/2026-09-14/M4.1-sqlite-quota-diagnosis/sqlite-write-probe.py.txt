@@ -1,0 +1,12 @@
+from pathlib import Path
+import tempfile,os,json
+from services.api.app.config import Settings
+from services.api.app.database import Database
+root=Path(tempfile.mkdtemp(prefix='m41-sqlite-write-'))
+os.environ['LEARNING_DATA_DIR']=str(root/'data')
+try:
+ Database(Settings.from_env()).initialize()
+ print(json.dumps({'status':'PASS','path':str(root)}))
+except Exception as e:
+ print(json.dumps({'status':'FAIL','path':str(root),'type':type(e).__name__,'message':str(e),'sqlite_errorcode':getattr(e,'sqlite_errorcode',None),'sqlite_errorname':getattr(e,'sqlite_errorname',None)}))
+ raise

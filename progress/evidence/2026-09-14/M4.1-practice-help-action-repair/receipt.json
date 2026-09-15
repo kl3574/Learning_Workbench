@@ -1,0 +1,50 @@
+{
+  "observed_at": "2026-09-14T20:14:31.251234+00:00",
+  "scope": "Adjacent unsubmitted Practice help source integrity only, not full-stage acceptance",
+  "red": {
+    "command": "PYTHONPATH=. uv run --frozen pytest -q independent-probe/test_help_action_binding.py",
+    "exit_code": 1,
+    "failed": 2,
+    "passed": 0,
+    "seconds": 0.8,
+    "source_stable": true,
+    "source_count": 4
+  },
+  "green": {
+    "command": "PYTHONPATH=. uv run --frozen pytest -q independent-probe/test_help_action_binding.py",
+    "exit_code": 0,
+    "passed": 2,
+    "failed": 0,
+    "seconds": 0.78,
+    "source_stable": true,
+    "source_count": 5
+  },
+  "probe_sha256": "0d6a2760a6ad7b2964c909bcfc768ac34f0d77cc2d92870cf9d0874a3832b3d6",
+  "same_probe_bytes_red_green": true,
+  "regression": {
+    "command": "uv run --frozen pytest -q tests/integration/test_routes_commands.py tests/integration/test_learning_content_scope.py tests/integration/test_learning_activity_access.py tests/integration/test_concept_states.py",
+    "exit_code": 0,
+    "passed": 43,
+    "seconds": 6.22,
+    "count_scope": "32 prior Route/scope/activity cases +2 permanent unsubmitted help cases +9 Concept cases"
+  },
+  "lint": {
+    "exit_code": 0,
+    "files": [
+      "services/api/app/application/practice_activity_access.py",
+      "tests/integration/test_learning_activity_access.py"
+    ]
+  },
+  "mypy": {
+    "exit_code": 0,
+    "source_files": 1
+  },
+  "mechanism": "Actual unsubmitted Practice hint or solution remains in exposures and native events, but its learning.action_recorded outbox is removed by controlled SQLite fault injection. Previously ConceptState read counted it; the new Learning-owned checked_action_revisions port validates the whole sequential action/outbox/progress binding before Practice builds participation. Every returned help/submission event must occur in that checked map.",
+  "boundaries": [
+    "Only synthetic SQLite fixtures; no claim that normal HTTP can mutate database outbox rows.",
+    "No core model or migration changes.",
+    "No default-port service or browser tests.",
+    "Previous development and boundary-repair packages preserved unchanged.",
+    "No source changes or test reruns during packaging."
+  ]
+}

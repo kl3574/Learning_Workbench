@@ -1,0 +1,43 @@
+"""Independent narrow probes; synthetic SQLite only, no learned state seeded."""
+import pytest
+from services.api.app.application.errors import ApiError
+from services.api.app.application.concept_states import ConceptStateService
+from services.api.app.application.grading import GradingService, GradingWorker
+from tests.integration.test_learner_profile import profile_store, request
+from tests.integration.test_learning_evidence import storage, submit, raw_history
+from tests.integration.test_assessment_grading import real_author, review_request
+
+
+def test_corrupt_old_profile_version_blocks_current_and_latest_command_replay(profile_store):
+    database, identity, service = profile_store
+    service.save(identity, request(), 'first')
+    second = request(2, goals=['Current profile survives only with checked history'])
+    service.save(identity, second, 'second')
+    with database.transaction() as connection:
+        connection.execute('DROP TRIGGER learner_profile_history_no_update')
+        connection.execute('UPDATE learner_profile_history SET profile_sha256=? WHERE workspace_id=? AND revision=2', ('0' * 64, identity.workspace_id))
+    for read in [lambda:service.read(identity.workspace_id), lambda:service.save(identity, second, 'second')]:
+        with pytest.raises(ApiError) as rejected:read()
+        assert rejected.value.code == 'PROFILE_INTEGRITY_INVALID'
+
+
+def test_failed_regrade_retains_same_concept_sources_original_time_and_no_fake_new_count(storage):
+    database, identity, fixture, _ = storage
+    attempt = submit(storage)
+    assert GradingWorker(database).run_once()
+    service = ConceptStateService(database)
+    before = service.read(identity.workspace_id)
+    history_before = raw_history(database)
+    job = GradingService(database).regrade(real_author(database), attempt.id, review_request(fixture), 'failed-review')
+    with database.transaction() as connection:
+        connection.execute('DELETE FROM solutions WHERE question_id=?', (fixture.questions[0].id,))
+    assert GradingWorker(database).run_once()
+    with database.connect() as connection:
+        assert connection.execute('SELECT status FROM jobs WHERE id=?', (job.id,)).fetchone()[0] == 'failed'
+    after = service.read(identity.workspace_id)
+    assert after == before
+    assert {source.grading_revision for item in after.items for source in item.sources} == {1}
+    assert all(item.independent_count == 0 and item.evidence_state == 'none' for item in after.items)
+    history_after = raw_history(database)
+    for key in ('grades','assessment_grade_audits','learning_submission_bases','learning_grade_bindings','evidence','learning_evidence_refs'):
+        assert history_before[key] == history_after[key]

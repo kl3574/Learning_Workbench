@@ -1,0 +1,28 @@
+
+Running 1 test using 1 worker
+
+(node:48097) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/e2e/reader-conflict-layout.spec.ts:97:1 › real session conflict preserves the scrolled submitted explanation and requires an explicit comparison choice (8.5s)
+
+
+  1) tests/e2e/reader-conflict-layout.spec.ts:97:1 › real session conflict preserves the scrolled submitted explanation and requires an explicit comparison choice 
+
+    Error: expect(received).toBeGreaterThanOrEqual(expected)
+
+    Expected: >= 493.46875
+    Received:    485.125
+
+      151 |     const after = await geometry(page)
+      152 |     observations.push({ stage: 'real-conflict-visible-without-choice', geometry: after })
+    > 153 |     expect(after.paragraph.top).toBeGreaterThanOrEqual(after.scroll.top)
+          |                                 ^
+      154 |     expect(after.paragraph.bottom).toBeLessThanOrEqual(after.scroll.bottom + 1)
+      155 |     expect(await read(page, 'workbench/session')).toEqual(remote)
+      156 |     expect(await read(page, `attempts/${attempt.id}`)).toEqual(ended)
+        at <REPOSITORY>/tests/e2e/reader-conflict-layout.spec.ts:153:33
+
+    Error Context: ../../../.cache/learning-workbench-acceptance/m41-assessment-viewport-native-full-explanation/focused-results/reader-conflict-layout-rea-dfee7--explicit-comparison-choice/error-context.md
+
+  1 failed
+    tests/e2e/reader-conflict-layout.spec.ts:97:1 › real session conflict preserves the scrolled submitted explanation and requires an explicit comparison choice 

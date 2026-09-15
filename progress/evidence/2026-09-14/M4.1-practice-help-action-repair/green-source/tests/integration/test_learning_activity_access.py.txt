@@ -1,0 +1,126 @@
+"""Verified participation ports preserve original submissions separately from scores."""
+
+import pytest
+
+from packages.contracts import domain_models as dm
+from services.api.app.application.assessment_activity_access import assessment_submissions
+from services.api.app.application.content import ContentService
+from services.api.app.application.errors import ApiError
+from services.api.app.application.grading import GradingWorker
+from services.api.app.application.practice import PracticeService
+from services.api.app.application.practice_activity_access import practice_participation
+from services.api.app.application.route_progress import route_step_projection
+from services.api.app.infrastructure.content_repository import reference
+from services.api.app.practice_dto import PracticeHintRequest, PracticeSessionCreate, PracticeSolutionRequest, PracticeSubmitRequest
+from tests.integration.test_assessment_attempts import storage, start
+
+__all__ = ['storage']
+
+
+def test_allocated_practice_is_not_submission_help_has_actual_kind_and_original_event_time(storage):
+    database, identity, fixture, _ = storage
+    practice = PracticeService(database)
+    session = practice.create_session(identity, PracticeSessionCreate(practice_ref=reference(fixture.practice)), 'practice')
+    with database.transaction() as connection:
+        empty = practice_participation(connection, identity.workspace_id)
+    assert empty.submissions == [] and empty.help == []
+    hint = practice.hint(identity, session.id, PracticeHintRequest(question_id=fixture.questions[0].id, expected_revision=1, level=2), 'hint')
+    solution = practice.solution(identity, session.id, PracticeSolutionRequest(question_id=fixture.questions[1].id, expected_revision=2), 'solution')
+    submitted = practice.submit(identity, session.id, PracticeSubmitRequest(expected_revision=3), 'submit')
+    assert all(item.status == 'needs_review' and item.score is None for item in submitted.results)
+    with database.transaction() as connection:
+        facts = practice_participation(connection, identity.workspace_id)
+        assert len(facts.submissions) == 1 and len(facts.help) == 2
+        kinds = {item.event_id: item.kind for item in facts.help}
+        assert kinds == {hint.exposure_event_id: 'hint_revealed', solution.exposure_event_id: 'solution_revealed'}
+        submission = facts.submissions[0]
+        row = connection.execute('SELECT payload_json FROM learning_events WHERE event_id=?', (submission.event_id,)).fetchone()
+        event = dm.LearningEvent.model_validate_json(row['payload_json'])
+        assert event.kind == 'practice_submitted' and event.attempt_id == session.id
+        assert submission.question_refs == [reference(question) for question in fixture.questions]
+        assert submission.submitted_at and event.occurred_at
+    route = dm.Route(id='route_after_practice', revision=1, title='Route created after real work', goal='Completion only', steps=[
+        dm.RouteStep(id='step_practice', title='Already submitted', target=reference(fixture.practice), completion_rule='practice_submitted')])
+    ContentService(database).publish(identity.workspace_id, [route], {})
+    with database.transaction() as connection:
+        state = route_step_projection(connection, identity.workspace_id)[0]
+        assert state.completed and state.completed_at == submission.submitted_at
+        assert state.source_event_ids == [submission.event_id]
+        assert connection.execute('SELECT COUNT(*) FROM evidence').fetchone()[0] == 0
+    assert 'solution_markdown' not in facts.model_dump_json()
+
+
+def test_actual_assessment_submission_completes_route_while_grade_queued_or_failed(storage):
+    database, identity, fixture, service = storage
+    attempt = start(storage)
+    service.submit(identity, attempt.id, dm.AttemptSubmit(expected_revision=1), 'submit')
+    with database.transaction() as connection:
+        original = assessment_submissions(connection, identity.workspace_id)
+        assert len(original) == 1 and original[0].source_id == attempt.id
+        assert connection.execute('SELECT COUNT(*) FROM grades').fetchone()[0] == 0
+    route = dm.Route(id='route_submitted', revision=1, title='Submitted before scoring', goal='No score inference', steps=[
+        dm.RouteStep(id='step_test', title='Actual submission', target=reference(fixture.assessment), completion_rule='assessment_submitted')])
+    ContentService(database).publish(identity.workspace_id, [route], {})
+    # Test-only missing private version: real grading worker must fail, not fabricate a grade.
+    with database.transaction() as connection:
+        connection.execute('DELETE FROM solutions WHERE question_id=?', (fixture.questions[0].id,))
+    assert GradingWorker(database).run_once()
+    with database.transaction() as connection:
+        after = assessment_submissions(connection, identity.workspace_id)
+        assert after == original
+        state = route_step_projection(connection, identity.workspace_id)[0]
+        assert state.completed and state.completion_origin == 'assessment_submitted'
+        assert state.completed_at == original[0].submitted_at and state.source_event_ids == [original[0].event_id]
+        assert connection.execute('SELECT COUNT(*) FROM grades').fetchone()[0] == 0
+        assert connection.execute("SELECT COUNT(*) FROM jobs WHERE status='failed'").fetchone()[0] == 1
+
+
+def test_participation_read_rejects_tampered_submission_event_and_active_independent_guard(storage):
+    database, identity, fixture, _ = storage
+    practice = PracticeService(database)
+    session = practice.create_session(identity, PracticeSessionCreate(practice_ref=reference(fixture.practice)), 'practice')
+    practice.submit(identity, session.id, PracticeSubmitRequest(expected_revision=1), 'submit')
+    with database.transaction() as connection:
+        result = practice_participation(connection, identity.workspace_id)
+        event_id = result.submissions[0].event_id
+        connection.execute('DROP TRIGGER event_no_update')
+        connection.execute("UPDATE learning_events SET origin='user_supplied_import' WHERE event_id=?", (event_id,))
+    with database.transaction() as connection, pytest.raises(ApiError):
+        practice_participation(connection, identity.workspace_id)
+    start(storage)
+    for reader in [practice_participation, assessment_submissions]:
+        with database.transaction() as connection, pytest.raises(ApiError) as denied:
+            reader(connection, identity.workspace_id)
+        assert denied.value.status == 409
+
+
+def test_missing_submitted_snapshot_is_not_silently_filtered_out(storage):
+    database, identity, _, service = storage
+    attempt = start(storage)
+    service.submit(identity, attempt.id, dm.AttemptSubmit(expected_revision=1), 'submit')
+    with database.transaction() as connection:
+        assert len(assessment_submissions(connection, identity.workspace_id)) == 1
+        connection.execute('DROP TRIGGER immutable_assessment_submission')
+        connection.execute('UPDATE attempts SET submission_json=NULL WHERE id=?', (attempt.id,))
+    with database.transaction() as connection, pytest.raises(ApiError):
+        assessment_submissions(connection, identity.workspace_id)
+
+
+@pytest.mark.parametrize('kind', ['hint', 'solution'])
+def test_unsubmitted_help_missing_learning_action_receipt_is_rejected(storage, kind):
+    from services.api.app.application.concept_states import ConceptStateService
+    database, identity, fixture, _ = storage
+    practice = PracticeService(database)
+    session = practice.create_session(identity, PracticeSessionCreate(practice_ref=reference(fixture.practice)), 'practice')
+    if kind == 'hint':
+        help = practice.hint(identity, session.id, PracticeHintRequest(question_id=fixture.questions[0].id, expected_revision=1, level=1), 'help')
+    else:
+        help = practice.solution(identity, session.id, PracticeSolutionRequest(question_id=fixture.questions[0].id, expected_revision=1), 'help')
+    with database.transaction() as connection:
+        original = practice_participation(connection, identity.workspace_id)
+        assert len(original.help) == 1 and original.submissions == []
+        deleted = connection.execute("DELETE FROM outbox WHERE event_type='learning.action_recorded' AND json_extract(payload_json,'$.event_id')=?", (help.exposure_event_id,))
+        assert deleted.rowcount == 1
+    # The actual public Concept projection must fail closed, not retain a source-less help count.
+    with pytest.raises(ApiError):
+        ConceptStateService(database).read(identity.workspace_id)
