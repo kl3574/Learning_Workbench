@@ -3,6 +3,7 @@ import { writeFileSync } from 'node:fs'
 import type { AttemptSnapshot, ProviderConfigWrite, SessionResponse, TutorMessagePage, TutorRunCreate, TutorRunView, TutorThreadView } from '../../packages/contracts/generated/api-types'
 import { RestartRuntime } from './restartRuntime'
 import { TutorRuntime } from './tutorRuntime'
+import { observeTutorCompletion } from './tutorDiagnostic'
 import { importAssessmentPackage, originalAssessmentPackage } from './assessmentTestData'
 
 async function unregisteredProvider(page: Page, origin: string) {
@@ -147,8 +148,10 @@ test('lost Run ACK replays original bytes and cross-page open-book hides academi
 test('explicit same-Run consent uses the real loopback protocol and restores raw answer without upgrading evidence', async ({ playwright }, info) => {
   test.setTimeout(90_000)
   const runtime = await TutorRuntime.start(), errors: string[] = []
+  let diagnostic: Awaited<ReturnType<typeof observeTutorCompletion>> | undefined
   try {
     const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]
+    diagnostic = await observeTutorCompletion(page, { readRuntime: () => runtime.diagnosticControl() })
     page.on('pageerror', error => errors.push(error.message))
     await runtime.authenticateOnly(page)
     await expect(page.locator('.import-trigger')).toBeEnabled()
@@ -173,6 +176,7 @@ test('explicit same-Run consent uses the real loopback protocol and restores raw
     const starting = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith('/api/v1/tutor/runs'))
     await page.getByRole('button', { name: '创建本次问答任务 ↑', exact: true }).click()
     const ack: TutorRunView = await (await starting).json()
+    diagnostic.bindRun(ack.run.id)
     await expect(tutor.getByRole('heading', { name: '真实任务状态：awaiting_approval', exact: true })).toBeVisible()
     expect(runtime.control().received_request_count).toBe(0)
     const preview = tutor.getByRole('region', { name: '准备授权预览', exact: true })
@@ -185,8 +189,11 @@ test('explicit same-Run consent uses the real loopback protocol and restores raw
     expect(runtime.control().received_request_count).toBe(0)
     await tutor.getByLabel('我已核对本次冻结范围、目的地、预算与到期时间', { exact: true }).check()
     await tutor.getByRole('button', { name: '准备批准本次授权命令', exact: true }).click()
+    diagnostic.mark('grant_click')
     await tutor.getByRole('button', { name: '确认发送批准授权', exact: true }).click()
-    await expect(tutor.getByRole('heading', { name: '真实任务状态：completed', exact: true })).toBeVisible()
+    await diagnostic.around(info, async () => {
+      await expect(tutor.getByRole('heading', { name: '真实任务状态：completed', exact: true })).toBeVisible()
+    })
     const complete: TutorRunView = await page.request.get(`/api/v1/runs/${ack.run.id}`).then(value => value.json())
     expect(complete.run.id).toBe(ack.run.id); expect(complete.run.thread_id).toBe(thread.id)
     expect(complete.consent_id).toBeTruthy(); expect(complete.latest_proposal_id).toBeTruthy()
@@ -214,5 +221,5 @@ test('explicit same-Run consent uses the real loopback protocol and restores raw
     await page.screenshot({ path: info.outputPath('tutor-loopback-answer-390.png') })
     expect(errors).toEqual([])
     writeFileSync(info.outputPath('actual-tutor-loopback.json'), JSON.stringify({ scope: 'Test-only complete-byte model, synthetic secret and original material; actual loopback HTTP, provider ledger, Tutor worker/SSE and native UI. No production input proof, vendor call or answer-quality acceptance.', thread, create_ack: ack, final: complete, observation: runtime.control(), runtime_errors: errors }, null, 2))
-  } finally { await runtime.close() }
+  } finally { diagnostic?.dispose(); await runtime.close() }
 })
