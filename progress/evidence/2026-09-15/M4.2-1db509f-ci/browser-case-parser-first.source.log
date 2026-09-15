@@ -1,0 +1,79 @@
+"""Read actual list-reporter results without treating retries as unique cases."""
+from pathlib import Path
+from datetime import datetime, timezone
+from collections import Counter
+import json, hashlib, re, sys
+
+head = sys.argv[1]
+cache = Path('<home>/.cache/learning-workbench-acceptance')
+raw = cache / ('m42-ci-' + head[:7])
+receipt = json.loads((raw / 'final-ci-receipt.json').read_text())
+ansi = re.compile(r'\x1b\[[0-9;]*[A-Za-z]')
+row = re.compile(r'^\s*([✓✘×x-])\s+(\d+)\s+(.+\.spec\.[cm]?[jt]sx?):(\d+):(\d+)\s+›\s+(.+?)(?:\s+\(([^()]*)\))?$')
+summary = re.compile(r'^\s*(\d+) (passed|failed|skipped|interrupted|did not run|flaky)(?:\s+\(([^()]*)\))?\s*$')
+result = {'version': 'actual-browser-case-lines-v2', 'source_head_sha': head,
+          'read_at': datetime.now(timezone.utc).isoformat(), 'jobs': [],
+          'scope': 'Read-only parsing of completed original job logs; one workflow is not added to the other. Attempts and unique cases are separate. A missing, interrupted, failed or cancelled run never establishes an unobserved pass.'}
+for job in receipt['jobs']:
+    if job['name'] != 'browser':
+        continue
+    path = raw / job['log_file']
+    data = path.read_bytes()
+    assert hashlib.sha256(data).hexdigest() == job['log_sha256']
+    attempts = []; summaries = []; running = []; unmatched = []
+    for lineno, original in enumerate(data.decode(errors='replace').splitlines(), 1):
+        plain = ansi.sub('', original)
+        message = re.sub(r'^\d{4}-\d{2}-\d{2}T\S+Z ', '', plain)
+        start = re.fullmatch(r'\s*Running (\d+) tests? using (\d+) workers?\s*', message)
+        if start:
+            running.append({'tests': int(start[1]), 'workers': int(start[2]), 'original_log_line': lineno})
+        match = row.fullmatch(message)
+        if match:
+            title = match[6]
+            retry = re.search(r'\s*\(retry #(\d+)\)', title)
+            retry_number = int(retry[1]) if retry else 0
+            clean_title = re.sub(r'\s*\(retry #\d+\)', '', title)
+            attempts.append({'number': int(match[2]), 'status': {'✓': 'passed', '✘': 'failed', '×': 'failed', 'x': 'failed', '-': 'skipped'}[match[1]],
+                             'source_file': match[3], 'source_line': int(match[4]), 'source_column': int(match[5]),
+                             'title': clean_title, 'title_as_logged': title, 'retry_number_as_logged': retry_number,
+                             'duration_as_logged': match[7], 'original_log_line': lineno})
+        elif re.match(r'^\s*[✓✘×x-]\s+\d+\s+', message):
+            unmatched.append({'original_log_line': lineno, 'text': message})
+        end = summary.fullmatch(message)
+        if end:
+            summaries.append({'status': end[2], 'count': int(end[1]), 'duration_as_logged': end[3], 'original_log_line': lineno})
+    identities = {}
+    for attempt in attempts:
+        identity = (attempt['source_file'], attempt['source_line'], attempt['source_column'], attempt['title'])
+        identities.setdefault(identity, []).append(attempt)
+    repeats = [{'case_identity': list(key), 'attempts': values} for key, values in identities.items() if len(values) > 1]
+    unique = []
+    for values in identities.values():
+        chosen = dict(values[-1])
+        chosen['attempt_count'] = len(values)
+        if len(values) > 1 and chosen['status'] == 'passed' and any(v['status'] == 'failed' for v in values[:-1]):
+            chosen['status'] = 'flaky'
+        unique.append(chosen)
+    counts = dict(Counter(case['status'] for case in unique))
+    summary_counts = {entry['status']: entry['count'] for entry in summaries}
+    numbers = [attempt['number'] for attempt in attempts]
+    checks = {'exactly_one_running_announcement': len(running) == 1,
+              'case_number_sequence_contiguous': numbers == list(range(1, len(numbers) + 1)),
+              'all_result_rows_recognized': not unmatched,
+              'no_duplicate_final_summary_status': len(summary_counts) == len(summaries),
+              'unique_results_match_announced_count': len(running) == 1 and len(unique) == running[0]['tests'],
+              'unique_case_counts_match_final_summary': counts == summary_counts,
+              'no_retry_attempt_miscount': all(len(values) == 1 or all(v['retry_number_as_logged'] == i for i, v in enumerate(values)) for values in identities.values())}
+    result['jobs'].append({'job_id': job['id'], 'event': job['workflow_event'], 'conclusion': job['conclusion'],
+                           'source_head_sha': head, 'actual_checkout_commits': job['actual_checkout_commits_from_log'],
+                           'job_started_at': job['started_at'], 'job_completed_at': job['completed_at'],
+                           'raw_log_reference': raw.name + '/' + path.name, 'raw_log_sha256': job['log_sha256'],
+                           'running_announcements': running, 'case_counts': counts, 'attempt_counts': dict(Counter(v['status'] for v in attempts)),
+                           'all_case_results': unique, 'retry_cases': repeats, 'final_summary_lines': summaries,
+                           'unrecognized_result_rows': unmatched, 'validation': checks,
+                           'validation_passed': all(checks.values())})
+result['all_browser_logs_reconciled'] = len(result['jobs']) == 2 and all(job['validation_passed'] for job in result['jobs'])
+result['all_browser_jobs_successful'] = len(result['jobs']) == 2 and all(job['conclusion'] == 'success' for job in result['jobs'])
+with (raw / 'browser-case-readback.json').open('x') as file:
+    file.write(json.dumps(result, indent=2, ensure_ascii=False) + '\n')
+print(json.dumps({'file': str(raw / 'browser-case-readback.json'), 'sha256': hashlib.sha256((raw / 'browser-case-readback.json').read_bytes()).hexdigest(), 'all_browser_logs_reconciled': result['all_browser_logs_reconciled'], 'jobs': [{'job_id': job['job_id'], 'event': job['event'], 'conclusion': job['conclusion'], 'counts': job['case_counts'], 'validation': job['validation']} for job in result['jobs']]}))

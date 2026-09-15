@@ -1,0 +1,2 @@
+import { defineConfig } from '<DIAGNOSIS_CACHE>/fixed-source-01/apps/web/node_modules/@playwright/test/index.mjs'
+export default defineConfig({testDir:'<DIAGNOSIS_CACHE>/fixed-source-01/tests/e2e',testMatch:'route-draft-input.spec.ts',fullyParallel:false,workers:1,timeout:30000,reporter:[['list']],outputDir:'<DIAGNOSIS_CACHE>/run-10-artifacts',use:{headless:true,trace:'off',screenshot:'off',viewport:{width:1440,height:900}}})

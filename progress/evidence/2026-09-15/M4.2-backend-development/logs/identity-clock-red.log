@@ -1,0 +1,22 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+____ test_same_clock_timestamp_cannot_reuse_an_id_for_changed_frozen_inputs ____
+
+    def test_same_clock_timestamp_cannot_reuse_an_id_for_changed_frozen_inputs():
+        from services.api.app.application.recommendation_rules import derive_recommendations
+        inputs, fixture = rule_inputs()
+        parameters = RecommendationRuleParameters(review_after_days=3, calibration='uncalibrated')
+        first = derive_recommendations(inputs, generated_at=NOW, parameters=parameters)
+        inputs.profile.goal_concept_ids = [fixture.concept.id]
+        second = derive_recommendations(inputs, generated_at=NOW, parameters=parameters)
+        original = next(item for item in first.items if item.reason_codes == ['read_without_practice'])
+        changed = next(item for item in second.items if item.reason_codes == ['read_without_practice'])
+>       assert original.id != changed.id
+E       AssertionError: assert 'recommendation_84ebfe01b28fadd96ce4fae72856e4df9807798bb7a30536' != 'recommendation_84ebfe01b28fadd96ce4fae72856e4df9807798bb7a30536'
+E        +  where 'recommendation_84ebfe01b28fadd96ce4fae72856e4df9807798bb7a30536' = RecommendationView(id='recommendation_84ebfe01b28fadd96ce4fae72856e4df9807798bb7a30536', target_ref=ContentRef(entity=...n_revision=1, decision_sha256='0000000000000000000000000000000000000000000000000000000000000000', decision_reason=None).id
+E        +  and   'recommendation_84ebfe01b28fadd96ce4fae72856e4df9807798bb7a30536' = RecommendationView(id='recommendation_84ebfe01b28fadd96ce4fae72856e4df9807798bb7a30536', target_ref=ContentRef(entity=...n_revision=1, decision_sha256='0000000000000000000000000000000000000000000000000000000000000000', decision_reason=None).id
+
+tests/unit/test_recommendation_rules.py:236: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_recommendation_rules.py::test_same_clock_timestamp_cannot_reuse_an_id_for_changed_frozen_inputs
+1 failed, 16 deselected in 0.12s

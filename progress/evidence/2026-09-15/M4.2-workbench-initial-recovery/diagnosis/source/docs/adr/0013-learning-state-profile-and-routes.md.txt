@@ -1,0 +1,26 @@
+# M4.1 学习状态、画像与路线完成
+
+唯一规范：PRODUCT_DESIGN.md v3.0.0，SHA256 ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c。依据§4/5.4/7/9.3/13、附录A routes/profile/concept-states及附录B核心模型。本文记录工程选择，不增加产品需求。基线为M3.4已验证40bd429及文档证据提交e252971，PR46待审未合并。M4.1测试状态按progress记录，不能把本决定当实现证据。
+
+- 核心54模型不改；新增七条已有规范路由及其严格应用DTO，客户端由实际schema生成。Route内容归Content/Route，人工完成事件与进度归Learning，参与/帮助与测验提交分别通过Practice/Assessment自己的校验端口读取，禁止跨模块写表。所有学科学习投影及写命令在当前工作区策略与同一事务内校验，先guard再返回旧幂等回执。
+- Route的先修步骤用于提醒，保留DAG校验；不因先修未完成而锁课或否认真实活动。完整route_ref+step_id的最后一次人工true/false优先；没有人工动作时才由该步completion_rule派生。manual无动作保持未完成。新路线修订不复制旧人工动作；已有精确目标活动可证明新路线自动完成，保留原始来源和时间。人工完成只证明用户标记，不产生能力证据。
+- 原学习事件与`learning.action_recorded`必须保持一对一的原修订关联：按实际事件写入次序核验连续进度修订，最终修订和last_event_id同时对应；已投递outbox保留原payload。读取路线、原阅读动作及练习提交时核对原始关联，不能用“位于当前修订范围内”替代确切历史绑定。该校验用于发现记录不一致，不宣称能防御协调篡改整个数据库。
+- read沿用Reader精确lesson显式状态优先、缺少lesson动作时全部真实block已读的语义；显式unread不能被block标记覆盖。practice/assessment_submitted使用真实原提交，未评分/待复核/失败评分也可证明参与。GET实时派生自动完成，不回填事件或写库。持久化人工动作使用严格内部StoredRouteCompletionAction，不擅自增加核心LearningEvent枚举。
+- GET routes返回实际可访问的所有精确版本，Page<Route>增加类型化完整ref与目标导航伴随数据；重复/模糊父链保留明确可选项或不可解析理由，不能按标题/ID猜最新父课程。路线创建与更新继续不可变Content发布、If-Match和请求幂等。步骤完成使用原progress revision进行CAS，冲突保留候选。
+- Profile单独修订与CAS；不存在时GET返回规范默认revision1且零写入。首次PUT基准1产生r2；后续保存服务端生成下一版本。请求只收规范字段，SelfAssessment.origin/updated_at由服务端填写。concept ID须在实际工作区可用，重复ID拒绝；自由goals可以表达未入库主题。历史自报保留原JSON/hash/时间，删除当前项不改旧修订。Profile变动不改grades/Evidence/独立计数。PUT需Idempotency-Key；412后客户端通过真实GET取得远端进行三方比较，不在错误DTO伪造current_profile。
+- course_id未带revision，范围覆盖该课程全部真实历史修订的精确成员；概念行保留完整concept_ref+skill身份，concept_id必须等于ref.id。同名不同ID不合并，自报针对概念身份而非伪造每个修订自评。练习经自己的lesson_ref匹配；测验归属须由同一实际课程修订完整见证，不能拼两个修订凑映射。
+- Evidence完整核验所有实际成功评分绑定后先选每attempt最新成功版，再筛选/聚合。失败重评不覆盖上一成功版，重评时间不当作新学习时间。Learning提供严格来源端口：原Evidence、题目/概念/测验完整ref、attempt、grade revision、原submitted_at、规则理由及exposuregroup，不带私有答案、pins或反馈。concept-states各行附这些安全来源；原PageEvidence契约保持原有语义，不要求前端解析Evidence ID猜来源。
+- 当前适用性与历史资格分开。Content端口正向核对题目/概念精确语义依赖闭包仍为实际当前修订，且无精确命中的待处理内容变更，方可作为当前状态输入。无关课程容器/标题修订不自动清空证据。依赖修订改变或只有ID级意图无法证明范围时标pending_review并保留历史，不直接称confirmed_stale。stale_count仅计实际确认失效；当前没有确认事实时不编造。M6完整失效审查仍未实现。
+- 首版可解释规则版本learning-state-v1：从当前usable且eligible、已明确评分的记录中按原提交时间取最近最多3个不同exposuregroup代表。同组最多一条阈值代表，重评不成为新样本。空为none；窗口有实际失分(score<1)为needs_support；全满分但少于3组或2次attempt为preliminary；3组、至少2次attempt全满分为consistent。界面称“多条一致记录”，明示工程规则未校准，不称掌握概率或认证掌握。
+- independent_count为当前usable、eligible且已评分题次；assisted_count为已核验来源且已评分的辅助模式题次，不声称用户实际求助。repeated/unknown/null/适用性待核验分别计数；Practice提交次数与提示/解答次数单列且标明单位，不与评分题次相加。自报/阅读/人工完成不改变独立题次。
+- 前端画像候选使用独立workspace命名空间、原基准、持久化命令身份与实际IndexedDB回读；离线、丢ACK、412、跨页分支、存储失败及迟到恢复不静默覆盖。Route编辑保存新修订并保留旧标签；所有学科异步读回沿当前策略/epoch处理。推荐排序和决定属于M4.2，不在本任务伪造。
+
+验收将覆盖真实数据库事务/失败注入、空GET零写入、CAS与幂等、原事件来源、最新成功评分、不同精确概念和skill、未审/辅助/重复/未知分离、路线人工覆盖/自动活动，以及实际浏览器/API重启。正资格fixture若人为建立审核前置必须明确为受控测试，不冒充正常导入内容已获专家审校。真实Provider/Codex及学习效果另列NOT_RUN。
+
+## 验收中发现的工作台布局回归（R-03 / R-28）
+
+真实会话保存返回412后，三方比较面板会在Reader上方插入。若插入发生在用户已定位内容之后，滚动区顶部下移而内部scrollTop不变，原本可见的内容可能被推出剩余视口。该可达时序已由实际HTTP响应延迟交付的控制复现；没有原完整失败的时序账本时，不把它追认为每次历史失败的唯一原因。
+
+工作台根布局边界保持原DOM层级，通过React提交前快照及提交后测量，仅补偿比较面板从无到有时同一对象、同一滚动节点的顶部位移。对象身份包含工作区、标签、视图种类、完整活动/附加引用及作答实例；保存的滚动数值不构成对象身份。初挂、换对象/节点、焦点更换、子组件位置恢复、已有浏览器补偿，以及宽度/视口/底边同时改变时不补偿。不延迟排队滚动，也不恢复旧持久化偏移。
+
+补偿量还受原本可见的同一焦点控件约束，避免把该控件重新推到新面板占据的区域。比较面板继续展开，真实412、原基准、本机候选和用户显式选择流程均保留；滚动继续沿现有onScroll保存，不在布局组件中写会话或解决CAS。单元测试只模拟几何；真实并发会话写入和原412响应的原生回归分别验证提交说明及焦点仍可见，实际结果另存progress。

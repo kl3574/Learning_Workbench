@@ -1,0 +1,54 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/routes/RouteEditorDraftSequence.test.tsx
+
+
+ RUN  v5.0.0 <REPO>/apps/web
+
+ ❯ src/features/routes/RouteEditorDraftSequence.test.tsx (4 tests | 4 failed) 403ms
+   × real route input and conflict candidates survive own_save_first delivery 171ms
+   × real route input and conflict candidates survive own_load_first delivery 74ms
+   × real route input and conflict candidates survive other_newer_primary delivery 81ms
+   × real route input and conflict candidates survive other_same_revision_conflict delivery 76ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/routes/RouteEditorDraftSequence.test.tsx > real route input and conflict candidates survive own_save_first delivery
+ FAIL  src/features/routes/RouteEditorDraftSequence.test.tsx > real route input and conflict candidates survive own_load_first delivery
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/features/routes/RouteEditorDraftSequence.test.tsx:66:50
+     64|       expect(screen.getByText('本机路线候选')).toBeTruthy()
+     65|     } else {
+     66|       expect(goal.closest('fieldset')?.disabled).toBe(false)
+       |                                                  ^
+     67|       fireEvent.change(goal, { target: { value: '下一输入必须保留' } })
+     68|       await act(async () => { firstDelivery.release(); secondWrite.rel…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  src/features/routes/RouteEditorDraftSequence.test.tsx > real route input and conflict candidates survive other_newer_primary delivery
+ FAIL  src/features/routes/RouteEditorDraftSequence.test.tsx > real route input and conflict candidates survive other_same_revision_conflict delivery
+AssertionError: expected null not to be null
+ ❯ src/features/routes/RouteEditorDraftSequence.test.tsx:54:48
+     52|       expect(goal.closest('fieldset')?.disabled).toBe(true)
+     53|       await act(async () => { firstDelivery.release(); await secondSta…
+     54|       expect(screen.queryByText('远端草稿目标')).not.toBeNull()
+       |                                                ^
+     55|       expect(goal.closest('fieldset')?.disabled).toBe(true)
+     56|       await act(async () => { secondWrite.release() })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  4 failed (4)
+   Start at  11:55:50
+   Duration  929ms (tests 50%, environment 30%, transform 11%, import 9%)
+

@@ -1,0 +1,2 @@
+import { defineConfig } from '<REPOSITORY_ROOT>/apps/web/node_modules/@playwright/test/index.mjs'
+export default defineConfig({testDir:'<REPOSITORY_ROOT>/tests/e2e',testMatch:'recommendations.spec.ts',fullyParallel:false,workers:1,timeout:30000,reporter:[['list']],outputDir:'<ACCEPTANCE_CACHE>/m42-frontend/native-02-artifacts',use:{headless:true,trace:'off',screenshot:'off',viewport:{width:1440,height:900}}})

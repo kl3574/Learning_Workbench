@@ -1,0 +1,56 @@
+
+Running 4 tests using 1 worker
+
+(node:130842) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/e2e/recommendations.spec.ts:56:1 › real recommendation decisions recover a lost ACK across browser and API restart without rewriting later decisions or learning facts (6.1s)
+  ✘  2 tests/e2e/recommendations.spec.ts:90:1 › real local suggestions cover another imported textbook and open its complete original refs independently of acceptance (15.8s)
+(node:131958) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  3 tests/e2e/recommendations.spec.ts:109:1 › real offline and stale decision candidates require explicit 412 correction and current independent policy hides delayed subject sources (5.5s)
+(node:132291) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  4 tests/e2e/recommendations.spec.ts:140:1 › a controlled archived fixture makes the real historical recommendation stale and its formerly current UI cannot open the old target (4.7s)
+
+
+  1) tests/e2e/recommendations.spec.ts:90:1 › real local suggestions cover another imported textbook and open its complete original refs independently of acceptance 
+
+    TimeoutError: locator.click: Timeout 10000ms exceeded.
+    Call log:
+      - waiting for getByRole('dialog', { name: '命令面板', exact: true }).getByRole('button', { name: /^学习建议/ })
+
+
+      28 | }
+      29 | async function openRecommendations(page: Page) {
+    > 30 |   await page.keyboard.press('Control+Shift+P'); await page.getByRole('dialog', { name: '命令面板', exact: true }).getByRole('button', { name: /^学习建议/ }).click()
+         |                                                                                                                                                      ^
+      31 |   const dialog = page.getByRole('dialog', { name: '学习建议', exact: true })
+      32 |   await expect(dialog.getByText('本机推荐候选存储可用', { exact: true })).toBeVisible()
+      33 |   return dialog
+        at openRecommendations (<REPOSITORY_ROOT>/tests/e2e/recommendations.spec.ts:30:150)
+        at <REPOSITORY_ROOT>/tests/e2e/recommendations.spec.ts:100:20
+
+    Error Context: ../../../.cache/learning-workbench-acceptance/m42-frontend/native-03-artifacts/recommendations-real-local-8a602-independently-of-acceptance/error-context.md
+
+  2) tests/e2e/recommendations.spec.ts:109:1 › real offline and stale decision candidates require explicit 412 correction and current independent policy hides delayed subject sources 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 409
+
+      126 |     await editor.getByRole('button', { name: '返回推荐列表', exact: true }).click()
+      127 |     let release!: () => void, captured!: () => void; const gate = new Promise<void>(done => { release = done }), ready = new Promise<void>(done => { captured = done })
+    > 128 |     await page.route('**/api/v1/recommendations?*', async route => { const response = await route.fetch(); expect(response.status()).toBe(200); captured(); await gate; await route.fulfill({ response }) })
+          |                                                                                                                                      ^
+      129 |     await dialog.getByRole('button', { name: '重新读取学习建议', exact: true }).click(); await ready
+      130 |     const other = await page.context().newPage()
+      131 |     try {
+        at <REPOSITORY_ROOT>/tests/e2e/recommendations.spec.ts:128:134
+
+    Error Context: ../../../.cache/learning-workbench-acceptance/m42-frontend/native-03-artifacts/recommendations-real-offli-ff5dd-des-delayed-subject-sources/error-context.md
+
+  2 failed
+    tests/e2e/recommendations.spec.ts:90:1 › real local suggestions cover another imported textbook and open its complete original refs independently of acceptance 
+    tests/e2e/recommendations.spec.ts:109:1 › real offline and stale decision candidates require explicit 412 correction and current independent policy hides delayed subject sources 
+  2 passed (32.9s)

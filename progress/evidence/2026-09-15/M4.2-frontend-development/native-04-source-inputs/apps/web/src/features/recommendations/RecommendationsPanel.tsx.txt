@@ -1,0 +1,40 @@
+import { useEffect, useRef, useState } from 'react'
+import type { ContentRef, RecommendationView } from '../../../../../packages/contracts/generated/api-types'
+import { refKey } from '../reader/target'
+import { useDecisions, type DecisionPort } from './useDecisions'
+import { useRecommendations, type RecommendationListPort } from './useRecommendations'
+import { actionLabels, decisionLabels, navigationLabel, navigationRefs, projectionLabels, reasonLabels, type RecommendationNavigation } from './recommendationModel'
+import { useRecommendationNavigation, type RecommendationNavigationPort } from './useRecommendationNavigation'
+import { RecommendationRef, RecommendationSources } from './RecommendationSources'
+import { DecisionEditor } from './DecisionEditor'
+import '../learning/learning.css'
+import './recommendations.css'
+export function RecommendationsPanel({ workspace, paused, course, port, onState, open }: { workspace: string; paused: boolean; course: ContentRef | null; port: DecisionPort & RecommendationListPort & RecommendationNavigationPort; onState: (value: { dirty: boolean; safe: boolean }) => void; open: (option: RecommendationNavigation) => void }) {
+  const [limited, setLimited] = useState(false)
+  const list = useRecommendations(workspace, paused, limited ? course?.id : undefined, port), decisions = useDecisions(workspace, paused, port)
+  const [pendingOpen, setPendingOpen] = useState<{ item: RecommendationView; option: RecommendationNavigation } | null>(null)
+  const navigation = useRecommendationNavigation(workspace, paused, decisions.closeSafe, JSON.stringify([limited ? course?.id : null, list.value?.snapshot_id ?? null]), port, open)
+  const callback = useRef(onState); callback.current = onState
+  const acknowledged = useRef<string | null>(null)
+  useEffect(() => { callback.current({ dirty: decisions.dirty, safe: decisions.closeSafe }) }, [decisions.dirty, decisions.closeSafe])
+  useEffect(() => {
+    const value = decisions.editor
+    if (value?.acknowledged && acknowledged.current !== value.command_id) { acknowledged.current = value.command_id; list.refresh() }
+  }, [decisions.editor, list])
+  useEffect(() => { setPendingOpen(null) }, [workspace, paused, limited, course?.id])
+  if (paused) return <section className="recommendations-panel"><p>当前工作区策略尚未核验或独立测试正在进行。推荐、学科原因与来源暂不显示；本机候选保留，暂停读写。</p></section>
+  const value = list.value && navigation.staleIds.length ? { ...list.value, projection_state: 'stale' as const, items: list.value.items.map(item => ({ ...item, staleness: 'stale' as const })) } : list.value
+  const navigate = (item: RecommendationView, option: RecommendationNavigation) => { if (!decisions.closeSafe || decisions.busy || navigation.busy) return; if (decisions.dirty) setPendingOpen({ item, option }); else void navigation.navigate(item, option) }
+  return <section className="learning-panel recommendations-panel" aria-label="本地学习建议"><p>按本机已有目标、路线和学习记录给出可解释建议，默认检查工作区全部可访问教材。你可以接受或拒绝；这些选择不改变成绩、路线完成标记或能力状态。</p>
+    <div className="learning-actions"><label className="learning-check"><input type="checkbox" disabled={!course} checked={limited} onChange={event => setLimited(event.target.checked)} />只看当前所选教材身份</label><button disabled={list.loading} onClick={list.refresh}>重新读取学习建议</button></div><p>范围：{limited && course ? `教材 ${course.id}` : '工作区全部可访问教材'}。读取只核对已有投影，不代表已启动生成。</p>
+    {list.loading && <p role="status">正在读取已生成的推荐…</p>}{[list.error, navigation.error, decisions.error, decisions.decodeError, decisions.journal.error].filter(Boolean).map((message, index) => <p role="alert" key={index}>{message}</p>)}
+    {navigation.busy && <p role="status">正在核验原推荐及所选精确路径，尚未打开内容…</p>}{decisions.safe && !decisions.closeSafe && <p role="alert">其他工作区仍有尚未落盘的输入。本工作区可以记录决定；请保持当前页面打开，返回原工作区重试保存后再关闭或导航。</p>}<p role="status">{decisions.journal.saving ? '本机推荐候选保存中…' : decisions.safe ? '本机推荐候选存储可用' : '本机推荐候选尚未安全保存'}</p>
+    {decisions.candidates.some(candidate => candidate.text !== (decisions.editor ? JSON.stringify(decisions.editor) : null)) && <section aria-label="本机推荐决定候选"><h3>恢复未确认的推荐决定</h3><p>每份候选保留原推荐和原命令身份。恢复会读回真实当前决定，不会自动提交。</p>{decisions.candidates.filter(candidate => candidate.text !== (decisions.editor ? JSON.stringify(decisions.editor) : null)).map((candidate, index) => <details className="learning-candidate" key={candidate.text} open><summary>{candidate.value.base.target_title} · 原基准 r{candidate.value.base.decision_revision}</summary><p>{decisionLabels[candidate.value.fields.decision]} · {candidate.value.fields.reason ?? '无理由'}</p><p>推荐 {candidate.value.base.id}</p><button disabled={decisions.busy || !decisions.safe || !!decisions.editor && decisions.editor.base.id !== candidate.value.base.id && !decisions.editor.acknowledged} onClick={() => void decisions.restore(candidate)}>恢复推荐候选 {index + 1}</button></details>)}</section>}
+    <DecisionEditor state={decisions} />
+    {pendingOpen && <section className="learning-candidate" aria-label="保留推荐候选后打开"><h3>本机仍有未确认的推荐决定</h3><p>明确保留候选后可以打开材料；打开不会提交这些决定。</p><button disabled={!decisions.closeSafe || decisions.busy || navigation.busy} onClick={() => { const value = pendingOpen; setPendingOpen(null); void navigation.navigate(value.item, value.option) }}>保留本机推荐候选并打开材料</button><button onClick={() => setPendingOpen(null)}>返回推荐</button></section>}
+    {value && <><p role="status">{projectionLabels[value.projection_state]}{value.generated_at ? ` · 本批生成于 ${value.generated_at}` : ''}。</p><p className="learning-muted">规则 {value.rule_version} · 复习提醒间隔 {value.rule_parameters.review_after_days} 天 · 未校准。所需时间没有实测来源时显示未知。</p>{value.warnings.map((warning, index) => <p className="recommendation-warning" role={warning.severity === 'error' ? 'alert' : 'status'} key={`${warning.code}:${index}`}>{warning.message}{warning.locator ? `（${warning.locator}）` : ''}<br /><small>{warning.code}</small></p>)}{!value.items.length && <p>{value.projection_state === 'ready' ? '本批没有可执行的本地建议。请核对实际目标、可用内容与上面的缺口说明。' : '当前没有可展示的推荐快照。已有学习记录保持原样。'}</p>}
+      <ol className="recommendation-list">{value.items.map(item => <li className="recommendation-item" key={item.id} data-recommendation-id={item.id}><article aria-label={`学习建议：${item.target_title}`}><h3>{actionLabels[item.action]} · {item.target_title}</h3><p>{item.reason_codes.map(code => reasonLabels[code]).join('；')}。</p><p>{item.explanation}</p><p>{item.staleness === 'current' ? '本批依据当前可用' : '依据已过期，请核对当前材料'} · 预计用时：{item.estimated_minutes === null ? '未知' : `${item.estimated_minutes} 分钟`} · {decisionLabels[item.decision]}（决定 r{item.decision_revision}）。</p>{item.decision_reason !== null && <p>当前决定理由：{item.decision_reason}</p>}<RecommendationSources item={item} /><div className="learning-actions"><button disabled={!decisions.safe || decisions.busy || item.staleness !== 'current' || value.projection_state !== 'ready'} onClick={() => decisions.begin(item, 'accepted')}>{item.decision === 'pending' ? '接受此建议' : '更正为接受'}</button><button disabled={!decisions.safe || decisions.busy || item.staleness !== 'current' || value.projection_state !== 'ready'} onClick={() => decisions.begin(item, 'dismissed')}>{item.decision === 'pending' ? '拒绝此建议' : '更正为拒绝'}</button></div>
+        <p>{item.navigation_options.length > 1 ? '此目标有多个真实教材父链，请明确选择从哪条路径打开。' : '打开以下精确内容；此操作独立于推荐决定。'}{item.staleness === 'stale' ? '推荐依据已过期，请查看最新推荐。历史精确引用保留供核对。' : ''}</p><div className="recommendation-navigation">{item.navigation_options.map(option => <button key={navigationRefs(option).map(refKey).join('|')} disabled={!decisions.closeSafe || decisions.busy || navigation.busy || item.staleness !== 'current' || value.projection_state !== 'ready'} onClick={() => navigate(item, option)}>{navigationLabel(option)}</button>)}<details><summary>核对精确导航路径</summary>{item.navigation_options.map(option => <section key={navigationRefs(option).map(refKey).join('|')}><h4>{navigationLabel(option)}</h4>{navigationRefs(option).map(ref => <p key={refKey(ref)}><RecommendationRef value={ref} /></p>)}</section>)}</details></div></article></li>)}</ol>{value.next_cursor && <button disabled={list.loading} onClick={() => void list.more()}>读取更多本批建议</button>}
+    </>}
+  </section>
+}

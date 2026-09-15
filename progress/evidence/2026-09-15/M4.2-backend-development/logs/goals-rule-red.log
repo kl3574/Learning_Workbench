@@ -1,0 +1,38 @@
+.F                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_goals_consider_two_exact_course_parents_without_turning_self_report_into_evidence _
+
+    def test_goals_consider_two_exact_course_parents_without_turning_self_report_into_evidence():
+        from services.api.app.application.recommendation_rules import derive_recommendations
+    
+        inputs, fixture = rule_inputs()
+        other_course = fixture.course.model_copy(update={'id': 'course_second'})
+        other_lesson = fixture.lesson.model_copy(update={'id': 'lesson_second'})
+        other_ref = reference(other_course)
+        candidate = inputs.catalog.candidates[0].model_copy(update={'target_ref': reference(other_lesson),
+            'course_refs': [other_ref], 'lesson_refs': [reference(other_lesson)],
+            'navigation_options': [RouteReaderOption(kind='reader', course_ref=other_ref,
+                lesson_ref=reference(other_lesson), block_ref=None)]})
+        inputs.catalog.course_refs.append(other_ref)
+        inputs.catalog.courses.append(CandidateCourse(ref=other_ref, title=other_course.title,
+            language=other_course.language, difficulty=other_course.difficulty, lifecycle='active'))
+        inputs.catalog.candidates.append(candidate)
+        inputs.profile.goal_concept_ids = [fixture.concept.id]
+        inputs.profile.self_assessments = [dm.SelfAssessment(concept_id=fixture.concept.id,
+            level='independent_use', updated_at=READ_AT)]
+        inputs.activities = []
+        plan = derive_recommendations(inputs, generated_at=NOW,
+            parameters=RecommendationRuleParameters(review_after_days=3, calibration='uncalibrated'))
+        lessons = [item for item in plan.items if item.action == 'read']
+>       assert {item.target_ref.id for item in lessons} == {fixture.lesson.id, other_lesson.id}
+E       AssertionError: assert set() == {'lesson_rule...esson_second'}
+E         
+E         Extra items in the right set:
+E         'lesson_second'
+E         'lesson_rules'
+E         Use -v to get more diff
+
+tests/unit/test_recommendation_rules.py:83: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_recommendation_rules.py::test_goals_consider_two_exact_course_parents_without_turning_self_report_into_evidence
+1 failed, 1 passed in 0.10s

@@ -1,0 +1,43 @@
+..............FF                                                         [100%]
+=================================== FAILURES ===================================
+___ test_cold_imported_prerequisite_relation_does_not_invent_a_learning_need ___
+
+    def test_cold_imported_prerequisite_relation_does_not_invent_a_learning_need():
+        from services.api.app.application.recommendation_rules import derive_recommendations
+        inputs, fixture = rule_inputs()
+        inputs.activities = []
+        inputs.catalog.candidates[1].prerequisite_refs = [reference(fixture.concept)]
+        plan = derive_recommendations(inputs, generated_at=NOW,
+            parameters=RecommendationRuleParameters(review_after_days=3, calibration='uncalibrated'))
+>       assert plan.items == [] and plan.warnings == []
+E       AssertionError: assert ([Recommendati..._reason=None)] == []
+E         
+E         Left contains one more item: RecommendationView(id='recommendation_ad892158d282cd5180b31289c782697d78810fe9e084287c', target_ref=ContentRef(entity=...n_revision=1, decision_sha256='0000000000000000000000000000000000000000000000000000000000000000', decision_reason=None)
+E         Use -v to get more diff)
+
+tests/unit/test_recommendation_rules.py:209: AssertionError
+___ test_text_only_goal_reports_unresolved_mapping_without_guessing_concepts ___
+
+    def test_text_only_goal_reports_unresolved_mapping_without_guessing_concepts():
+        from services.api.app.application.recommendation_rules import derive_recommendations
+        inputs, _ = rule_inputs()
+        inputs.activities = []
+        inputs.profile.goals = ['Understand estimation from first principles']
+        inputs.catalog.candidates = []
+        inputs.catalog.course_refs = []
+        inputs.catalog.courses = []
+        inputs.catalog.concepts = []
+        plan = derive_recommendations(inputs, generated_at=NOW,
+            parameters=RecommendationRuleParameters(review_after_days=3, calibration='uncalibrated'))
+        assert plan.items == []
+>       assert [warning.code for warning in plan.warnings] == ['EXACT_MAPPING_UNRESOLVED']
+E       AssertionError: assert [] == ['EXACT_MAPPING_UNRESOLVED']
+E         
+E         Right contains one more item: 'EXACT_MAPPING_UNRESOLVED'
+E         Use -v to get more diff
+
+tests/unit/test_recommendation_rules.py:224: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_recommendation_rules.py::test_cold_imported_prerequisite_relation_does_not_invent_a_learning_need
+FAILED tests/unit/test_recommendation_rules.py::test_text_only_goal_reports_unresolved_mapping_without_guessing_concepts
+2 failed, 14 passed in 0.15s

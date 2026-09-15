@@ -1,0 +1,43 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/shared/createResponseDraftJournal.test.tsx
+
+
+ RUN  v5.0.0 <REPOSITORY_ROOT>/apps/web
+
+ ❯ src/shared/createResponseDraftJournal.test.tsx (4 tests | 1 failed) 774ms
+   × a normal explicit choice succeeds when its own real load is consumed before the resolve ACK 167ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/shared/createResponseDraftJournal.test.tsx > a normal explicit choice succeeds when its own real load is consumed before the resolve ACK
+AssertionError: expected Error: 选择期间又有新的本页编辑，较新的候选仍保留。 to deeply equal { …(4) }
+
+- Expected
++ Received
+
+- {
+-   "dirty": true,
+-   "key": "same_route",
+-   "text": "explicit chosen A",
+-   "workspace": "workspace_resolve_own_notification",
++ Error {
++   "message": "选择期间又有新的本页编辑，较新的候选仍保留。",
+  }
+
+ ❯ src/shared/createResponseDraftJournal.test.tsx:232:20
+    230|     await act(async () => { delivery.release(); chosen = await pending…
+    231|     await waitFor(() => expect(view.result.current.saving).toBe(false))
+    232|     expect(chosen).toEqual(JSON.parse(a))
+       |                    ^
+    233|     expect(preservationCalls).toBe(0)
+    234|     expect(view.result.current.unsafe).toBe(false)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+   Start at  12:11:22
+   Duration  1.24s (tests 69%, environment 21%, import 5%, transform 4%)
+

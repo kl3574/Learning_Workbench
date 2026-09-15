@@ -1,0 +1,41 @@
+[WebServer] INFO:     Started server process [208592]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+[WebServer] (node:208612) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:208665) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 ../m42-continue-reading-diagnosis/observe-minimal.spec.ts:8:1 › minimal actual saved lesson survives reload navigation before session delivery (3.1s)
+
+
+  1) ../m42-continue-reading-diagnosis/observe-minimal.spec.ts:8:1 › minimal actual saved lesson survives reload navigation before session delivery 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('button', { name: '继续浏览示例' })
+    Expected: visible
+    Timeout: 1000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('button', { name: '继续浏览示例' }) with timeout 1000ms
+      - waiting for getByRole('button', { name: '继续浏览示例' })
+
+
+      16 |   await page.reload()
+      17 |   await page.getByRole('navigation', { name: '学习主导航' }).getByRole('button', { name: '习题' }).click()
+    > 18 |   await expect(page.getByRole('button', { name: '继续浏览示例' })).toBeVisible({ timeout: 1000 })
+         |                                                              ^
+      19 |   await page.getByRole('button', { name: '继续浏览示例' }).click()
+      20 |   await expect(page.locator('.reader-content h1')).toContainText('1.3')
+      21 | })
+        at <acceptance-cache>/m42-continue-reading-diagnosis/observe-minimal.spec.ts:18:62
+
+    Error Context: ../m42-continue-reading-diagnosis/run-005/playwright-output/observe-minimal-minimal-ac-2efc1-ion-before-session-delivery/error-context.md
+
+  1 failed
+    ../m42-continue-reading-diagnosis/observe-minimal.spec.ts:8:1 › minimal actual saved lesson survives reload navigation before session delivery 

@@ -1,0 +1,95 @@
+FFF                                                                      [100%]
+=================================== FAILURES ===================================
+_ test_every_native_decision_has_one_real_command_and_recomputed_request_binding[request_hash] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x704d43847e00>, SessionIdentity(id='session_assessment_...ted'], time_limit_seconds=None)), <services.api.app.application.assessment.AssessmentService object at 0x704d439edd30>)
+damage = 'request_hash'
+
+    @pytest.mark.parametrize('damage', ['request_hash', 'applied_flag', 'missing_receipt'])
+    def test_every_native_decision_has_one_real_command_and_recomputed_request_binding(storage, damage):
+        database, identity, _, _ = storage
+        service, item = generated(storage)
+        request = RecommendationDecisionWrite(decision='accepted', reason='original reason')
+        ack = service.decide(identity, item.id, request, 'original', item.decision_sha256)
+        with database.transaction() as connection:
+            connection.execute('DROP TRIGGER recommendation_receipts_no_update')
+            connection.execute('DROP TRIGGER recommendation_receipts_no_delete')
+            if damage == 'request_hash':
+                connection.execute('UPDATE recommendation_command_receipts SET request_sha256=?', ('c' * 64,))
+            elif damage == 'applied_flag':
+                connection.execute('UPDATE recommendation_command_receipts SET result_json=?',
+                    (canonical_bytes(ack.model_copy(update={'applied': False})).decode(),))
+            else:
+                connection.execute('DELETE FROM recommendation_command_receipts')
+>       with pytest.raises(ApiError) as rejected:
+             ^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ApiError
+
+tests/integration/test_recommendations.py:133: Failed
+_ test_every_native_decision_has_one_real_command_and_recomputed_request_binding[applied_flag] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x704d437b16d0>, SessionIdentity(id='session_assessment_...ted'], time_limit_seconds=None)), <services.api.app.application.assessment.AssessmentService object at 0x704d438ceff0>)
+damage = 'applied_flag'
+
+    @pytest.mark.parametrize('damage', ['request_hash', 'applied_flag', 'missing_receipt'])
+    def test_every_native_decision_has_one_real_command_and_recomputed_request_binding(storage, damage):
+        database, identity, _, _ = storage
+        service, item = generated(storage)
+        request = RecommendationDecisionWrite(decision='accepted', reason='original reason')
+        ack = service.decide(identity, item.id, request, 'original', item.decision_sha256)
+        with database.transaction() as connection:
+            connection.execute('DROP TRIGGER recommendation_receipts_no_update')
+            connection.execute('DROP TRIGGER recommendation_receipts_no_delete')
+            if damage == 'request_hash':
+                connection.execute('UPDATE recommendation_command_receipts SET request_sha256=?', ('c' * 64,))
+            elif damage == 'applied_flag':
+                connection.execute('UPDATE recommendation_command_receipts SET result_json=?',
+                    (canonical_bytes(ack.model_copy(update={'applied': False})).decode(),))
+            else:
+                connection.execute('DELETE FROM recommendation_command_receipts')
+>       with pytest.raises(ApiError) as rejected:
+             ^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ApiError
+
+tests/integration/test_recommendations.py:133: Failed
+_ test_every_native_decision_has_one_real_command_and_recomputed_request_binding[missing_receipt] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x704d437b3590>, SessionIdentity(id='session_assessment_...ted'], time_limit_seconds=None)), <services.api.app.application.assessment.AssessmentService object at 0x704d438cd6d0>)
+damage = 'missing_receipt'
+
+    @pytest.mark.parametrize('damage', ['request_hash', 'applied_flag', 'missing_receipt'])
+    def test_every_native_decision_has_one_real_command_and_recomputed_request_binding(storage, damage):
+        database, identity, _, _ = storage
+        service, item = generated(storage)
+        request = RecommendationDecisionWrite(decision='accepted', reason='original reason')
+        ack = service.decide(identity, item.id, request, 'original', item.decision_sha256)
+        with database.transaction() as connection:
+            connection.execute('DROP TRIGGER recommendation_receipts_no_update')
+            connection.execute('DROP TRIGGER recommendation_receipts_no_delete')
+            if damage == 'request_hash':
+                connection.execute('UPDATE recommendation_command_receipts SET request_sha256=?', ('c' * 64,))
+            elif damage == 'applied_flag':
+                connection.execute('UPDATE recommendation_command_receipts SET result_json=?',
+                    (canonical_bytes(ack.model_copy(update={'applied': False})).decode(),))
+            else:
+                connection.execute('DELETE FROM recommendation_command_receipts')
+>       with pytest.raises(ApiError) as rejected:
+             ^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ApiError
+
+tests/integration/test_recommendations.py:133: Failed
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <repository>/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <repository>/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_recommendations.py::test_every_native_decision_has_one_real_command_and_recomputed_request_binding[request_hash]
+FAILED tests/integration/test_recommendations.py::test_every_native_decision_has_one_real_command_and_recomputed_request_binding[applied_flag]
+FAILED tests/integration/test_recommendations.py::test_every_native_decision_has_one_real_command_and_recomputed_request_binding[missing_receipt]
+3 failed, 4 deselected, 2 warnings in 1.31s

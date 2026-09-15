@@ -1,0 +1,34 @@
+{
+  "spec_version": "3.0.1",
+  "spec_sha256": "397829f5267248aedfc60faf7cacbb12669966b1c1d636a909b04189e0cc09dd",
+  "requirements": 38,
+  "scenarios": 33,
+  "catalog_routes": 102,
+  "m42_routes": [
+    {
+      "method": "GET",
+      "path": "/api/v1/recommendations",
+      "source_path": "/recommendations",
+      "source_line": 1134,
+      "source_row": "| GET `/recommendations` | `course_id?`,`recommendation_id?`,`cursor?`,`limit?`，默认全工作区，limit 默认20、最大100 | RecommendationPage；仅回读已持久化推荐投影并校验当前依据，不生成/写入/排队刷新；每条有真实原因与来源，空态/缺材料/更新状态显式返回 |",
+      "location": "primary_cell",
+      "task_id": "M4.2",
+      "priority": "P0",
+      "runtime_evidence_source": "progress/state.json_and_runtime_openapi"
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/recommendations/{id}/decision",
+      "source_path": "/recommendations/{id}/decision",
+      "source_line": 1135,
+      "source_row": "| POST `/recommendations/{id}/decision` | RecommendationDecisionWrite，即 `{decision:accepted|dismissed,reason:string|null}`；Idempotency-Key；If-Match 为所读 RecommendationView.decision_sha256 的带引号强标签 | MutationAck；revision 是该推荐决定版本，applied 表示原命令是否真正改变决定；接受/拒绝不改变路线、成绩、学习事件或能力状态 |",
+      "location": "primary_cell",
+      "task_id": "M4.2",
+      "priority": "P0",
+      "runtime_evidence_source": "progress/state.json_and_runtime_openapi"
+    }
+  ],
+  "both_spec_paths_equal": true,
+  "embedded_core_and_ports_equal": true,
+  "product_acceptance": "NOT_RUN"
+}

@@ -1,0 +1,28 @@
+..F.....                                                                 [100%]
+=================================== FAILURES ===================================
+_ test_only_checked_current_deterministic_incorrect_is_an_assessment_error[deterministic-incorrect-usable-True] _
+
+origin = 'deterministic', outcome = 'incorrect', applicability = 'usable'
+expected = True
+
+    @pytest.mark.parametrize(('origin', 'outcome', 'applicability', 'expected'), [
+        ('deterministic', 'incorrect', 'usable', True), ('human_review', 'incorrect', 'usable', False),
+        ('deterministic', 'unanswered', 'usable', False), ('deterministic', 'invalid_input', 'usable', False),
+        ('deterministic', 'incorrect', 'pending_review', False), ('unknown', None, 'usable', False),
+    ])
+    def test_only_checked_current_deterministic_incorrect_is_an_assessment_error(origin, outcome, applicability, expected):
+        from services.api.app.application.recommendation_rules import derive_recommendations
+        inputs, fixture = rule_inputs()
+        inputs.activities = []
+        inputs.observations = [observation(fixture, origin=origin, outcome=outcome, applicability=applicability)]
+        plan = derive_recommendations(inputs, generated_at=NOW,
+            parameters=RecommendationRuleParameters(review_after_days=3, calibration='uncalibrated'))
+        errors = [item for item in plan.items if item.reason_codes == ['assessment_error']]
+>       assert bool(errors) is expected
+E       assert False is True
+E        +  where False = bool([])
+
+tests/unit/test_recommendation_rules.py:113: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_recommendation_rules.py::test_only_checked_current_deterministic_incorrect_is_an_assessment_error[deterministic-incorrect-usable-True]
+1 failed, 7 passed in 0.12s

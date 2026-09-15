@@ -1,0 +1,100 @@
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import type { MutationAck, RecommendationDecisionWrite, RecommendationView } from '../../../../../packages/contracts/generated/api-types'
+import { ApiError, getSessionGeneration, subscribeSessionAccess } from '../../api/client'
+import { decodeDecision, decisionDirty, decisionStore, newDecision, useDecisionJournal, type DecisionEnvelope } from './decisionDrafts'
+
+export type DecisionPort = { read: (id: string) => Promise<RecommendationView>; save: (value: DecisionEnvelope) => Promise<MutationAck> }
+export function useDecisions(workspace: string, paused: boolean, port: DecisionPort) {
+  const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
+  const owner = `${workspace}:${access}`, scope = useRef({ workspace, owner, paused }); scope.current = { workspace, owner, paused }
+  const journal = useDecisionJournal(workspace)
+  const [editor, setEditor] = useState<DecisionEnvelope | null>(null), live = useRef(editor); live.current = editor
+  const [observed, setObserved] = useState<{ owner: string; value: RecommendationView } | null>(null)
+  const [sealed, setSealed] = useState(false), [rejected, setRejected] = useState(false)
+  const [busy, setBusy] = useState(false), [error, setError] = useState('')
+  const operation = useRef(0), editVersion = useRef(0)
+  const owns = (captured: string) => scope.current.owner === captured && !scope.current.paused
+  const persist = (value: DecisionEnvelope) => { editVersion.current++; live.current = value; setEditor(value); journal.save(value) }
+  const candidates: { value: DecisionEnvelope; text: string }[] = []
+  let decodeError = ''
+  for (const record of Object.values(journal.records)) for (const raw of new Set([record.text, ...record.conflicts.map(item => item.text)])) {
+    try { const value = decodeDecision(raw, workspace); if (decisionDirty(value)) candidates.push({ value, text: raw }) } catch (reason) { decodeError = reason instanceof Error ? reason.message : '本机推荐候选无法读取；原记录保留。' }
+  }
+  const currentText = editor ? JSON.stringify(editor) : null
+  const competing = candidates.filter(candidate => candidate.value.base.id === editor?.base.id && candidate.text !== currentText)
+  const safe = journal.ready && !journal.unsafe && !journal.error && !decodeError
+  const dirty = !!editor && decisionDirty(editor) || candidates.length > 0
+  const remote = !paused && observed?.owner === owner ? observed.value : null
+  const conflict = !!editor && !editor.acknowledged && !!remote && editor.base.decision_sha256 !== remote.decision_sha256
+  const refresh = async () => {
+    const id = live.current?.base.id
+    if (!id || scope.current.paused) return
+    const captured = scope.current.owner, sequence = ++operation.current
+    setBusy(true); setObserved(null)
+    try { const value = await port.read(id); if (owns(captured) && sequence === operation.current) { setObserved({ owner: captured, value }); setError('') } }
+    catch (reason) { if (owns(captured) && sequence === operation.current) setError(`当前决定尚未读回；原候选保留。${reason instanceof Error ? reason.message : ''}`) }
+    finally { if (owns(captured) && sequence === operation.current) setBusy(false) }
+  }
+  const refreshRef = useRef(refresh); refreshRef.current = refresh
+  useEffect(() => { live.current = null; setEditor(null); setObserved(null); setSealed(false); setRejected(false); setError(''); ++editVersion.current }, [workspace])
+  useEffect(() => { ++operation.current; setObserved(null); setBusy(false); if (!paused) void refreshRef.current(); return () => { ++operation.current } }, [owner, paused, port])
+
+  const begin = (item: RecommendationView, decision: RecommendationDecisionWrite['decision']) => {
+    if (paused || busy || !safe || editor && decisionDirty(editor) || candidates.some(candidate => candidate.value.base.id === item.id)) { setError('请先保存当前决定，或明确保留并返回列表；已有候选须先恢复。'); return }
+    if (item.staleness !== 'current') { setError('此推荐依据已过期；未创建新的决定命令。请读取当前推荐。'); return }
+    persist(newDecision(item, workspace, { decision, reason: null })); setObserved({ owner, value: item }); setSealed(false); setRejected(false); setError('')
+  }
+  const edit = (fields: RecommendationDecisionWrite) => {
+    if (!live.current || paused || busy || sealed || live.current.acknowledged || competing.length) return
+    try { persist(decodeDecision(JSON.stringify({ ...live.current, fields, command_id: `recommendation_${crypto.randomUUID()}` }), workspace)); setError('') }
+    catch (reason) { setError(reason instanceof Error ? reason.message : '决定输入无效。') }
+  }
+  const restore = async (candidate: { value: DecisionEnvelope; text: string }) => {
+    if (paused || busy || !safe || editor && decisionDirty(editor) && editor.base.id !== candidate.value.base.id) return
+    const captured = owner, sequence = ++operation.current, version = editVersion.current
+    setBusy(true); setObserved(null)
+    try {
+      const record = (await decisionStore.load(workspace))[candidate.value.base.id]
+      if (!record || ![record.text, ...record.conflicts.map(item => item.text)].includes(candidate.text)) throw new Error('候选尚未从本机存储读回，未恢复或发送。')
+      const latest = await port.read(candidate.value.base.id)
+      if (!owns(captured) || sequence !== operation.current || version !== editVersion.current) return
+      const value = record.conflicts.length ? await journal.resolve(candidate.value.base.id, candidate.text) : decodeDecision(candidate.text, workspace)
+      if (!owns(captured) || sequence !== operation.current || version !== editVersion.current) return
+      live.current = value; setEditor(value); ++editVersion.current; setObserved({ owner: captured, value: latest }); setSealed(true); setRejected(false); setError('原命令已恢复，尚未重发。即使读回的决定已变化，也先重试原命令核对回执。')
+    } catch (reason) { if (owns(captured) && sequence === operation.current) setError(reason instanceof Error ? reason.message : '恢复失败；原候选仍保留。') }
+    finally { if (owns(captured) && sequence === operation.current) setBusy(false) }
+  }
+  const save = async () => {
+    const candidate = live.current
+    if (!candidate || !decisionDirty(candidate) || paused || busy || !safe || competing.length || rejected) return
+    const captured = owner, sequence = ++operation.current
+    setBusy(true); setSealed(true); setError('')
+    try {
+      const record = (await decisionStore.load(workspace))[candidate.base.id]
+      if (!record || ![record.text, ...record.conflicts.map(item => item.text)].includes(JSON.stringify(candidate))) throw new Error('本次决定尚未持久化，不发送。请重试本机保存。')
+      if (!owns(captured) || sequence !== operation.current) return
+      const ack = await port.save(candidate)
+      const acknowledged = decodeDecision(JSON.stringify({ ...candidate, acknowledged: ack }), workspace)
+      if (scope.current.workspace === workspace && live.current?.command_id === candidate.command_id) { persist(acknowledged); setRejected(false) }
+      if (!owns(captured) || sequence !== operation.current) return
+      try {
+        const latest = await port.read(candidate.base.id)
+        if (owns(captured) && sequence === operation.current) setObserved({ owner: captured, value: latest })
+      } catch (reason) { if (owns(captured) && sequence === operation.current) { setObserved(null); setError(`原命令已有成功回执；最新决定尚未读回。${reason instanceof Error ? reason.message : ''}`) } }
+    } catch (reason) {
+      if (!owns(captured) || sequence !== operation.current) return
+      if (reason instanceof ApiError && reason.status === 412) {
+        setRejected(true); setObserved(null)
+        try { const latest = await port.read(candidate.base.id); if (owns(captured) && sequence === operation.current) setObserved({ owner: captured, value: latest }) } catch { /* Unknown remote is displayed as unknown; it cannot become a correction base. */ }
+      }
+      if (owns(captured) && sequence === operation.current) setError(`推荐决定尚未确认。原目标、基准和命令身份保留。${reason instanceof Error ? reason.message : ''}`)
+    } finally { if (owns(captured) && sequence === operation.current) setBusy(false) }
+  }
+  const correct = () => {
+    if (!live.current || !remote || remote.staleness !== 'current' || paused || busy || !safe || competing.length || !rejected && !live.current.acknowledged) return
+    persist(newDecision(remote, workspace, live.current.fields)); setRejected(false); setSealed(false); setError('已明确采用读回的服务端基准，生成新的更正候选；尚未发送。')
+  }
+  const retain = () => { if (!safe || busy) return; ++operation.current; ++editVersion.current; live.current = null; setEditor(null); setObserved(null); setSealed(false); setRejected(false); setError('本机未确认候选已保留；可从候选列表恢复原命令。') }
+  const retryLocal = () => { if (live.current) journal.save(live.current) }
+  return { editor: !paused && editor?.workspace_id === workspace ? editor : null, remote, candidates: paused ? [] : candidates, safe, dirty, conflict, competing, rejected, sealed, busy, error: paused ? '' : error, decodeError: paused ? '' : decodeError, journal, begin, edit, restore, save, correct, retain, refresh, retryLocal }
+}

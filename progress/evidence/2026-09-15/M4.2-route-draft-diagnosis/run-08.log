@@ -1,0 +1,59 @@
+
+Running 2 tests using 1 worker
+
+(node:202778) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 ../m42-route-save-diagnosis/permanent-before-02.spec.ts:9:60 › native route goal input survives its own initial draft save_first delivery after focus (6.7s)
+(node:203139) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  2 ../m42-route-save-diagnosis/permanent-before-02.spec.ts:9:60 › native route goal input survives its own initial draft load_first delivery after focus (1.6s)
+
+
+  1) ../m42-route-save-diagnosis/permanent-before-02.spec.ts:9:60 › native route goal input survives its own initial draft save_first delivery after focus 
+
+    Error: expect(locator).toBeFocused() failed
+
+    Locator:  getByRole('dialog', { name: '创建路线', exact: true }).getByLabel('路线学习目标', { exact: true })
+    Expected: focused
+    Received: inactive
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toBeFocused" getByRole('dialog', { name: '创建路线', exact: true }).getByLabel('路线学习目标', { exact: true }) with timeout 5000ms
+      - waiting for getByRole('dialog', { name: '创建路线', exact: true }).getByLabel('路线学习目标', { exact: true })
+        14 × locator resolved to <textarea rows="3" aria-label="路线学习目标">原创路线目标：先读再练，保留每次明确输入。</textarea>
+           - unexpected value "inactive"
+
+
+      55 |     await goal.fill(goalText)
+      56 |     expect(await goal.inputValue()).toBe(goalText)
+    > 57 |     await expect(goal).toBeFocused()
+         |                        ^
+      58 |     const beforeRelease = await page.evaluate(() => (window as ProbeWindow).__routeDraftInputProbe?.events ?? [])
+      59 |     if (order === 'load_first') {
+      60 |       expect(beforeRelease.some(value => value.kind === 'load_delivered_before_save_release')).toBe(true)
+        at <DIAGNOSIS_CACHE>/permanent-before-02.spec.ts:57:24
+
+    Error Context: ../m42-route-save-diagnosis/run-08-artifacts/permanent-before-02-native-11f67--first-delivery-after-focus/error-context.md
+
+  2) ../m42-route-save-diagnosis/permanent-before-02.spec.ts:9:60 › native route goal input survives its own initial draft load_first delivery after focus 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "原创路线目标：先读再练，保留每次明确输入。"
+    Received: ""
+
+      54 |     const goal = editor.getByLabel('路线学习目标', { exact: true })
+      55 |     await goal.fill(goalText)
+    > 56 |     expect(await goal.inputValue()).toBe(goalText)
+         |                                     ^
+      57 |     await expect(goal).toBeFocused()
+      58 |     const beforeRelease = await page.evaluate(() => (window as ProbeWindow).__routeDraftInputProbe?.events ?? [])
+      59 |     if (order === 'load_first') {
+        at <DIAGNOSIS_CACHE>/permanent-before-02.spec.ts:56:37
+
+    Error Context: ../m42-route-save-diagnosis/run-08-artifacts/permanent-before-02-native-051f7--first-delivery-after-focus/error-context.md
+
+  2 failed
+    ../m42-route-save-diagnosis/permanent-before-02.spec.ts:9:60 › native route goal input survives its own initial draft save_first delivery after focus 
+    ../m42-route-save-diagnosis/permanent-before-02.spec.ts:9:60 › native route goal input survives its own initial draft load_first delivery after focus 

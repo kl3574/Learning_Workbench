@@ -1,0 +1,71 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/recommendations/useDecisions.test.tsx src/features/recommendations/recommendations.test.tsx src/features/recommendations/recommendationClient.test.ts
+
+
+ RUN  v5.0.0 <REPOSITORY_ROOT>/apps/web
+
+ ❯ src/features/recommendations/useDecisions.test.tsx (10 tests | 2 failed) 3290ms
+   × a local write failure prevents POST and protects the unsaved candidate until actual persistence succeeds 1061ms
+   × an unchanged explicit choice accepts an applied=false receipt at its original revision 1004ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/recommendations/useDecisions.test.tsx > a local write failure prevents POST and protects the unsaved candidate until actual persistence succeeds
+AssertionError: expected '本机作答草稿尚未保存：本机作答草稿存储未完成。 请保持本页打开。' to contain 'injected unit storage failure'
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div />[39m
+  [36m</body>[39m
+[36m</html>[39m
+
+Expected: "injected unit storage failure"
+Received: "本机作答草稿尚未保存：本机作答草稿存储未完成。 请保持本页打开。"
+
+ ❯ src/features/recommendations/useDecisions.test.tsx:104:134
+    102|   const write = vi.spyOn(decisionStore, 'save').mockRejectedValueOnce(…
+    103|   try {
+    104|     act(() => view.result.current.begin(state.current(), 'accepted'));…
+       |                                                                                                                                      ^
+    105|     expect(view.result.current.safe).toBe(false); const candidate = JS…
+    106|     await act(() => view.result.current.save()); expect(state.save).no…
+ ❯ runWithExpensiveErrorDiagnosticsDisabled node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/features/recommendations/useDecisions.test.tsx > an unchanged explicit choice accepts an applied=false receipt at its original revision
+AssertionError: expected false to be true // Object.is equality
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div />[39m
+  [36m</body>[39m
+[36m</html>[39m
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/features/recommendations/useDecisions.test.tsx:114:56
+
+ ❯ runWithExpensiveErrorDiagnosticsDisabled node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed | 2 passed (3)
+      Tests  2 failed | 16 passed (18)
+   Start at  10:34:48
+   Duration  3.67s (tests 79%, environment 14%, transform 4%, import 3%)
+

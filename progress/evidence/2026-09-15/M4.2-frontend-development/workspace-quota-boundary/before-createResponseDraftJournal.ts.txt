@@ -1,0 +1,220 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { DraftRecord, DraftStore } from '../workbench/DraftStore'
+
+
+type Branch = { text: string; expected: number; dirty: boolean; sequence: number; durable: boolean; pending: number }
+type MemoryCandidate = { owner: string; key: string; text: string; expected: number; updatedAt: string }
+type Session = {
+  workspace: string; owner: string; epoch: number; active: boolean; ready: boolean
+  persisted: Record<string, DraftRecord>; records: Record<string, DraftRecord>; branches: Map<string, Branch>
+  errors: Map<string, string>; loadError: string; busy: number; storageVersion: number; queue: Promise<void>; reload: Promise<void>
+}
+
+export function createResponseDraftJournal<Envelope>(options: {
+  store: DraftStore; decode: (raw: string, workspace: string) => Envelope
+  key: (envelope: Envelope) => string; dirty: (envelope: Envelope) => boolean
+}) {
+const { store: practiceDraftStore, decode: decodePracticeEnvelope, dirty: practiceDirty } = options
+// Page-memory recovery survives a React panel unmount. It is neither durable
+// storage nor a server save; beforeunload still protects every pending candidate.
+const memory = new Map<string, MemoryCandidate>()
+const memoryId = (workspace: string, owner: string, key: string) => JSON.stringify([workspace, owner, key])
+const memoryFor = (workspace: string) => [...memory.entries()].filter(([id]) => JSON.parse(id)[0] === workspace)
+const failure = (error: unknown) => error instanceof Error ? error.message : '本机作答草稿存储未完成。'
+const conflictMessage = '其他页面新增了作答草稿候选，请重新比较后明确选择；所有候选均保留。'
+
+function validateRecord(record: DraftRecord, workspace: string): void {
+  for (const text of [record.text, ...record.conflicts.map(value => value.text)]) {
+    const envelope = decodePracticeEnvelope(text, workspace)
+    if (options.key(envelope) !== record.objectId) throw new Error('作答草稿记录键与内容身份不一致，原记录保留。')
+  }
+}
+
+function project(session: Session): void {
+  const records = { ...session.persisted }
+  for (const [key, branch] of session.branches) {
+    const stored = session.persisted[key]
+    if (!branch.dirty && branch.durable && !branch.pending && stored) continue
+    const now = new Date().toISOString()
+    const conflicts = [...(stored?.conflicts ?? [])].filter(value => value.text !== branch.text)
+    if (stored && stored.text !== branch.text && !conflicts.some(value => value.text === stored.text)) {
+      conflicts.unshift({ id: `primary:${stored.revision}`, expectedRevision: branch.expected, actualRevision: stored.revision, text: stored.text, createdAt: stored.updatedAt })
+    }
+    for (const [, candidate] of memoryFor(session.workspace)) {
+      if (candidate.key === key && candidate.text !== branch.text && !conflicts.some(value => value.text === candidate.text)) {
+        conflicts.push({ id: `memory:${candidate.owner}`, expectedRevision: candidate.expected, actualRevision: stored?.revision ?? 0, text: candidate.text, createdAt: candidate.updatedAt })
+      }
+    }
+    records[key] = { objectId: key, revision: stored?.revision ?? 0, text: branch.text, updatedAt: stored?.updatedAt ?? now, conflicts }
+  }
+  session.records = records
+}
+
+function remember(session: Session, key: string, branch: Branch): void {
+  memory.set(memoryId(session.workspace, session.owner, key), { owner: session.owner, key, text: branch.text, expected: branch.expected, updatedAt: new Date().toISOString() })
+}
+
+function acknowledge(workspace: string, key: string, record: DraftRecord): void {
+  const durable = new Set([record.text, ...record.conflicts.map(item => item.text)])
+  for (const [id, candidate] of memoryFor(workspace)) if (candidate.key === key && durable.has(candidate.text)) memory.delete(id)
+}
+
+return function useResponseDrafts(workspace: string): {
+  records: Record<string, DraftRecord>; ready: boolean; saving: boolean; error: string; unsafe: boolean
+  save(envelope: Envelope): void; resolve(key: string, text: string): Promise<Envelope>
+} {
+  const owner = useRef(crypto.randomUUID())
+  const sessions = useRef(new Map<string, Session>())
+  let session = sessions.current.get(workspace)
+  if (!session) {
+    session = { workspace, owner: owner.current, epoch: 0, active: false, ready: false, persisted: {}, records: {}, branches: new Map(), errors: new Map(), loadError: '', busy: 0, storageVersion: 0, queue: Promise.resolve(), reload: Promise.resolve() }
+    for (const [, candidate] of memoryFor(workspace)) {
+      try {
+        const envelope = decodePracticeEnvelope(candidate.text, workspace)
+        session.branches.set(candidate.key, { text: candidate.text, expected: candidate.expected, dirty: practiceDirty(envelope), sequence: 0, durable: false, pending: 0 })
+      } catch (error) { session.errors.set(candidate.key, failure(error)) }
+    }
+    project(session); sessions.current.set(workspace, session)
+  }
+  const current = useRef(session); current.current = session
+  const [, render] = useState(0)
+  const notify = useCallback((value: Session) => {
+    project(value)
+    // A previous workspace may finish preserving page-memory candidates. Only
+    // the current scoped session is rendered; its records are never replaced.
+    if (current.current.active) render(count => count + 1)
+  }, [])
+
+  const enqueue = useCallback((value: Session, key: string, text: string, fixedExpected?: number) => {
+    const branch = value.branches.get(key)
+    if (!branch) return
+    branch.pending += 1; value.busy += 1
+    value.queue = value.queue.then(async () => {
+      try {
+        const result = await practiceDraftStore.save(value.workspace, key, text, fixedExpected ?? branch.expected)
+        value.storageVersion += 1
+        value.persisted[key] = result.record
+        if (result.kind === 'saved') branch.expected = result.record.revision
+        branch.durable = [result.record.text, ...result.record.conflicts.map(item => item.text)].includes(branch.text)
+        acknowledge(value.workspace, key, result.record)
+        value.errors.delete(key)
+      } catch (error) {
+        branch.durable = false; remember(value, key, branch)
+        value.errors.set(key, `本机作答草稿尚未保存：${failure(error)} 请保持本页打开。`)
+      } finally { branch.pending -= 1; value.busy -= 1; notify(value) }
+    })
+    notify(value)
+  }, [notify])
+
+  useEffect(() => {
+    const value = session
+    value.active = true
+    const epoch = ++value.epoch
+    const refresh = () => {
+      value.reload = value.reload.then(async () => {
+        try {
+          const storageVersion = value.storageVersion
+          const records = await practiceDraftStore.load(value.workspace)
+          if (!value.active || value.epoch !== epoch) return
+          if (storageVersion !== value.storageVersion) { refresh(); return }
+          value.loadError = ''; value.ready = true
+          for (const [key, record] of Object.entries(records)) {
+            try {
+              validateRecord(record, value.workspace); value.errors.delete(`decode:${key}`)
+              if (!value.branches.has(key)) {
+                const envelope = decodePracticeEnvelope(record.text, value.workspace)
+                if (practiceDirty(envelope)) value.branches.set(key, { text: record.text, expected: record.revision, dirty: true, sequence: 0, durable: true, pending: 0 })
+              }
+            }
+            catch (error) { value.errors.set(`decode:${key}`, failure(error)) }
+          }
+          value.persisted = records
+          for (const [key, branch] of value.branches) {
+            const stored = records[key]
+            const retained = stored && [stored.text, ...stored.conflicts.map(item => item.text)].includes(branch.text)
+            if (retained) {
+              branch.durable = true; acknowledge(value.workspace, key, stored)
+              if (stored.text === branch.text) branch.expected = stored.revision
+            } else if (branch.dirty || !branch.durable) {
+              branch.durable = false; remember(value, key, branch)
+            }
+            if (!branch.pending) {
+              const candidates = memoryFor(value.workspace).map(([, item]) => item).filter(item => item.key === key)
+              const durableTexts = new Set(stored ? [stored.text, ...stored.conflicts.map(item => item.text)] : [])
+              for (const text of new Set(candidates.map(item => item.text))) if (!durableTexts.has(text)) enqueue(value, key, text, 0)
+            }
+          }
+          notify(value)
+        } catch (error) {
+          if (value.active && value.epoch === epoch) { value.loadError = failure(error); notify(value) }
+        }
+      })
+    }
+    refresh()
+    const unsubscribe = practiceDraftStore.subscribe(value.workspace, refresh)
+    const focus = () => refresh()
+    const protect = (event: BeforeUnloadEvent) => {
+      if (memory.size || value.busy || [...value.branches.values()].some(branch => !branch.durable)) {
+        event.preventDefault(); event.returnValue = ''
+      }
+    }
+    window.addEventListener('focus', focus); window.addEventListener('beforeunload', protect)
+    return () => {
+      value.active = false; value.epoch += 1; unsubscribe()
+      window.removeEventListener('focus', focus); window.removeEventListener('beforeunload', protect)
+    }
+  }, [session, enqueue, notify])
+
+  const save = useCallback((envelope: Envelope) => {
+    const value = session, key = options.key(envelope), text = JSON.stringify(envelope)
+    try { decodePracticeEnvelope(text, value.workspace) }
+    catch (error) { value.errors.set(key, failure(error)); notify(value); return }
+    let branch = value.branches.get(key)
+    if (!branch) {
+      branch = { text, expected: value.ready && !value.errors.has(`decode:${key}`) ? value.persisted[key]?.revision ?? 0 : 0, dirty: practiceDirty(envelope), sequence: 0, durable: false, pending: 0 }
+      value.branches.set(key, branch)
+    }
+    branch.text = text; branch.sequence += 1; branch.dirty = practiceDirty(envelope); branch.durable = false
+    remember(value, key, branch); enqueue(value, key, text)
+  }, [session, enqueue, notify])
+
+  const resolve = useCallback(async (key: string, text: string): Promise<Envelope> => {
+    const value = session, epoch = value.epoch
+    const envelope = decodePracticeEnvelope(text, value.workspace)
+    if (options.key(envelope) !== key) return Promise.reject(new Error('候选作答身份与当前记录不一致。'))
+    const displayed = value.records[key]
+    const seenTexts = new Set(displayed ? [displayed.text, ...displayed.conflicts.map(item => item.text)] : [])
+    const seenIds = displayed?.conflicts.map(item => item.id) ?? []
+    if (!seenTexts.has(text)) return Promise.reject(new Error('候选不在已展示的作答冲突中，请重新读取。'))
+    value.busy += 1; notify(value)
+    const operation = value.queue.then(async () => {
+      const latest = (await practiceDraftStore.load(value.workspace))[key]
+      if (!value.active || value.epoch !== epoch || current.current !== value) throw new Error('作答工作区已切换；旧候选仍保留。')
+      if (!latest) throw new Error('尚无可确认的持久化作答记录，请先重试本机保存。')
+      value.persisted[key] = latest
+      validateRecord(latest, value.workspace)
+      if (!seenTexts.has(latest.text)) throw new Error(conflictMessage)
+      const result = await practiceDraftStore.save(value.workspace, key, text, latest.revision, seenIds)
+      value.storageVersion += 1
+      value.persisted[key] = result.record; acknowledge(value.workspace, key, result.record)
+      if (result.kind === 'conflict') throw new Error(conflictMessage)
+      const branch = value.branches.get(key)
+      if (branch && branch.pending) { branch.expected = result.record.revision; throw new Error('选择期间又有新的本页编辑，较新的候选仍保留。') }
+      value.branches.set(key, { text, expected: result.record.revision, dirty: practiceDirty(envelope), sequence: (branch?.sequence ?? 0) + 1, durable: true, pending: 0 })
+      value.errors.delete(key)
+      if (!value.active || value.epoch !== epoch || current.current !== value) throw new Error('作答工作区已切换；持久化结果仍保留。')
+      return envelope
+    })
+    value.queue = operation.then(() => undefined, error => { value.errors.set(key, failure(error)) }).finally(() => { value.busy -= 1; notify(value) })
+    return operation
+  }, [session, notify])
+
+  return {
+    records: session.records, ready: session.ready, saving: session.busy > 0,
+    error: [session.loadError, ...session.errors.values()].filter(Boolean).join(' '),
+    unsafe: !!session.loadError || session.busy > 0 || memory.size > 0 || [...session.branches.values()].some(branch => !branch.durable),
+    save, resolve,
+  }
+}
+
+}

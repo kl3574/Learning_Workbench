@@ -1,0 +1,68 @@
+import { execFileSync } from 'node:child_process'
+import { resolve } from 'node:path'
+import type { ContentRef } from '../../packages/contracts/generated/api-types'
+import type { PracticePackage } from './practiceTestData'
+import type { RestartRuntime } from './restartRuntime'
+
+/** Original unreviewed learnpacks with one shared block and four real parent chains. */
+export function originalSharedRecommendationPackages(): { packages: [PracticePackage, PracticePackage]; block: ContentRef; lessons: [ContentRef, ContentRef] } {
+  const root = resolve(import.meta.dirname, '../..')
+  const program = `
+import base64,json
+from hashlib import sha256
+from io import BytesIO
+import zipfile
+from packages.contracts import domain_models as dm
+from packages.contracts.canonical import canonical_bytes
+from services.api.app.infrastructure.content_repository import reference
+from tests.practice_fixtures import practice_fixture
+f=practice_fixture('recommendationshared',profile='learner')
+second=f.lesson.model_copy(update={'id':'lesson_recommendation_parent_two','title':'同一原创材料的第二精确小节父链'})
+lessons=[f.lesson,second]
+values=[]
+for suffix in ('a','b'):
+    course=f.course.model_copy(update={'id':'course_recommendation_shared_'+suffix,'title':'原创推荐四父链教材 '+suffix,'lesson_refs':[reference(x) for x in lessons],'sections':[dm.CourseSection(id='section_recommendation_'+suffix,title='真实共享父链',lesson_ids=[x.id for x in lessons])]})
+    with zipfile.ZipFile(BytesIO(f.archive)) as archive: payloads={name:archive.read(name) for name in archive.namelist() if name!='manifest.json'}
+    payloads['course.json']=canonical_bytes(course)
+    payloads['lessons/'+second.id+'.r1.json']=canonical_bytes(second)
+    manifest=dm.Manifest(package_id='package_recommendation_shared_'+suffix,profile='learner',created_at='2026-09-15T00:00:00Z',files=[dm.FileEntry(path=path,sha256=sha256(body).hexdigest(),size=len(body),media_type='text/markdown' if path.endswith('.md') else 'application/json',visibility='learner') for path,body in sorted(payloads.items())])
+    payloads['manifest.json']=canonical_bytes(manifest)
+    output=BytesIO()
+    with zipfile.ZipFile(output,'w') as archive:
+        for path,body in sorted(payloads.items()):
+            entry=zipfile.ZipInfo(path,date_time=(2026,9,15,0,0,0));entry.compress_type=zipfile.ZIP_DEFLATED;archive.writestr(entry,body)
+    values.append(dict(archive=base64.b64encode(output.getvalue()).decode(),course=reference(course).model_dump(),lesson=reference(f.lesson).model_dump(),block=reference(f.block).model_dump(),practice=reference(f.practice).model_dump(),questions=[reference(x).model_dump() for x in f.questions]))
+print(json.dumps(dict(packages=values,block=reference(f.block).model_dump(),lessons=[reference(x).model_dump() for x in lessons])))
+`
+  type Encoded = Omit<PracticePackage, 'bytes' | 'profile'> & { archive: string }
+  const value: { packages: [Encoded, Encoded]; block: ContentRef; lessons: [ContentRef, ContentRef] } = JSON.parse(execFileSync(`${root}/.venv/bin/python`, ['-B', '-c', program], { cwd: root, encoding: 'utf8' }))
+  const decode = ({ archive, ...fields }: Encoded): PracticePackage => ({ ...fields, bytes: Buffer.from(archive, 'base64'), profile: 'learner' })
+  return { packages: [decode(value.packages[0]), decode(value.packages[1])], block: value.block, lessons: value.lessons }
+}
+
+/** Controlled synthetic fixture state, NOT an implemented user/HTTP archive feature. */
+export function archiveRecommendationFixture(runtime: RestartRuntime, workspace: string, ref: ContentRef): { scope: string; workspace_id: string; exact_ref: ContentRef; before_lifecycle: string; after_lifecycle: string; changed_rows: number } {
+  const root = resolve(import.meta.dirname, '../..')
+  const program = `
+import json,sys
+from pathlib import Path
+from packages.contracts import domain_models as dm
+from services.api.app.infrastructure.config import Settings
+from services.api.app.infrastructure.database import Database
+from services.api.app.infrastructure.content_repository import ContentRepository,reference
+from services.api.app.application.recommendations import inputs_changed
+database=Database(Settings(data_dir=Path(sys.argv[1])))
+workspace=sys.argv[2];ref=dm.ContentRef.model_validate_json(sys.argv[3])
+with database.transaction() as connection:
+    repository=ContentRepository(connection,workspace)
+    original=repository.load(ref.entity,ref.id,ref.revision)
+    assert reference(original.value)==ref
+    row=connection.execute('SELECT lifecycle,current_revision,kind FROM objects WHERE workspace_id=? AND id=?',(workspace,ref.id)).fetchone()
+    assert row and row['lifecycle']=='active' and row['current_revision']==ref.revision and row['kind']==ref.entity
+    changed=connection.execute("UPDATE objects SET lifecycle='archived' WHERE workspace_id=? AND id=? AND current_revision=? AND kind=? AND lifecycle='active'",(workspace,ref.id,ref.revision,ref.entity)).rowcount
+    assert changed==1
+    inputs_changed(connection,workspace,'fixture.content_archived')
+print(json.dumps(dict(scope='Controlled synthetic SQLite lifecycle fixture with exact workspace/id/revision/hash checked; not a user archive action or public archive HTTP implementation',workspace_id=workspace,exact_ref=ref.model_dump(),before_lifecycle='active',after_lifecycle='archived',changed_rows=changed)))
+`
+  return JSON.parse(execFileSync(`${root}/.venv/bin/python`, ['-B', '-c', program, runtime.data, workspace, JSON.stringify(ref)], { cwd: root, encoding: 'utf8' }))
+}

@@ -1,0 +1,27 @@
+........F                                                                [100%]
+=================================== FAILURES ===================================
+_ test_prerequisite_gap_uses_original_exact_dependency_and_self_report_does_not_fill_it _
+
+    def test_prerequisite_gap_uses_original_exact_dependency_and_self_report_does_not_fill_it():
+        from services.api.app.application.recommendation_rules import derive_recommendations
+        inputs, fixture = rule_inputs()
+        dependent = fixture.concept.model_copy(update={'id': 'concept_advanced', 'prerequisite_ids': [fixture.concept.id]})
+        inputs.catalog.concepts.append(CandidateConcept(ref=reference(dependent), title=dependent.title,
+            skill_dimensions=['recall'], prerequisite_refs=[reference(fixture.concept)], mapping_state='complete', available=True))
+        inputs.catalog.candidates[1].concept_refs = [reference(dependent)]
+        inputs.catalog.candidates[1].prerequisite_refs = [reference(fixture.concept)]
+        inputs.profile.goal_concept_ids = [dependent.id]
+        inputs.profile.self_assessments = [dm.SelfAssessment(concept_id=fixture.concept.id,
+            level='independent_use', updated_at=READ_AT)]
+        inputs.activities = []
+        plan = derive_recommendations(inputs, generated_at=NOW,
+            parameters=RecommendationRuleParameters(review_after_days=3, calibration='uncalibrated'))
+        gaps = [item for item in plan.items if item.reason_codes == ['prerequisite_gap']]
+>       assert len(gaps) == 1 and gaps[0].target_ref == reference(fixture.lesson)
+E       assert (0 == 1)
+E        +  where 0 = len([])
+
+tests/unit/test_recommendation_rules.py:134: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_recommendation_rules.py::test_prerequisite_gap_uses_original_exact_dependency_and_self_report_does_not_fill_it
+1 failed, 8 passed in 0.12s

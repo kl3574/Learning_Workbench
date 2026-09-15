@@ -1,0 +1,45 @@
+{
+  "recorded_at": "2026-09-15T03:06:02.934949+00:00",
+  "scope": "Independent read-only static review of backend-owned M4.2 rules/service/repository/0009 migration/import-worker integration and related rule/service tests against sole PRODUCT_DESIGN v3.0.1; no repository files changed by reviewer in this task.",
+  "sole_spec_sha256": "397829f5267248aedfc60faf7cacbb12669966b1c1d636a909b04189e0cc09dd",
+  "initial_service_sha256": "f1dc44586d1d9e897f615328da54ff4a96f2d67c464a50505a1e05af1d16b1e2",
+  "sources_at_rereview": {
+    "services/api/app/application/recommendation_rules.py": "21353bd576b1c3d73969252ca1d519175fbf52b10921069dcc33e1c8e036802f",
+    "services/api/app/application/recommendations.py": "9b7a1d5a7d46da7ce76c7ecc0960e6409b8c39e9801764fa32947046dc544593",
+    "services/api/app/infrastructure/recommendation_repository.py": "53087042974d419ed867d31f65256cd05450fc8d34fe13e35ab2a8cccb614f92",
+    "migrations/0009_recommendation_projections.sql": "3d0476067d23576c6c15aab61461cf8b64508b454233622d20c4fe8984594265",
+    "services/api/app/infrastructure/import_worker.py": "e44fa5e91eeb48dfbd3ce40a210a6307992afbd791b2b933f7e17bf5d062d66a",
+    "tests/integration/test_recommendations.py": "9e18fa3d38b3e498fa797529ad18b5177a22d9bdf291afc98c8f57f41c6f609c",
+    "tests/unit/test_recommendation_rules.py": "7c0c5272958627e9464ddd04f9bd48995db354ee10c2a8fa36144472906075d2",
+    "tests/integration/test_recommendation_http.py": "8613502ce32e3a27d7dc069021ca33954cd11798b930f691903fd4df5d3f47ca"
+  },
+  "findings": [
+    {
+      "id": "B1",
+      "priority": "P2",
+      "status": "closed-by-static-rereview-and-owner-red-green-evidence",
+      "location": "services/api/app/application/recommendations.py:199-215",
+      "counterexample": "An original successful command with an intact own snapshot/decision/receipt history could not replay its ACK after unrelated new material had corrupted metadata/hash, because fresh load_inputs ran before execute_idempotent.",
+      "repair": "Fresh owner inputs now execute only inside a new operation after strong CAS and current batch/generation checks. Current Policy, workspace ownership and complete immutable history remain ahead of historical ACK replay."
+    },
+    {
+      "id": "B2",
+      "priority": "P2",
+      "status": "closed-by-static-rereview-and-owner-red-green-evidence",
+      "location": "services/api/app/application/recommendations.py:259-268",
+      "counterexample": "An external stop signal arriving during the second actual complete owner read was ignored and the worker published a batch.",
+      "repair": "Check stopping after the second actual read and again after publish before transaction exit; raise _RefreshStopped to roll back all native changes. This is cooperative cancellation at tested boundaries, not an atomic guarantee against any possible signal after final check."
+    }
+  ],
+  "previously_known_not_new": "Rechecked SQL sequence versus embedded sequence, command request hash/applied flag and required applied receipts protections; these were root/owner discoveries and are not attributed to this review.",
+  "other_scope": "Seven finite reasons use actual exact source/context refs; empty cold import does not invent a need; independent evidence qualification and deterministic incorrect provenance stay owner checked. Original submitted_at drives due time, valid_until makes expired GET stale without writes. Current decision overlay preserves immutable order/IDs; cursor binds workspace/course/limit/batch/position and rejects replaced batch. Commands retain exact idempotency instance and history under strong CAS. Recommendation failure cooldown and one maintenance tick before grading/import avoid starving recommendation refresh under a nonempty import queue. No further reachable blocking defect found in this bounded static scope.",
+  "historical_get_integrity_boundary": "No new finding: healthy lifecycle archive/invalidation is a verifiable unavailable state whose historical metadata remains stale. Corrupt current metadata/hash makes the current basis uncheckable; the sole spec does not promise a partial successful GET on integrity failure. Fail-closed read preserves stored snapshots and makes no failed/current writes. ACK replay has the separate explicit original-instance guarantee fixed by B1. No proposal to swallow Policy or own frozen-history integrity failures.",
+  "remaining_evidence_gap": "Static implementation of frozen pagination appears consistent, but inspected Python/E2E tests do not exercise actual server-issued next_cursor, scope/limit/signature isolation or replacement-batch CURSOR_EXPIRED. The frontend has a mocked mismatching-batch test. Root and owner notified to add native pagination acceptance evidence; this is a coverage gap, not a demonstrated implementation defect.",
+  "evidence_limits": "Reviewer ran no pytest, native browser, CI or publication checks. Read actual owner RED/GREEN and final-v2 logs, test sources and final receipt. Owner final-v2 reports 38 passed in 6.84s with ruff/mypy success and equal before/after inputs; these are owner executions, not independent runtime execution. Findings are bound to hashes listed here, not unchanged HEAD acceptance.",
+  "owner_evidence_read": {
+    "independent-boundaries-harness-fixed-red.log": "b6dcee356a2439f173d98624ad4f7e47265f9766c4c4b1381da9e3c0e0dbc08c",
+    "independent-boundaries-green.log": "ab57ca6170ba2889858393c624bae51acfd5c7943f24a40cad520b890e10ac75",
+    "final-v2/final-focused-receipt.json": "6d2bce8e1a17eefb5df7756bf30b3aec9296d9d184576de0741d78281eb39468",
+    "final-v2/final-pytest.log": "e5b9a781a46142f7e2f10ff75d0eb007d50621139e442bf7f0c2b73532cb3edc"
+  }
+}
