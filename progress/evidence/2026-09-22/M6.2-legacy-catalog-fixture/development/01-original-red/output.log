@@ -1,0 +1,56 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_ test_migration_marks_only_old_submissions_legacy_and_recovery_never_rewrites_grades _
+
+tmp_path = PosixPath('<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-legacy-catalog-fixture-fix-v1<PYTEST_ROOT>/pytest-0/test_migration_marks_only_old_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7eeaaf6e5d60>
+
+    def test_migration_marks_only_old_submissions_legacy_and_recovery_never_rewrites_grades(tmp_path, monkeypatch):
+>       storage, old, _, active, immutable, submissions = legacy_storage(tmp_path, monkeypatch)
+                                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_learning_evidence.py:294: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_learning_evidence.py:275: in legacy_storage
+    import_fixture(database, identity, fixture, 'legacy-import')
+tests/integration/test_assessment_attempts.py:36: in import_fixture
+    assert worker.run_once()
+           ^^^^^^^^^^^^^^^^^
+services/api/app/infrastructure/import_worker.py:315: in run_once
+    self.complete_preview(lease, parsed)
+services/api/app/infrastructure/import_worker.py:237: in complete_preview
+    DraftCandidateRepository(connection).register(ResolvedDraftCandidate(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.draft_candidate_repository.DraftCandidateRepository object at 0x7eeaaee6ad50>
+value = ResolvedDraftCandidate(workspace_id='workspace_27076de95c6f466aa551dc09a0f05537', owner='import', source_kind='import'...draft_revision=1, entity='block', candidate_sha256='2778b8dc16ad044ef3d2ae2225a280476fd1d5331c378c39a668cf1ad92fef61'))
+
+    def register(self, value: ResolvedDraftCandidate) -> None:
+        """Called only after the source owner verified this candidate in this transaction.
+    
+        Existing catalog facts never authenticate source payloads or approve content.
+        An exact retry performs no UPDATE/REPLACE and retains all older revisions.
+        """
+        candidate = value.candidate
+        expected = (candidate.draft_id, value.workspace_id, value.owner,
+                    value.source_kind, candidate.entity)
+>       row = self.connection.execute(
+            'SELECT draft_id,workspace_id,owner,source_kind,entity '
+            'FROM draft_candidate_identities WHERE draft_id=?', (candidate.draft_id,),
+        ).fetchone()
+E       sqlite3.OperationalError: no such table: draft_candidate_identities
+
+services/api/app/infrastructure/draft_candidate_repository.py:71: OperationalError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-legacy-catalog-fixture-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-legacy-catalog-fixture-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_learning_evidence.py::test_migration_marks_only_old_submissions_legacy_and_recovery_never_rewrites_grades
+1 failed, 2 warnings in 0.98s

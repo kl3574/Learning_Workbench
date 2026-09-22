@@ -1,0 +1,74 @@
+diff --git a/tests/integration/test_evidence_independent_review.py b/tests/integration/test_evidence_independent_review.py
+index 7bb90dd..59a1871 100644
+--- a/tests/integration/test_evidence_independent_review.py
++++ b/tests/integration/test_evidence_independent_review.py
+@@ -152,7 +152,8 @@ def test_page_uses_latest_successful_grade_without_old_duplicates_and_all_gets_a
+ 
+ def test_late_legacy_binding_failure_rolls_back_and_does_not_starve_safe_import_or_other_grades(tmp_path, monkeypatch):
+     # Real six-migration submit/score/review records, then the actual seventh
+-    # migration. The fixture disables only the not-yet-installed M3.4 hooks.
++    # migration. The fixture disables only later evidence/catalog hooks while
++    # constructing six-migration storage, then restores them before upgrading.
+     storage, _, _, _, original, _ = legacy_storage(tmp_path, monkeypatch, two=True)
+     database, identity, _, _ = storage
+     with database.transaction() as connection:
+diff --git a/tests/integration/test_learning_evidence.py b/tests/integration/test_learning_evidence.py
+index 4bd30dc..062ee83 100644
+--- a/tests/integration/test_learning_evidence.py
++++ b/tests/integration/test_learning_evidence.py
+@@ -23,6 +23,7 @@ from services.api.app.application.practice import PracticeService
+ from services.api.app.infrastructure.config import Settings
+ from services.api.app.infrastructure.content_repository import reference
+ from services.api.app.infrastructure.database import Database
++from services.api.app.infrastructure.draft_candidate_repository import DraftCandidateRepository
+ from services.api.app.infrastructure.import_worker import ImportWorker
+ from services.api.app.infrastructure.security import SessionIdentity, consume_bootstrap, issue_bootstrap_code
+ from services.api.app.main import create_app
+@@ -253,8 +254,9 @@ def test_http_evidence_queries_are_strict_read_only_and_other_active_attempt_blo
+ def legacy_storage(tmp_path, monkeypatch, *, two=False):
+     """Compatibility fixture: real six-migration storage and original grading.
+ 
+-    Only the new M3.4 hooks are disabled while constructing old-style rows; no
+-    grades, signatures or submission JSON are manufactured by this fixture.
++    Only later evidence hooks and candidate registration are disabled while
++    constructing old-style rows; no grades, signatures or submission JSON are
++    manufactured by this fixture. All hooks return before the real upgrade.
+     """
+     import services.api.app.application.evidence as evidence
+     migrations = tmp_path / 'six-migrations'
+@@ -267,7 +269,17 @@ def legacy_storage(tmp_path, monkeypatch, *, two=False):
+     identity = SessionIdentity('session_legacy_fixture', workspace, 'learner', 'unused', '2099-01-01T00:00:00Z')
+     fixture = assessment_fixture('legacyevidence')
+     storage = database, identity, fixture, AssessmentService(database)
++
++    def legacy_producer_registration(repository, value):
++        # Model the six-migration producer, which predates the M6.2 catalog.
++        # Never allow this fixture override to mask a failure on current storage.
++        assert repository.connection.execute('SELECT COUNT(*) FROM schema_migrations').fetchone()[0] == 6
++        assert repository.connection.execute(
++            "SELECT 1 FROM sqlite_master WHERE name='draft_candidate_identities'").fetchone() is None
++        assert value.owner == value.source_kind == 'import'
++
+     with monkeypatch.context() as patch:
++        patch.setattr(DraftCandidateRepository, 'register', legacy_producer_registration)
+         patch.setattr(EvidenceRecovery, 'run_once', lambda self: False)
+         patch.setattr(evidence, 'freeze_submission_prerequisites', lambda *args: None)
+         patch.setattr(evidence, 'checked_submission_basis', lambda *args: None)
+@@ -337,7 +349,16 @@ def test_corrupt_legacy_grade_is_quarantined_without_starving_valid_grade_or_saf
+     assert worker.run_once()
+     assert worker.run_once()
+     assert GradingService(database).result(identity, valid.id).grading_revision == 1
+-    assert ingestion.preview(identity, staged.import_id).status == 'preview_ready'
++    preview = ingestion.preview(identity, staged.import_id)
++    assert preview.status == 'preview_ready'
++    # The legacy-only override ended before migration. The real post-upgrade
++    # producer must already have registered every safe-import candidate.
++    assert preview.preview_refs
++    with database.transaction(immediate=False) as connection:
++        catalog = DraftCandidateRepository(connection)
++        for draft_id in preview.preview_refs:
++            registered = catalog.lookup(identity.workspace_id, draft_id, 1)
++            assert registered.owner == registered.source_kind == 'import'
+     with database.connect() as connection:
+         assert connection.execute('SELECT COUNT(*) FROM learning_evidence_recovery_failures WHERE attempt_id=?', (old.id,)).fetchone()[0] == 2
+         assert connection.execute('SELECT COUNT(*) FROM learning_grade_bindings WHERE attempt_id=?', (old.id,)).fetchone()[0] == 0
