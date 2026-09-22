@@ -292,7 +292,7 @@ class ReviewRepository:
                     or canonical_bytes(record).decode() != row['record_json']
                     or canonical_bytes(receipt).decode() != row['receipt_json']
                     or first != (revision == 1) or row['record_kind'] != ('machine' if first else 'human_decision')
-                    or row['recorded_at'] != (record.checked_at if first else record.decided_at)
+                    or row['recorded_at'] != (record.checked_at if isinstance(record, ReviewMachineRecord) else record.decided_at)
                     or row['previous_revision'] != (None if first else revision - 1)
                     or row['previous_receipt_sha256'] != (None if first else metadata_sha256(records[-1].receipt))):
                 raise integrity()

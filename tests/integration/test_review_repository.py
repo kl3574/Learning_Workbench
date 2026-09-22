@@ -159,7 +159,7 @@ def artifact_fixture(database, connection, value, identifier='artifact_machine',
         purpose=purpose, bound_at=utc_now())
 
 
-def complete_machine(prepared, connection):
+def complete_machine(prepared, connection, *, owner=None, numeric_owner=None):
     database, identity, value = prepared
     create = create_job(connection, identity.workspace_id, value)
     repo = ReviewRepository(connection, identity.workspace_id)
@@ -167,9 +167,10 @@ def complete_machine(prepared, connection):
     assert repo.load(value.review_id).state == 'pending'
     jobs = ReviewJobRepository(connection, identity.workspace_id)
     jobs.claim(value.review_id)
-    owner = ImportService(database)
+    owner = owner or ImportService(database)
     material = owner.read_review_material(connection, identity, value.candidate)
-    numeric = ReviewNumeric(DraftCandidates({'import': owner}), {}).read_review_numeric(
+    numeric = ReviewNumeric(DraftCandidates({value.source_kind: owner}),
+                            {value.source_kind: numeric_owner} if numeric_owner else {}).read_review_numeric(
         connection, identity, value.candidate.draft_id, value.candidate.draft_revision)
     structural = review_structure(material, requested='structure' in value.request.checks)
     evidence = artifact_fixture(database, connection, value)

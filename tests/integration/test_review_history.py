@@ -7,9 +7,11 @@ import pytest
 from packages.contracts.canonical import canonical_bytes, metadata_sha256, sha256_bytes
 from services.api.app.application.errors import ApiError
 from services.api.app.application.review_history_models import (
-    ReviewDecisionCommand, ReviewDecisionRecord, ReviewMachineRecord,
+    ReviewCancelCommand, ReviewDecisionCommand, ReviewDecisionRecord, ReviewMachineRecord,
 )
+from services.api.app.application.review_models import ReviewJobInput
 from services.api.app.infrastructure.database import utc_now
+from services.api.app.infrastructure.review_job_repository import ReviewJobRepository
 from services.api.app.infrastructure.review_repository import ReviewRepository
 from tests.integration.test_review_repository import (
     prepared, artifact_fixture, complete_machine, create_job,
@@ -287,3 +289,86 @@ def test_revalidation_of_constructed_values_never_warns_private_input(prepared):
         assert private not in str(caught.value) and private not in repr(caught.value)
         assert not emitted, 'Revalidation must not emit serializer warnings containing private input'
         assert quality_bytes(connection) == before
+
+
+@pytest.mark.parametrize('kind', ['single', 'assessment'])
+def test_generated_owner_history_preserves_exact_numeric_observation_without_running_it(tmp_path, kind, monkeypatch):
+    from tests.integration.test_authoring_numeric_service import generated as single_fixture
+    from tests.integration.test_authoring_group_numeric_service import generated_group
+    from tests.integration.test_review_job_lifecycle import PreparedReviewFixture
+
+    # Existing producers use explicit controlled loopback model bytes. This is
+    # neither a vendor request nor mathematical review or numeric execution.
+    state = single_fixture.__wrapped__(tmp_path) if kind == 'single' else generated_group(tmp_path, kind)
+    database, identity, owner, numeric, candidate, runtime = state
+    source_kind = 'authoring_single' if kind == 'single' else 'authoring_group'
+    value = ReviewJobInput(version='draft-review-job-v1', workspace_id=identity.workspace_id,
+        review_id='synthetic_generated_review', source_kind=source_kind, candidate=candidate.model_dump(),
+        request={'expected_revision': candidate.draft_revision, 'checks': ['structure', 'numerical_examples'],
+                 'reviewer_note': 'Synthetic persistence fixture; no actual review decision'},
+        creator_session_id=identity.id, rules_version='draft-review-rules-v1', created_at=utc_now())
+    safe = PreparedReviewFixture(database, identity, value)
+    def forbidden(*args, **kwargs):
+        pytest.fail('Persistence must not prepare or execute numeric work')
+    for method in ('prepare', 'check', 'manifest_document', 'run_checked'):
+        monkeypatch.setattr(runtime, method, forbidden, raising=False)
+    with database.transaction() as connection:
+        repo, machine, _ = complete_machine(safe, connection, owner=owner, numeric_owner=numeric)
+        repo.append_machine(machine)
+        record, command = decision_fixture(safe, connection, machine, machine, attachments=0)
+        repo.append_decision(record, command)
+        read = repo.load(value.review_id)
+        assert read.records[0].material.payload.record == machine.material.payload.record
+        assert read.records[0].numeric == machine.numeric and machine.numeric.checks == []
+        assert machine.numeric.coverage == 'authoring_numeric_ledger'
+        assert machine.numeric.candidate_record_sha256 == machine.material.owner_record_sha256
+        assert read.receipt.independent_pedagogy == 'NOT_RUN'
+
+
+def test_running_cancel_original_ack_survives_later_terminal_and_terminal_noop(prepared):
+    database, identity, value = prepared
+    with database.transaction() as connection:
+        create = create_job(connection, identity.workspace_id, value)
+        repo = ReviewRepository(connection, identity.workspace_id)
+        repo.bind(value, create)
+        jobs = ReviewJobRepository(connection, identity.workspace_id)
+        jobs.claim(value.review_id)
+        ack = jobs.cancel(value.review_id, 2)
+        original = ReviewCancelCommand(workspace_id=identity.workspace_id, actor_id=identity.id,
+            route=f'POST /jobs/{value.review_id}/cancel', command_key='synthetic_running_cancel',
+            review_id=value.review_id, basis_revision=2, resulting_revision=3, recorded_at=utc_now(),
+            command_kind='cancel', request={'expected_revision': 2}, ack=ack.model_dump())
+        repo.record_cancel(original)
+        jobs.transition(jobs.load(value.review_id), 'cancelled')
+        terminal_ack = jobs.cancel(value.review_id, 1)
+        terminal = original.model_copy(update={'command_key': 'synthetic_terminal_cancel', 'basis_revision': 4,
+            'resulting_revision': 4, 'request': original.request.model_copy(update={'expected_revision': 1}),
+            'ack': type(original.ack).model_validate(terminal_ack.model_dump()), 'recorded_at': utc_now()})
+        repo.record_cancel(terminal)
+        assert repo.load(value.review_id).state == 'pending'
+        assert repo.load(value.review_id).receipt is None
+        assert repo.replay(original.actor_id, original.route, original.command_key, original.request) == original
+        assert repo.replay(terminal.actor_id, terminal.route, terminal.command_key, terminal.request) == terminal
+        assert original.ack.status == 'running' and original.ack.revision == 3
+        assert terminal.ack.status == 'cancelled' and terminal.ack.revision == 4
+
+
+@pytest.mark.parametrize('model_name', ['machine', 'decision', 'command', 'history', 'artifact', 'receipt'])
+def test_closed_persistence_values_hide_private_diagnostics(prepared, model_name):
+    from pydantic import ValidationError
+
+    database, _, value = prepared
+    with database.transaction() as connection:
+        repo, machine, _ = complete_machine(prepared, connection)
+        repo.append_machine(machine)
+        decision, command = decision_fixture(prepared, connection, machine, machine)
+        values = {'machine': machine, 'decision': decision, 'command': command,
+                  'history': repo.load(value.review_id), 'artifact': machine.report, 'receipt': machine.receipt}
+        model = values[model_name]
+        assert repr(model) == type(model).__name__ + '()' and str(model) == ''
+        marker = 'SYNTHETIC_PRIVATE_REVIEW_VALIDATION_BODY'
+        malformed = model.model_dump() | {'unexpected_private_body': marker}
+        with pytest.raises(ValidationError) as caught:
+            type(model).model_validate(malformed)
+        assert marker not in str(caught.value) and marker not in repr(caught.value)
+        assert 'input_value' not in str(caught.value)
