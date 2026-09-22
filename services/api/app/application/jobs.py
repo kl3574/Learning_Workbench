@@ -38,6 +38,14 @@ def outbound_source_kind(connection: sqlite3.Connection, workspace_id: str, job_
     return str(row['kind'])
 
 
+def artifact_job_kind(connection: sqlite3.Connection, workspace_id: str, job_id: str) -> str:
+    """Jobs-owned kind fact for an artifact; never a content permission grant."""
+    from .errors import ApiError
+    if not connection.in_transaction:
+        raise ApiError(409, 'TRANSACTION_REQUIRED', '附件任务核验需要有效事务。')
+    return outbound_source_kind(connection, workspace_id, job_id)
+
+
 def outbound_lease_active(connection: sqlite3.Connection, workspace_id: str, job_id: str, now: str) -> bool:
     """A live owner lease excludes recovery, even after cancellation was requested.
 

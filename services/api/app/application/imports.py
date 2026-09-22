@@ -29,12 +29,14 @@ from ..infrastructure.idempotency import execute_idempotent
 from ..infrastructure.import_mapping import object_key, remap_import
 from ..infrastructure.import_repository import ImportRepository, identifier, json_object, json_text
 from ..infrastructure.provenance_repository import ProvenanceRepository
-from ..infrastructure.security import SessionIdentity, author_execution_identity, guard_subject_access
+from ..infrastructure.security import SessionIdentity, author_execution_identity, current_session_identity, guard_subject_access
 from .content import ContentService
 from .errors import ApiError
 from .draft_candidate_models import ResolvedDraftCandidate, match_candidate
 from .policy import Policy
 from .review_material_models import CheckedReviewMaterial, ImportReviewMaterial, checked_material
+
+IMPORT_ARTIFACT_PROFILES = frozenset({'import_original', 'import_asset', 'untrusted_quality_receipt', 'import_receipt'})
 
 
 def invalid() -> ApiError:
@@ -371,12 +373,18 @@ class ImportService:
             raise ApiError(403, "POLICY_DENIED", "此作者私有附件需要作者角色。")
         if row["visibility"] == "author_private":
             Policy(repository.connection, identity.workspace_id).check("private_artifact")
-        metadata = json_object(row["manifest_json"])
-        info = repository.blob(row["blob_sha256"])
-        if metadata.get("version") != 1 or metadata.get("sha256") != info.sha256 or metadata.get("size") != info.size:
-            raise damaged()
-        return row, DownloadArtifact(artifact_id=id, filename=metadata["filename"], media_type=metadata["media_type"],
-                                      size=info.size, sha256=info.sha256, download_path=f"/api/v1/artifacts/{id}/download")
+        try:
+            metadata = json_object(row["manifest_json"])
+            info = repository.blob(row["blob_sha256"])
+            if (set(metadata) != {'version', 'filename', 'media_type', 'size', 'sha256'}
+                    or type(metadata['version']) is not int or metadata['version'] != 1
+                    or type(metadata['size']) is not int or metadata['size'] != info.size
+                    or metadata['sha256'] != info.sha256):
+                raise damaged()
+            return row, DownloadArtifact(artifact_id=id, filename=metadata["filename"], media_type=metadata["media_type"],
+                                          size=info.size, sha256=info.sha256, download_path=f"/api/v1/artifacts/{id}/download")
+        except (ValueError, TypeError, KeyError):
+            raise damaged() from None
 
     def source(self, identity: SessionIdentity, id: str) -> SourceResponse:
         with self._access(identity) as repository:
@@ -392,10 +400,71 @@ class ImportService:
                                   warnings=[dm.Warning.model_validate(value) for value in metadata.get("warnings", [])], artifact=artifact)
 
     def download(self, identity: SessionIdentity, id: str) -> tuple[bytes, DownloadArtifact]:
+        """Compatibility port for existing trusted in-process Import callers.
+
+        HTTP and new owners must use read_artifact through ArtifactsService,
+        which revalidates the actual session in the caller transaction.
+        """
         with self._access(identity) as repository:
-            row, artifact = self._artifact(repository, identity, id)
-            imported = repository.from_job(row["job_id"])
-            return self.frozen_store(imported).read(artifact.sha256, expected_size=artifact.size), artifact
+            return self._download(repository, identity, id)
+
+    def read_artifact(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                      identifier: str) -> tuple[bytes, DownloadArtifact]:
+        current = current_session_identity(connection, identity)
+        ContentRepository(connection, current.workspace_id).require_workspace()
+        guard_subject_access(connection, current.workspace_id)
+        return self._download(ImportRepository(connection, current.workspace_id), current, identifier)
+
+    def _download(self, repository: ImportRepository, identity: SessionIdentity,
+                  identifier: str) -> tuple[bytes, DownloadArtifact]:
+        from .artifacts import unavailable_owner
+        from .jobs import artifact_job_kind
+        row, artifact = self._artifact(repository, identity, identifier)
+        if row['profile'] not in IMPORT_ARTIFACT_PROFILES or artifact_job_kind(
+                repository.connection, identity.workspace_id, row['job_id']) != 'import':
+            raise unavailable_owner()
+        imported = repository.from_job(row['job_id'])
+        self._artifact_origin(repository, imported, row, artifact)
+        return self.frozen_store(imported).read(artifact.sha256, expected_size=artifact.size), artifact
+
+    def _artifact_origin(self, repository: ImportRepository, imported: sqlite3.Row,
+                         row: sqlite3.Row, artifact: DownloadArtifact) -> None:
+        """Bind the real profile to its recorded Import source, never only a blob."""
+        try:
+            source = repository.connection.execute('SELECT id FROM sources WHERE id=? AND workspace_id=?',
+                (imported['source_id'], repository.workspace_id)).fetchone()
+            metadata, request = json_object(imported['source_metadata']), json_object(imported['input_json'])
+            if (source is None or request['source_id'] != imported['source_id']
+                    or imported['input_sha256'] != imported['blob_sha256']):
+                raise damaged()
+            profile = row['profile']
+            if profile == 'import_original':
+                if (metadata['artifact_id'] != artifact.artifact_id or imported['input_sha256'] != artifact.sha256
+                        or metadata['visibility'] != row['visibility'] or metadata['filename'] != artifact.filename
+                        or request['filename'] != artifact.filename or imported['media_type'] != artifact.media_type):
+                    raise damaged()
+            elif profile in {'import_asset', 'untrusted_quality_receipt'}:
+                expected = {'artifact_id': artifact.artifact_id, 'sha256': artifact.sha256, 'size': artifact.size}
+                if profile == 'import_asset':
+                    matches = [(path, value) for path, value in metadata['assets'].items()
+                               if value['artifact_id'] == artifact.artifact_id]
+                    if len(matches) != 1 or matches[0][1] != expected or safe_filename(matches[0][0]) != artifact.filename:
+                        raise damaged()
+                elif (metadata['untrusted_quality_receipt'] != expected or row['visibility'] != metadata['visibility']
+                        or artifact.filename != 'untrusted-quality-receipt.json' or artifact.media_type != 'application/json'):
+                    raise damaged()
+            elif profile == 'import_receipt':
+                preview = self._preview_data(imported)
+                result = json_object(imported['result_json'])
+                if (preview['commit_result']['migration_receipt_id'] != artifact.artifact_id
+                        or result['migration_receipt_id'] != artifact.artifact_id
+                        or row['visibility'] != preview_visibility(imported)
+                        or artifact.filename != 'import-receipt.json' or artifact.media_type != 'application/json'):
+                    raise damaged()
+            else:
+                raise damaged()
+        except (ValueError, TypeError, KeyError, AttributeError):
+            raise damaged() from None
 
     def _body_payloads(self, repository: ImportRepository, row: sqlite3.Row, preview: dict[str, Any]) -> dict[str, bytes]:
         output = {}

@@ -107,6 +107,23 @@ def author_execution_identity(connection: sqlite3.Connection, workspace_id: str,
     return SessionIdentity(row['id'], row['workspace_id'], row['role'], '', row['expires_at'])
 
 
+def current_session_identity(connection: sqlite3.Connection, identity: SessionIdentity) -> SessionIdentity:
+    """Revalidate an authenticated caller in the transaction that reads material.
+
+    Identity is not authority to retain an old role or a revoked session. No
+    missing-session fallback or token/CSRF material is returned to the reader.
+    """
+    if not connection.in_transaction:
+        raise ApiError(409, 'TRANSACTION_REQUIRED', '当前身份核验需要有效事务。')
+    row = connection.execute(
+        'SELECT id,workspace_id,role,expires_at FROM local_sessions '
+        'WHERE id=? AND workspace_id=? AND revoked_at IS NULL AND expires_at>?',
+        (identity.id, identity.workspace_id, utc_now())).fetchone()
+    if row is None:
+        raise ApiError(401, 'SESSION_REQUIRED', '本机会话已失效，请重新使用启动器。')
+    return SessionIdentity(row['id'], row['workspace_id'], row['role'], '', row['expires_at'])
+
+
 def active_independent_attempt(connection: sqlite3.Connection, workspace_id: str) -> str | None:
     from ..application.assessment_access import AssessmentAccess
     return AssessmentAccess(connection, workspace_id).active_independent()
