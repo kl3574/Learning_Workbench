@@ -5,6 +5,9 @@ import hashlib
 import io
 import os
 import stat
+import subprocess
+import sys
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import FrozenInstanceError
 
@@ -219,18 +222,45 @@ def test_nonregular_or_aliased_targets_are_refused(tmp_path, operation, kind):
     assert_no_temporary_files(tmp_path)
 
 
+def blob_fd_probe(tmp_path, fault='none'):
+    # The process running the full suite owns unrelated asynchronous resources.
+    # Compare exact descriptor identities in a fresh process, keeping the real
+    # twenty unsafe operations and their original error/temporary-file checks.
+    return subprocess.run([sys.executable, '-m', 'tests.blob_fd_probe', str(tmp_path), fault],
+        cwd=Path(__file__).resolve().parents[2], capture_output=True, text=True, timeout=10, close_fds=True)
+
+
 def test_repeated_unsafe_reads_and_writes_do_not_leak_file_descriptors(tmp_path):
-    store = BlobStore(tmp_path)
-    info = store.write(b"data")
-    path = tmp_path / info.relative_path
-    path.unlink()
-    path.mkdir(mode=0o700)
-    before = len(os.listdir("/proc/self/fd"))
-    for _ in range(10):
-        assert_error(lambda: store.read(info.sha256), 503, "BLOB_STORAGE_UNAVAILABLE")
-        assert_error(lambda: store.write(b"data"), 503, "BLOB_STORAGE_UNAVAILABLE")
-    assert len(os.listdir("/proc/self/fd")) == before
+    result = blob_fd_probe(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
     assert_no_temporary_files(tmp_path)
+
+
+@pytest.mark.parametrize('fault', ['leak', 'close', 'replace'])
+def test_blob_fd_probe_rejects_leaks_foreign_closure_and_same_count_replacement(tmp_path, fault):
+    result = blob_fd_probe(tmp_path, fault)
+    assert result.returncode == 1
+    assert 'Blob descriptor identities changed' in result.stderr
+
+
+def test_blob_fd_probe_is_unaffected_by_actual_parent_descriptor_closure(tmp_path, monkeypatch):
+    descriptor = os.open('/dev/null', os.O_RDONLY)
+    closed = False
+    real_run = subprocess.run
+
+    def close_parent(*args, **kwargs):
+        nonlocal closed
+        os.close(descriptor)
+        closed = True
+        return real_run(*args, **kwargs)
+
+    monkeypatch.setattr(subprocess, 'run', close_parent)
+    try:
+        result = blob_fd_probe(tmp_path)
+        assert closed and result.returncode == 0, result.stdout + result.stderr
+    finally:
+        if not closed:
+            os.close(descriptor)
 
 
 def test_predictable_name_collision_does_not_remove_someone_elses_temporary(tmp_path, monkeypatch):
