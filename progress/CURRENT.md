@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-22T01:31:03Z；规范 SHA-256：`30220c34fe7312887f5bcb1c67406c9638f1719ff3ed7bc9e95d7d5085b5d924`
+更新：2026-09-22T01:47:01Z；规范 SHA-256：`30220c34fe7312887f5bcb1c67406c9638f1719ff3ed7bc9e95d7d5085b5d924`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED
 实施：IN_PROGRESS；当前任务：M6.1；下一任务：M6.1
 
-发布首例题切片源码和原始证据的draft PR，实际回读CI；继续M6.1未完成的小节/习题集/测验生成，先完成可复用题面—私解结构预校验及具名候选契约。真实隔离权限及托管InputProof分别保留阻塞。
+PR53 draft/open/unmerged已发布并回读；等待实际CI，同时继续M6.1小节/习题集/测验生成，先合入保留Import行为的题面—私解结构预校验，完成具名组合候选契约。真实隔离权限及托管InputProof分别保留阻塞。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -97,7 +97,7 @@
 - M6.1_local: LOCAL_FIRST_SLICE_VERIFIED_FULL_STAGE_INCOMPLETE：80986ea固定903非progress源。实际1927Python PASS1ENV SKIP396.73s/2依赖弃用警告、401web PASS72files、96完整native PASS8.3m；Ruff全仓、mypy162、web lint/types/build和spec75生成均PASS。八非浏览器门禁逐Git/blob/mode前后不变；native仅4已知PNG直接输出变化，44前后原件保全后按精确hash恢复，原unchanged=false不改。真实7HTTP、loopback同Job授权→候选、独立数值拒绝/批准、安全取消与1440/390已验证；数值实际environment_unavailable/BLOCKED，1SKIP不是执行成功。生产proof仍空、平台真实DeepSeek/搜索/数学/来源/教学验收未通过；其他M6.1生成类型未实现，不能关闭M6.1。
 - M5.4_exact_81d_ci: 11 success / 1 failure, push93+1FAIL vs PR94PASS; exact same tree, distinct commits; raw evidence imported locally
 - M6.1_fixed_gates: LOCAL_FIRST_SLICE_VERIFIED_FULL_STAGE_INCOMPLETE：80986ea固定903非progress源。实际1927Python PASS1ENV SKIP396.73s/2依赖弃用警告、401web PASS72files、96完整native PASS8.3m；Ruff全仓、mypy162、web lint/types/build和spec75生成均PASS。八非浏览器门禁逐Git/blob/mode前后不变；native仅4已知PNG直接输出变化，44前后原件保全后按精确hash恢复，原unchanged=false不改。真实7HTTP、loopback同Job授权→候选、独立数值拒绝/批准、安全取消与1440/390已验证；数值实际environment_unavailable/BLOCKED，1SKIP不是执行成功。生产proof仍空、平台真实DeepSeek/搜索/数学/来源/教学验收未通过；其他M6.1生成类型未实现，不能关闭M6.1。
-- M6.1_remote: NOT_PUBLISHED：80986ea本地源码及待提交证据已验证；当前远端无该分支/PR，GitHub身份kl3574已回读，尚未运行M6.1 CI。
+- M6.1_remote: PUBLISHED：79908fb公开分支、PR53 draft/open/unmerged、父分支M5.4及规范SHA均实际回读。第一次直连443失败，命令级显式代理后推送成功；新CI以实际run回读为准，不由本地门禁推定。
 - M6.1_next_precheck: ISOLATED_UNCOMMITTED：在809基线独立工作树整理既有Import题面/私解结构校验，38focused+145既有Import回归和scoped lint/mypy实际PASS；原mypy变量复用失败保留。尚未合入主实施分支，不代表题目生成、数学或教学验收。
 
 ## 阻塞与待决项
