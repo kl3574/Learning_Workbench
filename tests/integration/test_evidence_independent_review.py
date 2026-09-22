@@ -152,7 +152,8 @@ def test_page_uses_latest_successful_grade_without_old_duplicates_and_all_gets_a
 
 def test_late_legacy_binding_failure_rolls_back_and_does_not_starve_safe_import_or_other_grades(tmp_path, monkeypatch):
     # Real six-migration submit/score/review records, then the actual seventh
-    # migration. The fixture disables only the not-yet-installed M3.4 hooks.
+    # migration. The fixture disables only later evidence/catalog hooks while
+    # constructing six-migration storage, then restores them before upgrading.
     storage, _, _, _, original, _ = legacy_storage(tmp_path, monkeypatch, two=True)
     database, identity, _, _ = storage
     with database.transaction() as connection:
