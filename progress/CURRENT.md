@@ -2,9 +2,9 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-22T08:06:59Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
+更新：2026-09-22T08:10:21Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
 
-仓库发布：VERIFIED；Issues 同步：LOCAL_UPDATE_PENDING_REMOTE_READBACK
+仓库发布：VERIFIED；Issues 同步：VERIFIED
 实施：IN_PROGRESS；当前任务：M6.2；下一任务：M6.2
 
 同步并回读完整材料端口及9eb CI真实失败；继续原数值观察冻结/历史重验，再接review Job/read/作者decision及发布/版本/影响/恢复。生产proof和数值环境阻塞保留。
@@ -133,6 +133,7 @@
 - M6.2_producer_current_ci: 07:42:46–47一次精确run/jobs快照：0cf8 push35700015507与PR35700019212均completed/cancelled，各4success及browser/integration cancelled；9eb9 push35700593259与PR35700598088均in_progress，各3success/3in_progress。24 jobs无failure，未取日志，actual checkout NOT_YET_READ；不以run head代替checkout、不推定终态。
 - M6.2_producer_latest_ci: 07:56:53一次追加精确run/jobs快照：9eb9 push35700593259与PR35700598088均in_progress，各5success/仅browser运行；无失败job，因此未下载日志。actual checkout未核，不推定最终结果。07:42的旧快照和0cf8取消结果分别保留。
 - M6.2_9eb_terminal_ci: 9eb精确push35700593259/PR35700598088现已completed/failure，各5success/1browser failure。原07:56运行中快照保留；本次仅run/jobs终态，失败日志/实际checkout/附件另行采集，不将run head当checkout、不推定与旧Tutor同因。
+- M6.2_material_publication: VERIFIED：b70ab4a分支/ref/PR55 head、PR说明及Issue31进度正文已由独立GET核实；PR draft/open/unmerged，Issue原身份/状态/标签/里程碑及进度块外正文保留。全部新增提交blob扫描通过。初次PR head暂旧、随后精确一致，没有重复push。新CI push35703221981/PR35703225712仅08:09初态queued，无终态或checkout结论。
 
 ## 阻塞与待决项
 
