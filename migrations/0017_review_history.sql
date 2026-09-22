@@ -91,9 +91,21 @@ CREATE TABLE review_commands(
  ack_sha256 TEXT NOT NULL CHECK(length(ack_sha256)=64 AND ack_sha256 NOT GLOB '*[^a-f0-9]*'),
  basis_revision INTEGER NOT NULL CHECK(typeof(basis_revision)='integer' AND basis_revision>=1),
  resulting_revision INTEGER NOT NULL CHECK(typeof(resulting_revision)='integer' AND resulting_revision>=1),
+ job_basis_revision INTEGER GENERATED ALWAYS AS
+  (CASE WHEN command_kind='cancel' THEN basis_revision END) VIRTUAL,
+ job_resulting_revision INTEGER GENERATED ALWAYS AS
+  (CASE WHEN command_kind IN ('create','cancel') THEN resulting_revision END) VIRTUAL,
+ review_basis_revision INTEGER GENERATED ALWAYS AS
+  (CASE WHEN command_kind='decision' THEN basis_revision END) VIRTUAL,
+ review_resulting_revision INTEGER GENERATED ALWAYS AS
+  (CASE WHEN command_kind='decision' THEN resulting_revision END) VIRTUAL,
  recorded_at TEXT NOT NULL,
  PRIMARY KEY(workspace_id,actor_id,route,command_key),
  FOREIGN KEY(review_id,workspace_id) REFERENCES review_jobs(review_id,workspace_id),
+ FOREIGN KEY(review_id,job_basis_revision) REFERENCES job_events(job_id,seq),
+ FOREIGN KEY(review_id,job_resulting_revision) REFERENCES job_events(job_id,seq),
+ FOREIGN KEY(review_id,review_basis_revision) REFERENCES review_revisions(review_id,revision),
+ FOREIGN KEY(review_id,review_resulting_revision) REFERENCES review_revisions(review_id,revision),
  CHECK((command_kind='create' AND resulting_revision=1)
     OR (command_kind='decision' AND resulting_revision=basis_revision+1)
     OR (command_kind='cancel' AND resulting_revision IN (basis_revision,basis_revision+1)))
@@ -110,9 +122,7 @@ WHEN NOT EXISTS(
        AND EXISTS(SELECT 1 FROM review_revisions r WHERE r.review_id=j.review_id
         AND r.revision=NEW.resulting_revision AND r.previous_revision=NEW.basis_revision
         AND r.record_kind='human_decision'))
-   OR (NEW.command_kind='cancel' AND NEW.route='POST /jobs/'||j.review_id||'/cancel'
-       AND EXISTS(SELECT 1 FROM job_events e WHERE e.job_id=j.review_id AND e.seq=NEW.basis_revision)
-       AND EXISTS(SELECT 1 FROM job_events e WHERE e.job_id=j.review_id AND e.seq=NEW.resulting_revision)))
+   OR (NEW.command_kind='cancel' AND NEW.route='POST /jobs/'||j.review_id||'/cancel'))
 )
 BEGIN SELECT RAISE(ABORT,'review command binding mismatch'); END;
 
