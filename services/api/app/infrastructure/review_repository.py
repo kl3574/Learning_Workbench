@@ -15,6 +15,7 @@ from ..application.review_history_models import (
     ReviewBinding, ReviewCommand, ReviewCreateCommand, ReviewCancelCommand, ReviewCancelAck, instant,
 )
 from ..application.review_models import ReviewJobInput
+from ..import_dto import JobSnapshot
 from .draft_candidate_repository import DraftCandidateRepository
 from .review_job_repository import ReviewJobRepository
 
@@ -129,7 +130,7 @@ class ReviewRepository:
                 raise integrity()
         elif isinstance(command, ReviewCancelCommand):
             self.jobs.verify_cancel_ack(value.review_id, command.request.expected_revision,
-                command.ack, command.basis_revision, command.recorded_at)
+                validated(JobSnapshot, command.ack), command.basis_revision, command.recorded_at)
         else:
             raise integrity()
 
