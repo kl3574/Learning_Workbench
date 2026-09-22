@@ -155,6 +155,7 @@ def complete_machine(prepared, connection):
     create = create_job(connection, identity.workspace_id, value)
     repo = ReviewRepository(connection, identity.workspace_id)
     repo.bind(value, create)
+    assert repo.load(value.review_id).state == 'pending'
     jobs = ReviewJobRepository(connection, identity.workspace_id)
     jobs.claim(value.review_id)
     owner = ImportService(database)
@@ -179,7 +180,6 @@ def test_machine_revision_preserves_complete_inputs_and_checked_job_terminal(pre
     database, identity, value = prepared
     with database.transaction() as connection:
         repo, record, create = complete_machine(prepared, connection)
-        assert repo.load(value.review_id).state == 'pending'
         repo.append_machine(record)
         history = repo.load(value.review_id)
         assert history.state == 'ready' and history.records == [record] and history.receipt == record.receipt

@@ -9,11 +9,15 @@ from typing import TypeVar
 from uuid import uuid4
 
 from pydantic import BaseModel, TypeAdapter
-from packages.contracts.canonical import canonical_bytes, sha256_bytes, strict_json
+from packages.contracts.canonical import canonical_bytes, metadata_sha256, sha256_bytes, strict_json
 from ..application.errors import ApiError
 from ..application.review_history_models import (
-    ReviewBinding, ReviewCommand, ReviewCreateCommand, ReviewCancelCommand, ReviewCancelAck, instant,
+    ReviewBinding, ReviewCommand, ReviewCreateCommand, ReviewCancelCommand, ReviewCancelAck,
+    ReviewDecisionCommand, ReviewArtifactBinding, ReviewMachineRecord, ReviewDecisionRecord,
+    ReviewRecord, ReviewHistory, StoredReviewReceipt, instant, machine_job_result,
 )
+from ..application.review_checks import review_structure
+from ..application.review_material_models import ImportReviewMaterial
 from ..application.review_models import ReviewJobInput
 from ..import_dto import JobSnapshot
 from .draft_candidate_repository import DraftCandidateRepository
@@ -21,6 +25,7 @@ from .review_job_repository import ReviewJobRepository
 
 M = TypeVar('M', bound=BaseModel)
 COMMAND = TypeAdapter(ReviewCommand)
+RECORD = TypeAdapter(ReviewRecord)
 
 
 def integrity() -> ApiError:
@@ -96,9 +101,7 @@ class ReviewRepository:
 
     def binding(self, identifier: str) -> ReviewBinding:
         """Internal binding read, including queued/cancelled jobs with no receipt."""
-        value = self._binding(identifier)
-        self._commands(value)
-        return value
+        return self.load(identifier).binding
 
     def _command(self, row: sqlite3.Row) -> ReviewCommand:
         try:
@@ -114,7 +117,8 @@ class ReviewRepository:
         except (ValueError, TypeError, KeyError):
             raise integrity() from None
 
-    def _verify_command(self, command: ReviewCommand, binding: ReviewBinding) -> None:
+    def _verify_command(self, command: ReviewCommand, binding: ReviewBinding,
+                        records: list[ReviewRecord] | None = None) -> None:
         value = binding.input
         if (command.workspace_id != self.workspace_id or command.review_id != value.review_id
                 or instant(command.recorded_at) < instant(value.created_at)):
@@ -132,15 +136,24 @@ class ReviewRepository:
             self.jobs.verify_cancel_ack(value.review_id, command.request.expected_revision,
                 validated(JobSnapshot, command.ack), command.basis_revision, command.recorded_at)
         else:
-            raise integrity()
+            matches = [record for record in records or [] if isinstance(record, ReviewDecisionRecord)
+                       and record.receipt.revision == command.resulting_revision]
+            if len(matches) != 1:
+                raise integrity()
+            record = matches[0]
+            if (command.actor_id != record.actor_session_id or command.request != record.request
+                    or command.ack != record.receipt or command.recorded_at != record.decided_at):
+                raise integrity()
 
-    def _commands(self, binding: ReviewBinding) -> list[ReviewCommand]:
+    def _commands(self, binding: ReviewBinding, records: list[ReviewRecord] | None = None) -> list[ReviewCommand]:
         rows = self.conn.execute('SELECT * FROM review_commands WHERE review_id=? ORDER BY rowid',
                                  (binding.input.review_id,)).fetchall()
         commands = [self._command(row) for row in rows]
         for command in commands:
-            self._verify_command(command, binding)
-        if sum(isinstance(command, ReviewCreateCommand) for command in commands) != 1:
+            self._verify_command(command, binding, records)
+        decisions = [command.resulting_revision for command in commands if isinstance(command, ReviewDecisionCommand)]
+        if (sum(isinstance(command, ReviewCreateCommand) for command in commands) != 1
+                or sorted(decisions) != list(range(2, len(records or []) + 1))):
             raise integrity()
         return commands
 
@@ -196,3 +209,181 @@ class ReviewRepository:
         if canonical_bytes(body) != canonical_bytes(command.request):
             raise ApiError(409, 'IDEMPOTENCY_CONFLICT', '原命令键已用于不同的完整命令。')
         return command
+
+    def _verify_artifact(self, value: ReviewArtifactBinding) -> None:
+        row = self.conn.execute('SELECT a.*,b.size AS blob_size FROM artifacts a JOIN content_blobs b '
+            'ON a.blob_sha256=b.sha256 WHERE a.id=? AND a.workspace_id=?',
+            (value.artifact.artifact_id, self.workspace_id)).fetchone()
+        if (row is None or value.workspace_id != self.workspace_id or row['job_id'] != value.source_job_id
+                or row['profile'] != value.profile or row['blob_sha256'] != value.artifact.sha256
+                or row['blob_size'] != value.artifact.size
+                or sha256_bytes(row['manifest_json'].encode()) != value.manifest_sha256):
+            raise integrity()
+        # This is a durable byte/row association, not physical file validation,
+        # profile/owner authentication or permission to download the artifact.
+
+    def _verify_machine(self, record: ReviewMachineRecord, binding: ReviewBinding) -> None:
+        value = binding.input
+        row = self.jobs.load(value.review_id)
+        if (record.workspace_id != self.workspace_id or record.review_id != value.review_id
+                or record.input_sha256 != metadata_sha256(value) or record.material.candidate != value.candidate
+                or record.material.owner != binding.owner or record.material.source_kind != value.source_kind
+                or record.receipt.created_at != value.created_at
+                or record.structural_report != review_structure(record.material, requested='structure' in value.request.checks)
+                or row['status'] != 'completed' or row['revision'] != record.job_revision or row['cancel_requested']
+                or row['result_json'] != canonical_bytes(machine_job_result(record)).decode()
+                or instant(record.checked_at) < instant(row['created_at'])
+                or instant(record.checked_at) > instant(row['updated_at'])):
+            raise integrity()
+        payload = record.material.payload
+        if not isinstance(payload, ImportReviewMaterial):
+            if (record.numeric.candidate_record_sha256 != record.material.owner_record_sha256
+                    or record.numeric.source_job_id != payload.record.source_job_id
+                    or record.numeric.provider_receipt_id != payload.record.provider_receipt_id):
+                raise integrity()
+        self._verify_artifact(record.report)
+
+    def _verify_decision(self, record: ReviewDecisionRecord, machine: ReviewMachineRecord,
+                         previous: ReviewRecord, binding: ReviewBinding) -> None:
+        if (record.workspace_id != self.workspace_id or record.review_id != binding.input.review_id
+                or record.candidate != binding.input.candidate
+                or record.previous_receipt_sha256 != metadata_sha256(previous.receipt)
+                or record.machine_record_sha256 != metadata_sha256(machine)
+                or record.material_descriptor_sha256 != machine.material.descriptor_sha256
+                or record.receipt.revision != previous.receipt.revision + 1
+                or record.receipt.created_at != machine.receipt.created_at
+                or record.receipt.structural != machine.receipt.structural
+                or instant(record.decided_at) < instant(previous.checked_at if isinstance(previous, ReviewMachineRecord)
+                                                         else previous.decided_at)
+                or record.receipt.evidence_paths != [machine.report.artifact.download_path,
+                                                    *[item.artifact.download_path for item in record.evidence]]
+                or machine.report.artifact.artifact_id in record.request.evidence_artifact_ids):
+            raise integrity()
+        for value in record.evidence:
+            self._verify_artifact(value)
+
+    @staticmethod
+    def _artifacts(record: ReviewRecord, machine: ReviewMachineRecord) -> list[ReviewArtifactBinding]:
+        return [machine.report] + (record.evidence if isinstance(record, ReviewDecisionRecord) else [])
+
+    def _records(self, binding: ReviewBinding) -> list[ReviewRecord]:
+        identifier = binding.input.review_id
+        rows = self.conn.execute('SELECT * FROM review_revisions WHERE review_id=? ORDER BY revision',
+                                 (identifier,)).fetchall()
+        projection = self.conn.execute('SELECT * FROM reviews WHERE id=?', (identifier,)).fetchone()
+        if not rows:
+            if projection is not None or binding.job.status == 'completed' or self.conn.execute(
+                    'SELECT 1 FROM review_artifact_bindings WHERE review_id=?', (identifier,)).fetchone():
+                raise integrity()
+            return []
+        records: list[ReviewRecord] = []
+        for revision, row in enumerate(rows, 1):
+            try:
+                record = RECORD.validate_python(checked(row['record_json'], row['record_sha256']))
+                receipt = validated(StoredReviewReceipt, checked(row['receipt_json'], row['receipt_sha256']))
+            except (ValueError, TypeError, KeyError):
+                raise integrity() from None
+            machine = record if isinstance(record, ReviewMachineRecord) else records[0] if records else None
+            if not isinstance(machine, ReviewMachineRecord):
+                raise integrity()
+            first = isinstance(record, ReviewMachineRecord)
+            if (row['revision'] != revision or record.receipt.revision != revision or record.receipt != receipt
+                    or canonical_bytes(record).decode() != row['record_json']
+                    or canonical_bytes(receipt).decode() != row['receipt_json']
+                    or first != (revision == 1) or row['record_kind'] != ('machine' if first else 'human_decision')
+                    or row['recorded_at'] != (record.checked_at if first else record.decided_at)
+                    or row['previous_revision'] != (None if first else revision - 1)
+                    or row['previous_receipt_sha256'] != (None if first else metadata_sha256(records[-1].receipt))):
+                raise integrity()
+            if isinstance(record, ReviewMachineRecord):
+                self._verify_machine(record, binding)
+            else:
+                self._verify_decision(record, machine, records[-1], binding)
+            bindings = self.conn.execute('SELECT * FROM review_artifact_bindings WHERE review_id=? '
+                'AND review_revision=? ORDER BY ordinal', (identifier, revision)).fetchall()
+            expected = self._artifacts(record, machine)
+            if len(bindings) != len(expected):
+                raise integrity()
+            for ordinal, (stored, item) in enumerate(zip(bindings, expected, strict=True)):
+                parsed = validated(ReviewArtifactBinding, checked(stored['binding_json'], stored['binding_sha256']))
+                if (parsed != item or canonical_bytes(parsed).decode() != stored['binding_json']
+                        or stored['ordinal'] != ordinal or stored['workspace_id'] != self.workspace_id
+                        or stored['artifact_id'] != item.artifact.artifact_id or stored['artifact_owner'] != item.artifact_owner
+                        or stored['artifact_sha256'] != item.artifact.sha256 or stored['manifest_sha256'] != item.manifest_sha256):
+                    raise integrity()
+            records.append(record)
+        last = records[-1].receipt
+        actor = records[-1].actor_session_id if isinstance(records[-1], ReviewDecisionRecord) else None
+        if (projection is None or projection['workspace_id'] != self.workspace_id or projection['owner'] != binding.owner
+                or projection['revision'] != last.revision or projection['receipt_json'] != canonical_bytes(last).decode()
+                or projection['created_at'] != last.created_at
+                or projection['reviewer_session_id'] not in (None, actor)
+                or any(projection[key] != getattr(last.candidate, key) for key in
+                       ('draft_id', 'draft_revision', 'entity', 'candidate_sha256'))):
+            raise integrity()
+        if self.conn.execute('SELECT 1 FROM review_artifact_bindings WHERE review_id=? AND review_revision>?',
+                             (identifier, len(records))).fetchone():
+            raise integrity()
+        return records
+
+    def load(self, identifier: str) -> ReviewHistory:
+        binding = self._binding(identifier)
+        records = self._records(binding)
+        self._commands(binding, records)
+        return ReviewHistory(state='ready' if records else 'pending', binding=binding, records=records,
+                             receipt=records[-1].receipt if records else None)
+
+    def _insert_revision(self, record: ReviewRecord, machine: ReviewMachineRecord) -> None:
+        first = isinstance(record, ReviewMachineRecord)
+        receipt, raw = canonical_bytes(record.receipt).decode(), canonical_bytes(record).decode()
+        self.conn.execute('INSERT INTO review_revisions(review_id,revision,receipt_json,receipt_sha256,'
+            'record_kind,record_json,record_sha256,previous_receipt_sha256,recorded_at) VALUES(?,?,?,?,?,?,?,?,?)',
+            (record.review_id, record.receipt.revision, receipt, sha256_bytes(receipt.encode()),
+             'machine' if first else 'human_decision', raw, sha256_bytes(raw.encode()),
+             None if first else record.previous_receipt_sha256, record.checked_at if first else record.decided_at))
+        for ordinal, value in enumerate(self._artifacts(record, machine)):
+            raw = canonical_bytes(value).decode()
+            self.conn.execute('INSERT INTO review_artifact_bindings(review_id,workspace_id,review_revision,ordinal,'
+                'artifact_id,artifact_owner,artifact_sha256,manifest_sha256,binding_json,binding_sha256) '
+                'VALUES(?,?,?,?,?,?,?,?,?,?)', (record.review_id, self.workspace_id, record.receipt.revision, ordinal,
+                value.artifact.artifact_id, value.artifact_owner, value.artifact.sha256, value.manifest_sha256,
+                raw, sha256_bytes(raw.encode())))
+
+    def append_machine(self, record: ReviewMachineRecord) -> None:
+        with self._write():
+            record = validated(ReviewMachineRecord, record)
+            binding = self._binding(record.review_id)
+            self._commands(binding)
+            if self.conn.execute('SELECT 1 FROM reviews WHERE id=?', (record.review_id,)).fetchone() or self.conn.execute(
+                    'SELECT 1 FROM review_revisions WHERE review_id=?', (record.review_id,)).fetchone():
+                raise integrity()
+            self._verify_machine(record, binding)
+            receipt = record.receipt
+            self.conn.execute('INSERT INTO reviews(id,draft_id,draft_revision,candidate_sha256,revision,receipt_json,'
+                'reviewer_session_id,created_at,workspace_id,owner,entity) VALUES(?,?,?,?,?,?,NULL,?,?,?,?)',
+                (record.review_id, receipt.candidate.draft_id, receipt.candidate.draft_revision,
+                 receipt.candidate.candidate_sha256, 1, canonical_bytes(receipt).decode(), receipt.created_at,
+                 self.workspace_id, binding.owner, receipt.candidate.entity))
+            self._insert_revision(record, record)
+            self.load(record.review_id)
+
+    def append_decision(self, record: ReviewDecisionRecord, command: ReviewDecisionCommand) -> None:
+        with self._write():
+            record, command = validated(ReviewDecisionRecord, record), validated(ReviewDecisionCommand, command)
+            history = self.load(record.review_id)
+            if not history.records or not isinstance(history.records[0], ReviewMachineRecord) or history.receipt is None:
+                raise ApiError(409, 'REVIEW_NOT_READY', '审核尚无机器回执。')
+            if record.request.expected_revision != history.receipt.revision:
+                raise ApiError(412, 'REVIEW_REVISION_MISMATCH', '审核回执已更新，请重新读取。')
+            machine = history.records[0]
+            self._verify_decision(record, machine, history.records[-1], history.binding)
+            self._verify_command(command, history.binding, [*history.records, record])
+            changed = self.conn.execute('UPDATE reviews SET revision=?,receipt_json=?,reviewer_session_id=? '
+                'WHERE id=? AND workspace_id=? AND revision=? AND receipt_json=?',
+                (record.receipt.revision, canonical_bytes(record.receipt).decode(), record.actor_session_id,
+                 record.review_id, self.workspace_id, history.receipt.revision, canonical_bytes(history.receipt).decode()))
+            if changed.rowcount != 1:
+                raise ApiError(412, 'REVIEW_REVISION_MISMATCH', '审核回执已更新，请重新读取。')
+            self._insert_revision(record, machine)
+            self._insert_command(command)
+            self.load(record.review_id)
