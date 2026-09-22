@@ -290,17 +290,23 @@ def test_same_original_command_key_cannot_be_reused_for_another_review(storage):
         insert(connection, 'review_commands', command(other), replace=True)
 
 
-@pytest.mark.parametrize('kind', ['create', 'cancel'])
+@pytest.mark.parametrize(('kind', 'event_seq'), [('create', 1), ('cancel', 1), ('cancel', 2)])
 @pytest.mark.parametrize('operation', ['DELETE', 'UPDATE'])
-def test_command_job_revision_binding_survives_later_event_mutations(storage, kind, operation):
+def test_command_job_revision_binding_survives_later_event_mutations(storage, kind, event_seq, operation):
     database, registered = storage
     with database.transaction() as connection:
         insert(connection, 'review_jobs', registered)
-        insert(connection, 'review_commands', command(registered, kind))
+        value = command(registered, kind)
+        if kind == 'cancel':
+            insert(connection, 'job_events', {'job_id': registered['review_id'], 'seq': 2, 'type': 'cancelled',
+                'payload_json': '{"fixture_only":true}', 'occurred_at': STAMP})
+            value['resulting_revision'] = 2
+        insert(connection, 'review_commands', value)
         before = rows(connection, 'job_events')
-    sql = 'DELETE FROM job_events' if operation == 'DELETE' else 'UPDATE job_events SET seq=seq+1'
+    sql = ('DELETE FROM job_events WHERE seq=?' if operation == 'DELETE'
+           else 'UPDATE job_events SET seq=seq+10 WHERE seq=?')
     with pytest.raises(sqlite3.IntegrityError), database.transaction() as connection:
-        connection.execute(sql)
+        connection.execute(sql, (event_seq,))
     with database.connect() as connection:
         assert rows(connection, 'job_events') == before
         assert connection.execute('PRAGMA foreign_key_check').fetchall() == []
