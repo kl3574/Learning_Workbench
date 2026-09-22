@@ -75,7 +75,7 @@ def test_self_consistent_foreign_declared_source_is_fail_without_owner_authentic
     raw = material.model_dump(mode='json')
     record = raw['payload']['record']
     record['payload']['declared_source_refs'] = [
-        {'entity': 'block', 'id': 'block_unprepared', 'revision': 1, 'content_sha256': 'a' * 64}]
+        {'entity': 'block', 'id': 'block_unprepared', 'revision': 1, 'sha256': 'a' * 64}]
     candidate_sha = sha256_bytes(canonical_bytes(record['payload']))
     record['candidate']['candidate_sha256'] = candidate_sha
     raw['candidate']['candidate_sha256'] = candidate_sha
