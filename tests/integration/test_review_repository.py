@@ -2,7 +2,16 @@
 import pytest
 
 from services.api.app.application.errors import ApiError
-from services.api.app.application.review_history_models import ReviewCreateCommand, ReviewCancelCommand
+from packages.contracts.canonical import canonical_bytes, metadata_sha256, sha256_bytes
+from services.api.app.application.draft_candidates import DraftCandidates
+from services.api.app.application.imports import ImportService
+from services.api.app.application.review_checks import review_structure
+from services.api.app.application.review_numeric import ReviewNumeric
+from services.api.app.application.review_history_models import (
+    ReviewCreateCommand, ReviewCancelCommand, ReviewArtifactBinding, ReviewMachineRecord,
+    MACHINE_REASON, machine_job_result,
+)
+from services.api.app.infrastructure.blobs import BlobStore
 from services.api.app.infrastructure.authoring_job_repository import AuthoringJobRepository
 from services.api.app.infrastructure.database import utc_now
 from services.api.app.infrastructure.review_job_repository import ReviewJobRepository
@@ -121,3 +130,61 @@ def test_other_job_consumer_cannot_be_bound_as_a_review(prepared):
             ReviewRepository(connection, identity.workspace_id).bind(value, {})
         assert caught.value.code == 'REVIEW_INTEGRITY_ERROR'
         assert connection.execute('SELECT count(*) FROM review_jobs').fetchone()[0] == 0
+
+
+def artifact_fixture(database, connection, value, identifier='artifact_machine', *, purpose='machine_report'):
+    """Synthetic physical bytes and real FK rows, not a production artifact owner."""
+    raw = canonical_bytes({'fixture_only': True, 'identifier': identifier, 'approval': 'NOT_RUN'})
+    info = BlobStore(database.settings.data_dir).write(raw)
+    connection.execute('INSERT INTO content_blobs VALUES(?,?,?,?)',
+                       (info.sha256, info.relative_path, info.size, utc_now()))
+    manifest = canonical_bytes({'fixture_only': True, 'size': info.size, 'sha256': info.sha256}).decode()
+    connection.execute('INSERT INTO artifacts VALUES(?,?,?,?,?,?,?,?)',
+        (identifier, value.workspace_id, value.review_id, info.sha256, 'synthetic_quality_evidence',
+         manifest, 'author_private', utc_now()))
+    return ReviewArtifactBinding(version='review-artifact-binding-v1', workspace_id=value.workspace_id,
+        candidate=value.candidate, artifact={'artifact_id': identifier, 'filename': 'synthetic.json',
+        'size': info.size, 'sha256': info.sha256, 'media_type': 'application/json',
+        'download_path': f'/api/v1/artifacts/{identifier}/download'}, artifact_owner='quality',
+        source_job_id=value.review_id, profile='synthetic_quality_evidence', manifest_sha256=sha256_bytes(manifest.encode()),
+        purpose=purpose, bound_at=utc_now())
+
+
+def complete_machine(prepared, connection):
+    database, identity, value = prepared
+    create = create_job(connection, identity.workspace_id, value)
+    repo = ReviewRepository(connection, identity.workspace_id)
+    repo.bind(value, create)
+    jobs = ReviewJobRepository(connection, identity.workspace_id)
+    jobs.claim(value.review_id)
+    owner = ImportService(database)
+    material = owner.read_review_material(connection, identity, value.candidate)
+    numeric = ReviewNumeric(DraftCandidates({'import': owner}), {}).read_review_numeric(
+        connection, identity, value.candidate.draft_id, value.candidate.draft_revision)
+    structural = review_structure(material, requested='structure' in value.request.checks)
+    evidence = artifact_fixture(database, connection, value)
+    record = ReviewMachineRecord(version='review-machine-record-v1', workspace_id=identity.workspace_id,
+        review_id=value.review_id, job_revision=3, input_sha256=metadata_sha256(value), material=material,
+        numeric=numeric, structural_report=structural, report=evidence, checked_at=utc_now(),
+        receipt={'id':value.review_id, 'revision':1, 'candidate':value.candidate.model_dump(),
+            'structural':structural.structural, 'mathematical':'NOT_RUN', 'sources':'NOT_RUN',
+            'independent_pedagogy':'NOT_RUN', 'reviewer':'system:draft-review-rules-v1',
+            'created_at':value.created_at, 'evidence_paths':[evidence.artifact.download_path], 'decision_reason':MACHINE_REASON})
+    # Actual Jobs port, still in the caller's outer operation. No worker ran.
+    jobs.transition(jobs.load(value.review_id), 'completed', result=machine_job_result(record))
+    return repo, record, create
+
+
+def test_machine_revision_preserves_complete_inputs_and_checked_job_terminal(prepared):
+    database, identity, value = prepared
+    with database.transaction() as connection:
+        repo, record, create = complete_machine(prepared, connection)
+        assert repo.load(value.review_id).state == 'pending'
+        repo.append_machine(record)
+        history = repo.load(value.review_id)
+        assert history.state == 'ready' and history.records == [record] and history.receipt == record.receipt
+        assert history.receipt.mathematical == history.receipt.sources == 'NOT_RUN'
+        assert repo.replay(create.actor_id, create.route, create.command_key, create.request) == create
+    with database.transaction(immediate=False) as connection:
+        connection.execute('PRAGMA query_only=ON')
+        assert ReviewRepository(connection, identity.workspace_id).load(value.review_id).records == [record]

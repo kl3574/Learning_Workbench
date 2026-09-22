@@ -8,11 +8,15 @@ from typing import Annotated, Literal, Self
 
 from pydantic import Field, model_validator
 from packages.contracts import domain_models as dm
+from packages.contracts.canonical import metadata_sha256
 from ..authoring_dto import AuthoringModel, NonBlank
 from ..import_dto import DownloadArtifact, JobCancelRequest, JobSnapshot
 from ..review_dto import DraftReviewWrite, ReviewDecisionWrite
 from .draft_candidate_models import DraftOwner
 from .review_models import ReviewJobInput
+from .review_checks import StructuralReviewReport
+from .review_material_models import CheckedReviewMaterial
+from .review_numeric_models import ReviewNumericObservation
 
 
 def instant(value: str) -> datetime:
@@ -110,3 +114,104 @@ class ReviewBinding(AuthoringModel):
     input: ReviewJobInput
     owner: DraftOwner
     job: ReviewCancelAck
+
+
+MACHINE_REASON = 'Machine checks recorded; human decisions remain NOT_RUN.'
+
+
+class ReviewMachineRecord(AuthoringModel):
+    version: Literal['review-machine-record-v1']
+    workspace_id: dm.Id
+    review_id: dm.Id
+    job_revision: dm.Revision
+    input_sha256: dm.Sha256
+    material: CheckedReviewMaterial
+    numeric: ReviewNumericObservation
+    structural_report: StructuralReviewReport
+    report: ReviewArtifactBinding
+    receipt: StoredReviewReceipt
+    checked_at: dm.UTC
+
+    @model_validator(mode='after')
+    def complete_machine_binding(self) -> Self:
+        candidate = self.material.candidate
+        if (self.workspace_id != self.material.workspace_id or self.workspace_id != self.numeric.workspace_id
+                or self.numeric.source_kind != self.material.source_kind or self.numeric.candidate != candidate
+                or self.structural_report.candidate != candidate
+                or self.structural_report.material_descriptor_sha256 != self.material.descriptor_sha256
+                or self.report.workspace_id != self.workspace_id or self.report.candidate != candidate
+                or self.report.source_job_id != self.review_id or self.report.artifact_owner != 'quality'
+                or self.report.purpose != 'machine_report'
+                or self.receipt.id != self.review_id or self.receipt.revision != 1
+                or self.receipt.candidate != candidate or self.receipt.structural != self.structural_report.structural
+                or any(getattr(self.receipt, field) != 'NOT_RUN' for field in
+                       ('mathematical', 'sources', 'independent_pedagogy'))
+                or self.receipt.reviewer != 'system:draft-review-rules-v1'
+                or self.receipt.decision_reason != MACHINE_REASON
+                or self.receipt.evidence_paths != [self.report.artifact.download_path]
+                or any(instant(value) > instant(self.checked_at) for value in
+                       (self.numeric.observed_at, self.report.bound_at, self.receipt.created_at))):
+            raise ValueError('Machine history must preserve its complete bound inputs and unreviewed human fields')
+        return self
+
+
+class ReviewDecisionRecord(AuthoringModel):
+    version: Literal['review-decision-record-v1']
+    workspace_id: dm.Id
+    review_id: dm.Id
+    candidate: dm.DraftCandidate
+    previous_receipt_sha256: dm.Sha256
+    machine_record_sha256: dm.Sha256
+    material_descriptor_sha256: dm.Sha256
+    request: ReviewDecisionWrite
+    request_sha256: dm.Sha256
+    actor_session_id: dm.Id
+    actor_role_at_decision: Literal['author']
+    evidence: list[ReviewArtifactBinding]
+    receipt: StoredReviewReceipt
+    decided_at: dm.UTC
+
+    @model_validator(mode='after')
+    def complete_human_binding(self) -> Self:
+        if (self.request_sha256 != metadata_sha256(self.request)
+                or self.request.candidate_sha256 != self.candidate.candidate_sha256
+                or self.receipt.id != self.review_id or self.receipt.candidate != self.candidate
+                or self.receipt.revision != self.request.expected_revision + 1
+                or self.receipt.reviewer != self.actor_session_id
+                or self.receipt.mathematical != self.request.mathematical or self.receipt.sources != self.request.sources
+                or self.receipt.decision_reason != self.request.reason
+                or self.receipt.independent_pedagogy != 'NOT_RUN'
+                or [item.artifact.artifact_id for item in self.evidence] != self.request.evidence_artifact_ids
+                or instant(self.receipt.created_at) > instant(self.decided_at)):
+            raise ValueError('Human history must retain the exact original decision and actor')
+        for item in self.evidence:
+            if (item.workspace_id != self.workspace_id or item.candidate != self.candidate
+                    or item.purpose != 'human_decision_evidence' or instant(item.bound_at) > instant(self.decided_at)):
+                raise ValueError('Decision evidence must retain its original candidate and ordered attachment binding')
+        return self
+
+
+ReviewRecord = Annotated[ReviewMachineRecord | ReviewDecisionRecord, Field(discriminator='version')]
+
+
+class ReviewHistory(AuthoringModel):
+    state: Literal['pending', 'ready']
+    binding: ReviewBinding
+    records: list[ReviewRecord]
+    receipt: StoredReviewReceipt | None
+
+    @model_validator(mode='after')
+    def no_invented_pending_receipt(self) -> Self:
+        if self.state == 'pending':
+            if self.records or self.receipt is not None:
+                raise ValueError('Pending review has no machine receipt')
+        elif (not self.records or not isinstance(self.records[0], ReviewMachineRecord)
+              or self.receipt != self.records[-1].receipt):
+            raise ValueError('Ready projection must retain its original machine history and last receipt')
+        return self
+
+
+def machine_job_result(record: ReviewMachineRecord) -> dict[str, str]:
+    """Exact terminal reference for the caller's real Jobs transition, not execution."""
+    return {'review_id': record.review_id, 'receipt_sha256': metadata_sha256(record.receipt),
+            'machine_record_sha256': metadata_sha256(record)}
