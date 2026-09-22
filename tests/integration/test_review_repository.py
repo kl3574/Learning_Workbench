@@ -1,7 +1,7 @@
 """Internal Quality persistence with explicit synthetic intent; no review application."""
 import pytest
 
-from services.api.app.application.review_history_models import ReviewCreateCommand
+from services.api.app.application.review_history_models import ReviewCreateCommand, ReviewCancelCommand
 from services.api.app.infrastructure.database import utc_now
 from services.api.app.infrastructure.review_job_repository import ReviewJobRepository
 from services.api.app.infrastructure.review_repository import ReviewRepository
@@ -35,3 +35,22 @@ def test_binding_and_original_create_replay_preserve_real_job_without_a_receipt(
         assert repo.replay(command.actor_id, command.route, command.command_key, command.request) == command
         assert connection.execute('SELECT count(*) FROM reviews').fetchone()[0] == 0
         assert connection.execute('SELECT count(*) FROM review_revisions').fetchone()[0] == 0
+
+
+def test_cancel_ack_and_original_create_replay_do_not_use_latest_snapshot(prepared):
+    database, identity, value = prepared
+    with database.transaction() as connection:
+        create = create_job(connection, identity.workspace_id, value)
+        repo = ReviewRepository(connection, identity.workspace_id)
+        repo.bind(value, create)
+        jobs = ReviewJobRepository(connection, identity.workspace_id)
+        ack = jobs.cancel(value.review_id, 1)
+        cancel = ReviewCancelCommand(workspace_id=identity.workspace_id, actor_id=identity.id,
+            route=f'POST /jobs/{value.review_id}/cancel', command_key='synthetic_cancel',
+            review_id=value.review_id, basis_revision=1, resulting_revision=ack.revision,
+            recorded_at=utc_now(), command_kind='cancel', request={'expected_revision': 1}, ack=ack.model_dump())
+        repo.record_cancel(cancel)
+        assert repo.replay(create.actor_id, create.route, create.command_key, create.request) == create
+        assert repo.replay(cancel.actor_id, cancel.route, cancel.command_key, cancel.request) == cancel
+        assert repo.binding(value.review_id).job.status == 'cancelled'
+        assert connection.execute('SELECT count(*) FROM reviews').fetchone()[0] == 0
