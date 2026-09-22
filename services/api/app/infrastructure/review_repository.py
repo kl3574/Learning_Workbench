@@ -9,6 +9,7 @@ from typing import TypeVar
 from uuid import uuid4
 
 from pydantic import BaseModel, TypeAdapter
+from pydantic_core import PydanticSerializationError
 from packages.contracts.canonical import canonical_bytes, metadata_sha256, sha256_bytes, strict_json
 from ..application.errors import ApiError
 from ..application.review_history_models import (
@@ -24,8 +25,8 @@ from .draft_candidate_repository import DraftCandidateRepository
 from .review_job_repository import ReviewJobRepository
 
 M = TypeVar('M', bound=BaseModel)
-COMMAND = TypeAdapter(ReviewCommand)
-RECORD = TypeAdapter(ReviewRecord)
+COMMAND: TypeAdapter[ReviewCommand] = TypeAdapter(ReviewCommand)
+RECORD: TypeAdapter[ReviewRecord] = TypeAdapter(ReviewRecord)
 
 
 def integrity() -> ApiError:
@@ -44,8 +45,8 @@ def checked(raw: str, digest: str) -> dict:
 
 def validated(model: type[M], value: object) -> M:
     try:
-        return model.model_validate(value.model_dump(mode='python') if isinstance(value, BaseModel) else value)
-    except (ValueError, TypeError, AttributeError):
+        return model.model_validate(value.model_dump(mode='python', warnings='error') if isinstance(value, BaseModel) else value)
+    except (ValueError, TypeError, AttributeError, PydanticSerializationError):
         raise integrity() from None
 
 
@@ -203,8 +204,8 @@ class ReviewRepository:
         self.binding(row['review_id'])
         command = self._command(row)
         try:
-            body = type(command.request).model_validate(body.model_dump(mode='python'))
-        except (ValueError, TypeError, AttributeError):
+            body = type(command.request).model_validate(body.model_dump(mode='python', warnings='error'))
+        except (ValueError, TypeError, AttributeError, PydanticSerializationError):
             raise integrity() from None
         if canonical_bytes(body) != canonical_bytes(command.request):
             raise ApiError(409, 'IDEMPOTENCY_CONFLICT', '原命令键已用于不同的完整命令。')
@@ -335,12 +336,14 @@ class ReviewRepository:
 
     def _insert_revision(self, record: ReviewRecord, machine: ReviewMachineRecord) -> None:
         first = isinstance(record, ReviewMachineRecord)
+        previous = None if isinstance(record, ReviewMachineRecord) else record.previous_receipt_sha256
+        recorded_at = record.checked_at if isinstance(record, ReviewMachineRecord) else record.decided_at
         receipt, raw = canonical_bytes(record.receipt).decode(), canonical_bytes(record).decode()
         self.conn.execute('INSERT INTO review_revisions(review_id,revision,receipt_json,receipt_sha256,'
             'record_kind,record_json,record_sha256,previous_receipt_sha256,recorded_at) VALUES(?,?,?,?,?,?,?,?,?)',
             (record.review_id, record.receipt.revision, receipt, sha256_bytes(receipt.encode()),
              'machine' if first else 'human_decision', raw, sha256_bytes(raw.encode()),
-             None if first else record.previous_receipt_sha256, record.checked_at if first else record.decided_at))
+             previous, recorded_at))
         for ordinal, value in enumerate(self._artifacts(record, machine)):
             raw = canonical_bytes(value).decode()
             self.conn.execute('INSERT INTO review_artifact_bindings(review_id,workspace_id,review_revision,ordinal,'
