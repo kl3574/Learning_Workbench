@@ -7,12 +7,14 @@ from datetime import datetime
 from typing import Annotated, Literal, Self
 
 from pydantic import Field, model_validator
+from pydantic_core import PydanticSerializationError
 from packages.contracts import domain_models as dm
 from packages.contracts.canonical import metadata_sha256
 from ..authoring_dto import AuthoringModel, NonBlank
 from ..import_dto import DownloadArtifact, JobCancelRequest, JobSnapshot
 from ..review_dto import DraftReviewWrite, ReviewDecisionWrite
 from .draft_candidate_models import DraftOwner
+from .errors import ApiError
 from .review_models import ReviewJobInput
 from .review_checks import StructuralReviewReport
 from .review_material_models import CheckedReviewMaterial
@@ -213,5 +215,9 @@ class ReviewHistory(AuthoringModel):
 
 def machine_job_result(record: ReviewMachineRecord) -> dict[str, str]:
     """Exact terminal reference for the caller's real Jobs transition, not execution."""
+    try:
+        record = ReviewMachineRecord.model_validate(record.model_dump(mode='python', warnings='error'))
+    except (ValueError, TypeError, AttributeError, PydanticSerializationError):
+        raise ApiError(409, 'REVIEW_INTEGRITY_ERROR', '审核持久历史未通过完整性校验。') from None
     return {'review_id': record.review_id, 'receipt_sha256': metadata_sha256(record.receipt),
             'machine_record_sha256': metadata_sha256(record)}
