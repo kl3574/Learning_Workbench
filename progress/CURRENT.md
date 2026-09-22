@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-22T01:47:01Z；规范 SHA-256：`30220c34fe7312887f5bcb1c67406c9638f1719ff3ed7bc9e95d7d5085b5d924`
+更新：2026-09-22T04:12:17Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
 
-仓库发布：VERIFIED；Issues 同步：VERIFIED
+仓库发布：VERIFIED；Issues 同步：PENDING_NEW_LOCAL_EVIDENCE
 实施：IN_PROGRESS；当前任务：M6.1；下一任务：M6.1
 
-PR53 draft/open/unmerged已发布并回读；等待实际CI，同时继续M6.1小节/习题集/测验生成，先合入保留Import行为的题面—私解结构预校验，完成具名组合候选契约。真实隔离权限及托管InputProof分别保留阻塞。
+归档并校验9d4aa2e完整门禁实际证据，推送组分支并建立依赖PR53的draft PR，同步Issues；读取确切head的CI事实。继续本地生产输入计量checker工程与数值隔离诊断，保留生产证明/环境/教学质量阻塞；M6.1尚未验收，不推进发布或Codex。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -31,7 +31,7 @@ PR53 draft/open/unmerged已发布并回读；等待实际CI，同时继续M6.1�
 | M5.2 检索权限、中文 FTS、来源和修订哈希 | review | [#27](https://github.com/kl3574/Learning_Workbench/issues/27) | 69e54478ae3c3604a925f2cdb905ce03ddda2b8b |
 | M5.3 Tutor 状态机、SSE/取消/重连/异步上下文 | review | [#28](https://github.com/kl3574/Learning_Workbench/issues/28) | 919a00532b499cff604ef2be4e90c88cc6378490 |
 | M5.4 真实模型与搜索评测 | blocked | [#29](https://github.com/kl3574/Learning_Workbench/issues/29) | e982a14644317c7be12a63ec0b31c1e615c72fa6 |
-| M6.1 教材/例题/题目生成 schema + 数值验证 | in_progress | [#30](https://github.com/kl3574/Learning_Workbench/issues/30) | 80986eaed01d4de620cdd4320a7fab8ce01ce959 |
+| M6.1 教材/例题/题目生成 schema + 数值验证 | in_progress | [#30](https://github.com/kl3574/Learning_Workbench/issues/30) | 9d4aa2e75c0583b4752e1a2669534ef621e6c7f9 |
 | M6.2 审校/发布/版本对比/影响分析/恢复旧内容 | todo | [#31](https://github.com/kl3574/Learning_Workbench/issues/31) | 未验证提交 |
 | M6.3 CodexBroker/App Server、操作审批、产物清单 | todo | [#32](https://github.com/kl3574/Learning_Workbench/issues/32) | 未验证提交 |
 | M7.1 全备份/学习者包/作者包/恢复预览和事务 | todo | [#33](https://github.com/kl3574/Learning_Workbench/issues/33) | 未验证提交 |
@@ -97,8 +97,22 @@ PR53 draft/open/unmerged已发布并回读；等待实际CI，同时继续M6.1�
 - M6.1_local: LOCAL_FIRST_SLICE_VERIFIED_FULL_STAGE_INCOMPLETE：80986ea固定903非progress源。实际1927Python PASS1ENV SKIP396.73s/2依赖弃用警告、401web PASS72files、96完整native PASS8.3m；Ruff全仓、mypy162、web lint/types/build和spec75生成均PASS。八非浏览器门禁逐Git/blob/mode前后不变；native仅4已知PNG直接输出变化，44前后原件保全后按精确hash恢复，原unchanged=false不改。真实7HTTP、loopback同Job授权→候选、独立数值拒绝/批准、安全取消与1440/390已验证；数值实际environment_unavailable/BLOCKED，1SKIP不是执行成功。生产proof仍空、平台真实DeepSeek/搜索/数学/来源/教学验收未通过；其他M6.1生成类型未实现，不能关闭M6.1。
 - M5.4_exact_81d_ci: 11 success / 1 failure, push93+1FAIL vs PR94PASS; exact same tree, distinct commits; raw evidence imported locally
 - M6.1_fixed_gates: LOCAL_FIRST_SLICE_VERIFIED_FULL_STAGE_INCOMPLETE：80986ea固定903非progress源。实际1927Python PASS1ENV SKIP396.73s/2依赖弃用警告、401web PASS72files、96完整native PASS8.3m；Ruff全仓、mypy162、web lint/types/build和spec75生成均PASS。八非浏览器门禁逐Git/blob/mode前后不变；native仅4已知PNG直接输出变化，44前后原件保全后按精确hash恢复，原unchanged=false不改。真实7HTTP、loopback同Job授权→候选、独立数值拒绝/批准、安全取消与1440/390已验证；数值实际environment_unavailable/BLOCKED，1SKIP不是执行成功。生产proof仍空、平台真实DeepSeek/搜索/数学/来源/教学验收未通过；其他M6.1生成类型未实现，不能关闭M6.1。
-- M6.1_remote: PUBLISHED：79908fb公开分支、PR53 draft/open/unmerged、父分支M5.4及规范SHA均实际回读。第一次直连443失败，命令级显式代理后推送成功；新CI以实际run回读为准，不由本地门禁推定。
-- M6.1_next_precheck: ISOLATED_UNCOMMITTED：在809基线独立工作树整理既有Import题面/私解结构校验，38focused+145既有Import回归和scoped lint/mypy实际PASS；原mypy变量复用失败保留。尚未合入主实施分支，不代表题目生成、数学或教学验收。
+- M6.1_remote: PUBLISHED_FIRST_SLICE_ONLY：2026-09-22T02:28:53Z GitHub ref和PR53 head均bebf806，draft/open/unmerged。该head双CI合计9success3failure，完整证据与失败边界见M6.1_bebf_ci；groups仅本地，不借PR53声称其发布。
+- M6.1_next_precheck: IMPORTED_UNCOMMITTED：38 focused/145 Import 的已验证提取和脱敏原证据精确移入groups-active；903/905输入与该测试版本同字节，仅采用后的规范/端口不同。尚无新组生成或3.0.7全门禁通过结论。
+- M6.1_group_implementation: LOCAL_DEVELOPMENT_PARTIALLY_VERIFIED：3.0.7；实际6新增HTTP、93已注册/119声明路由，76生成文件结构PASS。纯DTO/构造138PASS、Content targets44PASS、prepare/Provider11PASS、cancel+revocation4PASS、新HTTP3PASS/旧2PASS、numeric24PASS各自独立范围。组数值实际bwrap BLOCKED，未称隔离计算成功。前端接线后原18Authoring、web lint/types、Ruff、mypy177 PASS；新组浏览器与最终全阶段门禁待验。
+- M6.1_group_contract_development: 原609 PASS/94 FAIL165.41s保留。测试按3.0.7明确补6路由和两个封闭具名联合；新API投影96PASS92.59s，逐分支拒额外字段且限定旧/组variant。运行中新增3个无关前端/fixture测试源，before/after变化如实保留；不作固定全仓门禁结论。
+- M6.1_799_ci: FAIL：79908fb push35676551352/PR35676944952各5success1browserfailure，各95PASS1Tutor FAIL；原:195 completed heading5000ms缺失，两Authoring通过。PR实际checkouta08bb873与head同tree，不同commit；原日志/2ZIP/诊断/源码及精确派生映射已独立核验并导入。
+- M6.1_799_local_diagnosis: NO_REPRODUCTION_NO_FIX：固定799隔离树原Tutor单例3PASS，原5000ms未改；2完整后端测量(12616/12049事件、0dropped)，第一次backend export缺失保留。51公共文件/50原始派生/12Git源码及3分析输出字节由root独立重放核验；本机争用不构成CI根因，未作产品修复。
+- M6.1_bebf_ci: FAIL：bebf806 push35677956691为4success/2failure；browser94PASS2FAIL（Tutor原:195 5秒未见completed、grading-recovery初次结果GET409预期200），integration763PASS1FAIL1SKIP（并发cancel窗口lease_until+312ms，未证明cancel改lease）。PR35677959449为5success/1browserFAIL，95PASS1Tutor FAIL；integration764PASS1SKIP。12jobs实际checkout分别bebf/merge5579332，同tree a7f63f5不同commit；两个Authoringcase两run均PASS。post_assertion.run.state=failed仅诊断read失败，不是实际Run.status；没有Run.value。57文件/56原始派生/13实际Git及2ZIP全部成员由root独立核验，不追認根因。
+- M6.1_group_web: DEVELOPMENT_PASS：新增30项首28PASS2FAIL揭示workspace/Policy变化后late数值preview ACK仍写私有plan入IDB；原用例保留，最小scope guard后新31+旧11共42PASS，安全cancel迟到ACK正控保留。当前937声明输入前后同字节：完整432web/74files与build实际PASS，bundle体积警告保留。新2native已实际通过，非固定整阶段门禁；独立review与数值决定原ACK补证仍进行中。
+- M6.1_group_history_review: REPAIRED_DEVELOPMENT_PASS_INDEPENDENTLY_REVIEWED：原干净RED12FAIL2PASS13.92s，旧/组preview/read/approve及原ACK replay/worker prebegin未核Provider bytes；接入实际Authoring owner.verify_history，原conn/事务核原Provider产物且再绑定candidate，safe Job/cancel仅control历史。新18PASS18.16s含4个缺owner failclosed，938输入前后相同。另6旧/组numeric+HTTP文件43PASS92.03s、Ruff全仓/mypy177 PASS。尚非固定提交全门禁；原审查P1及RED原件保留。 独立修复复审未见新增阻断；不替代最终固定源码门禁。
+- M6.1_group_native: DEVELOPMENT_PASS：新增2条lesson/practice_set原生15.5s；旧2条Authoring回归12.7s。旧02字段declined/approved只是pending preview ACK，原件保留；新07教材单例1PASS10.7s补齐实际decline/approve ACK及declined GET。459声明输入前后相同，strict TS8输入PASS。实际numeric environment_unavailable/BLOCKED exit1。root核155raw/23receipt/4Git PNG及新390公式图，108公开文件导入；不借历史结果验证后续history修复。
+- M6.1_group_storage_review: REPAIRED_DEVELOPMENT_PASS_INDEPENDENTLY_REVIEWED：永久新7RED32PASS保留；修复后60PASS（40组commands/hooks+20既有DraftStore/Authoring）及types，938输入稳定。测试使用真实hook/DraftStore代码和fake-indexeddb事件，非浏览器原生竞态证明；覆盖等待load、GET/PUT事件准入前失效和显式commit后撤权保留合法ACK，安全cancel及原key回放保留。独立事务设计按W3C committing不可撤回、complete才持久化成功；三生产文件最终修复review未见新增阻断；全量浏览器仍待验。
+- M6.1_group_fixed_gates: 62d3b1af固定938源前后/Git一致：Ruff/mypy177、web lint/types、441web74files4.54s、build和spec76生成均PASS。完整Python实际2161PASS1FAIL1ENVSKIP524.78s：唯一失败为test_spec_catalog旧len113，3.0.7已声明119；root已按六条明确group路由更新断言，focused catalog实际4PASS1.13s。原FAIL保留。该提交native NOT_RUN；先补assessment UI、三root安全取消/真实重启和五题型/私解索引隔离覆盖，再新提交完整门禁。
+- M6.1_group_task_sync: VERIFIED_READBACK：36既有Issues与9里程碑原身份/状态保留，逐Issue实际正文等于保留人工文本后的工程块更新；当前组代码和新证据仍本地，未声称发布或验收。
+- M6.1_group_native_completion: DEVELOPMENT_NATIVE_PASS：三根lesson/practice_set/assessment实际3PASS37.7s。每根同SQLite新API进程读取原Job/plan/完整candidate和question私解；前进程1次loopback/后进程0新增分别记录。撤权前正文/私解可见，实际learner后403及清空，第二无consent Job取消真实丢ACK后同key/body回放与当前GET一致。assessment explicit Concept-only、两modes/600s和成员独立decline/approve已实走；lesson/assessment numeric实际environment_unavailable/BLOCKED exit1。root重核3原JSON并看390题面/私解图；限定459输入稳定，未称全固定提交门禁。
+- M6.1_group_backend_completion: DEVELOPMENT_PASS：五题型同组受控Provider→SQLite→完整私解/质量记录；3真实评分不兼容响应拒绝留原输出和plan，零candidate；3根已消费唯一Provider结果后人工过期lease、新owner恢复唯一candidate，再全新实例回读零新增dispatch。实际ready索引有公开哨兵命中正控，全部物理scope/generation/chunk/FTS只含已有公开block；私解哨兵无索引，Content/Import/review表未增加。新增7+原5共12PASS12.36s，939前后同；原测试预期错误3FAIL及修复另存。新2文件mypy/Ruff通过，非OS崩溃或真实供应商。
+- M6.1_group_9d4_gates: LOCAL_GROUP_GATES_PASS_NOT_PUBLISHED_NOT_ACCEPTED：固定939源码9d4aa2e；Python2169PASS1环境SKIP，web441PASS74files，完整native99PASS9.1m，Ruff/mypy177/lint/types/build/spec76均通过。native实际改变4PNG+1缩放JSON，44前/44后文件保留；精确恢复后939全部匹配固定Git。三根生成/授权/真实进程重启/权限锁/安全取消，五题型与私解索引隔离及checked-result恢复有定向补证。仅受控loopback Provider；真正隔离算术BLOCKED，平台DeepSeek E2E及教学质量NOT_RUN。原62d3失败和PR53 CI失败保留。
 
 ## 阻塞与待决项
 

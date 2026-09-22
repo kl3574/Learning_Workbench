@@ -1,0 +1,2293 @@
+.FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF [ 10%]
+FFFFFFFFFFFFFFFFFFFFFFF................................................. [ 20%]
+........................................................................ [ 30%]
+........................................................................ [ 40%]
+........................................................................ [ 51%]
+........................................................................ [ 61%]
+........................................................................ [ 71%]
+........................................................................ [ 81%]
+........................................................................ [ 92%]
+.......................................................                  [100%]
+=================================== FAILURES ===================================
+_____ test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec _____
+
+    def test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec():
+        application = create_app()
+        api = application.openapi()
+        runtime = {(method, context.path) for context in iter_route_contexts(application.routes)
+                   if isinstance(context.original_route, APIRoute) for method in context.methods}
+        projection = {(method.upper(), path) for path, methods in api["paths"].items() for method in methods if method in HTTP_METHODS}
+        assert runtime == projection
+        assert projection <= SPEC_ROUTES
+        assert {('GET', '/api/v1/recommendations'),
+                ('POST', '/api/v1/recommendations/{id}/decision')} <= projection
+        provider_operations = {item for item in SPEC_ROUTES if item[1].startswith(('/api/v1/providers/', '/api/v1/consents'))}
+        assert len(provider_operations) == 10
+        assert provider_operations <= projection
+        assert {('POST', '/api/v1/retrieval/query'), ('POST', '/api/v1/index/rebuild'),
+                ('GET', '/api/v1/index/status')} <= projection
+        tutor = {('POST', '/api/v1/threads'), ('GET', '/api/v1/threads'),
+                 ('GET', '/api/v1/threads/{id}/messages'), ('POST', '/api/v1/tutor/runs'),
+                 ('GET', '/api/v1/runs/{id}'), ('GET', '/api/v1/runs/{id}/events'),
+                 ('POST', '/api/v1/runs/{id}/cancel')}
+        assert tutor <= projection
+        authoring = {
+            ('POST', '/api/v1/authoring/jobs'), ('GET', '/api/v1/authoring/jobs'),
+            ('GET', '/api/v1/authoring/jobs/{id}'), ('GET', '/api/v1/authoring/drafts/{id}'),
+            ('POST', '/api/v1/authoring/drafts/{id}/numeric-checks'),
+            ('GET', '/api/v1/authoring/numeric-checks/{id}'),
+            ('POST', '/api/v1/authoring/numeric-checks/{id}/decision'),
+        }
+        assert authoring <= projection
+>       assert len(projection) == 87
+E       AssertionError: assert 93 == 87
+E        +  where 93 = len({('DELETE', '/api/v1/notes/{id}'), ('DELETE', '/api/v1/providers/{id}/secret'), ('GET', '/api/v1/artifacts/{id}/download'), ('GET', '/api/v1/assessments'), ('GET', '/api/v1/attempts/{id}'), ('GET', '/api/v1/attempts/{id}/responses'), ...})
+
+tests/contract/test_api_projection.py:54: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /health] _
+
+path = '/health', method = 'get'
+operation = {'tags': ['runtime'], 'summary': 'Health', 'operationId': 'health_health_get', 'responses': {'200': {'description': 'S...tion': 'Forbidden', 'content': {'application/json': {'schema': {'$ref': '#/components/schemas/ErrorEnvelope'}}}}, ...}}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/session/bootstrap] _
+
+path = '/api/v1/session/bootstrap', method = 'post'
+operation = {'tags': ['session'], 'summary': 'Bootstrap', 'operationId': 'bootstrap_api_v1_session_bootstrap_post', 'parameters': [{'name': 'Origin', 'in': 'header', 'required': True, 'schema': {'type': 'string', 'title': 'Origin'}}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/session] _
+
+path = '/api/v1/session', method = 'get'
+operation = {'tags': ['session'], 'summary': 'Read Session', 'operationId': 'read_session_api_v1_session_get', 'responses': {'200'...: 'Forbidden', 'content': {'application/json': {'schema': {'$ref': '#/components/schemas/ErrorEnvelope'}}}}, ...}, ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/session/logout] _
+
+path = '/api/v1/session/logout', method = 'post'
+operation = {'tags': ['session'], 'summary': 'Logout', 'operationId': 'logout_api_v1_session_logout_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/session/role] _
+
+path = '/api/v1/session/role', method = 'post'
+operation = {'tags': ['session'], 'summary': 'Switch Role', 'operationId': 'switch_role_api_v1_session_role_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/readiness] _
+
+path = '/api/v1/readiness', method = 'get'
+operation = {'tags': ['runtime'], 'summary': 'Readiness', 'operationId': 'readiness_api_v1_readiness_get', 'responses': {'200': {'...: 'Forbidden', 'content': {'application/json': {'schema': {'$ref': '#/components/schemas/ErrorEnvelope'}}}}, ...}, ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/workspace] _
+
+path = '/api/v1/workspace', method = 'get'
+operation = {'tags': ['workspace'], 'summary': 'Workspace', 'operationId': 'workspace_api_v1_workspace_get', 'responses': {'200': ...: 'Forbidden', 'content': {'application/json': {'schema': {'$ref': '#/components/schemas/ErrorEnvelope'}}}}, ...}, ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[PUT /api/v1/workspace/preferences] _
+
+path = '/api/v1/workspace/preferences', method = 'put'
+operation = {'tags': ['workspace'], 'summary': 'Save Preferences', 'operationId': 'save_preferences_api_v1_workspace_preferences_put', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/workbench/session] _
+
+path = '/api/v1/workbench/session', method = 'get'
+operation = {'tags': ['workbench'], 'summary': 'Read Workbench', 'operationId': 'read_workbench_api_v1_workbench_session_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[PUT /api/v1/workbench/session] _
+
+path = '/api/v1/workbench/session', method = 'put'
+operation = {'tags': ['workbench'], 'summary': 'Save Workbench', 'operationId': 'save_workbench_api_v1_workbench_session_put', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/courses] _
+
+path = '/api/v1/courses', method = 'get'
+operation = {'tags': ['content'], 'summary': 'Courses', 'operationId': 'courses_api_v1_courses_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/courses/{id}] _
+
+path = '/api/v1/courses/{id}', method = 'get'
+operation = {'tags': ['content'], 'summary': 'Course', 'operationId': 'course_api_v1_courses__id__get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/lessons/{id}] _
+
+path = '/api/v1/lessons/{id}', method = 'get'
+operation = {'tags': ['content'], 'summary': 'Lesson', 'operationId': 'lesson_api_v1_lessons__id__get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/blocks/{id}] _
+
+path = '/api/v1/blocks/{id}', method = 'get'
+operation = {'tags': ['content'], 'summary': 'Block', 'operationId': 'block_api_v1_blocks__id__get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/courses/{id}/outline] _
+
+path = '/api/v1/courses/{id}/outline', method = 'get'
+operation = {'tags': ['content'], 'summary': 'Outline', 'operationId': 'outline_api_v1_courses__id__outline_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/courses/{id}/directory-search] _
+
+path = '/api/v1/courses/{id}/directory-search', method = 'get'
+operation = {'tags': ['content'], 'summary': 'Directory Search', 'operationId': 'directory_search_api_v1_courses__id__directory_search_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/blocks/{id}/body] _
+
+path = '/api/v1/blocks/{id}/body', method = 'get'
+operation = {'tags': ['content'], 'summary': 'Body', 'operationId': 'body_api_v1_blocks__id__body_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/objects/{id}/current] _
+
+path = '/api/v1/objects/{id}/current', method = 'get'
+operation = {'tags': ['content'], 'summary': 'Current', 'operationId': 'current_api_v1_objects__id__current_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/objects/{id}/revisions] _
+
+path = '/api/v1/objects/{id}/revisions', method = 'get'
+operation = {'tags': ['content'], 'summary': 'Revisions', 'operationId': 'revisions_api_v1_objects__id__revisions_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/imports] _
+
+path = '/api/v1/imports', method = 'post'
+operation = {'tags': ['imports'], 'summary': 'Stage', 'operationId': 'stage_api_v1_imports_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/imports/{id}] _
+
+path = '/api/v1/imports/{id}', method = 'get'
+operation = {'tags': ['imports'], 'summary': 'Preview', 'operationId': 'preview_api_v1_imports__id__get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/imports/{id}/commit] _
+
+path = '/api/v1/imports/{id}/commit', method = 'post'
+operation = {'tags': ['imports'], 'summary': 'Commit', 'operationId': 'commit_api_v1_imports__id__commit_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/imports/{id}/cancel] _
+
+path = '/api/v1/imports/{id}/cancel', method = 'post'
+operation = {'tags': ['imports'], 'summary': 'Cancel', 'operationId': 'cancel_api_v1_imports__id__cancel_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/jobs/{id}] _
+
+path = '/api/v1/jobs/{id}', method = 'get'
+operation = {'tags': ['imports'], 'summary': 'Job', 'operationId': 'job_api_v1_jobs__id__get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/jobs/{id}/cancel] _
+
+path = '/api/v1/jobs/{id}/cancel', method = 'post'
+operation = {'tags': ['imports'], 'summary': 'Cancel Job', 'operationId': 'cancel_job_api_v1_jobs__id__cancel_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/drafts/{id}] _
+
+path = '/api/v1/drafts/{id}', method = 'get'
+operation = {'tags': ['imports'], 'summary': 'Draft', 'operationId': 'draft_api_v1_drafts__id__get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/sources/{id}] _
+
+path = '/api/v1/sources/{id}', method = 'get'
+operation = {'tags': ['imports'], 'summary': 'Source', 'operationId': 'source_api_v1_sources__id__get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/artifacts/{id}/download] _
+
+path = '/api/v1/artifacts/{id}/download', method = 'get'
+operation = {'tags': ['imports'], 'summary': 'Download', 'operationId': 'download_api_v1_artifacts__id__download_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/learning/evidence] _
+
+path = '/api/v1/learning/evidence', method = 'get'
+operation = {'tags': ['learning'], 'summary': 'Evidence Page', 'operationId': 'evidence_page_api_v1_learning_evidence_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/notes] _
+
+path = '/api/v1/notes', method = 'get'
+operation = {'tags': ['learning'], 'summary': 'List Notes', 'operationId': 'list_notes_api_v1_notes_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/notes] _
+
+path = '/api/v1/notes', method = 'post'
+operation = {'tags': ['learning'], 'summary': 'Create Note', 'operationId': 'create_note_api_v1_notes_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[PATCH /api/v1/notes/{id}] _
+
+path = '/api/v1/notes/{id}', method = 'patch'
+operation = {'tags': ['learning'], 'summary': 'Update Note', 'operationId': 'update_note_api_v1_notes__id__patch', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[DELETE /api/v1/notes/{id}] _
+
+path = '/api/v1/notes/{id}', method = 'delete'
+operation = {'tags': ['learning'], 'summary': 'Delete Note', 'operationId': 'delete_note_api_v1_notes__id__delete', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/learning/progress] _
+
+path = '/api/v1/learning/progress', method = 'get'
+operation = {'tags': ['learning'], 'summary': 'Progress', 'operationId': 'progress_api_v1_learning_progress_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/learning/actions] _
+
+path = '/api/v1/learning/actions', method = 'post'
+operation = {'tags': ['learning'], 'summary': 'Action', 'operationId': 'action_api_v1_learning_actions_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/practice/sets] _
+
+path = '/api/v1/practice/sets', method = 'get'
+operation = {'tags': ['practice'], 'summary': 'List Sets', 'operationId': 'list_sets_api_v1_practice_sets_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/practice/sessions] _
+
+path = '/api/v1/practice/sessions', method = 'post'
+operation = {'tags': ['practice'], 'summary': 'Create Session', 'operationId': 'create_session_api_v1_practice_sessions_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/practice/sessions/{id}] _
+
+path = '/api/v1/practice/sessions/{id}', method = 'get'
+operation = {'tags': ['practice'], 'summary': 'Get Session', 'operationId': 'get_session_api_v1_practice_sessions__id__get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[PUT /api/v1/practice/sessions/{id}/responses] _
+
+path = '/api/v1/practice/sessions/{id}/responses', method = 'put'
+operation = {'tags': ['practice'], 'summary': 'Save Responses', 'operationId': 'save_responses_api_v1_practice_sessions__id__responses_put', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/practice/sessions/{id}/submit] _
+
+path = '/api/v1/practice/sessions/{id}/submit', method = 'post'
+operation = {'tags': ['practice'], 'summary': 'Submit', 'operationId': 'submit_api_v1_practice_sessions__id__submit_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/practice/sessions/{id}/hints] _
+
+path = '/api/v1/practice/sessions/{id}/hints', method = 'post'
+operation = {'tags': ['practice'], 'summary': 'Hint', 'operationId': 'hint_api_v1_practice_sessions__id__hints_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/practice/sessions/{id}/solutions] _
+
+path = '/api/v1/practice/sessions/{id}/solutions', method = 'post'
+operation = {'tags': ['practice'], 'summary': 'Solution', 'operationId': 'solution_api_v1_practice_sessions__id__solutions_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/assessments] _
+
+path = '/api/v1/assessments', method = 'get'
+operation = {'tags': ['assessment'], 'summary': 'List Assessments', 'operationId': 'list_assessments_api_v1_assessments_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/assessments/{id}/attempts] _
+
+path = '/api/v1/assessments/{id}/attempts', method = 'post'
+operation = {'tags': ['assessment'], 'summary': 'Create', 'operationId': 'create_api_v1_assessments__id__attempts_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/attempts/{id}] _
+
+path = '/api/v1/attempts/{id}', method = 'get'
+operation = {'tags': ['assessment'], 'summary': 'Get', 'operationId': 'get_api_v1_attempts__id__get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/attempts/{id}/responses] _
+
+path = '/api/v1/attempts/{id}/responses', method = 'get'
+operation = {'tags': ['assessment'], 'summary': 'Responses', 'operationId': 'responses_api_v1_attempts__id__responses_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[PUT /api/v1/attempts/{id}/responses] _
+
+path = '/api/v1/attempts/{id}/responses', method = 'put'
+operation = {'tags': ['assessment'], 'summary': 'Save', 'operationId': 'save_api_v1_attempts__id__responses_put', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/attempts/{id}/submit] _
+
+path = '/api/v1/attempts/{id}/submit', method = 'post'
+operation = {'tags': ['assessment'], 'summary': 'Submit', 'operationId': 'submit_api_v1_attempts__id__submit_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/attempts/{id}/abandon] _
+
+path = '/api/v1/attempts/{id}/abandon', method = 'post'
+operation = {'tags': ['assessment'], 'summary': 'Abandon', 'operationId': 'abandon_api_v1_attempts__id__abandon_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/attempts/{id}/result] _
+
+path = '/api/v1/attempts/{id}/result', method = 'get'
+operation = {'tags': ['assessment'], 'summary': 'Result', 'operationId': 'result_api_v1_attempts__id__result_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/attempts/{id}/regrade] _
+
+path = '/api/v1/attempts/{id}/regrade', method = 'post'
+operation = {'tags': ['assessment'], 'summary': 'Regrade', 'operationId': 'regrade_api_v1_attempts__id__regrade_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/routes] _
+
+path = '/api/v1/routes', method = 'get'
+operation = {'tags': ['routes'], 'summary': 'Routes', 'operationId': 'routes_api_v1_routes_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/routes] _
+
+path = '/api/v1/routes', method = 'post'
+operation = {'tags': ['routes'], 'summary': 'Create', 'operationId': 'create_api_v1_routes_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[PUT /api/v1/routes/{id}] _
+
+path = '/api/v1/routes/{id}', method = 'put'
+operation = {'tags': ['routes'], 'summary': 'Update', 'operationId': 'update_api_v1_routes__id__put', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/routes/{id}/steps/{step_id}/complete] _
+
+path = '/api/v1/routes/{id}/steps/{step_id}/complete', method = 'post'
+operation = {'tags': ['routes'], 'summary': 'Complete', 'operationId': 'complete_api_v1_routes__id__steps__step_id__complete_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/learner/profile] _
+
+path = '/api/v1/learner/profile', method = 'get'
+operation = {'tags': ['learner-profile'], 'summary': 'Read', 'operationId': 'read_api_v1_learner_profile_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[PUT /api/v1/learner/profile] _
+
+path = '/api/v1/learner/profile', method = 'put'
+operation = {'tags': ['learner-profile'], 'summary': 'Write', 'operationId': 'write_api_v1_learner_profile_put', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/providers/capabilities] _
+
+path = '/api/v1/providers/capabilities', method = 'get'
+operation = {'tags': ['providers'], 'summary': 'Capabilities', 'operationId': 'capabilities_api_v1_providers_capabilities_get', 'r...: 'Forbidden', 'content': {'application/json': {'schema': {'$ref': '#/components/schemas/ErrorEnvelope'}}}}, ...}, ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/providers/{id}/config] _
+
+path = '/api/v1/providers/{id}/config', method = 'get'
+operation = {'tags': ['providers'], 'summary': 'Config', 'operationId': 'config_api_v1_providers__id__config_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[PUT /api/v1/providers/{id}/config] _
+
+path = '/api/v1/providers/{id}/config', method = 'put'
+operation = {'tags': ['providers'], 'summary': 'Save Config', 'operationId': 'save_config_api_v1_providers__id__config_put', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/providers/{id}/secret] _
+
+path = '/api/v1/providers/{id}/secret', method = 'post'
+operation = {'tags': ['providers'], 'summary': 'Save Secret', 'operationId': 'save_secret_api_v1_providers__id__secret_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[DELETE /api/v1/providers/{id}/secret] _
+
+path = '/api/v1/providers/{id}/secret', method = 'delete'
+operation = {'tags': ['providers'], 'summary': 'Delete Secret', 'operationId': 'delete_secret_api_v1_providers__id__secret_delete', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/consents/preview] _
+
+path = '/api/v1/consents/preview', method = 'post'
+operation = {'tags': ['providers'], 'summary': 'Preview', 'operationId': 'preview_api_v1_consents_preview_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/consents/preview/{id}] _
+
+path = '/api/v1/consents/preview/{id}', method = 'get'
+operation = {'tags': ['providers'], 'summary': 'Proposal', 'operationId': 'proposal_api_v1_consents_preview__id__get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/consents] _
+
+path = '/api/v1/consents', method = 'post'
+operation = {'tags': ['providers'], 'summary': 'Grant', 'operationId': 'grant_api_v1_consents_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/consents] _
+
+path = '/api/v1/consents', method = 'get'
+operation = {'tags': ['providers'], 'summary': 'Page', 'operationId': 'page_api_v1_consents_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/consents/{id}/revoke] _
+
+path = '/api/v1/consents/{id}/revoke', method = 'post'
+operation = {'tags': ['providers'], 'summary': 'Revoke', 'operationId': 'revoke_api_v1_consents__id__revoke_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/learning/concept-states] _
+
+path = '/api/v1/learning/concept-states', method = 'get'
+operation = {'tags': ['learning-state'], 'summary': 'Read', 'operationId': 'read_api_v1_learning_concept_states_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/recommendations] _
+
+path = '/api/v1/recommendations', method = 'get'
+operation = {'tags': ['recommendations'], 'summary': 'Page', 'operationId': 'page_api_v1_recommendations_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/recommendations/{id}/decision] _
+
+path = '/api/v1/recommendations/{id}/decision', method = 'post'
+operation = {'tags': ['recommendations'], 'summary': 'Decide', 'operationId': 'decide_api_v1_recommendations__id__decision_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/retrieval/query] _
+
+path = '/api/v1/retrieval/query', method = 'post'
+operation = {'tags': ['retrieval'], 'summary': 'Query', 'operationId': 'query_api_v1_retrieval_query_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/index/status] _
+
+path = '/api/v1/index/status', method = 'get'
+operation = {'tags': ['retrieval'], 'summary': 'Status', 'operationId': 'status_api_v1_index_status_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/index/rebuild] _
+
+path = '/api/v1/index/rebuild', method = 'post'
+operation = {'tags': ['retrieval'], 'summary': 'Rebuild', 'operationId': 'rebuild_api_v1_index_rebuild_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/threads] _
+
+path = '/api/v1/threads', method = 'post'
+operation = {'tags': ['tutor'], 'summary': 'Create', 'operationId': 'create_api_v1_threads_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/threads] _
+
+path = '/api/v1/threads', method = 'get'
+operation = {'tags': ['tutor'], 'summary': 'Threads', 'operationId': 'threads_api_v1_threads_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/threads/{id}/messages] _
+
+path = '/api/v1/threads/{id}/messages', method = 'get'
+operation = {'tags': ['tutor'], 'summary': 'Messages', 'operationId': 'messages_api_v1_threads__id__messages_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/tutor/runs] _
+
+path = '/api/v1/tutor/runs', method = 'post'
+operation = {'tags': ['tutor'], 'summary': 'Start', 'operationId': 'start_api_v1_tutor_runs_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/runs/{id}] _
+
+path = '/api/v1/runs/{id}', method = 'get'
+operation = {'tags': ['tutor'], 'summary': 'Read', 'operationId': 'read_api_v1_runs__id__get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/runs/{id}/cancel] _
+
+path = '/api/v1/runs/{id}/cancel', method = 'post'
+operation = {'tags': ['tutor'], 'summary': 'Cancel', 'operationId': 'cancel_api_v1_runs__id__cancel_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/runs/{id}/events] _
+
+path = '/api/v1/runs/{id}/events', method = 'get'
+operation = {'tags': ['tutor'], 'summary': 'Events', 'operationId': 'events_api_v1_runs__id__events_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/authoring/jobs] _
+
+path = '/api/v1/authoring/jobs', method = 'post'
+operation = {'tags': ['authoring'], 'summary': 'Prepare', 'operationId': 'prepare_api_v1_authoring_jobs_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/authoring/jobs] _
+
+path = '/api/v1/authoring/jobs', method = 'get'
+operation = {'tags': ['authoring'], 'summary': 'Jobs', 'operationId': 'jobs_api_v1_authoring_jobs_get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/authoring/jobs/{id}] _
+
+path = '/api/v1/authoring/jobs/{id}', method = 'get'
+operation = {'tags': ['authoring'], 'summary': 'Read', 'operationId': 'read_api_v1_authoring_jobs__id__get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/authoring/drafts/{id}] _
+
+path = '/api/v1/authoring/drafts/{id}', method = 'get'
+operation = {'tags': ['authoring'], 'summary': 'Draft', 'operationId': 'draft_api_v1_authoring_drafts__id__get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/authoring/drafts/{id}/numeric-checks] _
+
+path = '/api/v1/authoring/drafts/{id}/numeric-checks', method = 'post'
+operation = {'tags': ['authoring'], 'summary': 'Preview', 'operationId': 'preview_api_v1_authoring_drafts__id__numeric_checks_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/authoring/numeric-checks/{id}] _
+
+path = '/api/v1/authoring/numeric-checks/{id}', method = 'get'
+operation = {'tags': ['authoring'], 'summary': 'Numeric Read', 'operationId': 'numeric_read_api_v1_authoring_numeric_checks__id__get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/authoring/numeric-checks/{id}/decision] _
+
+path = '/api/v1/authoring/numeric-checks/{id}/decision', method = 'post'
+operation = {'tags': ['authoring'], 'summary': 'Decision', 'operationId': 'decision_api_v1_authoring_numeric_checks__id__decision_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/authoring/group-jobs] _
+
+path = '/api/v1/authoring/group-jobs', method = 'post'
+operation = {'tags': ['authoring'], 'summary': 'Prepare', 'operationId': 'prepare_api_v1_authoring_group_jobs_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/authoring/draft-groups/{id}] _
+
+path = '/api/v1/authoring/draft-groups/{id}', method = 'get'
+operation = {'tags': ['authoring'], 'summary': 'Draft', 'operationId': 'draft_api_v1_authoring_draft_groups__id__get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/authoring/draft-groups/{id}/solutions/{member_key}] _
+
+path = '/api/v1/authoring/draft-groups/{id}/solutions/{member_key}'
+method = 'get'
+operation = {'tags': ['authoring'], 'summary': 'Solution', 'operationId': 'solution_api_v1_authoring_draft_groups__id__solutions__member_key__get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/authoring/draft-groups/{id}/members/{member_key}/numeric-checks] _
+
+path = '/api/v1/authoring/draft-groups/{id}/members/{member_key}/numeric-checks'
+method = 'post'
+operation = {'tags': ['authoring'], 'summary': 'Preview', 'operationId': 'preview_api_v1_authoring_draft_groups__id__members__member_key__numeric_checks_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/authoring/group-numeric-checks/{id}] _
+
+path = '/api/v1/authoring/group-numeric-checks/{id}', method = 'get'
+operation = {'tags': ['authoring'], 'summary': 'Read', 'operationId': 'read_api_v1_authoring_group_numeric_checks__id__get', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+_ test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/authoring/group-numeric-checks/{id}/decision] _
+
+path = '/api/v1/authoring/group-numeric-checks/{id}/decision', method = 'post'
+operation = {'tags': ['authoring'], 'summary': 'Decide', 'operationId': 'decide_api_v1_authoring_group_numeric_checks__id__decision_post', 'security': [{'LocalSession': []}], ...}
+
+    @pytest.mark.parametrize("path,method,operation", OPERATIONS, ids=[f"{method.upper()} {path}" for path, method, _ in OPERATIONS])
+    def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, method, operation):
+        assert (method.upper(), path) in SPEC_ROUTES
+        api = create_app().openapi()
+        for schema in api["components"]["schemas"].values():
+            Draft202012Validator.check_schema(schema)
+            if schema.get("type") == "object":
+                assert schema["additionalProperties"] is False
+            else:
+                # A named RootModel projects the two concrete block-read shapes.
+                # Every union branch must still be a closed named object contract.
+>               assert schema["title"] == "BlockReadResponse"
+E               AssertionError: assert 'AuthoringGroupPrepareWrite' == 'BlockReadResponse'
+E                 
+E                 - BlockReadResponse
+E                 + AuthoringGroupPrepareWrite
+
+tests/contract/test_api_projection.py:73: AssertionError
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/contract/test_api_projection.py::test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /health]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/session/bootstrap]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/session]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/session/logout]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/session/role]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/readiness]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/workspace]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[PUT /api/v1/workspace/preferences]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/workbench/session]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[PUT /api/v1/workbench/session]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/courses]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/courses/{id}]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/lessons/{id}]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/blocks/{id}]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/courses/{id}/outline]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/courses/{id}/directory-search]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/blocks/{id}/body]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/objects/{id}/current]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/objects/{id}/revisions]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/imports]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/imports/{id}]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/imports/{id}/commit]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/imports/{id}/cancel]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/jobs/{id}]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/jobs/{id}/cancel]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/drafts/{id}]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/sources/{id}]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/artifacts/{id}/download]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/learning/evidence]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/notes]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/notes]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[PATCH /api/v1/notes/{id}]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[DELETE /api/v1/notes/{id}]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/learning/progress]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/learning/actions]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/practice/sets]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/practice/sessions]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/practice/sessions/{id}]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[PUT /api/v1/practice/sessions/{id}/responses]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/practice/sessions/{id}/submit]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/practice/sessions/{id}/hints]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/practice/sessions/{id}/solutions]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/assessments]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/assessments/{id}/attempts]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/attempts/{id}]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/attempts/{id}/responses]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[PUT /api/v1/attempts/{id}/responses]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/attempts/{id}/submit]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/attempts/{id}/abandon]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/attempts/{id}/result]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/attempts/{id}/regrade]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/routes]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/routes]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[PUT /api/v1/routes/{id}]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/routes/{id}/steps/{step_id}/complete]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/learner/profile]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[PUT /api/v1/learner/profile]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/providers/capabilities]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/providers/{id}/config]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[PUT /api/v1/providers/{id}/config]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/providers/{id}/secret]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[DELETE /api/v1/providers/{id}/secret]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/consents/preview]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/consents/preview/{id}]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/consents]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/consents]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/consents/{id}/revoke]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/learning/concept-states]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/recommendations]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/recommendations/{id}/decision]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/retrieval/query]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/index/status]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/index/rebuild]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/threads]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/threads]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/threads/{id}/messages]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/tutor/runs]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/runs/{id}]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/runs/{id}/cancel]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/runs/{id}/events]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/authoring/jobs]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/authoring/jobs]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/authoring/jobs/{id}]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/authoring/drafts/{id}]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/authoring/drafts/{id}/numeric-checks]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/authoring/numeric-checks/{id}]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/authoring/numeric-checks/{id}/decision]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/authoring/group-jobs]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/authoring/draft-groups/{id}]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/authoring/draft-groups/{id}/solutions/{member_key}]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/authoring/draft-groups/{id}/members/{member_key}/numeric-checks]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[GET /api/v1/authoring/group-numeric-checks/{id}]
+FAILED tests/contract/test_api_projection.py::test_implemented_route_is_in_spec_and_has_strict_openapi_contract[POST /api/v1/authoring/group-numeric-checks/{id}/decision]
+94 failed, 609 passed, 2 warnings in 165.41s (0:02:45)

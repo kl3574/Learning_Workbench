@@ -1,0 +1,124 @@
+diff --git a/apps/web/src/features/tutor/useTutor.ts b/apps/web/src/features/tutor/useTutor.ts
+index 7cacf8f..e0257dc 100644
+--- a/apps/web/src/features/tutor/useTutor.ts
++++ b/apps/web/src/features/tutor/useTutor.ts
+@@ -8,6 +8,8 @@ import { makeTutorCommand, persistTutorCommand, readTutorCommand, tutorCommandSt
+ import { readTutorContext, type BoundTutorContext, type TutorLocation } from './tutorContext'
+ import { acceptRun, contextIdentity, observeEvent, terminalRun, threadMatches } from './tutorState'
+ 
++const measurement = (kind: string, facts: object) => (window as unknown as { __m61_mark?: (kind: string, facts: object) => void }).__m61_mark?.(kind, facts)
++
+ export function useTutor(workspace: string, location: TutorLocation | null, paused: boolean, port: TutorPort = tutorClient, bind = readTutorContext, store = tutorCommandStore) {
+   const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
+   const owner = JSON.stringify([workspace, access, location]), scope = useRef({ owner, paused }); scope.current = { owner, paused }
+@@ -42,15 +44,20 @@ export function useTutor(workspace: string, location: TutorLocation | null, paus
+       let reload = false
+       try {
+         for await (const event of port.events(value.run.id, value.run.last_seq, controller.signal)) {
++          measurement('sse_parsed', { run_id: event.run_id, seq: event.seq, type: event.type })
+           if (!current() || sequence !== operation.current || controller.signal.aborted) return
+           value = observeEvent(value, event); observed.current = value; setRun(value)
++          measurement('event_set_run', { run_id: value.run.id, seq: value.run.last_seq, status: value.run.status })
+           if (['context_ready', 'approval_required', 'completed', 'failed', 'cancelled'].includes(event.type)) { reload = true; break }
+         }
+         if (!current() || sequence !== operation.current || controller.signal.aborted) return
+         if (!reload) { setStreamState('连接中断，任务状态未知；先读取快照再恢复观察'); return }
++        measurement('observe_read_start', { run_id: value.run.id })
+         const fresh = acceptRun(value, await port.read(value.run.id), expectedThread)
++        measurement('observe_read_return', { run_id: fresh.run.id, seq: fresh.run.last_seq, status: fresh.run.status })
+         if (!current() || sequence !== operation.current || controller.signal.aborted) return
+         value = fresh; observed.current = fresh; setRun(fresh); setThread(old => old?.id === expectedThread ? { ...old, revision: fresh.thread_revision } : old)
++        measurement('snapshot_set_run', { run_id: fresh.run.id, seq: fresh.run.last_seq, status: fresh.run.status })
+       } catch (reason) { if (current() && sequence === operation.current && !controller.signal.aborted) { fail(reason); setStreamState('连接中断，任务状态未知；先读取快照再恢复观察') }; return }
+     }
+     if (current() && sequence === operation.current) setStreamState('已从服务端快照确认任务终态')
+@@ -58,7 +65,9 @@ export function useTutor(workspace: string, location: TutorLocation | null, paus
+   const readRun = async (id: string, expectedThread: string, sequence: number) => {
+     stop()
+     const previous = observed.current?.run.id === id ? observed.current : null
++    measurement('read_start', { run_id: id })
+     const value = acceptRun(previous, await port.read(id), expectedThread)
++    measurement('read_return', { run_id: value.run.id, seq: value.run.last_seq, status: value.run.status })
+     if (!current() || sequence !== operation.current) return
+     remember(value.run.id); observed.current = value; setRun(value); setThread(old => old?.id === expectedThread ? { ...old, revision: value.thread_revision } : old); setDenied(false)
+     if (!terminalRun(value)) void observe(value, expectedThread, sequence)
+diff --git a/tests/e2e/tutor.spec.ts b/tests/e2e/tutor.spec.ts
+index 0ed75eb..9fe574c 100644
+--- a/tests/e2e/tutor.spec.ts
++++ b/tests/e2e/tutor.spec.ts
+@@ -4,6 +4,7 @@ import type { AttemptSnapshot, ProviderConfigWrite, SessionResponse, TutorMessag
+ import { RestartRuntime } from './restartRuntime'
+ import { TutorRuntime } from './tutorRuntime'
+ import { observeTutorCompletion } from './tutorDiagnostic'
++import { measureTutor } from './tutorLocalMeasurement'
+ import { importAssessmentPackage, originalAssessmentPackage } from './assessmentTestData'
+ 
+ async function unregisteredProvider(page: Page, origin: string) {
+@@ -151,6 +152,7 @@ test('explicit same-Run consent uses the real loopback protocol and restores raw
+   let diagnostic: Awaited<ReturnType<typeof observeTutorCompletion>> | undefined
+   try {
+     const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]
++    const measurement = await measureTutor(page)
+     diagnostic = await observeTutorCompletion(page, { readRuntime: () => runtime.diagnosticControl() })
+     page.on('pageerror', error => errors.push(error.message))
+     await runtime.authenticateOnly(page)
+@@ -189,11 +191,12 @@ test('explicit same-Run consent uses the real loopback protocol and restores raw
+     expect(runtime.control().received_request_count).toBe(0)
+     await tutor.getByLabel('我已核对本次冻结范围、目的地、预算与到期时间', { exact: true }).check()
+     await tutor.getByRole('button', { name: '准备批准本次授权命令', exact: true }).click()
++    await measurement.before()
+     diagnostic.mark('grant_click')
+     await tutor.getByRole('button', { name: '确认发送批准授权', exact: true }).click()
+-    await diagnostic.around(info, async () => {
++    try { await diagnostic.around(info, () => measurement.around(async () => {
+       await expect(tutor.getByRole('heading', { name: '真实任务状态：completed', exact: true })).toBeVisible()
+-    })
++    })) } finally { await measurement.save() }
+     const complete: TutorRunView = await page.request.get(`/api/v1/runs/${ack.run.id}`).then(value => value.json())
+     expect(complete.run.id).toBe(ack.run.id); expect(complete.run.thread_id).toBe(thread.id)
+     expect(complete.consent_id).toBeTruthy(); expect(complete.latest_proposal_id).toBeTruthy()
+diff --git a/tests/e2e/tutorRuntime.ts b/tests/e2e/tutorRuntime.ts
+index f0b0f46..e69b1c3 100644
+--- a/tests/e2e/tutorRuntime.ts
++++ b/tests/e2e/tutorRuntime.ts
+@@ -1,5 +1,5 @@
+ import { spawn, execFileSync, type ChildProcess } from 'node:child_process'
+-import { mkdtempSync, existsSync, statSync, readFileSync } from 'node:fs'
++import { mkdtempSync, existsSync, statSync, readFileSync, writeFileSync } from 'node:fs'
+ import { readFile } from 'node:fs/promises'
+ import { createServer } from 'node:net'
+ import { tmpdir } from 'node:os'
+@@ -31,9 +31,10 @@ function owned(command: string, args: string[], env: NodeJS.ProcessEnv): OwnedPr
+   const child = spawn(command, args, { cwd: root, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
+   if (child.pid) ownedGroups.add(child.pid)
+   let output = ''
+-  for (const stream of [child.stdout, child.stderr]) stream?.on('data', chunk => { output = (output + String(chunk)).slice(-8192) })
++  const fullOutput: string[] = []
++  for (const stream of [child.stdout, child.stderr]) stream?.on('data', chunk => { fullOutput.push(String(chunk)); output = (output + String(chunk)).slice(-8192) })
+   const exit = new Promise<void>(accept => {
+-    const done = () => { if (child.pid) ownedGroups.delete(child.pid); accept() }
++    const done = () => { if (child.pid) ownedGroups.delete(child.pid); if (process.env.TUTOR_MEASUREMENT_DIR) writeFileSync(resolve(process.env.TUTOR_MEASUREMENT_DIR, `child-${child.pid}.log`), fullOutput.join('')); accept() }
+     child.once('close', done); child.once('error', done)
+   })
+   return { child, exit, output: () => output }
+diff --git a/tests/tutor_native_fixture.py b/tests/tutor_native_fixture.py
+index 0fbb769..2f71173 100644
+--- a/tests/tutor_native_fixture.py
++++ b/tests/tutor_native_fixture.py
+@@ -24,6 +24,8 @@ ANSWER = '这是原创合成协议返回的完整助教回答。\n它只用于
+ 
+ 
+ def create_test_app() -> FastAPI:
++    from tests.tutor_local_measurement import install, MeasurementMiddleware
++    install()
+     """Construction is IO-free; servers and observation begin in lifespan."""
+     settings = Settings.from_env()
+     scenario = os.environ.get('TUTOR_NATIVE_SCENARIO', 'complete')
+@@ -31,6 +33,7 @@ def create_test_app() -> FastAPI:
+         raise ValueError('Unknown explicit Tutor test scenario')
+     preparer = RequestPreparer()
+     application = create_app(settings, request_preparer=preparer)
++    application.add_middleware(MeasurementMiddleware)
+     production_lifespan = application.router.lifespan_context
+ 
+     @asynccontextmanager

@@ -1,0 +1,57 @@
+"""Preserve real development commands and declared repository input snapshots."""
+import datetime
+import hashlib
+import json
+import pathlib
+import subprocess
+import sys
+import time
+
+ROOT = pathlib.Path('<LOCAL_HOME>/.cache/learning-workbench-acceptance/m61-groups-active')
+OUT = pathlib.Path(__file__).resolve().parent
+
+
+def encoded(value):
+    return (json.dumps(value, ensure_ascii=False, indent=2) + '\n').encode()
+
+
+def snapshot():
+    names = subprocess.check_output(['git', 'ls-files', '-co', '--exclude-standard', '-z'], cwd=ROOT).decode().split('\0')
+    rows = []
+    for name in sorted(set(names)):
+        if not name or name.startswith('progress/'):
+            continue
+        path = ROOT / name
+        if not path.is_file() or path.is_symlink():
+            raise RuntimeError('Declared source is absent or an unexpected symlink: ' + name)
+        data = path.read_bytes()
+        rows.append({'path': name, 'bytes': len(data), 'mode': path.stat().st_mode & 0o777,
+                     'sha256': hashlib.sha256(data).hexdigest()})
+    return rows
+
+
+name, *command = sys.argv[1:]
+target = OUT / name
+target.mkdir()
+before = snapshot()
+(target / 'before.json').write_bytes(encoded(before))
+receipt = {'command': command, 'cwd': str(ROOT), 'started_at': datetime.datetime.now(datetime.UTC).isoformat(),
+           'head': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
+           'driver_sha256': hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest(),
+           'scope': 'Declared non-progress repository sources/configs/generated files, not installed dependency binaries.'}
+start = time.monotonic()
+with (target / 'stdout.log').open('wb') as stdout, (target / 'stderr.log').open('wb') as stderr:
+    result = subprocess.run(command, cwd=ROOT, stdout=stdout, stderr=stderr, check=False)
+after = snapshot()
+(target / 'after.json').write_bytes(encoded(after))
+receipt.update(exit_code=result.returncode, finished_at=datetime.datetime.now(datetime.UTC).isoformat(),
+               seconds=time.monotonic()-start, input_count_before=len(before), input_count_after=len(after),
+               declared_inputs_unchanged=before == after,
+               files={p.name: {'bytes': p.stat().st_size, 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()}
+                      for p in target.iterdir()})
+(target / 'receipt.json').write_bytes(encoded(receipt))
+print(json.dumps(receipt, ensure_ascii=False))
+for filename in ('stdout.log', 'stderr.log'):
+    text = (target / filename).read_text(errors='replace')
+    print(filename, text[-8000:])
+sys.exit(result.returncode)

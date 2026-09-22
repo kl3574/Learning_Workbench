@@ -1,0 +1,113 @@
+diff --git a/tests/integration/test_authoring_cancel_policy_recovery.py b/tests/integration/test_authoring_cancel_policy_recovery.py
+new file mode 100644
+index 0000000..42e9265
+--- /dev/null
++++ b/tests/integration/test_authoring_cancel_policy_recovery.py
+@@ -0,0 +1,107 @@
++"""Actual checked loopback output survives cancellation plus creator revocation.
++
++This is controlled Provider/SQLite evidence, not a vendor call or draft approval.
++"""
++
++import asyncio
++from contextlib import aclosing
++from dataclasses import replace
++
++import pytest
++
++from packages.contracts.canonical import canonical_bytes
++from services.api.app.application.errors import ApiError
++from services.api.app.application.sessions import SessionService
++from services.api.app.dto import RoleRequest
++from services.api.app.import_dto import JobCancelRequest
++from services.api.app.infrastructure.authoring_group_repository import AuthoringGroupRepository
++from services.api.app.infrastructure.authoring_repository import AuthoringRepository
++from services.api.app.infrastructure.security import consume_bootstrap, issue_bootstrap_code
++from tests.integration import test_authoring_group_provider as group
++from tests.integration import test_authoring_provider as single
++from tests.integration.test_retrieval import all_rows
++from tests.provider_protocol_fixture import local_provider
++
++
++@pytest.mark.parametrize('variant', ['single', 'group'])
++def test_cancelled_control_only_receipt_recovers_original_output_without_adoption(tmp_path, variant):
++    async def run():
++        fixture = single if variant == 'single' else group
++        repository = AuthoringRepository if variant == 'single' else AuthoringGroupRepository
++        answer = canonical_bytes(fixture.payload()).decode()
++        async with local_provider(text=answer) as server:
++            state = fixture.configured(tmp_path, server.base_url)
++            database, identity, service, worker, _, dispatch = state
++            original, _, grant = fixture.approved(state)
++            lease = worker.claim()
++            assert lease is not None and lease.job_id == original.id
++
++            # Stop after the real Provider's checked terminal, before either
++            # Authoring owner can read private bytes or adopt a candidate.
++            async with aclosing(dispatch.dispatch(identity, original.id, grant.id,
++                                                  lease.dispatch(), asyncio.Event())) as stream:
++                async for _ in stream:
++                    pass
++            assert len(server.requests) == 1
++            with database.transaction(immediate=False) as conn:
++                checked = dispatch.read_result(conn, identity, original.id, grant.id)
++                assert checked is not None and checked.answer is not None
++                assert checked.answer.text == answer
++                receipt_id = checked.receipt.id
++                pending = repository(conn, identity.workspace_id).load(original.id)
++                assert pending.view.raw_answer is None and pending.view.summary.candidate is None
++
++            # Revoke the real granting session. A separate authenticated learner
++            # can still cancel and inspect safe operation controls in this workspace.
++            sessions = SessionService(database)
++            sessions.logout(identity)
++            _, learner = consume_bootstrap(database, issue_bootstrap_code(database))
++            running = service.job(learner, original.id)
++            command = JobCancelRequest(expected_revision=running.revision)
++            cancel_ack = service.cancel_job(learner, original.id, command, 'cancel-after-author-revoked')
++            assert cancel_ack.status == 'running' and cancel_ack.revision == running.revision + 1
++            assert cancel_ack.result_refs == [] and cancel_ack.error is None
++            await asyncio.to_thread(worker._finish, lease)
++
++            terminal = service.job(learner, original.id)
++            assert terminal.status == 'cancelled' and terminal.revision == cancel_ack.revision + 1
++            assert terminal.result_refs == [] and terminal.error is None
++            for safe in (cancel_ack, terminal):
++                raw = canonical_bytes(safe)
++                assert answer.encode() not in raw
++                assert all(field not in raw for field in (b'raw_answer', b'raw_refusal', b'accepted_answers', b'content_plan'))
++            with pytest.raises(ApiError) as denied:
++                service.read(learner, original.id)
++            assert denied.value.code == 'POLICY_DENIED'
++            with database.transaction(immediate=False) as conn:
++                stored = repository(conn, identity.workspace_id).load(original.id)
++                assert stored.view.provider_receipt_id == receipt_id
++                assert stored.view.provider_outcome == 'completed'
++                assert stored.view.raw_answer is stored.view.raw_refusal is None
++                assert stored.view.summary.candidate is None
++                if variant == 'group':
++                    assert stored.view.plan_ref is stored.view.content_plan is None
++                for table in ('authoring_candidates', 'authoring_group_candidates', 'authoring_content_plans'):
++                    assert conn.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0] == 0
++
++            before_replay = all_rows(database)
++            assert service.cancel_job(learner, original.id, command, 'cancel-after-author-revoked') == cancel_ack
++            assert all_rows(database) == before_replay
++            sessions.switch_role(learner, RoleRequest(role='author'), 'new-session-author')
++            restored_author = replace(learner, role='author')
++            before_read = all_rows(database)
++
++            # Regression: cancellation must not erase the control-only receipt
++            # fact and make the checked original output fail integrity on read.
++            recovered = service.read(restored_author, original.id)
++            assert recovered.summary.status == 'cancelled' and recovered.summary.candidate is None
++            assert recovered.raw_answer == answer and recovered.raw_refusal is None
++            assert recovered.provider_receipt_id == receipt_id and recovered.provider_outcome == 'completed'
++            if variant == 'group':
++                assert recovered.plan_ref is recovered.content_plan is None
++            assert service.job(restored_author, original.id) == terminal
++            assert service.cancel_job(learner, original.id, command, 'cancel-after-author-revoked') == cancel_ack
++            assert not await asyncio.to_thread(worker.run_once)
++            assert len(server.requests) == 1 and all_rows(database) == before_read
++
++    asyncio.run(run())

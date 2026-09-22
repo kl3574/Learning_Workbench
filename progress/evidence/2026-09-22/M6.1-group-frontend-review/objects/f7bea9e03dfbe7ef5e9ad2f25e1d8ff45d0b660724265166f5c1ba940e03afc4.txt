@@ -1,0 +1,362 @@
+diff --git a/apps/web/src/features/authoring/AuthoringConsent.tsx b/apps/web/src/features/authoring/AuthoringConsent.tsx
+index 4983da1..e1ff1fe 100644
+--- a/apps/web/src/features/authoring/AuthoringConsent.tsx
++++ b/apps/web/src/features/authoring/AuthoringConsent.tsx
+@@ -1,5 +1,5 @@
+ import { useEffect, useMemo, useRef, useState } from 'react'
+-import type { AuthoringJobView, ConsentProposalView, ProviderConfigView } from '../../../../../packages/contracts/generated/api-types'
++import type { AuthoringJobReadView, ConsentProposalView, ProviderConfigView } from '../../../../../packages/contracts/generated/api-types'
+ import { providerClient, type ProviderPort } from '../providers/providerClient'
+ import { ConsentPreview } from '../providers/ConsentPreview'
+ import { ProposalDisplay } from '../providers/ConsentSummary'
+@@ -7,7 +7,7 @@ import { ProviderCommandPanel } from '../providers/ProviderCommandPanel'
+ import { useProviderCommands } from '../providers/useProviderCommands'
+ import type { ProviderCommand } from '../providers/providerDrafts'
+ const commandJob = (command: ProviderCommand) => command.kind === 'preview' ? command.body.job_id : command.kind === 'grant' ? command.proposal.summary.job_id : null
+-export function AuthoringConsent({ workspace, value, refresh, denied, onState, port = providerClient }: { workspace: string; value: AuthoringJobView; refresh: () => void; denied: (reason: unknown) => void; onState: (state: { dirty: boolean; safe: boolean }) => void; port?: ProviderPort }) {
++export function AuthoringConsent({ workspace, value, refresh, denied, onState, port = providerClient }: { workspace: string; value: AuthoringJobReadView; refresh: () => void; denied: (reason: unknown) => void; onState: (state: { dirty: boolean; safe: boolean }) => void; port?: ProviderPort }) {
+   const callbacks = useRef({ denied, onState, refresh }); callbacks.current = { denied, onState, refresh }
+   const wrapped = useMemo<ProviderPort>(() => {
+     const guarded = async <T,>(promise: Promise<T>) => { try { return await promise } catch (reason) { callbacks.current.denied(reason); throw reason } }
+@@ -28,10 +28,11 @@ export function AuthoringConsent({ workspace, value, refresh, denied, onState, p
+   const previousAck = useRef<unknown>(null)
+   useEffect(() => { if (editor?.ack && editor.ack !== previousAck.current) { previousAck.current = editor.ack; callbacks.current.refresh() } }, [editor?.ack])
+   useEffect(() => { callbacks.current.onState({ dirty: dirty || !!editor && !editor.ack || candidates.length > 0, safe: commands.closeSafe }); return () => callbacks.current.onState({ dirty: false, safe: true }) }, [dirty, editor, candidates.length, commands.closeSafe])
++  const group = 'variant' in value
+   const awaiting = value.summary.status === 'awaiting_approval' && !value.consent_id
+-  return <section aria-label="本次例题模型授权"><h3>另行批准本次模型调用</h3><p>Provider 授权只绑定此例题任务，不批准数值运行或发布。</p><button disabled={commands.busy} onClick={() => { setGeneration(v => v + 1); refresh() }}>刷新配置与本任务授权</button>{error && <p role="alert">{error}</p>}
++  return <section aria-label={group ? '本次组合草稿模型授权' : '本次例题模型授权'}><h3>另行批准本次模型调用</h3><p>本次 Provider 授权绑定此创作任务；数值运行需要单独批准，草稿仍需审查。</p><button disabled={commands.busy} onClick={() => { setGeneration(v => v + 1); refresh() }}>刷新配置与本任务授权</button>{error && <p role="alert">{error}</p>}
+     {awaiting && !proposal && <ConsentPreview task={{ job_id: job, expected_job_revision: value.summary.job_revision }} config={config} paused={false} disabled={!commands.safe || commands.busy || !!editor && !editor.ack} prepare={commands.begin} onDirty={setDirty} />}
+-    {proposal && <><ProposalDisplay value={proposal} />{awaiting && !proposal.consent_id && proposal.validity === 'current' && <><label><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />我已核对本次例题的冻结范围、提供商、预算与到期时间</label><button disabled={!confirmed || !commands.safe || commands.busy || !!editor && !editor.ack} onClick={() => commands.begin({ kind: 'grant', proposal, body: { proposal_id: proposal.id, proposal_sha256: proposal.proposal_sha256 } })}>准备批准例题模型调用</button></>}</>}
++    {proposal && <><ProposalDisplay value={proposal} />{awaiting && !proposal.consent_id && proposal.validity === 'current' && <><label><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />{group ? '我已核对本次组合草稿的冻结范围、提供商、预算与到期时间' : '我已核对本次例题的冻结范围、提供商、预算与到期时间'}</label><button disabled={!confirmed || !commands.safe || commands.busy || !!editor && !editor.ack} onClick={() => commands.begin({ kind: 'grant', proposal, body: { proposal_id: proposal.id, proposal_sha256: proposal.proposal_sha256 } })}>{group ? '准备批准组合草稿模型调用' : '准备批准例题模型调用'}</button></>}</>}
+     {value.consent_id && <p>此任务已有授权，继续读取同一任务；不要再次创建来继续。</p>}
+     <ProviderCommandPanel state={scoped} />
+   </section>
+diff --git a/apps/web/src/features/authoring/AuthoringForm.tsx b/apps/web/src/features/authoring/AuthoringForm.tsx
+index b929ff7..90baf76 100644
+--- a/apps/web/src/features/authoring/AuthoringForm.tsx
++++ b/apps/web/src/features/authoring/AuthoringForm.tsx
+@@ -1,12 +1,15 @@
+ import { useEffect, useRef, useState } from 'react'
+-import type { AuthoringPrepareWrite, ContentRef } from '../../../../../packages/contracts/generated/api-types'
++import type { AuthoringPrepareWrite, AuthoringGroupPrepareWrite, ContentRef } from '../../../../../packages/contracts/generated/api-types'
+ import { checkedAuthoring } from './authoringCommands'
++import { AuthoringTargets, type GroupTargets } from './AuthoringTargets'
+ import { sameRef } from '../reader/target'
+-export function AuthoringForm({ currentBlock, busy, submit, onDirty }: { currentBlock: ContentRef | null; busy: boolean; submit: (body: AuthoringPrepareWrite) => Promise<void>; onDirty: (dirty: boolean) => void }) {
++export function AuthoringForm({ currentBlock, busy, submit, submitGroup, denied = () => {}, onDirty }: { currentBlock: ContentRef | null; busy: boolean; submit: (body: AuthoringPrepareWrite) => Promise<void>; onDirty: (dirty: boolean) => void; submitGroup?: (body: AuthoringGroupPrepareWrite) => Promise<void>; denied?: (reason: unknown) => void }) {
+   const [topic, setTopic] = useState(''), [prerequisites, setPrerequisites] = useState(''), [objectives, setObjectives] = useState(''), [proof, setProof] = useState<'full' | 'declared_dependencies'>('full'), [provider, setProvider] = useState('')
++  const [kind, setKind] = useState<'worked_example' | 'lesson' | 'practice_set' | 'assessment'>('worked_example')
++  const [targets, setTargets] = useState<GroupTargets>({ concepts: [], lesson: null }), [modes, setModes] = useState<Array<'independent' | 'assisted' | 'open_book'>>([]), [time, setTime] = useState(''), [unlimited, setUnlimited] = useState(false)
+   const [refs, setRefs] = useState<ContentRef[]>([]), [id, setId] = useState(''), [revision, setRevision] = useState(''), [hash, setHash] = useState(''), [error, setError] = useState('')
+   const callback = useRef(onDirty); callback.current = onDirty
+-  useEffect(() => { callback.current(!!topic || !!prerequisites || !!objectives || proof !== 'full' || !!provider || !!refs.length || !!id || !!revision || !!hash) }, [topic, prerequisites, objectives, proof, provider, refs, id, revision, hash])
++  useEffect(() => { callback.current(!!topic || !!prerequisites || !!objectives || proof !== 'full' || !!provider || !!refs.length || !!id || !!revision || !!hash || kind !== 'worked_example' || targets.concepts.length > 0 || !!targets.lesson || modes.length > 0 || !!time || unlimited) }, [kind, targets, modes, time, unlimited, topic, prerequisites, objectives, proof, provider, refs, id, revision, hash])
+   const add = (ref: ContentRef) => {
+     try {
+       checkedAuthoring('ContentRef', ref)
+@@ -17,22 +20,33 @@ export function AuthoringForm({ currentBlock, busy, submit, onDirty }: { current
+   const prepare = async () => {
+     try {
+       const lines = (value: string) => value.split('\n').map(v => v.trim()).filter(Boolean)
+-      const body = checkedAuthoring<AuthoringPrepareWrite>('AuthoringPrepareWrite', { topic, prerequisites: lines(prerequisites), objectives: lines(objectives), proof_policy: proof, output_kind: 'worked_example', provider_id: provider, source_refs: refs })
+-      setError(''); await submit(body)
++      const common = { topic, prerequisites: lines(prerequisites), objectives: lines(objectives), proof_policy: proof, output_kind: kind, provider_id: provider, source_refs: refs }
++      if (kind === 'worked_example') {
++        const body = checkedAuthoring<AuthoringPrepareWrite>('AuthoringPrepareWrite', common)
++        setError(''); await submit(body)
++      } else {
++        if (!submitGroup) throw new Error('组合创作当前不可用。')
++        if (kind === 'assessment' && !unlimited && (!/^[1-9][0-9]*$/.test(time) || !Number.isSafeInteger(Number(time)))) throw new Error('请明确选择不限时，或填写正整数秒数。')
++        const body = checkedAuthoring<AuthoringGroupPrepareWrite>('AuthoringGroupPrepareWrite', { ...common, target_concept_refs: targets.concepts, ...(kind === 'practice_set' ? { lesson_ref: targets.lesson } : {}), ...(kind === 'assessment' ? { allowed_modes: modes, time_limit_seconds: unlimited ? null : Number(time) } : {}) })
++        setError(''); await submitGroup(body)
++      }
+     } catch (reason) { setError(reason instanceof Error ? reason.message : '准备要求无效，未发送。') }
+   }
+-  return <section aria-label="准备单个例题候选"><h3>准备一个例题候选</h3><p>先保存教学要求与准确材料，再另行核对模型调用授权。不会覆盖教材，也不会自动运行数值检查。</p>
++  return <section aria-label={kind === 'worked_example' ? '准备单个例题候选' : '准备组合草稿'}><h3>{kind === 'worked_example' ? '准备一个例题候选' : '准备组合草稿'}</h3><p>先保存教学要求与准确材料，再另行核对模型调用授权。不会覆盖教材，也不会自动运行数值检查。</p>
+     <fieldset disabled={busy}><legend>本次教学要求</legend>
+-      <label>例题主题<textarea value={topic} onChange={e => setTopic(e.target.value)} /></label>
++      {submitGroup && <label>创作类型<select value={kind} onChange={event => setKind(event.target.value as typeof kind)}><option value="worked_example">单个例题</option><option value="lesson">教材小节</option><option value="practice_set">习题集</option><option value="assessment">测试题组</option></select></label>}
++      <label>{kind === 'worked_example' ? '例题主题' : '创作主题'}<textarea value={topic} onChange={e => setTopic(e.target.value)} /></label>
+       <label>已声明先修（每行一条）<textarea value={prerequisites} onChange={e => setPrerequisites(e.target.value)} /></label>
+       <label>学习目标（每行一条，至少一条）<textarea value={objectives} onChange={e => setObjectives(e.target.value)} /></label>
+       <label>证明策略<select value={proof} onChange={e => setProof(e.target.value as typeof proof)}><option value="full">完整证明</option><option value="declared_dependencies">明确声明所依赖的结论</option></select></label>
+       <label>已配置的提供商 ID<input value={provider} onChange={e => setProvider(e.target.value)} /></label><p>请从设置中的实际配置选择 ID。配置存在不代表具备完整输入计量证明或已授权调用。</p>
++      {kind !== 'worked_example' && <AuthoringTargets value={targets} change={setTargets} practice={kind === 'practice_set'} busy={busy} denied={denied} />}
++      {kind === 'assessment' && <section aria-label="本次测试要求"><h4>本次测试要求</h4>{(['independent', 'assisted', 'open_book'] as const).map(mode => <label key={mode}><input type="checkbox" checked={modes.includes(mode)} onChange={event => setModes(old => event.target.checked ? [...old, mode] : old.filter(value => value !== mode))} />{{ independent: '独立测试', assisted: '辅助测试', open_book: '开卷测试' }[mode]}</label>)}<label><input type="checkbox" checked={unlimited} onChange={event => setUnlimited(event.target.checked)} />明确不限时</label><label>测试时限（秒）<input disabled={unlimited} inputMode="numeric" value={time} onChange={event => setTime(event.target.value)} /></label></section>}
+       <h4>本次材料范围</h4>{!refs.length && <p>无已选教材来源。不会自动加入当前教材或父级内容。</p>}
+       {currentBlock?.entity === 'block' && <button disabled={refs.some(v => sameRef(v, currentBlock)) || refs.length >= 8} onClick={() => add(currentBlock)}>明确加入当前准确内容块</button>}
+       {refs.map((ref, i) => <p key={`${ref.id}:${ref.revision}`}>{ref.id} · r{ref.revision} · <code>{ref.sha256}</code> <button onClick={() => setRefs(old => old.filter((_, index) => index !== i))}>移除材料 {i + 1}</button></p>)}
+       <details><summary>明确加入其他准确内容块</summary><label>内容块 ID<input value={id} onChange={e => setId(e.target.value)} /></label><label>内容修订<input inputMode="numeric" value={revision} onChange={e => setRevision(e.target.value)} /></label><label>内容 SHA256<input value={hash} onChange={e => setHash(e.target.value)} /></label><button onClick={() => add({ entity: 'block', id, revision: /^[1-9][0-9]*$/.test(revision) ? Number(revision) : 0, sha256: hash })}>加入这份准确引用</button></details>
+-      <button onClick={() => void prepare()}>明确准备本次例题任务</button>
++      <button onClick={() => void prepare()}>{kind === 'worked_example' ? '明确准备本次例题任务' : '明确准备本次组合创作任务'}</button>
+     </fieldset>{error && <p role="alert">{error}</p>}
+   </section>
+ }
+diff --git a/apps/web/src/features/authoring/AuthoringPanel.tsx b/apps/web/src/features/authoring/AuthoringPanel.tsx
+index 7004c80..6a44c0a 100644
+--- a/apps/web/src/features/authoring/AuthoringPanel.tsx
++++ b/apps/web/src/features/authoring/AuthoringPanel.tsx
+@@ -4,6 +4,7 @@ import { getSessionGeneration, subscribeSessionAccess } from '../../api/client'
+ import { useAuthoring } from './useAuthoring'
+ import { authoringClient, type AuthoringPort } from './authoringClient'
+ import { AuthoringControlList } from './AuthoringControlList'
++import { AuthoringGroupDraft, GroupPlan } from './AuthoringGroupDraft'
+ import { AuthoringForm } from './AuthoringForm'
+ import { AuthoringConsent } from './AuthoringConsent'
+ import { NumericCheckPanel, NumericPlanDisplay } from './NumericCheckPanel'
+@@ -17,23 +18,25 @@ export function AuthoringPanel({ workspace, paused, currentBlock, onState, port
+   const dirty = state.academic && formDirty || consentState.dirty || state.commands.some(v => !v.ack), safe = state.ready && !state.busy && consentState.safe
+   useEffect(() => { callback.current({ dirty, safe }) }, [dirty, safe])
+   const detail = state.detail, draft = state.draft, numeric = state.numeric
+-  return <div className="authoring-panel"><p>首个切片只准备一个例题草稿；不包含审核发布、整课生成或 Codex 执行。</p>
++  return <div className="authoring-panel"><p>可以准备例题、教材小节、习题集与测试题组草稿。模型调用与数值执行分别授权；数学、来源与教学质量均待审查。</p>
+     <button disabled={state.busy} onClick={() => void state.refresh()}>刷新安全任务列表与当前权限</button>
+     {state.error && <p role="status">{state.error}</p>}
+     <AuthoringControlList jobs={state.jobs} busy={state.busy || !state.controlReady} academic={state.academic} read={id => void state.read(id)} cancel={job => void state.cancel(job)} />
+     {state.cursor && <button disabled={state.busy} onClick={() => void state.refresh(true)}>继续读取安全任务</button>}
+-    <section aria-label="原创作命令回执"><h3>本机保留的原命令</h3>{state.commands.map(command => <article key={command.command_id}><p>{command.kind === 'cancel' ? '取消任务' : command.kind === 'prepare' ? '准备例题' : command.kind === 'numeric_preview' ? '数值检查预览' : '独立数值决定'} · {command.ack ? '原命令已确认' : command.rejection ? '服务端拒绝，保留原基准' : '结果未知，原 key 与完整命令保留'}</p><details><summary>核对原命令</summary><p>{command.command_id}</p>{command.kind !== 'cancel' && <pre>{JSON.stringify(command.body, null, 2)}</pre>}{command.ack && <p>原回执不是当前状态。请从任务列表重新读取；数值检查从原候选的检查列表进入。</p>}</details><button disabled={state.busy || !(command.kind === 'cancel' ? state.controlReady : state.ready) || !!command.ack} onClick={() => void state.execute(command)}>回放原命令 {command.command_id}</button></article>)}</section>
++    <section aria-label="原创作命令回执"><h3>本机保留的原命令</h3>{state.commands.map(command => <article key={command.command_id}><p>{command.kind === 'cancel' ? '取消任务' : command.kind === 'prepare' ? '准备例题' : command.kind === 'group_prepare' ? '准备组合草稿' : ['numeric_preview', 'group_numeric_preview'].includes(command.kind) ? '数值检查预览' : '独立数值决定'} · {command.ack ? '原命令已确认' : command.rejection ? '服务端拒绝，保留原基准' : '结果未知，原 key 与完整命令保留'}</p><details><summary>核对原命令</summary><p>{command.command_id}</p>{command.kind !== 'cancel' && <pre>{JSON.stringify(command.body, null, 2)}</pre>}{command.ack && <p>原回执不是当前状态。请从任务列表重新读取；数值检查从原候选的检查列表进入。</p>}</details><button disabled={state.busy || !(command.kind === 'cancel' ? state.controlReady : state.ready) || !!command.ack} onClick={() => void state.execute(command)}>回放原命令 {command.command_id}</button></article>)}</section>
+     {!state.academic ? <p role="status">当前只开放安全任务控制。主题、材料、候选、数值输入与结果已收起；请在作者会话且当前测试策略允许后明确重新读取。</p> : <div key={`${workspace}:${access}`}>
+-      <AuthoringForm currentBlock={currentBlock} busy={state.busy || !state.ready} submit={body => state.create({ kind: 'prepare', body })} onDirty={setFormDirty} />
++      <AuthoringForm currentBlock={currentBlock} busy={state.busy || !state.ready} submit={body => state.create({ kind: 'prepare', body })} submitGroup={port.groups ? body => state.create({ kind: 'group_prepare', body }) : undefined} denied={state.reportAccessError} onDirty={setFormDirty} />
+       {detail && <section aria-label="受保护创作详情"><h3>{detail.summary.title}</h3><p>实际任务状态：{detail.summary.status} · r{detail.summary.job_revision}</p><button disabled={state.busy} onClick={() => void state.read(detail.summary.id)}>重新读取本次创作任务</button>
+         <details><summary>完整原教学要求与实际材料</summary><pre>{JSON.stringify(detail.request, null, 2)}</pre><p>实际包装字符数 {detail.preparation.character_count}，不是 token 计数。</p>{!detail.preparation.materials.length && <p>无已选教材来源。</p>}{detail.preparation.materials.map(v => <article key={`${v.ref.id}:${v.ref.revision}`}><h4>{v.title} · 材料未审</h4><pre>{JSON.stringify(v, null, 2)}</pre></article>)}</details>
+         {detail.preparation.warnings.map((v, i) => <p key={i}>{v.code}：{v.message}</p>)}
++        {'variant' in detail && <><details><summary>本次明确选择的已有目标</summary>{detail.preparation.targets.map(target => <p key={`${target.ref.entity}:${target.ref.id}:${target.ref.revision}`}>{target.metadata.title} · {target.ref.entity} · r{target.ref.revision}</p>)}</details>{detail.content_plan && <GroupPlan value={detail.content_plan} />}</>}
+         <AuthoringConsent key={`${detail.summary.id}:${workspace}:${access}`} workspace={workspace} value={detail} refresh={() => void state.read(detail.summary.id)} denied={state.reportAccessError} onState={setConsentState} port={provider} />
+         <section aria-label="原生成输出"><h4>原模型输出，未逐项核验</h4><pre>{detail.raw_answer ?? '尚未取得回答原文。'}</pre>{detail.raw_refusal !== null && <><h4>原拒答</h4><pre>{detail.raw_refusal}</pre></>}<p>提供商终态 {detail.provider_outcome ?? '未知／尚无'}；输入 tokens {detail.usage.input_tokens ?? '未知'}；输出 tokens {detail.usage.output_tokens ?? '未知'}</p><p>Schema {detail.validation.schema}；引用声明 {detail.validation.references}；符号声明 {detail.validation.symbol_declarations}。数学、来源与独立教学审校均 NOT_RUN。</p>{detail.validation.issues.map((v, i) => <p key={i}>{v.code}：{v.message}</p>)}{detail.error_code && <p>{detail.error_code}</p>}</section>
+-        {detail.summary.candidate && <button disabled={state.busy} onClick={() => void state.readDraft()}>读取这份准确例题候选</button>}
++        {detail.summary.candidate && <button disabled={state.busy} onClick={() => void state.readDraft()}>{'variant' in detail ? '读取这份准确组合候选' : '读取这份准确例题候选'}</button>}
+       </section>}
+-      {draft && <section aria-label="例题草稿候选"><h3>{draft.payload.title}</h3><p>状态 draft · r{draft.candidate.draft_revision}；尚未发布。检查通过不授予数学或来源审核。</p><pre aria-label="完整候选正文">{draft.payload.body_markdown}</pre><details><summary>准确候选、来源与符号声明</summary><pre>{JSON.stringify({ candidate: draft.candidate, body_sha256: draft.body_sha256, source_refs: draft.payload.declared_source_refs, symbols: draft.payload.symbols }, null, 2)}</pre></details><NumericPlanDisplay plan={draft.payload.numeric_plan} /><button disabled={state.busy || !state.ready || draft.numeric_check_ids.length >= 100} onClick={() => void state.create({ kind: 'numeric_preview', draft_id: draft.candidate.draft_id, body: { candidate: draft.candidate } })}>明确准备独立数值检查预览</button><p>预览不执行；需另一次明确批准。此候选已保留 {draft.numeric_check_ids.length} / 100 份预览。</p><button disabled={state.busy} onClick={() => void state.readDraft()}>刷新候选的检查记录</button>{draft.numeric_check_ids.map(id => <button key={id} disabled={state.busy} onClick={() => void state.readNumeric(id)}>读取数值检查 {id}</button>)}</section>}
+-      {numeric && <NumericCheckPanel key={`${numeric.id}:${numeric.revision}:${numeric.operation_sha256}`} value={numeric} busy={state.busy || !state.ready} commandExists={state.commands.some(v => v.kind === 'numeric_decision' && v.check_id === numeric.id && (!v.rejection || !!v.ack))} decide={body => void state.create({ kind: 'numeric_decision', check_id: numeric.id, body })} refresh={() => void state.readNumeric(numeric.id)} />}
++      {draft && !('root' in draft) && <section aria-label="例题草稿候选"><h3>{draft.payload.title}</h3><p>状态 draft · r{draft.candidate.draft_revision}；尚未发布。检查通过不授予数学或来源审核。</p><pre aria-label="完整候选正文">{draft.payload.body_markdown}</pre><details><summary>准确候选、来源与符号声明</summary><pre>{JSON.stringify({ candidate: draft.candidate, body_sha256: draft.body_sha256, source_refs: draft.payload.declared_source_refs, symbols: draft.payload.symbols }, null, 2)}</pre></details><NumericPlanDisplay plan={draft.payload.numeric_plan} /><button disabled={state.busy || !state.ready || draft.numeric_check_ids.length >= 100} onClick={() => void state.create({ kind: 'numeric_preview', draft_id: draft.candidate.draft_id, body: { candidate: draft.candidate } })}>明确准备独立数值检查预览</button><p>预览不执行；需另一次明确批准。此候选已保留 {draft.numeric_check_ids.length} / 100 份预览。</p><button disabled={state.busy} onClick={() => void state.readDraft()}>刷新候选的检查记录</button>{draft.numeric_check_ids.map(id => <button key={id} disabled={state.busy} onClick={() => void state.readNumeric(id)}>读取数值检查 {id}</button>)}</section>}
++      {draft && 'root' in draft && <AuthoringGroupDraft value={draft} solution={state.privateSolution} busy={state.busy || !state.ready} readSolution={member => void state.readPrivateSolution(member)} preview={target => void state.create({ kind: 'group_numeric_preview', draft_id: draft.candidate.draft_id, member_key: target.member_key, body: { candidate: draft.candidate, target } })} refresh={() => void state.readDraft()} readNumeric={id => void state.readNumeric(id)} />}
++      {numeric && <NumericCheckPanel key={`${numeric.id}:${numeric.revision}:${numeric.operation_sha256}`} value={numeric} busy={state.busy || !state.ready} commandExists={state.commands.some(v => (v.kind === 'numeric_decision' || v.kind === 'group_numeric_decision') && v.check_id === numeric.id && (!v.rejection || !!v.ack))} decide={body => void state.create({ kind: 'target' in numeric ? 'group_numeric_decision' : 'numeric_decision', check_id: numeric.id, body })} refresh={() => void state.readNumeric(numeric.id)} />}
+     </div>}
+   </div>
+ }
+diff --git a/apps/web/src/features/authoring/NumericCheckPanel.tsx b/apps/web/src/features/authoring/NumericCheckPanel.tsx
+index 9417979..a25b520 100644
+--- a/apps/web/src/features/authoring/NumericCheckPanel.tsx
++++ b/apps/web/src/features/authoring/NumericCheckPanel.tsx
+@@ -1,17 +1,18 @@
+ import { useState } from 'react'
+-import type { ApprovalDecision, NumericCheckView, NumericPlan } from '../../../../../packages/contracts/generated/api-types'
++import type { ApprovalDecision, AuthoringGroupNumericCheckView, NumericCheckView, NumericPlan } from '../../../../../packages/contracts/generated/api-types'
+ export function NumericPlanDisplay({ plan }: { plan: NumericPlan }) {
+   return <section aria-label="完整算术计划"><h4>完整算术计划</h4><p>使用有限 binary64 运算；单位只是标签，不检查维度相容或换算，随机种子为 null。</p>
+     <table><caption>全部变量</caption><thead><tr><th>变量</th><th>值</th><th>单位</th></tr></thead><tbody>{plan.variables.map(v => <tr key={v.name}><td>{v.name}</td><td>{v.value}</td><td>{v.unit}</td></tr>)}</tbody></table>
+     {plan.assertions.map(v => <article key={v.id}><h5>{v.id}</h5><p>表达式：<code>{v.expression}</code></p><p>期望 {v.expected}；actual 与 expected 单位标签：{v.unit}</p><p>绝对容差 {v.atol}；相对容差 {v.rtol}</p></article>)}
+   </section>
+ }
+-export function NumericCheckPanel({ value, busy, commandExists = false, decide, refresh }: { value: NumericCheckView; busy: boolean; commandExists?: boolean; decide: (body: ApprovalDecision) => void; refresh: () => void }) {
++export function NumericCheckPanel({ value, busy, commandExists = false, decide, refresh }: { value: NumericCheckView | AuthoringGroupNumericCheckView; busy: boolean; commandExists?: boolean; decide: (body: ApprovalDecision) => void; refresh: () => void }) {
+   const identity = `${value.id}:${value.revision}:${value.operation_sha256}`
+   const [confirmation, setConfirmation] = useState<string | null>(null), confirmed = confirmation === identity
+   const runtime = value.runtime
+   return <section aria-label="独立数值执行批准"><h3>单独批准本机算术复算</h3><p>数值 PASS 只表示本次计划按记录的输入与容差通过；不证明正文与计划对应、推导正确或来源已审。</p>
+     <p>当前决定：{value.decision}{value.expired ? ' · 预览已过期' : ''} · r{value.revision}</p><p>有效期：{value.created_at} 至 {value.expires_at}</p>
++    {'target' in value && <p>本次组内成员：{value.target.member_key} · {value.target.entity} · <code>{value.target.member_sha256}</code></p>}
+     <NumericPlanDisplay plan={value.plan} />
+     <section aria-label="本次隔离范围"><h4>本次隔离与资源范围</h4><p>仅本机隔离计算，不联网，不读取工作区、个人文件或提供商秘密；缺可靠隔离时阻断，不回退到普通 Python。</p><p>wall {runtime.wall_seconds} 秒；CPU {runtime.cpu_seconds} 秒；内存 {runtime.memory_bytes} bytes；输出 {runtime.output_bytes} bytes；计算进程上限 {runtime.evaluator_process_limit}</p><p>解释器 {runtime.python_version}；沙箱 {runtime.sandbox_version}；{runtime.evaluator_version}</p><p>计算器 SHA256 <code>{runtime.evaluator_sha256}</code></p><p>运行文件清单 SHA256 <code>{runtime.runtime_manifest_sha256}</code></p><p>本次操作 SHA256 <code>{value.operation_sha256}</code></p></section>
+     {value.decision === 'pending' && <><label><input type="checkbox" checked={confirmed} disabled={busy || commandExists || value.expired} onChange={e => setConfirmation(e.target.checked ? identity : null)} />我已核对全部变量、表达式、容差、候选与本机隔离范围，单独批准这一次执行</label><button disabled={busy || commandExists || !confirmed || value.expired} onClick={() => decide({ decision: 'approve_once', expected_revision: value.revision, operation_sha256: value.operation_sha256 })}>明确批准本次数值执行</button><button disabled={busy || commandExists} onClick={() => decide({ decision: 'decline', expected_revision: value.revision, operation_sha256: value.operation_sha256 })}>明确拒绝本次数值执行</button></>}
+diff --git a/apps/web/src/features/authoring/authoringClient.ts b/apps/web/src/features/authoring/authoringClient.ts
+index bc12f51..dd7f6a9 100644
+--- a/apps/web/src/features/authoring/authoringClient.ts
++++ b/apps/web/src/features/authoring/authoringClient.ts
+@@ -1,11 +1,13 @@
+-import type { ApprovalDecision, AuthoringDraftView, AuthoringJobPage, AuthoringJobView, AuthoringPrepareWrite, JobRef, JobSnapshot, NumericCheckDecisionAck, NumericCheckPreviewWrite, NumericCheckView, SessionResponse } from '../../../../../packages/contracts/generated/api-types'
++import type { ApprovalDecision, AuthoringDraftView, AuthoringJobPage, AuthoringJobReadView, AuthoringPrepareWrite, JobRef, JobSnapshot, NumericCheckDecisionAck, NumericCheckPreviewWrite, NumericCheckView, SessionResponse } from '../../../../../packages/contracts/generated/api-types'
+ import { request } from '../../api/client'
++import { authoringGroupClient, type AuthoringGroupPort } from './authoringGroupClient'
+ import { checkedAuthoring } from './authoringCommands'
+ export type AuthoringPort = {
++  groups?: AuthoringGroupPort
+   session(): Promise<SessionResponse>
+   list(cursor?: string): Promise<AuthoringJobPage>
+   prepare(body: AuthoringPrepareWrite, key: string): Promise<JobRef>
+-  read(id: string): Promise<AuthoringJobView>
++  read(id: string): Promise<AuthoringJobReadView>
+   draft(id: string): Promise<AuthoringDraftView>
+   preview(id: string, body: NumericCheckPreviewWrite, key: string): Promise<NumericCheckView>
+   numeric(id: string): Promise<NumericCheckView>
+@@ -14,10 +16,11 @@ export type AuthoringPort = {
+   cancel(id: string, body: { expected_revision: number }, key: string): Promise<JobSnapshot>
+ }
+ export const authoringClient: AuthoringPort = {
++  groups: authoringGroupClient,
+   session: () => request('GET /api/v1/session', undefined),
+   list: async cursor => checkedAuthoring('AuthoringJobPage', await request('GET /api/v1/authoring/jobs', undefined, undefined, { query: { limit: 20, ...(cursor ? { cursor } : {}) } })),
+   prepare: async (body, key) => checkedAuthoring('JobRef', await request('POST /api/v1/authoring/jobs', body, { 'Idempotency-Key': key })),
+-  read: async id => checkedAuthoring('AuthoringJobView', await request('GET /api/v1/authoring/jobs/{id}', undefined, undefined, { path: { id } })),
++  read: async id => checkedAuthoring('AuthoringJobReadView', await request('GET /api/v1/authoring/jobs/{id}', undefined, undefined, { path: { id } })),
+   draft: async id => checkedAuthoring('AuthoringDraftView', await request('GET /api/v1/authoring/drafts/{id}', undefined, undefined, { path: { id } })),
+   preview: async (id, body, key) => checkedAuthoring('NumericCheckView', await request('POST /api/v1/authoring/drafts/{id}/numeric-checks', body, { 'Idempotency-Key': key }, { path: { id } })),
+   numeric: async id => checkedAuthoring('NumericCheckView', await request('GET /api/v1/authoring/numeric-checks/{id}', undefined, undefined, { path: { id } })),
+diff --git a/apps/web/src/features/authoring/authoringCommands.ts b/apps/web/src/features/authoring/authoringCommands.ts
+index d0ffe23..17223cf 100644
+--- a/apps/web/src/features/authoring/authoringCommands.ts
++++ b/apps/web/src/features/authoring/authoringCommands.ts
+@@ -1,4 +1,4 @@
+-import type { ApprovalDecision, AuthoringPrepareWrite, JobRef, JobSnapshot, NumericCheckDecisionAck, NumericCheckPreviewWrite, NumericCheckView } from '../../../../../packages/contracts/generated/api-types'
++import type { ApprovalDecision, AuthoringGroupPrepareWrite, AuthoringGroupNumericPreviewWrite, AuthoringGroupNumericCheckView, AuthoringPrepareWrite, JobRef, JobSnapshot, NumericCheckDecisionAck, NumericCheckPreviewWrite, NumericCheckView } from '../../../../../packages/contracts/generated/api-types'
+ import { DraftStore, type DraftRecord } from '../../workbench/DraftStore'
+ import { checkedProvider, exactObject, sameValue, validIdentity } from '../providers/providerSchema'
+ type Identity = { version: 1; workspace_id: string; command_id: string; rejection: { status: number; code: string | null } | null }
+@@ -6,6 +6,9 @@ export type AuthoringCommand = Identity & (
+   { kind: 'prepare'; body: AuthoringPrepareWrite; ack: JobRef | null }
+   | { kind: 'numeric_preview'; draft_id: string; body: NumericCheckPreviewWrite; ack: NumericCheckView | null }
+   | { kind: 'numeric_decision'; check_id: string; body: ApprovalDecision; ack: NumericCheckDecisionAck | null }
++  | { kind: 'group_prepare'; body: AuthoringGroupPrepareWrite; ack: JobRef | null }
++  | { kind: 'group_numeric_preview'; draft_id: string; member_key: string; body: AuthoringGroupNumericPreviewWrite; ack: AuthoringGroupNumericCheckView | null }
++  | { kind: 'group_numeric_decision'; check_id: string; body: ApprovalDecision; ack: NumericCheckDecisionAck | null }
+   | { kind: 'cancel'; job_id: string; body: { expected_revision: number }; ack: JobSnapshot | null }
+ )
+ type Input<T> = T extends AuthoringCommand ? Omit<T, keyof Identity | 'ack'> : never
+@@ -17,21 +20,25 @@ export function checkedAuthoring<T>(name: string, value: unknown): T {
+ }
+ export function decodeAuthoringCommand(raw: string, workspace: string): AuthoringCommand {
+   const v = JSON.parse(raw) as AuthoringCommand
+-  const extra = v?.kind === 'cancel' ? ['job_id'] : v?.kind === 'numeric_preview' ? ['draft_id'] : v?.kind === 'numeric_decision' ? ['check_id'] : []
++  const extra = v?.kind === 'cancel' ? ['job_id'] : v?.kind === 'group_numeric_preview' ? ['draft_id', 'member_key'] : v?.kind === 'numeric_preview' ? ['draft_id'] : (v?.kind === 'numeric_decision' || v?.kind === 'group_numeric_decision') ? ['check_id'] : []
+   if (!exactObject(v, ['version', 'workspace_id', 'command_id', 'rejection', 'kind', 'body', 'ack', ...extra]) || v.version !== 1 || v.workspace_id !== workspace || !validIdentity(v.command_id)) throw new Error('创作命令身份不一致。')
+   if (v.rejection !== null && (!exactObject(v.rejection, ['status', 'code']) || ![400, 409, 412, 422].includes(v.rejection.status) || v.rejection.code !== null && typeof v.rejection.code !== 'string') || v.rejection && v.ack) throw new Error('命令拒绝记录无效。')
+   if (v.kind === 'cancel') {
+     checkedAuthoring('JobCancelRequest', v.body)
+     if (!validIdentity(v.job_id)) throw new Error('任务身份无效。')
+     if (v.ack !== null) { const ack = checkedAuthoring<JobSnapshot>('JobSnapshot', v.ack); if (ack.id !== v.job_id || ack.workspace_id !== workspace || !['authoring', 'authoring_numeric_check'].includes(ack.kind)) throw new Error('取消回执与本工作区任务不一致。') }
+-  } else if (v.kind === 'prepare') {
+-    checkedAuthoring('AuthoringPrepareWrite', v.body)
++  } else if (v.kind === 'prepare' || v.kind === 'group_prepare') {
++    checkedAuthoring(v.kind === 'prepare' ? 'AuthoringPrepareWrite' : 'AuthoringGroupPrepareWrite', v.body)
+     if (v.ack !== null && checkedAuthoring<JobRef>('JobRef', v.ack).status !== 'awaiting_approval') throw new Error('准备回执并非原授权前阶段。')
+   } else if (v.kind === 'numeric_preview') {
+     checkedAuthoring('NumericCheckPreviewWrite', v.body)
+     if (!validIdentity(v.draft_id) || v.draft_id !== v.body.candidate.draft_id) throw new Error('数值预览候选身份不一致。')
+     if (v.ack !== null) { const ack = checkedAuthoring<NumericCheckView>('NumericCheckView', v.ack); if (!sameValue(ack.candidate, v.body.candidate) || ack.revision !== 1 || ack.decision !== 'pending' || ack.job !== null || ack.result !== null) throw new Error('数值预览回执不匹配。') }
+-  } else if (v.kind === 'numeric_decision') {
++  } else if (v.kind === 'group_numeric_preview') {
++    checkedAuthoring('AuthoringGroupNumericPreviewWrite', v.body)
++    if (!validIdentity(v.draft_id) || v.draft_id !== v.body.candidate.draft_id || !validIdentity(v.member_key) || v.member_key !== v.body.target.member_key) throw new Error('组数值预览的候选或成员身份不一致。')
++    if (v.ack !== null) { const ack = checkedAuthoring<AuthoringGroupNumericCheckView>('AuthoringGroupNumericCheckView', v.ack); if (!sameValue(ack.candidate, v.body.candidate) || !sameValue(ack.target, v.body.target) || ack.revision !== 1 || ack.decision !== 'pending' || ack.job !== null || ack.result !== null) throw new Error('组数值预览回执不匹配。') }
++  } else if (v.kind === 'numeric_decision' || v.kind === 'group_numeric_decision') {
+     checkedAuthoring('ApprovalDecision', v.body)
+     if (!validIdentity(v.check_id)) throw new Error('数值批准身份无效。')
+     if (v.ack !== null) { const ack = checkedAuthoring<NumericCheckDecisionAck>('NumericCheckDecisionAck', v.ack); if (ack.id !== v.check_id || ack.operation_sha256 !== v.body.operation_sha256 || ack.decision !== v.body.decision || ack.revision !== v.body.expected_revision + 1) throw new Error('数值决定回执不匹配原操作。') }
+diff --git a/apps/web/src/features/authoring/useAuthoring.ts b/apps/web/src/features/authoring/useAuthoring.ts
+index e6bbee7..219f7e3 100644
+--- a/apps/web/src/features/authoring/useAuthoring.ts
++++ b/apps/web/src/features/authoring/useAuthoring.ts
+@@ -1,5 +1,5 @@
+ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+-import type { AuthoringDraftView, AuthoringJobView, JobSnapshot, NumericCheckView } from '../../../../../packages/contracts/generated/api-types'
++import type { AuthoringDraftView, AuthoringJobReadView, AuthoringGroupDraftView, AuthoringGroupNumericCheckView, AuthoringPrivateSolutionView, JobSnapshot, NumericCheckView } from '../../../../../packages/contracts/generated/api-types'
+ import { ApiError, getSessionGeneration, subscribeSessionAccess } from '../../api/client'
+ import { digest } from '../retrieval/retrievalModel'
+ import { sameValue } from '../providers/providerSchema'
+@@ -12,13 +12,15 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
+   const operation = useRef(0), working = useRef(false)
+   const [renderOwner, setRenderOwner] = useState(owner), [permission, setPermission] = useState(false), [denied, setDenied] = useState(false)
+   const [jobs, setJobs] = useState<JobSnapshot[]>([]), [cursor, setCursor] = useState<string | null>(null)
+-  const [detail, setDetail] = useState<AuthoringJobView | null>(null), [draft, setDraft] = useState<AuthoringDraftView | null>(null), [numeric, setNumeric] = useState<NumericCheckView | null>(null)
++  const [detail, setDetail] = useState<AuthoringJobReadView | null>(null), [draft, setDraft] = useState<AuthoringDraftView | AuthoringGroupDraftView | null>(null), [numeric, setNumeric] = useState<NumericCheckView | AuthoringGroupNumericCheckView | null>(null)
++  const [privateSolution, setPrivateSolution] = useState<AuthoringPrivateSolutionView | null>(null)
++  const groupPort = () => { if (!port.groups) throw new Error('Group Authoring port unavailable'); return port.groups }
+   const [subjectReady, setSubjectReady] = useState(false)
+   const [commands, setCommands] = useState<AuthoringCommand[]>([]), [ready, setReady] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('')
+   const academic = renderOwner === owner && permission && !paused && !denied
+   const academicRef = useRef(academic); academicRef.current = academic
+   const current = (subject = false) => scope.current.owner === owner && getSessionGeneration() === access && (!subject || !scope.current.paused && academicRef.current)
+-  const clearSubject = () => { setDetail(null); setDraft(null); setNumeric(null); setSubjectReady(false); setCommands(old => old.filter(v => v.kind === 'cancel')) }
++  const clearSubject = () => { setDetail(null); setDraft(null); setNumeric(null); setPrivateSolution(null); setSubjectReady(false); setCommands(old => old.filter(v => v.kind === 'cancel')) }
+   const fail = (reason: unknown) => {
+     const policy = reason instanceof ApiError && (reason.status === 401 || reason.status === 403 || ['ASSESSMENT_ACTIVE', 'POLICY_DENIED', 'ASSESSMENT_ANSWER_PROTECTED'].includes(reason.code ?? ''))
+     if (policy) { academicRef.current = false; setDenied(true); setPermission(false); clearSubject() }
+@@ -77,24 +79,52 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
+   }
+   const read = async (id: string) => {
+     const sequence = begin(true); if (sequence === null) return
+-    setDetail(null); setDraft(null); setNumeric(null)
+-    try { const value = await port.read(id); if (value.summary.id !== id || value.summary.kind !== 'authoring') throw new Error('Wrong authoring identity'); if (current(true) && sequence === operation.current) setDetail(value) }
++    setDetail(null); setDraft(null); setNumeric(null); setPrivateSolution(null)
++    try { const value = checkedAuthoring<AuthoringJobReadView>('AuthoringJobReadView', await port.read(id)); if (value.summary.id !== id || value.summary.kind !== 'authoring') throw new Error('Wrong authoring identity'); if (current(true) && sequence === operation.current) setDetail(value) }
+     catch (reason) { if (current() && sequence === operation.current) fail(reason) } finally { finish(sequence) }
+   }
+   const readDraft = async () => {
+     if (!detail?.summary.candidate) return
+     const candidate = detail.summary.candidate, job = detail.summary.id, sequence = begin(true); if (sequence === null) return
+-    setDraft(null); setNumeric(null)
+-    try { const value = await port.draft(candidate.draft_id); if (value.owner !== 'authoring' || value.source_job_id !== job || !sameValue(value.candidate, candidate) || value.body_sha256 !== digest(value.payload.body_markdown)) throw new Error('Wrong candidate identity or body bytes'); if (current(true) && sequence === operation.current) setDraft(value) }
++    setDraft(null); setNumeric(null); setPrivateSolution(null)
++    try {
++      const value = 'variant' in detail
++        ? checkedAuthoring<AuthoringGroupDraftView>('AuthoringGroupDraftView', await groupPort().draft(candidate.draft_id))
++        : checkedAuthoring<AuthoringDraftView>('AuthoringDraftView', await port.draft(candidate.draft_id))
++      if (value.owner !== 'authoring' || value.source_job_id !== job || !sameValue(value.candidate, candidate)) throw new Error('Wrong candidate identity')
++      if ('root' in value) {
++        if (!('variant' in detail) || !sameValue(value.plan_ref, detail.plan_ref) || !sameValue(value.content_plan, detail.content_plan)) throw new Error('Wrong frozen group plan')
++      } else if (value.body_sha256 !== digest(value.payload.body_markdown)) throw new Error('Wrong candidate body bytes')
++      if (current(true) && sequence === operation.current) setDraft(value)
++    }
+     catch (reason) { if (current() && sequence === operation.current) fail(reason) } finally { finish(sequence) }
+   }
+   const readNumeric = async (id: string) => {
+     if (!draft?.numeric_check_ids.includes(id)) return
+     const candidate = draft.candidate, sequence = begin(true); if (sequence === null) return
+     setNumeric(null)
+-    try { const value = await port.numeric(id); if (value.id !== id || !sameValue(value.candidate, candidate)) throw new Error('Wrong numeric identity'); if (current(true) && sequence === operation.current) setNumeric(value) }
++    try {
++      const value = 'root' in draft
++        ? checkedAuthoring<AuthoringGroupNumericCheckView>('AuthoringGroupNumericCheckView', await groupPort().numeric(id))
++        : checkedAuthoring<NumericCheckView>('NumericCheckView', await port.numeric(id))
++      if (value.id !== id || !sameValue(value.candidate, candidate)) throw new Error('Wrong numeric identity')
++      if ('target' in value && (!('root' in draft) || !(draft.root.entity === 'lesson' ? draft.root.blocks : draft.root.questions).some(member => sameValue(member, value.target)))) throw new Error('Wrong numeric group member')
++      if (current(true) && sequence === operation.current) setNumeric(value)
++    }
+     catch (reason) { if (current() && sequence === operation.current) fail(reason) } finally { finish(sequence) }
+   }
++  const readPrivateSolution = async (member: string) => {
++    if (!draft || !('root' in draft)) return
++    const expected = draft.private_solution_refs.find(ref => ref.question.member_key === member)
++    if (!expected) return
++    const candidate = draft.candidate, sequence = begin(true); if (sequence === null) return
++    setPrivateSolution(null); setNumeric(null)
++    try {
++      const value = checkedAuthoring<AuthoringPrivateSolutionView>('AuthoringPrivateSolutionView', await groupPort().solution(candidate.draft_id, member))
++      if (!sameValue(value.candidate, candidate) || !sameValue(value.ref, expected) || !sameValue(value.payload.question, expected.question)) throw new Error('Wrong private answer binding')
++      if (current(true) && sequence === operation.current) setPrivateSolution(value)
++    } catch (reason) { if (current() && sequence === operation.current) fail(reason) } finally { finish(sequence) }
++  }
+   const execute = async (command: AuthoringCommand) => {
+     if (command.workspace_id !== workspace) return
+     const subject = command.kind !== 'cancel', sequence = ready && (!subject || subjectReady) ? begin(subject) : null; if (sequence === null) return
+@@ -106,7 +136,13 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
+       const ack = retained.ack ?? (retained.kind === 'prepare' ? await port.prepare(retained.body, retained.command_id)
+         : retained.kind === 'cancel' ? await port.cancel(retained.job_id, retained.body, retained.command_id)
+           : retained.kind === 'numeric_preview' ? await port.preview(retained.draft_id, retained.body, retained.command_id)
+-            : await port.decide(retained.check_id, retained.body, retained.command_id))
++            : retained.kind === 'numeric_decision' ? await port.decide(retained.check_id, retained.body, retained.command_id)
++              : retained.kind === 'group_prepare' ? await groupPort().prepare(retained.body, retained.command_id)
++                : retained.kind === 'group_numeric_preview' ? await groupPort().preview(retained.draft_id, retained.member_key, retained.body, retained.command_id)
++                  : await groupPort().decide(retained.check_id, retained.body, retained.command_id))
++      // Admit academic replies only while their original access scope is current.
++      // Safe control ACKs remain durable after a Policy change.
++      if (subject && (!current(true) || sequence !== operation.current)) return
+       await persistAuthoringCommand({ ...retained, rejection: null, ack } as AuthoringCommand)
+       if (!current(subject) || sequence !== operation.current) return
+       const values = await loadCommands(academicRef.current && subjectReady)
+@@ -132,9 +168,9 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
+     if (pending) { setError('已有未知结果的原命令，请先回放；未创建新 key。'); return }
+     try { await execute(makeAuthoringCommand(workspace, input)) } catch (reason) { if (current()) fail(reason) }
+   }
+-  return { jobs: renderOwner === owner ? jobs : [], cursor, detail: academic ? detail : null, draft: academic ? draft : null, numeric: academic ? numeric : null,
++  return { jobs: renderOwner === owner ? jobs : [], cursor, detail: academic ? detail : null, draft: academic ? draft : null, numeric: academic ? numeric : null, privateSolution: academic ? privateSolution : null,
+     reportAccessError: (reason: unknown) => { if (current()) fail(reason) },
+-    commands: renderOwner === owner ? commands.filter(v => academic || v.kind === 'cancel') : [], academic, ready: ready && (!academic || subjectReady), controlReady: ready, busy, error: renderOwner === owner ? error : '', refresh, read, readDraft, readNumeric, execute, create,
++    commands: renderOwner === owner ? commands.filter(v => academic || v.kind === 'cancel') : [], academic, ready: ready && (!academic || subjectReady), controlReady: ready, busy, error: renderOwner === owner ? error : '', refresh, read, readDraft, readNumeric, readPrivateSolution, execute, create,
+     cancel: (job: JobSnapshot) => { const value = checkedJob(job); return create({ kind: 'cancel', job_id: value.id, body: { expected_revision: value.revision } }) },
+   }
+ }

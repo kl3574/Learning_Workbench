@@ -1,0 +1,1005 @@
+FFFF......................FFFFFFFFFFFFFF..                               [100%]
+=================================== FAILURES ===================================
+__ test_exact_order_metadata_and_no_implicit_children_dependencies_or_writes ___
+
+targets = (<services.api.app.infrastructure.database.Database object at 0x7d4bdef0e720>, SessionIdentity(id='session_targets_syn...first', revision=1, entity='concept', title='合成目标甲', prerequisite_ids=['target_dependency'], skill_dimensions=[]), ...)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7d4bdf0ae690>
+
+    def test_exact_order_metadata_and_no_implicit_children_dependencies_or_writes(targets, monkeypatch):
+        database, identity, _, source, lesson, first, second = targets
+        refs = selected(lesson, first, second)
+        loaded = []
+        load = ContentRepository.load
+    
+        def observe(repository, entity, identifier, revision):
+            loaded.append((entity, identifier, revision))
+            return load(repository, entity, identifier, revision)
+    
+        monkeypatch.setattr(ContentRepository, 'load', observe)
+        monkeypatch.setattr(ContentRepository, 'current', lambda *args: pytest.fail('read current pointer'))
+        monkeypatch.setattr(BlobStore, 'read', lambda *args, **kwargs: pytest.fail('opened child body'))
+        with database.transaction() as conn:
+            conn.execute('PRAGMA query_only=ON')
+            before = conn.total_changes
+            with monkeypatch.context() as same_transaction:
+                same_transaction.setattr(database, 'connect', lambda **kwargs: pytest.fail('opened another connection'))
+                result = source.resolve_targets(conn, identity, refs)
+>               frozen = canonical_bytes(result)
+                         ^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_content_authoring_targets.py:82: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+packages/contracts/canonical.py:26: in canonical_bytes
+    return json.dumps(
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/__init__.py:238: in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:200: in encode
+    chunks = self.iterencode(o, _one_shot=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:258: in iterencode
+    return _iterencode(o, 0)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.encoder.JSONEncoder object at 0x7d4bdef0dca0>
+o = AuthoringTargetMaterial()
+
+    def default(self, o):
+        """Implement this method in a subclass such that it returns
+        a serializable object for ``o``, or calls the base implementation
+        (to raise a ``TypeError``).
+    
+        For example, to support arbitrary iterators, you could
+        implement default like this::
+    
+            def default(self, o):
+                try:
+                    iterable = iter(o)
+                except TypeError:
+                    pass
+                else:
+                    return list(iterable)
+                # Let the base class default method raise the TypeError
+                return super().default(o)
+    
+        """
+>       raise TypeError(f'Object of type {o.__class__.__name__} '
+                        f'is not JSON serializable')
+E       TypeError: Object of type AuthoringTargetMaterial is not JSON serializable
+
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:180: TypeError
+_ test_same_transaction_reads_uncommitted_revision_and_leaves_rollback_to_caller _
+
+targets = (<services.api.app.infrastructure.database.Database object at 0x7d4bdef0dfd0>, SessionIdentity(id='session_targets_syn...first', revision=1, entity='concept', title='合成目标甲', prerequisite_ids=['target_dependency'], skill_dimensions=[]), ...)
+
+    def test_same_transaction_reads_uncommitted_revision_and_leaves_rollback_to_caller(targets):
+        database, identity, publisher, source, _, first, _ = targets
+        updated = first.model_copy(update={'revision': 2, 'title': '尚未提交的真实修订'})
+        with database.connect() as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            publisher.publish_in_transaction(conn, identity.workspace_id, [updated], {})
+            before = conn.total_changes
+            result = source.resolve_targets(conn, identity, [reference(updated)])
+>           source.revalidate_targets(conn, identity, result)
+
+tests/integration/test_content_authoring_targets.py:102: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/api/app/application/content_authoring_targets.py:91: in revalidate_targets
+    if canonical_bytes(current) != canonical_bytes(checked):
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+packages/contracts/canonical.py:26: in canonical_bytes
+    return json.dumps(
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/__init__.py:238: in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:200: in encode
+    chunks = self.iterencode(o, _one_shot=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:258: in iterencode
+    return _iterencode(o, 0)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.encoder.JSONEncoder object at 0x7d4bdef4fc20>
+o = AuthoringTargetMaterial()
+
+    def default(self, o):
+        """Implement this method in a subclass such that it returns
+        a serializable object for ``o``, or calls the base implementation
+        (to raise a ``TypeError``).
+    
+        For example, to support arbitrary iterators, you could
+        implement default like this::
+    
+            def default(self, o):
+                try:
+                    iterable = iter(o)
+                except TypeError:
+                    pass
+                else:
+                    return list(iterable)
+                # Let the base class default method raise the TypeError
+                return super().default(o)
+    
+        """
+>       raise TypeError(f'Object of type {o.__class__.__name__} '
+                        f'is not JSON serializable')
+E       TypeError: Object of type AuthoringTargetMaterial is not JSON serializable
+
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:180: TypeError
+_ test_frozen_old_revisions_survive_new_current_and_archive_without_substitution _
+
+targets = (<services.api.app.infrastructure.database.Database object at 0x7d4bdef4f2f0>, SessionIdentity(id='session_targets_syn...first', revision=1, entity='concept', title='合成目标甲', prerequisite_ids=['target_dependency'], skill_dimensions=[]), ...)
+
+    def test_frozen_old_revisions_survive_new_current_and_archive_without_substitution(targets):
+        database, identity, publisher, source, lesson, first, second = targets
+        original = resolve(targets, selected(lesson, first, second))
+        new_lesson = lesson.model_copy(update={'revision': 2, 'title': '新修订小节'})
+        new_first = first.model_copy(update={'revision': 2, 'title': '新修订概念'})
+        publisher.publish(identity.workspace_id, [new_lesson, new_first], {})
+        with database.transaction() as conn:
+            # Explicit archive fixture; this port does not implement archive writes.
+            conn.execute("UPDATE objects SET lifecycle='archived' WHERE id IN (?,?)", (lesson.id, first.id))
+>           source.revalidate_targets(conn, identity, original)
+
+tests/integration/test_content_authoring_targets.py:118: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/api/app/application/content_authoring_targets.py:91: in revalidate_targets
+    if canonical_bytes(current) != canonical_bytes(checked):
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+packages/contracts/canonical.py:26: in canonical_bytes
+    return json.dumps(
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/__init__.py:238: in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:200: in encode
+    chunks = self.iterencode(o, _one_shot=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:258: in iterencode
+    return _iterencode(o, 0)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.encoder.JSONEncoder object at 0x7d4bdef4fb90>
+o = AuthoringTargetMaterial()
+
+    def default(self, o):
+        """Implement this method in a subclass such that it returns
+        a serializable object for ``o``, or calls the base implementation
+        (to raise a ``TypeError``).
+    
+        For example, to support arbitrary iterators, you could
+        implement default like this::
+    
+            def default(self, o):
+                try:
+                    iterable = iter(o)
+                except TypeError:
+                    pass
+                else:
+                    return list(iterable)
+                # Let the base class default method raise the TypeError
+                return super().default(o)
+    
+        """
+>       raise TypeError(f'Object of type {o.__class__.__name__} '
+                        f'is not JSON serializable')
+E       TypeError: Object of type AuthoringTargetMaterial is not JSON serializable
+
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:180: TypeError
+__________ test_empty_and_maximum_inputs_are_ordered_zero_write_reads __________
+
+targets = (<services.api.app.infrastructure.database.Database object at 0x7d4bdef4eff0>, SessionIdentity(id='session_targets_syn...first', revision=1, entity='concept', title='合成目标甲', prerequisite_ids=['target_dependency'], skill_dimensions=[]), ...)
+
+    def test_empty_and_maximum_inputs_are_ordered_zero_write_reads(targets):
+        database, identity, publisher, source, *_ = targets
+        values = [dm.Concept(id=f'target_limit_{index}', revision=1, title=f'合成概念 {index}') for index in range(33)]
+        publisher.publish(identity.workspace_id, values, {})
+        with database.transaction() as conn:
+            before = conn.total_changes
+            assert source.resolve_targets(conn, identity, []) == []
+            assert source.revalidate_targets(conn, identity, []) is None
+            result = source.resolve_targets(conn, identity, [reference(value) for value in reversed(values)])
+            assert [item.metadata for item in result] == list(reversed(values))
+>           source.revalidate_targets(conn, identity, result)
+
+tests/integration/test_content_authoring_targets.py:134: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/api/app/application/content_authoring_targets.py:91: in revalidate_targets
+    if canonical_bytes(current) != canonical_bytes(checked):
+       ^^^^^^^^^^^^^^^^^^^^^^^^
+packages/contracts/canonical.py:26: in canonical_bytes
+    return json.dumps(
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/__init__.py:238: in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:200: in encode
+    chunks = self.iterencode(o, _one_shot=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:258: in iterencode
+    return _iterencode(o, 0)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.encoder.JSONEncoder object at 0x7d4bdef4ec30>
+o = AuthoringTargetMaterial()
+
+    def default(self, o):
+        """Implement this method in a subclass such that it returns
+        a serializable object for ``o``, or calls the base implementation
+        (to raise a ``TypeError``).
+    
+        For example, to support arbitrary iterators, you could
+        implement default like this::
+    
+            def default(self, o):
+                try:
+                    iterable = iter(o)
+                except TypeError:
+                    pass
+                else:
+                    return list(iterable)
+                # Let the base class default method raise the TypeError
+                return super().default(o)
+    
+        """
+>       raise TypeError(f'Object of type {o.__class__.__name__} '
+                        f'is not JSON serializable')
+E       TypeError: Object of type AuthoringTargetMaterial is not JSON serializable
+
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:180: TypeError
+____ test_revalidate_reloads_exact_real_storage_and_rejects_corruption[sha] ____
+
+targets = (<services.api.app.infrastructure.database.Database object at 0x7d4bdef78380>, SessionIdentity(id='session_targets_syn...first', revision=1, entity='concept', title='合成目标甲', prerequisite_ids=['target_dependency'], skill_dimensions=[]), ...)
+fault = 'sha'
+
+    @pytest.mark.parametrize('fault', ['sha', 'malformed_json', 'actual_type', 'actual_id', 'actual_revision',
+        'consistent_changed_metadata', 'missing'])
+    def test_revalidate_reloads_exact_real_storage_and_rejects_corruption(targets, fault):
+        database, identity, _, source, _, first, _ = targets
+        original = resolve(targets, [reference(first)])
+>       frozen = canonical_bytes(original)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_content_authoring_targets.py:213: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+packages/contracts/canonical.py:26: in canonical_bytes
+    return json.dumps(
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/__init__.py:238: in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:200: in encode
+    chunks = self.iterencode(o, _one_shot=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:258: in iterencode
+    return _iterencode(o, 0)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.encoder.JSONEncoder object at 0x7d4bdef78470>
+o = AuthoringTargetMaterial()
+
+    def default(self, o):
+        """Implement this method in a subclass such that it returns
+        a serializable object for ``o``, or calls the base implementation
+        (to raise a ``TypeError``).
+    
+        For example, to support arbitrary iterators, you could
+        implement default like this::
+    
+            def default(self, o):
+                try:
+                    iterable = iter(o)
+                except TypeError:
+                    pass
+                else:
+                    return list(iterable)
+                # Let the base class default method raise the TypeError
+                return super().default(o)
+    
+        """
+>       raise TypeError(f'Object of type {o.__class__.__name__} '
+                        f'is not JSON serializable')
+E       TypeError: Object of type AuthoringTargetMaterial is not JSON serializable
+
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:180: TypeError
+_ test_revalidate_reloads_exact_real_storage_and_rejects_corruption[malformed_json] _
+
+targets = (<services.api.app.infrastructure.database.Database object at 0x7d4bdef7b4a0>, SessionIdentity(id='session_targets_syn...first', revision=1, entity='concept', title='合成目标甲', prerequisite_ids=['target_dependency'], skill_dimensions=[]), ...)
+fault = 'malformed_json'
+
+    @pytest.mark.parametrize('fault', ['sha', 'malformed_json', 'actual_type', 'actual_id', 'actual_revision',
+        'consistent_changed_metadata', 'missing'])
+    def test_revalidate_reloads_exact_real_storage_and_rejects_corruption(targets, fault):
+        database, identity, _, source, _, first, _ = targets
+        original = resolve(targets, [reference(first)])
+>       frozen = canonical_bytes(original)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_content_authoring_targets.py:213: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+packages/contracts/canonical.py:26: in canonical_bytes
+    return json.dumps(
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/__init__.py:238: in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:200: in encode
+    chunks = self.iterencode(o, _one_shot=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:258: in iterencode
+    return _iterencode(o, 0)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.encoder.JSONEncoder object at 0x7d4bdef7bc80>
+o = AuthoringTargetMaterial()
+
+    def default(self, o):
+        """Implement this method in a subclass such that it returns
+        a serializable object for ``o``, or calls the base implementation
+        (to raise a ``TypeError``).
+    
+        For example, to support arbitrary iterators, you could
+        implement default like this::
+    
+            def default(self, o):
+                try:
+                    iterable = iter(o)
+                except TypeError:
+                    pass
+                else:
+                    return list(iterable)
+                # Let the base class default method raise the TypeError
+                return super().default(o)
+    
+        """
+>       raise TypeError(f'Object of type {o.__class__.__name__} '
+                        f'is not JSON serializable')
+E       TypeError: Object of type AuthoringTargetMaterial is not JSON serializable
+
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:180: TypeError
+_ test_revalidate_reloads_exact_real_storage_and_rejects_corruption[actual_type] _
+
+targets = (<services.api.app.infrastructure.database.Database object at 0x7d4bdef782c0>, SessionIdentity(id='session_targets_syn...first', revision=1, entity='concept', title='合成目标甲', prerequisite_ids=['target_dependency'], skill_dimensions=[]), ...)
+fault = 'actual_type'
+
+    @pytest.mark.parametrize('fault', ['sha', 'malformed_json', 'actual_type', 'actual_id', 'actual_revision',
+        'consistent_changed_metadata', 'missing'])
+    def test_revalidate_reloads_exact_real_storage_and_rejects_corruption(targets, fault):
+        database, identity, _, source, _, first, _ = targets
+        original = resolve(targets, [reference(first)])
+>       frozen = canonical_bytes(original)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_content_authoring_targets.py:213: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+packages/contracts/canonical.py:26: in canonical_bytes
+    return json.dumps(
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/__init__.py:238: in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:200: in encode
+    chunks = self.iterencode(o, _one_shot=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:258: in iterencode
+    return _iterencode(o, 0)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.encoder.JSONEncoder object at 0x7d4bdef7ab70>
+o = AuthoringTargetMaterial()
+
+    def default(self, o):
+        """Implement this method in a subclass such that it returns
+        a serializable object for ``o``, or calls the base implementation
+        (to raise a ``TypeError``).
+    
+        For example, to support arbitrary iterators, you could
+        implement default like this::
+    
+            def default(self, o):
+                try:
+                    iterable = iter(o)
+                except TypeError:
+                    pass
+                else:
+                    return list(iterable)
+                # Let the base class default method raise the TypeError
+                return super().default(o)
+    
+        """
+>       raise TypeError(f'Object of type {o.__class__.__name__} '
+                        f'is not JSON serializable')
+E       TypeError: Object of type AuthoringTargetMaterial is not JSON serializable
+
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:180: TypeError
+_ test_revalidate_reloads_exact_real_storage_and_rejects_corruption[actual_id] _
+
+targets = (<services.api.app.infrastructure.database.Database object at 0x7d4bdef791c0>, SessionIdentity(id='session_targets_syn...first', revision=1, entity='concept', title='合成目标甲', prerequisite_ids=['target_dependency'], skill_dimensions=[]), ...)
+fault = 'actual_id'
+
+    @pytest.mark.parametrize('fault', ['sha', 'malformed_json', 'actual_type', 'actual_id', 'actual_revision',
+        'consistent_changed_metadata', 'missing'])
+    def test_revalidate_reloads_exact_real_storage_and_rejects_corruption(targets, fault):
+        database, identity, _, source, _, first, _ = targets
+        original = resolve(targets, [reference(first)])
+>       frozen = canonical_bytes(original)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_content_authoring_targets.py:213: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+packages/contracts/canonical.py:26: in canonical_bytes
+    return json.dumps(
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/__init__.py:238: in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:200: in encode
+    chunks = self.iterencode(o, _one_shot=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:258: in iterencode
+    return _iterencode(o, 0)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.encoder.JSONEncoder object at 0x7d4bdef7ca40>
+o = AuthoringTargetMaterial()
+
+    def default(self, o):
+        """Implement this method in a subclass such that it returns
+        a serializable object for ``o``, or calls the base implementation
+        (to raise a ``TypeError``).
+    
+        For example, to support arbitrary iterators, you could
+        implement default like this::
+    
+            def default(self, o):
+                try:
+                    iterable = iter(o)
+                except TypeError:
+                    pass
+                else:
+                    return list(iterable)
+                # Let the base class default method raise the TypeError
+                return super().default(o)
+    
+        """
+>       raise TypeError(f'Object of type {o.__class__.__name__} '
+                        f'is not JSON serializable')
+E       TypeError: Object of type AuthoringTargetMaterial is not JSON serializable
+
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:180: TypeError
+_ test_revalidate_reloads_exact_real_storage_and_rejects_corruption[actual_revision] _
+
+targets = (<services.api.app.infrastructure.database.Database object at 0x7d4bdef79970>, SessionIdentity(id='session_targets_syn...first', revision=1, entity='concept', title='合成目标甲', prerequisite_ids=['target_dependency'], skill_dimensions=[]), ...)
+fault = 'actual_revision'
+
+    @pytest.mark.parametrize('fault', ['sha', 'malformed_json', 'actual_type', 'actual_id', 'actual_revision',
+        'consistent_changed_metadata', 'missing'])
+    def test_revalidate_reloads_exact_real_storage_and_rejects_corruption(targets, fault):
+        database, identity, _, source, _, first, _ = targets
+        original = resolve(targets, [reference(first)])
+>       frozen = canonical_bytes(original)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_content_authoring_targets.py:213: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+packages/contracts/canonical.py:26: in canonical_bytes
+    return json.dumps(
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/__init__.py:238: in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:200: in encode
+    chunks = self.iterencode(o, _one_shot=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:258: in iterencode
+    return _iterencode(o, 0)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.encoder.JSONEncoder object at 0x7d4bdef4e210>
+o = AuthoringTargetMaterial()
+
+    def default(self, o):
+        """Implement this method in a subclass such that it returns
+        a serializable object for ``o``, or calls the base implementation
+        (to raise a ``TypeError``).
+    
+        For example, to support arbitrary iterators, you could
+        implement default like this::
+    
+            def default(self, o):
+                try:
+                    iterable = iter(o)
+                except TypeError:
+                    pass
+                else:
+                    return list(iterable)
+                # Let the base class default method raise the TypeError
+                return super().default(o)
+    
+        """
+>       raise TypeError(f'Object of type {o.__class__.__name__} '
+                        f'is not JSON serializable')
+E       TypeError: Object of type AuthoringTargetMaterial is not JSON serializable
+
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:180: TypeError
+_ test_revalidate_reloads_exact_real_storage_and_rejects_corruption[consistent_changed_metadata] _
+
+targets = (<services.api.app.infrastructure.database.Database object at 0x7d4bdef79550>, SessionIdentity(id='session_targets_syn...first', revision=1, entity='concept', title='合成目标甲', prerequisite_ids=['target_dependency'], skill_dimensions=[]), ...)
+fault = 'consistent_changed_metadata'
+
+    @pytest.mark.parametrize('fault', ['sha', 'malformed_json', 'actual_type', 'actual_id', 'actual_revision',
+        'consistent_changed_metadata', 'missing'])
+    def test_revalidate_reloads_exact_real_storage_and_rejects_corruption(targets, fault):
+        database, identity, _, source, _, first, _ = targets
+        original = resolve(targets, [reference(first)])
+>       frozen = canonical_bytes(original)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_content_authoring_targets.py:213: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+packages/contracts/canonical.py:26: in canonical_bytes
+    return json.dumps(
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/__init__.py:238: in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:200: in encode
+    chunks = self.iterencode(o, _one_shot=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:258: in iterencode
+    return _iterencode(o, 0)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.encoder.JSONEncoder object at 0x7d4bdef7bce0>
+o = AuthoringTargetMaterial()
+
+    def default(self, o):
+        """Implement this method in a subclass such that it returns
+        a serializable object for ``o``, or calls the base implementation
+        (to raise a ``TypeError``).
+    
+        For example, to support arbitrary iterators, you could
+        implement default like this::
+    
+            def default(self, o):
+                try:
+                    iterable = iter(o)
+                except TypeError:
+                    pass
+                else:
+                    return list(iterable)
+                # Let the base class default method raise the TypeError
+                return super().default(o)
+    
+        """
+>       raise TypeError(f'Object of type {o.__class__.__name__} '
+                        f'is not JSON serializable')
+E       TypeError: Object of type AuthoringTargetMaterial is not JSON serializable
+
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:180: TypeError
+__ test_revalidate_reloads_exact_real_storage_and_rejects_corruption[missing] __
+
+targets = (<services.api.app.infrastructure.database.Database object at 0x7d4bdef7e1b0>, SessionIdentity(id='session_targets_syn...first', revision=1, entity='concept', title='合成目标甲', prerequisite_ids=['target_dependency'], skill_dimensions=[]), ...)
+fault = 'missing'
+
+    @pytest.mark.parametrize('fault', ['sha', 'malformed_json', 'actual_type', 'actual_id', 'actual_revision',
+        'consistent_changed_metadata', 'missing'])
+    def test_revalidate_reloads_exact_real_storage_and_rejects_corruption(targets, fault):
+        database, identity, _, source, _, first, _ = targets
+        original = resolve(targets, [reference(first)])
+>       frozen = canonical_bytes(original)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_content_authoring_targets.py:213: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+packages/contracts/canonical.py:26: in canonical_bytes
+    return json.dumps(
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/__init__.py:238: in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:200: in encode
+    chunks = self.iterencode(o, _one_shot=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:258: in iterencode
+    return _iterencode(o, 0)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.encoder.JSONEncoder object at 0x7d4bdef7dd00>
+o = AuthoringTargetMaterial()
+
+    def default(self, o):
+        """Implement this method in a subclass such that it returns
+        a serializable object for ``o``, or calls the base implementation
+        (to raise a ``TypeError``).
+    
+        For example, to support arbitrary iterators, you could
+        implement default like this::
+    
+            def default(self, o):
+                try:
+                    iterable = iter(o)
+                except TypeError:
+                    pass
+                else:
+                    return list(iterable)
+                # Let the base class default method raise the TypeError
+                return super().default(o)
+    
+        """
+>       raise TypeError(f'Object of type {o.__class__.__name__} '
+                        f'is not JSON serializable')
+E       TypeError: Object of type AuthoringTargetMaterial is not JSON serializable
+
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:180: TypeError
+___ test_forged_frozen_material_does_not_replace_original_snapshot[metadata] ___
+
+targets = (<services.api.app.infrastructure.database.Database object at 0x7d4bdef7cf50>, SessionIdentity(id='session_targets_syn...first', revision=1, entity='concept', title='合成目标甲', prerequisite_ids=['target_dependency'], skill_dimensions=[]), ...)
+fault = 'metadata'
+
+    @pytest.mark.parametrize('fault', ['metadata', 'ref', 'metadata_type', 'nested_construct', 'duplicate', 'over_limit'])
+    def test_forged_frozen_material_does_not_replace_original_snapshot(targets, fault):
+        database, identity, _, source, lesson, first, _ = targets
+        original = resolve(targets, [reference(first)])
+>       frozen = canonical_bytes(original)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_content_authoring_targets.py:246: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+packages/contracts/canonical.py:26: in canonical_bytes
+    return json.dumps(
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/__init__.py:238: in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:200: in encode
+    chunks = self.iterencode(o, _one_shot=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:258: in iterencode
+    return _iterencode(o, 0)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.encoder.JSONEncoder object at 0x7d4bdef7c710>
+o = AuthoringTargetMaterial()
+
+    def default(self, o):
+        """Implement this method in a subclass such that it returns
+        a serializable object for ``o``, or calls the base implementation
+        (to raise a ``TypeError``).
+    
+        For example, to support arbitrary iterators, you could
+        implement default like this::
+    
+            def default(self, o):
+                try:
+                    iterable = iter(o)
+                except TypeError:
+                    pass
+                else:
+                    return list(iterable)
+                # Let the base class default method raise the TypeError
+                return super().default(o)
+    
+        """
+>       raise TypeError(f'Object of type {o.__class__.__name__} '
+                        f'is not JSON serializable')
+E       TypeError: Object of type AuthoringTargetMaterial is not JSON serializable
+
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:180: TypeError
+_____ test_forged_frozen_material_does_not_replace_original_snapshot[ref] ______
+
+targets = (<services.api.app.infrastructure.database.Database object at 0x7d4bdef7a090>, SessionIdentity(id='session_targets_syn...first', revision=1, entity='concept', title='合成目标甲', prerequisite_ids=['target_dependency'], skill_dimensions=[]), ...)
+fault = 'ref'
+
+    @pytest.mark.parametrize('fault', ['metadata', 'ref', 'metadata_type', 'nested_construct', 'duplicate', 'over_limit'])
+    def test_forged_frozen_material_does_not_replace_original_snapshot(targets, fault):
+        database, identity, _, source, lesson, first, _ = targets
+        original = resolve(targets, [reference(first)])
+>       frozen = canonical_bytes(original)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_content_authoring_targets.py:246: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+packages/contracts/canonical.py:26: in canonical_bytes
+    return json.dumps(
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/__init__.py:238: in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:200: in encode
+    chunks = self.iterencode(o, _one_shot=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:258: in iterencode
+    return _iterencode(o, 0)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.encoder.JSONEncoder object at 0x7d4bdef7b0e0>
+o = AuthoringTargetMaterial()
+
+    def default(self, o):
+        """Implement this method in a subclass such that it returns
+        a serializable object for ``o``, or calls the base implementation
+        (to raise a ``TypeError``).
+    
+        For example, to support arbitrary iterators, you could
+        implement default like this::
+    
+            def default(self, o):
+                try:
+                    iterable = iter(o)
+                except TypeError:
+                    pass
+                else:
+                    return list(iterable)
+                # Let the base class default method raise the TypeError
+                return super().default(o)
+    
+        """
+>       raise TypeError(f'Object of type {o.__class__.__name__} '
+                        f'is not JSON serializable')
+E       TypeError: Object of type AuthoringTargetMaterial is not JSON serializable
+
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:180: TypeError
+_ test_forged_frozen_material_does_not_replace_original_snapshot[metadata_type] _
+
+targets = (<services.api.app.infrastructure.database.Database object at 0x7d4bdef7cb90>, SessionIdentity(id='session_targets_syn...first', revision=1, entity='concept', title='合成目标甲', prerequisite_ids=['target_dependency'], skill_dimensions=[]), ...)
+fault = 'metadata_type'
+
+    @pytest.mark.parametrize('fault', ['metadata', 'ref', 'metadata_type', 'nested_construct', 'duplicate', 'over_limit'])
+    def test_forged_frozen_material_does_not_replace_original_snapshot(targets, fault):
+        database, identity, _, source, lesson, first, _ = targets
+        original = resolve(targets, [reference(first)])
+>       frozen = canonical_bytes(original)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_content_authoring_targets.py:246: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+packages/contracts/canonical.py:26: in canonical_bytes
+    return json.dumps(
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/__init__.py:238: in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:200: in encode
+    chunks = self.iterencode(o, _one_shot=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:258: in iterencode
+    return _iterencode(o, 0)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.encoder.JSONEncoder object at 0x7d4bdef79280>
+o = AuthoringTargetMaterial()
+
+    def default(self, o):
+        """Implement this method in a subclass such that it returns
+        a serializable object for ``o``, or calls the base implementation
+        (to raise a ``TypeError``).
+    
+        For example, to support arbitrary iterators, you could
+        implement default like this::
+    
+            def default(self, o):
+                try:
+                    iterable = iter(o)
+                except TypeError:
+                    pass
+                else:
+                    return list(iterable)
+                # Let the base class default method raise the TypeError
+                return super().default(o)
+    
+        """
+>       raise TypeError(f'Object of type {o.__class__.__name__} '
+                        f'is not JSON serializable')
+E       TypeError: Object of type AuthoringTargetMaterial is not JSON serializable
+
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:180: TypeError
+_ test_forged_frozen_material_does_not_replace_original_snapshot[nested_construct] _
+
+targets = (<services.api.app.infrastructure.database.Database object at 0x7d4bdef7cd70>, SessionIdentity(id='session_targets_syn...first', revision=1, entity='concept', title='合成目标甲', prerequisite_ids=['target_dependency'], skill_dimensions=[]), ...)
+fault = 'nested_construct'
+
+    @pytest.mark.parametrize('fault', ['metadata', 'ref', 'metadata_type', 'nested_construct', 'duplicate', 'over_limit'])
+    def test_forged_frozen_material_does_not_replace_original_snapshot(targets, fault):
+        database, identity, _, source, lesson, first, _ = targets
+        original = resolve(targets, [reference(first)])
+>       frozen = canonical_bytes(original)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_content_authoring_targets.py:246: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+packages/contracts/canonical.py:26: in canonical_bytes
+    return json.dumps(
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/__init__.py:238: in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:200: in encode
+    chunks = self.iterencode(o, _one_shot=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:258: in iterencode
+    return _iterencode(o, 0)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.encoder.JSONEncoder object at 0x7d4bdef7d370>
+o = AuthoringTargetMaterial()
+
+    def default(self, o):
+        """Implement this method in a subclass such that it returns
+        a serializable object for ``o``, or calls the base implementation
+        (to raise a ``TypeError``).
+    
+        For example, to support arbitrary iterators, you could
+        implement default like this::
+    
+            def default(self, o):
+                try:
+                    iterable = iter(o)
+                except TypeError:
+                    pass
+                else:
+                    return list(iterable)
+                # Let the base class default method raise the TypeError
+                return super().default(o)
+    
+        """
+>       raise TypeError(f'Object of type {o.__class__.__name__} '
+                        f'is not JSON serializable')
+E       TypeError: Object of type AuthoringTargetMaterial is not JSON serializable
+
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:180: TypeError
+__ test_forged_frozen_material_does_not_replace_original_snapshot[duplicate] ___
+
+targets = (<services.api.app.infrastructure.database.Database object at 0x7d4bdefc3380>, SessionIdentity(id='session_targets_syn...first', revision=1, entity='concept', title='合成目标甲', prerequisite_ids=['target_dependency'], skill_dimensions=[]), ...)
+fault = 'duplicate'
+
+    @pytest.mark.parametrize('fault', ['metadata', 'ref', 'metadata_type', 'nested_construct', 'duplicate', 'over_limit'])
+    def test_forged_frozen_material_does_not_replace_original_snapshot(targets, fault):
+        database, identity, _, source, lesson, first, _ = targets
+        original = resolve(targets, [reference(first)])
+>       frozen = canonical_bytes(original)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_content_authoring_targets.py:246: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+packages/contracts/canonical.py:26: in canonical_bytes
+    return json.dumps(
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/__init__.py:238: in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:200: in encode
+    chunks = self.iterencode(o, _one_shot=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:258: in iterencode
+    return _iterencode(o, 0)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.encoder.JSONEncoder object at 0x7d4bdefc1e50>
+o = AuthoringTargetMaterial()
+
+    def default(self, o):
+        """Implement this method in a subclass such that it returns
+        a serializable object for ``o``, or calls the base implementation
+        (to raise a ``TypeError``).
+    
+        For example, to support arbitrary iterators, you could
+        implement default like this::
+    
+            def default(self, o):
+                try:
+                    iterable = iter(o)
+                except TypeError:
+                    pass
+                else:
+                    return list(iterable)
+                # Let the base class default method raise the TypeError
+                return super().default(o)
+    
+        """
+>       raise TypeError(f'Object of type {o.__class__.__name__} '
+                        f'is not JSON serializable')
+E       TypeError: Object of type AuthoringTargetMaterial is not JSON serializable
+
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:180: TypeError
+__ test_forged_frozen_material_does_not_replace_original_snapshot[over_limit] __
+
+targets = (<services.api.app.infrastructure.database.Database object at 0x7d4bdef7d550>, SessionIdentity(id='session_targets_syn...first', revision=1, entity='concept', title='合成目标甲', prerequisite_ids=['target_dependency'], skill_dimensions=[]), ...)
+fault = 'over_limit'
+
+    @pytest.mark.parametrize('fault', ['metadata', 'ref', 'metadata_type', 'nested_construct', 'duplicate', 'over_limit'])
+    def test_forged_frozen_material_does_not_replace_original_snapshot(targets, fault):
+        database, identity, _, source, lesson, first, _ = targets
+        original = resolve(targets, [reference(first)])
+>       frozen = canonical_bytes(original)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_content_authoring_targets.py:246: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+packages/contracts/canonical.py:26: in canonical_bytes
+    return json.dumps(
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/__init__.py:238: in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:200: in encode
+    chunks = self.iterencode(o, _one_shot=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:258: in iterencode
+    return _iterencode(o, 0)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.encoder.JSONEncoder object at 0x7d4bdef7d2b0>
+o = AuthoringTargetMaterial()
+
+    def default(self, o):
+        """Implement this method in a subclass such that it returns
+        a serializable object for ``o``, or calls the base implementation
+        (to raise a ``TypeError``).
+    
+        For example, to support arbitrary iterators, you could
+        implement default like this::
+    
+            def default(self, o):
+                try:
+                    iterable = iter(o)
+                except TypeError:
+                    pass
+                else:
+                    return list(iterable)
+                # Let the base class default method raise the TypeError
+                return super().default(o)
+    
+        """
+>       raise TypeError(f'Object of type {o.__class__.__name__} '
+                        f'is not JSON serializable')
+E       TypeError: Object of type AuthoringTargetMaterial is not JSON serializable
+
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:180: TypeError
+_____ test_current_policy_is_rechecked_for_learner_author_and_empty_inputs _____
+
+targets = (<services.api.app.infrastructure.database.Database object at 0x7d4bdef7b0e0>, SessionIdentity(id='session_targets_syn...first', revision=1, entity='concept', title='合成目标甲', prerequisite_ids=['target_dependency'], skill_dimensions=[]), ...)
+
+    def test_current_policy_is_rechecked_for_learner_author_and_empty_inputs(targets):
+        database, identity, publisher, source, _, first, _ = targets
+        original = resolve(targets, [reference(first)])
+>       fixture = assessment_fixture('targets_policy')
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_content_authoring_targets.py:267: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/assessment_fixtures.py:27: in assessment_fixture
+    original = practice_fixture(prefix, profile=profile, revision=revision)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+prefix = 'targets_policy', profile = 'author', revision = 1
+
+    def practice_fixture(prefix: str = 'practice', *, profile: Literal['learner', 'author'] = 'author', revision: int = 1) -> PracticeFixture:
+        if not prefix.isascii() or not prefix.isalpha() or revision not in {1, 2}:
+>           raise ValueError('Use an ASCII alphabetic prefix and revision 1 or 2')
+E           ValueError: Use an ASCII alphabetic prefix and revision 1 or 2
+
+tests/practice_fixtures.py:34: ValueError
+=========================== short test summary info ============================
+FAILED tests/integration/test_content_authoring_targets.py::test_exact_order_metadata_and_no_implicit_children_dependencies_or_writes
+FAILED tests/integration/test_content_authoring_targets.py::test_same_transaction_reads_uncommitted_revision_and_leaves_rollback_to_caller
+FAILED tests/integration/test_content_authoring_targets.py::test_frozen_old_revisions_survive_new_current_and_archive_without_substitution
+FAILED tests/integration/test_content_authoring_targets.py::test_empty_and_maximum_inputs_are_ordered_zero_write_reads
+FAILED tests/integration/test_content_authoring_targets.py::test_revalidate_reloads_exact_real_storage_and_rejects_corruption[sha]
+FAILED tests/integration/test_content_authoring_targets.py::test_revalidate_reloads_exact_real_storage_and_rejects_corruption[malformed_json]
+FAILED tests/integration/test_content_authoring_targets.py::test_revalidate_reloads_exact_real_storage_and_rejects_corruption[actual_type]
+FAILED tests/integration/test_content_authoring_targets.py::test_revalidate_reloads_exact_real_storage_and_rejects_corruption[actual_id]
+FAILED tests/integration/test_content_authoring_targets.py::test_revalidate_reloads_exact_real_storage_and_rejects_corruption[actual_revision]
+FAILED tests/integration/test_content_authoring_targets.py::test_revalidate_reloads_exact_real_storage_and_rejects_corruption[consistent_changed_metadata]
+FAILED tests/integration/test_content_authoring_targets.py::test_revalidate_reloads_exact_real_storage_and_rejects_corruption[missing]
+FAILED tests/integration/test_content_authoring_targets.py::test_forged_frozen_material_does_not_replace_original_snapshot[metadata]
+FAILED tests/integration/test_content_authoring_targets.py::test_forged_frozen_material_does_not_replace_original_snapshot[ref]
+FAILED tests/integration/test_content_authoring_targets.py::test_forged_frozen_material_does_not_replace_original_snapshot[metadata_type]
+FAILED tests/integration/test_content_authoring_targets.py::test_forged_frozen_material_does_not_replace_original_snapshot[nested_construct]
+FAILED tests/integration/test_content_authoring_targets.py::test_forged_frozen_material_does_not_replace_original_snapshot[duplicate]
+FAILED tests/integration/test_content_authoring_targets.py::test_forged_frozen_material_does_not_replace_original_snapshot[over_limit]
+FAILED tests/integration/test_content_authoring_targets.py::test_current_policy_is_rechecked_for_learner_author_and_empty_inputs
+18 failed, 24 passed in 1.34s

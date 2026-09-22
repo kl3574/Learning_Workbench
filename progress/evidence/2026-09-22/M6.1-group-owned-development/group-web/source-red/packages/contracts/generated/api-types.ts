@@ -1,0 +1,2282 @@
+// Generated from PRODUCT_DESIGN.md v3.0.7. DO NOT EDIT.
+// spec_sha256: 2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d
+// JSON Schema is the type source; runtime semantic checks remain required.
+
+export type ActualUsageCost = {
+  "kind": "actual";
+  "currency": "USD";
+  "amount": number;
+  "source": "provider_reported";
+};
+
+export type ApprovalDecision = {
+  "operation_sha256": string;
+  "decision": "approve_once" | "decline";
+  "expected_revision": number;
+};
+
+export type AssessmentAttemptCreate = {
+  "assessment_ref": ContentRef;
+  "mode": "independent" | "assisted" | "open_book";
+};
+
+export type AssessmentBlueprint = {
+  "schema_version"?: "3.0.0";
+  "id": string;
+  "revision": number;
+  "entity"?: "assessment";
+  "title": string;
+  "question_refs": Array<ContentRef>;
+  "allowed_modes": Array<"independent" | "assisted" | "open_book">;
+  "time_limit_seconds"?: (number | null);
+};
+
+export type AssessmentCandidateRoot = {
+  "entity": "assessment";
+  "title": string;
+  "questions": Array<AuthoringQuestionMemberRef>;
+  "allowed_modes": Array<"independent" | "assisted" | "open_book">;
+  "time_limit_seconds": (number | null);
+};
+
+export type AssessmentGradingJob = {
+  "id": string;
+  "status": "queued" | "running" | "awaiting_approval" | "completed" | "failed" | "cancelled";
+  "last_completed_result": (AssessmentGradingResult | null);
+  "history": Array<GradeHistoryEntry>;
+  "current_review_policy": CurrentReviewPolicy;
+};
+
+export type AssessmentGradingResult = {
+  "attempt_id": string;
+  "grading_revision": number;
+  "grading_rules_version": string;
+  "status": "graded" | "needs_review";
+  "items": Array<ItemGrade>;
+  "finalized_at": string;
+  "manual_reviews": Array<ManualReviewReceipt>;
+  "solution_reviews": Array<ReleasedSolutionReview>;
+  "eligibility_status": "not_evaluated" | "evaluated";
+  "history": Array<GradeHistoryEntry>;
+  "current_review_policy": CurrentReviewPolicy;
+  "review_materials": Array<QuestionReviewMaterials>;
+};
+
+export type AssessmentPreflight = {
+  "course_refs": Array<ContentRef>;
+  "question_kinds": Array<QuestionKindCount>;
+  "target_concept_refs": Array<ContentRef>;
+  "grading": GradingReadiness;
+  "prior_seen": PriorSeen;
+  "startable": boolean;
+  "start_block_reason_codes": Array<string>;
+};
+
+export type AssessmentSummary = {
+  "ref": ContentRef;
+  "title": string;
+  "question_count": number;
+  "allowed_modes": Array<"independent" | "assisted" | "open_book">;
+  "time_limit_seconds": (number | null);
+  "preflight": AssessmentPreflight;
+  "recent_attempts": Array<RecentAttempt>;
+  "recent_attempts_truncated": boolean;
+};
+
+export type AttemptResponses = {
+  "revision": number;
+  "responses": Array<ResponseDraft>;
+  "saved_at": (string | null);
+};
+
+export type AttemptSnapshot = {
+  "id": string;
+  "workspace_id": string;
+  "assessment_ref": ContentRef;
+  "status": "active" | "submitted" | "grading" | "graded" | "needs_review" | "abandoned";
+  "policy": PolicySnapshot;
+  "questions": Array<QuestionPublic>;
+  "revision": number;
+  "created_at": string;
+  "deadline_at"?: (string | null);
+  "submitted_at"?: (string | null);
+  "preflight": AssessmentPreflight;
+  "grading_revision"?: number;
+  "grading_status": "not_graded" | "pending" | "graded" | "needs_review" | "failed" | "cancelled";
+};
+
+export type AttemptSubmit = {
+  "expected_revision": number;
+};
+
+export type AuthoringAssessmentPrepareWrite = {
+  "topic": string;
+  "prerequisites": Array<string>;
+  "objectives": Array<string>;
+  "proof_policy": "full" | "declared_dependencies";
+  "source_refs": Array<AuthoringBlockRef>;
+  "provider_id": string;
+  "target_concept_refs": Array<AuthoringConceptRef>;
+  "output_kind": "assessment";
+  "allowed_modes": Array<"independent" | "assisted" | "open_book">;
+  "time_limit_seconds": (number | null);
+};
+
+export type AuthoringBlockMemberRef = {
+  "member_key": string;
+  "entity": "block";
+  "member_sha256": string;
+};
+
+export type AuthoringBlockPlanEntry = {
+  "member_key": string;
+  "entity": "block";
+  "kind": "orientation" | "definition" | "theorem" | "proof" | "intuition" | "worked_example" | "boundary" | "summary" | "text" | "code" | "figure";
+  "title": string;
+  "objective_indexes": Array<number>;
+  "prerequisite_indexes": Array<number>;
+  "depends_on_keys": Array<string>;
+};
+
+export type AuthoringBlockRef = {
+  "entity": "block";
+  "id": string;
+  "revision": number;
+  "sha256": string;
+};
+
+export type AuthoringCandidate = {
+  "draft_id": string;
+  "draft_revision": number;
+  "entity": "block";
+  "candidate_sha256": string;
+};
+
+export type AuthoringConceptRef = {
+  "entity": "concept";
+  "id": string;
+  "revision": number;
+  "sha256": string;
+};
+
+export type AuthoringContentPlan = {
+  "version": "authoring-content-plan-v1";
+  "output_kind": "lesson" | "practice_set" | "assessment";
+  "topic": string;
+  "prerequisites": Array<string>;
+  "objectives": Array<string>;
+  "proof_policy": "full" | "declared_dependencies";
+  "entries": Array<(AuthoringBlockPlanEntry | AuthoringQuestionPlanEntry)>;
+};
+
+export type AuthoringContentPlanRef = {
+  "source_job_id": string;
+  "plan_sha256": string;
+};
+
+export type AuthoringDraftMemberRef = {
+  "member_key": string;
+  "entity": "block" | "question";
+  "member_sha256": string;
+};
+
+export type AuthoringDraftView = {
+  "owner": "authoring";
+  "candidate": AuthoringCandidate;
+  "source_job_id": string;
+  "state": "draft";
+  "base_ref": null;
+  "body_sha256": string;
+  "payload": WorkedExamplePayload;
+  "validation": AuthoringValidation;
+  "numeric_check_ids": Array<string>;
+  "warnings": Array<Warning>;
+};
+
+export type AuthoringGeneratedBlock = {
+  "member_key": string;
+  "depends_on_keys": Array<string>;
+  "payload": (WorkedExamplePayload | AuthoringTextBlockPayload);
+};
+
+export type AuthoringGroupCandidate = {
+  "draft_id": string;
+  "draft_revision": number;
+  "entity": "lesson" | "practice_set" | "assessment";
+  "candidate_sha256": string;
+};
+
+export type AuthoringGroupDraftView = {
+  "owner": "authoring";
+  "candidate": AuthoringGroupCandidate;
+  "source_job_id": string;
+  "state": "draft";
+  "base_ref": null;
+  "plan_ref": AuthoringContentPlanRef;
+  "content_plan": AuthoringContentPlan;
+  "root": (LessonCandidateRoot | PracticeSetCandidateRoot | AssessmentCandidateRoot);
+  "blocks": Array<AuthoringGeneratedBlock>;
+  "questions": Array<QuestionDraftPublic>;
+  "private_solution_refs": Array<AuthoringPrivateSolutionRef>;
+  "validation": AuthoringGroupValidation;
+  "numeric_check_ids": Array<string>;
+  "warnings": Array<Warning>;
+};
+
+export type AuthoringGroupJobSummary = {
+  "id": string;
+  "kind": "authoring";
+  "job_revision": number;
+  "status": "queued" | "running" | "awaiting_approval" | "completed" | "failed" | "cancelled";
+  "title": string;
+  "candidate": (AuthoringGroupCandidate | null);
+  "created_at": string;
+  "updated_at": string;
+};
+
+export type AuthoringGroupJobView = {
+  "variant": "group";
+  "summary": AuthoringGroupJobSummary;
+  "request": AuthoringGroupPrepareWrite;
+  "preparation": AuthoringGroupPreparationSummary;
+  "proposal_id": (string | null);
+  "consent_id": (string | null);
+  "provider_receipt_id": (string | null);
+  "provider_outcome": ("completed" | "failed" | "incomplete" | "cancelled" | "unknown" | null);
+  "usage": UsageSnapshot;
+  "raw_answer": (string | null);
+  "raw_refusal": (string | null);
+  "validation": AuthoringGroupValidation;
+  "error_code": (string | null);
+  "plan_ref": (AuthoringContentPlanRef | null);
+  "content_plan": (AuthoringContentPlan | null);
+};
+
+export type AuthoringGroupNumericCheckView = {
+  "id": string;
+  "revision": number;
+  "candidate": AuthoringGroupCandidate;
+  "target": AuthoringDraftMemberRef;
+  "plan": NumericPlan;
+  "runtime": NumericRuntimeProfile;
+  "operation_sha256": string;
+  "decision": "pending" | "approve_once" | "decline";
+  "created_at": string;
+  "expires_at": string;
+  "expired": boolean;
+  "job": (JobRef | null);
+  "job_revision": (number | null);
+  "result": (NumericCheckResult | null);
+  "warnings": Array<Warning>;
+};
+
+export type AuthoringGroupNumericPreviewWrite = {
+  "candidate": AuthoringGroupCandidate;
+  "target": AuthoringDraftMemberRef;
+};
+
+export type AuthoringGroupPreparationSummary = {
+  "context_snapshot_id": string;
+  "snapshot_sha256": string;
+  "job_input_sha256": string;
+  "prepared_input_sha256": string;
+  "character_count": number;
+  "materials": Array<AuthoringInputMaterial>;
+  "warnings": Array<Warning>;
+  "targets": Array<AuthoringTargetMaterial>;
+};
+
+export type AuthoringGroupPrepareWrite = (AuthoringLessonPrepareWrite | AuthoringPracticePrepareWrite | AuthoringAssessmentPrepareWrite);
+
+export type AuthoringGroupValidation = {
+  "schema": "PASS" | "FAIL" | "NOT_RUN";
+  "references": "PASS" | "FAIL" | "NOT_RUN";
+  "symbol_declarations": "PASS" | "FAIL" | "NOT_RUN";
+  "issues": Array<Warning>;
+  "mathematical": "NOT_RUN";
+  "sources": "NOT_RUN";
+  "independent_pedagogy": "NOT_RUN";
+  "plan_membership": "PASS" | "FAIL" | "NOT_RUN";
+  "private_bindings": "PASS" | "FAIL" | "NOT_RUN";
+  "question_checks": Array<AuthoringQuestionQuality>;
+};
+
+export type AuthoringInputMaterial = {
+  "ref": AuthoringBlockRef;
+  "title": string;
+  "body_sha256": string;
+  "body_bytes": number;
+  "material_review": "unreviewed";
+  "provenance": RetrievalProvenance;
+};
+
+export type AuthoringJobPage = {
+  "items": Array<JobSnapshot>;
+  "next_cursor": (string | null);
+  "total_hint"?: number;
+};
+
+export type AuthoringJobReadView = (AuthoringJobView | AuthoringGroupJobView);
+
+export type AuthoringJobSummary = {
+  "id": string;
+  "kind": "authoring";
+  "job_revision": number;
+  "status": "queued" | "running" | "awaiting_approval" | "completed" | "failed" | "cancelled";
+  "title": string;
+  "candidate": (AuthoringCandidate | null);
+  "created_at": string;
+  "updated_at": string;
+};
+
+export type AuthoringJobView = {
+  "summary": AuthoringJobSummary;
+  "request": AuthoringPrepareWrite;
+  "preparation": AuthoringPreparationSummary;
+  "proposal_id": (string | null);
+  "consent_id": (string | null);
+  "provider_receipt_id": (string | null);
+  "provider_outcome": ("completed" | "failed" | "incomplete" | "cancelled" | "unknown" | null);
+  "usage": UsageSnapshot;
+  "raw_answer": (string | null);
+  "raw_refusal": (string | null);
+  "validation": AuthoringValidation;
+  "error_code": (string | null);
+};
+
+export type AuthoringLessonPrepareWrite = {
+  "topic": string;
+  "prerequisites": Array<string>;
+  "objectives": Array<string>;
+  "proof_policy": "full" | "declared_dependencies";
+  "source_refs": Array<AuthoringBlockRef>;
+  "provider_id": string;
+  "target_concept_refs": Array<AuthoringConceptRef>;
+  "output_kind": "lesson";
+};
+
+export type AuthoringLessonRef = {
+  "entity": "lesson";
+  "id": string;
+  "revision": number;
+  "sha256": string;
+};
+
+export type AuthoringPracticePrepareWrite = {
+  "topic": string;
+  "prerequisites": Array<string>;
+  "objectives": Array<string>;
+  "proof_policy": "full" | "declared_dependencies";
+  "source_refs": Array<AuthoringBlockRef>;
+  "provider_id": string;
+  "target_concept_refs": Array<AuthoringConceptRef>;
+  "output_kind": "practice_set";
+  "lesson_ref": AuthoringLessonRef;
+};
+
+export type AuthoringPreparationSummary = {
+  "context_snapshot_id": string;
+  "snapshot_sha256": string;
+  "job_input_sha256": string;
+  "prepared_input_sha256": string;
+  "character_count": number;
+  "materials": Array<AuthoringInputMaterial>;
+  "warnings": Array<Warning>;
+};
+
+export type AuthoringPrepareWrite = {
+  "topic": string;
+  "prerequisites": Array<string>;
+  "objectives": Array<string>;
+  "proof_policy": "full" | "declared_dependencies";
+  "output_kind": "worked_example";
+  "source_refs": Array<AuthoringBlockRef>;
+  "provider_id": string;
+};
+
+export type AuthoringPrivateSolutionRef = {
+  "question": AuthoringQuestionMemberRef;
+  "solution_sha256": string;
+};
+
+export type AuthoringPrivateSolutionView = {
+  "candidate": AuthoringGroupCandidate;
+  "ref": AuthoringPrivateSolutionRef;
+  "payload": SolutionDraftPrivate;
+};
+
+export type AuthoringQuestionMemberRef = {
+  "member_key": string;
+  "entity": "question";
+  "member_sha256": string;
+};
+
+export type AuthoringQuestionPlanEntry = {
+  "member_key": string;
+  "entity": "question";
+  "kind": "single_choice" | "text_blank" | "numeric" | "expression" | "calculation";
+  "objective_indexes": Array<number>;
+  "prerequisite_indexes": Array<number>;
+  "depends_on_keys": Array<string>;
+};
+
+export type AuthoringQuestionQuality = {
+  "question": AuthoringQuestionMemberRef;
+  "grading_compatibility": "PASS" | "FAIL" | "NOT_RUN";
+  "accepted_answer_membership": "PASS" | "FAIL" | "NOT_RUN";
+  "answer_uniqueness": "NOT_RUN";
+  "distractor_reasonableness": "NOT_RUN";
+  "condition_sufficiency": "NOT_RUN";
+  "unit_semantics": "NOT_RUN";
+  "solution_grading_semantics": "NOT_RUN";
+  "objective_alignment": "NOT_RUN";
+  "prerequisite_sufficiency": "NOT_RUN";
+};
+
+export type AuthoringTargetMaterial = {
+  "ref": AuthoringTargetRef;
+  "metadata": (Lesson | Concept);
+};
+
+export type AuthoringTargetRef = {
+  "entity": "lesson" | "concept";
+  "id": string;
+  "revision": number;
+  "sha256": string;
+};
+
+export type AuthoringTextBlockPayload = {
+  "version": "content-block-candidate-v1";
+  "kind": "orientation" | "definition" | "theorem" | "proof" | "intuition" | "boundary" | "summary" | "text" | "code" | "figure";
+  "title": string;
+  "body_markdown": string;
+  "symbols": Array<WorkedExampleSymbol>;
+  "declared_source_refs": Array<AuthoringBlockRef>;
+};
+
+export type AuthoringValidation = {
+  "schema": "PASS" | "FAIL" | "NOT_RUN";
+  "references": "PASS" | "FAIL" | "NOT_RUN";
+  "symbol_declarations": "PASS" | "FAIL" | "NOT_RUN";
+  "issues": Array<Warning>;
+  "mathematical": "NOT_RUN";
+  "sources": "NOT_RUN";
+  "independent_pedagogy": "NOT_RUN";
+};
+
+export type BlockDraftPayload = {
+  "metadata": ContentBlock;
+  "body_markdown": string;
+  "source_id": string;
+  "citations"?: Array<Citation>;
+};
+
+export type BlockProvenanceResponse = {
+  "block": ContentBlock;
+  "block_ref": ContentRef;
+  "original_source": (RetainedOriginal | null);
+  "citations": Array<ResolvedCitation>;
+  "unresolved_citation_ids": Array<string>;
+  "warnings": Array<Warning>;
+};
+
+export type BlockReadResponse = (ContentBlock | BlockProvenanceResponse);
+
+export type BookmarkState = {
+  "ref": ContentRef;
+  "value": boolean;
+  "updated_at": string;
+};
+
+export type BootstrapRequest = {
+  "one_time_code": string;
+};
+
+export type BootstrapResponse = {
+  "workspace_id": string;
+  "csrf_token": string;
+  "expires_at": string;
+};
+
+export type CandidateSummary = {
+  "course_title": string;
+  "lesson_count": number;
+  "block_count": number;
+  "unresolved_refs": Array<string>;
+};
+
+export type Choice = {
+  "id": string;
+  "text_markdown": string;
+};
+
+export type Citation = {
+  "id": string;
+  "title": string;
+  "url"?: (string | null);
+  "locator": string;
+  "source_sha256"?: (string | null);
+  "verification": "verified" | "unverified" | "user_supplied";
+};
+
+export type Concept = {
+  "schema_version"?: "3.0.0";
+  "id": string;
+  "revision": number;
+  "entity"?: "concept";
+  "title": string;
+  "prerequisite_ids"?: Array<string>;
+  "skill_dimensions"?: Array<"recall" | "explain" | "compute" | "derive" | "transfer">;
+};
+
+export type ConceptState = {
+  "concept_id": string;
+  "concept_ref": ContentRef;
+  "title": string;
+  "skill": "recall" | "explain" | "compute" | "derive" | "transfer";
+  "evidence_state": "none" | "preliminary" | "needs_support" | "consistent";
+  "independent_count": number;
+  "assisted_count": number;
+  "stale_count": number;
+  "repeated_count": number;
+  "unknown_count": number;
+  "null_count": number;
+  "pending_review_count": number;
+  "self_report": (SelfAssessment | null);
+  "evidence_ids": Array<string>;
+  "state_input_evidence_ids": Array<string>;
+  "sources": Array<ConceptStateSource>;
+  "practice_submission_count": number;
+  "hint_count": number;
+  "solution_count": number;
+  "practice_submission_sources": Array<SubmissionActivity>;
+  "hint_sources": Array<PracticeHelpActivity>;
+  "solution_sources": Array<PracticeHelpActivity>;
+  "rule_version"?: "learning-state-v1";
+};
+
+export type ConceptStateResponse = {
+  "items": Array<ConceptState>;
+  "course_refs": Array<ContentRef>;
+  "concepts": Array<ScopedConcept>;
+  "rule_version"?: "learning-state-v1";
+  "calibration"?: "uncalibrated";
+  "evidence_count_unit"?: "question_attempts";
+  "practice_submission_count_unit"?: "sessions";
+  "help_count_unit"?: "events";
+};
+
+export type ConceptStateSource = {
+  "evidence": Evidence;
+  "question_ref": ContentRef;
+  "concept_ref": ContentRef;
+  "assessment_ref": ContentRef;
+  "attempt_id": string;
+  "grading_revision": number;
+  "submitted_at": string;
+  "exposure_group": string;
+  "qualification_basis": "submission_frozen" | "history_not_frozen";
+  "reason_codes": Array<"MODE_OPEN_BOOK" | "MODE_ASSISTED" | "HELP_BEFORE_SUBMIT" | "ANSWER_UNREVIEWED" | "GRADE_UNRESOLVED" | "CONCEPT_MAPPING_UNRESOLVED" | "PREVIOUSLY_SEEN" | "PRIOR_SEEN_UNKNOWN" | "HELP_HISTORY_UNKNOWN" | "SOURCE_NOT_TRUSTED" | "HISTORY_PREREQUISITES_NOT_FROZEN">;
+  "applicability": EvidenceApplicability;
+};
+
+export type ConsentCreate = {
+  "proposal_id": string;
+  "proposal_sha256": string;
+};
+
+export type ConsentCreateAck = {
+  "id": string;
+  "revision": 1;
+  "status": "active";
+  "proposal_id": string;
+  "proposal_sha256": string;
+  "summary": FrozenOutboundSummary;
+};
+
+export type ConsentDispatchView = {
+  "id": string;
+  "job": JobRef;
+  "started_at": (string | null);
+  "finished_at": (string | null);
+  "usage": ProviderUsageView;
+  "error_code": ("CAPABILITY_UNSUPPORTED" | "PROVIDER_CONFIGURATION_CHANGED" | "PROVIDER_SECRET_UNAVAILABLE" | "OUTBOUND_SOURCE_CHANGED" | "OUTBOUND_SOURCE_UNAVAILABLE" | "CONSENT_REQUIRED" | "CONSENT_REVOKED" | "CONSENT_EXPIRED" | "OUTBOUND_BUDGET_EXCEEDED" | "PROVIDER_TIMEOUT" | "PROVIDER_CANCELLED" | "PROVIDER_TRANSPORT_ERROR" | "PROVIDER_PROTOCOL_ERROR" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_USAGE_INCONSISTENT" | "PROVIDER_REFUSAL" | "PROVIDER_INCOMPLETE" | null);
+};
+
+export type ConsentPage = {
+  "items": Array<ConsentView>;
+  "next_cursor": (string | null);
+  "total_hint"?: number;
+};
+
+export type ConsentPreviewWrite = {
+  "job_id": string;
+  "expected_job_revision": number;
+  "provider_id": string;
+  "expected_provider_revision": number;
+  "budget": OutboundBudget;
+  "expires_at": string;
+};
+
+export type ConsentProposalView = {
+  "id": string;
+  "proposal_sha256": string;
+  "summary": FrozenOutboundSummary;
+  "validity": "current" | "stale" | "expired" | "unavailable";
+  "consent_id": (string | null);
+  "warnings": Array<ProposalWarning>;
+};
+
+export type ConsentRevoke = {
+  "expected_revision": number;
+};
+
+export type ConsentView = {
+  "id": string;
+  "revision": number;
+  "status": "active" | "revoked" | "expired";
+  "proposal_id": string;
+  "proposal_sha256": string;
+  "summary": FrozenOutboundSummary;
+  "created_at": string;
+  "expires_at": string;
+  "revoked_at": (string | null);
+  "dispatch": (ConsentDispatchView | null);
+};
+
+export type ContentBlock = {
+  "schema_version"?: "3.0.0";
+  "id": string;
+  "revision": number;
+  "entity"?: "block";
+  "kind": "orientation" | "definition" | "theorem" | "proof" | "intuition" | "worked_example" | "boundary" | "summary" | "text" | "code" | "figure";
+  "title": string;
+  "body_path": string;
+  "body_sha256": string;
+  "concepts"?: Array<string>;
+  "citations"?: Array<string>;
+  "depends_on"?: Array<ContentRef>;
+};
+
+export type ContentRef = {
+  "entity": "course" | "lesson" | "block" | "concept" | "route" | "question" | "practice_set" | "assessment" | "note";
+  "id": string;
+  "revision": number;
+  "sha256": string;
+};
+
+export type ContextSnapshot = {
+  "id": string;
+  "created_at": string;
+  "request_sha256": string;
+  "resolved_refs": Array<ContentRef>;
+  "policy": "learning" | "practice" | "test_help" | "review" | "authoring";
+  "character_count": number;
+  "snapshot_sha256": string;
+};
+
+export type Course = {
+  "schema_version"?: "3.0.0";
+  "id": string;
+  "revision": number;
+  "entity"?: "course";
+  "title": string;
+  "language"?: string;
+  "audience": string;
+  "lesson_refs": Array<ContentRef>;
+  "concept_refs"?: Array<ContentRef>;
+  "sections"?: Array<CourseSection>;
+  "objectives"?: Array<string>;
+  "difficulty"?: "beginner" | "intermediate" | "advanced";
+};
+
+export type CourseSection = {
+  "id": string;
+  "title": string;
+  "lesson_ids": Array<string>;
+};
+
+export type CourseSummary = {
+  "ref": ContentRef;
+  "title": string;
+  "language": string;
+  "lesson_count": number;
+  "review_state"?: "unreviewed";
+};
+
+export type CurrentReviewPolicy = {
+  "tutor_scope": "operation_help_only" | "academic";
+  "allow_materials": boolean;
+  "allow_web": false;
+};
+
+export type DirectoryAncestor = {
+  "id": string;
+  "title": string;
+};
+
+export type DirectoryHit = {
+  "ref": ContentRef;
+  "title": string;
+  "ancestors": Array<DirectoryAncestor>;
+};
+
+export type DirectorySearchResponse = {
+  "hits": Array<DirectoryHit>;
+};
+
+export type DownloadArtifact = {
+  "artifact_id": string;
+  "filename": string;
+  "size": number;
+  "sha256": string;
+  "media_type": string;
+  "download_path": string;
+};
+
+export type EmptyRequest = Record<string, never>;
+
+export type ErrorDetail = {
+  "code": string;
+  "message": string;
+  "request_id": string;
+  "retryable": boolean;
+  "details"?: Array<string>;
+};
+
+export type ErrorEnvelope = {
+  "error": ErrorDetail;
+};
+
+export type EstimatedCostEstimate = {
+  "kind": "estimated";
+  "currency": "USD";
+  "maximum_estimated_cost": number;
+  "pricing_sha256": string;
+};
+
+export type EstimatedUsageCost = {
+  "kind": "estimated";
+  "currency": "USD";
+  "amount": number;
+  "pricing_sha256": string;
+};
+
+export type Evidence = {
+  "id": string;
+  "event_id": string;
+  "concept_id": string;
+  "skill": "recall" | "explain" | "compute" | "derive" | "transfer";
+  "eligible": boolean;
+  "reason": string;
+  "score"?: (number | null);
+  "independence": "independent" | "assisted" | "unknown";
+  "freshness": "novel" | "repeated" | "unknown";
+};
+
+export type EvidenceApplicability = {
+  "status": "usable" | "pending_review" | "confirmed_stale";
+  "reason_codes": Array<string>;
+  "checked_refs": Array<ContentRef>;
+  "check_scope"?: "exact_semantic_dependencies";
+};
+
+export type FrozenOutboundBudget = {
+  "max_input_tokens": number;
+  "max_output_tokens": number;
+  "max_provider_calls": 1;
+  "max_search_calls": 0;
+  "max_tool_calls": 0;
+  "timeout_seconds": number;
+  "max_cost_usd": (number | null);
+};
+
+export type FrozenOutboundSummary = {
+  "job_id": string;
+  "source_job_revision": number;
+  "source_input_sha256": string;
+  "purpose": "tutor" | "search" | "authoring" | "codex";
+  "provider_id": string;
+  "provider_revision": number;
+  "config_sha256": string;
+  "adapter": "official_responses" | "compatible_chat";
+  "adapter_version": string;
+  "base_url": string;
+  "endpoint_policy": "public_https" | "explicit_loopback";
+  "model": string;
+  "context_snapshot_id": string;
+  "context_snapshot_sha256": string;
+  "input_sha256": string;
+  "messages": Array<MessageSummary>;
+  "references": Array<ReferenceSummary>;
+  "input_character_count": number;
+  "input_token_assurance": (LocalExactInputTokens | LocalUpperBoundInputTokens);
+  "allow_web": false;
+  "budget": FrozenOutboundBudget;
+  "cost_estimate": (UnknownCostEstimate | EstimatedCostEstimate);
+  "created_at": string;
+  "expires_at": string;
+};
+
+export type GeneratedSolutionAnswer = {
+  "question_key": string;
+  "grading_kind": "choice_exact" | "text_normalized" | "numeric_tolerance" | "symbolic_review" | "rubric_review";
+  "accepted_answers": Array<string>;
+  "absolute_tolerance": number;
+  "relative_tolerance": number;
+  "unit": (string | null);
+  "domain_assumptions": Array<string>;
+  "solution_markdown": string;
+  "rubric_markdown": string;
+  "symbols": Array<WorkedExampleSymbol>;
+  "numeric_plan": (NumericPlan | null);
+};
+
+export type GradeHistoryEntry = {
+  "grading_revision": number;
+  "grading_rules_version": string;
+  "status": "graded" | "needs_review";
+  "finalized_at": string;
+  "qualification_basis": "submission_frozen" | "history_not_frozen";
+  "qualification_recorded_at": string;
+  "items": Array<GradeHistoryItem>;
+};
+
+export type GradeHistoryItem = {
+  "question_ref": ContentRef;
+  "score": (number | null);
+  "max_score": number;
+  "status": "graded" | "needs_review";
+  "concept_refs": Array<ContentRef>;
+  "eligible": boolean;
+  "reason_codes": Array<"MODE_OPEN_BOOK" | "MODE_ASSISTED" | "HELP_BEFORE_SUBMIT" | "ANSWER_UNREVIEWED" | "GRADE_UNRESOLVED" | "CONCEPT_MAPPING_UNRESOLVED" | "PREVIOUSLY_SEEN" | "PRIOR_SEEN_UNKNOWN" | "HELP_HISTORY_UNKNOWN" | "SOURCE_NOT_TRUSTED" | "HISTORY_PREREQUISITES_NOT_FROZEN">;
+  "evidence_ids": Array<string>;
+  "independence": "independent" | "assisted" | "unknown";
+  "freshness": "novel" | "repeated" | "unknown";
+};
+
+export type GradingReadiness = {
+  "status": "reviewed" | "unreviewed" | "unavailable";
+  "approved_count": number;
+  "draft_count": number;
+  "needs_review_count": number;
+  "missing_count": number;
+  "damaged_count": number;
+  "reason_codes": Array<string>;
+};
+
+export type HealthResponse = {
+  "status"?: "ok";
+  "build_version"?: string;
+};
+
+export type ImportCancelRequest = {
+  "expected_input_sha256": string;
+};
+
+export type ImportCancelResponse = {
+  "id": string;
+  "status"?: "cancelled";
+};
+
+export type ImportCommitRequest = {
+  "expected_input_sha256": string;
+  "accepted_warning_codes": Array<string>;
+  "id_mapping": Array<ImportIdMapping>;
+};
+
+export type ImportCommitResponse = {
+  "course_refs": Array<ContentRef>;
+  "migration_receipt_id": string;
+};
+
+export type ImportDraftSnapshot = {
+  "id": string;
+  "kind": "course" | "lesson" | "block" | "concept" | "route" | "question" | "practice_set" | "assessment" | "note";
+  "revision": number;
+  "base_ref": (ContentRef | null);
+  "state": "draft" | "in_review" | "approved" | "needs_changes" | "published" | "cancelled";
+  "candidate_sha256": string;
+  "payload": (BlockDraftPayload | Course | Lesson | Concept | Route | QuestionPublic | PracticeSet | AssessmentBlueprint | Note);
+  "warnings": Array<Warning>;
+};
+
+export type ImportIdMapping = {
+  "old_id": string;
+  "new_id": string;
+};
+
+export type ImportPreview = {
+  "id": string;
+  "status": "staged" | "parsing" | "preview_ready" | "committed" | "cancelled" | "failed";
+  "input_sha256": string;
+  "warnings": Array<Warning>;
+  "candidate_summary": CandidateSummary;
+  "preview_refs": Array<string>;
+};
+
+export type ImportStaged = {
+  "import_id": string;
+  "job": JobRef;
+  "input_sha256": string;
+};
+
+export type ImportUpload = {
+  "file": Blob;
+  "kind": "auto" | "markdown" | "text" | "html" | "pdf" | "docx" | "learnpack";
+  "target_course_id"?: (string | null);
+};
+
+export type ItemGrade = {
+  "question_ref": ContentRef;
+  "score"?: (number | null);
+  "max_score": number;
+  "status": "graded" | "needs_review";
+  "feedback_markdown": string;
+  "solution_markdown"?: (string | null);
+};
+
+export type JobCancelRequest = {
+  "expected_revision": number;
+};
+
+export type JobProgress = {
+  "completed": number;
+  "total": (number | null);
+  "label": string;
+};
+
+export type JobRef = {
+  "id": string;
+  "status": "queued" | "running" | "awaiting_approval" | "completed" | "failed" | "cancelled";
+};
+
+export type JobSnapshot = {
+  "id": string;
+  "workspace_id": string;
+  "kind": string;
+  "status": "queued" | "running" | "awaiting_approval" | "completed" | "failed" | "cancelled";
+  "revision": number;
+  "created_at": string;
+  "updated_at": string;
+  "progress": JobProgress;
+  "result_refs": Array<ContentRef>;
+  "warnings": Array<Warning>;
+  "error": (ErrorDetail | null);
+};
+
+export type LearnerProfile = {
+  "workspace_id": string;
+  "revision": number;
+  "goals"?: Array<string>;
+  "goal_concept_ids"?: Array<string>;
+  "weekly_minutes"?: number;
+  "language"?: string;
+  "preferred_difficulty"?: "beginner" | "intermediate" | "advanced";
+  "self_assessments"?: Array<SelfAssessment>;
+};
+
+export type LearningActionRequest = {
+  "kind": "read_marked" | "bookmark_set";
+  "ref": ContentRef;
+  "expected_revision": number;
+  "value": boolean;
+};
+
+export type LearningActionResponse = {
+  "event_id": string;
+  "progress_revision": number;
+};
+
+export type LearningProgress = {
+  "revision": number;
+  "readings": Array<ReadingState>;
+  "route_steps": Array<RouteStepState>;
+  "bookmarks": Array<BookmarkState>;
+};
+
+export type Lesson = {
+  "schema_version"?: "3.0.0";
+  "id": string;
+  "revision": number;
+  "entity"?: "lesson";
+  "title": string;
+  "objectives": Array<string>;
+  "prerequisite_ids"?: Array<string>;
+  "block_refs": Array<ContentRef>;
+  "proof_policy"?: "full" | "declared_dependencies";
+};
+
+export type LessonCandidateRoot = {
+  "entity": "lesson";
+  "title": string;
+  "objectives": Array<string>;
+  "prerequisites": Array<string>;
+  "proof_policy": "full" | "declared_dependencies";
+  "blocks": Array<AuthoringBlockMemberRef>;
+};
+
+export type LocalExactInputTokens = {
+  "kind": "local_exact";
+  "input_tokens": number;
+  "checker_version": string;
+  "proof_sha256": string;
+  "request_body_sha256": string;
+};
+
+export type LocalUpperBoundInputTokens = {
+  "kind": "local_upper_bound";
+  "input_tokens_upper_bound": number;
+  "checker_version": string;
+  "proof_sha256": string;
+  "request_body_sha256": string;
+};
+
+export type LogoutResponse = {
+  "logged_out"?: true;
+};
+
+export type ManualReviewReceipt = {
+  "id": string;
+  "actor_role": "author";
+  "signed_at": string;
+  "reason": string;
+  "question_ids": Array<string>;
+  "signature": string;
+  "signature_algorithm": "hmac-sha256-v1";
+};
+
+export type MessageSummary = {
+  "role": "system" | "user" | "assistant";
+  "character_count": number;
+  "content_sha256": string;
+};
+
+export type MutationAck = {
+  "id": string;
+  "revision": number;
+  "applied": boolean;
+};
+
+export type Note = {
+  "schema_version"?: "3.0.0";
+  "id": string;
+  "revision": number;
+  "entity"?: "note";
+  "workspace_id": string;
+  "anchor": Selection;
+  "markdown": string;
+  "anchor_state"?: "exact" | "stale" | "unresolved";
+};
+
+export type NoteDeleted = {
+  "id": string;
+  "deleted"?: true;
+};
+
+export type NumericAssertion = {
+  "id": string;
+  "expression": string;
+  "expected": number;
+  "atol": number;
+  "rtol": number;
+  "unit": string;
+};
+
+export type NumericAssertionResult = {
+  "id": string;
+  "actual": (number | null);
+  "passed": boolean;
+  "error_code": ("NUMERIC_DOMAIN_ERROR" | "NUMERIC_NONFINITE" | null);
+};
+
+export type NumericCheckDecisionAck = {
+  "id": string;
+  "revision": number;
+  "operation_sha256": string;
+  "decision": "approve_once" | "decline";
+  "applied": true;
+  "job": (JobRef | null);
+};
+
+export type NumericCheckPreviewWrite = {
+  "candidate": AuthoringCandidate;
+};
+
+export type NumericCheckResult = {
+  "job_id": string;
+  "input_sha256": string;
+  "operation_sha256": string;
+  "outcome": "passed" | "mismatch" | "evaluation_error" | "timeout" | "resource_limit" | "cancelled" | "environment_unavailable" | "outcome_unknown";
+  "verdict": "PASS" | "FAIL" | "BLOCKED";
+  "started_at": (string | null);
+  "finished_at": string;
+  "exit_code": (number | null);
+  "assertions": Array<NumericAssertionResult>;
+  "output_sha256": (string | null);
+  "result_sha256": string;
+};
+
+export type NumericCheckView = {
+  "id": string;
+  "revision": number;
+  "candidate": AuthoringCandidate;
+  "plan": NumericPlan;
+  "runtime": NumericRuntimeProfile;
+  "operation_sha256": string;
+  "decision": "pending" | "approve_once" | "decline";
+  "created_at": string;
+  "expires_at": string;
+  "expired": boolean;
+  "job": (JobRef | null);
+  "job_revision": (number | null);
+  "result": (NumericCheckResult | null);
+  "warnings": Array<Warning>;
+};
+
+export type NumericPlan = {
+  "version": "finite-arithmetic-v1";
+  "variables": Array<NumericVariable>;
+  "assertions": Array<NumericAssertion>;
+  "seed": null;
+};
+
+export type NumericRuntimeProfile = {
+  "evaluator_version": "finite-arithmetic-v1";
+  "evaluator_sha256": string;
+  "runtime_manifest_sha256": string;
+  "python_version": string;
+  "sandbox_version": string;
+  "wall_seconds": 5;
+  "cpu_seconds": 2;
+  "memory_bytes": 268435456;
+  "output_bytes": 65536;
+  "evaluator_process_limit": 1;
+};
+
+export type NumericVariable = {
+  "name": string;
+  "value": number;
+  "unit": string;
+};
+
+export type OutboundBudget = {
+  "max_input_tokens": number;
+  "max_output_tokens": number;
+  "max_provider_calls": 1;
+  "max_search_calls": 0;
+  "max_tool_calls": 0;
+  "timeout_seconds"?: number;
+  "max_cost_usd": (number | null);
+};
+
+export type OutlineBlock = {
+  "ref": ContentRef;
+  "kind": "orientation" | "definition" | "theorem" | "proof" | "intuition" | "worked_example" | "boundary" | "summary" | "text" | "code" | "figure";
+  "title": string;
+};
+
+export type OutlineLesson = {
+  "ref": ContentRef;
+  "title": string;
+  "blocks": Array<OutlineBlock>;
+  "reading_state": "unread" | "read" | "stale";
+};
+
+export type OutlineResponse = {
+  "course_ref": ContentRef;
+  "sections": Array<OutlineSection>;
+};
+
+export type OutlineSection = {
+  "id": string;
+  "title": string;
+  "lessons": Array<OutlineLesson>;
+};
+
+export type PageAssessment = {
+  "items": Array<AssessmentSummary>;
+  "next_cursor": (string | null);
+};
+
+export type PageCourse = {
+  "items": Array<CourseSummary>;
+  "next_cursor": (string | null);
+};
+
+export type PageEvidence = {
+  "items": Array<Evidence>;
+  "next_cursor": (string | null);
+};
+
+export type PageNote = {
+  "items": Array<Note>;
+  "next_cursor": (string | null);
+};
+
+export type PagePracticeSet = {
+  "items": Array<PracticeSetSummary>;
+  "next_cursor": (string | null);
+};
+
+export type PageRevision = {
+  "items": Array<RevisionSummary>;
+  "next_cursor": (string | null);
+};
+
+export type PageRoute = {
+  "items": Array<Route>;
+  "item_refs": Array<ContentRef>;
+  "targets": Array<RouteTargetBinding>;
+  "next_cursor": (string | null);
+};
+
+export type PolicySnapshot = {
+  "policy_version"?: "1.0.0";
+  "mode": "independent" | "assisted" | "open_book";
+  "tutor_scope": "operation_help_only" | "academic";
+  "allow_web": boolean;
+  "allow_materials": boolean;
+  "solution_release"?: "after_submit";
+};
+
+export type PracticeAssistanceView = {
+  "question_id": string;
+  "highest_hint_level": 0 | 1 | 2 | 3;
+  "solution_revealed": boolean;
+  "model_help_received"?: boolean;
+};
+
+export type PracticeHelpActivity = {
+  "practice_session_id": string;
+  "practice_set_ref": ContentRef;
+  "question_ref": ContentRef;
+  "event_id": string;
+  "occurred_at": string;
+  "kind": "hint_revealed" | "solution_revealed";
+};
+
+export type PracticeHint = {
+  "markdown": string;
+  "exposure_event_id": string;
+  "revision": number;
+  "level": 1 | 2 | 3;
+  "rule_version": string;
+  "source": "rules";
+};
+
+export type PracticeHintRequest = {
+  "question_id": string;
+  "expected_revision": number;
+  "level": 1 | 2 | 3;
+};
+
+export type PracticeResponsesSaved = {
+  "id": string;
+  "revision": number;
+  "saved_at": string;
+};
+
+export type PracticeSession = {
+  "id": string;
+  "revision": number;
+  "practice_ref": ContentRef;
+  "lesson_ref": ContentRef;
+  "questions": Array<QuestionPublic>;
+  "responses": Array<ResponseDraft>;
+  "status": "active" | "submitted" | "abandoned";
+  "exposure_event_ids": Array<string>;
+  "assisted": boolean;
+  "assistance": Array<PracticeAssistanceView>;
+  "results": (Array<ItemGrade> | null);
+};
+
+export type PracticeSessionCreate = {
+  "practice_ref": ContentRef;
+};
+
+export type PracticeSessionCreated = {
+  "id": string;
+  "revision": number;
+  "practice_ref": ContentRef;
+  "lesson_ref": ContentRef;
+  "questions": Array<QuestionPublic>;
+  "responses": Array<ResponseDraft>;
+  "status": "active";
+  "exposure_event_ids": Array<string>;
+  "assisted": boolean;
+  "assistance": Array<PracticeAssistanceView>;
+  "results": (Array<ItemGrade> | null);
+};
+
+export type PracticeSet = {
+  "schema_version"?: "3.0.0";
+  "id": string;
+  "revision": number;
+  "entity"?: "practice_set";
+  "title": string;
+  "lesson_ref": ContentRef;
+  "question_refs": Array<ContentRef>;
+  "feedback_policy"?: "on_submit_or_reveal";
+};
+
+export type PracticeSetCandidateRoot = {
+  "entity": "practice_set";
+  "title": string;
+  "lesson_ref": AuthoringLessonRef;
+  "questions": Array<AuthoringQuestionMemberRef>;
+  "feedback_policy": "on_submit_or_reveal";
+};
+
+export type PracticeSetSummary = {
+  "ref": ContentRef;
+  "title": string;
+  "lesson_ref": ContentRef;
+  "question_count": number;
+};
+
+export type PracticeSolution = {
+  "solution_markdown": string;
+  "exposure_event_id": string;
+  "revision": number;
+  "review_status": "draft" | "needs_review" | "approved";
+};
+
+export type PracticeSolutionRequest = {
+  "question_id": string;
+  "expected_revision": number;
+};
+
+export type PracticeSubmitRequest = {
+  "expected_revision": number;
+};
+
+export type PracticeSubmitted = {
+  "id": string;
+  "revision": number;
+  "results": Array<ItemGrade>;
+  "evidence_label": "practice";
+  "exposure_event_ids": Array<string>;
+  "assisted": boolean;
+  "assistance": Array<PracticeAssistanceView>;
+};
+
+export type PreferencesPatch = {
+  "language"?: string;
+  "reader_font_size"?: number;
+  "default_learning_minutes"?: number;
+  "auto_attach_current_lesson"?: boolean;
+};
+
+export type PreferencesRequest = {
+  "expected_revision": number;
+  "preferences": PreferencesPatch;
+};
+
+export type PriorSeen = {
+  "status": "known" | "unknown";
+  "questions": Array<PriorSeenQuestion>;
+};
+
+export type PriorSeenQuestion = {
+  "question_ref": ContentRef;
+  "state": "unseen" | "seen" | "unknown";
+  "reason_codes": Array<string>;
+};
+
+export type ProfileWrite = {
+  "expected_revision": number;
+  "goals": Array<string>;
+  "goal_concept_ids": Array<string>;
+  "weekly_minutes": number;
+  "language": string;
+  "preferred_difficulty": "beginner" | "intermediate" | "advanced";
+  "self_assessments": Array<SelfAssessmentWrite>;
+};
+
+export type ProposalWarning = {
+  "code": "price_unknown" | "estimate_not_guaranteed" | "provider_changed" | "source_changed" | "source_unavailable" | "job_unavailable" | "proposal_expired" | "capability_unavailable";
+  "message": string;
+};
+
+export type ProvenanceSource = {
+  "id": string;
+  "media_type": string;
+  "size": number;
+  "sha256": string;
+  "rights": string;
+  "parser_version": (string | null);
+};
+
+export type ProviderCapabilities = {
+  "provider_id": string;
+  "configured": boolean;
+  "chat": boolean;
+  "structured_output": boolean;
+  "web_search": boolean;
+  "streaming": boolean;
+  "tool_calls": boolean;
+  "version_evidence": string;
+};
+
+export type ProviderCapabilitiesResponse = {
+  "items": Array<ProviderCapabilities>;
+};
+
+export type ProviderConfigAck = {
+  "id": string;
+  "revision": number;
+  "config_sha256": string;
+  "configured": true;
+  "secret_present": boolean;
+};
+
+export type ProviderConfigView = {
+  "id": string;
+  "revision": number;
+  "config_sha256": string;
+  "adapter": "official_responses" | "compatible_chat";
+  "base_url": string;
+  "model": string;
+  "embedding_model": (string | null);
+  "endpoint_policy": "public_https" | "explicit_loopback";
+  "pricing": (ProviderPricing | null);
+  "configured": true;
+  "secret_present": boolean;
+};
+
+export type ProviderConfigWrite = {
+  "expected_revision": number;
+  "adapter": "official_responses" | "compatible_chat";
+  "base_url": string;
+  "model": string;
+  "embedding_model": (string | null);
+  "endpoint_policy": "public_https" | "explicit_loopback";
+  "pricing": (ProviderPricing | null);
+};
+
+export type ProviderPricing = {
+  "input_usd_per_million": number;
+  "output_usd_per_million": number;
+  "source_note": string;
+};
+
+export type ProviderSecretAck = {
+  "id": string;
+  "revision": number;
+  "config_sha256": string;
+  "secret_present": boolean;
+};
+
+export type ProviderSecretWrite = {
+  "expected_revision": number;
+  "secret": string;
+};
+
+export type ProviderUsageView = {
+  "consumed_provider_calls": number;
+  "search_calls": 0;
+  "tool_calls": 0;
+  "input_tokens": (number | null);
+  "output_tokens": (number | null);
+  "elapsed_ms": (number | null);
+  "cost": (UnknownUsageCost | EstimatedUsageCost | ActualUsageCost);
+};
+
+export type QuestionDraftPublic = {
+  "member_key": string;
+  "kind": "single_choice" | "text_blank" | "numeric" | "expression" | "calculation";
+  "stem_markdown": string;
+  "choices": Array<Choice>;
+  "concept_refs": Array<AuthoringConceptRef>;
+  "skill": "recall" | "explain" | "compute" | "derive" | "transfer";
+  "exposure_family_key": string;
+  "max_score": number;
+  "input_instructions": string;
+  "declared_source_refs": Array<AuthoringBlockRef>;
+  "depends_on_keys": Array<string>;
+};
+
+export type QuestionKindCount = {
+  "kind": "single_choice" | "text_blank" | "numeric" | "expression" | "calculation";
+  "count": number;
+};
+
+export type QuestionPublic = {
+  "schema_version"?: "3.0.0";
+  "id": string;
+  "revision": number;
+  "entity"?: "question";
+  "kind": "single_choice" | "text_blank" | "numeric" | "expression" | "calculation";
+  "stem_markdown": string;
+  "choices"?: Array<Choice>;
+  "concept_ids": Array<string>;
+  "skill": "recall" | "explain" | "compute" | "derive" | "transfer";
+  "exposure_group": string;
+  "max_score"?: number;
+  "input_instructions": string;
+};
+
+export type QuestionReviewMaterials = {
+  "question_ref": ContentRef;
+  "materials": Array<ReviewMaterial>;
+};
+
+export type ReadinessResponse = {
+  "database_ready": boolean;
+  "worker_ready": boolean;
+  "data_schema_version": string;
+  "migrations_pending": boolean;
+  "providers_configured": boolean;
+};
+
+export type ReadingState = {
+  "ref": ContentRef;
+  "read": boolean;
+  "read_at": (string | null);
+};
+
+export type RecentAttempt = {
+  "id": string;
+  "revision": number;
+  "status": "active" | "submitted" | "grading" | "graded" | "needs_review" | "abandoned";
+  "mode": "independent" | "assisted" | "open_book";
+  "created_at": string;
+  "submitted_at": (string | null);
+};
+
+export type RecommendationActivityRef = {
+  "kind": "read_marked" | "practice_submitted" | "test_submitted";
+  "event_id": string;
+  "target_ref": ContentRef;
+  "source_id": (string | null);
+  "occurred_at": string;
+};
+
+export type RecommendationAssessmentOption = {
+  "kind": "assessment";
+  "assessment_ref": ContentRef;
+  "course_ref": (ContentRef | null);
+};
+
+export type RecommendationDecisionWrite = {
+  "decision": "accepted" | "dismissed";
+  "reason": (string | null);
+};
+
+export type RecommendationEvidenceRef = {
+  "evidence": Evidence;
+  "question_ref": ContentRef;
+  "concept_ref": ContentRef;
+  "assessment_ref": ContentRef;
+  "attempt_id": string;
+  "grading_revision": number;
+  "submitted_at": string;
+  "applicability": "usable" | "pending_review" | "confirmed_stale";
+  "grading_origin": "deterministic" | "human_review" | "unknown";
+};
+
+export type RecommendationPage = {
+  "items": Array<RecommendationView>;
+  "next_cursor": (string | null);
+  "total_hint"?: number;
+  "projection_state": "missing" | "pending_refresh" | "ready" | "stale" | "failed";
+  "warnings": Array<Warning>;
+  "snapshot_id": (string | null);
+  "generated_at": (string | null);
+  "rule_version": string;
+  "rule_parameters": RecommendationRuleParameters;
+};
+
+export type RecommendationPracticeOption = {
+  "kind": "practice";
+  "course_ref": ContentRef;
+  "lesson_ref": ContentRef;
+  "practice_ref": ContentRef;
+};
+
+export type RecommendationProfileBasis = {
+  "revision": number;
+  "goal_concept_ids": Array<string>;
+  "goals": Array<string>;
+  "self_assessments": Array<SelfAssessment>;
+};
+
+export type RecommendationReaderOption = {
+  "kind": "reader";
+  "course_ref": ContentRef;
+  "lesson_ref": ContentRef;
+  "block_ref": (ContentRef | null);
+};
+
+export type RecommendationRouteBasis = {
+  "route_ref": ContentRef;
+  "step_id": string;
+  "source_event_ids": Array<string>;
+};
+
+export type RecommendationRuleParameters = {
+  "review_after_days": number;
+  "calibration": "uncalibrated";
+};
+
+export type RecommendationView = {
+  "id": string;
+  "target_ref": ContentRef;
+  "target_title": string;
+  "action": "read" | "practice" | "test" | "review" | "inspect_source";
+  "reason_codes": Array<"prerequisite_gap" | "assessment_error" | "review_due" | "next_route_step" | "user_goal" | "read_without_practice" | "practice_without_independent">;
+  "explanation": string;
+  "evidence_refs": Array<RecommendationEvidenceRef>;
+  "activity_refs": Array<RecommendationActivityRef>;
+  "profile_basis": (RecommendationProfileBasis | null);
+  "route_basis": (RecommendationRouteBasis | null);
+  "prerequisite_gaps": Array<ContentRef>;
+  "navigation_options": Array<(RecommendationReaderOption | RecommendationPracticeOption | RecommendationAssessmentOption)>;
+  "estimated_minutes": (number | null);
+  "rule_version": string;
+  "generated_at": string;
+  "staleness": "current" | "stale";
+  "decision": "pending" | "accepted" | "dismissed";
+  "decision_revision": number;
+  "decision_sha256": string;
+  "decision_reason": (string | null);
+};
+
+export type ReferenceSummary = {
+  "ref": ContentRef;
+  "title": string;
+  "locator": string;
+  "character_count": number;
+  "excerpt_sha256": string;
+};
+
+export type RegradeItemReview = {
+  "question_id": string;
+  "score": number;
+  "feedback_markdown": string;
+};
+
+export type RegradeRequest = {
+  "expected_grading_revision": number;
+  "reason": string;
+  "item_reviews": Array<RegradeItemReview>;
+};
+
+export type ReleasedSolutionReview = {
+  "question_id": string;
+  "review_status": "approved" | "draft" | "needs_review";
+};
+
+export type ResolvedCitation = {
+  "citation": Citation;
+  "source": ProvenanceSource;
+  "original_access": "allowed" | "author_required" | "unavailable";
+};
+
+export type ResponseDraft = {
+  "question_id": string;
+  "answer": string;
+  "steps_markdown"?: string;
+};
+
+export type ResponsesWrite = {
+  "expected_revision": number;
+  "responses": Array<ResponseDraft>;
+};
+
+export type RetainedOriginal = {
+  "source": ProvenanceSource;
+  "original_access": "allowed" | "author_required" | "unavailable";
+};
+
+export type RetrievalCommittedIndex = {
+  "index_version": string;
+  "corpus_sha256": string;
+  "built_at": string;
+  "block_count": number;
+  "term_count": number;
+};
+
+export type RetrievalHitView = {
+  "ref": ContentRef;
+  "title": string;
+  "text": string;
+  "locator": string;
+  "score": number;
+  "body_sha256": string;
+  "location": RetrievalWholeBlockLocation;
+  "current_ref": ContentRef;
+  "lifecycle": "active" | "archived";
+  "material_review": "unreviewed";
+  "provenance": RetrievalProvenance;
+  "parent_paths": Array<RetrievalScopePath>;
+  "warnings": Array<Warning>;
+};
+
+export type RetrievalIndexOverview = {
+  "kind": "overview";
+  "items": Array<RetrievalRegisteredScope>;
+  "next_cursor": (string | null);
+};
+
+export type RetrievalIndexRebuildWrite = {
+  "scope_refs": Array<ContentRef>;
+  "expected_corpus_sha256": string;
+  "provider_id": (string | null);
+  "consent_id": (string | null);
+};
+
+export type RetrievalIndexScopeStatus = {
+  "kind": "scope";
+  "scope_sha256": string;
+  "scope_refs": Array<ContentRef>;
+  "corpus_sha256": string;
+  "state": "ready" | "stale" | "building" | "missing";
+  "indexed_corpus_sha256": (string | null);
+  "index_version": (string | null);
+  "last_built_at": (string | null);
+  "latest_job": (RetrievalJobSummary | null);
+};
+
+export type RetrievalJobError = {
+  "code": string;
+  "message": string;
+  "retryable": boolean;
+};
+
+export type RetrievalJobSummary = {
+  "job": JobRef;
+  "target_corpus_sha256": string;
+  "error": (RetrievalJobError | null);
+};
+
+export type RetrievalOmissionCounts = {
+  "result_limit": number;
+  "text_byte_budget": number;
+  "json_byte_budget": number;
+};
+
+export type RetrievalProvenance = {
+  "state": "frozen" | "unresolved";
+  "original": (RetrievalRetainedSource | null);
+  "citations": Array<Citation>;
+  "unresolved_citation_ids": Array<string>;
+  "warnings": Array<Warning>;
+};
+
+export type RetrievalQueryView = {
+  "scope_sha256": string;
+  "scope_refs": Array<ContentRef>;
+  "corpus_sha256": string;
+  "indexed_corpus_sha256": (string | null);
+  "index_version": (string | null);
+  "index_state": "ready" | "stale" | "building" | "missing";
+  "result_state": "matched" | "no_match" | "indexed_empty" | "resource_omitted" | "not_ready";
+  "matched_count": (number | null);
+  "hits": Array<RetrievalHitView>;
+  "omissions": RetrievalOmissionCounts;
+  "warnings": Array<Warning>;
+};
+
+export type RetrievalQueryWrite = {
+  "query": string;
+  "scope_refs": Array<ContentRef>;
+  "limit": number;
+};
+
+export type RetrievalRegisteredScope = {
+  "scope_sha256": string;
+  "scope_refs": Array<ContentRef>;
+  "latest_index": (RetrievalCommittedIndex | null);
+  "latest_job": (RetrievalJobSummary | null);
+};
+
+export type RetrievalRetainedSource = {
+  "id": string;
+  "media_type": string;
+  "size": number;
+  "sha256": string;
+  "rights": string;
+  "parser_version": (string | null);
+};
+
+export type RetrievalScopePath = {
+  "root_ref": ContentRef;
+  "course_ref": (ContentRef | null);
+  "course_title": (string | null);
+  "lesson_ref": (ContentRef | null);
+  "lesson_title": (string | null);
+  "block_ref": ContentRef;
+};
+
+export type RetrievalWholeBlockLocation = {
+  "version": "whole-block-v1";
+  "unit": "unicode_codepoint";
+  "start_cp": 0;
+  "end_cp": number;
+};
+
+export type ReviewMaterial = {
+  "course_ref": ContentRef;
+  "lesson_ref": ContentRef;
+  "block_ref": ContentRef;
+  "title": string;
+  "concept_refs": Array<ContentRef>;
+};
+
+export type RevisionSummary = {
+  "ref": ContentRef;
+  "created_at": string;
+  "review_state"?: "unreviewed";
+  "lifecycle": "active" | "archived";
+};
+
+export type RoleRequest = {
+  "role": "learner" | "author";
+};
+
+export type Route = {
+  "schema_version"?: "3.0.0";
+  "id": string;
+  "revision": number;
+  "entity"?: "route";
+  "title": string;
+  "goal": string;
+  "steps": Array<RouteStep>;
+};
+
+export type RouteAssessmentOption = {
+  "kind": "assessment";
+  "assessment_ref": ContentRef;
+  "course_ref": (ContentRef | null);
+};
+
+export type RouteCompletionRequest = {
+  "route_revision": number;
+  "expected_progress_revision": number;
+  "completed": boolean;
+  "origin": "manual";
+};
+
+export type RoutePracticeOption = {
+  "kind": "practice";
+  "course_ref": ContentRef;
+  "lesson_ref": ContentRef;
+  "practice_ref": ContentRef;
+};
+
+export type RouteReaderOption = {
+  "kind": "reader";
+  "course_ref": ContentRef;
+  "lesson_ref": ContentRef;
+  "block_ref": (ContentRef | null);
+};
+
+export type RouteStep = {
+  "id": string;
+  "title": string;
+  "target": ContentRef;
+  "requires_steps"?: Array<string>;
+  "completion_rule": "manual" | "read" | "practice_submitted" | "assessment_submitted";
+};
+
+export type RouteStepState = {
+  "route_ref": ContentRef;
+  "step_id": string;
+  "completed": boolean;
+  "completion_origin"?: "none" | "manual" | "read" | "practice_submitted" | "assessment_submitted";
+  "manual_override"?: (boolean | null);
+  "completed_at"?: (string | null);
+  "updated_at"?: (string | null);
+  "source_event_ids"?: Array<string>;
+  "unmet_requires_steps"?: Array<string>;
+};
+
+export type RouteTargetBinding = {
+  "route_ref": ContentRef;
+  "step_id": string;
+  "target_ref": ContentRef;
+  "navigation_options": Array<(RouteReaderOption | RoutePracticeOption | RouteAssessmentOption)>;
+  "unresolved_reason": ("NO_EXACT_COURSE_PARENT" | null);
+};
+
+export type RunSnapshot = {
+  "id": string;
+  "thread_id": string;
+  "status": "queued" | "running" | "awaiting_approval" | "completed" | "failed" | "cancelled";
+  "context_snapshot_id"?: (string | null);
+  "last_seq": number;
+  "answer_markdown"?: string;
+  "citations"?: Array<Citation>;
+  "search_status"?: "not_requested" | "not_executed" | "executed" | "failed";
+};
+
+export type SavedTab = {
+  "id": string;
+  "context": ViewContext;
+  "pinned": boolean;
+  "scroll_offset"?: number;
+};
+
+export type ScopedConcept = {
+  "ref": ContentRef;
+  "title": string;
+  "skill_dimensions": Array<"recall" | "explain" | "compute" | "derive" | "transfer">;
+};
+
+export type Selection = {
+  "ref": ContentRef;
+  "exact_quote": string;
+  "prefix"?: string;
+  "suffix"?: string;
+  "start_codepoint": number;
+  "end_codepoint": number;
+};
+
+export type SelfAssessment = {
+  "concept_id": string;
+  "level": "not_learned" | "encountered" | "independent_use";
+  "origin"?: "self_report";
+  "updated_at": string;
+};
+
+export type SelfAssessmentWrite = {
+  "concept_id": string;
+  "level": "not_learned" | "encountered" | "independent_use";
+};
+
+export type SessionResponse = {
+  "workspace_id": string;
+  "role": "learner" | "author";
+  "csrf_token": string;
+  "active_independent_attempt_id": (string | null);
+  "active_open_book_attempt_id": (string | null);
+};
+
+export type SolutionDraftPrivate = {
+  "question": AuthoringQuestionMemberRef;
+  "answer": GeneratedSolutionAnswer;
+  "review_status": "needs_review";
+};
+
+export type SourceResponse = {
+  "id": string;
+  "media_type": string;
+  "size": number;
+  "sha256": string;
+  "rights": string;
+  "parser_version": (string | null);
+  "warnings": Array<Warning>;
+  "artifact": DownloadArtifact;
+};
+
+export type SubmissionActivity = {
+  "target_ref": ContentRef;
+  "source_id": string;
+  "event_id": string;
+  "submitted_at": string;
+  "question_refs": Array<ContentRef>;
+};
+
+export type TutorAnswerDeltaEvent = {
+  "run_id": string;
+  "seq": number;
+  "occurred_at": string;
+  "type": "answer_delta";
+  "text": string;
+};
+
+export type TutorApprovalRequiredEvent = {
+  "run_id": string;
+  "seq": number;
+  "occurred_at": string;
+  "type": "approval_required";
+  "approval_id": string;
+};
+
+export type TutorAssessmentBinding = {
+  "attempt_revision": number;
+  "question_ref": ContentRef;
+  "grading_revision": (number | null);
+};
+
+export type TutorCancelledEvent = {
+  "run_id": string;
+  "seq": number;
+  "occurred_at": string;
+  "type": "cancelled";
+};
+
+export type TutorCitationEvent = {
+  "run_id": string;
+  "seq": number;
+  "occurred_at": string;
+  "type": "citation";
+  "citation": Citation;
+};
+
+export type TutorCompletedEvent = {
+  "run_id": string;
+  "seq": number;
+  "occurred_at": string;
+  "type": "completed";
+};
+
+export type TutorContextBinding = {
+  "practice": (TutorPracticeBinding | null);
+  "assessment": (TutorAssessmentBinding | null);
+};
+
+export type TutorContextOmission = {
+  "ref": (ContentRef | null);
+  "reason": "character_budget" | "block_budget" | "history_budget" | "adapter_shape" | "index_missing" | "index_stale" | "index_building" | "no_match" | "not_released" | "unavailable";
+  "message": string;
+};
+
+export type TutorContextReadyEvent = {
+  "run_id": string;
+  "seq": number;
+  "occurred_at": string;
+  "type": "context_ready";
+  "context_snapshot_id": string;
+};
+
+export type TutorContextSummary = {
+  "snapshot": ContextSnapshot;
+  "included": Array<TutorInputMaterial>;
+  "history_message_ids": Array<string>;
+  "omissions": Array<TutorContextOmission>;
+  "warnings": Array<Warning>;
+};
+
+export type TutorFailedEvent = {
+  "run_id": string;
+  "seq": number;
+  "occurred_at": string;
+  "type": "failed";
+  "error_code": ("CAPABILITY_UNSUPPORTED" | "PROVIDER_CONFIGURATION_CHANGED" | "PROVIDER_SECRET_UNAVAILABLE" | "OUTBOUND_SOURCE_CHANGED" | "OUTBOUND_SOURCE_UNAVAILABLE" | "CONSENT_REQUIRED" | "CONSENT_REVOKED" | "CONSENT_EXPIRED" | "OUTBOUND_BUDGET_EXCEEDED" | "PROVIDER_TIMEOUT" | "PROVIDER_CANCELLED" | "PROVIDER_TRANSPORT_ERROR" | "PROVIDER_PROTOCOL_ERROR" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_USAGE_INCONSISTENT" | "PROVIDER_REFUSAL" | "PROVIDER_INCOMPLETE" | "POLICY_DENIED" | "ASSESSMENT_ACTIVE" | "TUTOR_CONTEXT_INVALID" | "TUTOR_CONTEXT_CHANGED" | "TUTOR_CONTEXT_UNAVAILABLE" | "TUTOR_CONTEXT_BUDGET_EXCEEDED" | "TUTOR_OUTPUT_INVALID" | "TUTOR_OUTPUT_EMPTY" | "TUTOR_INTEGRITY_ERROR" | "TUTOR_OUTCOME_UNKNOWN");
+};
+
+export type TutorInputMaterial = {
+  "reference": ReferenceSummary;
+  "body_sha256": (string | null);
+  "material_review": "unreviewed" | "not_applicable";
+};
+
+export type TutorMessage = {
+  "id": string;
+  "seq": number;
+  "run_id": string;
+  "role": "user" | "assistant";
+  "channel": ("answer" | "refusal" | null);
+  "status": "stored" | "completed" | "failed" | "cancelled";
+  "content_markdown": string;
+  "context_snapshot_id": (string | null);
+  "citations": Array<Citation>;
+  "created_at": string;
+};
+
+export type TutorMessagePage = {
+  "thread": TutorThreadView;
+  "items": Array<TutorMessage>;
+  "next_cursor": (string | null);
+};
+
+export type TutorPracticeBinding = {
+  "session_id": string;
+  "session_revision": number;
+  "question_ref": ContentRef;
+};
+
+export type TutorProviderResult = {
+  "receipt_id": string;
+  "receipt_sha256": string;
+  "outcome": "complete" | "refused" | "incomplete" | "error";
+  "provider_outcome": "completed" | "failed" | "incomplete" | "cancelled" | "unknown";
+  "output_state": "none" | "partial" | "complete";
+};
+
+export type TutorQueuedEvent = {
+  "run_id": string;
+  "seq": number;
+  "occurred_at": string;
+  "type": "queued";
+};
+
+export type TutorRequestInput = {
+  "thread_id": string;
+  "workspace_id": string;
+  "message": string;
+  "intent": "explain" | "hint" | "derive" | "research";
+  "context": TutorViewContext;
+  "web_search": false;
+  "consent_id": null;
+};
+
+export type TutorResultSummary = {
+  "refusal_markdown": string;
+  "usage": UsageSnapshot;
+  "provider": (TutorProviderResult | null);
+  "error_code": ("CAPABILITY_UNSUPPORTED" | "PROVIDER_CONFIGURATION_CHANGED" | "PROVIDER_SECRET_UNAVAILABLE" | "OUTBOUND_SOURCE_CHANGED" | "OUTBOUND_SOURCE_UNAVAILABLE" | "CONSENT_REQUIRED" | "CONSENT_REVOKED" | "CONSENT_EXPIRED" | "OUTBOUND_BUDGET_EXCEEDED" | "PROVIDER_TIMEOUT" | "PROVIDER_CANCELLED" | "PROVIDER_TRANSPORT_ERROR" | "PROVIDER_PROTOCOL_ERROR" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_USAGE_INCONSISTENT" | "PROVIDER_REFUSAL" | "PROVIDER_INCOMPLETE" | "POLICY_DENIED" | "ASSESSMENT_ACTIVE" | "TUTOR_CONTEXT_INVALID" | "TUTOR_CONTEXT_CHANGED" | "TUTOR_CONTEXT_UNAVAILABLE" | "TUTOR_CONTEXT_BUDGET_EXCEEDED" | "TUTOR_OUTPUT_INVALID" | "TUTOR_OUTPUT_EMPTY" | "TUTOR_INTEGRITY_ERROR" | "TUTOR_OUTCOME_UNKNOWN" | null);
+};
+
+export type TutorRetrievalCompletedEvent = {
+  "run_id": string;
+  "seq": number;
+  "occurred_at": string;
+  "type": "retrieval_completed";
+};
+
+export type TutorRunCancel = {
+  "expected_revision": number;
+};
+
+export type TutorRunControlView = {
+  "id": string;
+  "status": "queued" | "running" | "awaiting_approval" | "completed" | "failed" | "cancelled";
+  "job_revision": number;
+  "cancel_requested": boolean;
+};
+
+export type TutorRunCreate = {
+  "request": TutorRequestInput;
+  "expected_thread_revision": number;
+  "binding": TutorContextBinding;
+};
+
+export type TutorRunView = {
+  "run": RunSnapshot;
+  "job_revision": number;
+  "thread_revision": number;
+  "context": (TutorContextSummary | null);
+  "latest_proposal_id": (string | null);
+  "consent_id": (string | null);
+  "result": TutorResultSummary;
+};
+
+export type TutorThreadCreate = {
+  "scope": TutorViewContext;
+  "binding": TutorContextBinding;
+  "title": string;
+};
+
+export type TutorThreadPage = {
+  "items": Array<TutorThreadView>;
+  "next_cursor": (string | null);
+};
+
+export type TutorThreadView = {
+  "scope": TutorViewContext;
+  "binding": TutorContextBinding;
+  "title": string;
+  "id": string;
+  "revision": number;
+  "created_at": string;
+};
+
+export type TutorUsageEvent = {
+  "run_id": string;
+  "seq": number;
+  "occurred_at": string;
+  "type": "usage";
+  "input_tokens": (number | null);
+  "output_tokens": (number | null);
+};
+
+export type TutorViewContext = {
+  "view_kind": "route" | "lesson" | "worked_example" | "practice" | "assessment_help" | "assessment_review" | "authoring";
+  "active_ref": ContentRef;
+  "attached_refs": Array<ContentRef>;
+  "selection": (Selection | null);
+  "attempt_id": (string | null);
+};
+
+export type UnknownCostEstimate = {
+  "kind": "unknown";
+  "currency": "USD";
+};
+
+export type UnknownUsageCost = {
+  "kind": "unknown";
+  "currency": "USD";
+};
+
+export type UsageSnapshot = {
+  "input_tokens": (number | null);
+  "output_tokens": (number | null);
+};
+
+export type ViewContext = {
+  "view_kind": "route" | "lesson" | "worked_example" | "practice" | "assessment_help" | "assessment_review" | "authoring";
+  "active_ref": ContentRef;
+  "attached_refs"?: Array<ContentRef>;
+  "selection"?: (Selection | null);
+  "attempt_id"?: (string | null);
+};
+
+export type Warning = {
+  "code": string;
+  "message": string;
+  "locator"?: (string | null);
+  "severity": "info" | "warning" | "error";
+};
+
+export type WorkbenchSaveRequest = {
+  "expected_revision": number;
+  "session": WorkbenchSession;
+};
+
+export type WorkbenchSession = {
+  "revision": number;
+  "course_ref"?: (ContentRef | null);
+  "navigation"?: "route" | "textbook" | "practice" | "assessment";
+  "tabs"?: Array<SavedTab>;
+  "active_tab_id"?: (string | null);
+  "expanded_keys"?: Array<string>;
+  "directory_scroll"?: number;
+  "nav_width"?: number;
+  "agent_width"?: number;
+  "nav_collapsed"?: boolean;
+  "agent_collapsed"?: boolean;
+};
+
+export type WorkedExamplePayload = {
+  "version": "worked-example-candidate-v1";
+  "kind": "worked_example";
+  "title": string;
+  "body_markdown": string;
+  "symbols": Array<WorkedExampleSymbol>;
+  "declared_source_refs": Array<AuthoringBlockRef>;
+  "numeric_plan": NumericPlan;
+};
+
+export type WorkedExampleSymbol = {
+  "name": string;
+  "tex": string;
+  "domain": string;
+  "dimension": string;
+};
+
+export type WorkspaceLayout = {
+  "nav_width": number;
+  "agent_width": number;
+  "nav_collapsed": boolean;
+  "agent_collapsed": boolean;
+};
+
+export type WorkspacePreferences = {
+  "language"?: string;
+  "reader_font_size"?: number;
+  "default_learning_minutes"?: number;
+  "auto_attach_current_lesson"?: boolean;
+};
+
+export type WorkspaceResponse = {
+  "id": string;
+  "title": string;
+  "revision": number;
+  "preferences": WorkspacePreferences;
+  "layout": WorkspaceLayout;
+  "data_schema_version": string;
+};

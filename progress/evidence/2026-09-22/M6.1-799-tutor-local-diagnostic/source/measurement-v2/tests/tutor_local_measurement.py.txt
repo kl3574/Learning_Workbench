@@ -1,0 +1,209 @@
+"""Cache-only passive measurement; enabled solely by the test-only app factory.
+
+No SQL, parameters, headers, cookies, bodies, paths, or provider output are logged.
+Events stay in memory until shutdown. No fault injection or clock substitution.
+"""
+import atexit
+from contextvars import ContextVar
+from functools import wraps
+import inspect
+from itertools import count
+import json
+import os
+from pathlib import Path
+import sqlite3
+import threading
+from time import monotonic_ns
+
+EVENTS = []
+DROPPED = 0
+SERIAL = count(1)
+ACTIVE = ContextVar('local_measurement_span', default=None)
+ORIGINAL_CONNECT = sqlite3.connect
+
+
+def mark(kind, **values):
+    global DROPPED
+    if len(EVENTS) >= 100000:
+        DROPPED += 1
+        return
+    EVENTS.append(dict(t_ns=monotonic_ns(), kind=kind, thread=threading.current_thread().name,
+                       span=ACTIVE.get(), **values))
+
+
+class Connection(sqlite3.Connection):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.measurement_id = next(SERIAL)
+        self.statement_count = self.statement_ns = 0
+        self.acquired = None
+        mark('connection_open', connection=self.measurement_id)
+
+    def execute(self, sql, parameters=(), /):
+        begin = sql.upper().startswith('BEGIN')
+        started = monotonic_ns()
+        if begin:
+            mark('begin_start', connection=self.measurement_id, immediate=sql.upper() == 'BEGIN IMMEDIATE')
+        try:
+            result = super().execute(sql, parameters)
+        except BaseException as error:
+            if begin:
+                mark('begin_error', connection=self.measurement_id, elapsed_ns=monotonic_ns() - started,
+                     error=type(error).__name__)
+            raise
+        else:
+            if begin:
+                self.acquired = monotonic_ns()
+                mark('begin_acquired', connection=self.measurement_id, elapsed_ns=self.acquired - started)
+            return result
+        finally:
+            self.statement_count += 1
+            self.statement_ns += monotonic_ns() - started
+
+    def commit(self):
+        started = monotonic_ns()
+        try:
+            return super().commit()
+        finally:
+            mark('commit_return', connection=self.measurement_id, elapsed_ns=monotonic_ns() - started,
+                 acquired_ns=self.acquired)
+
+    def rollback(self):
+        try:
+            return super().rollback()
+        finally:
+            mark('rollback_return', connection=self.measurement_id, acquired_ns=self.acquired)
+
+    def close(self):
+        mark('connection_close', connection=self.measurement_id,
+             execute_count=self.statement_count, execute_elapsed_ns=self.statement_ns)
+        return super().close()
+
+
+def connect(*args, **kwargs):
+    kwargs.setdefault('factory', Connection)
+    return ORIGINAL_CONNECT(*args, **kwargs)
+
+
+def wrap(cls, name):
+    original = getattr(cls, name)
+    label = cls.__name__ + '.' + name
+
+    def enter(args):
+        identifier = next(SERIAL)
+        mark('phase_start', phase=label, id=identifier)
+        token = ACTIVE.set(identifier)
+        if label == 'TutorRepository.finish':
+            mark('tutor_finish_enter', run_id=args[1], status=args[2])
+        return token, identifier
+
+    def returned(value):
+        if label in {'TutorService.read', 'TutorRepository.view'}:
+            mark('run_view_return', run_id=value.run.id, status=value.run.status, seq=value.run.last_seq)
+        elif label == 'CheckedDispatch._finish':
+            mark('provider_receipt_return', outcome=value.terminal.outcome)
+        elif label == 'TutorRepository._event':
+            mark('persisted_event_return', seq=value)
+
+    @wraps(original)
+    def sync(*args, **kwargs):
+        token, identifier = enter(args)
+        try:
+            result = original(*args, **kwargs)
+            returned(result)
+            return result
+        except BaseException as error:
+            mark('phase_error', phase=label, error=type(error).__name__)
+            raise
+        finally:
+            mark('phase_end', phase=label, id=identifier)
+            ACTIVE.reset(token)
+
+    @wraps(original)
+    async def asynchronous(*args, **kwargs):
+        token, identifier = enter(args)
+        try:
+            return await original(*args, **kwargs)
+        except BaseException as error:
+            mark('phase_error', phase=label, error=type(error).__name__)
+            raise
+        finally:
+            mark('phase_end', phase=label, id=identifier)
+            ACTIVE.reset(token)
+
+    setattr(cls, name, asynchronous if inspect.iscoroutinefunction(original) else sync)
+
+
+def flush():
+    target = Path(os.environ['TUTOR_MEASUREMENT_DIR']) / 'backend.json'
+    target.write_text(json.dumps(dict(version=1, pid=os.getpid(), clock='Python time.monotonic_ns',
+                                     dropped=DROPPED, events=EVENTS), indent=2) + '\n')
+
+
+def install():
+    from services.api.app.application.authoring_worker import AuthoringWorker
+    from services.api.app.application.authoring_numeric_worker import NumericWorker
+    from services.api.app.infrastructure.import_worker import ImportWorker
+    from services.api.app.application.provider_dispatch import CheckedDispatch
+    from services.api.app.application.tutor import TutorService
+    from services.api.app.application.tutor_worker import TutorWorker
+    from services.api.app.infrastructure.tutor_repository import TutorRepository
+    sqlite3.connect = connect
+    for cls, methods in (
+        (TutorWorker, ('run_once', 'claim', '_prepare', '_watch', '_consume', '_finish', 'process')),
+        (AuthoringWorker, ('run_once', 'claim')),
+        (NumericWorker, ('run_once', 'claim')),
+        (ImportWorker, ('run_once', 'claim')),
+        (CheckedDispatch, ('recover_unfinished', '_start', '_guard', '_finish', '_usage', '_db', 'read_result')),
+        (TutorService, ('read', 'events', 'authorize', '_check_run')),
+        (TutorRepository, ('view', 'source_state', '_load', 'thread', 'messages', 'history', 'events_raw', '_event', 'finish')),
+    ):
+        for name in methods:
+            wrap(cls, name)
+    atexit.register(flush)
+    mark('measurement_installed')
+
+
+class MeasurementMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope['type'] == 'lifespan':
+            try:
+                return await self.app(scope, receive, send)
+            finally:
+                flush()
+        if scope['type'] != 'http':
+            return await self.app(scope, receive, send)
+        path = scope['path']
+        if path == '/api/v1/__test_measurement_clock':
+            value = json.dumps(dict(python_ns=monotonic_ns())).encode()
+            await send(dict(type='http.response.start', status=200, headers=[(b'content-type', b'application/json')]))
+            await send(dict(type='http.response.body', body=value))
+            return
+        if not path.startswith('/api/v1/runs/'):
+            return await self.app(scope, receive, send)
+        identifier = next(SERIAL)
+        token = ACTIVE.set(identifier)
+        mark('http_enter', request_id=identifier, path=path)
+        async def measured_send(message):
+            facts = dict(request_id=identifier, asgi_type=message['type'])
+            if message['type'] == 'http.response.start':
+                facts['status'] = message['status']
+            elif path.endswith('/events'):
+                body = message.get('body', b'')
+                for line in body.splitlines():
+                    if line.startswith(b'id:'):
+                        facts['sse_id'] = line[3:].strip().decode('ascii')
+                    elif line.startswith(b'event:'):
+                        facts['sse_type'] = line[6:].strip().decode('ascii')
+                facts['more_body'] = message.get('more_body', False)
+            mark('asgi_send_start', **facts)
+            await send(message)
+            mark('asgi_send_return', **facts)
+        try:
+            await self.app(scope, receive, measured_send)
+        finally:
+            mark('http_exit', request_id=identifier)
+            ACTIVE.reset(token)

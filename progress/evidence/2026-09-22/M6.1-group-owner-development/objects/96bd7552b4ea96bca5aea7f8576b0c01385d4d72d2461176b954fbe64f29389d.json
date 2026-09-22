@@ -1,0 +1,19 @@
+{
+  "scope": "Local authorized write admission; not a claim that remote policy changes are atomic with browser storage.",
+  "source": "https://www.w3.org/TR/IndexedDB-3/#dom-idbtransaction-commit",
+  "also": "https://www.w3.org/TR/IndexedDB-3/#dom-idbtransaction-abort",
+  "decision": "Pass one access guard through all protected command persistence, load/CAS loops and real DraftStore save. Recheck after asynchronous boundaries, immediately before put and in last put success event; synchronously call commit while guard valid. Only actual complete means saved. Abort before admission on scope/session invalidation. A revocation after explicit commit admission cannot undo a committing transaction; retain the already authorized original ACK and hide UI. Safe cancellation does not use the subject guard.",
+  "scope_invalidations": [
+    "workspace/access generation",
+    "paused Policy",
+    "author denial",
+    "component unmount",
+    "operation sequence change"
+  ],
+  "not_changed": [
+    "original command IDs and request bodies",
+    "original ACK schema",
+    "existing unguarded DraftStore clients",
+    "private Provider/server ledger"
+  ]
+}

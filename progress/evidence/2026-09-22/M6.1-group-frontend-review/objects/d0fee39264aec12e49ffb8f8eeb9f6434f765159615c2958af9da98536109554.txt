@@ -1,0 +1,43 @@
+# Independent storage repair review
+
+No new blocking defect was found in the three-file repair relative to the frozen original frontend review. The reproduced pre-admission private-ACK race is addressed in the reviewed source and the seven permanent RED cases now pass. This conclusion is bounded to the captured files and read-back tests, not the full platform gates or a native-browser rerun.
+
+Original review and cache RED remain unchanged in sibling `m61-group-frontend-independent-review-v1`. This review captures 14 current source/support/spec/test-engine files in `before.json` and `inputs/`; `repair-vs-frozen.diff` compares the three production files to the exact original review copies. The specification remains PRODUCT_DESIGN.md 3.0.7, SHA `2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`. Root subsequently fixed source commit `62d3b1af344c3f43cdfe25815512fff71f79d757`; this review's proof uses the captured file hashes rather than assuming that commit alone proves correctness.
+
+## Standards
+
+No additional standards finding. The typed guard is optional, remains in memory, and is passed only for academic command writes. Existing persisted command/ACK/record formats, four-attempt CAS reconciliation and unguarded callers are preserved. The shared store still notifies only after a real completed transaction and still broadcasts workspace identity without draft text.
+
+## Spec
+
+The original P1 is resolved within the reviewed scope:
+
+- `DraftStore.save` checks the signal/predicate before and after opening storage, at the readwrite GET success callback, immediately before either normal or conflict PUT, and in the final PUT success callback. Both PUT branches use the same guard. Revocation before admission attempts a real abort and settles failure from the actual terminal event. `ACCESS_CHANGED` remains distinct from a successful save or server rejection.
+- Final PUT success executes the last synchronous check immediately followed by `transaction.commit()`. This is the local authorization admission point. A successful commit request is not yet persistence success: only `oncomplete` resolves the saved/conflict result; a genuine abort still rejects. After admission the abort listener is removed, and later permission loss does not claim to roll back a committing transaction. Listener cleanup also occurs on abort and complete.
+- `persistAuthoringCommand` validates access at entry, every retry and after each awaited load, before its synchronous existing-ACK/unchanged-record returns. Its saves receive the same guard. A completed admitted ACK is not erased merely because access changes afterward; the hook stops exposing or using it. CAS-conflict retry re-enters the guard rather than continuing under captured permission.
+- `useAuthoring` creates one guard per academic operation and passes it through initial-command, ACK and non-Policy rejection persistence. The predicate checks current owner/workspace, session generation and operation identity. Subject clearing, scope cleanup and immediate session-access notifications abort the signal. A Policy rejection invalidates academic access before any error-journal write. Finally unsubscribes the session listener and releases the controller. Safe cancellation uses no academic guard and retains its original ACK behavior.
+
+This distinction between admission and persistence matches the IndexedDB method algorithms: API `abort()` rejects a committing/finished transaction, while `commit()` starts committing from active state; the later complete event follows successful storage. [W3C IndexedDB 3.0 transaction methods](https://www.w3.org/TR/IndexedDB-3/#dom-idbtransaction-abort), [commit algorithm](https://www.w3.org/TR/IndexedDB-3/#commit-transaction). This is local frontend authorization sequencing, not an atomic check against an unobserved remote Policy change.
+
+The installed fake-indexeddb transaction implementation was inspected and captured: its `abort()` also rejects committing/finished state, and its `commit()` changes active to committing synchronously. The test's `nativeCommit` variable denotes the original fake-indexeddb method, not a Chromium run. The positive control invokes that real test-engine commit first and then changes Policy; it is not evidence that post-commit abort succeeds.
+
+## Actual evidence readback
+
+The independent test agent's raw files were inspected rather than rerun:
+
+| Stage | Actual result | Input proof |
+|---|---|---|
+| Permanent race RED | 7 failed, 32 passed, 39 total | All 938 before/after records identical |
+| RED typecheck | PASS | All 938 records identical |
+| Repaired group plus related regressions | 60 passed across six files; Vitest 3.02 s | All 938 records identical |
+| Repaired typecheck | PASS | All 938 records identical |
+
+RED output SHA: `103c6b5650187931e84cb554cbc1c07cc28580556d72bd2f6e6a69a643f479d1`. GREEN output SHA: `2f5a9b5e5d8b37a78b976211fc80d51983018c305752754b41ce625a579f3001`. Copies of original logs, receipts and maps are under `evidence-readback/`; `evidence-readback.json` binds them to this review's source. All thirteen inventoried repository files match the GREEN/typecheck maps; the fourteenth captured file is the installed test-engine implementation, outside that 938-file repository inventory.
+
+The seven unchanged original failing bodies cover owner/Policy/session changes within helper load, all three changes at a real PUT success event registered before the product's admission callback, and Policy change at the readwrite GET success event before PUT. They reread actual fake-indexeddb records and preserve the original unknown command for explicit same-key/body recovery. The existing safe-cancel positive control exercises the corresponding write boundary.
+
+The only GREEN test-source additions are importing IDBTransaction and appending the separate post-admission positive control; all prior 39 test bodies remain byte-identical. GREEN therefore has 40 group cases plus 20 related cases. The additional case retains the legitimately admitted original ACK after permission changes and confirms original-command replay performs no second request. The nine existing generic DraftStore cases retain CAS conflicts, workspace separation, open/write/quota failures and notification behavior.
+
+No source/test file was changed by this reviewer, no test or native browser was rerun, and no vendor or calculator was invoked. The three repaired production files and all 14 declared inputs remained byte-identical through this review. Tests do not enumerate every possible unsupported-storage/browser failure or unobserved server event; source inspection found no bypass in those guarded paths. Later unified gates and native browser behavior remain separate evidence.
+
+Findings: Standards 0; Spec 0 new blockers. The previous P1 is resolved for the reviewed pre-admission schedules; this is not an M6.1 completion or publication approval.

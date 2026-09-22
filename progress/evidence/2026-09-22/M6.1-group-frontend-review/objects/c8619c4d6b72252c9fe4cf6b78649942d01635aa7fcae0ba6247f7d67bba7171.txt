@@ -1,0 +1,45 @@
+# Bounded group frontend review
+
+One P1 is confirmed in the frozen pre-repair source: a private numeric-preview ACK can enter IndexedDB after Policy changes while its persistence operation is awaiting an IDB read. The UI clears correctly, but the durable academic command receives the private plan anyway.
+
+Scope: the ten requested frontend production files, the two new group test files (31 cases), selected existing regression/support files and existing native evidence. Sole specification: PRODUCT_DESIGN.md 3.0.7, SHA `2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`. Fixed base: `bebf80601b3debf788d446ed2b3abf0847b392bc`; tracked changes are in production-tracked.diff, and untracked group additions are captured whole under inputs/. This review does not approve later repairs or a complete gate.
+
+The code-review skill's two axes were applied locally. All four agent slots were occupied; the existing backend reviewer remained assigned to the root task. No parallel subagent review is claimed.
+
+## Standards
+
+No additional actionable standards violation or code-smell finding was established in the bounded ten-file review. Existing closed-union/client/hook/command-store patterns are reused; no new product requirement, implicit model retry, review/publication action, or fabricated ContentRef was found. The concrete permission failure below is counted once under Spec, not duplicated as a style finding. Tool-enforced formatting/types are outside this review's findings.
+
+## Spec
+
+### P1 — access must remain valid through the private ACK persistence boundary
+
+Normative source: PRODUCT_DESIGN.md:1160 requires “角色/Policy未知或变化清空学科payload，丢弃旧异步响应” and applies the original actor/workspace/key/body rules to replay and every execution boundary. Group numeric plans can contain private expected answers, so suppressing React state alone is insufficient for a late academic ACK.
+
+Frozen locations:
+
+- inputs/apps/web/src/features/authoring/useAuthoring.ts:145 checks current access and sequence once, then line 146 awaits `persistAuthoringCommand({...retained, ack})`.
+- inputs/apps/web/src/features/authoring/authoringCommands.ts:62 awaits `store.load`; line 69 later calls `store.save` without another access predicate or transactional admission contract.
+- inputs/apps/web/src/workbench/DraftStore.ts:129 writes the complete record; line 134 resolves only after the actual IDB transaction completes. The saved ACK contains `plan.assertions[].expected`.
+
+Minimal actual reproduction: `repro/ack-race.test.tsx:578` uses the real current hook, command persistence and DraftStore with fake-indexeddb. The port returns the valid synthetic group numeric DTO immediately. A spy first performs the real `authoringCommandStore.load`, then delays completion of the first load after the preview returns. This pause occurs after the hook's access check and before its ACK write. Rerender the hook with `paused=true`; confirm `academic=false`; release the load; await completion. The UI's numeric state remains null, but the actual IDB record's ACK contains the private expected value 42. The required `expect(command.ack).toBeNull()` fails at line 604.
+
+Recorded RED: 1 failed case, 69 ms case time, 572 ms Vitest duration, process exit 1. `01-red/run.log` SHA `dc929d216dac2308b9313933a7b52d50aa2a38822c0d4bd55502c57452ced9b5`; `01-red/receipt.json` binds the actual driver, command and all 35 declared input records before/after, unchanged. An exploratory identical run also failed before the recorded run. No production/test files were changed, and no browser, real workspace database, calculator or vendor was used.
+
+Required fix direction: carry an owner/Policy/operation admission guard through academic ACK persistence and the IDB transaction boundary, aborting a write that loses admission. A check only before an awaited `load` is inadequate, and a check after an already committed `save` cannot undo the disclosure. Preserve the exact original command/key/body for explicit replay, preserve conflict detection, and keep already-sent safe cancellation ACKs durable. This review does not propose changing the ledger protocol or stripping an accepted original ACK's plan. The narrower get/put/commit scheduling window needs its own regression; it was not claimed as independently reproduced here.
+
+The prior 31 cases cover late *network* ACK arrival after workspace/Policy replacement, but their deferred response is resolved after the switch, so the hook exits before entering persistence. They do not cover this later await within persistence. The existing broad green result therefore does not contradict this RED.
+
+## Other reviewed behavior and evidence limits
+
+- Owner and display lifecycle: `useAuthoring` captures workspace plus session generation, checks sequence on protected reads, hides academic returns immediately when ownership differs, clears group/private/numeric state on Policy changes, and retains safe Job cancellation. `AuthoringPanel` keys its academic subtree by workspace/access; target-picker pending reads are dropped when it unmounts. No second specific stale-view defect was established.
+- Real target references: `AuthoringTargets` uses catalog-selected complete references, reads exact Course revision/ETag, checks outline Course identity and lesson membership, carries declared Concept and Lesson refs to the closed prepare DTO, and leaves final metadata/permission truth to the Content owner. It does not create a published reference from a group member or synthesize a current-version fallback. Practice requires its explicit Lesson; assessment modes/time are explicit form inputs. No additional target binding defect was established.
+- Original command replay: the command store validates closed kind/body/ACK shapes, exact workspace/draft/member/operation bindings and immutable command identity. Conflicting IDB writers remain conflicts. Unknown commands retain their original key and full body; a retained original ACK avoids another send. The new native practice evidence demonstrates one committed prepare with lost browser response and explicit identical replay. This does not turn any original ACK into current state.
+- Default single behavior: the form still defaults to `worked_example`, original single endpoints remain unchanged, and the shared GET is decoded as the generated closed union before branch selection. Group private responses and draft/numeric projections also pass named runtime shape checks. React renders protected data only within the academic subtree; source and original response text are escaped or use the existing Markdown component. No concrete malformed-union rendering defect was found; this is source review, not exhaustive malformed-payload execution.
+- Existing tests: the two frozen group files match the recorded 31 new cases; the actual existing result is 42 passed across five files including 11 related regressions. Its original summary/log/receipt hashes were read back, not rerun. The new cache test is the only recorded execution in this review.
+- Native evidence: `03-legacy-native` (two original cases) and `07-native-decision-receipts` (one lesson case) have all ten requested frontend source hashes identical to these review inputs. In `02-native-role-selector`, nine match and `useAuthoring.ts` differs; its practice evidence remains limited to that older captured hook. `prior-evidence-readback.json` records this comparison rather than relabeling all three runs as current-head proof.
+- The 02 artifact's `declined`/`approved` fields are original pending previews. Only the later 07 artifact preserves separately verified actual decision ACKs and declined GET. Native numeric truth remains BLOCKED/environment_unavailable, and the synthetic loopback proof is not a hosted-model qualification. Assessment form behavior was inspected in source; these two native group scenarios do not demonstrate assessment UI execution.
+
+Thirty-three source/support/test/spec files were copied with hashes: 32 initial inputs plus the actual imported openapi.json in input-additions.json. The guessed absent api-schema.json was never inventoried. The RED adds two cache reproduction/config inputs for 35 total. Unlisted transitive modules and installed tools are not claimed as a complete reproducible environment; later source changes require new validation. `run-repro.py` deliberately refuses to run against source bytes different from its captured originals.
+
+Findings: Standards 0 additional; Spec 1 P1. The P1 is open in this frozen review; product repair and permanent transaction-boundary regressions belong to the separately recorded follow-up.

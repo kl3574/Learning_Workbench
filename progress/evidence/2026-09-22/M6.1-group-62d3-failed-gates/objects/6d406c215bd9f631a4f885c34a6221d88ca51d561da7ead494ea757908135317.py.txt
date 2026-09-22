@@ -1,0 +1,79 @@
+"""Nine fixed-source gates; native outputs are preserved, never hidden in this receipt."""
+import json
+import os
+from pathlib import Path
+import socket
+import subprocess
+import sys
+from common import ROOT, OUT, COMMIT, SOURCE_COUNT, UI_COUNT, sha, now, write, head, snapshot, git_compare
+
+COMMANDS=[('01-ruff',['.venv/bin/ruff','check','.']), ('02-mypy',['.venv/bin/mypy']), ('03-python',['.venv/bin/python','-B','-m','pytest']), ('04-web-lint',['bash','scripts/node.sh','npm','--prefix','apps/web','run','lint']),
+ ('05-web-typecheck',['bash','scripts/node.sh','npm','--prefix','apps/web','run','typecheck']),
+ ('06-web-tests',['bash','scripts/node.sh','npm','--prefix','apps/web','run','test']),
+ ('07-web-build',['bash','scripts/node.sh','npm','--prefix','apps/web','run','build']),
+ ('08-spec',['.venv/bin/python','-B','scripts/verify_spec.py']),
+ ('09-native',['bash','scripts/node.sh','npm','--prefix','apps/web','run','test:e2e'])]
+
+def driver_hashes():return {p.name:sha(p.read_bytes()) for p in (OUT/'run.py',OUT/'common.py',OUT/'restore.py',OUT/'config.json')}
+def archive_ui(folder):
+ folder.mkdir()
+ values=[]
+ for path in sorted((ROOT/'docs/ui').glob('*')):
+  if path.is_file():
+   b=path.read_bytes();target=folder/path.name;target.write_bytes(b)
+   assert target.read_bytes()==b
+   values.append({'path':str(path.relative_to(ROOT)),'bytes':len(b),'sha256':sha(b),'archived_file':path.name})
+ write(folder/'manifest.json',{'files':values,'count':len(values)})
+ return values
+
+def execute(name,command):
+ folder=OUT/name;folder.mkdir()
+ before=snapshot();gitbefore=git_compare(before)
+ write(folder/'source-before.json',before);write(folder/'git-before.json',gitbefore)
+ assert head()==COMMIT and before['count']==SOURCE_COUNT and gitbefore['all_match']
+ native=name=='09-native'
+ env=dict(os.environ,TMPDIR='<LOCAL_HOME>/.cache/lw-m61groups-fixed',PYTHONDONTWRITEBYTECODE='1')
+ if native:
+  for port in (5173,8765):
+   with socket.socket() as probe:assert probe.connect_ex(('127.0.0.1',port))!=0, 'Reserved native port is already occupied'
+  original_ui=archive_ui(folder/'ui-before');assert len(original_ui)==UI_COUNT
+  paths={x['path']:x for x in before['files']}
+  assert all(paths[x['path']]['sha256']==x['sha256'] for x in original_ui)
+  env.update(LEARNING_E2E_OUTPUT_DIR=str(folder/'artifacts'),LEARNING_E2E_DATA_DIR=str(folder/'runtime-data'))
+ started=now()
+ write(folder/'running.json',{'started_at':started,'command':command,'commit':COMMIT,'driver_hashes':driver_hashes(),'source_before_sha256':sha((folder/'source-before.json').read_bytes()),'native_output_dir':str(folder/'artifacts') if native else None})
+ with (folder/'run.log').open('wb') as log:
+  result=subprocess.run(command,cwd=ROOT,env=env,stdout=log,stderr=subprocess.STDOUT)
+ finished=now()
+ after=snapshot();gitafter=git_compare(after)
+ write(folder/'source-after.json',after);write(folder/'git-after.json',gitafter)
+ ui_after=archive_ui(folder/'ui-after') if native else None
+ b={x['path']:x for x in before['files']};a={x['path']:x for x in after['files']}
+ changes=[x for x in sorted(b.keys()|a.keys()) if b.get(x)!=a.get(x)]
+ receipt={'gate':name,'fixed_commit':COMMIT,'git_after':head(),'command':command,'started_at':started,'finished_at':finished,'exit_code':result.returncode,'driver_hashes':driver_hashes(),
+ 'before_count':before['count'],'after_count':after['count'],'before_aggregate':before['aggregate_sha256'],'after_aggregate':after['aggregate_sha256'],
+ 'git_match_before':gitbefore['all_match'],'git_match_after':gitafter['all_match'],'unchanged':not changes,'changed_inputs':changes,
+ 'log_sha256':sha((folder/'run.log').read_bytes()),'source_before_sha256':sha((folder/'source-before.json').read_bytes()),'source_after_sha256':sha((folder/'source-after.json').read_bytes()),
+ 'git_before_sha256':sha((folder/'git-before.json').read_bytes()),'git_after_sha256':sha((folder/'git-after.json').read_bytes()),
+ 'native_output_directory':str(folder/'artifacts') if native else None,
+ 'ui_before_manifest_sha256':sha((folder/'ui-before/manifest.json').read_bytes()) if native else None,
+ 'ui_after_manifest_sha256':sha((folder/'ui-after/manifest.json').read_bytes()) if native else None,
+ 'scope':'Actual command only. Native direct UI output differences remain explicit and restoration, if performed, has its own later receipt. Installed dependency binaries are not inventoried.'}
+ write(folder/'receipt.json',receipt)
+ print((folder/'run.log').read_text()[-5000:]);print(json.dumps(receipt),flush=True)
+ if not native:assert not changes and gitafter['all_match'], 'Source changed during non-native gate'
+ return result.returncode
+
+if sys.argv[1]=='preflight':
+ before=snapshot();comparison=git_compare(before)
+ assert head()==COMMIT and before['count']==SOURCE_COUNT and comparison['all_match']
+ write(OUT/'preflight.json',{'recorded_at':now(),'fixed_commit':COMMIT,'source_count':before['count'],'source_aggregate':before['aggregate_sha256'],'driver_hashes':driver_hashes(),'commands':COMMANDS,'tests_started':False,'ui_top_level_file_count':len([p for p in (ROOT/'docs/ui').glob('*') if p.is_file()])})
+ print('Preflight:',SOURCE_COUNT,'inputs match Git; nine gate commands recorded; no command run yet.')
+else:
+ selected=COMMANDS[:3] if sys.argv[1]=='backend' else COMMANDS[3:-1] if sys.argv[1]=='web' else COMMANDS[-1:] if sys.argv[1]=='native' else []
+ assert selected
+ codes=[]
+ for name,command in selected:
+  codes.append(execute(name,command))
+  if codes[-1]:break
+ sys.exit(0 if all(c==0 for c in codes) else 1)

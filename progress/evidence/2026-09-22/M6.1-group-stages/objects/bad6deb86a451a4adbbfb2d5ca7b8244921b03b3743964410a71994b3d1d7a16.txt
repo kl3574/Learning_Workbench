@@ -1,0 +1,25 @@
+import datetime,hashlib,json,os,subprocess,sys
+from pathlib import Path
+ROOT=Path('<HOME>/.cache/learning-workbench-acceptance/m61-groups-active');OUT=Path(__file__).parent
+COMMANDS={'01-legacy-numeric': ['.venv/bin/python', '-B', '-m', 'pytest', 'tests/integration/test_authoring_numeric_service.py', 'tests/integration/test_authoring_numeric_worker.py', 'tests/integration/test_authoring_numeric_runtime.py'], '02-ruff': ['.venv/bin/ruff', 'check', 'services/api/app/infrastructure/authoring_group_numeric_repository.py', 'services/api/app/application/authoring_group_numeric_service.py', 'services/api/app/application/authoring_group_numeric_worker.py', 'services/api/app/infrastructure/authoring_numeric_runtime.py'], '03-mypy': ['.venv/bin/mypy', 'services/api/app/infrastructure/authoring_group_numeric_repository.py', 'services/api/app/application/authoring_group_numeric_service.py', 'services/api/app/application/authoring_group_numeric_worker.py', 'services/api/app/infrastructure/authoring_numeric_runtime.py']}
+INPUTS=['PRODUCT_DESIGN.md', 'pyproject.toml', 'uv.lock', 'migrations/0015_authoring_groups.sql', 'packages/contracts/domain_models.py', 'packages/contracts/canonical.py', 'services/api/app/authoring_dto.py', 'services/api/app/authoring_group_dto.py', 'services/api/app/application/authoring_group_models.py', 'services/api/app/application/authoring_group_validation.py', 'services/api/app/infrastructure/authoring_numeric_repository.py', 'services/api/app/application/authoring_numeric_service.py', 'services/api/app/application/authoring_numeric_worker.py', 'services/api/app/application/authoring_numeric.py', 'scripts/authoring_numeric_entry.py', 'services/api/app/infrastructure/authoring_group_numeric_repository.py', 'services/api/app/application/authoring_group_numeric_service.py', 'services/api/app/application/authoring_group_numeric_worker.py', 'services/api/app/infrastructure/authoring_numeric_runtime.py', 'tests/integration/test_authoring_numeric_service.py', 'tests/integration/test_authoring_numeric_worker.py', 'tests/integration/test_authoring_numeric_runtime.py']
+sha=lambda b:hashlib.sha256(b).hexdigest()
+def write(p,v):p.write_text(json.dumps(v,ensure_ascii=False,indent=2)+'\n')
+def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
+def snapshot():
+ rows=[]
+ for name in sorted(INPUTS):
+  p=ROOT/name;b=p.read_bytes();st=p.stat();rows.append({'path':name,'bytes':len(b),'sha256':sha(b),'mode':st.st_mode,'mtime_ns':st.st_mtime_ns})
+ return {'scope':'Declared source/spec/locked dependencies and test files for this unit/contract change. Other agents concurrently edit separate owner files. Installed dependency binaries and transitive files not listed here are not inventoried.','files':rows,'count':len(rows),'aggregate_sha256':sha(json.dumps(rows,sort_keys=True,separators=(',',':')).encode())}
+name=sys.argv[1];command=COMMANDS[name];folder=OUT/(sys.argv[2] if len(sys.argv)>2 else name);folder.mkdir()
+before=snapshot();write(folder/'before.json',before)
+started=now()
+with (folder/'run.log').open('wb') as f:r=subprocess.run(command,cwd=ROOT,stdout=f,stderr=subprocess.STDOUT,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1'))
+after=snapshot();write(folder/'after.json',after)
+write(folder/'receipt.json',{'command':command,'started_at':started,'finished_at':now(),'exit_code':r.returncode,
+ 'head':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),'spec_sha256':sha((ROOT/'PRODUCT_DESIGN.md').read_bytes()),
+ 'driver_sha256':sha(Path(__file__).read_bytes()),'before_sha256':sha((folder/'before.json').read_bytes()),'after_sha256':sha((folder/'after.json').read_bytes()),
+ 'declared_inputs_unchanged':before==after,'run_log_sha256':sha((folder/'run.log').read_bytes()),'source_count':before['count']})
+print((folder/'run.log').read_text()[-11000:]);print('CACHE',folder,'EXIT',r.returncode,'UNCHANGED',before==after)
+assert before==after,'Declared inputs changed during verification'
+sys.exit(r.returncode)

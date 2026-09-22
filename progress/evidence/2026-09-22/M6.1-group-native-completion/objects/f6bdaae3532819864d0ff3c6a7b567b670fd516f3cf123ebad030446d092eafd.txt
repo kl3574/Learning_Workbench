@@ -1,0 +1,403 @@
+--- a/tests/authoring_group_native_fixture.py
++++ b/tests/authoring_group_native_fixture.py
+@@ -19,7 +19,7 @@
+ from services.api.app.application.content import ContentService
+ from services.api.app.application.provider_budget import RequestPreparer
+ from services.api.app.infrastructure.config import Settings
+-from services.api.app.infrastructure.content_repository import reference
++from services.api.app.infrastructure.content_repository import ContentRepository, reference
+ from services.api.app.main import create_app
+ from tests.authoring_native_fixture import PAYLOAD as WORKED_EXAMPLE
+ from tests.provider_protocol_fixture import MODEL, complete_byte_count, local_provider, test_preparer
+@@ -56,7 +56,7 @@
+             'title': block['payload']['title'], 'objective_indexes': [0], 'prerequisite_indexes': [],
+             'depends_on_keys': block['depends_on_keys']} for block in blocks]
+         draft: dict[str, Any] = {'output_kind': scenario, 'title': '原创合成教材组草稿', 'blocks': blocks}
+-    elif scenario == 'practice_set':
++    elif scenario in {'practice_set', 'assessment'}:
+         question = {'member_key': 'question_double', 'kind': 'numeric', 'stem_markdown': '当 $x=9$ 时，求 $2x$。',
+             'choices': [], 'concept_refs': [reference(concept).model_dump()], 'skill': 'compute',
+             'exposure_family_key': 'family_group_native', 'max_score': 1.0, 'input_instructions': '输入数值',
+@@ -68,7 +68,8 @@
+             'numeric_plan': WORKED_EXAMPLE['numeric_plan']}
+         plan['entries'] = [{'member_key': question['member_key'], 'entity': 'question', 'kind': 'numeric',
+             'objective_indexes': [0], 'prerequisite_indexes': [], 'depends_on_keys': []}]
+-        draft = {'output_kind': scenario, 'title': '原创合成习题组草稿', 'questions': [question], 'solutions': [answer]}
++        draft = {'output_kind': scenario, 'title': '原创合成习题组草稿' if scenario == 'practice_set' else '原创合成测试组草稿',
++            'questions': [question], 'solutions': [answer]}
+     else:
+         raise ValueError('Unknown closed group native scenario')
+     return {'version': 'authoring-group-generated-v1', 'content_plan': plan, 'draft': draft}
+@@ -77,7 +78,7 @@
+ def create_test_app() -> FastAPI:
+     settings = Settings.from_env()
+     scenario = os.environ.get('AUTHORING_NATIVE_SCENARIO')
+-    if scenario not in {'lesson', 'practice_set'}:
++    if scenario not in {'lesson', 'practice_set', 'assessment'}:
+         raise ValueError('Select a closed group native test scenario')
+     answer = canonical_bytes(payload(scenario)).decode()
+     preparer = RequestPreparer()
+@@ -90,7 +91,24 @@
+             preparer.registry = test_preparer(provider.base_url).registry
+             async with original_lifespan(app) as state:
+                 _, _, objects, bodies = targets()
+-                ContentService(app.state.database).publish(app.state.database.workspace_id(), objects, bodies)
++                database = app.state.database
++                workspace = database.workspace_id()
++                with database.transaction(immediate=False) as conn:
++                    existing = conn.execute(
++                        "SELECT COUNT(*) FROM objects WHERE workspace_id=? AND id IN (?,?,?,?)",
++                        (workspace, *(value.id for value in objects)),
++                    ).fetchone()[0]
++                    if existing:
++                        if existing != len(objects):
++                            raise ValueError('Partial synthetic targets must not be reseeded')
++                        repo = ContentRepository(conn, workspace)
++                        for value in objects:
++                            stored = repo.load(value.entity, value.id, value.revision).value
++                            if reference(stored) != reference(value):
++                                raise ValueError('Restart target differs from the exact original')
++                if not existing:
++                    ContentService(database).publish(workspace, objects, bodies)
++                target_initialization = 'reused_exact' if existing else 'published_once'
+                 path = settings.data_dir / 'authoring-native-control.json'
+                 pending = path.with_suffix('.pending')
+                 stopped = asyncio.Event()
+@@ -107,6 +125,8 @@
+                     value = {'version': 'authoring-group-native-fixture-v1', 'scenario': scenario,
+                         'test_only': True, 'proof_registered': True, 'adapter': 'compatible_chat', 'model': MODEL,
+                         'base_url': provider.base_url, 'answer_markdown': answer,
++                        'api_pid': os.getpid(), 'target_initialization': target_initialization,
++                        'target_refs': [reference(value).model_dump() for value in objects],
+                         'received_request_count': len(provider.requests), 'validated_request_count': len(valid),
+                         'invalid_request_count': invalid, 'request_body_sha256': valid}
+                     raw = (json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + '\n').encode()
+--- a/tests/e2e/authoringRuntime.ts
++++ b/tests/e2e/authoringRuntime.ts
+@@ -8,7 +8,7 @@
+ import { expect, type BrowserContext, type BrowserType, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
+ 
+ const root = resolve(import.meta.dirname, '../..')
+-type AuthoringScenario = 'complete' | 'no_proof' | 'lesson' | 'practice_set'
++type AuthoringScenario = 'complete' | 'no_proof' | 'lesson' | 'practice_set' | 'assessment'
+ type AuthoringFactory = 'single' | 'groups'
+ const factories = {
+   single: 'tests.authoring_native_fixture:create_test_app',
+@@ -96,10 +96,10 @@
+   }
+ 
+   static async start(scenario: 'complete' | 'no_proof', factory?: 'single'): Promise<AuthoringRuntime>
+-  static async start(scenario: 'lesson' | 'practice_set', factory: 'groups'): Promise<AuthoringRuntime>
++  static async start(scenario: 'lesson' | 'practice_set' | 'assessment', factory: 'groups'): Promise<AuthoringRuntime>
+   static async start(): Promise<AuthoringRuntime>
+   static async start(scenario: AuthoringScenario = 'no_proof', factory: AuthoringFactory = 'single') {
+-    if (factory === 'single' ? !['complete', 'no_proof'].includes(scenario) : factory !== 'groups' || !['lesson', 'practice_set'].includes(scenario)) throw new Error('Unknown closed Authoring test factory/scenario')
++    if (factory === 'single' ? !['complete', 'no_proof'].includes(scenario) : factory !== 'groups' || !['lesson', 'practice_set', 'assessment'].includes(scenario)) throw new Error('Unknown closed Authoring test factory/scenario')
+     const apiPort = await availablePort()
+     let uiPort = await availablePort()
+     while (uiPort === apiPort) uiPort = await availablePort()
+@@ -152,7 +152,7 @@
+     await expect(page).toHaveURL(`${this.origin}/`)
+   }
+ 
+-  control(): { test_only: true; proof_registered: boolean; base_url: string; model: string; adapter: 'compatible_chat'; answer_markdown: string; received_request_count: number; validated_request_count: number; invalid_request_count: number; request_body_sha256: string[] } {
++  control(): { api_pid?: number; target_initialization?: 'published_once' | 'reused_exact'; target_refs?: unknown[]; test_only: true; proof_registered: boolean; base_url: string; model: string; adapter: 'compatible_chat'; answer_markdown: string; received_request_count: number; validated_request_count: number; invalid_request_count: number; request_body_sha256: string[] } {
+     return JSON.parse(readFileSync(resolve(this.data, 'authoring-native-control.json'), 'utf8'))
+   }
+ 
+--- a/tests/e2e/authoring-groups.spec.ts
++++ b/tests/e2e/authoring-groups.spec.ts
+@@ -1,6 +1,6 @@
+ import { writeFileSync } from 'node:fs'
+-import { expect, test, type Locator, type Page, type TestInfo } from '../../apps/web/node_modules/@playwright/test/index.mjs'
+-import type { AuthoringGroupDraftView, AuthoringGroupJobView, AuthoringGroupNumericCheckView, AuthoringPrivateSolutionView, ConsentProposalView, JobRef, NumericCheckDecisionAck, SessionResponse } from '../../packages/contracts/generated/api-types'
++import { expect, test, type BrowserType, type Locator, type Page, type TestInfo } from '../../apps/web/node_modules/@playwright/test/index.mjs'
++import type { AuthoringGroupDraftView, AuthoringGroupJobView, AuthoringGroupNumericCheckView, AuthoringPrivateSolutionView, ConsentProposalView, JobRef, JobSnapshot, NumericCheckDecisionAck, SessionResponse } from '../../packages/contracts/generated/api-types'
+ import { AuthoringRuntime } from './authoringRuntime'
+ 
+ const providerId = 'provider_authoring_group_native'
+@@ -17,7 +17,7 @@
+   await page.reload()
+   await expect(page.getByText('✓ UI 会话已保存', { exact: true })).toBeVisible()
+ }
+-async function form(page: Page, kind: 'lesson' | 'practice_set') {
++async function form(page: Page, kind: 'lesson' | 'practice_set' | 'assessment') {
+   await page.getByRole('button', { name: '创作', exact: true }).click()
+   const dialog = page.getByRole('dialog', { name: '创作', exact: true })
+   await expect(dialog.getByRole('combobox', { name: '创作类型', exact: true })).toBeEnabled()
+@@ -25,13 +25,21 @@
+   await dialog.getByLabel('创作主题', { exact: true }).fill(topic)
+   await dialog.getByLabel('学习目标（每行一条，至少一条）', { exact: true }).fill(objective)
+   await dialog.getByLabel('已配置的提供商 ID', { exact: true }).fill(providerId)
+-  if (kind === 'practice_set') {
++  if (kind !== 'lesson') {
+     const target = dialog.getByRole('region', { name: '明确选择已有目标', exact: true })
+     await target.getByRole('button', { name: '读取课程目录以选择目标', exact: true }).click()
+     await target.getByRole('button', { name: '原创合成组目标课程 · r1 · 选择目标', exact: true }).click()
+     await target.getByRole('button', { name: '加入概念：concept_group_native · r1', exact: true }).click()
+-    await target.getByRole('button', { name: '选择所属小节：原创合成已有小节 · r1', exact: true }).click()
++    if (kind === 'practice_set') await target.getByRole('button', { name: '选择所属小节：原创合成已有小节 · r1', exact: true }).click()
+     await expect(target.getByText('已选概念 1 / 32', { exact: true })).toBeVisible()
++  }
++  if (kind === 'assessment') {
++    const requirements = dialog.getByRole('region', { name: '本次测试要求', exact: true })
++    await requirements.getByLabel('独立测试', { exact: true }).check()
++    await requirements.getByLabel('开卷测试', { exact: true }).check()
++    await requirements.getByLabel('测试时限（秒）', { exact: true }).fill('600')
++    await expect(requirements.getByLabel('辅助测试', { exact: true })).not.toBeChecked()
++    await expect(requirements.getByLabel('明确不限时', { exact: true })).not.toBeChecked()
+   }
+   return dialog
+ }
+@@ -78,12 +86,20 @@
+   await expect(group.getByRole('region', { name: '冻结的内容计划', exact: true })).toContainText(objective)
+   return { completed, draft, group, proposal }
+ }
+-async function numericPreview(page: Page, dialog: Locator, group: Locator, draft: AuthoringGroupDraftView) {
++async function numericPreview(page: Page, dialog: Locator, group: Locator, draft: AuthoringGroupDraftView, solution?: AuthoringPrivateSolutionView) {
++  if (solution) {
++    // Refreshing the candidate intentionally clears private reads. Explicitly
++    // request the exact solution again for each new question preview.
++    const reading = page.waitForResponse(value => value.request().method() === 'GET' && value.url().endsWith(`/api/v1/authoring/draft-groups/${draft.candidate.draft_id}/solutions/question_double`))
++    await group.getByRole('button', { name: '明确读取第 1 题的私有解答草稿', exact: true }).click()
++    const response = await reading; expect(response.status()).toBe(200); expect(await response.json()).toEqual(solution)
++  }
+   const receiving = page.waitForResponse(value => value.request().method() === 'POST' && value.url().includes(`/api/v1/authoring/draft-groups/${draft.candidate.draft_id}/members/`) && value.url().endsWith('/numeric-checks'))
+-  await group.getByRole('button', { name: '为例题 原创合成双倍例题 准备独立数值预览', exact: true }).click()
++  await group.getByRole('button', { name: solution ? '为这份准确题目解答准备独立数值预览' : '为例题 原创合成双倍例题 准备独立数值预览', exact: true }).click()
+   const response = await receiving; expect(response.status()).toBe(201)
+   const check: AuthoringGroupNumericCheckView = await response.json()
+-  expect(check.target.member_key).toBe('example'); expect(check.candidate).toEqual(draft.candidate)
++  expect(check.target.member_key).toBe(solution ? 'question_double' : 'example'); expect(check.candidate).toEqual(draft.candidate)
++  if (solution) { expect(check.target).toEqual(solution.payload.question); expect(check.plan).toEqual(solution.payload.answer.numeric_plan) }
+   expect(check.decision).toBe('pending'); expect(check.revision).toBe(1)
+   expect(check.job).toBeNull(); expect(check.result).toBeNull()
+   await group.getByRole('button', { name: '刷新组合候选的检查记录', exact: true }).click()
+@@ -105,6 +121,101 @@
+   expect(bounds.left).toBeGreaterThanOrEqual(0); expect(bounds.right).toBeLessThanOrEqual(bounds.viewport)
+   expect(bounds.document).toBeLessThanOrEqual(bounds.viewport)
+   return bounds
++}
++
++async function cancelSecondWithoutConsent(page: Page, dialog: Locator, runtime: AuthoringRuntime, first: JobRef, draft: AuthoringGroupDraftView) {
++  // A second explicitly prepared Job has never received consent. The completed
++  // first Job and its already consumed Provider request are not being cancelled.
++  const preparing = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith('/api/v1/authoring/group-jobs'))
++  await dialog.getByRole('button', { name: '明确准备本次组合创作任务', exact: true }).click()
++  const accepted = await preparing; expect(accepted.status()).toBe(202)
++  const ack: JobRef = await accepted.json()
++  expect(ack.id).not.toBe(first.id); expect(ack.status).toBe('awaiting_approval')
++  const second: AuthoringGroupJobView = await page.request.get(`/api/v1/authoring/jobs/${ack.id}`).then(value => value.json())
++  expect(second.request.output_kind).toBe(draft.root.entity)
++  expect(second.consent_id).toBeNull(); expect(second.proposal_id).toBeNull(); expect(second.raw_answer).toBeNull(); expect(second.summary.candidate).toBeNull()
++  const before: JobSnapshot = await page.request.get(`/api/v1/jobs/${ack.id}`).then(value => value.json())
++  expect(before.status).toBe('awaiting_approval'); expect(runtime.control().received_request_count).toBe(1)
++  const auth: SessionResponse = await page.request.get('/api/v1/session').then(value => value.json())
++  expect((await page.request.post('/api/v1/session/role', { data: { role: 'learner' }, headers: { Origin: runtime.origin, 'X-CSRF-Token': auth.csrf_token, 'Idempotency-Key': 'native-group-demote' } })).status()).toBe(200)
++  await dialog.getByRole('button', { name: '刷新安全任务列表与当前权限', exact: true }).click()
++  for (const name of ['私有解答草稿', '组合草稿候选', '受保护创作详情', '冻结的内容计划', '独立数值执行批准', '实际数值结果']) await expect(dialog.getByRole('region', { name, exact: true })).toHaveCount(0)
++  const control = dialog.getByRole('region', { name: '创作任务安全控制', exact: true })
++  await expect(control).toBeVisible()
++  expect((await page.request.get(`/api/v1/authoring/jobs/${first.id}`)).status()).toBe(403)
++  expect((await page.request.get(`/api/v1/authoring/draft-groups/${draft.candidate.draft_id}`)).status()).toBe(403)
++  if (draft.root.entity !== 'lesson') expect((await page.request.get(`/api/v1/authoring/draft-groups/${draft.candidate.draft_id}/solutions/question_double`)).status()).toBe(403)
++  const attempts: { key: string; body: unknown }[] = []
++  let original!: JobSnapshot
++  const routePattern = `**/api/v1/jobs/${ack.id}/cancel`
++  await page.route(routePattern, async route => {
++    const request = route.request(); attempts.push({ key: request.headers()['idempotency-key'], body: request.postDataJSON() })
++    if (attempts.length === 1) {
++      const actual = await route.fetch(); expect(actual.status()).toBe(200); original = await actual.json()
++      await route.abort('failed')
++    } else await route.continue()
++  })
++  try {
++    await control.getByRole('button', { name: `明确取消任务 ${ack.id}`, exact: true }).click()
++    await expect(dialog.getByText('取消任务 · 结果未知，原 key 与完整命令保留', { exact: true })).toBeVisible()
++    expect(attempts).toHaveLength(1); expect(attempts[0].body).toEqual({ expected_revision: before.revision })
++    expect(original.id).toBe(ack.id); expect(original.status).toBe('cancelled'); expect(original.revision).toBe(before.revision + 1)
++    const replaying = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith(`/api/v1/jobs/${ack.id}/cancel`))
++    await dialog.getByRole('button', { name: `回放原命令 ${attempts[0].key}`, exact: true }).click()
++    const replay = await replaying; expect(replay.status()).toBe(200); expect(await replay.json()).toEqual(original)
++    expect(attempts).toHaveLength(2); expect(attempts[1]).toEqual(attempts[0])
++    await expect(control.getByText(`${ack.id} · cancelled · r${original.revision}`, { exact: true })).toBeVisible()
++    const final: JobSnapshot = await page.request.get(`/api/v1/jobs/${ack.id}`).then(value => value.json())
++    expect(final).toEqual(original); expect(final.result_refs).toEqual([])
++    await expect(control.getByRole('button', { name: `明确取消任务 ${first.id}`, exact: true })).toBeDisabled()
++    expect((await page.request.get(`/api/v1/jobs/${first.id}`).then(value => value.json())).status).toBe('completed')
++    expect(runtime.control().received_request_count).toBe(1)
++    return { second_prepare_ack: ack, second_prepared: second, before, attempts, original_cancel_ack: original, readback: final, permission: 'actual author-to-learner role change; academic endpoints denied with 403; safe control remains available' }
++  } finally { await page.unroute(routePattern) }
++}
++
++async function restartAndReadOriginal(runtime: AuthoringRuntime, browser: BrowserType, completed: AuthoringGroupJobView, draft: AuthoringGroupDraftView, solution: AuthoringPrivateSolutionView | null, errors: string[]) {
++  const databaseBefore = runtime.databaseIdentity(), providerBefore = runtime.control(), processesBefore = [...runtime.generations]
++  expect(providerBefore.received_request_count).toBe(1); expect(providerBefore.validated_request_count).toBe(1)
++  expect(providerBefore.target_initialization).toBe('published_once')
++  await runtime.closeBrowser()
++  await runtime.restartApiAfterBrowserClosed()
++  expect(runtime.databaseIdentity()).toEqual(databaseBefore)
++  expect(runtime.generations).toHaveLength(processesBefore.length + 1)
++  const context = await runtime.openBrowser(browser), page = context.pages()[0]
++  page.on('pageerror', error => errors.push(error.message))
++  // Resume the existing workspace through the actual session endpoints. No
++  // provider config/secret write, fixture import, or content publication occurs.
++  await runtime.authenticateOnly(page)
++  const auth: SessionResponse = await page.request.get('/api/v1/session').then(value => value.json())
++  expect((await page.request.post('/api/v1/session/role', { data: { role: 'author' }, headers: { Origin: runtime.origin, 'X-CSRF-Token': auth.csrf_token, 'Idempotency-Key': 'native-group-author-after-restart' } })).status()).toBe(200)
++  await page.reload(); await expect(page.getByText('✓ UI 会话已保存', { exact: true })).toBeVisible()
++  await page.getByRole('button', { name: '创作', exact: true }).click()
++  const dialog = page.getByRole('dialog', { name: '创作', exact: true })
++  await dialog.getByRole('button', { name: `读取创作详情 ${completed.summary.id}`, exact: true }).click()
++  await expect(dialog.getByRole('region', { name: '受保护创作详情', exact: true })).toBeVisible()
++  const reloaded: AuthoringGroupJobView = await page.request.get(`/api/v1/authoring/jobs/${completed.summary.id}`).then(value => value.json())
++  expect(reloaded).toEqual(completed)
++  await dialog.getByRole('button', { name: '读取这份准确组合候选', exact: true }).click()
++  const group = dialog.getByRole('region', { name: '组合草稿候选', exact: true })
++  await expect(group.getByRole('heading', { name: draft.root.title, exact: true })).toBeVisible()
++  await expect(group.getByRole('region', { name: '冻结的内容计划', exact: true })).toContainText(objective)
++  const candidate: AuthoringGroupDraftView = await page.request.get(`/api/v1/authoring/draft-groups/${draft.candidate.draft_id}`).then(value => value.json())
++  expect(candidate).toEqual(draft)
++  let privateReadback: AuthoringPrivateSolutionView | null = null
++  if (solution) {
++    await expect(group.getByRole('region', { name: '私有解答草稿', exact: true })).toHaveCount(0)
++    const reading = page.waitForResponse(value => value.request().method() === 'GET' && value.url().endsWith(`/api/v1/authoring/draft-groups/${draft.candidate.draft_id}/solutions/question_double`))
++    await group.getByRole('button', { name: '明确读取第 1 题的私有解答草稿', exact: true }).click()
++    const response = await reading; expect(response.status()).toBe(200); privateReadback = await response.json()
++    expect(privateReadback).toEqual(solution)
++    await expect(group.getByRole('region', { name: '私有解答草稿', exact: true })).toContainText('私有合成解答')
++  }
++  const providerAfter = runtime.control()
++  expect(providerAfter.api_pid).not.toBe(providerBefore.api_pid)
++  expect(providerAfter.target_initialization).toBe('reused_exact'); expect(providerAfter.target_refs).toEqual(providerBefore.target_refs)
++  expect(providerAfter.received_request_count).toBe(0); expect(providerAfter.validated_request_count).toBe(0); expect(providerAfter.invalid_request_count).toBe(0)
++  return { database_before: databaseBefore, database_after: runtime.databaseIdentity(), api_processes: runtime.generations, provider_before: providerBefore, provider_after: providerAfter, job: reloaded, draft: candidate, private_solution: privateReadback, scope: 'Same SQLite file and exact targets; first process one Provider request, restarted process zero additional requests. Explicit author UI reopens original persisted plan, candidate and private solution. No re-seeding or provider reconfiguration.' }
+ }
+ 
+ test('native lesson group preserves its plan and formulas, then separately declines and executes one exact numeric member', async ({ playwright }, info) => {
+@@ -159,8 +270,10 @@
+     expect(finalDraft.state).toBe('draft'); expect(finalDraft.numeric_check_ids).toEqual([first.id, second.id])
+     await expect.poll(() => runtime.control().validated_request_count).toBe(1)
+     expect(runtime.control().received_request_count).toBe(1); expect(runtime.control().invalid_request_count).toBe(0)
++    const cancellation = await cancelSecondWithoutConsent(page, dialog, runtime, ack, finalDraft)
++    const recovery = await restartAndReadOriginal(runtime, playwright.chromium, completed, finalDraft, null, errors)
+     expect(errors).toEqual([])
+-    writeFileSync(info.outputPath('group-lesson-actual.json'), JSON.stringify({ scope: 'Real browser, SQLite and test-only loopback single consent. Original pending preview ACKs, actual decision ACKs and declined GET readback are distinct. Numeric actual environment verdict is preserved; BLOCKED is not successful arithmetic. Candidate and quality remain unreviewed draft.', prepared, completed, proposal_id: proposal.id, draft: finalDraft, first_preview_ack: first, second_preview_ack: second, decline_ack: declineAck, decline_readback: declineReadback, approve_ack: approveAck, numeric, runtime: runtime.control(), bounds: { wide, narrow }, page_errors: errors }, null, 2))
++    writeFileSync(info.outputPath('group-lesson-actual.json'), JSON.stringify({ scope: 'Real browser, SQLite and test-only loopback single consent. Original pending preview ACKs, actual decision ACKs and declined GET readback are distinct. Numeric actual environment verdict is preserved; BLOCKED is not successful arithmetic. Candidate and quality remain unreviewed draft.', prepared, completed, proposal_id: proposal.id, draft: finalDraft, first_preview_ack: first, second_preview_ack: second, decline_ack: declineAck, decline_readback: declineReadback, approve_ack: approveAck, numeric, cancellation, recovery, runtime: recovery.provider_before, bounds: { wide, narrow }, page_errors: errors }, null, 2))
+   } finally { await runtime.close() }
+ })
+ 
+@@ -191,6 +304,7 @@
+     await dialog.getByRole('button', { name: `回放原命令 ${attempts[0].key}`, exact: true }).click()
+     const replay = await replaying; expect(replay.status()).toBe(202); expect(await replay.json()).toEqual(originalAck)
+     expect(attempts).toHaveLength(2); expect(attempts[1]).toEqual(attempts[0])
++    await page.unroute('**/api/v1/authoring/group-jobs')
+     const prepared = await readPrepared(page, dialog, originalAck)
+     expect(prepared.preparation.targets.map(value => value.ref.entity)).toEqual(['lesson', 'concept'])
+     const { completed, draft, group, proposal } = await grant(page, dialog, originalAck)
+@@ -208,17 +322,97 @@
+     const privatePanel = group.getByRole('region', { name: '私有解答草稿', exact: true })
+     await expect(privatePanel).toContainText('私有合成解答')
+     await picture(page, dialog, privatePanel, 390, 'group-private-390', info)
+-    const auth: SessionResponse = await page.request.get('/api/v1/session').then(value => value.json())
+-    expect((await page.request.post('/api/v1/session/role', { data: { role: 'learner' }, headers: { Origin: runtime.origin, 'X-CSRF-Token': auth.csrf_token, 'Idempotency-Key': 'native-group-demote' } })).status()).toBe(200)
+-    await dialog.getByRole('button', { name: '刷新安全任务列表与当前权限', exact: true }).click()
++    const cancellation = await cancelSecondWithoutConsent(page, dialog, runtime, originalAck, draft)
+     await expect(privatePanel).toHaveCount(0)
+-    await expect(dialog.getByRole('region', { name: '组合草稿候选', exact: true })).toHaveCount(0)
+-    await expect(dialog.getByRole('region', { name: '受保护创作详情', exact: true })).toHaveCount(0)
+-    await expect(dialog.getByRole('region', { name: '创作任务安全控制', exact: true })).toBeVisible()
+-    expect((await page.request.get(`/api/v1/authoring/draft-groups/${draft.candidate.draft_id}/solutions/question_double`)).status()).toBe(403)
+     await expect.poll(() => runtime.control().validated_request_count).toBe(1)
+     expect(runtime.control().received_request_count).toBe(1); expect(runtime.control().invalid_request_count).toBe(0)
++    const recovery = await restartAndReadOriginal(runtime, playwright.chromium, completed, draft, solution, errors)
+     expect(errors).toEqual([])
+-    writeFileSync(info.outputPath('group-practice-actual.json'), JSON.stringify({ scope: 'Lost browser prepare response after actual server commit, then explicit identical original command replay. One original Job and one actual loopback model dispatch. Exact existing Content targets, public/private separation and real role change clearing without page reload. No review or publication.', prepare_attempts: attempts, original_prepare_ack: originalAck, prepared, completed, proposal_id: proposal.id, draft, solution, runtime: runtime.control(), bounds: { wide, narrow }, page_errors: errors }, null, 2))
++    writeFileSync(info.outputPath('group-practice-actual.json'), JSON.stringify({ scope: 'Lost browser prepare response after actual server commit, then explicit identical original command replay. One original Job and one actual loopback model dispatch. Exact existing Content targets, public/private separation and real role change clearing without page reload. No review or publication.', prepare_attempts: attempts, original_prepare_ack: originalAck, prepared, completed, proposal_id: proposal.id, draft, solution, cancellation, recovery, runtime: recovery.provider_before, bounds: { wide, narrow }, page_errors: errors }, null, 2))
+   } finally { await runtime.close() }
+ })
++
++
++test('native assessment group keeps explicit modes and time, checks its exact private numeric plan, and cancels a separate unconsented job under a permission lock', async ({ playwright }, info) => {
++  test.setTimeout(120_000)
++  const runtime = await AuthoringRuntime.start('assessment', 'groups'), errors: string[] = []
++  try {
++    const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]
++    page.on('pageerror', error => errors.push(error.message))
++    await runtime.authenticateOnly(page); await configure(page, runtime)
++    const dialog = await form(page, 'assessment')
++    const preparing = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith('/api/v1/authoring/group-jobs'))
++    await dialog.getByRole('button', { name: '明确准备本次组合创作任务', exact: true }).click()
++    const accepted = await preparing; expect(accepted.status()).toBe(202)
++    const ack: JobRef = await accepted.json(), prepared = await readPrepared(page, dialog, ack)
++    expect(prepared.request.output_kind).toBe('assessment')
++    if (prepared.request.output_kind !== 'assessment') throw new Error('Wrong actual assessment request')
++    expect(prepared.request.allowed_modes).toEqual(['independent', 'open_book']); expect(prepared.request.time_limit_seconds).toBe(600)
++    expect(prepared.request).not.toHaveProperty('lesson_ref')
++    expect(prepared.preparation.targets.map(value => value.ref)).toEqual(prepared.request.target_concept_refs)
++    expect(prepared.request.target_concept_refs).toHaveLength(1)
++    expect(prepared.request.target_concept_refs[0]).toMatchObject({ entity: 'concept', id: 'concept_group_native', revision: 1, sha256: expect.stringMatching(/^[a-f0-9]{64}$/) })
++    expect(runtime.control().received_request_count).toBe(0)
++    const { completed, draft, group, proposal } = await grant(page, dialog, ack)
++    expect(completed.raw_answer).toBe(runtime.control().answer_markdown)
++    expect(draft.root.entity).toBe('assessment')
++    if (draft.root.entity !== 'assessment') throw new Error('Wrong actual assessment root')
++    expect(draft.root.allowed_modes).toEqual(prepared.request.allowed_modes); expect(draft.root.time_limit_seconds).toBe(prepared.request.time_limit_seconds)
++    expect(draft.root).not.toHaveProperty('lesson_ref')
++    expect(draft.questions[0].concept_refs).toEqual(prepared.request.target_concept_refs)
++    expect(JSON.stringify(draft)).not.toContain('accepted_answers'); expect(JSON.stringify(draft)).not.toContain('私有合成解答')
++    await expect(group.getByRole('region', { name: '私有解答草稿', exact: true })).toHaveCount(0)
++    await expect(group.getByRole('heading', { name: '原创合成测试组草稿', exact: true })).toBeVisible()
++    await expect(group.locator('.formula svg').first()).toBeVisible()
++    const wide = await picture(page, dialog, group.getByRole('heading', { name: '第 1 题 · numeric', exact: true }), 1440, 'group-assessment-1440', info)
++    const narrow = await picture(page, dialog, group.getByRole('heading', { name: '第 1 题 · numeric', exact: true }), 390, 'group-assessment-390', info)
++    const reading = page.waitForResponse(value => value.request().method() === 'GET' && value.url().endsWith(`/api/v1/authoring/draft-groups/${draft.candidate.draft_id}/solutions/question_double`))
++    await group.getByRole('button', { name: '明确读取第 1 题的私有解答草稿', exact: true }).click()
++    const response = await reading; expect(response.status()).toBe(200)
++    const solution: AuthoringPrivateSolutionView = await response.json()
++    expect(solution.candidate).toEqual(draft.candidate); expect(solution.ref).toEqual(draft.private_solution_refs[0]); expect(solution.payload.question).toEqual(draft.root.questions[0])
++    expect(solution.payload.answer.accepted_answers).toEqual(['18', '18.0'])
++    const privatePanel = group.getByRole('region', { name: '私有解答草稿', exact: true })
++    await expect(privatePanel).toContainText('私有合成解答')
++    await picture(page, dialog, privatePanel, 390, 'group-assessment-private-390', info)
++    const first = await numericPreview(page, dialog, group, draft, solution)
++    const declining = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith(`/api/v1/authoring/group-numeric-checks/${first.id}/decision`))
++    await dialog.getByRole('button', { name: '明确拒绝本次数值执行', exact: true }).click()
++    const declined = await declining; expect(declined.status()).toBe(200)
++    const declineAck: NumericCheckDecisionAck = await declined.json()
++    expect(declineAck).toEqual({ id: first.id, revision: 2, operation_sha256: first.operation_sha256, decision: 'decline', applied: true, job: null })
++    const declineReading = await page.request.get(`/api/v1/authoring/group-numeric-checks/${first.id}`)
++    expect(declineReading.status()).toBe(200)
++    const declineReadback: AuthoringGroupNumericCheckView = await declineReading.json()
++    expect(declineReadback).toEqual({ ...first, revision: 2, decision: 'decline', job: null, job_revision: null, result: null })
++    const second = await numericPreview(page, dialog, group, draft, solution)
++    expect(second.id).not.toBe(first.id); expect(second.operation_sha256).not.toBe(first.operation_sha256)
++    await dialog.getByLabel('我已核对全部变量、表达式、容差、候选与本机隔离范围，单独批准这一次执行', { exact: true }).check()
++    const approving = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith(`/api/v1/authoring/group-numeric-checks/${second.id}/decision`))
++    await dialog.getByRole('button', { name: '明确批准本次数值执行', exact: true }).click()
++    const approved = await approving; expect(approved.status()).toBe(202)
++    const approveAck: NumericCheckDecisionAck = await approved.json()
++    expect(approveAck).toEqual({ id: second.id, revision: 2, operation_sha256: second.operation_sha256, decision: 'approve_once', applied: true, job: { id: expect.any(String), status: 'queued' } })
++    expect(approveAck.job!.id).not.toBe(ack.id)
++    let numeric!: AuthoringGroupNumericCheckView
++    await expect.poll(async () => { numeric = await page.request.get(`/api/v1/authoring/group-numeric-checks/${second.id}`).then(value => value.json()); return numeric.result !== null }).toBe(true)
++    expect(numeric.id).toBe(second.id); expect(numeric.revision).toBe(2); expect(numeric.decision).toBe('approve_once')
++    expect(numeric.operation_sha256).toBe(second.operation_sha256); expect(numeric.candidate).toEqual(second.candidate); expect(numeric.target).toEqual(second.target)
++    expect(numeric.job!.id).toBe(approveAck.job!.id); expect(numeric.result!.job_id).toBe(approveAck.job!.id)
++    expect(['passed', 'environment_unavailable']).toContain(numeric.result!.outcome)
++    expect(numeric.result!.verdict).toBe(numeric.result!.outcome === 'passed' ? 'PASS' : 'BLOCKED')
++    await dialog.getByRole('button', { name: '另行读取数值检查当前状态', exact: true }).click()
++    await expect(dialog.getByRole('heading', { name: `实际数值结果：${numeric.result!.verdict}`, exact: true })).toBeVisible()
++    await picture(page, dialog, dialog.getByRole('region', { name: '实际数值结果', exact: true }), 390, 'group-assessment-numeric-390', info)
++    const finalDraft: AuthoringGroupDraftView = await page.request.get(`/api/v1/authoring/draft-groups/${draft.candidate.draft_id}`).then(value => value.json())
++    expect(finalDraft.candidate).toEqual(draft.candidate); expect(finalDraft.content_plan).toEqual(draft.content_plan)
++    expect(finalDraft.state).toBe('draft'); expect(finalDraft.numeric_check_ids).toEqual([first.id, second.id])
++    await expect.poll(() => runtime.control().validated_request_count).toBe(1)
++    expect(runtime.control().received_request_count).toBe(1); expect(runtime.control().invalid_request_count).toBe(0)
++    const cancellation = await cancelSecondWithoutConsent(page, dialog, runtime, ack, finalDraft)
++    await expect(privatePanel).toHaveCount(0)
++    const recovery = await restartAndReadOriginal(runtime, playwright.chromium, completed, finalDraft, solution, errors)
++    expect(errors).toEqual([])
++    writeFileSync(info.outputPath('group-assessment-actual.json'), JSON.stringify({ scope: 'Actual assessment author UI with explicit exact Concept only, selected independent/open_book modes and 600 seconds; one consent and one controlled loopback dispatch. Public/private separation and exact question NumericPlan independently declined then approved with actual result. A distinct unconsented Job is cancelled after real role change; lost safe-cancel ACK replays the original key/body. No mathematical or teaching approval.', prepared, completed, proposal_id: proposal.id, draft: finalDraft, solution, first_preview_ack: first, second_preview_ack: second, decline_ack: declineAck, decline_readback: declineReadback, approve_ack: approveAck, numeric, cancellation, recovery, runtime: recovery.provider_before, bounds: { wide, narrow }, page_errors: errors }, null, 2))
++  } finally { await runtime.close() }
++})

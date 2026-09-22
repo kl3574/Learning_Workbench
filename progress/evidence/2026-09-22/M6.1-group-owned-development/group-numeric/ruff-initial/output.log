@@ -1,0 +1,12 @@
+E702 Multiple statements on one line (semicolon)
+   --> tests/integration/test_authoring_group_numeric_service.py:321:38
+    |
+319 |         elif damage == 'cancel_ack':
+320 |             row = conn.execute("SELECT request_json FROM authoring_commands WHERE owner_id=? AND key='cancel'", (view.id,)).fetchone()
+321 |             body = json.loads(row[0]); body['expected_revision'] = 99
+    |                                      ^
+322 |             raw = canonical_bytes(body).decode()
+323 |             conn.execute("UPDATE authoring_commands SET request_json=?,request_sha256=? WHERE owner_id=? AND key='cancel'",
+    |
+
+Found 1 error.

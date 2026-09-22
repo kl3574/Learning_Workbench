@@ -1,0 +1,54 @@
+{
+  "completed_at": "2026-09-22T03:11:28.294847+00:00",
+  "changed_test": {
+    "path": "apps/web/src/features/authoring/useAuthoringGroups.test.tsx",
+    "bytes": 47668,
+    "sha256": "b6e47ce5bc46b344d68f002707cd0041e253087bc815c26c446271037862c54f"
+  },
+  "unchanged_command_test": "apps/web/src/features/authoring/authoringGroupCommands.test.ts",
+  "red": {
+    "result": "7 FAIL + 32 PASS (39 cases)",
+    "run": "red",
+    "log_sha256": "103c6b5650187931e84cb554cbc1c07cc28580556d72bd2f6e6a69a643f479d1",
+    "input_before": 938,
+    "input_after": 938,
+    "input_changes": []
+  },
+  "green": {
+    "result": "60 PASS across 6 files",
+    "run": "green-and-related",
+    "log_sha256": "2f5a9b5e5d8b37a78b976211fc80d51983018c305752754b41ce625a579f3001",
+    "input_before": 938,
+    "input_after": 938,
+    "input_changes": []
+  },
+  "accounting": {
+    "existing_group_commands_and_hook_tests": 31,
+    "new_pre_admission_negative_cases": 7,
+    "new_safe_cancel_positive": 1,
+    "new_post_admission_positive": 1,
+    "total_group_cases": 40,
+    "existing_other_hook_owner_client_and_DraftStore_regressions": 20
+  },
+  "red_to_green_test_change": "Seven RED assertions unchanged. One explicit native-commit post-admission positive control was added after RED. Existing private fixture DTOs and all original command keys/bodies/ACK assertions remain unchanged.",
+  "typecheck": "RED and GREEN PASS using project Node wrapper; 938 inputs unchanged",
+  "verified_boundaries": [
+    "Actual store.load result is held inside private ACK persistence after caller guard; Policy, workspace and actual session generation invalidation each preserve original unknown command",
+    "Actual IDB readwrite lookup success is observed before product handler enqueues PUT; Policy invalidation prevents private ACK",
+    "Actual PUT success listener is registered before product write success/commit callback; Policy, workspace and actual session generation invalidation each prevent persistence",
+    "Unknown preserved original key/body survives reload and is replayed with the same key, root and member, then its current authorized ACK persists",
+    "Safe cancel ACK persists when Policy invalidates before real transaction completes, without duplicate POST on replay",
+    "Native IDBTransaction.commit returns successfully before Policy invalidation; oncomplete proves lawful ACK persistence, UI remains cleared and restored original command replay does not POST again"
+  ],
+  "product_fix_owner": "Root modified DraftStore, authoringCommands, useAuthoring. This agent only extended the assigned hook test file.",
+  "source_boundaries": [
+    "source-before-tests.json",
+    "source-red.json",
+    "source-green.json"
+  ],
+  "limits": [
+    "Real fake-indexeddb transaction semantics and React hook tests with controlled ports; not native browser E2E",
+    "No live provider or numeric execution claim",
+    "No publication package prepared for this additional stage"
+  ]
+}

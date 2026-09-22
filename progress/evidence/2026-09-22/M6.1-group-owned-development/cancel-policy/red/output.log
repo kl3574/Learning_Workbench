@@ -1,0 +1,312 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_cancelled_control_only_receipt_recovers_original_output_without_adoption[single] _
+
+tmp_path = PosixPath('<LOCAL_HOME>/.cache/learning-workbench-acceptance/m61-authoring-cancel-policy-recovery-verification-v1/pytest-temp/red/test_cancelled_control_only_re0')
+variant = 'single'
+
+    @pytest.mark.parametrize('variant', ['single', 'group'])
+    def test_cancelled_control_only_receipt_recovers_original_output_without_adoption(tmp_path, variant):
+        async def run():
+            fixture = single if variant == 'single' else group
+            repository = AuthoringRepository if variant == 'single' else AuthoringGroupRepository
+            answer = canonical_bytes(fixture.payload()).decode()
+            async with local_provider(text=answer) as server:
+                state = fixture.configured(tmp_path, server.base_url)
+                database, identity, service, worker, _, dispatch = state
+                original, _, grant = fixture.approved(state)
+                lease = worker.claim()
+                assert lease is not None and lease.job_id == original.id
+    
+                # Stop after the real Provider's checked terminal, before either
+                # Authoring owner can read private bytes or adopt a candidate.
+                async with aclosing(dispatch.dispatch(identity, original.id, grant.id,
+                                                      lease.dispatch(), asyncio.Event())) as stream:
+                    async for _ in stream:
+                        pass
+                assert len(server.requests) == 1
+                with database.transaction(immediate=False) as conn:
+                    checked = dispatch.read_result(conn, identity, original.id, grant.id)
+                    assert checked is not None and checked.answer is not None
+                    assert checked.answer.text == answer
+                    receipt_id = checked.receipt.id
+                    pending = repository(conn, identity.workspace_id).load(original.id)
+                    assert pending.view.raw_answer is None and pending.view.summary.candidate is None
+    
+                # Revoke the real granting session. A separate authenticated learner
+                # can still cancel and inspect safe operation controls in this workspace.
+                sessions = SessionService(database)
+                sessions.logout(identity)
+                _, learner = consume_bootstrap(database, issue_bootstrap_code(database))
+                running = service.job(learner, original.id)
+                command = JobCancelRequest(expected_revision=running.revision)
+                cancel_ack = service.cancel_job(learner, original.id, command, 'cancel-after-author-revoked')
+                assert cancel_ack.status == 'running' and cancel_ack.revision == running.revision + 1
+                assert cancel_ack.result_refs == [] and cancel_ack.error is None
+                await asyncio.to_thread(worker._finish, lease)
+    
+                terminal = service.job(learner, original.id)
+                assert terminal.status == 'cancelled' and terminal.revision == cancel_ack.revision + 1
+                assert terminal.result_refs == [] and terminal.error is None
+                for safe in (cancel_ack, terminal):
+                    raw = canonical_bytes(safe)
+                    assert answer.encode() not in raw
+                    assert all(field not in raw for field in (b'raw_answer', b'raw_refusal', b'accepted_answers', b'content_plan'))
+                with pytest.raises(ApiError) as denied:
+                    service.read(learner, original.id)
+                assert denied.value.code == 'POLICY_DENIED'
+                with database.transaction(immediate=False) as conn:
+                    stored = repository(conn, identity.workspace_id).load(original.id)
+                    assert stored.view.provider_receipt_id == receipt_id
+                    assert stored.view.provider_outcome == 'completed'
+                    assert stored.view.raw_answer is stored.view.raw_refusal is None
+                    assert stored.view.summary.candidate is None
+                    if variant == 'group':
+                        assert stored.view.plan_ref is stored.view.content_plan is None
+                    for table in ('authoring_candidates', 'authoring_group_candidates', 'authoring_content_plans'):
+                        assert conn.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0] == 0
+    
+                before_replay = all_rows(database)
+                assert service.cancel_job(learner, original.id, command, 'cancel-after-author-revoked') == cancel_ack
+                assert all_rows(database) == before_replay
+                sessions.switch_role(learner, RoleRequest(role='author'), 'new-session-author')
+                restored_author = replace(learner, role='author')
+                before_read = all_rows(database)
+    
+                # Regression: cancellation must not erase the control-only receipt
+                # fact and make the checked original output fail integrity on read.
+                recovered = service.read(restored_author, original.id)
+                assert recovered.summary.status == 'cancelled' and recovered.summary.candidate is None
+                assert recovered.raw_answer == answer and recovered.raw_refusal is None
+                assert recovered.provider_receipt_id == receipt_id and recovered.provider_outcome == 'completed'
+                if variant == 'group':
+                    assert recovered.plan_ref is recovered.content_plan is None
+                assert service.job(restored_author, original.id) == terminal
+                assert service.cancel_job(learner, original.id, command, 'cancel-after-author-revoked') == cancel_ack
+                assert not await asyncio.to_thread(worker.run_once)
+                assert len(server.requests) == 1 and all_rows(database) == before_read
+    
+>       asyncio.run(run())
+
+tests/integration/test_authoring_cancel_policy_recovery.py:107: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/integration/test_authoring_cancel_policy_recovery.py:96: in run
+    recovered = service.read(restored_author, original.id)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+services/api/app/application/authoring.py:97: in read
+    return self._history(conn, identity, identifier).view
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.application.authoring.AuthoringService object at 0x7b155a042480>
+conn = <sqlite3.Connection object at 0x7b1559f073d0>
+identity = SessionIdentity(id='<REDACTED_TEST_SESSION_ID>', workspace_id='workspace_d09024cfc4a64ceb800080f0fe9e321...srf_token='<REDACTED_TEST_CSRF>', expires_at='2026-09-22T14:08:23.774376Z')
+identifier = 'authoring_5de4521689914880af1761692cb3e6d2'
+
+    def _history(self, conn: sqlite3.Connection, identity: SessionIdentity, identifier: str):
+        record = AuthoringRepository(conn, identity.workspace_id).load(identifier)
+        context = self.context.read(conn, identity, record.view.preparation.context_snapshot_id)
+        actual = build_outbound(record.input, context, record.view.summary.job_revision)
+        summary = AuthoringPreparationSummary(context_snapshot_id=context.snapshot.id,
+            snapshot_sha256=context.snapshot.snapshot_sha256, job_input_sha256=actual.job_input_sha256,
+            prepared_input_sha256=actual.prepared_input_sha256, character_count=context.snapshot.character_count,
+            materials=context.materials, warnings=context.warnings)
+        if summary != record.view.preparation:
+            raise integrity()
+        view = record.view
+        if view.provider_receipt_id is not None:
+            if self.provider is None or view.consent_id is None:
+                raise ApiError(503, 'AUTHORING_OUTPUT_UNAVAILABLE', '原生成结果当前无法核验。')
+            original = self.provider.read_result(conn, identity, identifier, view.consent_id)
+            if original is None or original.receipt.id != view.provider_receipt_id:
+                raise integrity()
+            terminal = original.receipt.terminal
+            outcome = ('incomplete' if terminal.outcome == 'incomplete' else 'completed') if isinstance(
+                terminal, CheckedProviderFinished) else terminal.provider_outcome
+            if view.provider_outcome != outcome or view.usage != terminal.usage:
+                raise integrity()
+            answer = original.answer.text if original.answer else None
+            refusal = original.refusal.text if original.refusal else None
+            withheld = (view.summary.status in {'failed', 'cancelled'} and view.summary.candidate is None
+                and view.raw_answer is None and view.raw_refusal is None
+                and view.error_code in {'POLICY_DENIED', 'ASSESSMENT_ACTIVE', 'ASSESSMENT_ANSWER_PROTECTED'})
+            if withheld:
+                # A control-only terminal never acquired the private bytes.
+                # Current permission now permits this checked, read-only projection;
+                # the original failed job and absence of a candidate stay intact.
+                record = record.model_copy(deep=True)
+                record.view.raw_answer, record.view.raw_refusal = answer, refusal
+            elif view.raw_answer != answer or view.raw_refusal != refusal:
+>               raise integrity()
+E               services.api.app.application.errors.ApiError: (409, 'AUTHORING_INTEGRITY_ERROR', '创作持久记录未通过完整性校验。')
+
+services/api/app/application/authoring.py:67: ApiError
+_ test_cancelled_control_only_receipt_recovers_original_output_without_adoption[group] _
+
+tmp_path = PosixPath('<LOCAL_HOME>/.cache/learning-workbench-acceptance/m61-authoring-cancel-policy-recovery-verification-v1/pytest-temp/red/test_cancelled_control_only_re1')
+variant = 'group'
+
+    @pytest.mark.parametrize('variant', ['single', 'group'])
+    def test_cancelled_control_only_receipt_recovers_original_output_without_adoption(tmp_path, variant):
+        async def run():
+            fixture = single if variant == 'single' else group
+            repository = AuthoringRepository if variant == 'single' else AuthoringGroupRepository
+            answer = canonical_bytes(fixture.payload()).decode()
+            async with local_provider(text=answer) as server:
+                state = fixture.configured(tmp_path, server.base_url)
+                database, identity, service, worker, _, dispatch = state
+                original, _, grant = fixture.approved(state)
+                lease = worker.claim()
+                assert lease is not None and lease.job_id == original.id
+    
+                # Stop after the real Provider's checked terminal, before either
+                # Authoring owner can read private bytes or adopt a candidate.
+                async with aclosing(dispatch.dispatch(identity, original.id, grant.id,
+                                                      lease.dispatch(), asyncio.Event())) as stream:
+                    async for _ in stream:
+                        pass
+                assert len(server.requests) == 1
+                with database.transaction(immediate=False) as conn:
+                    checked = dispatch.read_result(conn, identity, original.id, grant.id)
+                    assert checked is not None and checked.answer is not None
+                    assert checked.answer.text == answer
+                    receipt_id = checked.receipt.id
+                    pending = repository(conn, identity.workspace_id).load(original.id)
+                    assert pending.view.raw_answer is None and pending.view.summary.candidate is None
+    
+                # Revoke the real granting session. A separate authenticated learner
+                # can still cancel and inspect safe operation controls in this workspace.
+                sessions = SessionService(database)
+                sessions.logout(identity)
+                _, learner = consume_bootstrap(database, issue_bootstrap_code(database))
+                running = service.job(learner, original.id)
+                command = JobCancelRequest(expected_revision=running.revision)
+                cancel_ack = service.cancel_job(learner, original.id, command, 'cancel-after-author-revoked')
+                assert cancel_ack.status == 'running' and cancel_ack.revision == running.revision + 1
+                assert cancel_ack.result_refs == [] and cancel_ack.error is None
+                await asyncio.to_thread(worker._finish, lease)
+    
+                terminal = service.job(learner, original.id)
+                assert terminal.status == 'cancelled' and terminal.revision == cancel_ack.revision + 1
+                assert terminal.result_refs == [] and terminal.error is None
+                for safe in (cancel_ack, terminal):
+                    raw = canonical_bytes(safe)
+                    assert answer.encode() not in raw
+                    assert all(field not in raw for field in (b'raw_answer', b'raw_refusal', b'accepted_answers', b'content_plan'))
+                with pytest.raises(ApiError) as denied:
+                    service.read(learner, original.id)
+                assert denied.value.code == 'POLICY_DENIED'
+                with database.transaction(immediate=False) as conn:
+                    stored = repository(conn, identity.workspace_id).load(original.id)
+                    assert stored.view.provider_receipt_id == receipt_id
+                    assert stored.view.provider_outcome == 'completed'
+                    assert stored.view.raw_answer is stored.view.raw_refusal is None
+                    assert stored.view.summary.candidate is None
+                    if variant == 'group':
+                        assert stored.view.plan_ref is stored.view.content_plan is None
+                    for table in ('authoring_candidates', 'authoring_group_candidates', 'authoring_content_plans'):
+                        assert conn.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0] == 0
+    
+                before_replay = all_rows(database)
+                assert service.cancel_job(learner, original.id, command, 'cancel-after-author-revoked') == cancel_ack
+                assert all_rows(database) == before_replay
+                sessions.switch_role(learner, RoleRequest(role='author'), 'new-session-author')
+                restored_author = replace(learner, role='author')
+                before_read = all_rows(database)
+    
+                # Regression: cancellation must not erase the control-only receipt
+                # fact and make the checked original output fail integrity on read.
+                recovered = service.read(restored_author, original.id)
+                assert recovered.summary.status == 'cancelled' and recovered.summary.candidate is None
+                assert recovered.raw_answer == answer and recovered.raw_refusal is None
+                assert recovered.provider_receipt_id == receipt_id and recovered.provider_outcome == 'completed'
+                if variant == 'group':
+                    assert recovered.plan_ref is recovered.content_plan is None
+                assert service.job(restored_author, original.id) == terminal
+                assert service.cancel_job(learner, original.id, command, 'cancel-after-author-revoked') == cancel_ack
+                assert not await asyncio.to_thread(worker.run_once)
+                assert len(server.requests) == 1 and all_rows(database) == before_read
+    
+>       asyncio.run(run())
+
+tests/integration/test_authoring_cancel_policy_recovery.py:107: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/integration/test_authoring_cancel_policy_recovery.py:96: in run
+    recovered = service.read(restored_author, original.id)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+services/api/app/application/authoring_group.py:85: in read
+    return self._history(conn, identity, identifier).view
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.application.authoring_group.AuthoringGroupService object at 0x7b1559f449b0>
+conn = <sqlite3.Connection object at 0x7b15599d8a90>
+identity = SessionIdentity(id='<REDACTED_TEST_SESSION_ID>', workspace_id='workspace_8fa7021c14cd4ca3bb3ffa02949eb9f...srf_token='<REDACTED_TEST_CSRF>', expires_at='2026-09-22T14:08:24.402741Z')
+identifier = 'authoring_c92423d56b6944198b164ff2e34bc818'
+
+    def _history(self, conn: sqlite3.Connection, identity: SessionIdentity, identifier: str):
+        record = AuthoringGroupRepository(conn, identity.workspace_id).load(identifier)
+        context = self.context.read_group(conn, identity, record.view.preparation.context_snapshot_id)
+        summary = group_preparation(record.input, context)
+        if summary != record.view.preparation:
+            raise integrity()
+        view = record.view
+        if view.provider_receipt_id is not None:
+            if self.provider is None or view.consent_id is None:
+                raise ApiError(503, 'AUTHORING_OUTPUT_UNAVAILABLE', '原生成结果当前无法核验。')
+            original = self.provider.read_result(conn, identity, identifier, view.consent_id)
+            if original is None or original.receipt.id != view.provider_receipt_id:
+                raise integrity()
+            terminal = original.receipt.terminal
+            outcome = ('incomplete' if terminal.outcome == 'incomplete' else 'completed') if isinstance(
+                terminal, CheckedProviderFinished) else terminal.provider_outcome
+            if view.provider_outcome != outcome or view.usage != terminal.usage:
+                raise integrity()
+            answer = original.answer.text if original.answer else None
+            refusal = original.refusal.text if original.refusal else None
+            withheld = (view.summary.status in {'failed', 'cancelled'} and view.summary.candidate is None
+                and view.raw_answer is None and view.raw_refusal is None
+                and view.error_code in {'POLICY_DENIED', 'ASSESSMENT_ACTIVE', 'ASSESSMENT_ANSWER_PROTECTED'})
+            if withheld:
+                # A control-only terminal never acquired the private bytes.
+                # Current permission now permits this checked, read-only projection;
+                # the original failed job and absence of a candidate stay intact.
+                record = record.model_copy(deep=True)
+                record.view.raw_answer, record.view.raw_refusal = answer, refusal
+            elif view.raw_answer != answer or view.raw_refusal != refusal:
+>               raise integrity()
+E               services.api.app.application.errors.ApiError: (409, 'AUTHORING_INTEGRITY_ERROR', '创作持久记录未通过完整性校验。')
+
+services/api/app/application/authoring_group.py:59: ApiError
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_authoring_cancel_policy_recovery.py::test_cancelled_control_only_receipt_recovers_original_output_without_adoption[single]
+FAILED tests/integration/test_authoring_cancel_policy_recovery.py::test_cancelled_control_only_receipt_recovers_original_output_without_adoption[group]
+2 failed, 2 warnings in 1.80s

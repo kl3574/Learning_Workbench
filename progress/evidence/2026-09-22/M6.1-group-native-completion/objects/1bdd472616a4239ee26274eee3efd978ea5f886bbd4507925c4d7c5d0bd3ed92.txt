@@ -1,0 +1,15 @@
+from pathlib import Path
+import datetime,hashlib,json,os,subprocess,sys
+ROOT=Path('<HOME>/.cache/learning-workbench-acceptance/m61-groups-active');BASE=Path(__file__).parent
+COMMANDS={'04-types-native':['bash','scripts/node.sh','apps/web/node_modules/.bin/tsc','--project',str(BASE/'tsconfig.native.json')],'05-ruff-fixture':['.venv/bin/ruff','check','tests/authoring_group_native_fixture.py'],'06-mypy-fixture':['.venv/bin/mypy','--follow-imports=silent','tests/authoring_group_native_fixture.py']}
+paths=[ROOT/'tests/e2e/authoringRuntime.ts',ROOT/'tests/e2e/authoring-groups.spec.ts',ROOT/'tests/authoring_group_native_fixture.py',BASE/'tsconfig.native.json',BASE/'playwright-types.d.ts',ROOT/'apps/web/node_modules/@playwright/test/index.d.ts',ROOT/'apps/web/node_modules/playwright/test.d.ts',ROOT/'apps/web/node_modules/playwright-core/types/types.d.ts']
+sha=lambda b:hashlib.sha256(b).hexdigest()
+def snap():
+ return [{'path':str(p),'bytes':len(p.read_bytes()),'sha256':sha(p.read_bytes()),'mtime_ns':p.stat().st_mtime_ns} for p in paths]
+def write(p,v):p.write_text(json.dumps(v,ensure_ascii=False,indent=2)+'\n')
+name=sys.argv[1];folder=BASE/(sys.argv[2] if len(sys.argv)>2 else name);folder.mkdir();before=snap();write(folder/'before.json',before)
+start=datetime.datetime.now(datetime.timezone.utc).isoformat()
+with (folder/'run.log').open('wb') as f:r=subprocess.run(COMMANDS[name],cwd=ROOT,stdout=f,stderr=subprocess.STDOUT,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1'))
+after=snap();write(folder/'after.json',after)
+write(folder/'receipt.json',{'command':COMMANDS[name],'started_at':start,'finished_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'exit_code':r.returncode,'declared_inputs_unchanged':before==after,'source_count':len(before),'driver_sha256':sha(Path(__file__).read_bytes()),'log_sha256':sha((folder/'run.log').read_bytes()),'scope':'Only declared three native sources, checking config/alias and installed primary Playwright declarations. Alias changes no source or runtime import and supplies no fake APIs. Remaining installed transitive library/tool binaries are not inventoried. Python fixture check silences existing imported test-helper diagnostics, not local diagnostics.'})
+print(name,(folder/'run.log').read_text(),'EXIT',r.returncode,'UNCHANGED',before==after);sys.exit(r.returncode if before==after else 90)

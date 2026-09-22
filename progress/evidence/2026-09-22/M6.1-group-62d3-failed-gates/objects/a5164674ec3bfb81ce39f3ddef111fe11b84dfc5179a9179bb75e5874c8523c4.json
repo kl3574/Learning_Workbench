@@ -1,0 +1,107 @@
+{
+  "recorded_at": "2026-09-22T03:11:36.085780+00:00",
+  "fixed_commit": "62d3b1af344c3f43cdfe25815512fff71f79d757",
+  "source_count": 938,
+  "source_aggregate": "80fd3024b30de73892fbdb59103824d0e8eb7f2d62e8da13867ed6b5182865ad",
+  "driver_hashes": {
+    "run.py": "be6a0d6104a7c54e554357f0667938cb84a2a9653f9a6871bfc450fb72b4437c",
+    "common.py": "045a269b7b02c8ff1e195c5859ad41f2eac068a9fb41bd872cd41272a7b59642",
+    "restore.py": "3616ee9f4a7330097407672758c362e1393dbfad5b3de37e710da6a6add87a58",
+    "config.json": "01ad88c530f0ea5d7ab6bed6fb2fa7a120e7eb7d8300fe1260740007966cf13c"
+  },
+  "commands": [
+    [
+      "01-ruff",
+      [
+        ".venv/bin/ruff",
+        "check",
+        "."
+      ]
+    ],
+    [
+      "02-mypy",
+      [
+        ".venv/bin/mypy"
+      ]
+    ],
+    [
+      "03-python",
+      [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest"
+      ]
+    ],
+    [
+      "04-web-lint",
+      [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "lint"
+      ]
+    ],
+    [
+      "05-web-typecheck",
+      [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "typecheck"
+      ]
+    ],
+    [
+      "06-web-tests",
+      [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "test"
+      ]
+    ],
+    [
+      "07-web-build",
+      [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "build"
+      ]
+    ],
+    [
+      "08-spec",
+      [
+        ".venv/bin/python",
+        "-B",
+        "scripts/verify_spec.py"
+      ]
+    ],
+    [
+      "09-native",
+      [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "test:e2e"
+      ]
+    ]
+  ],
+  "tests_started": false,
+  "ui_top_level_file_count": 44
+}

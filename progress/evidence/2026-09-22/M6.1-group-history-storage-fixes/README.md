@@ -1,0 +1,26 @@
+# Provider history and private ACK persistence fixes
+
+This candidate covers only two bounded development stages. The separate complete backend/web gate at the fixed commit is outside this package and was not read or modified during packaging. No test was rerun to build this package.
+
+| Stage | Retained RED and test repair | Final focused result |
+| --- | --- | --- |
+| Original Provider artifact history | Initial 14 FAIL: 12 missing integrity rejections plus 2 incorrect test expectations that queued cancel creates no ledger row. Corrected tests require its durable no-launch cancelled/BLOCKED terminal. Clean RED: 12 FAIL + 2 safe-control PASS. Initial Ruff lambda assignment FAIL also retained. | 18 PASS = original 12 rejection cases + 2 safe controls + 4 new missing-owner admission cases; Ruff PASS, normal mypy PASS. |
+| Private numeric ACK persistence race | 7 FAIL + 32 PASS. The private ACK wrongly commits after invalidation during journal load, before PUT, or at PUT success before guarded admission. Safe cancel positive control passed. | 60 PASS = 40 group command/hook cases + 20 existing related hook/owner/client/DraftStore cases; typecheck PASS. One separate post-admission commit positive control was added after RED. |
+
+Do not add these counts into broader product acceptance. All eleven selected run receipts record 938 inputs before and after with no changes; the verifier independently recomputes each pair's differences. That broad inventory is not a claim every inventoried file was exercised by the focused tests. All original failure logs, the fixture/lint correction versions, exact commands/timestamps/exit statuses and GREEN source snapshots are retained.
+
+The Provider history cases complete actual CheckedDispatch against a controlled loopback response, then change only provider_artifacts.bytes. Existing stored hashes, receipt, candidate and permissions remain intact. Numeric preview/read/approval/replay and worker pre-begin paths must reject corrupted bytes; safe task read/cancel remains available. LedgerRuntime never executes a calculator. This stage is neither live-vendor evidence nor a numerical execution PASS.
+
+The browser stage uses React hooks and real fake-indexeddb transactions with current schema-checked synthetic DTOs. Invalidations occur at actual asynchronous storage boundaries. Before guarded commit admission, private ACK writes must abort while preserving the already durable original key/body for same-key recovery. After native commit() succeeds, later revocation hides the UI but cannot pretend to roll back the legally admitted ACK; only transaction oncomplete proves persistence. Safe cancellation ACKs remain durable. This is not native-browser E2E evidence.
+
+`manifest.json` maps every original alias to its raw and public SHA/bytes and exact transformation counts. The only applied text transformation is expected to be fixed HOME-prefix substitution with `<LOCAL_HOME>`; the defined session/CSRF rules apply only to actual matches and their counts remain explicit. Synthetic no-network test strings are fixture literals, not authenticated exported sessions. Original log/source hashes within receipts remain raw references: use the manifest to resolve public derivatives. Exact duplicate source and input snapshot bytes share one public file, while every original alias stays individually mapped. No snapshot difference, test outcome or source version is synthesized.
+
+The 28 selected GREEN source records were independently compared byte-for-byte by SHA with Git commit `62d3b1af344c3f43cdfe25815512fff71f79d757`; all match. `fixed-source-comparison.json` records each comparison. Earlier RED/intermediate versions are preserved under their own aliases and are not claimed to match that commit.
+
+The builder explicitly selects only commands, receipts, logs, input inventories, bounded source versions, summaries and patches. It excludes all pytest temporary data, databases, secret stores, authenticated session values, mypy/pytest caches, archives, storageState and browser profiles. Per-payload checks reject raw session/CSRF values and credential forms. The actual unchanged project publication inspector is separately run over every public file.
+
+To verify the public payload, run `python3 verify_public.py`. With the private raw caches available, add `--raw-base /path/to/acceptance-cache --raw-home /path/to/local-home` to hash all originals and replay each derivative byte-for-byte. Run `python3 scan_repo.py --repository /path/to/repository --public .` to apply the actual repository inspector to the whole public package. These are evidence checks, not reruns of the test suites or isolated repository builds.
+
+No product, test, progress or remote changes were made while packaging. Root independently reviews this candidate before import.
+
+This successor only parameterizes the private prefix: the public manifest declares `raw_home` without its value, and raw replay requires an explicit `--raw-home`. It never infers a user directory. All original evidence payloads, raw hashes and per-alias transformation counts are unchanged. Earlier verification reports remain historical predecessor evidence; the successor is independently replayed and scanned. Stage outcomes and limitations above are unchanged.

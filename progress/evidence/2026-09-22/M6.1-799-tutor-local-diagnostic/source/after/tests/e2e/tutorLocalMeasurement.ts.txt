@@ -1,0 +1,46 @@
+// Cache-only passive measurement. No request/answer text or credentials.
+import { performance } from 'node:perf_hooks'
+import { writeFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import type { Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
+
+export async function measureTutor(page: Page) {
+  const calibrations: object[] = [], marks: object[] = []
+  const calibrate = async (phase: string) => {
+    const before = performance.now()
+    const python = await page.request.get('/api/v1/__test_measurement_clock').then(value => value.json())
+    const after = performance.now()
+    const browserBefore = performance.now()
+    const browser = await page.evaluate(() => ({ ms: performance.now(), origin: performance.timeOrigin }))
+    const browserAfter = performance.now()
+    calibrations.push({ phase, node_before_ms: before, node_after_ms: after, ...python,
+      node_browser_before_ms: browserBefore, node_browser_after_ms: browserAfter, browser })
+  }
+  const install = () => {
+    const host = window as unknown as { __m61_events: object[]; __m61_mark: (kind: string, facts: object) => void }
+    host.__m61_events = []
+    host.__m61_mark = (kind, facts) => { if (host.__m61_events.length < 10000) host.__m61_events.push({ browser_ms: performance.now(), origin: performance.timeOrigin, kind, ...facts }) }
+    let previous: string | null = null
+    const inspect = () => {
+      const status = document.querySelector('[aria-label="当前问答任务"] h3')?.textContent?.match(/^真实任务状态：(queued|running|awaiting_approval|completed|failed|cancelled)$/)?.[1] ?? null
+      if (status !== previous) { previous = status; host.__m61_mark('dom_status', { status }) }
+    }
+    new MutationObserver(inspect).observe(document, { subtree: true, childList: true, characterData: true })
+    inspect()
+  }
+  await page.addInitScript(install)
+  // The page starts at about:blank; install/calibrate after the real page is ready.
+  return {
+    async before() { await calibrate('before_grant') },
+    async around(assertion: () => Promise<unknown>) {
+      marks.push({ kind: 'assertion_start', node_ms: performance.now() })
+      try { return await assertion() }
+      finally { marks.push({ kind: 'assertion_return', node_ms: performance.now() }) }
+    },
+    async save() {
+      const browser = await page.evaluate(() => (window as unknown as { __m61_events: object[] }).__m61_events)
+      await calibrate('after_assertion')
+      writeFileSync(resolve(process.env.TUTOR_MEASUREMENT_DIR!, 'client.json'), JSON.stringify({ version: 1, calibrations, marks, browser, note: 'Events carry original browser timestamps; retrieval after assertion is not a deadline snapshot. Calibration gives offset intervals, not exact cross-process equality.' }, null, 2) + '\n')
+    },
+  }
+}

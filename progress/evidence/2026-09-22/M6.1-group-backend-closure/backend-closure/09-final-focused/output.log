@@ -1,0 +1,167 @@
+F...........                                                             [100%]
+=================================== FAILURES ===================================
+_ test_checked_five_question_kinds_keep_private_answers_out_of_public_control_and_real_index _
+
+tmp_path = PosixPath('<LOCAL_HOME>/.cache/learning-workbench-acceptance/m61-group-backend-closure-verification-v1/pytest-tmp-09/test_checked_five_question_kin0')
+
+    def test_checked_five_question_kinds_keep_private_answers_out_of_public_control_and_real_index(tmp_path):
+        from services.api.app.application.retrieval import RetrievalService, RetrievalWorker
+        from services.api.app.infrastructure.retrieval_repository import RetrievalRepository
+    
+        async def run():
+            body, generated, objects, bodies = mixed_question_material()
+            answer = canonical_bytes(generated).decode()
+            async with local_provider(text=answer) as server:
+                state = configured(tmp_path, server.base_url)
+                database, identity, service, worker, _, _ = state
+                empty = all_rows(database)
+                assert empty['objects'] == empty['solutions'] == []
+                ContentService(database).publish(identity.workspace_id, objects, bodies)
+                published = all_rows(database)
+                assert len(published['objects']) == 3 and published['solutions'] == []
+                content_tables = ('objects', 'revisions', 'block_bodies', 'solutions', 'drafts', 'reviews')
+                original, _, grant = approve_request(state, body)
+                assert server.requests == []
+                assert await asyncio.to_thread(worker.run_once)
+                current = service.read(identity, original.id)
+                assert current.summary.status == 'completed' and current.raw_answer == answer
+                assert current.consent_id == grant.id and len(server.requests) == 1
+                draft = service.draft(identity, current.summary.candidate.draft_id)
+                assert draft.root.entity == 'practice_set' and draft.root.lesson_ref == body.root.lesson_ref
+                assert [question.kind for question in draft.questions] == [item[0] for item in QUESTION_GRADERS]
+                assert len(draft.root.questions) == len(draft.private_solution_refs) == len(draft.validation.question_checks) == 5
+                assert draft.state == 'draft' and draft.base_ref is None
+                for member, quality, (_, grader, answers) in zip(
+                    draft.root.questions, draft.validation.question_checks, QUESTION_GRADERS, strict=True
+                ):
+                    private = service.solution(identity, draft.candidate.draft_id, member.member_key)
+                    assert private.payload.question == member and quality.question == member
+                    assert private.payload.answer.grading_kind == grader
+                    assert private.payload.answer.accepted_answers == answers
+                    assert PRIVATE_SENTINEL in private.payload.answer.solution_markdown
+                    assert private.payload.review_status == 'needs_review'
+                    assert quality.grading_compatibility == quality.accepted_answer_membership == 'PASS'
+                    assert quality.answer_uniqueness == quality.solution_grading_semantics == 'NOT_RUN'
+                assert draft.validation.mathematical == draft.validation.sources == draft.validation.independent_pedagogy == 'NOT_RUN'
+                learner = replace(identity, role='learner')
+                safe = JobService(database).job(learner, original.id)
+                for public in (draft, safe):
+                    raw = canonical_bytes(public)
+                    assert PRIVATE_SENTINEL.encode() not in raw and b'accepted_answers' not in raw
+                    assert b'solution_markdown' not in raw and b'numeric_plan' not in raw
+                assert safe.status == 'completed' and safe.result_refs == []
+                after_generation = all_rows(database)
+                assert all(after_generation[table] == published[table] for table in content_tables)
+    
+                # A ready index and positive hit prevent an empty/cold index from
+                # vacuously passing the private-sentinel query. No draft is published.
+                retrieval, indexing = RetrievalService(database), RetrievalWorker(database)
+                refs = [body.root.lesson_ref]
+                rebuild = retrieval.rebuild(identity, request_for(retrieval, identity, refs), 'index-public-target')
+                assert indexing.run_once()
+                assert retrieval.job(identity, rebuild.id).status == 'completed'
+                assert retrieval.scope_status(identity, refs).state == 'ready'
+                before = all_rows(database)
+                positive = retrieval.query(identity, RetrievalQueryWrite(query=PUBLIC_SENTINEL, scope_refs=refs, limit=5))
+                absent = retrieval.query(identity, RetrievalQueryWrite(query=PRIVATE_SENTINEL, scope_refs=refs, limit=5))
+                assert positive.result_state == 'matched' and positive.matched_count == 1
+                assert positive.hits[0].ref == reference(objects[1])
+                assert PUBLIC_SENTINEL in positive.hits[0].text
+                assert absent.index_state == 'ready' and absent.result_state == 'no_match'
+                assert absent.hits == [] and absent.matched_count == 0
+                assert PRIVATE_SENTINEL not in canonical_bytes(positive).decode()
+                with database.transaction(immediate=False) as conn:
+                    repo = RetrievalRepository(conn, identity.workspace_id)
+                    scopes = repo.scopes('', 20)
+                    assert len(scopes) == 1 and canonical_bytes(repo.roots(scopes[0])) == canonical_bytes(refs)
+                    indexed = repo.generation(scopes[0])
+                    assert indexed is not None
+                    manifest, terms = indexed
+                    assert [entry.ref for entry in manifest.blocks] == [reference(objects[1])]
+                    assert [entry.ref for entry in manifest.descriptor.blocks] == [reference(objects[1])]
+                    assert set(terms) == {manifest.blocks[0].chunk_id}
+                    # Global physical rows, with no query-scope filter, prove no
+                    # extra group document/chunk was silently added elsewhere.
+                    assert conn.execute('SELECT COUNT(*) FROM retrieval_scopes').fetchone()[0] == 1
+                    assert conn.execute('SELECT COUNT(*) FROM retrieval_generations').fetchone()[0] == 1
+                    chunks = conn.execute('SELECT ref_json,tokens FROM retrieval_chunks').fetchall()
+                    fts = conn.execute('SELECT tokens FROM retrieval_fts').fetchall()
+                    assert len(chunks) == len(fts) == 1
+                    assert chunks[0]['ref_json'] == canonical_bytes(reference(objects[1])).decode()
+                    assert chunks[0]['tokens'] == fts[0]['tokens'] == ' '.join(terms[manifest.blocks[0].chunk_id])
+                    decoded_terms = [bytes.fromhex(token[1:]).decode() for token in chunks[0]['tokens'].split()]
+                    assert PUBLIC_SENTINEL in decoded_terms and PRIVATE_SENTINEL not in decoded_terms
+                    for raw in (canonical_bytes(manifest).decode(), chunks[0]['ref_json']):
+                        assert PRIVATE_SENTINEL not in raw and draft.candidate.draft_id not in raw
+                        assert all(member.member_key not in raw for member in draft.root.questions)
+                assert all_rows(database) == before and len(server.requests) == 1
+                assert all(before[table] == published[table] for table in content_tables)
+>       asyncio.run(run())
+
+tests/integration/test_authoring_group_provider.py:251: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/integration/test_authoring_group_provider.py:228: in run
+    assert len(scopes) == 1 and canonical_bytes(repo.roots(scopes[0])) == canonical_bytes(refs)
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+packages/contracts/canonical.py:26: in canonical_bytes
+    return json.dumps(
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/__init__.py:238: in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:200: in encode
+    chunks = self.iterencode(o, _one_shot=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:258: in iterencode
+    return _iterencode(o, 0)
+           ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <json.encoder.JSONEncoder object at 0x71cc84c2d700>
+o = ContentRef(entity='lesson', id='mixed_group_lesson', revision=1, sha256='a52564c6a6f5d34003df6e3229325ae19f0c17e5d668d47e45d34a0cd1bfbb08')
+
+    def default(self, o):
+        """Implement this method in a subclass such that it returns
+        a serializable object for ``o``, or calls the base implementation
+        (to raise a ``TypeError``).
+    
+        For example, to support arbitrary iterators, you could
+        implement default like this::
+    
+            def default(self, o):
+                try:
+                    iterable = iter(o)
+                except TypeError:
+                    pass
+                else:
+                    return list(iterable)
+                # Let the base class default method raise the TypeError
+                return super().default(o)
+    
+        """
+>       raise TypeError(f'Object of type {o.__class__.__name__} '
+                        f'is not JSON serializable')
+E       TypeError: Object of type ContentRef is not JSON serializable
+
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py:180: TypeError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m61-groups-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m61-groups-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_authoring_group_provider.py::test_checked_five_question_kinds_keep_private_answers_out_of_public_control_and_real_index
+1 failed, 11 passed, 2 warnings in 12.22s
