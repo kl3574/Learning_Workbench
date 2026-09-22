@@ -175,6 +175,10 @@ class ImportWorker:
                 if self._stop.is_set():
                     raise _Stopped()
                 if not process.is_alive():
+                    # The child can send and exit after the earlier poll timed out.
+                    # Drain that real result before classifying an empty exit.
+                    if parent.poll(0):
+                        continue
                     raise ApiError(422, "IMPORT_PARSE_FAILED", "解析进程未返回完整结果。")
                 if time.monotonic() - last_check > 0.5:
                     with self.database.connect() as connection:
