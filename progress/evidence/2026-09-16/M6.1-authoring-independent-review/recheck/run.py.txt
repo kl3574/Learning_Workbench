@@ -1,0 +1,46 @@
+from pathlib import Path
+import datetime,hashlib,json,subprocess,time
+BASE=Path('<HOME>/.cache/learning-workbench-acceptance')
+REPO=BASE/'m61-active'; OLD=BASE/'m61-authoring-independent-review-v1'; OUT=Path(__file__).parent
+sha=lambda data:hashlib.sha256(data).hexdigest()
+paths=list(json.loads((OLD/'source-before-02.json').read_text()))
+paths += ['pyproject.toml','uv.lock','services/api/app/application/jobs.py',
+'services/api/app/infrastructure/provider_repository.py','services/api/app/application/providers.py',
+'services/api/app/infrastructure/consent_repository.py',
+'services/api/app/application/authoring_numeric_service.py','services/api/app/application/authoring_numeric_worker.py',
+'services/api/app/infrastructure/authoring_numeric_repository.py','services/api/app/infrastructure/authoring_numeric_runtime.py',
+'services/api/app/application/authoring_numeric.py','scripts/authoring_numeric_entry.py',
+'tests/integration/test_authoring_context.py','tests/integration/test_retrieval.py',
+'tests/integration/test_authoring_generation_integrity.py','tests/integration/test_authoring_actor_control.py',
+'tests/integration/test_authoring_http.py']
+paths=sorted(set(paths))
+def inputs():return {p:{'sha256':sha((REPO/p).read_bytes()),'bytes':(REPO/p).stat().st_size} for p in paths}
+before=inputs();(OUT/'inputs-before.json').write_text(json.dumps(before,indent=2)+'\n')
+archives=OUT/'source-before';archives.mkdir()
+for p in paths:
+ if p.endswith('.py') or p.endswith('.sql'):
+  (archives/(p.replace('/','__')+'.txt')).write_bytes((REPO/p).read_bytes())
+private_tests=[OLD/'test_generation_integrity_probe.py',OLD/'test_actor_and_control_probe.py']
+original_hashes={p.name:sha(p.read_bytes()) for p in private_tests}
+assert original_hashes=={'test_generation_integrity_probe.py':'066e00b1411deac546449ca430954aab2eb3a14d764afe57a9b702274ae6d865','test_actor_and_control_probe.py':'7cf8bfa5ac351bbf11093a67e654d15cd3a5491300a185f9544f4b6e806447ec'}
+commands=[('original-four-01',[str(p) for p in private_tests]),('permanent-six-02',[
+ 'tests/integration/test_authoring_generation_integrity.py','tests/integration/test_authoring_actor_control.py',
+ 'tests/integration/test_authoring_http.py'])]
+all_receipts=[]
+for name,targets in commands:
+ command=['.venv/bin/python','-m','pytest','-c','pyproject.toml',*targets,'-q']
+ start=datetime.datetime.now(datetime.UTC).isoformat();tick=time.monotonic();run_before=inputs()
+ with (OUT/(name+'.log')).open('xb') as output:
+  result=subprocess.run(command,cwd=REPO,stdout=output,stderr=subprocess.STDOUT,timeout=180)
+ run_after=inputs();log=(OUT/(name+'.log')).read_bytes()
+ receipt={'command':command,'exit_code':result.returncode,'started_at':start,
+  'finished_at':datetime.datetime.now(datetime.UTC).isoformat(),'wall_seconds':time.monotonic()-tick,
+  'inputs_before':run_before,'inputs_after':run_after,'inputs_equal':run_before==run_after,
+  'original_test_hashes':original_hashes,'log_sha256':sha(log),
+  'scope':'Independent actual same original four probes and permanent six-case bounded execution. Real temporary SQLite and synthetic local loopback only. No vendor/browser/full-suite. HTTP numeric result may truthfully be BLOCKED; passing protocol assertion does not prove successful sealed arithmetic.'}
+ (OUT/(name+'.json')).write_text(json.dumps(receipt,ensure_ascii=False,indent=2)+'\n')
+ all_receipts.append({'name':name,'exit_code':result.returncode,'receipt_sha256':sha((OUT/(name+'.json')).read_bytes()),'log_sha256':sha(log),'inputs_equal':run_before==run_after})
+ print(name,'exit',result.returncode,'input_equal',run_before==run_after,'last_line',log.decode().splitlines()[-1],flush=True)
+after=inputs();(OUT/'inputs-after.json').write_text(json.dumps(after,indent=2)+'\n')
+(OUT/'run-index.json').write_text(json.dumps({'runs':all_receipts,'window_inputs_equal':before==after,'bounded_input_count':len(paths),'original_test_hashes':original_hashes},indent=2)+'\n')
+print('WINDOW_INPUTS_EQUAL',before==after,'COUNT',len(paths),flush=True)

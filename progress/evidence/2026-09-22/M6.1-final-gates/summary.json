@@ -1,0 +1,239 @@
+{
+  "fixed_commit": "80986eaed01d4de620cdd4320a7fab8ce01ce959",
+  "spec_sha256": "30220c34fe7312887f5bcb1c67406c9638f1719ff3ed7bc9e95d7d5085b5d924",
+  "gate_processes": {
+    "exit_zero": 9,
+    "nonzero": 0
+  },
+  "gates": [
+    {
+      "gate": "01-ruff",
+      "command": [
+        ".venv/bin/ruff",
+        "check",
+        "."
+      ],
+      "started_at": "2026-09-15T17:33:29.793201+00:00",
+      "finished_at": "2026-09-15T17:33:29.804096+00:00",
+      "exit_code": 0,
+      "receipt_path": "01-ruff/receipt.json",
+      "log_path": "01-ruff/run.log",
+      "original_unchanged": true,
+      "original_git_match_after": true
+    },
+    {
+      "gate": "02-mypy",
+      "command": [
+        ".venv/bin/mypy"
+      ],
+      "started_at": "2026-09-15T17:33:29.960571+00:00",
+      "finished_at": "2026-09-15T17:33:30.058428+00:00",
+      "exit_code": 0,
+      "receipt_path": "02-mypy/receipt.json",
+      "log_path": "02-mypy/run.log",
+      "original_unchanged": true,
+      "original_git_match_after": true
+    },
+    {
+      "gate": "03-python",
+      "command": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest"
+      ],
+      "started_at": "2026-09-15T17:33:30.224117+00:00",
+      "finished_at": "2026-09-15T17:40:07.435960+00:00",
+      "exit_code": 0,
+      "receipt_path": "03-python/receipt.json",
+      "log_path": "03-python/run.log",
+      "original_unchanged": true,
+      "original_git_match_after": true
+    },
+    {
+      "gate": "04-web-lint",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "lint"
+      ],
+      "started_at": "2026-09-15T17:40:30.020548+00:00",
+      "finished_at": "2026-09-15T17:40:30.494692+00:00",
+      "exit_code": 0,
+      "receipt_path": "04-web-lint/receipt.json",
+      "log_path": "04-web-lint/run.log",
+      "original_unchanged": true,
+      "original_git_match_after": true
+    },
+    {
+      "gate": "05-web-typecheck",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "typecheck"
+      ],
+      "started_at": "2026-09-15T17:40:30.655481+00:00",
+      "finished_at": "2026-09-15T17:40:31.142756+00:00",
+      "exit_code": 0,
+      "receipt_path": "05-web-typecheck/receipt.json",
+      "log_path": "05-web-typecheck/run.log",
+      "original_unchanged": true,
+      "original_git_match_after": true
+    },
+    {
+      "gate": "06-web-tests",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "test"
+      ],
+      "started_at": "2026-09-15T17:40:31.305637+00:00",
+      "finished_at": "2026-09-15T17:40:35.639064+00:00",
+      "exit_code": 0,
+      "receipt_path": "06-web-tests/receipt.json",
+      "log_path": "06-web-tests/run.log",
+      "original_unchanged": true,
+      "original_git_match_after": true
+    },
+    {
+      "gate": "07-web-build",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "build"
+      ],
+      "started_at": "2026-09-15T17:40:35.802139+00:00",
+      "finished_at": "2026-09-15T17:40:36.654867+00:00",
+      "exit_code": 0,
+      "receipt_path": "07-web-build/receipt.json",
+      "log_path": "07-web-build/run.log",
+      "original_unchanged": true,
+      "original_git_match_after": true
+    },
+    {
+      "gate": "08-spec",
+      "command": [
+        ".venv/bin/python",
+        "-B",
+        "scripts/verify_spec.py"
+      ],
+      "started_at": "2026-09-15T17:40:36.814760+00:00",
+      "finished_at": "2026-09-15T17:40:38.237265+00:00",
+      "exit_code": 0,
+      "receipt_path": "08-spec/receipt.json",
+      "log_path": "08-spec/run.log",
+      "original_unchanged": true,
+      "original_git_match_after": true
+    },
+    {
+      "gate": "09-native",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "test:e2e"
+      ],
+      "started_at": "2026-09-15T17:42:01.751268+00:00",
+      "finished_at": "2026-09-15T17:50:22.747468+00:00",
+      "exit_code": 0,
+      "receipt_path": "09-native/receipt.json",
+      "log_path": "09-native/run.log",
+      "original_unchanged": false,
+      "original_git_match_after": false
+    }
+  ],
+  "actual_results": {
+    "ruff": "PASS",
+    "mypy": {
+      "status": "PASS",
+      "source_files": 162
+    },
+    "python": {
+      "passed": 1927,
+      "skipped": 1,
+      "warnings": 2,
+      "seconds": 396.73,
+      "skip_classification": "BLOCKED_ENVIRONMENT",
+      "skip_reason": "Real sealed runtime did not execute the calculator; original FAIL retained."
+    },
+    "web_lint": "PASS",
+    "web_typecheck": "PASS",
+    "web_tests": {
+      "passed": 401,
+      "files_passed": 72
+    },
+    "web_build": {
+      "status": "PASS",
+      "large_chunk_warning_retained": true
+    },
+    "spec": {
+      "status": "PASS",
+      "scope": "M0_structural_baseline_only",
+      "generated_artifacts": 75
+    },
+    "native": {
+      "passed": 96,
+      "reported_duration": "8.3m",
+      "artifact_files": 109
+    }
+  },
+  "boundaries": {
+    "actual_authoring_numeric": "BLOCKED_ENVIRONMENT",
+    "actual_authoring_numeric_job_status": "failed",
+    "actual_authoring_numeric_outcome": "environment_unavailable",
+    "actual_authoring_numeric_exit_code": 1,
+    "calculator_success_proven": false,
+    "native_provider": "test-only loopback",
+    "vendor_provider": "NOT_RUN",
+    "production_provider_transport": "NOT_RUN",
+    "real_codex": "NOT_RUN",
+    "mathematical": "NOT_RUN",
+    "sources": "NOT_RUN",
+    "independent_pedagogy": "NOT_RUN",
+    "candidate_state": "draft",
+    "content_publication": "NOT_RUN",
+    "complete_M6_1": "NOT_ESTABLISHED",
+    "complete_platform": "NOT_ESTABLISHED"
+  },
+  "source_identity": {
+    "declared_nonprogress_inputs": 903,
+    "all_nonnative_before_after_equal_fixed_git": true,
+    "original_native_unchanged": false,
+    "original_native_git_match_after": false,
+    "native_changed_inputs": [
+      "docs/ui/m1-after-1440.png",
+      "docs/ui/m1-after-1920.png",
+      "docs/ui/m1-after-390-agent.png",
+      "docs/ui/m1-session-three-way-conflict.png"
+    ],
+    "later_restoration_matches_all_903_fixed_git_inputs": true,
+    "installed_dependency_binary_inventory": "NOT_INCLUDED"
+  },
+  "excluded_private_material": [
+    "runtime-data and all database/WAL files",
+    "browser/user profiles",
+    "bootstrap/session/CSRF credentials",
+    "environment and credential files",
+    "Python bytecode"
+  ],
+  "warning_preservation": "Full raw-derived logs retain Python dependency deprecations, Vitest performance advice, Vite chunk warning, and all native output."
+}

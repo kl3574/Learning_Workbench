@@ -1,8 +1,8 @@
 <!-- task_id: M3-milestone -->
 task_id: `M3`
 
-spec_version: `3.0.5`
-spec_sha256: `2bfd471933be478a7cac51363a0482a87c81ec113c3e6cbdec88cfd139d43f37`
+spec_version: `3.0.6`
+spec_sha256: `30220c34fe7312887f5bcb1c67406c9638f1719ff3ed7bc9e95d7d5085b5d924`
 
 唯一规范：根目录 PRODUCT_DESIGN.md（第 17/19 章及相关附录）。
 
@@ -28,7 +28,7 @@ spec_sha256: `2bfd471933be478a7cac51363a0482a87c81ec113c3e6cbdec88cfd139d43f37`
 
 <!-- engineering_progress:start -->
 当前实际状态：`review`
-规范：`3.0.5` / `2bfd471933be478a7cac51363a0482a87c81ec113c3e6cbdec88cfd139d43f37`
+规范：`3.0.6` / `30220c34fe7312887f5bcb1c67406c9638f1719ff3ed7bc9e95d7d5085b5d924`
 当前需求关联：
 验证代码：`NOT_RUN`
 验证：`NOT_RUN`

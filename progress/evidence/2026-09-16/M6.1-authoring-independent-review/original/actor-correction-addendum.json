@@ -1,0 +1,25 @@
+{
+  "status": "CORRECTION_TO_REVIEW_V1_ONLY; FOUR_ACTUAL_PROBE_FAILURES_UNCHANGED",
+  "created_at": "2026-09-15T17:12:15.097361+00:00",
+  "supersedes_text_only": {
+    "review.md": "b6b77682eb652a534473a422234be75183ed781c03f6a0517ef3a962cb247f8f",
+    "review-receipt.json": "495df5a1d3d51b501baac5704e32a3ede55e2bc6868c6eb5f1117256e9d07077"
+  },
+  "correction": "Original Provider command.actor and fingerprint.actor are workspace_id, not session identity.id. Original Provider grant history was unchanged by the executed corruption probe, but does not contain an independently checked original granting session actor. The recommendation in review.md to bind to the actual original Provider grant actor was therefore inaccurate. A new immutable Authoring-owned grant callback record is required to capture the actual grant identity.id with consent/proposal/prepared/job and approval event revision. This does not redefine existing Provider ledger semantics.",
+  "actual_counterexample_retained": "The executed probe changed only Authoring execution_actor_id plus its owner record digest to another existing current author after the granting session was demoted; one actual synthetic loopback request occurred. It is a deliberate corruption fixture, not an HTTP write exploit claim.",
+  "scope": "Static re-read only for this correction. Original test source/logs/receipts are preserved unchanged. Parent owns production fixes and permanent regressions; repaired behavior has not yet been independently reviewed here.",
+  "sources": {
+    "services/api/app/infrastructure/provider_repository.py": {
+      "sha256": "2e768d2c2fb6a7068764326e6c6457fe393c9f63e741f3517e532efc73fe6ba4",
+      "lines": "91-93,134-144"
+    },
+    "services/api/app/application/providers.py": {
+      "sha256": "485d19f92c36a0b4a47c0d813fd3841e64abae88c65ffdfa5e5afb578b17ead7",
+      "lines": "53-57"
+    },
+    "services/api/app/application/consents.py": {
+      "sha256": "e50b71ec972101a675bcb337dc801e2990f647522139a89cd3367d59912f2f62",
+      "lines": "41-42"
+    }
+  }
+}

@@ -1,0 +1,203 @@
+--- before/services/api/app/application/authoring.py
++++ reviewed-final/services/api/app/application/authoring.py
+@@ -50,9 +50,20 @@
+             terminal = original.receipt.terminal
+             outcome = ('incomplete' if terminal.outcome == 'incomplete' else 'completed') if isinstance(
+                 terminal, CheckedProviderFinished) else terminal.provider_outcome
+-            if (view.provider_outcome != outcome or view.usage != terminal.usage
+-                    or view.raw_answer != (original.answer.text if original.answer else None)
+-                    or view.raw_refusal != (original.refusal.text if original.refusal else None)):
++            if view.provider_outcome != outcome or view.usage != terminal.usage:
++                raise integrity()
++            answer = original.answer.text if original.answer else None
++            refusal = original.refusal.text if original.refusal else None
++            withheld = (view.summary.status in {'failed', 'cancelled'} and view.summary.candidate is None
++                and view.raw_answer is None and view.raw_refusal is None
++                and view.error_code in {'POLICY_DENIED', 'ASSESSMENT_ACTIVE', 'ASSESSMENT_ANSWER_PROTECTED'})
++            if withheld:
++                # A control-only terminal never acquired the private bytes.
++                # Current permission now permits this checked, read-only projection;
++                # the original failed job and absence of a candidate stay intact.
++                record = record.model_copy(deep=True)
++                record.view.raw_answer, record.view.raw_refusal = answer, refusal
++            elif view.raw_answer != answer or view.raw_refusal != refusal:
+                 raise integrity()
+         return record
+ 
+@@ -91,6 +102,12 @@
+             repo = AuthoringRepository(conn, identity.workspace_id)
+             result = repo.draft(identifier)
+             self._history(conn, identity, result.source_job_id)
++            from ..infrastructure.authoring_numeric_repository import NumericRepository
++            numeric = NumericRepository(conn, identity.workspace_id)
++            if numeric.candidate_checks(identifier) != result.numeric_check_ids:
++                raise integrity()
++            for check_id in result.numeric_check_ids:
++                numeric.current(check_id)
+             return result
+ 
+     def job(self, identity: SessionIdentity, identifier: str) -> JobSnapshot:
+--- before/services/api/app/application/authoring_source.py
++++ reviewed-final/services/api/app/application/authoring_source.py
+@@ -4,6 +4,7 @@
+ from packages.contracts import domain_models as dm
+ from packages.contracts.canonical import canonical_bytes, sha256_bytes
+ from ..infrastructure.authoring_job_repository import integrity
++from ..infrastructure.authoring_job_repository import AuthoringLease
+ from ..infrastructure.authoring_repository import AuthoringRecord, AuthoringRepository
+ from ..infrastructure.consent_repository import ConsentRepository, prepared_digest
+ from ..infrastructure.security import SessionIdentity
+@@ -32,7 +33,13 @@
+ 
+     def _state(self, conn: sqlite3.Connection, identity: SessionIdentity, identifier: str) -> AuthoringRecord:
+         self.context.check_access(conn, identity)
+-        return AuthoringRepository(conn, identity.workspace_id).load(identifier)
++        record = AuthoringRepository(conn, identity.workspace_id).load(identifier)
++        for consent_id in record.consent_history:
++            summary, material, _ = ConsentRepository(conn, identity.workspace_id).dispatch_material(consent_id)
++            if (summary.job_id != identifier or material.job_input_sha256 != record.view.preparation.job_input_sha256
++                    or material.prepared_input_sha256 != record.view.preparation.prepared_input_sha256):
++                raise integrity()
++        return record
+ 
+     def _prepared(self, conn: sqlite3.Connection, identity: SessionIdentity,
+                   record: AuthoringRecord) -> tuple[PreparedAuthoringContext, PreparedOutboundMaterial]:
+@@ -107,8 +114,36 @@
+         record.view.proposal_id = consent['proposal_id']
+         record.view.consent_id = consent_id
+         record.execution_actor_id = identity.id
++        record.consent_history.append(consent_id)
+         repo.jobs.transition(repo.jobs.load(job_id), 'queued')
++        repo.record_authorization(identity, record, repo.jobs.load(job_id)['revision'])
+         repo.sync(record)
++
++    def resume_before_dispatch(self, transaction: sqlite3.Connection, identity: SessionIdentity,
++                               lease: AuthoringLease) -> bool:
++        """Only proven unused revoked/expired consent can return to approval.
++
++        This is an explicit owner worker transition, never a GET repair and
++        never a new grant. Original Provider history remains immutable.
++        """
++        repo = AuthoringRepository(transaction, identity.workspace_id)
++        record = self._state(transaction, identity, lease.job_id)
++        row = repo.jobs.load(lease.job_id)
++        if not repo.jobs.owned(row, lease) or record.view.consent_id is None:
++            return False
++        provider = ConsentRepository(transaction, identity.workspace_id)
++        consent = provider.consent(record.view.consent_id)
++        summary, _, _ = provider.dispatch_material(record.view.consent_id)
++        from ..infrastructure.database import utc_now
++        if (provider.dispatch_for_consent(record.view.consent_id) is not None
++                or consent['status'] == 'active' and summary.expires_at > utc_now()):
++            return False
++        record.view.consent_id = None
++        record.view.proposal_id = None
++        record.execution_actor_id = None
++        repo.jobs.transition(row, 'awaiting_approval')
++        repo.sync(record)
++        return True
+ 
+     def verify_dispatch(self, transaction: sqlite3.Connection, identity: SessionIdentity,
+                         material: PreparedOutboundMaterial, lease: DispatchLease, consent_id: str) -> dm.JobRef:
+--- before/services/api/app/application/authoring_worker.py
++++ reviewed-final/services/api/app/application/authoring_worker.py
+@@ -13,6 +13,7 @@
+ from ..infrastructure.security import SessionIdentity, author_execution_identity, expires_after
+ from .authoring_context import AuthoringContext
+ from .authoring_models import AuthoringCandidateRecord
++from .authoring_source import AuthoringOutboundSource
+ from .errors import ApiError
+ from .provider_models import CheckedProviderFinished
+ from .tutor_worker import TutorProviderPort
+@@ -104,6 +105,8 @@
+             result, receipt, access_error = None, None, None
+             try:
+                 identity = self._identity(conn, lease)
++                if AuthoringOutboundSource(self.context).resume_before_dispatch(conn, identity, lease):
++                    return
+                 if record.view.consent_id is not None:
+                     result = self.provider.read_result(conn, identity, lease.job_id, record.view.consent_id)
+                     receipt = result.receipt if result is not None else None
+@@ -176,8 +179,10 @@
+ 
+     async def process(self, lease: AuthoringLease) -> None:
+         try:
+-            with self.database.transaction(immediate=False) as conn:
++            with self.database.transaction() as conn:
+                 identity = self._identity(conn, lease)
++                if AuthoringOutboundSource(self.context).resume_before_dispatch(conn, identity, lease):
++                    return
+                 record = AuthoringRepository(conn, lease.workspace_id).load(lease.job_id)
+                 consent = record.view.consent_id
+                 if consent is None:
+--- before/services/api/app/infrastructure/authoring_repository.py
++++ reviewed-final/services/api/app/infrastructure/authoring_repository.py
+@@ -32,6 +32,18 @@
+     input: AuthoringJobInput
+     view: AuthoringJobView
+     execution_actor_id: dm.Id | None
++    consent_history: list[dm.Id]
++
++
++class AuthoringAuthorization(AuthoringModel):
++    version: Literal['authoring-authorization-v1']
++    workspace_id: dm.Id
++    job_id: dm.Id
++    consent_id: dm.Id
++    proposal_id: dm.Id
++    actor_id: dm.Id
++    prepared_input_sha256: dm.Sha256
++    job_revision: dm.Revision
+ 
+ 
+ class AuthoringRepository:
+@@ -48,7 +60,8 @@
+             preparation=preparation, proposal_id=None, consent_id=None, provider_receipt_id=None,
+             provider_outcome=None, usage=UsageSnapshot(input_tokens=None, output_tokens=None),
+             raw_answer=None, raw_refusal=None, validation=not_run(), error_code=None)
+-        record = AuthoringRecord(version='authoring-record-v1', input=value, view=view, execution_actor_id=None)
++        record = AuthoringRecord(version='authoring-record-v1', input=value, view=view,
++                                 execution_actor_id=None, consent_history=[])
+         raw = canonical_bytes(record).decode()
+         self.conn.execute('INSERT INTO authoring_records(job_id,workspace_id,actor_id,record_json,record_sha256) VALUES(?,?,?,?,?)',
+                           (value.job_id, self.workspace_id, identity.id, raw, sha256_bytes(raw.encode())))
+@@ -73,6 +86,21 @@
+                 raise integrity()
+             if (record.execution_actor_id is not None) != (view.consent_id is not None):
+                 raise integrity()
++            if (len(set(record.consent_history)) != len(record.consent_history)
++                    or view.consent_id is not None and (not record.consent_history or record.consent_history[-1] != view.consent_id)):
++                raise integrity()
++            authorizations = self.conn.execute('SELECT * FROM authoring_authorizations WHERE workspace_id=? AND job_id=? ORDER BY rowid',
++                                                (self.workspace_id, identifier)).fetchall()
++            if [item['consent_id'] for item in authorizations] != record.consent_history:
++                raise integrity()
++            for item in authorizations:
++                auth = AuthoringAuthorization.model_validate(checked(item['record_json'], item['record_sha256']))
++                if (auth.workspace_id != self.workspace_id or auth.job_id != identifier or auth.consent_id != item['consent_id']
++                        or auth.prepared_input_sha256 != view.preparation.prepared_input_sha256
++                        or self.jobs.snapshot(identifier, auth.job_revision).status != 'queued'):
++                    raise integrity()
++                if view.consent_id == auth.consent_id and (record.execution_actor_id != auth.actor_id or view.proposal_id != auth.proposal_id):
++                    raise integrity()
+             TypeAdapter(dm.Id).validate_python(owner['actor_id'])
+             if view.summary.candidate is not None:
+                 candidate = self.candidate(view.summary.candidate.draft_id)
+@@ -104,6 +132,17 @@
+             (raw, sha256_bytes(raw.encode()), record.input.job_id, self.workspace_id))
+         if changed.rowcount != 1:
+             raise integrity()
++
++    def record_authorization(self, identity: SessionIdentity, record: AuthoringRecord, job_revision: int) -> None:
++        if record.view.consent_id is None or record.view.proposal_id is None:
++            raise integrity()
++        value = AuthoringAuthorization(version='authoring-authorization-v1', workspace_id=self.workspace_id,
++            job_id=record.input.job_id, consent_id=record.view.consent_id, proposal_id=record.view.proposal_id,
++            actor_id=identity.id, prepared_input_sha256=record.view.preparation.prepared_input_sha256,
++            job_revision=job_revision)
++        raw = canonical_bytes(value).decode()
++        self.conn.execute('INSERT INTO authoring_authorizations VALUES(?,?,?,?,?)',
++            (value.consent_id, self.workspace_id, value.job_id, raw, sha256_bytes(raw.encode())))
+ 
+     def sync(self, record: AuthoringRecord) -> AuthoringRecord:
+         row = self.jobs.load(record.input.job_id)

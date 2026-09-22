@@ -1,0 +1,48 @@
+"""Full Python test gate on an explicit commit; no product edits or shell expansion."""
+import datetime
+import hashlib
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+
+ROOT=Path('<HOME>/.cache/learning-workbench-acceptance/m61-active')
+OUT=Path(__file__).parent
+COMMIT='80986eaed01d4de620cdd4320a7fab8ce01ce959'
+COMMAND=['.venv/bin/python','-B','-m','pytest']
+def sha(b):return hashlib.sha256(b).hexdigest()
+def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
+def write(p,v):p.write_text(json.dumps(v,ensure_ascii=False,indent=2)+'\n')
+def head():return subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
+def snapshot():
+ names=subprocess.check_output(['git','ls-files','-z','--cached','--others','--exclude-standard'],cwd=ROOT).decode().split('\0')
+ files=[]
+ for name in sorted(set(x for x in names if x and not x.startswith('progress/'))):
+  p=ROOT/name
+  if p.is_symlink(): b=os.readlink(p).encode();kind='symlink'
+  elif p.is_file(): b=p.read_bytes();kind='file'
+  else:
+   files.append({'path':name,'kind':'missing','bytes':None,'sha256':None});continue
+  files.append({'path':name,'kind':kind,'bytes':len(b),'sha256':sha(b)})
+ return {'scope':'All git cached + untracked nonignored paths except progress/**; includes generated/locks/toolchain configuration and tracked output PNGs',
+         'count':len(files),'files':files,'aggregate_sha256':sha(json.dumps(files,sort_keys=True,separators=(',',':')).encode())}
+def git_compare(actual):
+ expected={}
+ for row in subprocess.check_output(['git','ls-tree','-rz',COMMIT],cwd=ROOT).split(b'\0'):
+  if not row:continue
+  rawheader,rawname=row.split(b'\t',1);name=rawname.decode();mode,kind,oid=rawheader.decode().split()
+  if not name.startswith('progress/'):
+   assert kind=='blob',(name,kind)
+   expected[name]=(mode,oid)
+ values={x['path']:x for x in actual['files']}
+ records=[]
+ for name in sorted(expected.keys()|values.keys()):
+  p=ROOT/name
+  raw=os.readlink(p).encode() if p.is_symlink() else p.read_bytes() if p.is_file() else None
+  oid=hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest() if raw is not None else None
+  mode='120000' if p.is_symlink() else '100755' if p.is_file() and p.stat().st_mode & 0o111 else '100644'
+  match=name in values and expected.get(name)==(mode,oid)
+  records.append({'path':name,'git_blob':expected.get(name,[None,None])[1],
+                  'actual_git_blob':oid,'git_mode':expected.get(name,[None,None])[0],'actual_mode':mode,'matches':match})
+ return {'commit':COMMIT,'expected_count':len(expected),'actual_count':len(values),'all_match':all(x['matches'] for x in records),'files':records}

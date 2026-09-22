@@ -1,0 +1,9 @@
+from pathlib import Path
+import json,hashlib,datetime,subprocess,os,sys
+B=Path(__file__).resolve().parent;R=B.parent/'m53-active';O=B/sys.argv[1];O.mkdir(exist_ok=False);phase=sys.argv[2];assert phase in ('none','4750','4600','4800')
+sha=lambda p:hashlib.sha256(p.read_bytes()).hexdigest()
+paths=[p for p in subprocess.check_output(['git','ls-files','-z'],cwd=R).decode().split('\0')if p and not p.startswith('progress/') and (R/p).is_file()]
+def inputs():return {'repository':{p:sha(R/p)for p in sorted(paths)},'private_harness':{p.relative_to(B).as_posix():sha(p)for p in sorted((B/'harness').iterdir())if p.is_file()},'driver_sha256':sha(Path(__file__))}
+before=inputs();started=datetime.datetime.now(datetime.timezone.utc).isoformat();cmd=['bash','scripts/node.sh','node','apps/web/node_modules/@playwright/test/cli.js','test','--config',str(B/'harness/playwright.config.ts')];env=dict(os.environ,TMPDIR='<private-home>/.cache/lw53-diag-tmp',LEARNING_E2E_OUTPUT_DIR=str(O/'artifacts'),TUTOR_COMPLETION_PHASE_MS=phase)
+with (O/'run.log').open('wb')as log:result=subprocess.run(cmd,cwd=R,env=env,stdout=log,stderr=subprocess.STDOUT)
+after=inputs();record={'command':cmd,'phase_ms':None if phase=='none'else int(phase),'started_at':started,'finished_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'exit_code':result.returncode,'source_before':before,'source_after':after,'source_unchanged':before==after,'log_sha256':sha(O/'run.log'),'scope':'Actual original third case business assertions including original5000ms; cache-only transparent/gated real completed APIResponse; synthetic loopback, no product edit/real vendor call.'};(O/'receipt.json').write_text(json.dumps(record,indent=2)+'\n');print(json.dumps({'run':O.name,'exit_code':result.returncode,'source_unchanged':before==after,'log_sha256':record['log_sha256']}));print((O/'run.log').read_text()[-6000:])

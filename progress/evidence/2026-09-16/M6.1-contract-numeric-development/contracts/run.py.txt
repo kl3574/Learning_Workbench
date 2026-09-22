@@ -1,0 +1,20 @@
+import hashlib,json,subprocess,sys
+from pathlib import Path
+from datetime import datetime,timezone
+ROOT=Path('<LOCAL_HOME>/.cache/learning-workbench-acceptance/m61-active')
+OUT=Path(__file__).parent
+FILES=['services/api/app/authoring_dto.py','services/api/app/application/authoring_models.py','tests/contract/test_authoring_contracts.py','scripts/authoring_contracts.py','PRODUCT_DESIGN.md','packages/contracts/domain_models.py','services/api/app/import_dto.py','services/api/app/retrieval_dto.py']
+def sha(b):return hashlib.sha256(b).hexdigest()
+def snap(path):
+ rows=[]
+ for name in FILES:
+  p=ROOT/name
+  if not p.exists():rows.append({'path':name,'exists':False});continue
+  b=p.read_bytes();rows.append({'path':name,'exists':True,'sha256':sha(b),'bytes':len(b)})
+ path.write_text(json.dumps(rows,indent=2)+'\n');return rows
+name=sys.argv[1];cmd=sys.argv[2:];dest=OUT/name;dest.mkdir()
+before=snap(dest/'source-before.json');started=datetime.now(timezone.utc).isoformat()
+with (dest/'run.log').open('wb') as f: code=subprocess.run(cmd,cwd=ROOT,stdout=f,stderr=subprocess.STDOUT).returncode
+finished=datetime.now(timezone.utc).isoformat();after=snap(dest/'source-after.json')
+x={'command':cmd,'started_at':started,'finished_at':finished,'exit_code':code,'source_unchanged':before==after,'git_head':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),'log_sha256':sha((dest/'run.log').read_bytes()),'source_before_sha256':sha((dest/'source-before.json').read_bytes()),'source_after_sha256':sha((dest/'source-after.json').read_bytes())}
+(dest/'receipt.json').write_text(json.dumps(x,indent=2)+'\n');print(json.dumps(x));print((dest/'run.log').read_text()[-6000:])

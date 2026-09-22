@@ -1,0 +1,158 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_corrupt_execution_actor_cannot_borrow_another_live_author_after_granter_demotion _
+
+tmp_path = PosixPath('/tmp/pytest-of-lkx/pytest-64/test_corrupt_execution_actor_c0')
+
+    def test_corrupt_execution_actor_cannot_borrow_another_live_author_after_granter_demotion(tmp_path):
+        async def run():
+            async with local_provider(text=canonical_bytes(payload()).decode()) as server:
+                state = configured(tmp_path, server.base_url)
+                database, identity, service, worker, _, _ = state
+                original, _, _ = approved(state)
+                _, other = consume_bootstrap(database, issue_bootstrap_code(database))
+                SessionService(database).switch_role(other, RoleRequest(role='author'), 'other-author')
+                SessionService(database).switch_role(identity, RoleRequest(role='learner'), 'granter-demoted')
+                with database.transaction() as conn:
+                    repo = AuthoringRepository(conn, identity.workspace_id)
+                    record = repo.load(original.id)
+                    record.execution_actor_id = other.id
+                    repo.save(record)  # Only current owner JSON/hash; original Provider grant actor unchanged.
+                try:
+                    await asyncio.to_thread(worker.run_once)
+                except ApiError as error:
+                    assert error.code == 'AUTHORING_INTEGRITY_ERROR'
+                assert len(server.requests) == 0
+>       asyncio.run(run())
+
+../m61-authoring-independent-review-v1/test_actor_and_control_probe.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    async def run():
+        async with local_provider(text=canonical_bytes(payload()).decode()) as server:
+            state = configured(tmp_path, server.base_url)
+            database, identity, service, worker, _, _ = state
+            original, _, _ = approved(state)
+            _, other = consume_bootstrap(database, issue_bootstrap_code(database))
+            SessionService(database).switch_role(other, RoleRequest(role='author'), 'other-author')
+            SessionService(database).switch_role(identity, RoleRequest(role='learner'), 'granter-demoted')
+            with database.transaction() as conn:
+                repo = AuthoringRepository(conn, identity.workspace_id)
+                record = repo.load(original.id)
+                record.execution_actor_id = other.id
+                repo.save(record)  # Only current owner JSON/hash; original Provider grant actor unchanged.
+            try:
+                await asyncio.to_thread(worker.run_once)
+            except ApiError as error:
+                assert error.code == 'AUTHORING_INTEGRITY_ERROR'
+>           assert len(server.requests) == 0
+E           assert 1 == 0
+E            +  where 1 = len([b'{"max_completion_tokens":5000,"messages":[{"content":"Produce one worked example as exactly one JSON object, withou...ole":"user"}],"model":"test-only-complete-byte-model-v1","n":1,"stream":true,"stream_options":{"include_usage":true}}'])
+E            +    where [b'{"max_completion_tokens":5000,"messages":[{"content":"Produce one worked example as exactly one JSON object, withou...ole":"user"}],"model":"test-only-complete-byte-model-v1","n":1,"stream":true,"stream_options":{"include_usage":true}}'] = LocalProvider(base_url='http://127.0.0.1:43405/v1', connections=1, headers_received=1).requests
+
+../m61-authoring-independent-review-v1/test_actor_and_control_probe.py:34: AssertionError
+___ test_checked_output_remains_recoverable_after_control_only_finalization ____
+
+tmp_path = PosixPath('/tmp/pytest-of-lkx/pytest-64/test_checked_output_remains_re0')
+
+    def test_checked_output_remains_recoverable_after_control_only_finalization(tmp_path):
+        async def run():
+            async with local_provider(text=canonical_bytes(payload()).decode()) as server:
+                state = configured(tmp_path, server.base_url)
+                database, identity, service, worker, _, dispatch = state
+                original, _, grant = approved(state)
+                lease = worker.claim()
+                assert lease is not None
+                # Actual Provider terminal is durable; this phase intentionally stops
+                # before Authoring's own final transaction, not a fake terminal.
+                async with aclosing(dispatch.dispatch(identity, original.id, grant.id, lease.dispatch(), asyncio.Event())) as stream:
+                    async for _ in stream:
+                        pass
+                assert len(server.requests) == 1
+                SessionService(database).switch_role(identity, RoleRequest(role='learner'), 'demote-before-adoption')
+                await asyncio.to_thread(worker._finish, lease)
+                safe = service.job(replace(identity, role='learner'), original.id)
+                assert safe.status == 'failed'
+                SessionService(database).switch_role(replace(identity, role='learner'), RoleRequest(role='author'), 'restore-author')
+                restored = service.read(identity, original.id)
+                assert restored.summary.id == original.id
+                assert restored.raw_answer == canonical_bytes(payload()).decode()
+                assert restored.summary.candidate is None
+                assert len(server.requests) == 1
+>       asyncio.run(run())
+
+../m61-authoring-independent-review-v1/test_actor_and_control_probe.py:62: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+../m61-authoring-independent-review-v1/test_actor_and_control_probe.py:57: in run
+    restored = service.read(identity, original.id)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+services/api/app/application/authoring.py:86: in read
+    return self._history(conn, identity, identifier).view
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.application.authoring.AuthoringService object at 0x759ddcb062d0>
+conn = <sqlite3.Connection object at 0x759ddcb01030>
+identity = SessionIdentity(id='session_0170095ff21c40e1874fc911239eccc3', workspace_id='workspace_3b927b1d84bd46b1a2f43443977a716...srf_token='<REDACTED_SYNTHETIC_SESSION_CSRF>', expires_at='2026-09-16T05:05:35.012009Z')
+identifier = 'authoring_de284c9920b74d8ea8cbb75cf3fca60d'
+
+    def _history(self, conn: sqlite3.Connection, identity: SessionIdentity, identifier: str):
+        record = AuthoringRepository(conn, identity.workspace_id).load(identifier)
+        context = self.context.read(conn, identity, record.view.preparation.context_snapshot_id)
+        actual = build_outbound(record.input, context, record.view.summary.job_revision)
+        summary = AuthoringPreparationSummary(context_snapshot_id=context.snapshot.id,
+            snapshot_sha256=context.snapshot.snapshot_sha256, job_input_sha256=actual.job_input_sha256,
+            prepared_input_sha256=actual.prepared_input_sha256, character_count=context.snapshot.character_count,
+            materials=context.materials, warnings=context.warnings)
+        if summary != record.view.preparation:
+            raise integrity()
+        view = record.view
+        if view.provider_receipt_id is not None:
+            if self.provider is None or view.consent_id is None:
+                raise ApiError(503, 'AUTHORING_OUTPUT_UNAVAILABLE', '原生成结果当前无法核验。')
+            original = self.provider.read_result(conn, identity, identifier, view.consent_id)
+            if original is None or original.receipt.id != view.provider_receipt_id:
+                raise integrity()
+            terminal = original.receipt.terminal
+            outcome = ('incomplete' if terminal.outcome == 'incomplete' else 'completed') if isinstance(
+                terminal, CheckedProviderFinished) else terminal.provider_outcome
+            if (view.provider_outcome != outcome or view.usage != terminal.usage
+                    or view.raw_answer != (original.answer.text if original.answer else None)
+                    or view.raw_refusal != (original.refusal.text if original.refusal else None)):
+>               raise integrity()
+E               services.api.app.application.errors.ApiError: (409, 'AUTHORING_INTEGRITY_ERROR', '创作持久记录未通过完整性校验。')
+
+services/api/app/application/authoring.py:56: ApiError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <HOME>/.cache/learning-workbench-acceptance/m61-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <HOME>/.cache/learning-workbench-acceptance/m61-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ::test_corrupt_execution_actor_cannot_borrow_another_live_author_after_granter_demotion
+FAILED ::test_checked_output_remains_recoverable_after_control_only_finalization
+2 failed, 2 warnings in 1.35s

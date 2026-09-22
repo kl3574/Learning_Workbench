@@ -1,0 +1,22 @@
+# M6.1 numerical evaluator and runtime development evidence
+
+This is a cache-only publication candidate. It records D's bounded local development, not M6.1 acceptance, publication, mathematical review, Provider execution or a working isolated calculator on this host.
+
+Final actual checks: focused-final-26 has 39 PASS and 1 explicit environment SKIP (33 pure arithmetic cases and 6 runtime/manifest/pre-launch checks), 0.96 s. Ruff passes five owned files; Mypy passes two service modules. Each final receipt records the actual ten-file before/after input set. Those inventories are a bounded input set, not a claim that all host dependencies had complete before/after execution snapshots. The 353-member runtime manifest records actual closure identities and resource configuration; it is not evidence that namespace entry or all runtime limits worked.
+
+The attempted sealed calculator could not enter its network namespace: actual bubblewrap stderr is `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`, with the host's AppArmor user-namespace restriction enabled. The earlier actual failed functional tests are retained. The final functional test skips only this recognized environmental denial. No successful calculator, in-flight cancellation, successful sandbox filesystem/network/process denial test, or actual 5 s / 2 s / 256 MiB / 64 KiB enforcement has been demonstrated. There is no ordinary-process fallback and no change to host AppArmor policy. Canonical-path and existing-profile probes were diagnostics only; they were not adopted as production execution routes.
+
+Failure classification:
+
+- evaluator-red-01 and runtime-red-01: not-yet-implemented module import failures. evaluator-red-03 and runtime-red-03: missing callable portions before their implementation. These are development RED, not completed isolation/security tests.
+- runtime-first-execution-04 and runtime-observation-05: real unsuccessful calculator attempts. runtime-observation-06 records the sealed launch's SIGFPE. The historical loader source is preserved; removing a duplicate loader preload resolved that launch defect and exposed the host namespace denial (runtime-loader-07).
+- runtime-environment-probe-08 and -09: diagnostic execution observed a bad seccomp descriptor and executable-mount permission error in canonical-path probes. Those implementation errors were corrected; the final sealed route still received the host denial (runtime-still-blocked-10). runtime-profile-probe-11/12 preserve the exact existing-profile/label observations, not successful calculator output.
+- lint-first has four development lint findings. focused-13, lint-14, types-15 share a malformed docstring edit; these are syntax/harness development failures, not business counterexamples.
+- factory-red-24 is an actual constructor filesystem-access counterexample; factory-green-25 runs the same permanent test after removing eager path resolution. Its RED/GREEN receipts preserve their real input differences.
+- Intermediate PASS logs remain historical and are not relabeled as final-source checks. Earlier development logs predate the fixed-input runner; no missing source-before/after observation is reconstructed retrospectively.
+
+Five final owned sources and three specifically relevant historical source snapshots are included as `.py.txt`. Runtime metadata includes hashes and logical paths only; host executables, shared libraries, interpreter/standard-library bytes, credentials and database files are excluded. run_focused.py.txt is the actual bounded test driver with the same declared prefix normalization as every other payload.
+
+The manifest gives each original cache-relative source path and its raw/public SHA-256 and byte length. The sole byte transformation is the declared fixed home prefix mapping; raw files remain unchanged privately. Raw hashes referenced inside normalized JSON receipts still mean original raw bytes, while manifest public hashes identify the supplied derivative. Aggregate hashes use the exact sorted path/NUL/SHA/LF algorithm stated in manifest.json.
+
+Publication inspection uses the repository's actual scripts.check_publication.inspect on every supplied candidate file under the proposed progress/evidence path. It supplements the explicit provenance review; it is not a general detector of arbitrary sensitive prose. This package creation did not rerun business tests or isolated execution.

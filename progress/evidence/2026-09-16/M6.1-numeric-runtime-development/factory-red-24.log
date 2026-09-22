@@ -1,0 +1,36 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_____________ test_runtime_factory_does_not_resolve_or_read_files ______________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x79a0c6242c90>
+
+    def test_runtime_factory_does_not_resolve_or_read_files(monkeypatch):
+        import builtins
+        import os
+        def forbidden(*args, **kwargs):
+            pytest.fail('runtime factory must not inspect the filesystem')
+        with monkeypatch.context() as patch:
+            patch.setattr(Path, 'resolve', forbidden)
+            patch.setattr(os, 'open', forbidden)
+            patch.setattr(builtins, 'open', forbidden)
+>           runtime = NumericRuntime()
+                      ^^^^^^^^^^^^^^^^
+
+tests/integration/test_authoring_numeric_runtime.py:130: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/api/app/infrastructure/authoring_numeric_runtime.py:190: in __init__
+    self.entry_path = entry_path or Path(__file__).resolve().parents[4] / 'scripts/authoring_numeric_entry.py'
+                                    ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (PosixPath('<HOME>/.cache/learning-workbench-acceptance/m61-active/services/api/app/infrastructure/authoring_numeric_runtime.py'),)
+kwargs = {}
+
+    def forbidden(*args, **kwargs):
+>       pytest.fail('runtime factory must not inspect the filesystem')
+E       Failed: runtime factory must not inspect the filesystem
+
+tests/integration/test_authoring_numeric_runtime.py:125: Failed
+=========================== short test summary info ============================
+FAILED tests/integration/test_authoring_numeric_runtime.py::test_runtime_factory_does_not_resolve_or_read_files
+1 failed in 0.19s

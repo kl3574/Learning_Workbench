@@ -1,0 +1,106 @@
+{
+  "recorded_at": "2026-09-15T17:33:29.598545+00:00",
+  "fixed_commit": "80986eaed01d4de620cdd4320a7fab8ce01ce959",
+  "source_count": 903,
+  "source_aggregate": "9f942beddf9828f8b420ccc01af6d0254f693e8b0eb98017844b6519361feec6",
+  "driver_hashes": {
+    "run.py": "5a58f8e82429399d6fb75225522dde3ae9677d5d927c4ca1743e2c23aa5f9adc",
+    "common.py": "5b5bba3b02d1ba27acf229b3c46c8ba0b0d757696c6efe50b1266c97c563214c",
+    "restore.py": "8228d3e215a085704bb5a53678d11bc1c4a6abef738c9e64293cd2a2805ddbde"
+  },
+  "commands": [
+    [
+      "01-ruff",
+      [
+        ".venv/bin/ruff",
+        "check",
+        "."
+      ]
+    ],
+    [
+      "02-mypy",
+      [
+        ".venv/bin/mypy"
+      ]
+    ],
+    [
+      "03-python",
+      [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest"
+      ]
+    ],
+    [
+      "04-web-lint",
+      [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "lint"
+      ]
+    ],
+    [
+      "05-web-typecheck",
+      [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "typecheck"
+      ]
+    ],
+    [
+      "06-web-tests",
+      [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "test"
+      ]
+    ],
+    [
+      "07-web-build",
+      [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "build"
+      ]
+    ],
+    [
+      "08-spec",
+      [
+        ".venv/bin/python",
+        "-B",
+        "scripts/verify_spec.py"
+      ]
+    ],
+    [
+      "09-native",
+      [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "test:e2e"
+      ]
+    ]
+  ],
+  "tests_started": false,
+  "ui_top_level_file_count": 44
+}

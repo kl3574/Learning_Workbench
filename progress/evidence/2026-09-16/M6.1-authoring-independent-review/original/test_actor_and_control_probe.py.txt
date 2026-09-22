@@ -1,0 +1,62 @@
+"""Additional bounded identity/output-recovery probes, no external provider."""
+import asyncio
+from contextlib import aclosing
+from dataclasses import replace
+import pytest
+from packages.contracts.canonical import canonical_bytes
+from services.api.app.application.errors import ApiError
+from services.api.app.application.sessions import SessionService
+from services.api.app.dto import RoleRequest
+from services.api.app.infrastructure.authoring_repository import AuthoringRepository
+from services.api.app.infrastructure.security import consume_bootstrap, issue_bootstrap_code
+from tests.integration.test_authoring_provider import configured, approved, payload
+from tests.provider_protocol_fixture import local_provider
+
+
+def test_corrupt_execution_actor_cannot_borrow_another_live_author_after_granter_demotion(tmp_path):
+    async def run():
+        async with local_provider(text=canonical_bytes(payload()).decode()) as server:
+            state = configured(tmp_path, server.base_url)
+            database, identity, service, worker, _, _ = state
+            original, _, _ = approved(state)
+            _, other = consume_bootstrap(database, issue_bootstrap_code(database))
+            SessionService(database).switch_role(other, RoleRequest(role='author'), 'other-author')
+            SessionService(database).switch_role(identity, RoleRequest(role='learner'), 'granter-demoted')
+            with database.transaction() as conn:
+                repo = AuthoringRepository(conn, identity.workspace_id)
+                record = repo.load(original.id)
+                record.execution_actor_id = other.id
+                repo.save(record)  # Only current owner JSON/hash; original Provider grant actor unchanged.
+            try:
+                await asyncio.to_thread(worker.run_once)
+            except ApiError as error:
+                assert error.code == 'AUTHORING_INTEGRITY_ERROR'
+            assert len(server.requests) == 0
+    asyncio.run(run())
+
+
+def test_checked_output_remains_recoverable_after_control_only_finalization(tmp_path):
+    async def run():
+        async with local_provider(text=canonical_bytes(payload()).decode()) as server:
+            state = configured(tmp_path, server.base_url)
+            database, identity, service, worker, _, dispatch = state
+            original, _, grant = approved(state)
+            lease = worker.claim()
+            assert lease is not None
+            # Actual Provider terminal is durable; this phase intentionally stops
+            # before Authoring's own final transaction, not a fake terminal.
+            async with aclosing(dispatch.dispatch(identity, original.id, grant.id, lease.dispatch(), asyncio.Event())) as stream:
+                async for _ in stream:
+                    pass
+            assert len(server.requests) == 1
+            SessionService(database).switch_role(identity, RoleRequest(role='learner'), 'demote-before-adoption')
+            await asyncio.to_thread(worker._finish, lease)
+            safe = service.job(replace(identity, role='learner'), original.id)
+            assert safe.status == 'failed'
+            SessionService(database).switch_role(replace(identity, role='learner'), RoleRequest(role='author'), 'restore-author')
+            restored = service.read(identity, original.id)
+            assert restored.summary.id == original.id
+            assert restored.raw_answer == canonical_bytes(payload()).decode()
+            assert restored.summary.candidate is None
+            assert len(server.requests) == 1
+    asyncio.run(run())

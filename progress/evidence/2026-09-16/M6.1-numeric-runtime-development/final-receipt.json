@@ -1,0 +1,80 @@
+{
+  "status": "LOCAL_EVALUATOR_AND_FAIL_CLOSED_RUNTIME_IMPLEMENTED; ACTUAL_CALCULATOR_BLOCKED_ENVIRONMENT",
+  "created_at": "2026-09-15T16:59:39.150518+00:00",
+  "git_head_observed": "81d2b92e2f9ed24631988f860a1fba528f2c4ad7",
+  "spec_sha256": "30220c34fe7312887f5bcb1c67406c9638f1719ff3ed7bc9e95d7d5085b5d924",
+  "owned_sources": {
+    "services/api/app/application/authoring_numeric.py": {
+      "sha256": "1b8a49d15b0ded3671a616e290536d87a082b0977465804a1634b951a305913d",
+      "bytes": 9239
+    },
+    "services/api/app/infrastructure/authoring_numeric_runtime.py": {
+      "sha256": "99e0e8583a57ec3fe94d77e5d80009f3e515a127d6291c324d9e0453a0313a9c",
+      "bytes": 25880
+    },
+    "scripts/authoring_numeric_entry.py": {
+      "sha256": "a03756b65361c3e1e1f2be9178a737c79460cc847dfa430547d412c713499374",
+      "bytes": 3403
+    },
+    "tests/unit/test_authoring_numeric.py": {
+      "sha256": "85d7ff5bcbd86af8af4f843f58e83f43e3111a1940ca3d0a9f73e4143c1a90ed",
+      "bytes": 5040
+    },
+    "tests/integration/test_authoring_numeric_runtime.py": {
+      "sha256": "2ee7371622bc1dc575a3b27d497734dcbee1291c8c3796da831ac84994c21a63",
+      "bytes": 6373
+    }
+  },
+  "final_checks": {
+    "pytest": "39 PASS, 1 SKIP; 33 evaluator cases plus 6 runtime/pre-launch/manifest checks; actual calculator test skipped only for exact observed host EPERM with enabled AppArmor restriction",
+    "ruff": "PASS, 5 owned files",
+    "mypy": "PASS, 2 service modules"
+  },
+  "fixed_input_receipts": [
+    "focused-final-26.json",
+    "lint-final-27.json",
+    "types-final-28.json"
+  ],
+  "actual_environment_failure": {
+    "stderr": "bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted",
+    "sysctl": "apparmor_restrict_unprivileged_userns=1",
+    "source_profile": "/etc/apparmor.d/bwrap-userns-restrict",
+    "observations": [
+      "runtime-loader-07.log",
+      "runtime-still-blocked-10.log",
+      "runtime-profile-probe-11.log",
+      "runtime-profile-probe-12.log"
+    ],
+    "plain_process_fallback": false,
+    "system_profile_modified": false
+  },
+  "not_run": [
+    "successful full sealed calculator execution",
+    "in-flight calculator cancellation",
+    "actual 5s wall/2s CPU/256MiB/64KiB enforcement under successful sandbox entry",
+    "runtime filesystem/network/process denial checks inside a successfully started calculator",
+    "end-to-end approval/Jobs/DB/browser pipeline"
+  ],
+  "fact_boundaries": [
+    "prepare/check read 353 actual allowed runtime members; profile is a file/config identity, not an availability or isolation-success claim",
+    "original actual functional FAIL logs remain; final SKIP is explicit environmental qualification, not repaired arithmetic success",
+    "factory Path.resolve counterexample is same permanent test RED24 to GREEN25",
+    "initial development logs before run_focused.py do not have reconstructed before/after snapshots; do not retroactively claim fixed-source gate for them",
+    "final last cancel/end check and kill-before-reaped guard were static defensive fixes; in-flight behavioral proof remains NOT_RUN"
+  ],
+  "runtime_manifest_sha256": "429a335955eb3ca951fe87fe7a25f283fb6ba97c94ae1e5cd75e927a3ad8d52a",
+  "runtime_member_count": 353,
+  "interface": {
+    "prepare": "prepare() -> NumericRuntimeProfile; reads fresh files, no child",
+    "check": "check(profile) -> None; fresh full closure comparison",
+    "manifest": "manifest_document() -> canonical bytes with safe logical paths; manifest() -> tuple[RuntimeMember]",
+    "run_checked": "run_checked(job, cancellation, *, on_started=None) -> NumericExecution(result, stdout, stderr, output_complete, manifest, manifest_json)",
+    "cancel": "cancel() -> bool; only this active runtime process group; false if no active process",
+    "output_hash": "SHA256 complete stdout bytes; null if no stdout or incomplete output; stderr separate private bytes"
+  },
+  "no_product_scope_changes": [
+    "no spec/core54/baseline/main/http/database/migration/progress edits",
+    "no network/Provider/credentials/browser/full-suite calls",
+    "no commit/push"
+  ]
+}

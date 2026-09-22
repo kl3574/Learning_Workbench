@@ -1,0 +1,56 @@
+
+ RUN  v5.0.0 <private-home>/.cache/learning-workbench-acceptance/m61-authoring-ui-independent-review-v1
+
+ ❯ late-rejection.test.tsx (1 test | 1 failed) 187ms
+   × late original rejection journal read cannot enter a replacement workspace 186ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  late-rejection.test.tsx > late original rejection journal read cannot enter a replacement workspace
+AssertionError: expected [ { kind: 'prepare', …(6) } ] to deeply equal []
+
+- Expected
++ Received
+
+- []
++ [
++   {
++     "ack": null,
++     "body": {
++       "objectives": [
++         "synthetic objective",
++       ],
++       "output_kind": "worked_example",
++       "prerequisites": [],
++       "proof_policy": "full",
++       "provider_id": "provider_test",
++       "source_refs": [],
++       "topic": "OLD WORKSPACE PRIVATE REQUEST",
++     },
++     "command_id": "authoring_b30d5732-ce83-4fc7-b697-2020c393ac45",
++     "kind": "prepare",
++     "rejection": {
++       "code": "REVISION_MISMATCH",
++       "status": 412,
++     },
++     "version": 1,
++     "workspace_id": "workspace_ffb6e44b-35f4-48a3-ad17-695fe5543cc9",
++   },
++ ]
+
+ ❯ late-rejection.test.tsx:37:40
+     35|   expect(hook.result.current.commands).toEqual([])
+     36|   await act(async()=>{release();await pending})
+     37|   expect(hook.result.current.commands).toEqual([])
+       |                                        ^
+     38|   expect(old.port.prepare).toHaveBeenCalledTimes(1)
+     39|   expect(next.port.prepare).not.toHaveBeenCalled()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  01:14:51
+   Duration  848ms (environment 36%, tests 26%, transform 23%, import 14%)
+
