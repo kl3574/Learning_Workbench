@@ -5,6 +5,7 @@ JSON validity and relational identity do not certify a machine or human review.
 """
 import json
 import sqlite3
+from contextlib import closing
 
 import pytest
 
@@ -318,3 +319,49 @@ def test_sql_does_not_authenticate_hashes_owner_claims_or_current_actor(storage)
         insert(connection, 'review_commands', {**command(registered), 'ack_json': json.dumps({'fixture_only': True})})
         assert connection.execute('SELECT count(*) FROM local_sessions').fetchone()[0] == 0
         assert connection.execute('PRAGMA foreign_key_check').fetchall() == []
+
+
+def test_copy_can_clear_live_reviewer_without_rewriting_immutable_history(storage, tmp_path):
+    database, registered, _ = populated(storage)
+    with database.transaction() as connection:
+        connection.execute('INSERT INTO local_sessions(id,workspace_id,token_hash,csrf_hash,role,expires_at) '
+                           "VALUES('synthetic_actor',?,?,?,'author','2099-01-01T00:00:00Z')",
+                           (registered['workspace_id'], 'c' * 64, 'd' * 64))
+        connection.execute("UPDATE reviews SET reviewer_session_id='synthetic_actor'")
+        before = {table: rows(connection, table) for table in TABLES}
+        original = connection.execute('SELECT receipt_json FROM reviews').fetchone()[0]
+    backup = database.online_backup(tmp_path / 'copy.sqlite3')
+    with closing(sqlite3.connect(backup)) as connection:
+        connection.execute('PRAGMA foreign_keys=ON')
+        connection.execute('UPDATE reviews SET reviewer_session_id=NULL')
+        connection.execute('DELETE FROM local_sessions')
+        connection.commit()
+        assert connection.execute('SELECT receipt_json,reviewer_session_id FROM reviews').fetchone() == (original, None)
+        assert {table: rows(connection, table) for table in TABLES} == before
+        assert connection.execute('PRAGMA foreign_key_check').fetchall() == []
+    with database.connect() as connection:
+        assert connection.execute('SELECT reviewer_session_id FROM reviews').fetchone()[0] == 'synthetic_actor'
+
+
+@pytest.mark.parametrize(('table', 'field', 'value'), [
+    ('review_jobs', 'input_sha256', 'A' * 64), ('review_jobs', 'draft_revision', 1.5),
+    ('review_revisions', 'receipt_sha256', 'g' * 64), ('review_revisions', 'record_sha256', 'a' * 63),
+    ('review_revisions', 'revision', 0), ('review_artifact_bindings', 'ordinal', 0.5),
+    ('review_artifact_bindings', 'binding_sha256', 'A' * 64), ('review_artifact_bindings', 'manifest_sha256', 'g' * 64),
+    ('review_commands', 'basis_revision', 1.5), ('review_commands', 'request_sha256', 'a' * 63),
+    ('review_commands', 'ack_sha256', 'A' * 64), ('review_commands', 'command_key', ''),
+])
+def test_invalid_digest_and_numeric_storage_shapes_fail(storage, table, field, value):
+    database, registered = storage
+    with database.transaction() as connection:
+        revision = None
+        if table != 'review_jobs':
+            insert(connection, 'review_jobs', registered)
+            revision = receipt(connection, registered)
+        if table == 'review_artifact_bindings':
+            insert(connection, 'review_revisions', revision)
+            artifact(connection, registered['workspace_id'])
+    source = {'review_jobs': registered, 'review_revisions': revision,
+              'review_artifact_bindings': binding(registered), 'review_commands': command(registered)}[table]
+    with pytest.raises(sqlite3.IntegrityError), database.transaction() as connection:
+        insert(connection, table, {**source, field: value})

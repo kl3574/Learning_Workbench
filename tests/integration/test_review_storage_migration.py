@@ -1,7 +1,11 @@
 """SQLite schema boundaries only; SQL fixtures do not authenticate a review."""
 from contextlib import closing
+import json
 import shutil
 import sqlite3
+import zipfile
+
+import pytest
 
 from services.api.app.infrastructure.config import REPOSITORY_ROOT, Settings
 from services.api.app.infrastructure.database import Database
@@ -59,3 +63,55 @@ def test_empty_install_has_no_machine_or_human_review(tmp_path):
     with database.connect() as connection:
         assert all(rows(connection, table) == [] for table in (*TABLES, 'reviews', 'jobs'))
         assert connection.execute('PRAGMA foreign_key_check').fetchall() == []
+
+
+def test_failure_after_new_schema_rolls_back_tables_indexes_and_migration_record(tmp_path):
+    database, workspace = before_catalog(tmp_path)
+    with database.transaction() as connection:
+        legacy_review(connection, workspace, source_candidate(connection, workspace, 'draft_legacy', 'import'))
+    enable_catalog(database)
+    database.initialize()
+    with database.connect() as connection:
+        before = {table: rows(connection, table) for table in ('reviews', 'jobs', 'schema_migrations')}
+        schema = rows(connection, 'sqlite_master')
+    backups_before = set((database.settings.data_dir / 'backups').glob('*.sqlite3'))
+    target = enable_migration(database)
+    with target.open('a') as stream:
+        stream.write('\nINVALID SQL;\n')
+    with pytest.raises(sqlite3.OperationalError):
+        database.initialize()
+    with database.connect() as connection:
+        assert {table: rows(connection, table) for table in before} == before
+        assert rows(connection, 'sqlite_master') == schema
+        assert connection.execute('PRAGMA foreign_key_check').fetchall() == []
+    backups = set((database.settings.data_dir / 'backups').glob('*.sqlite3')) - backups_before
+    assert len(backups) == 1
+    with closing(sqlite3.connect(backups.pop())) as backup:
+        assert {table: rows(backup, table) for table in before} == before
+        assert backup.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
+
+
+def test_actual_backup_script_can_clear_legacy_session_without_changing_receipt(tmp_path):
+    from scripts.backup import create_backup
+
+    database, workspace = before_catalog(tmp_path)
+    with database.transaction() as connection:
+        original = legacy_review(connection, workspace, source_candidate(connection, workspace, 'draft_legacy', 'import'))
+    enable_catalog(database)
+    database.initialize()
+    enable_migration(database)
+    database.initialize()
+    archive = create_backup(database.settings)
+    snapshot = tmp_path / 'readback.sqlite3'
+    with zipfile.ZipFile(archive) as backup:
+        snapshot.write_bytes(backup.read('workspace.sqlite3'))
+        manifest = json.loads(backup.read('manifest.json'))
+        assert manifest['restore_acceptance'] == 'NOT_RUN'
+    with closing(sqlite3.connect(snapshot)) as connection:
+        assert connection.execute('SELECT receipt_json,reviewer_session_id FROM reviews').fetchone() == (original, None)
+        assert connection.execute('SELECT count(*) FROM local_sessions').fetchone()[0] == 0
+        assert all(rows(connection, table) == [] for table in TABLES)
+        assert connection.execute('PRAGMA foreign_key_check').fetchall() == []
+    with database.connect() as connection:
+        assert connection.execute('SELECT receipt_json FROM reviews').fetchone()[0] == original
+        assert connection.execute('SELECT reviewer_session_id FROM reviews').fetchone()[0] is not None
