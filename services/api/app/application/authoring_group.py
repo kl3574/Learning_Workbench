@@ -9,15 +9,16 @@ from ..import_dto import JobCancelRequest, JobSnapshot
 from ..infrastructure.authoring_job_repository import integrity
 from ..infrastructure.authoring_group_repository import AuthoringGroupRepository, AuthoringGroupRecord
 from ..infrastructure.database import Database
-from ..infrastructure.security import SessionIdentity
+from ..infrastructure.security import SessionIdentity, author_execution_identity
 from .authoring_group_context import AuthoringGroupContext
-from .authoring_group_models import AuthoringGroupJobInput
+from .authoring_group_models import AuthoringGroupCandidateRecord, AuthoringGroupJobInput
 from .authoring_group_source import group_preparation
 from .authoring_group_validation import group_private_solution_view
 from .errors import ApiError
 from .draft_candidate_models import ResolvedDraftCandidate, match_candidate
 from .provider_models import CheckedProviderFinished
 from .tutor_worker import TutorProviderPort
+from .review_material_models import CheckedReviewMaterial, GroupReviewMaterial, checked_material
 
 
 class AuthoringGroupService:
@@ -29,14 +30,33 @@ class AuthoringGroupService:
 
     def resolve_candidate(self, connection: sqlite3.Connection, identity: SessionIdentity,
                           candidate: dm.DraftCandidate) -> ResolvedDraftCandidate:
+        return self._candidate_history(connection, identity, candidate)[0]
+
+    def _candidate_history(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                           candidate: dm.DraftCandidate) -> tuple[ResolvedDraftCandidate, AuthoringGroupCandidateRecord, AuthoringGroupRecord]:
         self.context.check_access(connection, identity)
         repository = AuthoringGroupRepository(connection, identity.workspace_id)
         actual = repository.candidate(candidate.draft_id)
-        self.verify_history(connection, identity, actual.source_job_id)
+        history = self.verify_history(connection, identity, actual.source_job_id)
         expected = dm.DraftCandidate.model_validate(candidate.model_dump(mode='python'))
         actual_identity = dm.DraftCandidate.model_validate(actual.candidate.model_dump(mode='python'))
         match_candidate(expected, actual_identity)
-        return ResolvedDraftCandidate(identity.workspace_id, 'authoring', 'authoring_group', actual_identity)
+        resolved = ResolvedDraftCandidate(identity.workspace_id, 'authoring', 'authoring_group', actual_identity)
+        return resolved, actual, history
+
+    def read_review_material(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                             candidate: dm.DraftCandidate) -> CheckedReviewMaterial:
+        self.context.check_access(connection, identity)
+        current = author_execution_identity(connection, identity.workspace_id, identity.id)
+        resolved, actual, history = self._candidate_history(connection, current, candidate)
+        context = self.context.read_group(connection, current, history.view.preparation.context_snapshot_id)
+        self.context.verify_group(connection, current, context)
+        plan = AuthoringGroupRepository(connection, current.workspace_id).validate_plan(history)
+        if plan is None:
+            raise integrity()
+        return checked_material(resolved, GroupReviewMaterial(version='authoring-group-review-material-v1',
+            record=actual, input=history.input, context=context, plan=plan,
+            private_solution_coverage='included_in_complete_root_sha'))
 
     def verify_history(self, conn: sqlite3.Connection, identity: SessionIdentity, identifier: str) -> AuthoringGroupRecord:
         """Verify protected source and Provider history within the caller's transaction."""

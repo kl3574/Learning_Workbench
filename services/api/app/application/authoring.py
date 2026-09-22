@@ -13,14 +13,15 @@ from ..import_dto import JobCancelRequest, JobSnapshot
 from ..infrastructure.authoring_job_repository import integrity
 from ..infrastructure.authoring_repository import AuthoringRepository, AuthoringRecord
 from ..infrastructure.database import Database
-from ..infrastructure.security import SessionIdentity
+from ..infrastructure.security import SessionIdentity, author_execution_identity
 from .authoring_context import AuthoringContext
-from .authoring_models import AuthoringJobInput
+from .authoring_models import AuthoringCandidateRecord, AuthoringJobInput
 from .authoring_source import build_outbound
 from .errors import ApiError
 from .draft_candidate_models import ResolvedDraftCandidate, match_candidate
 from .provider_models import CheckedProviderFinished
 from .tutor_worker import TutorProviderPort
+from .review_material_models import CheckedReviewMaterial, SingleReviewMaterial, checked_material
 
 
 class AuthoringService:
@@ -33,14 +34,29 @@ class AuthoringService:
 
     def resolve_candidate(self, connection: sqlite3.Connection, identity: SessionIdentity,
                           candidate: dm.DraftCandidate) -> ResolvedDraftCandidate:
+        return self._candidate_history(connection, identity, candidate)[0]
+
+    def _candidate_history(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                           candidate: dm.DraftCandidate) -> tuple[ResolvedDraftCandidate, AuthoringCandidateRecord, AuthoringRecord]:
         self.context.check_access(connection, identity)
         repository = AuthoringRepository(connection, identity.workspace_id)
         actual = repository.candidate(candidate.draft_id)
-        self.verify_history(connection, identity, actual.source_job_id)
+        history = self.verify_history(connection, identity, actual.source_job_id)
         expected = dm.DraftCandidate.model_validate(candidate.model_dump(mode='python'))
         actual_identity = dm.DraftCandidate.model_validate(actual.candidate.model_dump(mode='python'))
         match_candidate(expected, actual_identity)
-        return ResolvedDraftCandidate(identity.workspace_id, 'authoring', 'authoring_single', actual_identity)
+        resolved = ResolvedDraftCandidate(identity.workspace_id, 'authoring', 'authoring_single', actual_identity)
+        return resolved, actual, history
+
+    def read_review_material(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                             candidate: dm.DraftCandidate) -> CheckedReviewMaterial:
+        self.context.check_access(connection, identity)
+        current = author_execution_identity(connection, identity.workspace_id, identity.id)
+        resolved, actual, history = self._candidate_history(connection, current, candidate)
+        context = self.context.read(connection, current, history.view.preparation.context_snapshot_id)
+        self.context.verify(connection, current, context)
+        return checked_material(resolved, SingleReviewMaterial(version='authoring-single-review-material-v1',
+            record=actual, input=history.input, context=context))
 
     def verify_history(self, conn: sqlite3.Connection, identity: SessionIdentity, identifier: str) -> AuthoringRecord:
         """Verify protected source and Provider history within the caller's transaction."""

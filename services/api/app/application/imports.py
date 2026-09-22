@@ -29,11 +29,12 @@ from ..infrastructure.idempotency import execute_idempotent
 from ..infrastructure.import_mapping import object_key, remap_import
 from ..infrastructure.import_repository import ImportRepository, identifier, json_object, json_text
 from ..infrastructure.provenance_repository import ProvenanceRepository
-from ..infrastructure.security import SessionIdentity, guard_subject_access
+from ..infrastructure.security import SessionIdentity, author_execution_identity, guard_subject_access
 from .content import ContentService
 from .errors import ApiError
 from .draft_candidate_models import ResolvedDraftCandidate, match_candidate
 from .policy import Policy
+from .review_material_models import CheckedReviewMaterial, ImportReviewMaterial, checked_material
 
 
 def invalid() -> ApiError:
@@ -107,6 +108,23 @@ class ImportService:
             raise damaged() from None
         match_candidate(candidate, actual)
         return ResolvedDraftCandidate(identity.workspace_id, 'import', 'import', actual)
+
+    def read_review_material(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                             candidate: dm.DraftCandidate) -> CheckedReviewMaterial:
+        from .authoring_context import AuthoringContext
+
+        AuthoringContext.check_access(connection, identity)
+        current = author_execution_identity(connection, identity.workspace_id, identity.id)
+        resolved = self.resolve_candidate(connection, current, candidate)
+        repository = ImportRepository(connection, current.workspace_id)
+        snapshot = self._draft_snapshot(repository, current, candidate.draft_id)
+        row = connection.execute('SELECT candidate_json FROM drafts WHERE id=? AND workspace_id=?',
+                                 (candidate.draft_id, current.workspace_id)).fetchone()
+        source = repository.load(json_object(row['candidate_json'])['import_id'])
+        payload = ImportReviewMaterial(version='import-review-material-v1', candidate=resolved.candidate,
+            import_id=source['id'], source_id=source['source_id'], original_input_sha256=source['input_sha256'],
+            payload=snapshot.payload, warnings=snapshot.warnings, private_solution_coverage='excluded')
+        return checked_material(resolved, payload)
 
     @contextmanager
     def _access(self, identity: SessionIdentity) -> Iterator[ImportRepository]:
@@ -311,36 +329,39 @@ class ImportService:
 
     def draft(self, identity: SessionIdentity, id: str) -> ImportDraftSnapshot:
         with self._access(identity) as repository:
-            draft = repository.connection.execute("SELECT * FROM drafts WHERE id=? AND workspace_id=?", (id, identity.workspace_id)).fetchone()
-            if draft is None:
-                raise missing()
-            candidate = json_object(draft["candidate_json"])
-            row = repository.load(candidate["import_id"])
-            self._private(identity, row)
-            self._guard_preview(repository, identity, row)
-            if id not in self._preview_data(row)["draft_ids"]:
+            return self._draft_snapshot(repository, identity, id)
+
+    def _draft_snapshot(self, repository: ImportRepository, identity: SessionIdentity, id: str) -> ImportDraftSnapshot:
+        draft = repository.connection.execute("SELECT * FROM drafts WHERE id=? AND workspace_id=?", (id, identity.workspace_id)).fetchone()
+        if draft is None:
+            raise missing()
+        candidate = json_object(draft["candidate_json"])
+        row = repository.load(candidate["import_id"])
+        self._private(identity, row)
+        self._guard_preview(repository, identity, row)
+        if id not in self._preview_data(row)["draft_ids"]:
+            raise damaged()
+        value = ENTITY_MODELS[draft["kind"]].model_validate(candidate["metadata"])
+        if metadata_sha256(value) != draft["candidate_sha256"]:
+            raise damaged()
+        payload: Any = value
+        warnings = [dm.Warning.model_validate(warning) for warning in self._preview_data(row)["warnings"]]
+        if isinstance(value, dm.ContentBlock):
+            info = repository.blob(value.body_sha256)
+            body = self.frozen_store(row).read(info.sha256, expected_size=info.size).decode("utf-8")
+            metadata = json_object(row["source_metadata"])
+            citations = [dm.Citation.model_validate(item) for item in metadata.get("citations", []) if item["id"] in value.citations]
+            if {citation.id for citation in citations} != set(value.citations) or len(citations) != len(set(value.citations)):
                 raise damaged()
-            value = ENTITY_MODELS[draft["kind"]].model_validate(candidate["metadata"])
-            if metadata_sha256(value) != draft["candidate_sha256"]:
-                raise damaged()
-            payload: Any = value
-            warnings = [dm.Warning.model_validate(warning) for warning in self._preview_data(row)["warnings"]]
-            if isinstance(value, dm.ContentBlock):
-                info = repository.blob(value.body_sha256)
-                body = self.frozen_store(row).read(info.sha256, expected_size=info.size).decode("utf-8")
-                metadata = json_object(row["source_metadata"])
-                citations = [dm.Citation.model_validate(item) for item in metadata.get("citations", []) if item["id"] in value.citations]
-                if {citation.id for citation in citations} != set(value.citations) or len(citations) != len(set(value.citations)):
-                    raise damaged()
-                locators = {citation.locator for citation in citations}
-                warnings = [warning for warning in warnings if warning.locator is None
-                            or warning.locator in {f"source:{row['source_id']}", f"source:{row['source_id']};docx:container"}
-                            or warning.locator in locators
-                            or any(locator.startswith(warning.locator + "/") for locator in locators)]
-                payload = BlockDraftPayload(metadata=value, body_markdown=body, source_id=row["source_id"], citations=citations)
-            return ImportDraftSnapshot(id=id, kind=value.entity, revision=draft["revision"], base_ref=None,
-                state=draft["status"], candidate_sha256=draft["candidate_sha256"], payload=payload,
-                warnings=warnings)
+            locators = {citation.locator for citation in citations}
+            warnings = [warning for warning in warnings if warning.locator is None
+                        or warning.locator in {f"source:{row['source_id']}", f"source:{row['source_id']};docx:container"}
+                        or warning.locator in locators
+                        or any(locator.startswith(warning.locator + "/") for locator in locators)]
+            payload = BlockDraftPayload(metadata=value, body_markdown=body, source_id=row["source_id"], citations=citations)
+        return ImportDraftSnapshot(id=id, kind=value.entity, revision=draft["revision"], base_ref=None,
+            state=draft["status"], candidate_sha256=draft["candidate_sha256"], payload=payload,
+            warnings=warnings)
 
     def _artifact(self, repository: ImportRepository, identity: SessionIdentity, id: str) -> tuple[sqlite3.Row, DownloadArtifact]:
         row = repository.connection.execute("SELECT * FROM artifacts WHERE id=? AND workspace_id=?", (id, identity.workspace_id)).fetchone()

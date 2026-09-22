@@ -11,11 +11,15 @@ from ..infrastructure.security import SessionIdentity, author_execution_identity
 from .authoring_context import AuthoringContext
 from .draft_candidate_models import DraftSourceKind, ResolvedDraftCandidate
 from .errors import ApiError
+from .review_material_models import CheckedReviewMaterial
 
 
 class DraftCandidateOwner(Protocol):
     def resolve_candidate(self, connection: sqlite3.Connection, identity: SessionIdentity,
                           candidate: dm.DraftCandidate) -> ResolvedDraftCandidate: ...
+
+    def read_review_material(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                             candidate: dm.DraftCandidate) -> CheckedReviewMaterial: ...
 
 
 class DraftCandidates:
@@ -29,6 +33,14 @@ class DraftCandidates:
         Missing registration is never repaired here, including for an otherwise
         valid legacy candidate. No owner detection by ID prefix or fallback scan.
         """
+        current, registered, owner = self._registered_owner(connection, identity, draft_id, expected_revision)
+        resolved = owner.resolve_candidate(connection, current, registered.candidate)
+        if resolved != registered:
+            raise ApiError(503, 'DRAFT_OWNER_INTEGRITY', '草稿所属记录当前无法核验。')
+        return resolved
+
+    def _registered_owner(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                          draft_id: str, expected_revision: int) -> tuple[SessionIdentity, ResolvedDraftCandidate, DraftCandidateOwner]:
         AuthoringContext.check_access(connection, identity)
         current = author_execution_identity(connection, identity.workspace_id, identity.id)
         AuthoringContext.check_access(connection, current)
@@ -37,10 +49,21 @@ class DraftCandidates:
         owner = self._owners.get(registered.source_kind)
         if owner is None:
             raise ApiError(503, 'DRAFT_OWNER_UNAVAILABLE', '草稿所属服务当前无法核验。')
-        resolved = owner.resolve_candidate(connection, current, registered.candidate)
-        if resolved != registered:
-            raise ApiError(503, 'DRAFT_OWNER_INTEGRITY', '草稿所属记录当前无法核验。')
-        return resolved
+        return current, registered, owner
+
+    def read_review_material(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                             draft_id: str, expected_revision: int) -> CheckedReviewMaterial:
+        """Resolve exactly one registered owner; never register, repair or execute."""
+        current, registered, owner = self._registered_owner(connection, identity, draft_id, expected_revision)
+        result = owner.read_review_material(connection, current, registered.candidate)
+        try:
+            result = CheckedReviewMaterial.model_validate(result.model_dump(mode='python'))
+        except (ValidationError, ValueError, TypeError, AttributeError):
+            raise ApiError(503, 'DRAFT_OWNER_INTEGRITY', '审核材料当前无法完整核验。') from None
+        if (result.workspace_id != registered.workspace_id or result.owner != registered.owner
+                or result.source_kind != registered.source_kind or result.candidate != registered.candidate):
+            raise ApiError(503, 'DRAFT_OWNER_INTEGRITY', '审核材料当前无法完整核验。')
+        return result
 
     def admit(self, connection: sqlite3.Connection, identity: SessionIdentity,
               source_kind: DraftSourceKind, candidate: dm.DraftCandidate) -> ResolvedDraftCandidate:
