@@ -1,0 +1,20 @@
+........F.                                                               [100%]
+=================================== FAILURES ===================================
+_________ test_provider_receipt_cannot_claim_an_unapproved_generation __________
+
+    def test_provider_receipt_cannot_claim_an_unapproved_generation():
+        from services.api.app.authoring_dto import AuthoringJobView
+    
+        value = generation_view()
+        assert AuthoringJobView.model_validate(value).provider_receipt_id is None
+        value.update(provider_receipt_id='receipt_one',provider_outcome='completed',raw_answer='bad JSON')
+        value['summary'].update(status='failed')
+        value.update(error_code='AUTHORING_OUTPUT_INVALID')
+>       with pytest.raises(ValidationError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValidationError
+
+tests/contract/test_authoring_contracts.py:313: Failed
+=========================== short test summary info ============================
+FAILED tests/contract/test_authoring_contracts.py::test_provider_receipt_cannot_claim_an_unapproved_generation
+1 failed, 9 passed in 0.19s

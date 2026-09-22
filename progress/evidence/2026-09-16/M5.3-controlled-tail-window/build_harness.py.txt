@@ -1,0 +1,94 @@
+from pathlib import Path
+import re,json,hashlib,subprocess,datetime
+R=Path('<private-home>/.cache/learning-workbench-acceptance/m53-active');B=Path(__file__).resolve().parent;H=B/'harness';src=subprocess.check_output(['git','show','00106992e33aecfa4d2cc0d79b474cb5aa463fdb:tests/e2e/tutor.spec.ts'],cwd=R).decode();assert src==(R/'tests/e2e/tutor.spec.ts').read_text()
+imports=src[:src.index('async function unregisteredProvider')]+"import { performance } from 'node:perf_hooks'\nimport { createHash } from 'node:crypto'\n"
+s=src[src.index("test('explicit same-Run consent"):]
+s=s.replace("test('explicit same-Run consent uses the real loopback protocol and restores raw answer without upgrading evidence'", "test('original third Tutor case with real completed response delivery phase'")
+s=s.replace('  let diagnostic: Awaited<ReturnType<typeof observeTutorCompletion>> | undefined', '''  let diagnostic: Awaited<ReturnType<typeof observeTutorCompletion>> | undefined
+  const phaseText = process.env.TUTOR_COMPLETION_PHASE_MS ?? 'none'
+  if (!['none', '4750', '4600', '4800'].includes(phaseText)) throw new Error('UNDECLARED_PHASE')
+  const phase = phaseText === 'none' ? null : Number(phaseText)
+  const events: object[] = [], probes: Promise<unknown>[] = []
+  const mark = (kind: string, value: object = {}) => events.push({ kind, node_ms: performance.now(), ...value })
+  let assertionStarted: number | null = null, verdict = 'NOT_REACHED', gated = false, completeTail = false
+  let completedDOMObserved = false''')
+s=s.replace('    diagnostic = await observeTutorCompletion(page, { readRuntime: () => runtime.diagnosticControl() })', '''    diagnostic = await observeTutorCompletion(page, { readRuntime: () => runtime.diagnosticControl() })
+    const exactCompleted = page.getByRole('region', { name: '真实问答线程与任务', exact: true }).getByRole('heading', { name: '真实任务状态：completed', exact: true })
+    await page.exposeBinding('__tutorTailWindowDOM', (_source, state: object) => {
+      mark('dom_completed_receipt', { state })
+      if (completedDOMObserved) return
+      completedDOMObserved = true
+      mark('exact_role_probe_started')
+      probes.push(exactCompleted.evaluateAll(nodes => ({ match_count: nodes.length, nodes: nodes.map(node => {
+        const element = node as HTMLElement, box = element.getBoundingClientRect(), style = getComputedStyle(element)
+        return { hidden_attribute_ancestor: !!element.closest('[hidden]'), aria_hidden_ancestor: !!element.closest('[aria-hidden="true"]'),
+          css_visibility_visible: style.visibility === 'visible', css_display_not_none: style.display !== 'none',
+          positive_geometry: box.width > 0 && box.height > 0,
+          width: box.width, height: box.height }
+      }) })).then(value => mark('exact_role_probe_finished', { value })).catch(() => mark('exact_role_probe_failed')))
+    })
+    const installTailObserver = () => {
+      let emitted = false
+      const inspect = () => {
+        const regions = [...document.querySelectorAll('[aria-label="真实问答线程与任务"]')]
+        const nodes = regions.flatMap(region => [...region.querySelectorAll('[aria-label="当前问答任务"] h3')]).filter(node => node.textContent === '真实任务状态：completed')
+        if (!nodes.length || emitted) return
+        emitted = true
+        const state = { matching_region_count: regions.length, completed_text_count: nodes.length, nodes: nodes.map(node => {
+          const element = node as HTMLElement, box = element.getBoundingClientRect(), style = getComputedStyle(element)
+          return { hidden_attribute_ancestor: !!element.closest('[hidden]'), aria_hidden_ancestor: !!element.closest('[aria-hidden="true"]'),
+            css_visibility_visible: style.visibility === 'visible', css_display_not_none: style.display !== 'none',
+            positive_geometry: box.width > 0 && box.height > 0, width: box.width, height: box.height }
+        }) }
+        void (window as unknown as { __tutorTailWindowDOM: (state: object) => Promise<void> }).__tutorTailWindowDOM(state).catch(() => undefined)
+      }
+      new MutationObserver(inspect).observe(document, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden','aria-hidden','style','class'] })
+      inspect()
+    }
+    await page.addInitScript(installTailObserver)
+    await page.evaluate(installTailObserver)''')
+s=s.replace("    diagnostic.mark('grant_click')", '''    await page.route(`**/api/v1/runs/${ack.run.id}`, async route => {
+      if (route.request().method() !== 'GET') { await route.continue(); return }
+      const response = await route.fetch(), bytes = await response.body()
+      const current: TutorRunView = JSON.parse(bytes.toString('utf8'))
+      const sha = createHash('sha256').update(bytes).digest('hex')
+      mark('real_run_response_received', { id: current.run?.id, status: current.run?.status, http_status: response.status(),
+        last_seq: current.run?.last_seq, job_revision: current.job_revision, body_sha256: sha, body_bytes: bytes.length })
+      if (!gated && phase !== null && assertionStarted !== null && response.status() === 200 && current.run.id === ack.run.id && current.run.status === 'completed') {
+        gated = true
+        const releaseAt = assertionStarted + phase
+        mark('hold_real_completed_response', { scheduled_release_ms: releaseAt, response_sha256: sha, delay_ms: Math.max(0, releaseAt - performance.now()) })
+        await new Promise(resolve => setTimeout(resolve, Math.max(0, releaseAt - performance.now())))
+        mark('release_original_completed_bytes', { response_sha256: sha, release_since_assertion_ms: performance.now() - assertionStarted })
+      }
+      // This is the exact received body; status/headers come from the same actual APIResponse.
+      await route.fulfill({ response, body: bytes })
+      mark('original_run_response_fulfilled', { response_sha256: sha, status: current.run?.status })
+    })
+    diagnostic.mark('grant_click')''')
+old="""    await diagnostic.around(info, async () => {
+      await expect(tutor.getByRole('heading', { name: '真实任务状态：completed', exact: true })).toBeVisible()
+    })"""
+new="""    await diagnostic.around(info, async () => {
+      assertionStarted = performance.now(); mark('original_expect_started', { assertion_started_ms: assertionStarted })
+      try {
+        await expect(tutor.getByRole('heading', { name: '真实任务状态：completed', exact: true })).toBeVisible()
+        verdict = 'passed'; mark('original_expect_passed')
+      } catch (error) { verdict = 'failed'; mark('original_expect_failed'); throw error }
+    })"""
+assert old in s;s=s.replace(old,new)
+s=s.replace('  } finally { diagnostic?.dispose(); await runtime.close() }', '''    completeTail = true
+  } finally {
+    try { writeFileSync(info.outputPath('completed-response-phase.json'), JSON.stringify({
+      version: 1, phase_ms: phase, clock: 'All node_ms are the same Node performance.now clock in this test worker; browser clocks are not collected.',
+      assertion_started_ms: assertionStarted, original_expect_timeout_ms: 5000, original_expect_verdict: verdict,
+      original_business_tail_completed: completeTail, gated, events,
+      scope: 'Only real same-Run completed GET bytes may be held; queued responses are unchanged. Exact role probe is an additional read and may perturb scheduling. Its start/finish differ from DOM notification time. No expected FAIL verdict; late DOM after5000ms is not a tail-window reproduction. No request/response text, credentials or headers stored.',
+    }, null, 2)) } catch { console.error('Private phase metadata incomplete; original case verdict is unchanged.') }
+    diagnostic?.dispose(); await runtime.close()
+  }''')
+text=imports+s
+text=re.sub(r"from '([^']+)'",lambda m:"from '"+str((R/'tests/e2e'/m.group(1)).resolve())+"'"if m.group(1).startswith('.')else m.group(0),text)
+(H/'controlled.spec.ts').write_text(text);(H/'playwright.config.ts').write_text("import base from '"+str(R/'tests/e2e/playwright.config.ts')+"'\nexport default { ...base, testDir: '"+str(H)+"' }\n");(H/'package.json').write_text('{"type":"module"}\n')
+plan={'created_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'immutable_base':'00106992e33aecfa4d2cc0d79b474cb5aa463fdb','original_tutor_spec_sha256':hashlib.sha256(src.encode()).hexdigest(),'allowed_phases_in_order':['none',4750,4600,4800],'bounds':'One transparent baseline and one4750; only if phase missed at most the predeclared4600/4800 next. Original5s/business assertions retained. No product or CI modifications.','harness_files':{p.name:hashlib.sha256(p.read_bytes()).hexdigest()for p in H.iterdir()if p.is_file()}}
+(B/'preflight.json').write_text(json.dumps(plan,indent=2)+'\n');print(json.dumps(plan,indent=2))

@@ -1,0 +1,30 @@
+
+ RUN  v5.0.0 <private-home>/.cache/learning-workbench-acceptance/m61-active/apps/web
+
+ ❯ src/features/authoring/useAuthoring.test.tsx (8 tests | 1 failed) 500ms
+   × a capability admission failure is reported as its actual safe code, not a successful model call 55ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/authoring/useAuthoring.test.tsx > a capability admission failure is reported as its actual safe code, not a successful model call
+AssertionError: expected '本次操作尚未确认。原命令保留；请重试原命令或重新读取，不会自动发送新 ke…' to contain 'CAPABILITY_UNSUPPORTED'
+
+Expected: "CAPABILITY_UNSUPPORTED"
+Received: "本次操作尚未确认。原命令保留；请重试原命令或重新读取，不会自动发送新 key。"
+
+ ❯ src/features/authoring/useAuthoring.test.tsx:99:37
+     97|   const hook = renderHook(() => useAuthoring(f.workspace, false, f.por…
+     98|   act(() => hook.result.current.reportAccessError(new ApiError(409, 'd…
+     99|   expect(hook.result.current.error).toContain('CAPABILITY_UNSUPPORTED')
+       |                                     ^
+    100|   expect(hook.result.current.error).not.toContain('arbitrary backend')
+    101|   expect(hook.result.current.detail).toBeNull()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 passed (8)
+   Start at  01:06:34
+   Duration  983ms (tests 55%, environment 21%, transform 15%, import 9%)
+

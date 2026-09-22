@@ -20,7 +20,9 @@ def test_traceability_covers_all_stable_requirements_scenarios_tasks():
 def test_route_inventory_includes_inline_response_routes_and_e1():
     catalog = route_catalog(ROOT / "PRODUCT_DESIGN.md")
     routes = {(route["method"], route["path"]): route for route in catalog["routes"]}
-    assert len(routes) == 107
+    assert len(routes) == 113
+    assert routes["GET", "/api/v1/authoring/drafts/{id}"]["task_id"] == "M6.1"
+    assert routes["POST", "/api/v1/authoring/numeric-checks/{id}/decision"]["task_id"] == "M6.1"
     assert routes["GET", "/api/v1/blocks/{id}/body"]["location"] == "inline_response_cell"
     assert routes["GET", "/api/v1/attempts/{id}/responses"]["location"] == "inline_response_cell"
     assert routes["POST", "/api/v1/connectors/{id}/apply"]["priority"] == "P1"

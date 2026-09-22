@@ -1,0 +1,47 @@
+....F                                                                    [100%]
+=================================== FAILURES ===================================
+__ test_rejected_result_cannot_leave_terminal_bytes_when_caller_handles_error __
+
+generated = <controlled fixture: actual candidate and SQLite; no identity repr>
+
+    def test_rejected_result_cannot_leave_terminal_bytes_when_caller_handles_error(generated):
+        database, identity, _, service, candidate, runtime = generated
+        view = service.preview(identity, candidate.draft_id, NumericCheckPreviewWrite(candidate=candidate), 'preview')
+        ack = service.decide(identity, view.id, decision(view), 'approve')
+        with database.transaction() as conn:
+            repo = NumericRepository(conn, identity.workspace_id)
+            lease, job, _ = repo.claim(ack.job.id)
+            assert repo.begin(lease, utc_now())
+            actual_start = utc_now()
+            repo.mark_started(lease, actual_start)
+        before = all_rows(database)
+        stdout = b'{"synthetic_ledger_result":42}\n'
+        wrong = completed_result(job, actual_start, stdout, actual=41.0)
+        with database.transaction() as conn:
+            repo = NumericRepository(conn, identity.workspace_id)
+            with pytest.raises((ApiError, ValueError)):
+                repo.finish(lease, wrong, stdout, b'', True, runtime.manifest_document())
+>       assert all_rows(database) == before
+E       assert {'approvals':...obs': [], ...} == {'approvals':...obs': [], ...}
+E         
+E         Omitting 111 identical items, use -vv to show
+E         Differing items:
+E         {'authoring_numeric_executions': [('numeric_job_0c1d5c5dcff044da9e6d5db7c0952008', '{"actual_started_at":"2026-09-15T1...Jlc3VsdCI6NDJ9Cg==","version":"numeric-end-v1"}', 'c9829497ea7ccd822e219f56897e7b297148d4a016831226afb15a2ab4ff4bd2')]} != {'authoring_numeric_executions': [('numeric_job_0c1d5c5dcff044da9e6d5db7c0952008', '{"actual_started_at":"2026-09-15T1..._a18d8761bbfd47e8afcc8dd9ad4bd81b"}', 'a61de2f2fcb135250fb2b9762f2dbb7a5ac75367d846761f9d77c94b0577d15d', None, None)]}
+E         {'jobs': [('authoring_e4ce78515...
+E         
+E         ...Full output truncated (3 lines hidden), use '-vv' to show
+
+tests/integration/test_authoring_numeric_service.py:223: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m61-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m61-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_authoring_numeric_service.py::test_rejected_result_cannot_leave_terminal_bytes_when_caller_handles_error
+1 failed, 4 passed, 2 warnings in 3.65s

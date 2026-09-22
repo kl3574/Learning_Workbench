@@ -1,0 +1,146 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_self_consistent_candidate_cannot_replace_actual_completed_provider_output _
+
+tmp_path = PosixPath('/tmp/pytest-of-lkx/pytest-58/test_self_consistent_candidate0')
+
+    def test_self_consistent_candidate_cannot_replace_actual_completed_provider_output(tmp_path):
+        async def run():
+            async with local_provider(text=canonical_bytes(payload()).decode()) as server:
+                state = configured(tmp_path, server.base_url)
+                database, identity, service, worker, _, _ = state
+                original, _, _ = approved(state)
+                assert await asyncio.to_thread(worker.run_once)
+                real = service.read(identity, original.id)
+                draft_id = real.summary.candidate.draft_id
+                assert len(server.requests) == 1
+                with database.transaction() as conn:
+                    repo = AuthoringRepository(conn, identity.workspace_id)
+                    candidate = repo.candidate(draft_id)
+                    record = repo.load(original.id)
+                    candidate.payload.body_markdown = '合成损坏反例：这个候选不是供应商实际原输出。'
+                    candidate.body_sha256 = sha256_bytes(candidate.payload.body_markdown.encode())
+                    candidate.candidate.candidate_sha256 = candidate_sha256(candidate.payload)
+                    raw = canonical_bytes(candidate).decode()
+                    conn.execute('UPDATE authoring_candidates SET record_json=?,record_sha256=? WHERE draft_id=?',
+                        (raw, sha256_bytes(raw.encode()), draft_id))
+                    record.view.summary.candidate = candidate.candidate
+                    repo.save(record)
+                    # Do not modify the Provider receipt/artifact, Jobs result or its terminal event.
+                with pytest.raises(ApiError) as caught:
+                    service.draft(identity, draft_id)
+                assert caught.value.code == 'AUTHORING_INTEGRITY_ERROR'
+                assert len(server.requests) == 1
+>       asyncio.run(run())
+
+../m61-authoring-independent-review-v1/test_generation_integrity_probe.py:41: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    async def run():
+        async with local_provider(text=canonical_bytes(payload()).decode()) as server:
+            state = configured(tmp_path, server.base_url)
+            database, identity, service, worker, _, _ = state
+            original, _, _ = approved(state)
+            assert await asyncio.to_thread(worker.run_once)
+            real = service.read(identity, original.id)
+            draft_id = real.summary.candidate.draft_id
+            assert len(server.requests) == 1
+            with database.transaction() as conn:
+                repo = AuthoringRepository(conn, identity.workspace_id)
+                candidate = repo.candidate(draft_id)
+                record = repo.load(original.id)
+                candidate.payload.body_markdown = '合成损坏反例：这个候选不是供应商实际原输出。'
+                candidate.body_sha256 = sha256_bytes(candidate.payload.body_markdown.encode())
+                candidate.candidate.candidate_sha256 = candidate_sha256(candidate.payload)
+                raw = canonical_bytes(candidate).decode()
+                conn.execute('UPDATE authoring_candidates SET record_json=?,record_sha256=? WHERE draft_id=?',
+                    (raw, sha256_bytes(raw.encode()), draft_id))
+                record.view.summary.candidate = candidate.candidate
+                repo.save(record)
+                # Do not modify the Provider receipt/artifact, Jobs result or its terminal event.
+>           with pytest.raises(ApiError) as caught:
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: DID NOT RAISE ApiError
+
+../m61-authoring-independent-review-v1/test_generation_integrity_probe.py:37: Failed
+__ test_revoked_before_dispatch_can_prepare_new_explicit_consent_for_same_job __
+
+tmp_path = PosixPath('/tmp/pytest-of-lkx/pytest-58/test_revoked_before_dispatch_c0')
+
+    def test_revoked_before_dispatch_can_prepare_new_explicit_consent_for_same_job(tmp_path):
+        async def run():
+            async with local_provider(text=canonical_bytes(payload()).decode()) as server:
+                state = configured(tmp_path, server.base_url)
+                _, identity, service, worker, consents, _ = state
+                original, _, grant = approved(state)
+                consents.revoke(identity, grant.id, ConsentRevoke(expected_revision=1), 'revoke-before-dispatch')
+                assert server.requests == []
+                # Existing work is processed by the owner; GET itself must not repair state.
+                assert await asyncio.to_thread(worker.run_once)
+                current = service.read(identity, original.id)
+                assert current.summary.id == original.id
+                assert current.summary.status == 'awaiting_approval'
+                proposal = consents.preview(identity, ConsentPreviewWrite(job_id=original.id,
+                    expected_job_revision=current.summary.job_revision, provider_id='test_provider',
+                    expected_provider_revision=2, expires_at=expires_after(300), budget=OutboundBudget(
+                    max_input_tokens=20000,max_output_tokens=5000,max_provider_calls=1,max_search_calls=0,
+                    max_tool_calls=0,timeout_seconds=10,max_cost_usd=None)), 'explicit-preview-again')
+                assert proposal.summary.job_id == original.id
+                assert server.requests == []
+>       asyncio.run(run())
+
+../m61-authoring-independent-review-v1/test_generation_integrity_probe.py:64: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    async def run():
+        async with local_provider(text=canonical_bytes(payload()).decode()) as server:
+            state = configured(tmp_path, server.base_url)
+            _, identity, service, worker, consents, _ = state
+            original, _, grant = approved(state)
+            consents.revoke(identity, grant.id, ConsentRevoke(expected_revision=1), 'revoke-before-dispatch')
+            assert server.requests == []
+            # Existing work is processed by the owner; GET itself must not repair state.
+            assert await asyncio.to_thread(worker.run_once)
+            current = service.read(identity, original.id)
+            assert current.summary.id == original.id
+>           assert current.summary.status == 'awaiting_approval'
+E           AssertionError: assert 'failed' == 'awaiting_approval'
+E             
+E             - awaiting_approval
+E             + failed
+
+../m61-authoring-independent-review-v1/test_generation_integrity_probe.py:56: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <HOME>/.cache/learning-workbench-acceptance/m61-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <HOME>/.cache/learning-workbench-acceptance/m61-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ::test_self_consistent_candidate_cannot_replace_actual_completed_provider_output
+FAILED ::test_revoked_before_dispatch_can_prepare_new_explicit_consent_for_same_job
+2 failed, 2 warnings in 1.30s

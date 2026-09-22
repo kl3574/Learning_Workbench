@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-15T16:19:13Z；规范 SHA-256：`2bfd471933be478a7cac51363a0482a87c81ec113c3e6cbdec88cfd139d43f37`
+更新：2026-09-22T01:47:01Z；规范 SHA-256：`30220c34fe7312887f5bcb1c67406c9638f1719ff3ed7bc9e95d7d5085b5d924`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED
-实施：IN_PROGRESS；当前任务：M5.4；下一任务：M5.4
+实施：IN_PROGRESS；当前任务：M6.1；下一任务：M6.1
 
-固定本地软件门禁与证据已完成，推送M5.4分支并创建依赖PR51的草稿PR、实际回读。托管完整输入格式关系未证成，生产proof保持空；真实平台模型/搜索/质量NOT_RUN。随后在明确依赖的已验证本地基线上继续M6.1。
+PR53 draft/open/unmerged已发布并回读；等待实际CI，同时继续M6.1小节/习题集/测验生成，先合入保留Import行为的题面—私解结构预校验，完成具名组合候选契约。真实隔离权限及托管InputProof分别保留阻塞。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -30,8 +30,8 @@
 | M5.1 ProviderPort/能力协商/服务端冻结授权/受控预算/秘密与脱敏 | review | [#26](https://github.com/kl3574/Learning_Workbench/issues/26) | 254a4ffe70dcab9db56663cc37245a33ae1495a5 |
 | M5.2 检索权限、中文 FTS、来源和修订哈希 | review | [#27](https://github.com/kl3574/Learning_Workbench/issues/27) | 69e54478ae3c3604a925f2cdb905ce03ddda2b8b |
 | M5.3 Tutor 状态机、SSE/取消/重连/异步上下文 | review | [#28](https://github.com/kl3574/Learning_Workbench/issues/28) | 919a00532b499cff604ef2be4e90c88cc6378490 |
-| M5.4 真实模型与搜索评测 | in_progress | [#29](https://github.com/kl3574/Learning_Workbench/issues/29) | e982a14644317c7be12a63ec0b31c1e615c72fa6 |
-| M6.1 教材/例题/题目生成 schema + 数值验证 | todo | [#30](https://github.com/kl3574/Learning_Workbench/issues/30) | 未验证提交 |
+| M5.4 真实模型与搜索评测 | blocked | [#29](https://github.com/kl3574/Learning_Workbench/issues/29) | e982a14644317c7be12a63ec0b31c1e615c72fa6 |
+| M6.1 教材/例题/题目生成 schema + 数值验证 | in_progress | [#30](https://github.com/kl3574/Learning_Workbench/issues/30) | 80986eaed01d4de620cdd4320a7fab8ce01ce959 |
 | M6.2 审校/发布/版本对比/影响分析/恢复旧内容 | todo | [#31](https://github.com/kl3574/Learning_Workbench/issues/31) | 未验证提交 |
 | M6.3 CodexBroker/App Server、操作审批、产物清单 | todo | [#32](https://github.com/kl3574/Learning_Workbench/issues/32) | 未验证提交 |
 | M7.1 全备份/学习者包/作者包/恢复预览和事务 | todo | [#33](https://github.com/kl3574/Learning_Workbench/issues/33) | 未验证提交 |
@@ -93,10 +93,17 @@
 - m5_4_native: PASS：e982a146实际94项/8.1m，ordinal1..94各一次，原5s业务断言未放宽。44顶层UI前后原件保全；仅4已有直接输出PNG改变，原unchanged=false与after aggregate保留，精确guard恢复后852源逐Git/blob/mode一致。Root已读取本轮1440/390 Tutor实际合成截图，不推断真实模型或旧CI失败原因。
 - m5_3_001_ci: FAIL：0010699 attempt1双CI终态11success/1failure。push34991095035 browser104455641488实际93PASS1FAIL14.4m；PR34991097477 browser104455650410实际94PASS10.8m。原第三Tutor completed断言仍5000ms。新单Node观察时钟记录completed DOM在断言开始后4779.307ms、失败冻结5002.232ms；post读取真实Run completed seq6/job r6，受控请求1received/1validated/0invalid。框架error-context仍queued，PNG已见合成回答；不能把不同采样时点合并。DOM answer_present包含占位，不表示真实回答；safeRun读取另有真实answer。实际12logs、4失败artifact和checkout同tree已核，原70b失败同样保留，尚未认定根因或修复。
 - m5_3_completion_diagnostics: DIAGNOSTICS_IMPLEMENTED_NOT_ROOT_CAUSE_FIXED：e30c519仅5个测试/CI诊断文件，产品/原三case业务断言/5s不变。诊断自己的部分回读丢失1RED→同test1GREEN；原第三case加被动观察1PASS10.9s，真实queued GET保留至同Runcompleted后原样交付对照1PASS11.9s；均未复现原CI。No-tests-found、ESM及adhoc类型解析前置失败保留。新诊断CI待实际发布运行。 以上为001发布前历史；该head实际11success/1failure另列m5_3_001_ci。
+- m5_4_publication: PUBLISHED：81d2b92公开分支和PR52 draft/open/unmerged已回读；该head双CI终态11success1failure，详见M5.4_exact_81d_ci。不是全部CI通过。
+- M6.1_local: LOCAL_FIRST_SLICE_VERIFIED_FULL_STAGE_INCOMPLETE：80986ea固定903非progress源。实际1927Python PASS1ENV SKIP396.73s/2依赖弃用警告、401web PASS72files、96完整native PASS8.3m；Ruff全仓、mypy162、web lint/types/build和spec75生成均PASS。八非浏览器门禁逐Git/blob/mode前后不变；native仅4已知PNG直接输出变化，44前后原件保全后按精确hash恢复，原unchanged=false不改。真实7HTTP、loopback同Job授权→候选、独立数值拒绝/批准、安全取消与1440/390已验证；数值实际environment_unavailable/BLOCKED，1SKIP不是执行成功。生产proof仍空、平台真实DeepSeek/搜索/数学/来源/教学验收未通过；其他M6.1生成类型未实现，不能关闭M6.1。
+- M5.4_exact_81d_ci: 11 success / 1 failure, push93+1FAIL vs PR94PASS; exact same tree, distinct commits; raw evidence imported locally
+- M6.1_fixed_gates: LOCAL_FIRST_SLICE_VERIFIED_FULL_STAGE_INCOMPLETE：80986ea固定903非progress源。实际1927Python PASS1ENV SKIP396.73s/2依赖弃用警告、401web PASS72files、96完整native PASS8.3m；Ruff全仓、mypy162、web lint/types/build和spec75生成均PASS。八非浏览器门禁逐Git/blob/mode前后不变；native仅4已知PNG直接输出变化，44前后原件保全后按精确hash恢复，原unchanged=false不改。真实7HTTP、loopback同Job授权→候选、独立数值拒绝/批准、安全取消与1440/390已验证；数值实际environment_unavailable/BLOCKED，1SKIP不是执行成功。生产proof仍空、平台真实DeepSeek/搜索/数学/来源/教学验收未通过；其他M6.1生成类型未实现，不能关闭M6.1。
+- M6.1_remote: PUBLISHED：79908fb公开分支、PR53 draft/open/unmerged、父分支M5.4及规范SHA均实际回读。第一次直连443失败，命令级显式代理后推送成功；新CI以实际run回读为准，不由本地门禁推定。
+- M6.1_next_precheck: ISOLATED_UNCOMMITTED：在809基线独立工作树整理既有Import题面/私解结构校验，38focused+145既有Import回归和scoped lint/mypy实际PASS；原mypy变量复用失败保留。尚未合入主实施分支，不代表题目生成、数学或教学验收。
 
 ## 阻塞与待决项
 
 - M5_3_CI_TUTOR_COMPLETION_OBSERVATION_FAILED: 70b与001均实际11success1failure；001在同Node时钟4.779s已观察completed、约5s仍断言失败，具体轮询/交付原因待受控复现。不是已修复。
 - PRODUCTION_INPUT_PROOF_NOT_ESTABLISHED: 尚未建立当前托管模型完整请求格式的exact/严格upper-bound证明；已有官方编码资料允许继续离线工程审计。这是工程/证据缺口，不是权限或缺凭据。
+- M61_NUMERIC_SANDBOX_ENVIRONMENT: 实际封存完整运行闭包的bwrap启动被本机AppArmor拒绝EPERM；普通宿主路径对照不构成封存闭包验收。未修改系统profile，未回退普通进程；真实隔离数值完成/取消尚未验收，其余本地工作继续。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。

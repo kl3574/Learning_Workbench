@@ -1,0 +1,14 @@
+from pathlib import Path
+import hashlib,json,subprocess,sys,datetime,time
+root=Path('<HOME>/.cache/learning-workbench-acceptance/m61-active')
+cache=Path('<HOME>/.cache/learning-workbench-acceptance/m61-numeric-development')
+name=sys.argv[1];command=sys.argv[2:]
+paths=['PRODUCT_DESIGN.md','pyproject.toml','uv.lock','services/api/app/authoring_dto.py','services/api/app/application/authoring_models.py','services/api/app/application/authoring_numeric.py','services/api/app/infrastructure/authoring_numeric_runtime.py','scripts/authoring_numeric_entry.py','tests/unit/test_authoring_numeric.py','tests/integration/test_authoring_numeric_runtime.py']
+sha=lambda b:hashlib.sha256(b).hexdigest()
+def inputs():return {p:{'sha256':sha((root/p).read_bytes()),'bytes':(root/p).stat().st_size} for p in paths}
+before=inputs();started=datetime.datetime.now(datetime.timezone.utc).isoformat();tick=time.monotonic()
+with (cache/(name+'.log')).open('xb') as log:
+ result=subprocess.run(command,cwd=root,stdout=log,stderr=subprocess.STDOUT)
+after=inputs()
+r={'command':command,'exit_code':result.returncode,'started_at':started,'finished_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'wall_seconds':time.monotonic()-tick,'inputs_before':before,'inputs_after':after,'inputs_equal':before==after,'log_sha256':sha((cache/(name+'.log')).read_bytes()),'scope':'local focused; no browser, database orchestration, Provider or whole-stage acceptance'}
+(cache/(name+'.json')).write_text(json.dumps(r,indent=2)+'\n');print(json.dumps({k:v for k,v in r.items() if not k.startswith('inputs_')},indent=2));print((cache/(name+'.log')).read_text());sys.exit(result.returncode)

@@ -34,6 +34,36 @@
         "title": "ActualUsageCost",
         "type": "object"
       },
+      "ApprovalDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "approve_once",
+              "decline"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "operation_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Operation Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation_sha256",
+          "decision",
+          "expected_revision"
+        ],
+        "title": "ApprovalDecision",
+        "type": "object"
+      },
       "AssessmentAttemptCreate": {
         "additionalProperties": false,
         "properties": {
@@ -559,6 +589,601 @@
           "expected_revision"
         ],
         "title": "AttemptSubmit",
+        "type": "object"
+      },
+      "AuthoringBlockRef": {
+        "additionalProperties": false,
+        "properties": {
+          "entity": {
+            "const": "block",
+            "title": "Entity",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity",
+          "id",
+          "revision",
+          "sha256"
+        ],
+        "title": "AuthoringBlockRef",
+        "type": "object"
+      },
+      "AuthoringCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Candidate Sha256",
+            "type": "string"
+          },
+          "draft_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Draft Id",
+            "type": "string"
+          },
+          "draft_revision": {
+            "minimum": 1.0,
+            "title": "Draft Revision",
+            "type": "integer"
+          },
+          "entity": {
+            "const": "block",
+            "title": "Entity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft_id",
+          "draft_revision",
+          "entity",
+          "candidate_sha256"
+        ],
+        "title": "AuthoringCandidate",
+        "type": "object"
+      },
+      "AuthoringDraftView": {
+        "additionalProperties": false,
+        "properties": {
+          "base_ref": {
+            "title": "Base Ref",
+            "type": "null"
+          },
+          "body_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Body Sha256",
+            "type": "string"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/AuthoringCandidate"
+          },
+          "numeric_check_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Numeric Check Ids",
+            "type": "array"
+          },
+          "owner": {
+            "const": "authoring",
+            "title": "Owner",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/WorkedExamplePayload"
+          },
+          "source_job_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Source Job Id",
+            "type": "string"
+          },
+          "state": {
+            "const": "draft",
+            "title": "State",
+            "type": "string"
+          },
+          "validation": {
+            "$ref": "#/components/schemas/AuthoringValidation"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/Warning"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "owner",
+          "candidate",
+          "source_job_id",
+          "state",
+          "base_ref",
+          "body_sha256",
+          "payload",
+          "validation",
+          "numeric_check_ids",
+          "warnings"
+        ],
+        "title": "AuthoringDraftView",
+        "type": "object"
+      },
+      "AuthoringInputMaterial": {
+        "additionalProperties": false,
+        "properties": {
+          "body_bytes": {
+            "minimum": 1.0,
+            "title": "Body Bytes",
+            "type": "integer"
+          },
+          "body_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Body Sha256",
+            "type": "string"
+          },
+          "material_review": {
+            "const": "unreviewed",
+            "title": "Material Review",
+            "type": "string"
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/RetrievalProvenance"
+          },
+          "ref": {
+            "$ref": "#/components/schemas/AuthoringBlockRef"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "title",
+          "body_sha256",
+          "body_bytes",
+          "material_review",
+          "provenance"
+        ],
+        "title": "AuthoringInputMaterial",
+        "type": "object"
+      },
+      "AuthoringJobPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/JobSnapshot"
+            },
+            "maxItems": 100,
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "total_hint": {
+            "minimum": 0.0,
+            "title": "Total Hint",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "AuthoringJobPage",
+        "type": "object"
+      },
+      "AuthoringJobSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthoringCandidate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "job_revision": {
+            "minimum": 1.0,
+            "title": "Job Revision",
+            "type": "integer"
+          },
+          "kind": {
+            "const": "authoring",
+            "title": "Kind",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "awaiting_approval",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "job_revision",
+          "status",
+          "title",
+          "candidate",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AuthoringJobSummary",
+        "type": "object"
+      },
+      "AuthoringJobView": {
+        "additionalProperties": false,
+        "properties": {
+          "consent_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consent Id"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "preparation": {
+            "$ref": "#/components/schemas/AuthoringPreparationSummary"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          },
+          "provider_outcome": {
+            "anyOf": [
+              {
+                "enum": [
+                  "completed",
+                  "failed",
+                  "incomplete",
+                  "cancelled",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Outcome"
+          },
+          "provider_receipt_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Receipt Id"
+          },
+          "raw_answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Answer"
+          },
+          "raw_refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Refusal"
+          },
+          "request": {
+            "$ref": "#/components/schemas/AuthoringPrepareWrite"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/AuthoringJobSummary"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/UsageSnapshot"
+          },
+          "validation": {
+            "$ref": "#/components/schemas/AuthoringValidation"
+          }
+        },
+        "required": [
+          "summary",
+          "request",
+          "preparation",
+          "proposal_id",
+          "consent_id",
+          "provider_receipt_id",
+          "provider_outcome",
+          "usage",
+          "raw_answer",
+          "raw_refusal",
+          "validation",
+          "error_code"
+        ],
+        "title": "AuthoringJobView",
+        "type": "object"
+      },
+      "AuthoringPreparationSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "character_count": {
+            "maximum": 12000.0,
+            "minimum": 1.0,
+            "title": "Character Count",
+            "type": "integer"
+          },
+          "context_snapshot_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Context Snapshot Id",
+            "type": "string"
+          },
+          "job_input_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Job Input Sha256",
+            "type": "string"
+          },
+          "materials": {
+            "items": {
+              "$ref": "#/components/schemas/AuthoringInputMaterial"
+            },
+            "maxItems": 8,
+            "title": "Materials",
+            "type": "array"
+          },
+          "prepared_input_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Prepared Input Sha256",
+            "type": "string"
+          },
+          "snapshot_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Snapshot Sha256",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/Warning"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "context_snapshot_id",
+          "snapshot_sha256",
+          "job_input_sha256",
+          "prepared_input_sha256",
+          "character_count",
+          "materials",
+          "warnings"
+        ],
+        "title": "AuthoringPreparationSummary",
+        "type": "object"
+      },
+      "AuthoringPrepareWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "objectives": {
+            "items": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Objectives",
+            "type": "array"
+          },
+          "output_kind": {
+            "const": "worked_example",
+            "title": "Output Kind",
+            "type": "string"
+          },
+          "prerequisites": {
+            "items": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Prerequisites",
+            "type": "array"
+          },
+          "proof_policy": {
+            "enum": [
+              "full",
+              "declared_dependencies"
+            ],
+            "title": "Proof Policy",
+            "type": "string"
+          },
+          "provider_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "source_refs": {
+            "items": {
+              "$ref": "#/components/schemas/AuthoringBlockRef"
+            },
+            "maxItems": 8,
+            "title": "Source Refs",
+            "type": "array"
+          },
+          "topic": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Topic",
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic",
+          "prerequisites",
+          "objectives",
+          "proof_policy",
+          "output_kind",
+          "source_refs",
+          "provider_id"
+        ],
+        "title": "AuthoringPrepareWrite",
+        "type": "object"
+      },
+      "AuthoringValidation": {
+        "additionalProperties": false,
+        "properties": {
+          "independent_pedagogy": {
+            "const": "NOT_RUN",
+            "title": "Independent Pedagogy",
+            "type": "string"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/Warning"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "mathematical": {
+            "const": "NOT_RUN",
+            "title": "Mathematical",
+            "type": "string"
+          },
+          "references": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "NOT_RUN"
+            ],
+            "title": "References",
+            "type": "string"
+          },
+          "schema": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "NOT_RUN"
+            ],
+            "title": "Schema",
+            "type": "string"
+          },
+          "sources": {
+            "const": "NOT_RUN",
+            "title": "Sources",
+            "type": "string"
+          },
+          "symbol_declarations": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "NOT_RUN"
+            ],
+            "title": "Symbol Declarations",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema",
+          "references",
+          "symbol_declarations",
+          "issues",
+          "mathematical",
+          "sources",
+          "independent_pedagogy"
+        ],
+        "title": "AuthoringValidation",
         "type": "object"
       },
       "BlockDraftPayload": {
@@ -3899,6 +4524,521 @@
           "id"
         ],
         "title": "NoteDeleted",
+        "type": "object"
+      },
+      "NumericAssertion": {
+        "additionalProperties": false,
+        "properties": {
+          "atol": {
+            "minimum": 0.0,
+            "title": "Atol",
+            "type": "number"
+          },
+          "expected": {
+            "title": "Expected",
+            "type": "number"
+          },
+          "expression": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Expression",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "rtol": {
+            "minimum": 0.0,
+            "title": "Rtol",
+            "type": "number"
+          },
+          "unit": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "expression",
+          "expected",
+          "atol",
+          "rtol",
+          "unit"
+        ],
+        "title": "NumericAssertion",
+        "type": "object"
+      },
+      "NumericAssertionResult": {
+        "additionalProperties": false,
+        "properties": {
+          "actual": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "NUMERIC_DOMAIN_ERROR",
+                  "NUMERIC_NONFINITE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "actual",
+          "passed",
+          "error_code"
+        ],
+        "title": "NumericAssertionResult",
+        "type": "object"
+      },
+      "NumericCheckDecisionAck": {
+        "additionalProperties": false,
+        "properties": {
+          "applied": {
+            "const": true,
+            "title": "Applied",
+            "type": "boolean"
+          },
+          "decision": {
+            "enum": [
+              "approve_once",
+              "decline"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "operation_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Operation Sha256",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "operation_sha256",
+          "decision",
+          "applied",
+          "job"
+        ],
+        "title": "NumericCheckDecisionAck",
+        "type": "object"
+      },
+      "NumericCheckPreviewWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate": {
+            "$ref": "#/components/schemas/AuthoringCandidate"
+          }
+        },
+        "required": [
+          "candidate"
+        ],
+        "title": "NumericCheckPreviewWrite",
+        "type": "object"
+      },
+      "NumericCheckResult": {
+        "additionalProperties": false,
+        "properties": {
+          "assertions": {
+            "items": {
+              "$ref": "#/components/schemas/NumericAssertionResult"
+            },
+            "maxItems": 32,
+            "title": "Assertions",
+            "type": "array"
+          },
+          "exit_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Code"
+          },
+          "finished_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Finished At",
+            "type": "string"
+          },
+          "input_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Input Sha256",
+            "type": "string"
+          },
+          "job_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "operation_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Operation Sha256",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "passed",
+              "mismatch",
+              "evaluation_error",
+              "timeout",
+              "resource_limit",
+              "cancelled",
+              "environment_unavailable",
+              "outcome_unknown"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "output_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Sha256"
+          },
+          "result_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Result Sha256",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "verdict": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "BLOCKED"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "input_sha256",
+          "operation_sha256",
+          "outcome",
+          "verdict",
+          "started_at",
+          "finished_at",
+          "exit_code",
+          "assertions",
+          "output_sha256",
+          "result_sha256"
+        ],
+        "title": "NumericCheckResult",
+        "type": "object"
+      },
+      "NumericCheckView": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate": {
+            "$ref": "#/components/schemas/AuthoringCandidate"
+          },
+          "created_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision": {
+            "enum": [
+              "pending",
+              "approve_once",
+              "decline"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "expired": {
+            "title": "Expired",
+            "type": "boolean"
+          },
+          "expires_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "job_revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Revision"
+          },
+          "operation_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Operation Sha256",
+            "type": "string"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/NumericPlan"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NumericCheckResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/NumericRuntimeProfile"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/Warning"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "candidate",
+          "plan",
+          "runtime",
+          "operation_sha256",
+          "decision",
+          "created_at",
+          "expires_at",
+          "expired",
+          "job",
+          "job_revision",
+          "result",
+          "warnings"
+        ],
+        "title": "NumericCheckView",
+        "type": "object"
+      },
+      "NumericPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "assertions": {
+            "items": {
+              "$ref": "#/components/schemas/NumericAssertion"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Assertions",
+            "type": "array"
+          },
+          "seed": {
+            "title": "Seed",
+            "type": "null"
+          },
+          "variables": {
+            "items": {
+              "$ref": "#/components/schemas/NumericVariable"
+            },
+            "maxItems": 32,
+            "title": "Variables",
+            "type": "array"
+          },
+          "version": {
+            "const": "finite-arithmetic-v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "variables",
+          "assertions",
+          "seed"
+        ],
+        "title": "NumericPlan",
+        "type": "object"
+      },
+      "NumericRuntimeProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "cpu_seconds": {
+            "const": 2,
+            "title": "Cpu Seconds",
+            "type": "integer"
+          },
+          "evaluator_process_limit": {
+            "const": 1,
+            "title": "Evaluator Process Limit",
+            "type": "integer"
+          },
+          "evaluator_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Evaluator Sha256",
+            "type": "string"
+          },
+          "evaluator_version": {
+            "const": "finite-arithmetic-v1",
+            "title": "Evaluator Version",
+            "type": "string"
+          },
+          "memory_bytes": {
+            "const": 268435456,
+            "title": "Memory Bytes",
+            "type": "integer"
+          },
+          "output_bytes": {
+            "const": 65536,
+            "title": "Output Bytes",
+            "type": "integer"
+          },
+          "python_version": {
+            "minLength": 1,
+            "title": "Python Version",
+            "type": "string"
+          },
+          "runtime_manifest_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Runtime Manifest Sha256",
+            "type": "string"
+          },
+          "sandbox_version": {
+            "minLength": 1,
+            "title": "Sandbox Version",
+            "type": "string"
+          },
+          "wall_seconds": {
+            "const": 5,
+            "title": "Wall Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "evaluator_version",
+          "evaluator_sha256",
+          "runtime_manifest_sha256",
+          "python_version",
+          "sandbox_version",
+          "wall_seconds",
+          "cpu_seconds",
+          "memory_bytes",
+          "output_bytes",
+          "evaluator_process_limit"
+        ],
+        "title": "NumericRuntimeProfile",
+        "type": "object"
+      },
+      "NumericVariable": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "unit": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Unit",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "name",
+          "value",
+          "unit"
+        ],
+        "title": "NumericVariable",
         "type": "object"
       },
       "OutboundBudget": {
@@ -9921,6 +11061,97 @@
         "title": "WorkbenchSession",
         "type": "object"
       },
+      "WorkedExamplePayload": {
+        "additionalProperties": false,
+        "properties": {
+          "body_markdown": {
+            "maxLength": 400000,
+            "minLength": 1,
+            "title": "Body Markdown",
+            "type": "string"
+          },
+          "declared_source_refs": {
+            "items": {
+              "$ref": "#/components/schemas/AuthoringBlockRef"
+            },
+            "maxItems": 8,
+            "title": "Declared Source Refs",
+            "type": "array"
+          },
+          "kind": {
+            "const": "worked_example",
+            "title": "Kind",
+            "type": "string"
+          },
+          "numeric_plan": {
+            "$ref": "#/components/schemas/NumericPlan"
+          },
+          "symbols": {
+            "items": {
+              "$ref": "#/components/schemas/WorkedExampleSymbol"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Symbols",
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "const": "worked-example-candidate-v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "kind",
+          "title",
+          "body_markdown",
+          "symbols",
+          "declared_source_refs",
+          "numeric_plan"
+        ],
+        "title": "WorkedExamplePayload",
+        "type": "object"
+      },
+      "WorkedExampleSymbol": {
+        "additionalProperties": false,
+        "properties": {
+          "dimension": {
+            "minLength": 1,
+            "title": "Dimension",
+            "type": "string"
+          },
+          "domain": {
+            "minLength": 1,
+            "title": "Domain",
+            "type": "string"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "tex": {
+            "minLength": 1,
+            "title": "Tex",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "tex",
+          "domain",
+          "dimension"
+        ],
+        "title": "WorkedExampleSymbol",
+        "type": "object"
+      },
       "WorkspaceLayout": {
         "additionalProperties": false,
         "properties": {
@@ -11756,6 +12987,1156 @@
         "summary": "Submit",
         "tags": [
           "assessment"
+        ]
+      }
+    },
+    "/api/v1/authoring/drafts/{id}": {
+      "get": {
+        "operationId": "draft_api_v1_authoring_drafts__id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthoringDraftView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Draft",
+        "tags": [
+          "authoring"
+        ]
+      }
+    },
+    "/api/v1/authoring/drafts/{id}/numeric-checks": {
+      "post": {
+        "operationId": "preview_api_v1_authoring_drafts__id__numeric_checks_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "title": "Origin",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NumericCheckPreviewWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NumericCheckView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Preview",
+        "tags": [
+          "authoring"
+        ]
+      }
+    },
+    "/api/v1/authoring/jobs": {
+      "get": {
+        "operationId": "jobs_api_v1_authoring_jobs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthoringJobPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Jobs",
+        "tags": [
+          "authoring"
+        ]
+      },
+      "post": {
+        "operationId": "prepare_api_v1_authoring_jobs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "title": "Origin",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthoringPrepareWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRef"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Prepare",
+        "tags": [
+          "authoring"
+        ]
+      }
+    },
+    "/api/v1/authoring/jobs/{id}": {
+      "get": {
+        "operationId": "read_api_v1_authoring_jobs__id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthoringJobView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Read",
+        "tags": [
+          "authoring"
+        ]
+      }
+    },
+    "/api/v1/authoring/numeric-checks/{id}": {
+      "get": {
+        "operationId": "numeric_read_api_v1_authoring_numeric_checks__id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NumericCheckView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Numeric Read",
+        "tags": [
+          "authoring"
+        ]
+      }
+    },
+    "/api/v1/authoring/numeric-checks/{id}/decision": {
+      "post": {
+        "operationId": "decision_api_v1_authoring_numeric_checks__id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "title": "Origin",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NumericCheckDecisionAck"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NumericCheckDecisionAck"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Decision",
+        "tags": [
+          "authoring"
         ]
       }
     },
@@ -23865,7 +26246,7 @@
   },
   "x-source-spec": {
     "source": "PRODUCT_DESIGN.md",
-    "spec_sha256": "2bfd471933be478a7cac51363a0482a87c81ec113c3e6cbdec88cfd139d43f37",
-    "spec_version": "3.0.5"
+    "spec_sha256": "30220c34fe7312887f5bcb1c67406c9638f1719ff3ed7bc9e95d7d5085b5d924",
+    "spec_version": "3.0.6"
   }
 }

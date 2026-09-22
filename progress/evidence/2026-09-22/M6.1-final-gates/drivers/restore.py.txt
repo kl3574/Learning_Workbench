@@ -1,0 +1,38 @@
+"""Restore only four known direct outputs, after preserving actual source/UI after bytes."""
+from pathlib import Path
+from common import ROOT, OUT, COMMIT, sha, now, write, snapshot, git_compare, head
+import json
+
+folder=OUT/'09-native'
+assert not (folder/'restoration.json').exists()
+r=json.loads((folder/'receipt.json').read_bytes())
+before=json.loads((folder/'source-before.json').read_bytes());after=json.loads((folder/'source-after.json').read_bytes())
+assert sha((folder/'source-before.json').read_bytes())==r['source_before_sha256']
+assert sha((folder/'source-after.json').read_bytes())==r['source_after_sha256']
+assert head()==COMMIT and snapshot()==after
+b={x['path']:x for x in before['files']};a={x['path']:x for x in after['files']}
+known={'docs/ui/m1-session-three-way-conflict.png','docs/ui/m1-after-1440.png','docs/ui/m1-after-390-agent.png','docs/ui/m1-after-1920.png'}
+changes=set(r['changed_inputs']);assert changes<=known, 'Unexpected output/source change: preserve and inspect before any restoration'
+b_ui=json.loads((folder/'ui-before/manifest.json').read_bytes());a_ui=json.loads((folder/'ui-after/manifest.json').read_bytes())
+assert sha((folder/'ui-before/manifest.json').read_bytes())==r['ui_before_manifest_sha256']
+assert sha((folder/'ui-after/manifest.json').read_bytes())==r['ui_after_manifest_sha256']
+assert len(b_ui['files'])==len(a_ui['files'])==44
+assert {x['path'] for x in b_ui['files']}=={x['path'] for x in a_ui['files']}
+for archive,record in [('ui-before',b_ui),('ui-after',a_ui)]:
+ for x in record['files']:
+  p=folder/archive/x['archived_file'];assert sha(p.read_bytes())==x['sha256'] and p.stat().st_size==x['bytes']
+restored=[]
+for name in sorted(changes):
+ original=(folder/'ui-before'/Path(name).name).read_bytes();actual=(folder/'ui-after'/Path(name).name).read_bytes()
+ assert sha(original)==b[name]['sha256'] and sha(actual)==a[name]['sha256'] and (ROOT/name).read_bytes()==actual
+ (ROOT/name).write_bytes(original)
+ assert (ROOT/name).read_bytes()==original
+ restored.append({'path':name,'before_sha256':sha(original),'after_sha256':sha(actual),'restored_sha256':sha((ROOT/name).read_bytes())})
+current=snapshot();git=git_compare(current)
+assert current==before and git['all_match']
+write(folder/'restored-source.json',current);write(folder/'restored-git.json',git)
+write(folder/'restoration.json',{'recorded_at':now(),'fixed_commit':COMMIT,'original_native_receipt_sha256':sha((folder/'receipt.json').read_bytes()),'original_unchanged':r['unchanged'],'original_changed_inputs':r['changed_inputs'],
+ 'preserved_top_level_ui_before_count':44,'preserved_top_level_ui_after_count':44,'restored':restored,
+ 'all_903_sources_match_before_and_fixed_git_after_restoration':True,'restored_source_sha256':sha((folder/'restored-source.json').read_bytes()),'restored_git_sha256':sha((folder/'restored-git.json').read_bytes()),
+ 'scope':'Only known direct test PNG outputs restored under exact before/after guards. Original negative unchanged flag and actual generated after bytes are retained; no test status is modified.'})
+print('Preserved both real UI snapshots; restored only',len(restored),'known output PNGs; 903 inputs now match Git.')

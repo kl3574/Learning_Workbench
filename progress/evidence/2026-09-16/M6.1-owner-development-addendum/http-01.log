@@ -1,0 +1,127 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_http_safe_discovery_cancel_survives_role_change_and_rejects_unknown_query _
+
+tmp_path = PosixPath('/tmp/pytest-of-lkx/pytest-60/test_http_safe_discovery_cance0')
+
+    def test_http_safe_discovery_cancel_survives_role_change_and_rejects_unknown_query(tmp_path):
+>       database, identity, app, client, headers = session(tmp_path)
+                                                   ^^^^^^^^^^^^^^^^^
+
+tests/integration/test_authoring_http.py:38: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tmp_path = PosixPath('/tmp/pytest-of-lkx/pytest-60/test_http_safe_discovery_cance0')
+preparer = None
+
+    def session(tmp_path, preparer=None):
+>       database = Database(Settings(data_dir=tmp_path / 'data', provider_secret_dir=tmp_path / 'synthetic-secrets'))
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: Settings.__init__() got an unexpected keyword argument 'provider_secret_dir'
+
+tests/integration/test_authoring_http.py:21: TypeError
+_ test_http_real_generation_separate_numeric_decisions_and_actual_environment_result _
+
+tmp_path = PosixPath('/tmp/pytest-of-lkx/pytest-60/test_http_real_generation_sepa0')
+
+    def test_http_real_generation_separate_numeric_decisions_and_actual_environment_result(tmp_path):
+        async def run():
+            async with local_provider(text=canonical_bytes(payload()).decode()) as server:
+                database, identity, app, client, headers = session(tmp_path, test_preparer(server.base_url))
+                try:
+                    app.state.provider_service.secret_store.initialize()
+                    app.state.provider_service.save_config(identity,'test_provider',ProviderConfigWrite(expected_revision=0,
+                        adapter='compatible_chat',base_url=server.base_url,model=MODEL,embedding_model=None,
+                        endpoint_policy='explicit_loopback',pricing=None),'config')
+                    app.state.provider_service.save_secret(identity,'test_provider',ProviderSecretWrite(expected_revision=1,
+                        secret='synthetic-http-authoring-key'),'secret')
+                    original = client.post('/api/v1/authoring/jobs',json=request().model_dump(mode='json'),headers=command(headers,'prepare'))
+                    assert original.status_code == 202, original.text
+                    job_id = original.json()['id']
+                    preview = client.post('/api/v1/consents/preview',json={'job_id':job_id,'expected_job_revision':1,
+                        'provider_id':'test_provider','expected_provider_revision':2,'expires_at':expires_after(300),
+                        'budget':{'max_input_tokens':20000,'max_output_tokens':5000,'max_provider_calls':1,
+                            'max_search_calls':0,'max_tool_calls':0,'timeout_seconds':10,'max_cost_usd':None}},headers=command(headers,'preview'))
+                    assert preview.status_code == 201, preview.text
+                    grant = client.post('/api/v1/consents',json={'proposal_id':preview.json()['id'],
+                        'proposal_sha256':preview.json()['proposal_sha256']},headers=command(headers,'grant'))
+                    assert grant.status_code == 201, grant.text
+                    assert await asyncio.to_thread(app.state.authoring_worker.run_once)
+                    generated = client.get('/api/v1/authoring/jobs/'+job_id)
+                    assert generated.status_code == 200, generated.text
+                    candidate = generated.json()['summary']['candidate']
+                    draft_path = '/api/v1/authoring/drafts/'+candidate['draft_id']
+                    draft = client.get(draft_path)
+                    assert draft.status_code == 200 and draft.json()['state'] == 'draft'
+                    assert client.get('/api/v1/drafts/'+candidate['draft_id']).status_code == 404
+                    preview_path = draft_path+'/numeric-checks'
+                    first = client.post(preview_path,json={'candidate':candidate},headers=command(headers,'numeric-preview-1'))
+                    assert first.status_code == 201, first.text
+                    assert first.json()['job'] is None and not app.state.numeric_worker.run_once()
+                    check_path = '/api/v1/authoring/numeric-checks/'+first.json()['id']
+                    declined = client.post(check_path+'/decision',json={'expected_revision':1,'operation_sha256':first.json()['operation_sha256'],
+                        'decision':'decline'},headers=command(headers,'decline'))
+                    assert declined.status_code == 200 and declined.json()['job'] is None
+                    second = client.post(preview_path,json={'candidate':candidate},headers=command(headers,'numeric-preview-2'))
+                    assert second.status_code == 201, second.text
+                    second_path = '/api/v1/authoring/numeric-checks/'+second.json()['id']
+                    approved = client.post(second_path+'/decision',json={'expected_revision':1,'operation_sha256':second.json()['operation_sha256'],
+                        'decision':'approve_once'},headers=command(headers,'approve'))
+                    assert approved.status_code == 202, approved.text
+                    safe = client.get('/api/v1/authoring/jobs').json()['items']
+                    assert {item['kind'] for item in safe} == {'authoring','authoring_numeric_check'}
+                    assert await asyncio.to_thread(app.state.numeric_worker.run_once)
+                    checked = client.get(second_path)
+                    assert checked.status_code == 200, checked.text
+                    result = checked.json()['result']
+                    # Actual trusted sandbox either evaluates the original plan or
+                    # reports this host's explicit isolation unavailability. The
+                    # latter is BLOCKED, never counted as successful arithmetic.
+                    assert result['outcome'] in {'passed','environment_unavailable'}, result
+                    assert result['verdict'] == ('PASS' if result['outcome']=='passed' else 'BLOCKED')
+                    assert client.get(draft_path).json()['state'] == 'draft'
+                    assert client.get(draft_path).json()['candidate'] == candidate
+                    assert len(server.requests) == 1
+                finally:
+                    client.close()
+>       asyncio.run(run())
+
+tests/integration/test_authoring_http.py:123: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/integration/test_authoring_http.py:66: in run
+    database, identity, app, client, headers = session(tmp_path, test_preparer(server.base_url))
+                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tmp_path = PosixPath('/tmp/pytest-of-lkx/pytest-60/test_http_real_generation_sepa0')
+preparer = <services.api.app.application.provider_budget.RequestPreparer object at 0x7f2baca3eff0>
+
+    def session(tmp_path, preparer=None):
+>       database = Database(Settings(data_dir=tmp_path / 'data', provider_secret_dir=tmp_path / 'synthetic-secrets'))
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: Settings.__init__() got an unexpected keyword argument 'provider_secret_dir'
+
+tests/integration/test_authoring_http.py:21: TypeError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <private-home>/.cache/learning-workbench-acceptance/m61-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <private-home>/.cache/learning-workbench-acceptance/m61-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_authoring_http.py::test_http_safe_discovery_cancel_survives_role_change_and_rejects_unknown_query
+FAILED tests/integration/test_authoring_http.py::test_http_real_generation_separate_numeric_decisions_and_actual_environment_result
+2 failed, 2 warnings in 0.33s

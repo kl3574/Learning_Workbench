@@ -1,0 +1,47 @@
+F401 [*] `json` imported but unused
+  --> services/api/app/infrastructure/authoring_numeric_runtime.py:17:8
+   |
+15 | import hashlib
+16 | import io
+17 | import json
+   |        ^^^^
+18 | import os
+19 | from pathlib import Path
+   |
+help: Remove unused import: `json`
+   |
+16 | import io
+   - import json
+17 | import os
+   |
+
+E731 Do not assign a `lambda` expression, use a `def`
+   --> services/api/app/infrastructure/authoring_numeric_runtime.py:411:9
+    |
+410 |     def _command(self, closure: _Closure, fds: dict[str, int]) -> list[str]:
+411 |         descriptor = lambda name: f'/proc/self/fd/{fds[name]}'
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+412 |         loader = descriptor(closure.loader)
+413 |         libraries = ':'.join(descriptor('runtime/lib/' + name) for name in closure.libraries
+    |
+help: Rewrite `descriptor` as a `def`
+
+E402 Module level import not at top of file
+  --> tests/unit/test_authoring_numeric.py:21:1
+   |
+21 | import pytest
+   | ^^^^^^^^^^^^^
+22 | from services.api.app.application.authoring_numeric import NumericError, evaluate_plan, validate_expression, validate_plan
+   |
+help: Move module level imports to top of file
+
+E402 Module level import not at top of file
+  --> tests/unit/test_authoring_numeric.py:22:1
+   |
+21 | import pytest
+22 | from services.api.app.application.authoring_numeric import NumericError, evaluate_plan, validate_expression, validate_plan
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+help: Move module level imports to top of file
+
+Found 4 errors.
+[*] 1 fixable with the `--fix` option (1 hidden fix can be enabled with the `--unsafe-fixes` option).

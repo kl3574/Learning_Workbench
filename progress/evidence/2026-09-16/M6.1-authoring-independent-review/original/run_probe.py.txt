@@ -1,0 +1,14 @@
+from pathlib import Path
+import hashlib,json,subprocess,sys,datetime,time
+root=Path('<HOME>/.cache/learning-workbench-acceptance/m61-active');cache=Path(__file__).parent
+paths=['PRODUCT_DESIGN.md','services/api/app/application/authoring.py','services/api/app/application/authoring_context.py','services/api/app/application/authoring_source.py','services/api/app/application/authoring_worker.py','services/api/app/infrastructure/authoring_repository.py','services/api/app/infrastructure/authoring_job_repository.py','services/api/app/application/consents.py','services/api/app/infrastructure/security.py','services/api/app/main.py','services/api/app/interfaces/authoring_http.py','services/api/app/authoring_dto.py','services/api/app/application/authoring_models.py','migrations/0014_authoring.sql','tests/integration/test_authoring_provider.py','tests/provider_protocol_fixture.py']
+sha=lambda b:hashlib.sha256(b).hexdigest()
+def inputs():return {p:sha((root/p).read_bytes()) for p in paths}
+before=inputs();(cache/'source-before.json').write_text(json.dumps(before,indent=2)+'\n')
+for p in paths:
+ if p.endswith('.py'):(cache/(p.replace('/','__')+'.txt')).write_bytes((root/p).read_bytes())
+cmd=['.venv/bin/python','-m','pytest','-c','pyproject.toml',str(cache/'test_generation_integrity_probe.py'),'-q']
+started=datetime.datetime.now(datetime.timezone.utc).isoformat();tick=time.monotonic()
+with (cache/'probe-red-01.log').open('xb') as f:r=subprocess.run(cmd,cwd=root,stdout=f,stderr=subprocess.STDOUT)
+after=inputs();receipt={'command':cmd,'exit_code':r.returncode,'started_at':started,'finished_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'wall_seconds':time.monotonic()-tick,'source_before':before,'source_after':after,'source_equal':before==after,'harness_sha256':sha((cache/'test_generation_integrity_probe.py').read_bytes()),'log_sha256':sha((cache/'probe-red-01.log').read_bytes()),'scope':'independent private fault fixture, real SQLite/loopback; no vendor/browser/root source edits'}
+(cache/'probe-red-01.json').write_text(json.dumps(receipt,indent=2)+'\n');print((cache/'probe-red-01.log').read_text());sys.exit(r.returncode)

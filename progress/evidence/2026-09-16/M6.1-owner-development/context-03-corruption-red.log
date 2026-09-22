@@ -1,0 +1,52 @@
+...FF.                                                                   [100%]
+=================================== FAILURES ===================================
+__ test_corrupt_owned_context_blocks_safe_control_without_disclosing_it[job] ___
+
+authoring = (<services.api.app.infrastructure.database.Database object at 0x719d5b56a600>, SessionIdentity(id='session_author_test...=[], citations=[], depends_on=[])], <services.api.app.application.authoring.AuthoringService object at 0x719d5b429f40>)
+read_kind = 'job'
+
+    @pytest.mark.parametrize('read_kind', ['job', 'page'])
+    def test_corrupt_owned_context_blocks_safe_control_without_disclosing_it(authoring, read_kind):
+        database, identity, _, service = authoring
+        ack = service.prepare(identity, request(), 'original')
+        with database.transaction() as conn:
+            conn.execute("UPDATE context_snapshots SET snapshot_sha256=?", ('f' * 64,))
+        before = all_rows(database)
+        learner = replace(identity, role='learner')
+>       with pytest.raises(ApiError) as caught:
+             ^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ApiError
+
+tests/integration/test_authoring_context.py:95: Failed
+__ test_corrupt_owned_context_blocks_safe_control_without_disclosing_it[page] __
+
+authoring = (<services.api.app.infrastructure.database.Database object at 0x719d5b568ad0>, SessionIdentity(id='session_author_test...=[], citations=[], depends_on=[])], <services.api.app.application.authoring.AuthoringService object at 0x719d5b569ac0>)
+read_kind = 'page'
+
+    @pytest.mark.parametrize('read_kind', ['job', 'page'])
+    def test_corrupt_owned_context_blocks_safe_control_without_disclosing_it(authoring, read_kind):
+        database, identity, _, service = authoring
+        ack = service.prepare(identity, request(), 'original')
+        with database.transaction() as conn:
+            conn.execute("UPDATE context_snapshots SET snapshot_sha256=?", ('f' * 64,))
+        before = all_rows(database)
+        learner = replace(identity, role='learner')
+>       with pytest.raises(ApiError) as caught:
+             ^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ApiError
+
+tests/integration/test_authoring_context.py:95: Failed
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <private-home>/.cache/learning-workbench-acceptance/m61-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <private-home>/.cache/learning-workbench-acceptance/m61-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_authoring_context.py::test_corrupt_owned_context_blocks_safe_control_without_disclosing_it[job]
+FAILED tests/integration/test_authoring_context.py::test_corrupt_owned_context_blocks_safe_control_without_disclosing_it[page]
+2 failed, 4 passed, 2 warnings in 0.64s
