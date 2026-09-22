@@ -1,0 +1,9 @@
+# PDF parser exit-race evidence
+
+The original 76 diagnostic payloads and both independent review reports/pins are retained. Review input copies are mapped by exact SHA to existing payloads in `review-input-aliases.json`; the raw manifests and original pins continue to describe raw bytes. All source and log hashes were checked before packaging.
+
+The controlled local race is demonstrated, and its four-line fix is independently reviewed. Original permanent RED: **1 FAIL, 2 PASS**; same test after fix: **3 PASS**; related existing document/worker checks: **19 PASS**. Ruff and product mypy pass. Counts overlap earlier checks and are not additive unique acceptance coverage. The original scan error/OCR/original-byte/restart assertions remain, with separate EOF/stop controls. These receipts do not establish full-suite success or that remote CI took this same interleaving. No Provider was invoked by this diagnosis or packaging.
+
+The 947-source early and 948-source permanent run boundaries are preserved. The new test's original null Git identity is retained; a separate committed-input receipt binds final bytes to candidate commit d4d018bc33a98328fc8bb2f21ab06adf78364803. Root later cherry-picked that candidate as d085401; this package does not invent a new test run on that descendant.
+
+Run `python verify.py` for public integrity, or supply `--raw-base`, `--raw-home` and `--ci-home` to replay every raw binding and the ordered literal transformations. The two home parameters are mandatory for raw replay and are never embedded in the public verifier or manifest. Only explicit home/pytest-root substitutions occur, with per-file replacement counts. Patch payloads use `.patch.log` and preserve captured whitespace. Private temporary databases, caches, archives and browser artifacts are excluded. The verifier checks integrity; it does not execute archived tests or re-establish their verdicts.

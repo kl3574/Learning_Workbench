@@ -1,0 +1,41 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_ test_failed_documents_report_safe_failure_and_retain_exact_original_without_formal_content[pdf-pdf_scan_fixture-True] _
+
+tmp_path = PosixPath('<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-pdf-ci-diagnosis-v1/02-poll-exit-gap-red<PYTEST_ROOT>/pytest-0/test_failed_documents_report_s0')
+kind = 'pdf', factory = <function pdf_scan_fixture at 0x79be705e36a0>
+scan = True
+
+    @pytest.mark.parametrize('kind,factory,scan', [
+        ('pdf', pdf_scan_fixture, True), ('pdf', pdf_malformed_fixture, False),
+        ('pdf', pdf_encrypted_fixture, False), ('docx', docx_malformed_fixture, False),
+    ])
+    def test_failed_documents_report_safe_failure_and_retain_exact_original_without_formal_content(tmp_path, kind, factory, scan):
+        settings = Settings(data_dir=tmp_path / 'data')
+        original = factory()
+        with application_client(settings) as (app, client):
+            staged, preview = staged_document(client, settings, original, kind)
+            assert preview['status'] == 'failed', preview
+            assert preview['preview_refs'] == []
+            denied = confirm(client, settings, preview, acknowledge=True)
+            assert denied.status_code == (403 if kind == 'docx' else 409), denied.text
+            job = client.get('/api/v1/jobs/' + staged['job']['id']).json()
+            assert job['status'] == 'failed' and job['result_refs'] == []
+>           assert job['error']['code'] != 'IMPORT_PARSE_FAILED', job
+E           AssertionError: {'id': 'job_fa81f8fdf6814b228172c173fb751737', 'workspace_id': 'workspace_46484f3519fa4828a35bbdc7eff94da7', 'kind': 'import', 'status': 'failed', ...}
+E           assert 'IMPORT_PARSE_FAILED' != 'IMPORT_PARSE_FAILED'
+
+tests/integration/test_document_http.py:169: AssertionError
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_document_http.py::test_failed_documents_report_safe_failure_and_retain_exact_original_without_formal_content[pdf-pdf_scan_fixture-True]
+1 failed, 2 warnings in 1.32s

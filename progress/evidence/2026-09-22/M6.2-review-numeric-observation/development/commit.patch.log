@@ -1,0 +1,876 @@
+commit b73953b2f65eecf533ceb4a834ab59c50a5546bb
+Author:     Kangxin Liu <robinliu97@outlook.com>
+AuthorDate: Tue Sep 22 16:10:21 2026 +0800
+Commit:     Kangxin Liu <robinliu97@outlook.com>
+CommitDate: Tue Sep 22 16:10:21 2026 +0800
+
+    feat(M6.2): add immutable numeric review observations and history verification
+
+diff --git a/services/api/app/application/authoring_group_numeric_service.py b/services/api/app/application/authoring_group_numeric_service.py
+index 1aa1ce2..cc4c010 100644
+--- a/services/api/app/application/authoring_group_numeric_service.py
++++ b/services/api/app/application/authoring_group_numeric_service.py
+@@ -1,5 +1,7 @@
+ """Explicit numeric preview and separate approval; no process runs in HTTP calls."""
+ 
++import sqlite3
++
+ from packages.contracts import domain_models as dm
+ from packages.contracts.canonical import sha256_bytes
+ from ..authoring_dto import NumericCheckDecisionAck
+@@ -15,6 +17,7 @@ from .authoring_group_context import AuthoringGroupContext
+ from .authoring_group_validation import group_numeric_plan
+ from .authoring_numeric import NumericError, validate_plan
+ from .errors import ApiError
++from .review_numeric_models import ReviewNumericObservation
+ 
+ 
+ class GroupNumericService:
+@@ -99,6 +102,18 @@ class GroupNumericService:
+             repo.load(record.view.id)
+             return record.view
+ 
++    def read_review_numeric(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                            candidate: dm.DraftCandidate) -> ReviewNumericObservation:
++        from .review_numeric import read_owner_numeric
++        return read_owner_numeric(connection, identity, candidate,
++                                  GroupNumericRepository(connection, identity.workspace_id), self.authoring)
++
++    def verify_review_numeric(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                              observation: ReviewNumericObservation) -> None:
++        from .review_numeric import verify_owner_numeric
++        verify_owner_numeric(connection, identity, observation,
++                             GroupNumericRepository(connection, identity.workspace_id), self.authoring)
++
+     def read(self, identity: SessionIdentity, identifier: str) -> AuthoringGroupNumericCheckView:
+         with self.database.transaction(immediate=False) as conn:
+             self.context.check_access(conn, identity)
+diff --git a/services/api/app/application/authoring_numeric_service.py b/services/api/app/application/authoring_numeric_service.py
+index 2c75064..4a0eb5a 100644
+--- a/services/api/app/application/authoring_numeric_service.py
++++ b/services/api/app/application/authoring_numeric_service.py
+@@ -1,4 +1,6 @@
+ """Explicit numeric preview and separate approval; no process runs in HTTP calls."""
++import sqlite3
++
+ from packages.contracts import domain_models as dm
+ from packages.contracts.canonical import sha256_bytes
+ from ..authoring_dto import NumericCheckDecisionAck, NumericCheckPreviewWrite, NumericCheckView
+@@ -12,6 +14,7 @@ from .authoring import AuthoringService
+ from .authoring_context import AuthoringContext
+ from .authoring_numeric import NumericError, validate_plan
+ from .errors import ApiError
++from .review_numeric_models import ReviewNumericObservation
+ 
+ 
+ class NumericService:
+@@ -71,6 +74,18 @@ class NumericService:
+             repo.load(record.view.id)
+             return record.view
+ 
++    def read_review_numeric(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                            candidate: dm.DraftCandidate) -> ReviewNumericObservation:
++        from .review_numeric import read_owner_numeric
++        return read_owner_numeric(connection, identity, candidate,
++                                  NumericRepository(connection, identity.workspace_id), self.authoring)
++
++    def verify_review_numeric(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                              observation: ReviewNumericObservation) -> None:
++        from .review_numeric import verify_owner_numeric
++        verify_owner_numeric(connection, identity, observation,
++                             NumericRepository(connection, identity.workspace_id), self.authoring)
++
+     def read(self, identity: SessionIdentity, identifier: str) -> NumericCheckView:
+         with self.database.transaction(immediate=False) as conn:
+             self.context.check_access(conn, identity)
+diff --git a/services/api/app/application/review_numeric.py b/services/api/app/application/review_numeric.py
+new file mode 100644
+index 0000000..a607fb1
+--- /dev/null
++++ b/services/api/app/application/review_numeric.py
+@@ -0,0 +1,191 @@
++"""Owner-backed numeric observations and exact historical prefix verification.
++
++Read methods never prepare a runtime or execute work. The future Review owner
++must store the descriptor with its own authenticated history; this port does
++not make caller-supplied self-consistent JSON an authentic past observation.
++"""
++import sqlite3
++from typing import Literal, Protocol
++
++from pydantic import ValidationError
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import canonical_bytes, metadata_sha256, sha256_bytes
++from ..authoring_dto import NumericCheckView
++from ..authoring_group_dto import AuthoringGroupNumericCheckView
++from ..infrastructure.authoring_job_repository import integrity
++from ..infrastructure.authoring_numeric_repository import NumericRepository, NumericStart
++from ..infrastructure.authoring_group_numeric_repository import GroupNumericRepository, GroupNumericRecord
++from ..infrastructure.database import utc_now
++from ..infrastructure.security import SessionIdentity, author_execution_identity
++from .authoring import AuthoringService
++from .authoring_group import AuthoringGroupService
++from .authoring_context import AuthoringContext
++from .draft_candidates import DraftCandidates
++from .errors import ApiError
++from .review_material_models import SingleReviewMaterial, GroupReviewMaterial
++from .review_numeric_models import (
++    NumericReviewCheck, NumericReviewCommand, NumericReviewEvent, ReviewNumericObservation, instant,
++)
++
++Repository = NumericRepository | GroupNumericRepository
++
++
++def read_numeric_history(repo: Repository, identifier: str, observed_at: str,
++                         original: NumericReviewCheck | None = None) -> NumericReviewCheck:
++    """Called only by a real numeric repository after its complete ledger checks.
++
++Commands use SQLite insertion order; Jobs use their durable seq. A caller may
++already hold an older SQLite snapshot, so wall-clock timestamps cannot select
++the prefix. Explicit frozen revision/prefix facts are rechecked instead.
++    """
++    record = repo.load(identifier)
++    rows = repo.conn.execute('SELECT * FROM authoring_commands WHERE workspace_id=? AND owner_id=? ORDER BY rowid',
++                             (repo.workspace_id, identifier)).fetchall()
++    commands = [NumericReviewCommand.model_validate({key: row[key] for key in NumericReviewCommand.model_fields})
++                for row in rows]
++    if original is not None:
++        count = len(original.commands)
++        if commands[:count] != original.commands:
++            raise integrity()
++        commands = commands[:count]
++    # Approval has just one durable decision. Its original preview ACK remains
++    # independently checked even after this mutable record advances to r2.
++    if not any(command.route.endswith('/decision') for command in commands):
++        raw = record.model_dump(mode='json')
++        raw['decision_actor_id'] = None
++        raw['view'].update(revision=1, decision='pending', job=None, job_revision=None, result=None, expired=False)
++        record = type(record).model_validate(raw)
++    job = value = start = end = None
++    events: list[NumericReviewEvent] = []
++    raw_view = record.view.model_dump(mode='json')
++    raw_view['expired'] = instant(record.view.expires_at) <= instant(observed_at)
++    if record.view.job is not None:
++        job_id = record.view.job.id
++        value = repo.job_input(job_id)
++        current = repo.jobs.snapshot(job_id)
++        revision = original.job.revision if original is not None and original.job is not None else current.revision
++        job = repo.jobs.snapshot(job_id, revision)
++        events = [NumericReviewEvent(seq=event.seq, type=event.type, payload_json=event.payload_json,
++                                    occurred_at=event.occurred_at) for event in repo.jobs.event_prefix(job_id, revision)]
++        start, end = repo.execution_state(job_id)
++        if original is not None:
++            if original.start is None:
++                start = None
++            else:
++                if start is None:
++                    raise integrity()
++                # mark_started fills the one allowed field without changing the
++                # launch permission; the original absent process fact stays absent.
++                raw_start = start.model_dump(mode='json')
++                if original.start.actual_started_at is None:
++                    raw_start['actual_started_at'] = None
++                start = NumericStart.model_validate(raw_start)
++            if original.end is None:
++                end = None
++        raw_view.update(job={'id': job.id, 'status': job.status}, job_revision=job.revision,
++                        result=end.result.model_dump(mode='json') if end else None)
++    view = (AuthoringGroupNumericCheckView.model_validate(raw_view) if isinstance(record, GroupNumericRecord)
++            else NumericCheckView.model_validate(raw_view))
++    result = NumericReviewCheck(record=record, view=view, commands=commands, job=job, input=value,
++                               events=events, start=start, end=end)
++    if original is not None and result != original:
++        raise integrity()
++    return result
++
++
++def _checked_observation(value: ReviewNumericObservation) -> ReviewNumericObservation:
++    try:
++        return ReviewNumericObservation.model_validate(value.model_dump(mode='python'))
++    except (ValidationError, ValueError, TypeError, AttributeError):
++        raise integrity() from None
++
++
++def _observation(raw: dict) -> ReviewNumericObservation:
++    raw['descriptor_sha256'] = sha256_bytes(canonical_bytes(raw))
++    return ReviewNumericObservation.model_validate(raw)
++
++
++def read_owner_numeric(connection: sqlite3.Connection, identity: SessionIdentity, candidate: dm.DraftCandidate,
++                       repo: Repository, authoring: AuthoringService | AuthoringGroupService | None,
++                       original: ReviewNumericObservation | None = None) -> ReviewNumericObservation:
++    AuthoringContext.check_access(connection, identity)
++    current = author_execution_identity(connection, identity.workspace_id, identity.id)
++    AuthoringContext.check_access(connection, current)
++    if authoring is None:
++        raise ApiError(503, 'AUTHORING_OUTPUT_UNAVAILABLE', '原生成结果当前无法核验。')
++    material = authoring.read_review_material(connection, current, candidate)
++    if not isinstance(material.payload, (SingleReviewMaterial, GroupReviewMaterial)):
++        raise integrity()
++    source_kind = 'authoring_single' if isinstance(repo, NumericRepository) else 'authoring_group'
++    if material.source_kind != source_kind:
++        raise integrity()
++    observed_at = utc_now() if original is None else original.observed_at
++    identifiers = repo.candidate_checks(candidate.draft_id)
++    if original is not None:
++        previous = [item.view.id for item in original.checks]
++        if identifiers[:len(previous)] != previous:
++            raise integrity()
++        identifiers = previous
++    checks = [repo.review_check(identifier, observed_at, original.checks[index] if original else None)
++              for index, identifier in enumerate(identifiers)]
++    record = material.payload.record
++    result = _observation(dict(version='review-numeric-observation-v1', workspace_id=current.workspace_id,
++        source_kind=source_kind, candidate=material.candidate.model_dump(mode='json'),
++        candidate_record_sha256=metadata_sha256(record), source_job_id=record.source_job_id,
++        provider_receipt_id=record.provider_receipt_id, coverage='authoring_numeric_ledger', observed_at=observed_at,
++        checks=[item.model_dump(mode='json') for item in checks]))
++    if original is not None and result != original:
++        raise integrity()
++    return result
++
++
++def verify_owner_numeric(connection: sqlite3.Connection, identity: SessionIdentity, original: ReviewNumericObservation,
++                         repo: Repository, authoring: AuthoringService | AuthoringGroupService | None) -> None:
++    original = _checked_observation(original)
++    if original.workspace_id != identity.workspace_id:
++        raise ApiError(404, 'NUMERIC_CHECK_MISSING', '数值观察不存在或不可访问。')
++    read_owner_numeric(connection, identity, original.candidate, repo, authoring, original)
++
++
++class ReviewNumericOwner(Protocol):
++    def read_review_numeric(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                            candidate: dm.DraftCandidate) -> ReviewNumericObservation: ...
++
++    def verify_review_numeric(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                              observation: ReviewNumericObservation) -> None: ...
++
++
++class ReviewNumeric:
++    """Catalog-routed read facade. Import absence is a pipeline fact, not N/A."""
++    def __init__(self, candidates: DraftCandidates,
++                 owners: dict[Literal['authoring_single', 'authoring_group'], ReviewNumericOwner]):
++        self.candidates, self.owners = candidates, dict(owners)
++
++    def read_review_numeric(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                            draft_id: str, expected_revision: int) -> ReviewNumericObservation:
++        resolved = self.candidates.lookup(connection, identity, draft_id, expected_revision)
++        if resolved.source_kind == 'import':
++            return _observation(dict(version='review-numeric-observation-v1', workspace_id=resolved.workspace_id,
++                source_kind='import', candidate=resolved.candidate.model_dump(mode='json'), candidate_record_sha256=None,
++                source_job_id=None, provider_receipt_id=None, coverage='no_numeric_owner_pipeline', observed_at=utc_now(), checks=[]))
++        owner = self.owners.get(resolved.source_kind)
++        if owner is None:
++            raise ApiError(503, 'NUMERIC_OWNER_UNAVAILABLE', '数值观察所属服务当前不可用。')
++        result = _checked_observation(owner.read_review_numeric(connection, identity, resolved.candidate))
++        if (result.workspace_id != resolved.workspace_id or result.source_kind != resolved.source_kind
++                or result.candidate != resolved.candidate):
++            raise integrity()
++        return result
++
++    def verify_review_numeric(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                              observation: ReviewNumericObservation) -> None:
++        original = _checked_observation(observation)
++        resolved = self.candidates.lookup(connection, identity, original.candidate.draft_id, original.candidate.draft_revision)
++        if (original.workspace_id != resolved.workspace_id or original.source_kind != resolved.source_kind
++                or original.candidate != resolved.candidate):
++            raise integrity()
++        if resolved.source_kind != 'import':
++            owner = self.owners.get(resolved.source_kind)
++            if owner is None:
++                raise ApiError(503, 'NUMERIC_OWNER_UNAVAILABLE', '数值观察所属服务当前不可用。')
++            owner.verify_review_numeric(connection, identity, original)
+diff --git a/services/api/app/application/review_numeric_models.py b/services/api/app/application/review_numeric_models.py
+new file mode 100644
+index 0000000..4a40a92
+--- /dev/null
++++ b/services/api/app/application/review_numeric_models.py
+@@ -0,0 +1,130 @@
++"""Frozen numeric ledger observations, never numerical or publication approval.
++
++Hashes bind bytes. A later Review owner must durably authenticate this complete
++observation; reconstructing a self-consistent model does not prove it occurred.
++"""
++from datetime import datetime
++from typing import Annotated, Literal, Self
++
++from pydantic import Field, model_validator
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import canonical_bytes, sha256_bytes
++from ..authoring_dto import AuthoringModel, NumericCheckView
++from ..authoring_group_dto import AuthoringGroupNumericCheckView
++from ..import_dto import JobSnapshot
++from ..infrastructure.authoring_job_repository import checked
++from ..infrastructure.authoring_numeric_repository import NumericRecord, NumericStart, NumericEnd
++from ..infrastructure.authoring_group_numeric_repository import GroupNumericRecord
++from .authoring_models import NumericJobInput
++from .authoring_group_models import AuthoringGroupNumericJobInput
++from .draft_candidate_models import DraftSourceKind
++
++
++def instant(value: str) -> datetime:
++    return datetime.fromisoformat(value.replace('Z', '+00:00'))
++
++
++class NumericReviewCommand(AuthoringModel):
++    actor_id: dm.Id
++    route: str
++    key: str
++    request_json: str
++    request_sha256: dm.Sha256
++    ack_json: str
++    ack_sha256: dm.Sha256
++    job_revision: dm.Revision | None
++    basis_revision: dm.Revision | None
++    created_at: dm.UTC
++
++    @model_validator(mode='after')
++    def complete_bytes(self) -> Self:
++        checked(self.request_json, self.request_sha256)
++        checked(self.ack_json, self.ack_sha256)
++        return self
++
++
++class NumericReviewEvent(AuthoringModel):
++    seq: dm.Revision
++    type: str
++    payload_json: str
++    occurred_at: dm.UTC
++
++
++NumericReviewRecord = Annotated[NumericRecord | GroupNumericRecord, Field(discriminator='version')]
++NumericReviewInput = Annotated[NumericJobInput | AuthoringGroupNumericJobInput, Field(discriminator='version')]
++
++
++class NumericReviewCheck(AuthoringModel):
++    record: NumericReviewRecord
++    view: NumericCheckView | AuthoringGroupNumericCheckView
++    commands: Annotated[list[NumericReviewCommand], Field(min_length=1)]
++    job: JobSnapshot | None
++    input: NumericReviewInput | None
++    events: list[NumericReviewEvent]
++    start: NumericStart | None
++    end: NumericEnd | None
++
++    @model_validator(mode='after')
++    def same_operation(self) -> Self:
++        excluded = {'expired', 'job', 'job_revision', 'result'}
++        if self.record.view.model_dump(exclude=excluded) != self.view.model_dump(exclude=excluded):
++            raise ValueError('observation must preserve the complete original numeric operation')
++        if self.job is None:
++            if any(value is not None for value in [self.view.job, self.input, self.start, self.end]) or self.events:
++                raise ValueError('unapproved observation cannot claim execution history')
++        else:
++            if (self.view.job is None or self.input is None or self.view.job.id != self.job.id
++                    or self.view.job.status != self.job.status or self.view.job_revision != self.job.revision
++                    or self.input.job_id != self.job.id or self.input.check_id != self.view.id
++                    or self.input.operation_sha256 != self.view.operation_sha256
++                    or self.input.candidate != self.view.candidate or self.input.plan != self.view.plan
++                    or self.input.runtime != self.view.runtime or len(self.events) != self.job.revision):
++                raise ValueError('observation must preserve the exact Job/input/event revision')
++        if self.view.result != (self.end.result if self.end else None):
++            raise ValueError('result must retain its complete original output bytes')
++        return self
++
++
++class ReviewNumericObservation(AuthoringModel):
++    version: Literal['review-numeric-observation-v1']
++    workspace_id: dm.Id
++    source_kind: DraftSourceKind
++    candidate: dm.DraftCandidate
++    candidate_record_sha256: dm.Sha256 | None
++    source_job_id: dm.Id | None
++    provider_receipt_id: dm.Id | None
++    coverage: Literal['authoring_numeric_ledger', 'no_numeric_owner_pipeline']
++    observed_at: dm.UTC
++    checks: Annotated[list[NumericReviewCheck], Field(max_length=100)]
++    descriptor_sha256: dm.Sha256
++
++    @model_validator(mode='after')
++    def complete_observation(self) -> Self:
++        import_owner = self.source_kind == 'import'
++        identities = [self.candidate_record_sha256, self.source_job_id, self.provider_receipt_id]
++        if import_owner:
++            if self.coverage != 'no_numeric_owner_pipeline' or self.checks or any(x is not None for x in identities):
++                raise ValueError('Import has no execution ledger; this does not establish absence of mathematics')
++        elif self.coverage != 'authoring_numeric_ledger' or any(x is None for x in identities):
++            raise ValueError('generated observation requires the actual original owner history')
++        if len({check.view.id for check in self.checks}) != len(self.checks):
++            raise ValueError('all original checks must be distinct in ledger order')
++        for check in self.checks:
++            group = isinstance(check.record, GroupNumericRecord)
++            if (check.record.workspace_id != self.workspace_id
++                    or check.view.candidate.model_dump() != self.candidate.model_dump()
++                    or group != (self.source_kind == 'authoring_group')
++                    or check.view.expired != (instant(check.view.expires_at) <= instant(self.observed_at))
++                    or instant(check.view.created_at) > instant(self.observed_at)):
++                raise ValueError('each observation must retain its exact owner/candidate and observation time')
++            times = [command.created_at for command in check.commands] + [event.occurred_at for event in check.events]
++            if check.start:
++                times += [value for value in [check.start.admitted_at, check.start.actual_started_at] if value is not None]
++            if check.end:
++                times.append(check.end.result.finished_at)
++            if any(instant(value) > instant(self.observed_at) for value in times):
++                raise ValueError('observations cannot claim facts from their future')
++        raw = self.model_dump(mode='json', exclude={'descriptor_sha256'})
++        if sha256_bytes(canonical_bytes(raw)) != self.descriptor_sha256:
++            raise ValueError('descriptor must cover all original ledger facts without selecting a preferred result')
++        return self
+diff --git a/services/api/app/infrastructure/authoring_group_numeric_repository.py b/services/api/app/infrastructure/authoring_group_numeric_repository.py
+index feb4cf0..2b0137d 100644
+--- a/services/api/app/infrastructure/authoring_group_numeric_repository.py
++++ b/services/api/app/infrastructure/authoring_group_numeric_repository.py
+@@ -3,7 +3,7 @@
+ import base64
+ import sqlite3
+ from datetime import datetime, timedelta
+-from typing import Literal, Self, TypeVar
++from typing import TYPE_CHECKING, Literal, Self, TypeVar
+ from uuid import uuid4
+ 
+ from pydantic import BaseModel, TypeAdapter, model_validator
+@@ -37,6 +37,10 @@ from .authoring_numeric_repository import NumericStart, NumericEnd
+ from .database import utc_now
+ from .security import SessionIdentity
+ 
++if TYPE_CHECKING:
++    from ..application.review_numeric_models import NumericReviewCheck
++
++
+ M = TypeVar("M", bound=BaseModel)
+ 
+ 
+@@ -216,6 +220,12 @@ class GroupNumericRepository:
+         value["result"] = result.model_dump(mode="json") if result else None
+         return AuthoringGroupNumericCheckView.model_validate(value)
+ 
++    def review_check(self, identifier: str, observed_at: str,
++                     original: 'NumericReviewCheck | None' = None) -> 'NumericReviewCheck':
++        """Checked read of the original approval/Job/execution prefix; no writes."""
++        from ..application.review_numeric import read_numeric_history
++        return read_numeric_history(self, identifier, observed_at, original)
++
+     def current(self, identifier: str) -> AuthoringGroupNumericCheckView:
+         record = self.load(identifier)
+         _, end = self._execution(record)
+diff --git a/services/api/app/infrastructure/authoring_job_repository.py b/services/api/app/infrastructure/authoring_job_repository.py
+index 9e5510d..51266b9 100644
+--- a/services/api/app/infrastructure/authoring_job_repository.py
++++ b/services/api/app/infrastructure/authoring_job_repository.py
+@@ -42,6 +42,14 @@ class AuthoringLease:
+         return DispatchLease(owner_id=self.owner, job_revision=self.revision, expires_at=self.expires_at)
+ 
+ 
++@dataclass(frozen=True, repr=False)
++class AuthoringJobEvent:
++    seq: int
++    type: str
++    payload_json: str
++    occurred_at: str
++
++
+ class AuthoringJobRepository:
+     def __init__(self, connection: sqlite3.Connection, workspace_id: str):
+         self.conn, self.workspace_id = connection, workspace_id
+@@ -140,6 +148,15 @@ class AuthoringJobRepository:
+             revision=revision, created_at=row['created_at'], updated_at=event['occurred_at'],
+             progress=JobProgress(completed=0, total=None, label=event['type']), result_refs=[], warnings=[], error=None)
+ 
++    def event_prefix(self, identifier: str, revision: int) -> tuple[AuthoringJobEvent, ...]:
++        """Return exact owned events after checking complete history in this transaction."""
++        if not self.conn.in_transaction:
++            raise ApiError(409, 'TRANSACTION_REQUIRED', '任务历史需要当前事务核验。')
++        self.snapshot(identifier, revision)
++        rows = self.conn.execute('SELECT * FROM job_events WHERE job_id=? AND seq<=? ORDER BY seq',
++                                 (identifier, revision)).fetchall()
++        return tuple(AuthoringJobEvent(row['seq'], row['type'], row['payload_json'], row['occurred_at']) for row in rows)
++
+     def transition(self, row: sqlite3.Row, status: str, *, result: dict | None = None,
+                    cancel: bool | None = None, owner: str | None = None, until: str | None = None) -> None:
+         if row['status'] in TERMINAL:
+diff --git a/services/api/app/infrastructure/authoring_numeric_repository.py b/services/api/app/infrastructure/authoring_numeric_repository.py
+index d41003f..f1786bd 100644
+--- a/services/api/app/infrastructure/authoring_numeric_repository.py
++++ b/services/api/app/infrastructure/authoring_numeric_repository.py
+@@ -2,7 +2,7 @@
+ import base64
+ import sqlite3
+ from datetime import datetime, timedelta
+-from typing import Literal, Self, TypeVar
++from typing import TYPE_CHECKING, Literal, Self, TypeVar
+ from uuid import uuid4
+ 
+ from pydantic import BaseModel, TypeAdapter, model_validator
+@@ -21,6 +21,10 @@ from .authoring_repository import AuthoringRepository
+ from .database import utc_now
+ from .security import SessionIdentity
+ 
++if TYPE_CHECKING:
++    from ..application.review_numeric_models import NumericReviewCheck
++
++
+ M = TypeVar('M', bound=BaseModel)
+ 
+ 
+@@ -215,6 +219,12 @@ class NumericRepository:
+         value['result'] = result.model_dump(mode='json') if result else None
+         return NumericCheckView.model_validate(value)
+ 
++    def review_check(self, identifier: str, observed_at: str,
++                     original: 'NumericReviewCheck | None' = None) -> 'NumericReviewCheck':
++        """Checked read of the original approval/Job/execution prefix; no writes."""
++        from ..application.review_numeric import read_numeric_history
++        return read_numeric_history(self, identifier, observed_at, original)
++
+     def current(self, identifier: str) -> NumericCheckView:
+         record = self.load(identifier)
+         _, end = self._execution(record)
+diff --git a/tests/integration/test_review_numeric_observations.py b/tests/integration/test_review_numeric_observations.py
+new file mode 100644
+index 0000000..963e3b7
+--- /dev/null
++++ b/tests/integration/test_review_numeric_observations.py
+@@ -0,0 +1,343 @@
++"""Read-only historical numeric observations from real SQLite owners and loopback generation."""
++from dataclasses import replace
++import base64
++import json
++
++import pytest
++
++from packages.contracts.canonical import canonical_bytes, sha256_bytes
++from services.api.app.application.errors import ApiError
++from services.api.app.infrastructure.authoring_numeric_repository import NumericRepository
++from services.api.app.infrastructure.authoring_group_numeric_repository import GroupNumericRepository
++from services.api.app.infrastructure.database import utc_now
++from services.api.app.import_dto import JobCancelRequest
++
++from tests.integration.test_authoring_numeric_provider_history import ProviderHistoryCase, table_hashes
++from tests.integration.test_authoring_numeric_service import generated as single_fixture, decision
++from tests.integration.test_authoring_group_numeric_service import generated_group
++
++
++@pytest.fixture(params=['single', 'group'])
++def generated(request, tmp_path):
++    state = single_fixture.__wrapped__(tmp_path) if request.param == 'single' else generated_group(tmp_path, 'assessment')
++    return ProviderHistoryCase(request.param, state)
++
++
++def repository(case, conn):
++    cls = NumericRepository if case.variant == 'single' else GroupNumericRepository
++    return cls(conn, case.identity.workspace_id)
++
++
++def read(case):
++    with case.database.transaction(immediate=False) as conn:
++        conn.execute('PRAGMA query_only=ON')
++        return case.numeric.read_review_numeric(conn, case.identity, case.candidate)
++
++
++def verify(case, observation, identity=None):
++    with case.database.transaction(immediate=False) as conn:
++        conn.execute('PRAGMA query_only=ON')
++        case.numeric.verify_review_numeric(conn, identity or case.identity, observation)
++
++
++def test_real_numeric_owner_reads_all_checks_without_writes_or_runtime(generated, monkeypatch):
++    case = generated
++    first = case.preview('first')
++    second = case.preview('second')
++    before = table_hashes(case.database)
++    with case.database.transaction(immediate=False) as conn:
++        conn.execute('PRAGMA query_only=ON')
++        def forbidden(*args, **kwargs):
++            pytest.fail('numeric review must not open another connection or invoke runtime')
++        with monkeypatch.context() as patch:
++            patch.setattr(case.database, 'connect', forbidden)
++            for method in ['prepare', 'check', 'manifest_document', 'run_checked']:
++                patch.setattr(case.runtime, method, forbidden, raising=False)
++            observation = case.numeric.read_review_numeric(conn, case.identity, case.candidate)
++            assert [item.view.id for item in observation.checks] == [first.id, second.id]
++            case.numeric.verify_review_numeric(conn, case.identity, observation)
++    assert table_hashes(case.database) == before
++
++
++def test_old_observations_survive_new_checks_decisions_job_progress_recovery_and_expiry(generated, monkeypatch):
++    from services.api.app.infrastructure import authoring_numeric_repository as single_repo
++    from services.api.app.infrastructure import authoring_group_numeric_repository as group_repo
++
++    case = generated
++    empty = read(case)
++    first, second = case.preview('pending-first'), case.preview('pending-second')
++    pending = read(case)
++    assert all(item.view.decision == 'pending' and not item.view.expired for item in pending.checks)
++    # Same timestamp and arbitrary UUID order cannot reorder an appended row.
++    with monkeypatch.context() as patch:
++        patch.setattr(single_repo if case.variant == 'single' else group_repo, 'utc_now', lambda: first.created_at)
++        third = case.preview('same-time-later')
++    case.numeric.decide(case.identity, second.id, decision(second, 'decline'), 'decline-second')
++    ack = case.numeric.decide(case.identity, first.id, decision(first), 'approve-first')
++    queued = read(case)
++    assert [item.view.id for item in queued.checks] == [first.id, second.id, third.id]
++    assert queued.checks[0].job.id == ack.job.id and queued.checks[0].job.status == 'queued'
++    worker = case.worker()
++    lease, _, _ = worker.claim()
++    running = read(case)
++    assert running.checks[0].job.status == 'running' and running.checks[0].start is None
++    with case.database.transaction() as conn:
++        assert repository(case, conn).begin(lease, utc_now())
++    admitted = read(case)
++    assert admitted.checks[0].start.admitted_at is not None
++    assert admitted.checks[0].start.actual_started_at is None
++    # Real recovery of a committed permission cannot execute the plan again.
++    with case.database.transaction() as conn:
++        conn.execute("UPDATE jobs SET lease_until='2000-01-01T00:00:00Z' WHERE id=?", (lease.job_id,))
++    def forbidden(*args, **kwargs):
++        pytest.fail('recovery of admitted work must not call an executor')
++    monkeypatch.setattr(case.runtime, 'run_checked', forbidden, raising=False)
++    assert worker.run_once()
++    terminal = read(case)
++    result = terminal.checks[0].end.result
++    assert (result.verdict, result.outcome, result.exit_code) == ('BLOCKED', 'outcome_unknown', None)
++    assert terminal.checks[0].view.result == result
++    before = table_hashes(case.database)
++    monkeypatch.setattr(single_repo, 'utc_now', lambda: '2099-01-01T00:00:00Z')
++    monkeypatch.setattr(group_repo, 'utc_now', lambda: '2099-01-01T00:00:00Z')
++    for original in [empty, pending, queued, running, admitted, terminal]:
++        verify(case, original)
++    assert not pending.checks[0].view.expired
++    assert table_hashes(case.database) == before
++
++
++def test_terminal_cancel_observation_keeps_original_input_runtime_and_all_output_facts(generated):
++    case = generated
++    preview = case.preview()
++    ack = case.numeric.decide(case.identity, preview.id, decision(preview), 'approve')
++    case.numeric.cancel_job(case.identity, ack.job.id, JobCancelRequest(expected_revision=1), 'cancel')
++    original = read(case)
++    entry = original.checks[0]
++    assert entry.view.result.verdict == 'BLOCKED' and entry.view.result.outcome == 'cancelled'
++    assert entry.start.admitted_at is entry.start.actual_started_at is None
++    assert entry.view.result.exit_code is None
++    assert entry.record.runtime_manifest_json == case.runtime.manifest_document().decode()
++    assert entry.input.plan == preview.plan and entry.input.runtime == preview.runtime
++    assert sha256_bytes(canonical_bytes(entry.input)) == entry.end.result.input_sha256
++    assert entry.end.stdout_base64 == entry.end.stderr_base64 == '' and not entry.end.output_complete
++    if case.variant == 'group':
++        assert entry.input.target.model_dump() == case.state[5].model_dump()
++        material = case.authoring.draft(case.identity, case.candidate.draft_id)
++        private = case.authoring.solution(case.identity, case.candidate.draft_id, entry.view.target.member_key)
++        assert private.payload.answer.numeric_plan == entry.view.plan
++        assert material.candidate.candidate_sha256 == original.candidate.candidate_sha256
++    # A later terminal no-op cancel command may be appended; old original ACK,
++    # command/event prefixes and result remain exact.
++    case.numeric.cancel_job(case.identity, ack.job.id, JobCancelRequest(expected_revision=1), 'cancel-again')
++    before = table_hashes(case.database)
++    verify(case, original)
++    assert table_hashes(case.database) == before
++
++
++@pytest.mark.parametrize('damage', ['check_missing', 'preview_command', 'runtime_manifest', 'job_event', 'execution_missing', 'output_bytes'])
++def test_original_numeric_ledger_loss_or_tampering_is_rejected(generated, damage):
++    case = generated
++    preview = case.preview()
++    ack = case.numeric.decide(case.identity, preview.id, decision(preview), 'approve')
++    case.numeric.cancel_job(case.identity, ack.job.id, JobCancelRequest(expected_revision=1), 'cancel')
++    original = read(case)
++    table = 'authoring_numeric_checks' if case.variant == 'single' else 'authoring_group_numeric_checks'
++    with case.database.transaction() as conn:
++        if damage == 'check_missing':
++            conn.execute(f'DELETE FROM {table} WHERE check_id=?', (preview.id,))
++        elif damage == 'preview_command':
++            # Current repository validation accepts any legitimate nonblank key;
++            # the observed original command prefix must still detect replacement.
++            conn.execute("UPDATE authoring_commands SET key='changed-key' WHERE owner_id=? AND job_revision IS NULL", (preview.id,))
++        elif damage == 'runtime_manifest':
++            row = conn.execute(f'SELECT record_json FROM {table} WHERE check_id=?', (preview.id,)).fetchone()
++            raw = json.loads(row['record_json'])
++            raw['runtime_manifest_json'] = '{}'
++            encoded = canonical_bytes(raw)
++            conn.execute(f'UPDATE {table} SET record_json=?,record_sha256=? WHERE check_id=?',
++                         (encoded.decode(), sha256_bytes(encoded), preview.id))
++        elif damage == 'job_event':
++            conn.execute('DELETE FROM job_events WHERE job_id=? AND seq=1', (ack.job.id,))
++        elif damage == 'execution_missing':
++            conn.execute('DELETE FROM authoring_numeric_executions WHERE job_id=?', (ack.job.id,))
++        else:
++            row = conn.execute('SELECT end_json FROM authoring_numeric_executions WHERE job_id=?', (ack.job.id,)).fetchone()
++            raw = json.loads(row['end_json'])
++            raw['stderr_base64'] = 'Y2hhbmdlZA=='
++            encoded = canonical_bytes(raw)
++            conn.execute('UPDATE authoring_numeric_executions SET end_json=?,end_sha256=? WHERE job_id=?',
++                         (encoded.decode(), sha256_bytes(encoded), ack.job.id))
++    before = table_hashes(case.database)
++    with pytest.raises(ApiError):
++        verify(case, original)
++    assert table_hashes(case.database) == before
++
++
++@pytest.mark.parametrize('damage', ['role', 'revoked', 'workspace', 'provider'])
++def test_observation_and_history_verification_require_current_access_and_provider(generated, damage):
++    case = generated
++    case.preview()
++    original = read(case)
++    identity = case.identity
++    if damage == 'provider':
++        case.damage_original_artifact()
++    elif damage == 'workspace':
++        identity = replace(identity, workspace_id='workspace_other')
++    else:
++        with case.database.transaction() as conn:
++            if damage == 'role':
++                conn.execute("UPDATE local_sessions SET role='learner' WHERE id=?", (identity.id,))
++            else:
++                conn.execute("UPDATE local_sessions SET revoked_at='2026-01-01T00:00:00Z' WHERE id=?", (identity.id,))
++    before = table_hashes(case.database)
++    with pytest.raises(ApiError):
++        verify(case, original, identity)
++    with case.database.transaction(immediate=False) as conn, pytest.raises(ApiError):
++        case.numeric.read_review_numeric(conn, identity, case.candidate)
++    assert table_hashes(case.database) == before
++
++
++def test_import_facade_explicitly_has_no_numeric_pipeline_and_does_not_repair_catalog(tmp_path):
++    from services.api.app.application.draft_candidates import DraftCandidates
++    from services.api.app.application.review_numeric import ReviewNumeric
++    from tests.integration.test_draft_candidate_owners import imported_candidate, remove_catalog_fixture
++
++    for database, identity, owner, _, _, candidate in imported_candidate.__wrapped__(tmp_path):
++        facade = ReviewNumeric(DraftCandidates({'import': owner}), {})
++        before = table_hashes(database)
++        with database.transaction(immediate=False) as conn:
++            conn.execute('PRAGMA query_only=ON')
++            original = facade.read_review_numeric(conn, identity, candidate.draft_id, candidate.draft_revision)
++            assert original.coverage == 'no_numeric_owner_pipeline' and original.checks == []
++            assert original.candidate_record_sha256 is None
++            facade.verify_review_numeric(conn, identity, original)
++        assert table_hashes(database) == before
++        remove_catalog_fixture(database, candidate.draft_id)
++        before = table_hashes(database)
++        with database.transaction(immediate=False) as conn, pytest.raises(ApiError) as caught:
++            facade.verify_review_numeric(conn, identity, original)
++        assert caught.value.code == 'DRAFT_CANDIDATE_UNREGISTERED'
++        assert table_hashes(database) == before
++
++
++def test_observation_facade_and_private_representations_are_bound_to_real_owner(generated):
++    from pydantic import ValidationError
++    from services.api.app.application.draft_candidates import DraftCandidates
++    from services.api.app.application.review_numeric import ReviewNumeric
++
++    case = generated
++    case.preview()
++    kind = 'authoring_' + case.variant
++    facade = ReviewNumeric(DraftCandidates({kind: case.authoring}), {kind: case.numeric})
++    before = table_hashes(case.database)
++    with case.database.transaction(immediate=False) as conn:
++        conn.execute('PRAGMA query_only=ON')
++        original = facade.read_review_numeric(conn, case.identity, case.candidate.draft_id, case.candidate.draft_revision)
++        facade.verify_review_numeric(conn, case.identity, original)
++    assert table_hashes(case.database) == before
++    for item in [original, original.checks[0], original.checks[0].commands[0]]:
++        assert repr(item) == type(item).__name__ + '()' and str(item) == ''
++        raw = item.model_dump(mode='json')
++        raw['unexpected'] = 'zz_numeric_review_private_sentinel'
++        with pytest.raises(ValidationError) as caught:
++            type(item).model_validate(raw)
++        assert 'zz_numeric_review_private_sentinel' not in str(caught.value)
++
++
++def test_existing_sqlite_snapshot_remains_verifiable_after_concurrent_valid_appends(generated):
++    case = generated
++    first = case.preview('first')
++    with case.database.transaction(immediate=False) as conn:
++        conn.execute('PRAGMA query_only=ON')
++        early = case.numeric.read_review_numeric(conn, case.identity, case.candidate)
++        # A real second connection commits while the caller retains its WAL
++        # snapshot. observed_at alone cannot reconstruct this older snapshot.
++        later = case.preview('later')
++        case.numeric.decide(case.identity, first.id, decision(first, 'decline'), 'later-decision')
++        original = case.numeric.read_review_numeric(conn, case.identity, case.candidate)
++        assert [item.view.id for item in original.checks] == [first.id]
++        assert original.checks[0].view.decision == 'pending'
++        assert later.created_at < original.observed_at
++    before = table_hashes(case.database)
++    verify(case, early)
++    verify(case, original)
++    assert table_hashes(case.database) == before
++
++
++@pytest.mark.parametrize('mode', ['independent', 'open_book'])
++def test_current_assessment_policy_blocks_both_new_and_historical_numeric_observation(generated, mode):
++    from services.api.app.application.assessment import AssessmentService
++    from services.api.app.assessment_dto import AssessmentAttemptCreate
++    from services.api.app.infrastructure.content_repository import reference
++    from tests.assessment_fixtures import assessment_fixture
++    from tests.integration.test_assessment_attempts import import_fixture
++
++    case = generated
++    case.preview()
++    original = read(case)
++    fixture = assessment_fixture('numericreviewpolicy')
++    import_fixture(case.database, case.identity, fixture, 'numeric-review-policy')
++    attempt = AssessmentService(case.database).create_attempt(case.identity, fixture.assessment.id,
++        AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode=mode), 'start-assessment')
++    assert attempt.status == 'active'
++    before = table_hashes(case.database)
++    for call in [lambda: read(case), lambda: verify(case, original)]:
++        with pytest.raises(ApiError) as caught:
++            call()
++        assert caught.value.code in {'ASSESSMENT_ACTIVE', 'ASSESSMENT_ANSWER_PROTECTED', 'POLICY_DENIED'}
++    assert table_hashes(case.database) == before
++
++
++def test_numeric_observation_requires_caller_transaction_and_actual_authoring_owner(generated):
++    case = generated
++    before = table_hashes(case.database)
++    with case.database.connect() as conn, pytest.raises(ApiError) as caught:
++        case.numeric.read_review_numeric(conn, case.identity, case.candidate)
++    assert caught.value.code == 'TRANSACTION_REQUIRED'
++    case.numeric.authoring = None
++    with pytest.raises(ApiError) as caught:
++        read(case)
++    assert (caught.value.status, caught.value.code) == (503, 'AUTHORING_OUTPUT_UNAVAILABLE')
++    assert table_hashes(case.database) == before
++
++
++def test_original_launch_observation_survives_later_callback_and_complete_blocked_output(generated):
++    """Controlled ledger callbacks, not a claim that any numeric process ran.
++
++The real worker/owner receives explicitly synthetic BLOCKED runtime facts. This
++isolates preservation of the appended callback and nonempty original streams.
++    """
++    from services.api.app.authoring_dto import NumericCheckResult, numeric_result_sha256
++    from services.api.app.infrastructure.authoring_numeric_runtime import NumericExecution
++
++    case = generated
++    preview = case.preview()
++    case.numeric.decide(case.identity, preview.id, decision(preview), 'approve')
++    worker = case.worker()
++    lease, value, _ = worker.claim()
++    with case.database.transaction() as conn:
++        assert repository(case, conn).begin(lease, utc_now())
++    admitted = read(case)
++    assert admitted.checks[0].start.actual_started_at is None
++    callback_at = utc_now()
++    worker._started(lease, callback_at)
++    callback = read(case)
++    assert callback.checks[0].start.actual_started_at == callback_at
++    stdout = b'synthetic ledger callback output; no numeric execution\n'
++    stderr = b'synthetic blocked runtime diagnostic\n'
++    raw = dict(job_id=lease.job_id, input_sha256=sha256_bytes(canonical_bytes(value)),
++        operation_sha256=value.operation_sha256, outcome='environment_unavailable', verdict='BLOCKED',
++        started_at=callback_at, finished_at=utc_now(), exit_code=1, assertions=[], output_sha256=sha256_bytes(stdout))
++    raw['result_sha256'] = numeric_result_sha256(raw)
++    execution = NumericExecution(result=NumericCheckResult.model_validate(raw), stdout=stdout, stderr=stderr,
++        output_complete=True, manifest=(), manifest_json=case.runtime.manifest_document())
++    worker._finish(lease, execution)
++    terminal = read(case)
++    assert base64.b64decode(terminal.checks[0].end.stdout_base64) == stdout
++    assert base64.b64decode(terminal.checks[0].end.stderr_base64) == stderr
++    assert terminal.checks[0].view.result == execution.result
++    before = table_hashes(case.database)
++    for original in [admitted, callback, terminal]:
++        verify(case, original)
++    assert admitted.checks[0].start.actual_started_at is None
++    assert table_hashes(case.database) == before

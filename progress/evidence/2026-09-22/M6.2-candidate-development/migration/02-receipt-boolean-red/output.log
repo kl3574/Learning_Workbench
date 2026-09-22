@@ -1,0 +1,82 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_unverifiable_legacy_review_aborts_instead_of_inventing_a_revision[receipt_revision_bool] _
+
+tmp_path = PosixPath('<USER_HOME>/.cache/learning-workbench-acceptance/m62-candidate-migration-verification-v1/private-pytest-boolean-red/test_unverifiable_legacy_revie0')
+damage = 'receipt_revision_bool'
+
+    @pytest.mark.parametrize('damage', ['revision', 'hash', 'receipt_id', 'receipt_entity', 'receipt_hash',
+                                       'session_workspace', 'receipt_revision_bool', 'receipt_candidate_revision_bool'])
+    def test_unverifiable_legacy_review_aborts_instead_of_inventing_a_revision(tmp_path, damage):
+        database, workspace = database_before_migration(tmp_path)
+        with database.transaction() as connection:
+            candidate = source_candidate(connection, workspace, 'draft_import', 'import')
+            raw = legacy_review(connection, workspace, candidate)
+            if damage == 'revision':
+                connection.execute('UPDATE reviews SET draft_revision=2')
+            elif damage == 'hash':
+                connection.execute('UPDATE reviews SET candidate_sha256=?', ('f' * 64,))
+            elif damage == 'session_workspace':
+                connection.execute('UPDATE local_sessions SET workspace_id=?', (other_workspace(connection),))
+            else:
+                receipt = json.loads(raw)
+                if damage == 'receipt_id':
+                    receipt['id'] = 'another_review'
+                elif damage == 'receipt_entity':
+                    receipt['candidate']['entity'] = 'question'
+                elif damage == 'receipt_revision_bool':
+                    receipt['revision'] = True
+                elif damage == 'receipt_candidate_revision_bool':
+                    receipt['candidate']['draft_revision'] = True
+                else:
+                    receipt['candidate']['candidate_sha256'] = 'f' * 64
+                connection.execute('UPDATE reviews SET receipt_json=?', (encoded(receipt),))
+            before = snapshot(connection)
+        enable_migration(database)
+>       with pytest.raises(sqlite3.IntegrityError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE IntegrityError
+
+tests/integration/test_draft_candidate_migration.py:221: Failed
+_ test_unverifiable_legacy_review_aborts_instead_of_inventing_a_revision[receipt_candidate_revision_bool] _
+
+tmp_path = PosixPath('<USER_HOME>/.cache/learning-workbench-acceptance/m62-candidate-migration-verification-v1/private-pytest-boolean-red/test_unverifiable_legacy_revie1')
+damage = 'receipt_candidate_revision_bool'
+
+    @pytest.mark.parametrize('damage', ['revision', 'hash', 'receipt_id', 'receipt_entity', 'receipt_hash',
+                                       'session_workspace', 'receipt_revision_bool', 'receipt_candidate_revision_bool'])
+    def test_unverifiable_legacy_review_aborts_instead_of_inventing_a_revision(tmp_path, damage):
+        database, workspace = database_before_migration(tmp_path)
+        with database.transaction() as connection:
+            candidate = source_candidate(connection, workspace, 'draft_import', 'import')
+            raw = legacy_review(connection, workspace, candidate)
+            if damage == 'revision':
+                connection.execute('UPDATE reviews SET draft_revision=2')
+            elif damage == 'hash':
+                connection.execute('UPDATE reviews SET candidate_sha256=?', ('f' * 64,))
+            elif damage == 'session_workspace':
+                connection.execute('UPDATE local_sessions SET workspace_id=?', (other_workspace(connection),))
+            else:
+                receipt = json.loads(raw)
+                if damage == 'receipt_id':
+                    receipt['id'] = 'another_review'
+                elif damage == 'receipt_entity':
+                    receipt['candidate']['entity'] = 'question'
+                elif damage == 'receipt_revision_bool':
+                    receipt['revision'] = True
+                elif damage == 'receipt_candidate_revision_bool':
+                    receipt['candidate']['draft_revision'] = True
+                else:
+                    receipt['candidate']['candidate_sha256'] = 'f' * 64
+                connection.execute('UPDATE reviews SET receipt_json=?', (encoded(receipt),))
+            before = snapshot(connection)
+        enable_migration(database)
+>       with pytest.raises(sqlite3.IntegrityError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE IntegrityError
+
+tests/integration/test_draft_candidate_migration.py:221: Failed
+=========================== short test summary info ============================
+FAILED tests/integration/test_draft_candidate_migration.py::test_unverifiable_legacy_review_aborts_instead_of_inventing_a_revision[receipt_revision_bool]
+FAILED tests/integration/test_draft_candidate_migration.py::test_unverifiable_legacy_review_aborts_instead_of_inventing_a_revision[receipt_candidate_revision_bool]
+2 failed, 38 deselected in 0.15s

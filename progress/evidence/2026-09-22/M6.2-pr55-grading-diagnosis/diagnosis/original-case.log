@@ -1,0 +1,53 @@
+
+> @learning-workbench/web@0.1.0 test:e2e
+> playwright test --config ../../tests/e2e/playwright.config.ts grading-recovery.spec.ts --retries=0
+
+[WebServer] INFO:     Started server process [227760]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+
+Running 1 test using 1 worker
+
+  ✘  1 ../../tests/e2e/grading-recovery.spec.ts:57:1 › a real failed regrade survives reload and can recover from the last actual grade without losing the old submission (2.3s)
+
+
+  1) ../../tests/e2e/grading-recovery.spec.ts:57:1 › a real failed regrade survives reload and can recover from the last actual grade without losing the old submission 
+
+    Error: browserType.launchPersistentContext: Target page, context or browser has been closed
+    Browser logs:
+
+    <launching> /usr/bin/google-chrome --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --user-data-dir=<USER_HOME>/.cache/learning-workbench-acceptance/m62-grading-ci-diagnosis-v1/tmp/learning-workbench-reader-restart-browser-xf2NC3 --remote-debugging-pipe about:blank
+    <launched> pid=227933
+    [pid=227933][err] [227933:227933:0922/134256.286054:FATAL:chrome/browser/process_singleton_posix.cc:313] Socket path too long: <USER_HOME>/.cache/learning-workbench-acceptance/m62-grading-ci-diagnosis-v1/tmp/com.google.Chrome.y1L7E3/SingletonSocket.
+    [pid=227933] <process did exit: exitCode=null, signal=SIGABRT>
+    [pid=227933] starting temporary directories cleanup
+    Call log:
+      - <launching> /usr/bin/google-chrome --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --user-data-dir=<USER_HOME>/.cache/learning-workbench-acceptance/m62-grading-ci-diagnosis-v1/tmp/learning-workbench-reader-restart-browser-xf2NC3 --remote-debugging-pipe about:blank
+      - <launched> pid=227933
+      - [pid=227933][err] [227933:227933:0922/134256.286054:FATAL:chrome/browser/process_singleton_posix.cc:313] Socket path too long: <USER_HOME>/.cache/learning-workbench-acceptance/m62-grading-ci-diagnosis-v1/tmp/com.google.Chrome.y1L7E3/SingletonSocket.
+      - [pid=227933] <process did exit: exitCode=null, signal=SIGABRT>
+      - [pid=227933] starting temporary directories cleanup
+      - [pid=227933] finished temporary directories cleanup
+      - [pid=227933] <gracefully close start>
+      - [pid=227933] <kill>
+      - [pid=227933] <skipped force kill spawnedProcess.killed=false processClosed=true>
+      - [pid=227933] <gracefully close end>
+
+
+       at restartRuntime.ts:111
+
+      109 |   async openBrowser(browserType: BrowserType) {
+      110 |     if (this.context) throw new Error('Close the actual previous browser before reopening')
+    > 111 |     this.context = await browserType.launchPersistentContext(this.profile, {
+          |                    ^
+      112 |       headless: true, viewport: { width: 1440, height: 900 }, baseURL: this.origin,
+      113 |       ...(existsSync('/usr/bin/google-chrome') ? { executablePath: '/usr/bin/google-chrome' } : {}),
+      114 |     })
+        at RestartRuntime.openBrowser (<USER_HOME>/.cache/learning-workbench-acceptance/m62-grading-ci-diagnosis-active/tests/e2e/restartRuntime.ts:111:20)
+        at <USER_HOME>/.cache/learning-workbench-acceptance/m62-grading-ci-diagnosis-active/tests/e2e/grading-recovery.spec.ts:62:21
+
+    Error Context: ../../../m62-grading-ci-diagnosis-v1/test-results/grading-recovery-a-real-fa-8007b-t-losing-the-old-submission/error-context.md
+
+  1 failed
+    ../../tests/e2e/grading-recovery.spec.ts:57:1 › a real failed regrade survives reload and can recover from the last actual grade without losing the old submission 

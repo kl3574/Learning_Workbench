@@ -1,0 +1,144 @@
+{
+  "version": 1,
+  "created_at": "2026-09-22T08:30:23.925813+00:00",
+  "spec_sha256": "2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d",
+  "base_commit": "acb9e220deeaf1da7ee89ec6fda8bae9c21ca918",
+  "initial_commit": "5fefa4e9c5374306a3bd7bfbf8fd5b7e935615c1",
+  "red_commit": "abab63eaf32a219694384e29362114b0e25fb598",
+  "reviewed_final_commit": "d419562f7ec26c7919e9fa12973b4b8cf30bbac1",
+  "changed_paths": [
+    "services/api/app/application/review_models.py",
+    "services/api/app/infrastructure/authoring_job_repository.py",
+    "services/api/app/infrastructure/review_job_repository.py",
+    "services/api/app/review_dto.py",
+    "tests/contract/test_review_requests.py",
+    "tests/integration/test_review_job_lifecycle.py"
+  ],
+  "final_source_count": 959,
+  "result": "NO_REMAINING_BLOCKER_FOUND_IN_BOUNDED_INTERNAL_ADAPTER_SLICE",
+  "initial_findings": [
+    {
+      "id": "R1",
+      "severity": "P1",
+      "issue": "Inherited read/write methods allowed autocommit and cross-snapshot validation",
+      "status": "RESOLVED_AT_REVIEWED_FINAL_COMMIT"
+    },
+    {
+      "id": "R2",
+      "severity": "P1",
+      "issue": "Late transition rejection could commit wrong-consumer or invalid-history writes when caller caught error",
+      "status": "RESOLVED_AT_REVIEWED_FINAL_COMMIT"
+    }
+  ],
+  "gates": [
+    {
+      "stage": "atomic-red",
+      "head": "abab63eaf32a219694384e29362114b0e25fb598",
+      "exit_code": 1,
+      "source_count": 959,
+      "actual_git_match": true,
+      "log_sha256": "8820b873e0e475a10a124c03169238915582e8ec893f1df0bc3b8d77408351fd",
+      "last_log_line": "7 failed, 17 deselected, 2 warnings in 3.79s"
+    },
+    {
+      "stage": "atomic-green",
+      "head": "d419562f7ec26c7919e9fa12973b4b8cf30bbac1",
+      "exit_code": 0,
+      "source_count": 959,
+      "actual_git_match": true,
+      "log_sha256": "aa0ff09681b8abf59d049903e31dd190ecea9f3815bfbb357de97d328ae8c3e3",
+      "last_log_line": "7 passed, 17 deselected, 2 warnings in 4.01s"
+    },
+    {
+      "stage": "new-final",
+      "head": "d419562f7ec26c7919e9fa12973b4b8cf30bbac1",
+      "exit_code": 0,
+      "source_count": 959,
+      "actual_git_match": true,
+      "log_sha256": "1ddabe36793e1198565b2e932d3b7afd20e2d3d4fbea482682d70c337792c57c",
+      "last_log_line": "42 passed, 2 warnings in 11.52s"
+    },
+    {
+      "stage": "ruff-final",
+      "head": "d419562f7ec26c7919e9fa12973b4b8cf30bbac1",
+      "exit_code": 0,
+      "source_count": 959,
+      "actual_git_match": true,
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "last_log_line": "All checks passed!"
+    },
+    {
+      "stage": "mypy-final",
+      "head": "d419562f7ec26c7919e9fa12973b4b8cf30bbac1",
+      "exit_code": 0,
+      "source_count": 959,
+      "actual_git_match": true,
+      "log_sha256": "65638be1b18ffeafcffbbb3243e3cc2c739a82ed3b00bca512594205965022a3",
+      "last_log_line": "Success: no issues found in 186 source files"
+    },
+    {
+      "stage": "regression-final",
+      "head": "d419562f7ec26c7919e9fa12973b4b8cf30bbac1",
+      "exit_code": 0,
+      "source_count": 959,
+      "actual_git_match": true,
+      "log_sha256": "f4b8971a5303c67612b82cfab25be961f4fad222f60d45299ab023b6fe3341dd",
+      "last_log_line": "50 passed, 2 warnings in 54.32s"
+    }
+  ],
+  "independent_probe": {
+    "head": "d419562f7ec26c7919e9fa12973b4b8cf30bbac1",
+    "start": "2026-09-22T08:28:24.683807+00:00",
+    "finish": "2026-09-22T08:28:25.920907+00:00",
+    "seconds": 1.2371043960010866,
+    "exit_code": 0,
+    "stdout_sha256": "5d08b2872c96ccc1c7db104b9ce7758f318e75e258922c4d11c54551d9d47a11",
+    "stderr_sha256": "adbafff1c11bfeffec72b044996256ea293c07c3e5d90d328be3e8e91ad123ae"
+  },
+  "independent_probe_cases": [
+    {
+      "case": "autocommit_claim",
+      "result": "REJECTED_ZERO_PERSISTENT_CHANGE"
+    },
+    {
+      "case": "wrong_consumer_caught_and_outer_commit",
+      "result": "REJECTED_ZERO_PERSISTENT_CHANGE"
+    },
+    {
+      "case": "invalid_awaiting_approval",
+      "result": "REJECTED_ORIGINAL_ROW_RETAINED_OUTER_TRANSACTION_RETAINED"
+    },
+    {
+      "case": "invalid_completed",
+      "result": "REJECTED_ORIGINAL_ROW_RETAINED_OUTER_TRANSACTION_RETAINED"
+    },
+    {
+      "case": "invalid_running",
+      "result": "REJECTED_ORIGINAL_ROW_RETAINED_OUTER_TRANSACTION_RETAINED"
+    },
+    {
+      "case": "valid_following_transition_and_stale_row",
+      "result": "SINGLE_TERMINAL_CURRENT_OWNER_ONLY_NO_REVIEW_RECEIPT"
+    }
+  ],
+  "input_privacy_probe": {
+    "exit_code": 0,
+    "stdout_sha256": "d9277f4f546a2a05357b78cffc2d958b05695cdd9be53b8bd7d1926719c6f3fc",
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "code_source": "5fefa4e commit; review_models/review_dto unchanged in current test-only successor"
+  },
+  "not_implemented_in_slice": [
+    "Quality repository and durable command/receipt history",
+    "Review worker and report artifacts",
+    "Review HTTP routes and JobService registration",
+    "Current candidate/session/Policy checks supplied by future Quality owner",
+    "Human approval and publish/diff/impact/restore"
+  ],
+  "limits": [
+    "No new full-platform/browser gate executed by this review",
+    "42 new includes the 7 regression cases; counts are not additive",
+    "Shared Authoring lifecycle remains unchanged except consumer configuration extraction",
+    "Internal typed construction does not establish authorization or a human approval",
+    "Original initial harness failure and original RED are retained, not represented as product PASS"
+  ]
+}

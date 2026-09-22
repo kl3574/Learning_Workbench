@@ -1,0 +1,77 @@
+diff --git a/tests/integration/test_tutor_runs.py b/tests/integration/test_tutor_runs.py
+index 329b27a..f03b160 100644
+--- a/tests/integration/test_tutor_runs.py
++++ b/tests/integration/test_tutor_runs.py
+@@ -328,6 +328,7 @@ def expire_crashed_lease(database, run_id):
+ 
+ def test_cancel_during_actual_http_stops_once_and_preserves_real_dispatch_facts(tutor, tmp_path, monkeypatch):
+     import asyncio
++    import threading
+     from tests.provider_protocol_fixture import local_provider
+     async def run():
+         async with local_provider(hold=True) as server:
+@@ -345,20 +346,63 @@ def test_cancel_during_actual_http_stops_once_and_preserves_real_dispatch_facts(
+                     source_errors.append(error.code)
+                     raise
+             monkeypatch.setattr(source, 'verify_dispatch', observed_verify)
++            leases, cancel_leases = [], []
++            claim, finish, cancel = worker.claim, worker._finish, TutorRepository.cancel
++            allow_finish = threading.Event()
++            def observed_claim():
++                lease = claim()
++                if lease is not None:
++                    leases.append(lease)
++                return lease
++            def held_finish(*args, **kwargs):
++                assert allow_finish.wait(5)
++                return finish(*args, **kwargs)
++            def observed_cancel(repo, identifier, expected):
++                # These reads share cancel's actual writer transaction. A
++                # watcher may legitimately renew before this transaction begins.
++                assert repo.connection.in_transaction
++                before = repo.source_state(identifier)
++                result = cancel(repo, identifier, expected)
++                after = repo.source_state(identifier)
++                assert after.lease_owner == before.lease_owner and after.lease_until == before.lease_until
++                cancel_leases.append((before.lease_owner, before.lease_until))
++                return result
++            monkeypatch.setattr(worker, 'claim', observed_claim)
++            monkeypatch.setattr(worker, '_finish', held_finish)
++            monkeypatch.setattr(TutorRepository, 'cancel', observed_cancel)
+             running = asyncio.create_task(asyncio.to_thread(worker.run_once))
+             try:
+                 await asyncio.wait_for(server.request_seen.wait(), 5)
+                 current = service.read(identity, original.run.id)
+                 with database.transaction(immediate=False) as connection:
+-                    before = TutorRepository(connection, identity.workspace_id).source_state(original.run.id)
++                    before_watch = TutorRepository(connection, identity.workspace_id).source_state(original.run.id)
++                # Exercise the original read/cancel race with a real watch,
++                # without sleeps, a fabricated lease, or changing production.
++                assert len(leases) == 1
++                worker_identity = worker._identity(identity.workspace_id)
++                assert worker._watch(worker_identity, leases[0])
++                with database.transaction(immediate=False) as connection:
++                    renewed = TutorRepository(connection, identity.workspace_id).source_state(original.run.id)
++                    assert renewed.lease_owner == before_watch.lease_owner
++                    assert renewed.lease_until > before_watch.lease_until
+                 control = service.cancel(identity, original.run.id,
+                     TutorRunCancel(expected_revision=current.job_revision), 'cancel-actual-http')
+                 assert control.status == 'running' and control.cancel_requested
++                assert len(cancel_leases) == 1
++                with database.transaction(immediate=False) as connection:
++                    before = TutorRepository(connection, identity.workspace_id).source_state(original.run.id)
++                    assert before.cancel_requested
++                    assert (before.lease_owner, before.lease_until) == cancel_leases[0]
++                # Owner finish is held only until this post-commit check, so
++                # terminal lease clearing cannot be mistaken for renewal.
++                assert not worker._watch(worker_identity, leases[0])
+                 with database.transaction(immediate=False) as connection:
+                     after = TutorRepository(connection, identity.workspace_id).source_state(original.run.id)
+                     assert after.lease_owner == before.lease_owner and after.lease_until == before.lease_until
++                allow_finish.set()
+                 assert await asyncio.wait_for(running, 5)
+             finally:
++                allow_finish.set()
+                 server.release.set()
+                 if not running.done():
+                     await asyncio.wait_for(running, 5)

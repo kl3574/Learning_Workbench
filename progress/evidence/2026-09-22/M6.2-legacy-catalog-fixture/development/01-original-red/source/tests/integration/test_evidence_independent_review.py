@@ -1,0 +1,191 @@
+"""Independent synthetic Learning probes; storage fault injection is not an HTTP capability."""
+
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from packages.contracts import domain_models as dm
+from packages.contracts.canonical import canonical_bytes
+from services.api.app.application.errors import ApiError
+from services.api.app.application.evidence import EvidenceRecovery, EvidenceService, checked_submission_basis
+from services.api.app.application.grading import GradingService, GradingWorker
+from services.api.app.application.imports import ImportService
+from services.api.app.application.learning import record_test_submitted
+from services.api.app.application.practice import PracticeService
+from services.api.app.application.practice_help_access import help_witnesses
+from services.api.app.infrastructure.assessment_repository import AssessmentRepository
+from services.api.app.infrastructure.content_repository import reference
+from services.api.app.infrastructure.database import utc_now
+from services.api.app.infrastructure.import_worker import ImportWorker
+from services.api.app.practice_dto import PracticeHintRequest, PracticeSessionCreate
+from tests.integration.test_assessment_attempts import storage as original_storage, start
+from tests.integration.test_assessment_grading import real_author, review_request
+from tests.integration.test_learning_evidence import legacy_storage
+
+
+@pytest.fixture
+def storage(tmp_path):
+    return original_storage.__wrapped__(tmp_path)
+
+
+def practice(storage):
+    database, identity, fixture, _ = storage
+    service = PracticeService(database)
+    session = service.create_session(identity, PracticeSessionCreate(practice_ref=reference(fixture.practice)), "practice")
+    return service, session
+
+
+def reveal_hint(storage, service, session):
+    _, identity, fixture, _ = storage
+    return service.hint(identity, session.id, PracticeHintRequest(question_id=fixture.questions[0].id,
+        expected_revision=session.revision, level=1), "hint")
+
+
+def table_counts(database):
+    with database.connect() as connection:
+        return {name: connection.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0] for name in
+            ("learning_events", "learning_progress", "learning_submission_bases", "learning_grade_bindings",
+             "learning_evidence_refs", "learning_evidence_recovery_failures", "evidence", "grades", "jobs", "outbox")}
+
+
+def table_rows(database):
+    with database.connect() as connection:
+        return {name: [tuple(row) for row in connection.execute(f"SELECT * FROM {name} ORDER BY rowid")]
+            for name in ("learning_events", "learning_progress", "learning_submission_bases", "learning_grade_bindings",
+                "learning_evidence_refs", "learning_evidence_recovery_failures", "evidence", "grades", "jobs", "outbox",
+                "attempts", "assessment_grade_audits", "idempotency")}
+
+
+def test_exposure_clock_after_cutoff_cannot_hide_its_valid_native_event_before_cutoff(storage):
+    database, identity, fixture, _ = storage
+    service, session = practice(storage)
+    revealed = reveal_hint(storage, service, session)
+    cutoff = utc_now()
+    future = (datetime.fromisoformat(cutoff.replace("Z", "+00:00")) + timedelta(days=1)).astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    with database.transaction() as connection:
+        # One controlled corrupted timestamp; real event, assignment and help
+        # receipt remain intact. Product APIs do not permit arbitrary SQL writes.
+        connection.execute("UPDATE exposures SET occurred_at=? WHERE event_id=?", (future, revealed.exposure_event_id))
+    with database.connect() as connection:
+        facts = help_witnesses(connection, identity.workspace_id, reference(fixture.questions[0]),
+            fixture.questions[0].exposure_group, "2000-01-01T00:00:00Z", cutoff)
+    assert facts.pre_submission_state == facts.in_attempt_state == "unknown", facts.model_dump()
+
+
+def test_exposure_changed_to_unrelated_question_cannot_hide_original_target_event(storage):
+    database, identity, fixture, _ = storage
+    service, session = practice(storage)
+    revealed = reveal_hint(storage, service, session)
+    target, unrelated = fixture.questions[0], fixture.questions[-1]
+    assert target.exposure_group != unrelated.exposure_group
+    with database.transaction() as connection:
+        # The independently stored native event and Practice receipt still point
+        # to target. Both alternative metadata values are otherwise legitimate.
+        connection.execute("UPDATE exposures SET question_ref_json=?,exposure_group=? WHERE event_id=?",
+            (canonical_bytes(reference(unrelated)).decode(), unrelated.exposure_group, revealed.exposure_event_id))
+    with database.connect() as connection:
+        facts = help_witnesses(connection, identity.workspace_id, reference(target), target.exposure_group,
+            "2000-01-01T00:00:00Z", utc_now())
+    assert facts.pre_submission_state == facts.in_attempt_state == "unknown", facts.model_dump()
+
+
+def test_new_submission_without_basis_is_not_reclassified_as_legacy(storage):
+    database, identity, _, _ = storage
+    active = start(storage)
+    with database.transaction() as connection:
+        repository = AssessmentRepository(connection, identity.workspace_id)
+        record = repository.submit(repository.load(active.id))
+        event = record_test_submitted(connection, identity.workspace_id, record.assessment_ref, record.id)
+        repository.link_submission(record, event)
+    before = table_counts(database)
+    with database.connect() as connection, pytest.raises(ApiError) as caught:
+        checked_submission_basis(connection, identity.workspace_id, active.id)
+    assert caught.value.code == "EVIDENCE_PREREQUISITES_INVALID"
+    assert table_counts(database) == before
+    assert before["learning_submission_bases"] == 0
+
+
+def test_real_post_submit_hint_does_not_change_frozen_prerequisites_or_persist_help_markdown(storage):
+    database, identity, _, assessment = storage
+    helper, session = practice(storage)
+    active = start(storage, mode="assisted")
+    final = assessment.submit(identity, active.id, dm.AttemptSubmit(expected_revision=active.revision), "submit")
+    with database.connect() as connection:
+        original = checked_submission_basis(connection, identity.workspace_id, final.id)
+    assert original.prerequisites is not None
+    assert all(item.prerequisites.pre_submission_help_state == "none" for item in original.prerequisites.items)
+    reveal_hint(storage, helper, session)
+    with database.connect() as connection:
+        current = checked_submission_basis(connection, identity.workspace_id, final.id)
+    assert canonical_bytes(original) == canonical_bytes(current)
+    assert all(not item.help.witnesses for item in current.prerequisites.items)
+    assert b'"markdown"' not in canonical_bytes(current) and b'"help_json"' not in canonical_bytes(current)
+
+
+def test_page_uses_latest_successful_grade_without_old_duplicates_and_all_gets_are_read_only(storage):
+    database, identity, fixture, assessment = storage
+    active = start(storage)
+    final = assessment.submit(identity, active.id, dm.AttemptSubmit(expected_revision=active.revision), "submit")
+    worker = GradingWorker(database)
+    assert worker.run_once()
+    evidence = EvidenceService(database)
+    old = evidence.page(identity.workspace_id)
+    old_ids = {item.id for item in old.items}
+    grading = GradingService(database)
+    author = real_author(database)
+    grading.regrade(author, final.id, review_request(fixture), "review")
+    assert worker.run_once()
+    before = table_counts(database)
+    original_rows = table_rows(database)
+    current = evidence.page(identity.workspace_id)
+    compute = evidence.page(identity.workspace_id, skill="compute")
+    result = grading.result(identity, final.id)
+    assert len(current.items) == len(fixture.questions)
+    assert not old_ids & {item.id for item in current.items}
+    assert {item.id for item in compute.items} == {item.id for item in current.items if item.skill == "compute"}
+    assert [item.grading_revision for item in result.history] == [1, 2]
+    assert all(item.score == .5 and not item.eligible for item in current.items)
+    assert table_counts(database) == before
+    assert table_rows(database) == original_rows
+    assert before["evidence"] == 2 * len(fixture.questions)
+
+
+def test_late_legacy_binding_failure_rolls_back_and_does_not_starve_safe_import_or_other_grades(tmp_path, monkeypatch):
+    # Real six-migration submit/score/review records, then the actual seventh
+    # migration. The fixture disables only the not-yet-installed M3.4 hooks.
+    storage, _, _, _, original, _ = legacy_storage(tmp_path, monkeypatch, two=True)
+    database, identity, _, _ = storage
+    with database.transaction() as connection:
+        first = connection.execute("SELECT attempt_id,grading_revision FROM grades ORDER BY attempt_id,grading_revision LIMIT 1").fetchone()
+        # Fixed SQL trigger with the actual selected key stored separately;
+        # this models one late storage failure, not an API-access capability.
+        connection.execute("CREATE TABLE independent_recovery_fault(attempt_id TEXT, grading_revision INTEGER)")
+        connection.execute("INSERT INTO independent_recovery_fault VALUES(?,?)", tuple(first))
+        connection.execute("CREATE TRIGGER independent_late_evidence_failure BEFORE INSERT ON learning_evidence_refs "
+            "WHEN EXISTS(SELECT 1 FROM independent_recovery_fault WHERE attempt_id=NEW.attempt_id AND grading_revision=NEW.grading_revision) "
+            "BEGIN SELECT RAISE(ABORT,'synthetic late recovery failure'); END")
+    before = table_counts(database)
+    ingestion = ImportService(database)
+    staged = ingestion.stage(identity, data=b"# Independent safe text\n\nOriginal synthetic body.",
+        filename="independent.txt", kind="text", key="independent-safe")
+    worker = ImportWorker(database)
+    try:
+        assert worker.run_once()
+        assert ingestion.preview(identity, staged.import_id).status == "preview_ready"
+    finally:
+        worker.stop()
+    after = table_counts(database)
+    for table in ("learning_events", "learning_progress", "learning_grade_bindings", "learning_evidence_refs", "evidence"):
+        assert after[table] == before[table], table
+    assert after["learning_evidence_recovery_failures"] == 1
+    with database.transaction() as connection:
+        connection.execute("DROP TRIGGER independent_late_evidence_failure")
+    recovery = EvidenceRecovery(database)
+    assert recovery.run_once() and recovery.run_once() and not recovery.run_once()
+    with database.connect() as connection:
+        assert connection.execute("SELECT COUNT(*) FROM learning_grade_bindings").fetchone()[0] == 2
+        assert connection.execute("SELECT COUNT(*) FROM learning_evidence_recovery_failures").fetchone()[0] == 1
+        assert connection.execute("SELECT 1 FROM learning_grade_bindings WHERE attempt_id=? AND grading_revision=?", tuple(first)).fetchone() is None
+        for table, old_rows in original.items():
+            assert [tuple(row) for row in connection.execute(f"SELECT * FROM {table} ORDER BY rowid")] == old_rows
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []

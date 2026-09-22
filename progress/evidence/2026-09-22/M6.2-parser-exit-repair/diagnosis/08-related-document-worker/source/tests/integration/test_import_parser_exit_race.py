@@ -1,0 +1,116 @@
+"""Real pipe/process scheduling at the import HTTP and durable worker boundaries."""
+
+import multiprocessing
+from multiprocessing.connection import Connection
+from multiprocessing.process import BaseProcess
+import threading
+
+from services.api.app.infrastructure.import_worker import _parse_process
+from tests.document_fixtures import pdf_scan_fixture
+from tests.integration.test_document_http import (
+    test_failed_documents_report_safe_failure_and_retain_exact_original_without_formal_content as check_failed_document,
+)
+from tests.integration.test_import_repository import imports as imports  # fixture
+from tests.integration.test_import_repository import sql_count
+
+
+def _wait_then_parse(connection, data, options, expected_parent, release, empty):
+    """Gate scheduling only; the normal branch executes the unchanged real parser."""
+    try:
+        assert release.wait(10), "Parent never released the parser scheduling gate"
+        if not empty:
+            _parse_process(connection, data, options, expected_parent)
+    finally:
+        connection.close()
+
+
+def schedule_exit_after_poll(monkeypatch, *, empty=False, stop=None):
+    """Return an actual false poll after the selected child has naturally exited.
+
+    This is the descheduled-parent interleaving. Neither poll/recv values nor
+    parser responses are invented. An Event guarantees the first false poll;
+    join bounds the test coordination without changing the worker's deadline.
+    The empty branch deliberately models a child exiting without any envelope.
+    """
+    release = multiprocessing.get_context("spawn").Event()
+    original_start, original_poll, original_recv = BaseProcess.start, Connection.poll, Connection.recv
+    trace = {"gated": False, "received": []}
+    selected = []
+
+    def start(process):
+        if getattr(process, "_target", None) is _parse_process:
+            process._target = _wait_then_parse
+            process._args = (*process._args, release, empty)
+            original_start(process)
+            selected.append((process, threading.get_ident()))
+        else:
+            original_start(process)
+
+    def poll(connection, timeout=0.0):
+        ready = original_poll(connection, timeout)
+        if (not trace["gated"] and not ready and timeout == 0.1 and selected
+                and threading.get_ident() == selected[-1][1]):
+            trace["gated"] = True
+            process = selected[-1][0]
+            if stop is not None:
+                stop()
+            release.set()
+            process.join(timeout=5)
+            trace.update(exitcode=process.exitcode, alive=process.is_alive(), ready=original_poll(connection, 0))
+        return ready
+
+    def recv(connection):
+        result = original_recv(connection)
+        if selected and threading.get_ident() == selected[-1][1]:
+            kind, payload = result
+            trace["received"].append((kind, payload.get("code") if isinstance(payload, dict) else None))
+        return result
+
+    monkeypatch.setattr(BaseProcess, "start", start)
+    monkeypatch.setattr(Connection, "poll", poll)
+    monkeypatch.setattr(Connection, "recv", recv)
+    return trace
+
+
+def assert_natural_exit(trace):
+    assert trace["gated"], "The real false-poll/child-exit interleaving was not reached"
+    assert trace["exitcode"] == 0 and trace["alive"] is False
+    assert trace["ready"] is True
+
+
+def test_exited_parser_retains_scan_error_ocr_original_and_restart(tmp_path, monkeypatch):
+    trace = schedule_exit_after_poll(monkeypatch)
+    # Reuse every original HTTP/SQLite/restart assertion, including exact source
+    # bytes, OCR/page warnings, typed failure and zero published content.
+    check_failed_document(tmp_path, "pdf", pdf_scan_fixture, True)
+    assert_natural_exit(trace)
+    assert trace["received"] == [("error", "PDF_NO_EXTRACTABLE_TEXT")]
+
+
+def test_exited_parser_without_envelope_still_fails_without_drafts(imports, monkeypatch):
+    database, service, worker, identity = imports
+    trace = schedule_exit_after_poll(monkeypatch, empty=True)
+    staged = service.stage(identity, data=b"Synthetic EOF source", filename="eof.txt", kind="text", key="eof")
+    assert worker.run_once()
+    snapshot = service.job(identity, staged.job.id)
+    assert snapshot.status == "failed" and snapshot.error.code == "IMPORT_PARSE_FAILED"
+    assert snapshot.result_refs == []
+    assert service.preview(identity, staged.import_id).status == "failed"
+    assert sql_count(database, "drafts") == sql_count(database, "objects") == 0
+    assert_natural_exit(trace)
+    assert trace["received"] == []
+
+
+def test_stop_precedes_receiving_exited_parser_result(imports, monkeypatch):
+    database, service, worker, identity = imports
+    trace = schedule_exit_after_poll(monkeypatch, stop=worker.stop)
+    staged = service.stage(identity, data=pdf_scan_fixture(), filename="scan.pdf", kind="pdf", key="stop")
+    assert worker.run_once()
+    # Stopping leaves the lease recoverable, without publishing or consuming the
+    # now-ready parser envelope as a new terminal decision.
+    snapshot = service.job(identity, staged.job.id)
+    assert snapshot.status == "running" and snapshot.result_refs == []
+    assert service.preview(identity, staged.import_id).status == "parsing"
+    assert sql_count(database, "drafts") == sql_count(database, "objects") == 0
+    assert_natural_exit(trace)
+    assert trace["received"] == []

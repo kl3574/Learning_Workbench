@@ -1,0 +1,122 @@
+....FF......                                                             [100%]
+=================================== FAILURES ===================================
+_ test_lookup_requires_exact_typed_identity[None-9223372036854775808-412-DRAFT_REVISION_MISMATCH] _
+
+imported_candidate = (<services.api.app.infrastructure.database.Database object at 0x7e41f2677da0>, SessionIdentity(id='session_8c4e9ae3ba6...draft_revision=1, entity='block', candidate_sha256='e620b32c2b6edf51aa3da6ec2f2a7be552101f3f9b6a1e6b7f6bf85fac4b5d62'))
+draft_id = None, revision = 9223372036854775808, status = 412
+code = 'DRAFT_REVISION_MISMATCH'
+
+    @pytest.mark.parametrize(('draft_id', 'revision', 'status', 'code'), [
+        (None, True, 422, 'SCHEMA_INVALID'), (None, 1.0, 422, 'SCHEMA_INVALID'),
+        (None, '1', 422, 'SCHEMA_INVALID'), (None, 0, 422, 'SCHEMA_INVALID'),
+        (None, 2**63, 412, 'DRAFT_REVISION_MISMATCH'), (None, 10**100, 412, 'DRAFT_REVISION_MISMATCH'),
+        (None, 2, 412, 'DRAFT_REVISION_MISMATCH'), ('missing', 1, 404, 'DRAFT_CANDIDATE_UNREGISTERED'),
+        ('missing', 2**63, 404, 'DRAFT_CANDIDATE_UNREGISTERED'),
+        ('', 1, 422, 'SCHEMA_INVALID'),
+    ])
+    def test_lookup_requires_exact_typed_identity(imported_candidate, draft_id, revision, status, code):
+        database, identity, service, _, _, candidate = imported_candidate
+        before = table_hashes(database)
+        with pytest.raises(ApiError) as caught, database.transaction(immediate=False) as connection:
+            connection.execute('PRAGMA query_only=ON')
+>           DraftCandidates({'import': service}).lookup(connection, identity,
+                candidate.draft_id if draft_id is None else draft_id, revision)
+
+tests/integration/test_draft_candidate_catalog.py:107: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/api/app/application/draft_candidates.py:35: in lookup
+    registered = DraftCandidateRepository(connection).lookup(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.draft_candidate_repository.DraftCandidateRepository object at 0x7e41f267a090>
+workspace_id = 'workspace_6255951543d24dd484b458b555874903'
+draft_id = 'draft_d4d9d0df8a10483ab8ee3757996d2eb6'
+revision = 9223372036854775808
+
+    def lookup(self, workspace_id: str, draft_id: str, revision: int) -> ResolvedDraftCandidate:
+        """Locate an exact registered revision; this does not authenticate its owner."""
+        try:
+            draft_id = TypeAdapter(dm.Id).validate_python(draft_id, strict=True)
+            revision = TypeAdapter(dm.Revision).validate_python(revision, strict=True)
+        except ValidationError:
+            raise ApiError(422, 'SCHEMA_INVALID', '草稿候选身份无效。') from None
+        identity = self.connection.execute(
+            'SELECT * FROM draft_candidate_identities WHERE draft_id=? AND workspace_id=?',
+            (draft_id, workspace_id),
+        ).fetchone()
+        if identity is None:
+            raise ApiError(404, 'DRAFT_CANDIDATE_UNREGISTERED', '草稿候选未登记或不可访问。')
+>       row = self.connection.execute(
+            'SELECT * FROM draft_candidate_revisions WHERE draft_id=? AND draft_revision=?',
+            (draft_id, revision),
+        ).fetchone()
+E       OverflowError: Python int too large to convert to SQLite INTEGER
+
+services/api/app/infrastructure/draft_candidate_repository.py:35: OverflowError
+_ test_lookup_requires_exact_typed_identity[None-10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000-412-DRAFT_REVISION_MISMATCH] _
+
+imported_candidate = (<services.api.app.infrastructure.database.Database object at 0x7e41f2b8ba10>, SessionIdentity(id='session_19b5296070e...draft_revision=1, entity='block', candidate_sha256='a88c81369301a3643e6d4f025d8728a3af6238f2920d56c4fe7805e53394d1e7'))
+draft_id = None, revision = 100000000000000000...0000000000000000000
+status = 412, code = 'DRAFT_REVISION_MISMATCH'
+
+    @pytest.mark.parametrize(('draft_id', 'revision', 'status', 'code'), [
+        (None, True, 422, 'SCHEMA_INVALID'), (None, 1.0, 422, 'SCHEMA_INVALID'),
+        (None, '1', 422, 'SCHEMA_INVALID'), (None, 0, 422, 'SCHEMA_INVALID'),
+        (None, 2**63, 412, 'DRAFT_REVISION_MISMATCH'), (None, 10**100, 412, 'DRAFT_REVISION_MISMATCH'),
+        (None, 2, 412, 'DRAFT_REVISION_MISMATCH'), ('missing', 1, 404, 'DRAFT_CANDIDATE_UNREGISTERED'),
+        ('missing', 2**63, 404, 'DRAFT_CANDIDATE_UNREGISTERED'),
+        ('', 1, 422, 'SCHEMA_INVALID'),
+    ])
+    def test_lookup_requires_exact_typed_identity(imported_candidate, draft_id, revision, status, code):
+        database, identity, service, _, _, candidate = imported_candidate
+        before = table_hashes(database)
+        with pytest.raises(ApiError) as caught, database.transaction(immediate=False) as connection:
+            connection.execute('PRAGMA query_only=ON')
+>           DraftCandidates({'import': service}).lookup(connection, identity,
+                candidate.draft_id if draft_id is None else draft_id, revision)
+
+tests/integration/test_draft_candidate_catalog.py:107: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/api/app/application/draft_candidates.py:35: in lookup
+    registered = DraftCandidateRepository(connection).lookup(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.draft_candidate_repository.DraftCandidateRepository object at 0x7e41f26792b0>
+workspace_id = 'workspace_f3456864966c42e18aae8afa1ae7e7b6'
+draft_id = 'draft_15ddc625fc5445eeaa1d551f80f37442'
+revision = 100000000000000000...0000000000000000000
+
+    def lookup(self, workspace_id: str, draft_id: str, revision: int) -> ResolvedDraftCandidate:
+        """Locate an exact registered revision; this does not authenticate its owner."""
+        try:
+            draft_id = TypeAdapter(dm.Id).validate_python(draft_id, strict=True)
+            revision = TypeAdapter(dm.Revision).validate_python(revision, strict=True)
+        except ValidationError:
+            raise ApiError(422, 'SCHEMA_INVALID', '草稿候选身份无效。') from None
+        identity = self.connection.execute(
+            'SELECT * FROM draft_candidate_identities WHERE draft_id=? AND workspace_id=?',
+            (draft_id, workspace_id),
+        ).fetchone()
+        if identity is None:
+            raise ApiError(404, 'DRAFT_CANDIDATE_UNREGISTERED', '草稿候选未登记或不可访问。')
+>       row = self.connection.execute(
+            'SELECT * FROM draft_candidate_revisions WHERE draft_id=? AND draft_revision=?',
+            (draft_id, revision),
+        ).fetchone()
+E       OverflowError: Python int too large to convert to SQLite INTEGER
+
+services/api/app/infrastructure/draft_candidate_repository.py:35: OverflowError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-catalog-wiring-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-catalog-wiring-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_draft_candidate_catalog.py::test_lookup_requires_exact_typed_identity[None-9223372036854775808-412-DRAFT_REVISION_MISMATCH]
+FAILED tests/integration/test_draft_candidate_catalog.py::test_lookup_requires_exact_typed_identity[None-10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000-412-DRAFT_REVISION_MISMATCH]
+2 failed, 10 passed, 27 deselected, 2 warnings in 5.50s

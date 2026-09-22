@@ -1,0 +1,242 @@
+.............................FFFFFFF...                                  [100%]
+=================================== FAILURES ===================================
+_ test_import_question_material_explicitly_excludes_actual_unapproved_private_answer _
+
+imported_candidate = <synthetic Import material fixture; session values omitted>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x754dc82fd400>
+
+    def test_import_question_material_explicitly_excludes_actual_unapproved_private_answer(imported_candidate, monkeypatch):
+>       from services.api.app.application.import_worker import ImportWorker
+E       ModuleNotFoundError: No module named 'services.api.app.application.import_worker'
+
+tests/integration/test_review_materials.py:223: ModuleNotFoundError
+_ test_material_preserves_ordered_complete_sources_and_rechecks_actual_missing_body[single] _
+
+tmp_path = PosixPath('<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-material-verification-v1/06-complete-owner-boundaries<PYTEST_ROOT>/pytest-0/test_material_preserves_ordere0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x754dc82fcec0>
+kind = 'single'
+
+    @pytest.mark.parametrize('kind', ['single', 'group'])
+    def test_material_preserves_ordered_complete_sources_and_rechecks_actual_missing_body(tmp_path, monkeypatch, kind):
+>       case, blocks, refs = generated_with_sources(tmp_path, kind)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_materials.py:288: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_materials.py:283: in generated_with_sources
+    return asyncio.run(build())
+           ^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/integration/test_review_materials.py:273: in build
+    original = owner.prepare(identity, body, 'prepare-sources')
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+services/api/app/application/authoring.py:119: in prepare
+    repo.create(identity, value, summary)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.authoring_repository.AuthoringRepository object at 0x754dc9f8d5e0>
+identity = SessionIdentity(id='<SYNTHETIC_SESSION_REDACTED>', workspace_id='workspace_1c0b32137d924ede98720417a0ca569...srf_token='<SYNTHETIC_CSRF_REDACTED>', expires_at='2026-09-22T19:33:50.899905Z')
+value = AuthoringJobInput(), preparation = AuthoringPreparationSummary()
+
+    def create(self, identity: SessionIdentity, value: AuthoringJobInput,
+               preparation: AuthoringPreparationSummary) -> None:
+        row = self.jobs.load(value.job_id)
+>       view = AuthoringJobView(summary=AuthoringJobSummary(id=value.job_id, kind='authoring',
+            job_revision=row['revision'], status=row['status'], title=value.request.topic, candidate=None,
+            created_at=row['created_at'], updated_at=row['updated_at']), request=value.request,
+            preparation=preparation, proposal_id=None, consent_id=None, provider_receipt_id=None,
+            provider_outcome=None, usage=UsageSnapshot(input_tokens=None, output_tokens=None),
+            raw_answer=None, raw_refusal=None, validation=not_run(), error_code=None)
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for AuthoringJobView
+E         Value error, every selected exact source must be prepared in original order [type=value_error]
+E           For further information visit https://errors.pydantic.dev/2.13/v/value_error
+
+services/api/app/infrastructure/authoring_repository.py:57: ValidationError
+_ test_material_preserves_ordered_complete_sources_and_rechecks_actual_missing_body[group] _
+
+tmp_path = PosixPath('<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-material-verification-v1/06-complete-owner-boundaries<PYTEST_ROOT>/pytest-0/test_material_preserves_ordere1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x754dc9f8e180>
+kind = 'group'
+
+    @pytest.mark.parametrize('kind', ['single', 'group'])
+    def test_material_preserves_ordered_complete_sources_and_rechecks_actual_missing_body(tmp_path, monkeypatch, kind):
+        case, blocks, refs = generated_with_sources(tmp_path, kind)
+        material = checked_read(case.database, case.identity, case.owner, case.kind, case.candidate, monkeypatch)
+>       assert material.source_refs == refs
+E       AssertionError: assert [] == [ContentRef(e...c22012776ba')]
+E         
+E         Right contains 2 more items, first extra item: ContentRef(entity='block', id='reviewsource_block_001', revision=1, sha256='988fc520e8a0cab30fe45aecdd775038ae2d16cc7a136e62d71b16a2426139e7')
+E         Use -v to get more diff
+
+tests/integration/test_review_materials.py:290: AssertionError
+_ test_group_material_rejects_actual_persisted_plan_and_complete_member_corruption[plan] _
+
+tmp_path = PosixPath('<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-material-verification-v1/06-complete-owner-boundaries<PYTEST_ROOT>/pytest-0/test_group_material_rejects_ac0')
+damage = 'plan'
+
+    @pytest.mark.parametrize('damage', ['plan', 'root', 'question', 'private'])
+    def test_group_material_rejects_actual_persisted_plan_and_complete_member_corruption(tmp_path, damage):
+        database, identity, owner, _, candidate, *_ = generated_group(tmp_path, 'assessment')
+        case = MaterialCase(database, identity, owner, candidate, 'authoring_group')
+        assert read_case(case).candidate.model_dump() == candidate.model_dump()
+        table = 'authoring_content_plans' if damage == 'plan' else 'authoring_group_candidates'
+        with database.transaction() as conn:
+            row = conn.execute(f'SELECT rowid,record_json FROM {table}').fetchone()
+            record = json.loads(row['record_json'])
+            if damage == 'plan':
+                record['plan']['topic'] += ' changed'
+            elif damage == 'root':
+                record['payload']['root']['title'] += ' changed'
+            elif damage == 'question':
+                record['payload']['questions'][0]['stem_markdown'] += ' changed'
+            else:
+                record['payload']['private_solutions'][0]['answer']['solution_markdown'] += ' changed'
+            raw = canonical_bytes(record)
+            # Recompute the storage envelope SHA: original owner/Provider bindings,
+            # not a stale outer digest, must still reject this persisted alteration.
+            conn.execute(f'UPDATE {table} SET record_json=?,record_sha256=? WHERE rowid=?',
+                         (raw.decode(), sha256_bytes(raw), row['rowid']))
+        before = table_hashes(database)
+        with pytest.raises(ApiError) as caught:
+            read_case(case)
+>       assert caught.value.status == 503
+E       AssertionError: assert 409 == 503
+E        +  where 409 = ApiError(status=409, code='AUTHORING_INTEGRITY_ERROR', message='创作持久记录未通过完整性校验。', retryable=False).status
+E        +    where ApiError(status=409, code='AUTHORING_INTEGRITY_ERROR', message='创作持久记录未通过完整性校验。', retryable=False) = <ExceptionInfo ApiError(status=409, code='AUTHORING_INTEGRITY_ERROR', message='创作持久记录未通过完整性校验。', retryable=False) tblen=8>.value
+
+tests/integration/test_review_materials.py:327: AssertionError
+_ test_group_material_rejects_actual_persisted_plan_and_complete_member_corruption[root] _
+
+tmp_path = PosixPath('<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-material-verification-v1/06-complete-owner-boundaries<PYTEST_ROOT>/pytest-0/test_group_material_rejects_ac1')
+damage = 'root'
+
+    @pytest.mark.parametrize('damage', ['plan', 'root', 'question', 'private'])
+    def test_group_material_rejects_actual_persisted_plan_and_complete_member_corruption(tmp_path, damage):
+        database, identity, owner, _, candidate, *_ = generated_group(tmp_path, 'assessment')
+        case = MaterialCase(database, identity, owner, candidate, 'authoring_group')
+        assert read_case(case).candidate.model_dump() == candidate.model_dump()
+        table = 'authoring_content_plans' if damage == 'plan' else 'authoring_group_candidates'
+        with database.transaction() as conn:
+            row = conn.execute(f'SELECT rowid,record_json FROM {table}').fetchone()
+            record = json.loads(row['record_json'])
+            if damage == 'plan':
+                record['plan']['topic'] += ' changed'
+            elif damage == 'root':
+                record['payload']['root']['title'] += ' changed'
+            elif damage == 'question':
+                record['payload']['questions'][0]['stem_markdown'] += ' changed'
+            else:
+                record['payload']['private_solutions'][0]['answer']['solution_markdown'] += ' changed'
+            raw = canonical_bytes(record)
+            # Recompute the storage envelope SHA: original owner/Provider bindings,
+            # not a stale outer digest, must still reject this persisted alteration.
+            conn.execute(f'UPDATE {table} SET record_json=?,record_sha256=? WHERE rowid=?',
+                         (raw.decode(), sha256_bytes(raw), row['rowid']))
+        before = table_hashes(database)
+        with pytest.raises(ApiError) as caught:
+            read_case(case)
+>       assert caught.value.status == 503
+E       AssertionError: assert 409 == 503
+E        +  where 409 = ApiError(status=409, code='AUTHORING_INTEGRITY_ERROR', message='创作持久记录未通过完整性校验。', retryable=False).status
+E        +    where ApiError(status=409, code='AUTHORING_INTEGRITY_ERROR', message='创作持久记录未通过完整性校验。', retryable=False) = <ExceptionInfo ApiError(status=409, code='AUTHORING_INTEGRITY_ERROR', message='创作持久记录未通过完整性校验。', retryable=False) tblen=6>.value
+
+tests/integration/test_review_materials.py:327: AssertionError
+_ test_group_material_rejects_actual_persisted_plan_and_complete_member_corruption[question] _
+
+tmp_path = PosixPath('<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-material-verification-v1/06-complete-owner-boundaries<PYTEST_ROOT>/pytest-0/test_group_material_rejects_ac2')
+damage = 'question'
+
+    @pytest.mark.parametrize('damage', ['plan', 'root', 'question', 'private'])
+    def test_group_material_rejects_actual_persisted_plan_and_complete_member_corruption(tmp_path, damage):
+        database, identity, owner, _, candidate, *_ = generated_group(tmp_path, 'assessment')
+        case = MaterialCase(database, identity, owner, candidate, 'authoring_group')
+        assert read_case(case).candidate.model_dump() == candidate.model_dump()
+        table = 'authoring_content_plans' if damage == 'plan' else 'authoring_group_candidates'
+        with database.transaction() as conn:
+            row = conn.execute(f'SELECT rowid,record_json FROM {table}').fetchone()
+            record = json.loads(row['record_json'])
+            if damage == 'plan':
+                record['plan']['topic'] += ' changed'
+            elif damage == 'root':
+                record['payload']['root']['title'] += ' changed'
+            elif damage == 'question':
+                record['payload']['questions'][0]['stem_markdown'] += ' changed'
+            else:
+                record['payload']['private_solutions'][0]['answer']['solution_markdown'] += ' changed'
+            raw = canonical_bytes(record)
+            # Recompute the storage envelope SHA: original owner/Provider bindings,
+            # not a stale outer digest, must still reject this persisted alteration.
+            conn.execute(f'UPDATE {table} SET record_json=?,record_sha256=? WHERE rowid=?',
+                         (raw.decode(), sha256_bytes(raw), row['rowid']))
+        before = table_hashes(database)
+        with pytest.raises(ApiError) as caught:
+            read_case(case)
+>       assert caught.value.status == 503
+E       AssertionError: assert 409 == 503
+E        +  where 409 = ApiError(status=409, code='AUTHORING_INTEGRITY_ERROR', message='创作持久记录未通过完整性校验。', retryable=False).status
+E        +    where ApiError(status=409, code='AUTHORING_INTEGRITY_ERROR', message='创作持久记录未通过完整性校验。', retryable=False) = <ExceptionInfo ApiError(status=409, code='AUTHORING_INTEGRITY_ERROR', message='创作持久记录未通过完整性校验。', retryable=False) tblen=6>.value
+
+tests/integration/test_review_materials.py:327: AssertionError
+_ test_group_material_rejects_actual_persisted_plan_and_complete_member_corruption[private] _
+
+tmp_path = PosixPath('<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-material-verification-v1/06-complete-owner-boundaries<PYTEST_ROOT>/pytest-0/test_group_material_rejects_ac3')
+damage = 'private'
+
+    @pytest.mark.parametrize('damage', ['plan', 'root', 'question', 'private'])
+    def test_group_material_rejects_actual_persisted_plan_and_complete_member_corruption(tmp_path, damage):
+        database, identity, owner, _, candidate, *_ = generated_group(tmp_path, 'assessment')
+        case = MaterialCase(database, identity, owner, candidate, 'authoring_group')
+        assert read_case(case).candidate.model_dump() == candidate.model_dump()
+        table = 'authoring_content_plans' if damage == 'plan' else 'authoring_group_candidates'
+        with database.transaction() as conn:
+            row = conn.execute(f'SELECT rowid,record_json FROM {table}').fetchone()
+            record = json.loads(row['record_json'])
+            if damage == 'plan':
+                record['plan']['topic'] += ' changed'
+            elif damage == 'root':
+                record['payload']['root']['title'] += ' changed'
+            elif damage == 'question':
+                record['payload']['questions'][0]['stem_markdown'] += ' changed'
+            else:
+                record['payload']['private_solutions'][0]['answer']['solution_markdown'] += ' changed'
+            raw = canonical_bytes(record)
+            # Recompute the storage envelope SHA: original owner/Provider bindings,
+            # not a stale outer digest, must still reject this persisted alteration.
+            conn.execute(f'UPDATE {table} SET record_json=?,record_sha256=? WHERE rowid=?',
+                         (raw.decode(), sha256_bytes(raw), row['rowid']))
+        before = table_hashes(database)
+        with pytest.raises(ApiError) as caught:
+            read_case(case)
+>       assert caught.value.status == 503
+E       AssertionError: assert 409 == 503
+E        +  where 409 = ApiError(status=409, code='AUTHORING_INTEGRITY_ERROR', message='创作持久记录未通过完整性校验。', retryable=False).status
+E        +    where ApiError(status=409, code='AUTHORING_INTEGRITY_ERROR', message='创作持久记录未通过完整性校验。', retryable=False) = <ExceptionInfo ApiError(status=409, code='AUTHORING_INTEGRITY_ERROR', message='创作持久记录未通过完整性校验。', retryable=False) tblen=6>.value
+
+tests/integration/test_review_materials.py:327: AssertionError
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_review_materials.py::test_import_question_material_explicitly_excludes_actual_unapproved_private_answer
+FAILED tests/integration/test_review_materials.py::test_material_preserves_ordered_complete_sources_and_rechecks_actual_missing_body[single]
+FAILED tests/integration/test_review_materials.py::test_material_preserves_ordered_complete_sources_and_rechecks_actual_missing_body[group]
+FAILED tests/integration/test_review_materials.py::test_group_material_rejects_actual_persisted_plan_and_complete_member_corruption[plan]
+FAILED tests/integration/test_review_materials.py::test_group_material_rejects_actual_persisted_plan_and_complete_member_corruption[root]
+FAILED tests/integration/test_review_materials.py::test_group_material_rejects_actual_persisted_plan_and_complete_member_corruption[question]
+FAILED tests/integration/test_review_materials.py::test_group_material_rejects_actual_persisted_plan_and_complete_member_corruption[private]
+7 failed, 32 passed, 2 warnings in 32.79s
