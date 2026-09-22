@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { expect, test, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
 import type { AssessmentGradingResult, AttemptSnapshot } from '../../packages/contracts/generated/api-types'
-import { originalAssessmentPackage, importAssessmentPackage } from './assessmentTestData'
+import { originalAssessmentPackage, importAssessmentPackage, submitAssessment } from './assessmentTestData'
 import { RestartRuntime } from './restartRuntime'
 
 const root = resolve(import.meta.dirname, '../..')
@@ -74,8 +74,7 @@ test('a real failed regrade survives reload and can recover from the last actual
     expect(created.status()).toBe(201)
     const attempt: AttemptSnapshot = await created.json()
     await expect(page.getByText('服务端作答已保存', { exact: true })).toBeVisible()
-    await page.getByRole('button', { name: '提交本次测试', exact: true }).click()
-    await page.getByRole('button', { name: '确认提交已保存作答', exact: true }).click()
+    await submitAssessment(page, attempt.id)
     const original = await result(page, attempt.id, 1)
     expect(original.items.every(item => item.score === null)).toBe(true)
     const originalResponses = await (await page.request.get(`/api/v1/attempts/${attempt.id}/responses`)).json()

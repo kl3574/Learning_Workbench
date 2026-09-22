@@ -1,6 +1,8 @@
 import { execFileSync } from 'node:child_process'
 import { resolve } from 'node:path'
+import { expect, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
 import type { ContentRef } from '../../packages/contracts/generated/types'
+import type { AttemptSnapshot } from '../../packages/contracts/generated/api-types'
 import { importPracticePackage, type PracticePackage } from './practiceTestData'
 
 export type AssessmentPackage = PracticePackage & { assessment: ContentRef }
@@ -15,3 +17,20 @@ export function originalAssessmentPackage(prefix: string, profile: PracticePacka
 
 /** Existing explicit role, actual upload/worker/confirm and learner readback workflow. */
 export const importAssessmentPackage = importPracticePackage
+
+/** A click can finish before the server freezes the submission. Await its exact ACK. */
+export async function submitAssessment(page: Page, attemptId: string): Promise<AttemptSnapshot> {
+  const [response] = await Promise.all([
+    page.waitForResponse(response => response.request().method() === 'POST'
+      && new URL(response.url()).pathname === `/api/v1/attempts/${attemptId}/submit`),
+    (async () => {
+      await page.getByRole('button', { name: '提交本次测试', exact: true }).click()
+      await page.getByRole('button', { name: '确认提交已保存作答', exact: true }).click()
+    })(),
+  ])
+  expect(response.status()).toBe(202)
+  const submitted: AttemptSnapshot = await response.json()
+  expect(submitted.id).toBe(attemptId)
+  expect(submitted.status).toBe('submitted')
+  return submitted
+}
