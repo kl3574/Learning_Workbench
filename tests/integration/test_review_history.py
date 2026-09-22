@@ -384,3 +384,66 @@ def test_closed_persistence_values_hide_private_diagnostics(prepared, model_name
             type(model).model_validate(malformed)
         assert marker not in str(caught.value) and marker not in repr(caught.value)
         assert 'input_value' not in str(caught.value)
+
+
+def test_self_consistent_report_and_matching_job_hash_still_require_original_check_request(prepared, monkeypatch):
+    from tests.integration import test_review_repository as fixture_module
+    from services.api.app.application.review_checks import review_structure
+
+    database, _, value = prepared
+    with database.transaction() as connection:
+        # Deliberately supply a self-consistent opposite report before the real
+        # Job terminal is recorded. Thus rejecting it cannot rely on hash drift.
+        monkeypatch.setattr(fixture_module, 'review_structure',
+                            lambda material, *, requested: review_structure(material, requested=not requested))
+        repo, machine, _ = complete_machine(prepared, connection)
+        actual = connection.execute('SELECT result_json FROM jobs WHERE id=?', (value.review_id,)).fetchone()[0]
+        assert actual == canonical_bytes(machine_job_result(machine)).decode()
+        assert machine.structural_report.requested != ('structure' in value.request.checks)
+        before = quality_bytes(connection)
+        with pytest.raises(ApiError) as caught:
+            repo.append_machine(machine)
+        assert caught.value.code == 'REVIEW_INTEGRITY_ERROR' and quality_bytes(connection) == before
+
+
+@pytest.mark.parametrize('phase', ['machine', 'decision'])
+def test_final_complete_read_failure_rolls_back_all_quality_writes(prepared, phase):
+    database, _, value = prepared
+    with database.transaction() as connection:
+        repo, machine, _ = complete_machine(prepared, connection)
+        if phase == 'decision':
+            repo.append_machine(machine)
+            record, command = decision_fixture(prepared, connection, machine, machine)
+        before = quality_bytes(connection)
+        table = 'review_artifact_bindings' if phase == 'machine' else 'review_commands'
+        connection.execute(f'CREATE TEMP TRIGGER poison_projection AFTER INSERT ON {table} '
+                           "BEGIN UPDATE reviews SET receipt_json='{}'; END")
+        with pytest.raises(ApiError) as caught:
+            if phase == 'machine':
+                repo.append_machine(machine)
+            else:
+                repo.append_decision(record, command)
+        assert caught.value.code == 'REVIEW_INTEGRITY_ERROR' and quality_bytes(connection) == before
+    with database.connect() as connection:
+        assert quality_bytes(connection) == before
+        assert connection.execute('SELECT revision FROM jobs WHERE id=?', (value.review_id,)).fetchone()[0] == 3
+
+
+def test_rehashed_noncurrent_human_record_is_rejected_even_when_current_projection_is_intact(prepared):
+    database, _, value = prepared
+    with database.transaction() as connection:
+        repo, machine, _ = complete_machine(prepared, connection)
+        repo.append_machine(machine)
+        first, first_command = decision_fixture(prepared, connection, machine, machine)
+        repo.append_decision(first, first_command)
+        second, second_command = decision_fixture(prepared, connection, machine, first, attachments=0)
+        repo.append_decision(second, second_command)
+        connection.execute('DROP TRIGGER review_revisions_no_update')
+        raw = canonical_bytes(first.model_dump() | {'machine_record_sha256': 'f' * 64}).decode()
+        connection.execute('UPDATE review_revisions SET record_json=?,record_sha256=? WHERE revision=2',
+                           (raw, sha256_bytes(raw.encode())))
+        assert connection.execute('SELECT receipt_json FROM reviews').fetchone()[0] == canonical_bytes(second.receipt).decode()
+        before = quality_bytes(connection)
+        with pytest.raises(ApiError) as caught:
+            repo.load(value.review_id)
+        assert caught.value.code == 'REVIEW_INTEGRITY_ERROR' and quality_bytes(connection) == before
