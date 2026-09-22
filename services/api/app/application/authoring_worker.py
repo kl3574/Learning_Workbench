@@ -57,7 +57,7 @@ class AuthoringWorker:
     def claim(self) -> AuthoringLease | None:
         workspace = self.database.workspace_id()
         with self.database.transaction() as conn:
-            query = "SELECT created_at,id FROM jobs WHERE workspace_id=? AND kind='authoring' AND (status='queued' OR (status='running' AND lease_until<=?))"
+            query = "SELECT created_at,id FROM jobs WHERE workspace_id=? AND kind='authoring' AND json_extract(input_json,'$.version')='authoring-job-v1' AND (status='queued' OR (status='running' AND lease_until<=?))"
             rows = conn.execute(query + ' ORDER BY created_at,id', (workspace, utc_now())).fetchall()
             if self._cursor is not None:
                 rows = [row for row in rows if tuple(row) > self._cursor] + [row for row in rows if tuple(row) <= self._cursor]
@@ -160,7 +160,10 @@ class AuthoringWorker:
                 view.error_code, status, payload = access_error, 'failed', None
             if row['cancel_requested']:
                 status, payload = 'cancelled', None
-                view.error_code = 'PROVIDER_CANCELLED'
+                # Preserve why only the control receipt was acquired. A later
+                # authorized read may project the original checked output while
+                # keeping cancellation and the absent candidate unchanged.
+                view.error_code = access_error or 'PROVIDER_CANCELLED'
             if payload is not None and receipt is not None:
                 candidate = AuthoringCandidate(draft_id='authoring_draft_' + uuid4().hex,
                     draft_revision=1, entity='block', candidate_sha256=candidate_sha256(payload))

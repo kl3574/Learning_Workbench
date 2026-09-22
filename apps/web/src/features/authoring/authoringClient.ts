@@ -1,11 +1,13 @@
-import type { ApprovalDecision, AuthoringDraftView, AuthoringJobPage, AuthoringJobView, AuthoringPrepareWrite, JobRef, JobSnapshot, NumericCheckDecisionAck, NumericCheckPreviewWrite, NumericCheckView, SessionResponse } from '../../../../../packages/contracts/generated/api-types'
+import type { ApprovalDecision, AuthoringDraftView, AuthoringJobPage, AuthoringJobReadView, AuthoringPrepareWrite, JobRef, JobSnapshot, NumericCheckDecisionAck, NumericCheckPreviewWrite, NumericCheckView, SessionResponse } from '../../../../../packages/contracts/generated/api-types'
 import { request } from '../../api/client'
+import { authoringGroupClient, type AuthoringGroupPort } from './authoringGroupClient'
 import { checkedAuthoring } from './authoringCommands'
 export type AuthoringPort = {
+  groups?: AuthoringGroupPort
   session(): Promise<SessionResponse>
   list(cursor?: string): Promise<AuthoringJobPage>
   prepare(body: AuthoringPrepareWrite, key: string): Promise<JobRef>
-  read(id: string): Promise<AuthoringJobView>
+  read(id: string): Promise<AuthoringJobReadView>
   draft(id: string): Promise<AuthoringDraftView>
   preview(id: string, body: NumericCheckPreviewWrite, key: string): Promise<NumericCheckView>
   numeric(id: string): Promise<NumericCheckView>
@@ -14,10 +16,11 @@ export type AuthoringPort = {
   cancel(id: string, body: { expected_revision: number }, key: string): Promise<JobSnapshot>
 }
 export const authoringClient: AuthoringPort = {
+  groups: authoringGroupClient,
   session: () => request('GET /api/v1/session', undefined),
   list: async cursor => checkedAuthoring('AuthoringJobPage', await request('GET /api/v1/authoring/jobs', undefined, undefined, { query: { limit: 20, ...(cursor ? { cursor } : {}) } })),
   prepare: async (body, key) => checkedAuthoring('JobRef', await request('POST /api/v1/authoring/jobs', body, { 'Idempotency-Key': key })),
-  read: async id => checkedAuthoring('AuthoringJobView', await request('GET /api/v1/authoring/jobs/{id}', undefined, undefined, { path: { id } })),
+  read: async id => checkedAuthoring('AuthoringJobReadView', await request('GET /api/v1/authoring/jobs/{id}', undefined, undefined, { path: { id } })),
   draft: async id => checkedAuthoring('AuthoringDraftView', await request('GET /api/v1/authoring/drafts/{id}', undefined, undefined, { path: { id } })),
   preview: async (id, body, key) => checkedAuthoring('NumericCheckView', await request('POST /api/v1/authoring/drafts/{id}/numeric-checks', body, { 'Idempotency-Key': key }, { path: { id } })),
   numeric: async id => checkedAuthoring('NumericCheckView', await request('GET /api/v1/authoring/numeric-checks/{id}', undefined, undefined, { path: { id } })),

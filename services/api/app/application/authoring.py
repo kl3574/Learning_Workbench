@@ -11,7 +11,7 @@ from packages.contracts.canonical import canonical_bytes, sha256_bytes, strict_j
 from ..authoring_dto import AuthoringDraftView, AuthoringJobPage, AuthoringJobView, AuthoringPreparationSummary, AuthoringPrepareWrite
 from ..import_dto import JobCancelRequest, JobSnapshot
 from ..infrastructure.authoring_job_repository import integrity
-from ..infrastructure.authoring_repository import AuthoringRepository
+from ..infrastructure.authoring_repository import AuthoringRepository, AuthoringRecord
 from ..infrastructure.database import Database
 from ..infrastructure.security import SessionIdentity
 from .authoring_context import AuthoringContext
@@ -30,7 +30,10 @@ class AuthoringService:
         self.provider = provider
         self._cursor_key = secrets.token_bytes(32)
 
-    def _history(self, conn: sqlite3.Connection, identity: SessionIdentity, identifier: str):
+    def verify_history(self, conn: sqlite3.Connection, identity: SessionIdentity, identifier: str) -> AuthoringRecord:
+        """Verify protected source and Provider history within the caller's transaction."""
+        if not conn.in_transaction:
+            raise integrity()
         record = AuthoringRepository(conn, identity.workspace_id).load(identifier)
         context = self.context.read(conn, identity, record.view.preparation.context_snapshot_id)
         actual = build_outbound(record.input, context, record.view.summary.job_revision)
@@ -73,7 +76,7 @@ class AuthoringService:
             repo = AuthoringRepository(conn, identity.workspace_id)
             previous = repo.replay(identity, 'POST /authoring/jobs', key, body, dm.JobRef)
             if previous is not None:
-                self._history(conn, identity, previous.id)
+                self.verify_history(conn, identity, previous.id)
                 return previous
             identifier = 'authoring_' + uuid4().hex
             value = AuthoringJobInput(version='authoring-job-v1', workspace_id=identity.workspace_id,
@@ -88,20 +91,20 @@ class AuthoringService:
             repo.create(identity, value, summary)
             ack = dm.JobRef(id=identifier, status='awaiting_approval')
             repo.record_command(identity, 'POST /authoring/jobs', key, body, ack, identifier, 1)
-            self._history(conn, identity, identifier)
+            self.verify_history(conn, identity, identifier)
             return ack
 
     def read(self, identity: SessionIdentity, identifier: str) -> AuthoringJobView:
         with self.database.transaction(immediate=False) as conn:
             self.context.check_access(conn, identity)
-            return self._history(conn, identity, identifier).view
+            return self.verify_history(conn, identity, identifier).view
 
     def draft(self, identity: SessionIdentity, identifier: str) -> AuthoringDraftView:
         with self.database.transaction(immediate=False) as conn:
             self.context.check_access(conn, identity)
             repo = AuthoringRepository(conn, identity.workspace_id)
             result = repo.draft(identifier)
-            self._history(conn, identity, result.source_job_id)
+            self.verify_history(conn, identity, result.source_job_id)
             from ..infrastructure.authoring_numeric_repository import NumericRepository
             numeric = NumericRepository(conn, identity.workspace_id)
             if numeric.candidate_checks(identifier) != result.numeric_check_ids:
@@ -116,6 +119,9 @@ class AuthoringService:
 
     def _control(self, conn: sqlite3.Connection, identity: SessionIdentity, identifier: str) -> JobSnapshot:
         repo = AuthoringRepository(conn, identity.workspace_id)
+        if repo.jobs.input_version(identifier) in {'authoring-group-job-v1', 'authoring-group-numeric-job-v1'}:
+            from .authoring_group import AuthoringGroupService
+            return AuthoringGroupService(self.database)._control(conn, identity, identifier)
         row = repo.jobs.load(identifier)
         if row['kind'] == 'authoring':
             record = repo.load(identifier)

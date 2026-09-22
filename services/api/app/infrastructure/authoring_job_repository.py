@@ -50,6 +50,17 @@ class AuthoringJobRepository:
         return {row[0] for row in self.conn.execute("SELECT id FROM jobs WHERE workspace_id=? AND kind IN ('authoring','authoring_numeric_check')",
                                                    (self.workspace_id,))}
 
+    def input_version(self, identifier: str) -> str:
+        """Route only an existing, hash/event-checked Job owned by this workspace."""
+        row = self.load(identifier)
+        value = checked(row['input_json'], row['input_sha256'])
+        version = value.get('version')
+        allowed = ({'authoring-job-v1', 'authoring-group-job-v1'} if row['kind'] == 'authoring'
+                   else {'authoring-numeric-job-v1', 'authoring-group-numeric-job-v1'})
+        if not isinstance(version, str) or version not in allowed:
+            raise integrity()
+        return version
+
     def load(self, identifier: str) -> sqlite3.Row:
         row = self.conn.execute('SELECT * FROM jobs WHERE id=? AND workspace_id=?',
                                 (identifier, self.workspace_id)).fetchone()

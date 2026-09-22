@@ -15,7 +15,8 @@ export interface DraftRecord {
 }
 interface StoredDraft extends DraftRecord { workspaceId: string }
 export type DraftSaveResult = { kind: 'saved'; record: DraftRecord } | { kind: 'conflict'; record: DraftRecord; conflict: DraftConflict }
-export type DraftStorageCode = 'UNAVAILABLE' | 'OPEN_FAILED' | 'BLOCKED' | 'READ_FAILED' | 'WRITE_FAILED' | 'QUOTA_EXCEEDED' | 'INVALID_INPUT'
+export type DraftWriteGuard = { allowed: () => boolean; signal: AbortSignal }
+export type DraftStorageCode = 'UNAVAILABLE' | 'OPEN_FAILED' | 'BLOCKED' | 'READ_FAILED' | 'WRITE_FAILED' | 'QUOTA_EXCEEDED' | 'INVALID_INPUT' | 'ACCESS_CHANGED'
 export class DraftStorageError extends Error {
   readonly code: DraftStorageCode
   constructor(code: DraftStorageCode) {
@@ -27,9 +28,13 @@ export class DraftStorageError extends Error {
       WRITE_FAILED: '草稿写入失败，当前文字尚未保存，请重试。',
       QUOTA_EXCEEDED: '浏览器存储空间不足，当前文字尚未保存，请保留文字后重试。',
       INVALID_INPUT: '草稿对象或基准修订无效，当前文字尚未保存。',
+      ACCESS_CHANGED: '当前权限或工作区已变化，未写入这次草稿。',
     }
     super(messages[code]); this.name = 'DraftStorageError'; this.code = code
   }
+}
+export function assertDraftWriteAllowed(guard?: DraftWriteGuard): void {
+  if (guard && (guard.signal.aborted || !guard.allowed())) throw new DraftStorageError('ACCESS_CHANGED')
 }
 function storageError(code: DraftStorageCode, cause?: unknown) {
   return new DraftStorageError(cause instanceof DOMException && cause.name === 'QuotaExceededError' ? 'QUOTA_EXCEEDED' : code)
@@ -97,9 +102,11 @@ export class DraftStore {
       transaction.onerror = () => { /* onabort is the only failure settlement */ }
     })
   }
-  async save(workspaceId: string, objectId: string, text: string, expectedRevision: number, resolvedConflictIds: readonly string[] = []): Promise<DraftSaveResult> {
+  async save(workspaceId: string, objectId: string, text: string, expectedRevision: number, resolvedConflictIds: readonly string[] = [], guard?: DraftWriteGuard): Promise<DraftSaveResult> {
     if (!workspaceId || !objectId || typeof text !== 'string' || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0 || expectedRevision === Number.MAX_SAFE_INTEGER) throw new DraftStorageError('INVALID_INPUT')
+    assertDraftWriteAllowed(guard)
     const database = await this.open()
+    assertDraftWriteAllowed(guard)
     const result = await new Promise<DraftSaveResult>((resolve, reject) => {
       let transaction: IDBTransaction
       try { transaction = database.transaction('drafts', 'readwrite') } catch (error) { reject(storageError('WRITE_FAILED', error)); return }
@@ -108,8 +115,33 @@ export class DraftStore {
       let outcome: DraftSaveResult | null = null
       let invalid = false
       let writeError: DraftStorageError | null = null
+      let committing = false
+      const abortWrite = (error: DraftStorageError) => {
+        if (committing) return
+        try { transaction.abort(); writeError = error }
+        catch { /* Already finishing: only the actual terminal event settles the write. */ }
+      }
+      const revoked = () => abortWrite(new DraftStorageError('ACCESS_CHANGED'))
+      const cleanup = () => guard?.signal.removeEventListener('abort', revoked)
+      guard?.signal.addEventListener('abort', revoked, { once: true })
+      const put = (value: StoredDraft) => {
+        assertDraftWriteAllowed(guard)
+        const written = store.put(value)
+        if (guard) written.onsuccess = () => {
+          try {
+            assertDraftWriteAllowed(guard)
+            // The final access check and explicit commit share one synchronous
+            // callback. Revocation after this admission cannot undo a committing
+            // transaction. Only oncomplete below establishes persistence.
+            transaction.commit()
+            committing = true
+            cleanup()
+          } catch (error) { abortWrite(error instanceof DraftStorageError ? error : storageError('WRITE_FAILED', error)) }
+        }
+      }
       request.onsuccess = () => {
         try {
+        assertDraftWriteAllowed(guard)
         const current: StoredDraft | undefined = request.result
         if (current !== undefined && !validRecord(current)) { invalid = true; transaction.abort(); return }
         const revision = current?.revision ?? 0
@@ -121,19 +153,20 @@ export class DraftStore {
           const duplicate = current.conflicts.find(conflict => conflict.expectedRevision === expectedRevision && conflict.text === text)
           const conflict: DraftConflict = duplicate ?? { id: crypto.randomUUID(), expectedRevision, actualRevision: revision, text, createdAt: now }
           const next: StoredDraft = { ...current, conflicts: duplicate ? current.conflicts : [...current.conflicts, conflict] }
-          store.put(next)
+          put(next)
           outcome = { kind: 'conflict', record: publicRecord(next), conflict: structuredClone(conflict) }
         } else {
           const next: StoredDraft = { workspaceId, objectId, revision: revision + 1, text, updatedAt: now,
             conflicts: (current?.conflicts ?? []).filter(conflict => !resolvedConflictIds.includes(conflict.id)) }
-          store.put(next)
+          put(next)
           outcome = { kind: 'saved', record: publicRecord(next) }
         }
-        } catch (error) { writeError = storageError('WRITE_FAILED', error); transaction.abort() }
+        } catch (error) { abortWrite(error instanceof DraftStorageError ? error : storageError('WRITE_FAILED', error)) }
       }
-      transaction.oncomplete = () => outcome ? resolve(outcome) : reject(new DraftStorageError('WRITE_FAILED'))
-      transaction.onabort = () => reject(writeError ?? storageError(invalid ? 'READ_FAILED' : 'WRITE_FAILED', transaction.error))
+      transaction.oncomplete = () => { cleanup(); outcome ? resolve(outcome) : reject(new DraftStorageError('WRITE_FAILED')) }
+      transaction.onabort = () => { cleanup(); reject(writeError ?? storageError(invalid ? 'READ_FAILED' : 'WRITE_FAILED', transaction.error)) }
       transaction.onerror = () => { /* do not report success before transaction commit */ }
+      if (guard?.signal.aborted) revoked()
     })
     this.notify(workspaceId)
     return result

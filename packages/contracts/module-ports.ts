@@ -129,17 +129,30 @@ export interface NotesPort<D extends DTOMap> {save(ctx:WriteContext, note:D['Not
 export interface DraftCandidate {draft_id:string;draft_revision:number;entity:Entity;candidate_sha256:string}
 export interface AuthoringApplicationDTOMap {
  AuthoringPrepareWrite:unknown; AuthoringJobPage:unknown; AuthoringJobView:unknown;
- AuthoringDraftView:unknown; NumericCheckPreviewWrite:unknown; NumericCheckView:unknown;
+ AuthoringDraftView:unknown; AuthoringJobReadView:unknown; NumericCheckPreviewWrite:unknown; NumericCheckView:unknown;
  NumericCheckDecisionAck:unknown; ApprovalDecision:unknown;
 }
 export interface AuthoringApplicationPort<A extends AuthoringApplicationDTOMap> {
  prepareJob(ctx:WriteContext,request:A['AuthoringPrepareWrite']):Promise<JobRef>;
  listJobs(ctx:AuthContext,query:{cursor?:string;limit?:number}):Promise<A['AuthoringJobPage']>;
- readJob(ctx:AuthContext,id:string):Promise<A['AuthoringJobView']>;
+ readJob(ctx:AuthContext,id:string):Promise<A['AuthoringJobReadView']>;
  readDraft(ctx:AuthContext,id:string):Promise<A['AuthoringDraftView']>;
  previewNumeric(ctx:WriteContext,draftId:string,request:A['NumericCheckPreviewWrite']):Promise<A['NumericCheckView']>;
  readNumeric(ctx:AuthContext,id:string):Promise<A['NumericCheckView']>;
  decideNumeric(ctx:WriteContext,id:string,request:A['ApprovalDecision']):Promise<A['NumericCheckDecisionAck']>;
+}
+export interface AuthoringGroupApplicationDTOMap {
+ AuthoringGroupPrepareWrite:unknown; AuthoringGroupDraftView:unknown; AuthoringPrivateSolutionView:unknown;
+ AuthoringGroupNumericPreviewWrite:unknown; AuthoringGroupNumericCheckView:unknown;
+ NumericCheckDecisionAck:unknown; ApprovalDecision:unknown;
+}
+export interface AuthoringGroupApplicationPort<G extends AuthoringGroupApplicationDTOMap> {
+ prepareGroup(ctx:WriteContext,request:G['AuthoringGroupPrepareWrite']):Promise<JobRef>;
+ readGroup(ctx:AuthContext,id:string):Promise<G['AuthoringGroupDraftView']>;
+ readSolution(ctx:AuthContext,id:string,memberKey:string):Promise<G['AuthoringPrivateSolutionView']>;
+ previewGroupNumeric(ctx:WriteContext,id:string,memberKey:string,request:G['AuthoringGroupNumericPreviewWrite']):Promise<G['AuthoringGroupNumericCheckView']>;
+ readGroupNumeric(ctx:AuthContext,id:string):Promise<G['AuthoringGroupNumericCheckView']>;
+ decideGroupNumeric(ctx:WriteContext,id:string,request:G['ApprovalDecision']):Promise<G['NumericCheckDecisionAck']>;
 }
 export interface AuthoringPort<D extends DTOMap> {
  generate(ctx:WriteContext, request:D['AuthoringRequest']):Promise<JobRef>;

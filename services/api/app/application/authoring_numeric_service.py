@@ -8,19 +8,31 @@ from ..infrastructure.authoring_numeric_repository import NumericRepository
 from ..infrastructure.authoring_numeric_runtime import NumericRuntime, NumericRuntimeError
 from ..infrastructure.database import Database, utc_now
 from ..infrastructure.security import SessionIdentity
+from .authoring import AuthoringService
 from .authoring_context import AuthoringContext
 from .authoring_numeric import NumericError, validate_plan
 from .errors import ApiError
 
 
 class NumericService:
-    def __init__(self, database: Database, context: AuthoringContext, runtime: NumericRuntime):
+    def __init__(self, database: Database, context: AuthoringContext, runtime: NumericRuntime,
+                 authoring: AuthoringService | None = None):
         self.database, self.context, self.runtime = database, context, runtime
+        self.authoring = authoring
 
-    def _candidate_history(self, conn, identity, repo, draft_id):
+    def _control_history(self, conn, identity, repo, draft_id):
         candidate = repo.candidate(draft_id)
         generation = repo.authoring.load(candidate.source_job_id)
         self.context.verify_history(conn, identity, generation.input, generation.view.preparation)
+        return candidate
+
+    def _candidate_history(self, conn, identity, repo, draft_id):
+        candidate = self._control_history(conn, identity, repo, draft_id)
+        if self.authoring is None:
+            raise ApiError(503, 'AUTHORING_OUTPUT_UNAVAILABLE', '原生成结果当前无法核验。')
+        generation = self.authoring.verify_history(conn, identity, candidate.source_job_id)
+        if generation.view.summary.candidate != candidate.candidate:
+            raise integrity()
         return candidate
 
     @staticmethod
@@ -105,7 +117,7 @@ class NumericService:
         with self.database.transaction(immediate=False) as conn:
             repo = NumericRepository(conn, identity.workspace_id)
             record = repo.load(repo.check_for_job(identifier))
-            self._candidate_history(conn, identity, repo, record.view.candidate.draft_id)
+            self._control_history(conn, identity, repo, record.view.candidate.draft_id)
             return repo.jobs.snapshot(identifier)
 
     def cancel_job(self, identity: SessionIdentity, identifier: str,
@@ -114,7 +126,7 @@ class NumericService:
         with self.database.transaction() as conn:
             repo = NumericRepository(conn, identity.workspace_id)
             record = repo.load(repo.check_for_job(identifier))
-            self._candidate_history(conn, identity, repo, record.view.candidate.draft_id)
+            self._control_history(conn, identity, repo, record.view.candidate.draft_id)
             previous = repo.replay(identity, route, key, body, JobSnapshot)
             if previous is not None:
                 return previous

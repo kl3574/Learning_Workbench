@@ -8,6 +8,12 @@ import { setTimeout as pause } from 'node:timers/promises'
 import { expect, type BrowserContext, type BrowserType, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
 
 const root = resolve(import.meta.dirname, '../..')
+type AuthoringScenario = 'complete' | 'no_proof' | 'lesson' | 'practice_set'
+type AuthoringFactory = 'single' | 'groups'
+const factories = {
+  single: 'tests.authoring_native_fixture:create_test_app',
+  groups: 'tests.authoring_group_native_fixture:create_test_app',
+} as const
 type OwnedProcess = { child: ChildProcess; exit: Promise<void>; output: () => string }
 const ownedGroups = new Set<number>()
 // Playwright can dispose a timed-out worker before its async finally finishes.
@@ -84,16 +90,20 @@ export class AuthoringRuntime {
   private ui?: OwnedProcess
   private context?: BrowserContext
 
-  private constructor(private readonly apiPort: number, uiPort: number, scenario: 'complete' | 'no_proof') {
+  private constructor(private readonly apiPort: number, uiPort: number, scenario: AuthoringScenario, private readonly factory: AuthoringFactory) {
     this.origin = `http://127.0.0.1:${uiPort}`
     this.env = { ...process.env, LEARNING_DATA_DIR: this.data, LEARNING_UI_ORIGIN: this.origin, LEARNING_HOST: '127.0.0.1', LEARNING_PORT: String(apiPort), AUTHORING_NATIVE_SCENARIO: scenario }
   }
 
-  static async start(scenario: 'complete' | 'no_proof' = 'no_proof') {
+  static async start(scenario: 'complete' | 'no_proof', factory?: 'single'): Promise<AuthoringRuntime>
+  static async start(scenario: 'lesson' | 'practice_set', factory: 'groups'): Promise<AuthoringRuntime>
+  static async start(): Promise<AuthoringRuntime>
+  static async start(scenario: AuthoringScenario = 'no_proof', factory: AuthoringFactory = 'single') {
+    if (factory === 'single' ? !['complete', 'no_proof'].includes(scenario) : factory !== 'groups' || !['lesson', 'practice_set'].includes(scenario)) throw new Error('Unknown closed Authoring test factory/scenario')
     const apiPort = await availablePort()
     let uiPort = await availablePort()
     while (uiPort === apiPort) uiPort = await availablePort()
-    const runtime = new AuthoringRuntime(apiPort, uiPort, scenario)
+    const runtime = new AuthoringRuntime(apiPort, uiPort, scenario, factory)
     try {
       await runtime.startApi()
       runtime.ui = owned('bash', ['scripts/node.sh', 'npm', '--prefix', 'apps/web', 'run', 'dev', '--', '--port', String(uiPort)], runtime.env)
@@ -103,7 +113,7 @@ export class AuthoringRuntime {
   }
 
   private async startApi() {
-    this.api = owned(`${root}/.venv/bin/python`, ['-B', '-m', 'uvicorn', 'tests.authoring_native_fixture:create_test_app', '--factory', '--host', '127.0.0.1', '--port', String(this.apiPort), '--no-access-log'], this.env)
+    this.api = owned(`${root}/.venv/bin/python`, ['-B', '-m', 'uvicorn', factories[this.factory], '--factory', '--host', '127.0.0.1', '--port', String(this.apiPort), '--no-access-log'], this.env)
     await ready(`http://127.0.0.1:${this.apiPort}/health`, this.api)
     if (!this.api.child.pid) throw new Error('Owned API has no process identity')
     this.generations.push(this.api.child.pid)

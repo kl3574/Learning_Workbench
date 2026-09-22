@@ -4,12 +4,15 @@ import re
 from fastapi import APIRouter, Depends, Request, Response
 from packages.contracts import domain_models as dm
 from ..application.authoring import AuthoringService
+from ..application.authoring_group import AuthoringGroupService
 from ..application.authoring_numeric_service import NumericService
 from ..application.errors import ApiError
 from ..authoring_dto import (
-    AuthoringDraftView, AuthoringJobPage, AuthoringJobView, AuthoringPrepareWrite,
+    AuthoringDraftView, AuthoringJobPage, AuthoringPrepareWrite,
     NumericCheckDecisionAck, NumericCheckPreviewWrite, NumericCheckView,
 )
+from ..authoring_group_dto import AuthoringJobReadView
+from ..infrastructure.authoring_job_repository import AuthoringJobRepository, integrity
 from .http import current_identity, verify_write
 from .practice_http import private_response
 from .tutor_http import COMMAND_PARAMETER, PAGE_PARAMETERS, command_key, unique_headers
@@ -21,7 +24,8 @@ def query_fields(request: Request, allowed: set[str]) -> None:
         raise ApiError(422, 'SCHEMA_INVALID', '查询字段未知或重复。')
 
 
-def create_authoring_router(service: AuthoringService, numeric: NumericService) -> APIRouter:
+def create_authoring_router(service: AuthoringService, numeric: NumericService,
+                            group: AuthoringGroupService) -> APIRouter:
     router = APIRouter(prefix='/api/v1', tags=['authoring'], dependencies=[
         Depends(current_identity), Depends(unique_headers), Depends(private_response)])
 
@@ -42,9 +46,17 @@ def create_authoring_router(service: AuthoringService, numeric: NumericService) 
             raise ApiError(422, 'SCHEMA_INVALID', '分页须使用非空游标和1至100的整数。')
         return service.jobs(request.state.identity, cursor, int(limit))
 
-    @router.get('/authoring/jobs/{id}', response_model=AuthoringJobView)
-    def read(id: str, request: Request) -> AuthoringJobView:
-        result = service.read(request.state.identity, id)
+    @router.get('/authoring/jobs/{id}', response_model=AuthoringJobReadView)
+    def read(id: str, request: Request) -> AuthoringJobReadView:
+        identity = request.state.identity
+        with service.database.transaction(immediate=False) as conn:
+            version = AuthoringJobRepository(conn, identity.workspace_id).input_version(id)
+        if version == 'authoring-group-job-v1':
+            result = AuthoringJobReadView(root=group.read(identity, id))
+        elif version == 'authoring-job-v1':
+            result = AuthoringJobReadView(root=service.read(identity, id))
+        else:
+            raise integrity()
         query_fields(request, set())
         return result
 

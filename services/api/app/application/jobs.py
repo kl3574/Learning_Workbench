@@ -90,9 +90,23 @@ class JobService:
             from .tutor_context import ContextService
             return TutorService(self.database, ContextService(self.database))
         if row['kind'] == 'authoring':
+            from ..infrastructure.authoring_job_repository import AuthoringJobRepository
+            with self.database.transaction(immediate=False) as conn:
+                version = AuthoringJobRepository(conn, identity.workspace_id).input_version(identifier)
+            if version == 'authoring-group-job-v1':
+                from .authoring_group import AuthoringGroupService
+                return AuthoringGroupService(self.database)
             from .authoring import AuthoringService
             return AuthoringService(self.database)
         if row['kind'] == 'authoring_numeric_check':
+            from ..infrastructure.authoring_job_repository import AuthoringJobRepository
+            with self.database.transaction(immediate=False) as conn:
+                version = AuthoringJobRepository(conn, identity.workspace_id).input_version(identifier)
+            if version == 'authoring-group-numeric-job-v1':
+                from .authoring_group_context import AuthoringGroupContext
+                from .authoring_group_numeric_service import GroupNumericService
+                from ..infrastructure.authoring_numeric_runtime import NumericRuntime
+                return GroupNumericService(self.database, AuthoringGroupContext(self.database), NumericRuntime())
             from .authoring_context import AuthoringContext
             from .authoring_numeric_service import NumericService
             from ..infrastructure.authoring_numeric_runtime import NumericRuntime

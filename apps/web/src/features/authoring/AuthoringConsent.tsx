@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { AuthoringJobView, ConsentProposalView, ProviderConfigView } from '../../../../../packages/contracts/generated/api-types'
+import type { AuthoringJobReadView, ConsentProposalView, ProviderConfigView } from '../../../../../packages/contracts/generated/api-types'
 import { providerClient, type ProviderPort } from '../providers/providerClient'
 import { ConsentPreview } from '../providers/ConsentPreview'
 import { ProposalDisplay } from '../providers/ConsentSummary'
@@ -7,7 +7,7 @@ import { ProviderCommandPanel } from '../providers/ProviderCommandPanel'
 import { useProviderCommands } from '../providers/useProviderCommands'
 import type { ProviderCommand } from '../providers/providerDrafts'
 const commandJob = (command: ProviderCommand) => command.kind === 'preview' ? command.body.job_id : command.kind === 'grant' ? command.proposal.summary.job_id : null
-export function AuthoringConsent({ workspace, value, refresh, denied, onState, port = providerClient }: { workspace: string; value: AuthoringJobView; refresh: () => void; denied: (reason: unknown) => void; onState: (state: { dirty: boolean; safe: boolean }) => void; port?: ProviderPort }) {
+export function AuthoringConsent({ workspace, value, refresh, denied, onState, port = providerClient }: { workspace: string; value: AuthoringJobReadView; refresh: () => void; denied: (reason: unknown) => void; onState: (state: { dirty: boolean; safe: boolean }) => void; port?: ProviderPort }) {
   const callbacks = useRef({ denied, onState, refresh }); callbacks.current = { denied, onState, refresh }
   const wrapped = useMemo<ProviderPort>(() => {
     const guarded = async <T,>(promise: Promise<T>) => { try { return await promise } catch (reason) { callbacks.current.denied(reason); throw reason } }
@@ -28,10 +28,11 @@ export function AuthoringConsent({ workspace, value, refresh, denied, onState, p
   const previousAck = useRef<unknown>(null)
   useEffect(() => { if (editor?.ack && editor.ack !== previousAck.current) { previousAck.current = editor.ack; callbacks.current.refresh() } }, [editor?.ack])
   useEffect(() => { callbacks.current.onState({ dirty: dirty || !!editor && !editor.ack || candidates.length > 0, safe: commands.closeSafe }); return () => callbacks.current.onState({ dirty: false, safe: true }) }, [dirty, editor, candidates.length, commands.closeSafe])
+  const group = 'variant' in value
   const awaiting = value.summary.status === 'awaiting_approval' && !value.consent_id
-  return <section aria-label="本次例题模型授权"><h3>另行批准本次模型调用</h3><p>Provider 授权只绑定此例题任务，不批准数值运行或发布。</p><button disabled={commands.busy} onClick={() => { setGeneration(v => v + 1); refresh() }}>刷新配置与本任务授权</button>{error && <p role="alert">{error}</p>}
+  return <section aria-label={group ? '本次组合草稿模型授权' : '本次例题模型授权'}><h3>另行批准本次模型调用</h3><p>本次 Provider 授权绑定此创作任务；数值运行需要单独批准，草稿仍需审查。</p><button disabled={commands.busy} onClick={() => { setGeneration(v => v + 1); refresh() }}>刷新配置与本任务授权</button>{error && <p role="alert">{error}</p>}
     {awaiting && !proposal && <ConsentPreview task={{ job_id: job, expected_job_revision: value.summary.job_revision }} config={config} paused={false} disabled={!commands.safe || commands.busy || !!editor && !editor.ack} prepare={commands.begin} onDirty={setDirty} />}
-    {proposal && <><ProposalDisplay value={proposal} />{awaiting && !proposal.consent_id && proposal.validity === 'current' && <><label><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />我已核对本次例题的冻结范围、提供商、预算与到期时间</label><button disabled={!confirmed || !commands.safe || commands.busy || !!editor && !editor.ack} onClick={() => commands.begin({ kind: 'grant', proposal, body: { proposal_id: proposal.id, proposal_sha256: proposal.proposal_sha256 } })}>准备批准例题模型调用</button></>}</>}
+    {proposal && <><ProposalDisplay value={proposal} />{awaiting && !proposal.consent_id && proposal.validity === 'current' && <><label><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />{group ? '我已核对本次组合草稿的冻结范围、提供商、预算与到期时间' : '我已核对本次例题的冻结范围、提供商、预算与到期时间'}</label><button disabled={!confirmed || !commands.safe || commands.busy || !!editor && !editor.ack} onClick={() => commands.begin({ kind: 'grant', proposal, body: { proposal_id: proposal.id, proposal_sha256: proposal.proposal_sha256 } })}>{group ? '准备批准组合草稿模型调用' : '准备批准例题模型调用'}</button></>}</>}
     {value.consent_id && <p>此任务已有授权，继续读取同一任务；不要再次创建来继续。</p>}
     <ProviderCommandPanel state={scoped} />
   </section>

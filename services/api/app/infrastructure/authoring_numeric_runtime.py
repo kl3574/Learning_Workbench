@@ -32,9 +32,16 @@ import zipfile
 from packages.contracts.canonical import canonical_bytes, strict_json
 from ..authoring_dto import NumericRuntimeProfile, NumericAssertionResult, NumericCheckResult, numeric_result_sha256
 from ..application.authoring_models import NumericJobInput
+from ..application.authoring_group_models import AuthoringGroupNumericJobInput
 from ..application.authoring_numeric import validate_plan
-from pydantic import BaseModel, ConfigDict, ValidationError
-from typing import Literal
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
+from typing import Annotated, Literal
+
+
+NumericExecutionInput = Annotated[
+    NumericJobInput | AuthoringGroupNumericJobInput, Field(discriminator='version')
+]
+_NUMERIC_INPUT: TypeAdapter[NumericJobInput | AuthoringGroupNumericJobInput] = TypeAdapter(NumericExecutionInput)
 
 
 class NumericRuntimeError(ValueError):
@@ -322,10 +329,10 @@ class NumericRuntime:
         _kill(process)
         return True
 
-    def run(self, job: NumericJobInput, cancellation: Callable[[], bool]) -> NumericCheckResult:
+    def run(self, job: NumericExecutionInput, cancellation: Callable[[], bool]) -> NumericCheckResult:
         return self.run_checked(job, cancellation).result
 
-    def run_checked(self, job: NumericJobInput, cancellation: Callable[[], bool], *,
+    def run_checked(self, job: NumericExecutionInput, cancellation: Callable[[], bool], *,
                     on_started: Callable[[str], None] | None = None) -> NumericExecution:
         if not self._lock.acquire(blocking=False):
             raise NumericRuntimeError('NUMERIC_RUNTIME_BUSY')
@@ -336,7 +343,7 @@ class NumericRuntime:
             self._process = None
             self._lock.release()
 
-    def _execute(self, job: NumericJobInput, cancellation: Callable[[], bool],
+    def _execute(self, job: NumericExecutionInput, cancellation: Callable[[], bool],
                  on_started: Callable[[str], None] | None) -> NumericExecution:
         started: str | None = None
         exit_code: int | None = None
@@ -347,7 +354,10 @@ class NumericRuntime:
         members: tuple[RuntimeMember, ...] = ()
         manifest_json = b''
         try:
-            job = NumericJobInput.model_validate(job.model_dump(mode='json'))
+            # Revalidate the complete versioned input before sealing any bytes.
+            # Group member and root identities remain in the mounted input and
+            # result input hash; they are never projected into the old schema.
+            job = _NUMERIC_INPUT.validate_python(job.model_dump(mode='json'))
             validate_plan(job.plan.model_dump(mode='json'))
             closure = self._closure()
             manifest_json = closure.manifest_json

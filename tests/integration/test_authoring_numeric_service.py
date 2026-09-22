@@ -62,7 +62,7 @@ def generated(tmp_path):
             candidate = authoring.read(identity, original.id).summary.candidate
             assert candidate is not None and len(server.requests) == 1
             runtime = LedgerRuntime()
-            return Generated((database, identity, authoring, NumericService(database, authoring.context, runtime), candidate, runtime))
+            return Generated((database, identity, authoring, NumericService(database, authoring.context, runtime, authoring=authoring), candidate, runtime))
     return asyncio.run(build())
 
 
@@ -298,7 +298,7 @@ def test_actual_runtime_manifest_preview_approval_without_process_execution(gene
         pytest.fail('numeric preview and approval must not spawn a process')
     monkeypatch.setattr(subprocess, 'Popen', forbidden)
     runtime = NumericRuntime()
-    service = NumericService(database, authoring.context, runtime)
+    service = NumericService(database, authoring.context, runtime, authoring=authoring)
     view = service.preview(identity, candidate.draft_id, NumericCheckPreviewWrite(candidate=candidate), 'actual-manifest')
     manifest = runtime.manifest_document()
     assert sha256_bytes(manifest) == view.runtime.runtime_manifest_sha256

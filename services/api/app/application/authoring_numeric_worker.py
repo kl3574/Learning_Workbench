@@ -8,14 +8,17 @@ from ..infrastructure.authoring_numeric_repository import NumericRepository
 from ..infrastructure.authoring_numeric_runtime import NumericExecution, NumericRuntime, NumericRuntimeError
 from ..infrastructure.database import Database, utc_now
 from ..infrastructure.security import author_execution_identity
+from .authoring import AuthoringService
 from .authoring_context import AuthoringContext
 from .authoring_models import NumericJobInput
 from .errors import ApiError
 
 
 class NumericWorker:
-    def __init__(self, database: Database, context: AuthoringContext, runtime: NumericRuntime):
+    def __init__(self, database: Database, context: AuthoringContext, runtime: NumericRuntime,
+                 authoring: AuthoringService | None = None):
         self.database, self.context, self.runtime = database, context, runtime
+        self.authoring = authoring
         self._stop = threading.Event()
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
@@ -52,7 +55,7 @@ class NumericWorker:
     def claim(self) -> tuple[AuthoringLease, NumericJobInput, str] | None:
         workspace = self.database.workspace_id()
         with self.database.transaction() as conn:
-            rows = conn.execute("SELECT created_at,id FROM jobs WHERE workspace_id=? AND kind='authoring_numeric_check' AND (status='queued' OR (status='running' AND lease_until<=?)) ORDER BY created_at,id",
+            rows = conn.execute("SELECT created_at,id FROM jobs WHERE workspace_id=? AND kind='authoring_numeric_check' AND json_extract(input_json,'$.version')='authoring-numeric-job-v1' AND (status='queued' OR (status='running' AND lease_until<=?)) ORDER BY created_at,id",
                                 (workspace, utc_now())).fetchall()
             if self._cursor is not None:
                 rows = [row for row in rows if tuple(row) > self._cursor] + [row for row in rows if tuple(row) <= self._cursor]
@@ -75,8 +78,11 @@ class NumericWorker:
         if repo.job_input(lease.job_id) != value:
             raise integrity()
         candidate = repo.candidate(value.candidate.draft_id)
-        generation = repo.authoring.load(candidate.source_job_id)
-        self.context.verify_history(conn, identity, generation.input, generation.view.preparation)
+        if self.authoring is None:
+            raise ApiError(503, 'AUTHORING_OUTPUT_UNAVAILABLE', '原生成结果当前无法核验。')
+        generation = self.authoring.verify_history(conn, identity, candidate.source_job_id)
+        if generation.view.summary.candidate != candidate.candidate:
+            raise integrity()
         return repo
 
     def _watch(self, lease: AuthoringLease, value: NumericJobInput, actor: str) -> bool:

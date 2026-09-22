@@ -27,7 +27,7 @@ def approved_numeric(generated):
 def test_numeric_recovery_of_committed_launch_never_executes_again(generated, monkeypatch, observed_start):
     database, identity, authoring, numeric, _, runtime = generated
     view, ack = approved_numeric(generated)
-    worker = NumericWorker(database, authoring.context, runtime)
+    worker = NumericWorker(database, authoring.context, runtime, authoring=authoring)
     work = worker.claim()
     assert work is not None
     lease, _, _ = work
@@ -59,7 +59,7 @@ def test_current_grant_actor_demotion_stops_numeric_before_start_permission(gene
     def forbidden(*args, **kwargs):
         pytest.fail('a demoted original author cannot begin numerical execution')
     monkeypatch.setattr(runtime, 'run_checked', forbidden, raising=False)
-    worker = NumericWorker(database, authoring.context, runtime)
+    worker = NumericWorker(database, authoring.context, runtime, authoring=authoring)
     assert worker.run_once()
     with database.transaction(immediate=False) as conn:
         repo = NumericRepository(conn, identity.workspace_id)

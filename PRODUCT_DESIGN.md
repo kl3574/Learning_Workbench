@@ -1,6 +1,6 @@
 # 知径 Learning Workbench：完整产品设计与工程实施规范
 
-**版本：3.0.6｜日期：2026-09-16｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
+**版本：3.0.7｜日期：2026-09-22｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
 
 **本文件（含文末附录）是唯一产品与工程规范。** 将它放入空目录即可开始；不需要旧版设计包、旧 Demo、之前聊天、私有 GitHub 仓库或另一份提示词说明需求。正文定义产品，附录内嵌数据模型、HTTP 字段、数据库设计、模块接口、样例和验收用例。构建 Agent 根据本文生成实现文件、OpenAPI、测试和进度记录；这些是派生产物，不是第二套产品需求。
 
@@ -29,6 +29,7 @@
 | 3.0.4 | M5.3 真实 Thread/Run/Jobs、上下文身份、授权衔接、受检输出、严格 SSE 与取消恢复 | 不代表生产模型可调度或已授权费用测试；54 core、基线 DDL、学习包 3.0.0 不变 |
 | 3.0.5 | M5.4 完整输入证明的精确目的地、模型/格式/有效性绑定及显式无思考 Responses 请求 | 不代表托管完整计量证明、真实模型/搜索或教学验收已通过；54 core、基线 DDL、学习包 3.0.0 不变 |
 | 3.0.6 | M6.1 首个 worked_example 的授权前准备、生成候选身份及单独批准的隔离算术复算 | 仅首个纵向切片，不代表全部 M6.1、M6.2 发布、M6.3 Codex、托管 InputProof 或数学/来源审核完成；54 core、基线 DDL、学习包 3.0.0 不变 |
+| 3.0.7 | M6.1 小节与题目组的一次许可计划/草稿、原子候选组、私解绑定及成员数值检查 | 待对应真实实施验收；不改54 core/0001/学习包3.0.0，不代表M6.2/M6.3或托管模型及内容质量已完成 |
 
 ## 0. 执行摘要与不可变决策
 
@@ -1136,6 +1137,30 @@ Content发布/current pointer/生命周期或来源descriptor变化在owner事�
 
 首切片验收须分开真实 SQLite/受控 Provider/隔离进程链、浏览器授权/候选/批准/拒绝/恢复、真正托管 Provider 的完整证明和本次费用授权。缺托管证明时继续可验证的本地工作，生产外发仍零传输且 NOT_RUN；受控本机模型、固定合成例题或数值 PASS 不代表真实模型、所有生成类型或数学/来源审校完成。
 
+### 20.9 M6.1 小节与题目组候选
+
+本节补齐 `lesson|practice_set|assessment` 的生成路径，仍只产生未审草稿。§20.8 的单个 `worked_example` 请求、输出、记录版本、数值操作和恢复规则保持原义。54 core、0001 基线、学习包与数据 schema_version=3.0.0 不变。M6.2 的人类审校、发布、修订与影响分析，以及 M6.3 Codex 不由本节提前开放。支持三种输出形状不是整个 M6.1 已通过验收；真实模型、数值运行与内容质量分别记事实。
+
+**一次明确许可，计划与草稿关联。** 新的严格 Group prepare 保存真实 `jobs.kind=authoring` 与不可变原请求，初始 awaiting_approval，无外发；原 Provider preview/grant 仍批准这个同一 Job 的完整 input/context/prepared/request-body SHA，不能改 body 再 POST 冒充继续。一次明确许可对应至多一次实际 dispatch。唯一允许的完整受检普通文本响应是具名 `AuthoringGroupGenerated`，同时含 content_plan 与 draft。服务端在本机处理时先校验并冻结计划，再依计划核对草稿成员、引用与检查记录，保留两个阶段的关联。这实现可回读的计划→草稿处理顺序，不声称观测到模型内部推理顺序，也不声称计划已被用户或独立审查者批准。不增加规划、补题、修复或重试模型调用；坏 JSON、重复键、拒答、不完整输出、超限或不匹配均保存真实失败及原受检结果。用户另行发起新任务必须重新准备及明确许可。
+
+**明确的输入范围。** 原 topic/prerequisites/objectives/proof_policy/provider/source_refs 约束保持；来源仍只为作者显式选择的0..8个精确公开 block，零来源可准备并显示缺来源事实。Group prepare 另允许显式选择既有精确 Concept；practice_set 必须显式选择一个已发布精确 Lesson，assessment 的 allowed_modes 与 time_limit_seconds 由作者请求指定，不由模型取得权限。Content owner 在调用方真实事务核 workspace、当前读取权限、完整 ref 与原元数据 SHA，冻结所选目标的实际元数据；Lesson 目标只冻结其元数据，不隐式读取所有子块，Concept 目标不自动展开先修。目标元数据经具名上下文进入两条 messages 的受控 user 数据封装，和原约束及全部来源包装共同计入12,000 codepoints；evidence仍≤8。缺目标、冲突ref或超预算拒绝准备，不以同名/最新版本/模型ID替代。未选中的题目、私解、历史作答与其他草稿不成为输入。首轮组生成仅绑定已选的既有Concept，不自动创建或发布概念；以后若需组内新Concept，须增加其具名成员和依赖契约，不伪造已发布引用。
+
+**计划和候选的唯一归属。** Authoring 保存一个不可变计划记录和一个原子候选组；组根使用现有 `DraftCandidate(entity=lesson|practice_set|assessment)`，首版 draft_revision=1。组内成员使用 `AuthoringDraftMemberRef` 的 local member_key、entity及完整成员payload SHA，只有与所属组候选同时核验才有意义，不是 ContentRef、独立发布修订或 Import 草稿。小节根按顺序包含block成员；习题集/测验根按顺序包含question成员。不得以假的 ContentRef、import_id、已有Content表、Assessment答案pin或Import commit完成生成。计划和组记录都绑定真实 workspace、source Job、原输入与Provider receipt；只核自洽hash不足以证明这些真实历史关系。
+
+content_plan保留原教学约束、目标顺序及proof_policy；计划条目与草稿成员必须完整一一对应，kind、顺序及声明依赖一致；block计划条目的title与同member_key的block payload.title逐字相同。目标/先修索引仅存在计划条目，为同member_key的成员分配原请求范围内的目标/先修；只核索引范围及目标结构覆盖，不与草稿中不存在的索引字段比较，不声称语义目标已经达成。拒绝缺项、额外项、重复key、越组引用或循环依赖。每个目标至少被一项显式声明覆盖，但这一结构覆盖不证明教学目标已经实现；需要的先修或定理实际是否讲授、证明是否完整仍未经内容审校。模型不能降低 full，也不能把自己的声明提升成来源或数学核验。
+
+**公开题面形状与私解分别保存。** `QuestionDraftPublic` 沿 QuestionPublic 的题干、选项、技能、分值、输入说明和题型规则，使用真实所选Concept refs及草稿局部 exposure_family_key；不接标准答案、私有评分规则或数值检查的期望值。`GeneratedSolutionAnswer` 与题面在独立数组中，owner据question_key建立 `SolutionDraftPrivate`，绑定该确切question member SHA。每个新生成question恰好一份当前私解，完整允许答案集合保留；此组完整性规则不追溯收紧Import合法历史答案修订。review_status由owner固定needs_review，模型输出不接受批准字段。exposure_family_key只表达本组的拟议题族关联，不是已发布exposure_group，也不证明新题/未见题；M6.2发布前才可通过真实owner完成跨版本身份及暴露关系，不能凭新ID洗掉既有暴露。
+
+题型与评分方式兼容、choice允许答案的选项成员关系、numeric允许答案的有限数规则复用既有纯检查；不得为调用要求published ContentRef的helper而构造假ref。引用检查由所属组核真实member及完整hash，兼容规则另从既有helper中分离成无I/O的纯函数，Import wrapper继续原契约、原错误映射与历史支持。允许答案是否在数学上唯一、干扰项是否合理、条件是否充分、单位语义、解答与评分语义一致、目标匹配、未教知识等均有单独NOT_RUN记录；结构PASS或数值PASS不能替代这些检查，也不让待审内容进入练习/测验投放、评分或独立证据。
+
+**完整身份和原子终态。** 每个成员SHA对它的具名完整payload规范JSON；plan_sha256对完整 `AuthoringContentPlan`；solution_sha256对含完整question member ref及私解字段的 `SolutionDraftPrivate`。组 candidate_sha256对 `AuthoringGroupCandidatePayload` 的完整规范JSON，包含计划、根描述、顺序成员与全部私解绑定/内容，不能只哈希公开投影。组记录另存完整record SHA。成员不反向内嵌组SHA，避免互含hash循环；归属由owner记录及组完整membership核验。修改任何计划、题面、私解、顺序、绑定或根配置会改变组SHA；不存在对原组就地修补。计划结构合法但草稿失败时，可保留计划记录及失败原因，candidate仍null；完整候选事务才使生成Job completed。result_refs始终[]，完成不代表发布或审校。恢复只消费同一次受检Provider结果，不再外发、不重复建立候选；坏历史fail closed，GET不修复。
+
+**成员数值检查。** lesson中的worked_example直接复用原 `WorkedExamplePayload`，其中NumericPlan仍必填。题目私解可声明 `numeric_plan:NumericPlan|null`，有计划时同时声明symbols并满足原变量/符号规则；null是没有可运行算术计划，不造空计划PASS，也不意味着不需要数学审校。作者明确选择一个组成员创建 `AuthoringGroupNumericPreviewWrite`；服务端核完整组候选与成员SHA，从该精确成员或私解读取计划，冻结整个组身份、成员、计划和真实runtime。新operation版本为group-numeric-operation-v1，不能借单块旧批准执行组成员。每个预览另行approve_once或decline，沿原10分钟、强CAS、执行前完整核验、无fallback、开始/取消/未知结果与真实回执规则；不自动批量执行。无计划或受限语言之外为NUMERIC_PLAN_UNSUPPORTED；环境阻塞仍BLOCKED_ENVIRONMENT。每个组候选最多100份预览，不因成员多而绕过上限。执行状态不改变组SHA、生成Job终态、needs_review或任何质量批准。
+
+**学科权限与控制。** 组Job详情、原响应、计划、组草稿、私解、数值预览/结果全部只供当前author且通过原private_artifact与活动open_book/independent策略核验；QuestionDraftPublic这个名称只表示无答案的字段投影，不授予learner读草稿权。组草稿视图只含题面及私解的具名hash清单，私解内容须显式受保护读口读取；原响应本身可能含私解，因此同等受保护。安全 `GET /authoring/jobs` 和通用Jobs读/取消继续使用原不含正文/原标题/候选/成员/父级关联的JobSnapshot；kind仍为authoring或authoring_numeric_check，各自按owner登记的输入版本调度。角色/Policy未知或变化清空学科payload，丢弃旧异步响应；不因隐藏学科详情而失去安全取消。新请求、回放和每个执行边界保留原会话、Origin/CSRF、actor/workspace/route/key/body/CAS规则。
+
+**有界验收。** 新组最多32个block或question成员，顺序计划同上限；新请求Concept targets最多32个，question至少引用1个已选Concept。完整受检生成响应UTF-8≤4MiB，各body/题干/私解正文沿Text≤400000 codepoints，其余数组/字符串按附录A明确上限，解析前与累计构造中检查总预算。超限整次失败，不截断后冒充完整组。必须完成两条真实纵向路径：一条lesson含普通教学块及worked_example、另一条题目组分别覆盖practice_set和assessment根；每条贯通真实prepare/SQLite/同Job许可/受控Provider完整响应/计划-组持久化/重启回读/作者UI与权限锁/取消。题目组另核私解不入公开题面/控制/索引及各题型评分兼容，至少一个声明NumericPlan的成员走单独拒绝与批准回执。浏览器可用性、真正隔离算术、托管InputProof/费用调用与数学/来源/教学审校分开记录；禁止用合成响应、已定义DTO或单元检查替代整条路径。
+
 ## 21. 旧格式兼容与确定的范围边界
 
 旧 Demo 不是依赖。仅保证以下可识别的迁移轮廓：
@@ -1700,7 +1725,7 @@ consumed_provider_calls 是本机保守消耗额度，不声称服务商实际�
 |---|---|---|
 | POST `/authoring/jobs` | AuthoringPrepareWrite；Idempotency-Key | 202 JobRef，真实 authoring Job，初始 awaiting_approval；无外发 |
 | GET `/authoring/jobs` | `cursor?`,`limit?`；默认20、最大100，拒未知/重复/null参数 | AuthoringJobPage；工作区内 authoring/authoring_numeric_check 两种真实Job的安全控制分页，learner/author均可；冻结创建序列，不下发正文/原标题/候选/父级学科关联 |
-| GET `/authoring/jobs/{id}` | 无 | AuthoringJobView；真实准备/许可/原生成结果，作者及当前学科读取许可 |
+| GET `/authoring/jobs/{id}` | 无 | AuthoringJobReadView；按真实记录版本返回原单块或§20.9组详情，作者及当前学科读取许可 |
 | GET `/authoring/drafts/{id}` | 无 | AuthoringDraftView；精确 DraftCandidate 与 immutable payload，非 ContentRef；不与 Import `/drafts/{id}` 争用 |
 | POST `/authoring/drafts/{id}/numeric-checks` | NumericCheckPreviewWrite；Idempotency-Key | 201 NumericCheckView，冻结完整操作、有效10分钟；不创建执行Job、不运行 |
 | GET `/authoring/numeric-checks/{id}` | 无 | NumericCheckView；原预览/决定/真实Job与结果，GET零写 |
@@ -1806,6 +1831,106 @@ AuthoringJobSummary.candidate 仅在实际候选完成事务后非null，complet
 NumericCheckView 仅批准后 job/job_revision 同时非null；decline为null，pending为null，result只在该实际Job唯一终态后出现。NumericCheckResult passed→PASS，mismatch/evaluation_error→FAIL，其余→BLOCKED；正常完整评估每个assertion必须恰好一项且原序，算术域/非有限错误为actual=null、passed=false及真实error_code，否则actual有限、error_code=null、passed按固定比较规则。完整计划评估即使数值不符也可是Job.completed，其检查verdict仍FAIL；环境/超时/资源/未知为Job.failed，取消为cancelled。非完整执行 assertions只列真实已保存项，不把未执行项补假0。result.input_sha256绑定实际NumericJobInput；output_sha256对实际完整子进程输出原bytes（若无则null），result_sha256对完整result唯一排除自身字段。平台控制错误不能用供应商/计算器任意报文直接填API错误；安全code枚举可沿既有错误契约扩展，原正文/输出仅存在本作用域受保护记录。
 
 控制列表cursor冻结workspace、两种Job kind的固定成员范围、limit、创建序列上界和最后排序位置，按创建序列倒序；不冻结动态job状态，下一页不得重复/漏既定成员，新增任务需刷新。AuthoringJobPage.items严格使用现有具名JobSnapshot且kind只允许authoring/authoring_numeric_check，result_refs=[]、warnings=[]、progress.label为固定非学科阶段标签，error只用受控安全code/固定说明；无原主题、源标题、candidate、check或父级关联。其归属/历史逐项由对应owner核验，learner/author不因学科Policy锁而失去安全发现/取消入口；坏历史不跳过成完整列表。拥有正常作者学科权限时，UI再对authoring类id读取AuthoringJobView/候选；numeric类列表只提供现有Job状态/取消，完整检查仍从所属候选的numeric_check_ids及受保护NumericCheckView进入，不猜外露父级ID。无query的三个id读口不接隐式revision或任意path。全部写先校验当前访问与自有历史，再回放原key；新操作才校验当前业务基准/有效性，完整命令不同409、强CAS旧基准412。安全控制通过原 GET/POST jobs，不新增宽权限学科view。
+
+### M6.1 组生成严格应用契约
+
+下列是§20.9的具名闭合类型，独立于54 core。全部字段required，nullable显式null，拒额外字段、重复JSON键、孤立surrogate、bool冒充数值与非有限数；原Id/Revision/Sha256/UTC/Text/Choice及Authoring约束沿用。这里的局部key只是同一不可变组内标识。字段组展开是固定字段集合，不允许开放字典或额外字段。
+
+```text
+GroupCommon = {topic:string[1..4000],prerequisites:nonblank string[0..32][1..2000],
+  objectives:nonblank string[1..32][1..2000],proof_policy:full|declared_dependencies,
+  source_refs:ContentRef(entity=block)[0..8],provider_id:Id,target_concept_refs:ContentRef(entity=concept)[0..32]}
+AuthoringLessonPrepareWrite = {GroupCommon全部字段,output_kind:lesson}
+AuthoringPracticePrepareWrite = {GroupCommon全部字段,output_kind:practice_set,lesson_ref:ContentRef(entity=lesson)}
+AuthoringAssessmentPrepareWrite = {GroupCommon全部字段,output_kind:assessment,
+  allowed_modes:(independent|assisted|open_book)[1..3],time_limit_seconds:integer>0|null}
+AuthoringGroupPrepareWrite = 按output_kind判别的以上三种闭合模型
+BlockKind = orientation|definition|theorem|proof|intuition|worked_example|boundary|summary|text|code|figure
+QuestionKind = single_choice|text_blank|numeric|expression|calculation
+AuthoringBlockPlanEntry = {member_key:Id,entity:block,kind:BlockKind,title:nonblank string[1..300],
+  objective_indexes:integer>=0[1..32],prerequisite_indexes:integer>=0[0..32],depends_on_keys:Id[0..32]}
+AuthoringQuestionPlanEntry = {member_key:Id,entity:question,kind:QuestionKind,
+  objective_indexes:integer>=0[1..32],prerequisite_indexes:integer>=0[0..32],depends_on_keys:Id[0..32]}
+AuthoringContentPlan = {version:authoring-content-plan-v1,output_kind:lesson|practice_set|assessment,
+  topic:nonblank string,prerequisites:nonblank string[0..32],objectives:nonblank string[1..32],
+  proof_policy:full|declared_dependencies,entries:(AuthoringBlockPlanEntry|AuthoringQuestionPlanEntry)[1..32]}
+AuthoringContentPlanRef = {source_job_id:Id,plan_sha256:Sha256}
+AuthoringTextBlockPayload = {version:content-block-candidate-v1,kind:BlockKind排除worked_example,
+  title:nonblank string[1..300],body_markdown:Text,symbols:WorkedExampleSymbol[0..64],
+  declared_source_refs:ContentRef(entity=block)[0..8]}
+AuthoringGeneratedBlock = {member_key:Id,depends_on_keys:Id[0..32],
+  payload:按kind判别的WorkedExamplePayload|AuthoringTextBlockPayload}
+QuestionDraftPublic = {member_key:Id,kind:QuestionKind,stem_markdown:Text,choices:Choice[0..32],
+  concept_refs:ContentRef(entity=concept)[1..32],skill:recall|explain|compute|derive|transfer,
+  exposure_family_key:Id,max_score:finite number>0且<=100,input_instructions:string[0..4000],
+  declared_source_refs:ContentRef(entity=block)[0..8],depends_on_keys:Id[0..32]}
+GeneratedSolutionAnswer = {question_key:Id,
+  grading_kind:choice_exact|text_normalized|numeric_tolerance|symbolic_review|rubric_review,
+  accepted_answers:string[1..32][0..4000],absolute_tolerance:finite number>=0,
+  relative_tolerance:finite number>=0,unit:nonblank string[1..64]|null,
+  domain_assumptions:nonblank string[0..32][1..2000],solution_markdown:Text,rubric_markdown:string[0..400000],
+  symbols:WorkedExampleSymbol[0..64],numeric_plan:NumericPlan|null}
+AuthoringLessonGenerated = {output_kind:lesson,title:nonblank string[1..300],blocks:AuthoringGeneratedBlock[1..32]}
+AuthoringPracticeGenerated = {output_kind:practice_set,title:nonblank string[1..300],
+  questions:QuestionDraftPublic[1..32],solutions:GeneratedSolutionAnswer[1..32]}
+AuthoringAssessmentGenerated = {output_kind:assessment,title:nonblank string[1..300],
+  questions:QuestionDraftPublic[1..32],solutions:GeneratedSolutionAnswer[1..32]}
+AuthoringGroupGenerated = {version:authoring-group-generated-v1,content_plan:AuthoringContentPlan,
+  draft:按output_kind判别的AuthoringLessonGenerated|AuthoringPracticeGenerated|AuthoringAssessmentGenerated}
+AuthoringDraftMemberRef = {member_key:Id,entity:block|question,member_sha256:Sha256}
+AuthoringGroupCandidate = DraftCandidate(entity=lesson|practice_set|assessment)
+LessonCandidateRoot = {entity:lesson,title:nonblank string,objectives:nonblank string[1..32],
+  prerequisites:nonblank string[0..32],proof_policy:full|declared_dependencies,blocks:AuthoringDraftMemberRef(entity=block)[1..32]}
+PracticeSetCandidateRoot = {entity:practice_set,title:nonblank string,lesson_ref:ContentRef(entity=lesson),
+  questions:AuthoringDraftMemberRef(entity=question)[1..32],feedback_policy:on_submit_or_reveal}
+AssessmentCandidateRoot = {entity:assessment,title:nonblank string,questions:AuthoringDraftMemberRef(entity=question)[1..32],
+  allowed_modes:(independent|assisted|open_book)[1..3],time_limit_seconds:integer>0|null}
+SolutionDraftPrivate = {question:AuthoringDraftMemberRef(entity=question),answer:GeneratedSolutionAnswer,review_status:needs_review}
+AuthoringPrivateSolutionRef = {question:AuthoringDraftMemberRef(entity=question),solution_sha256:Sha256}
+AuthoringGroupCandidatePayload = {version:authoring-group-candidate-v1,content_plan:AuthoringContentPlan,
+  root:按entity判别的LessonCandidateRoot|PracticeSetCandidateRoot|AssessmentCandidateRoot,
+  blocks:AuthoringGeneratedBlock[0..32],questions:QuestionDraftPublic[0..32],private_solutions:SolutionDraftPrivate[0..32]}
+AuthoringQuestionQuality = {question:AuthoringDraftMemberRef(entity=question),grading_compatibility:PASS|FAIL|NOT_RUN,
+  accepted_answer_membership:PASS|FAIL|NOT_RUN,answer_uniqueness:NOT_RUN,distractor_reasonableness:NOT_RUN,
+  condition_sufficiency:NOT_RUN,unit_semantics:NOT_RUN,solution_grading_semantics:NOT_RUN,
+  objective_alignment:NOT_RUN,prerequisite_sufficiency:NOT_RUN}
+AuthoringGroupValidation = {AuthoringValidation全部字段,plan_membership:PASS|FAIL|NOT_RUN,
+  private_bindings:PASS|FAIL|NOT_RUN,question_checks:AuthoringQuestionQuality[0..32]}
+AuthoringTargetMaterial = {ref:ContentRef(entity=lesson|concept),metadata:Lesson|Concept}
+AuthoringGroupPreparationSummary = {AuthoringPreparationSummary全部字段,targets:AuthoringTargetMaterial[0..33]}
+AuthoringGroupJobSummary = {AuthoringJobSummary全部字段；candidate替换为AuthoringGroupCandidate|null}
+AuthoringGroupJobView = {variant:group,AuthoringJobView全部字段；summary替换为AuthoringGroupJobSummary,
+  request替换为AuthoringGroupPrepareWrite,preparation替换为AuthoringGroupPreparationSummary,
+  validation替换为AuthoringGroupValidation,plan_ref:AuthoringContentPlanRef|null,content_plan:AuthoringContentPlan|null}
+AuthoringJobReadView = AuthoringJobView|AuthoringGroupJobView 的具名闭合union，原worked_example wire形状不变
+AuthoringGroupDraftView = {owner:authoring,candidate:AuthoringGroupCandidate,source_job_id:Id,state:draft,base_ref:null,
+  plan_ref:AuthoringContentPlanRef,content_plan:AuthoringContentPlan,
+  root:LessonCandidateRoot|PracticeSetCandidateRoot|AssessmentCandidateRoot,
+  blocks:AuthoringGeneratedBlock[0..32],questions:QuestionDraftPublic[0..32],
+  private_solution_refs:AuthoringPrivateSolutionRef[0..32],validation:AuthoringGroupValidation,
+  numeric_check_ids:Id[0..100],warnings:Warning[]}
+AuthoringPrivateSolutionView = {candidate:AuthoringGroupCandidate,ref:AuthoringPrivateSolutionRef,payload:SolutionDraftPrivate}
+AuthoringGroupNumericPreviewWrite = {candidate:AuthoringGroupCandidate,target:AuthoringDraftMemberRef}
+AuthoringGroupNumericCheckView = {NumericCheckView全部字段；candidate替换为AuthoringGroupCandidate,
+  target:AuthoringDraftMemberRef}
+```
+
+题目prepare的target_concept_refs必须非空。所有ref数组拒同entity/id/revision重复或冲突SHA；allowed_modes无重复。GroupCommon不是独立HTTP入口；具体具名Pydantic模型逐字段实现，输出JSON Schema拒额外字段且每个所列字段required。Provider只能输出AuthoringGroupGenerated，不能输出候选/成员SHA、ContentRef式新对象身份、consent、review_status、runtime或产物路径。plan.output_kind、draft.output_kind及请求一致，计划原约束逐字/顺序与原请求一致；所有索引均在原数组内且各条无重复，每个目标至少一条覆盖。lesson只能有block计划/成员，另两种只能有question；计划与正文依赖均指向本组更早成员。WorkedExamplePayload的symbols/变量/来源约束完全沿用；AuthoringTextBlockPayload与GeneratedSolutionAnswer的symbols名称也各自唯一，私解有numeric_plan时每个变量须同名出现在该私解symbols中；这些仍不证明单位/维度。QuestionDraftPublic的choice规则沿QuestionPublic，concept_refs只允许实际冻结targets中的Concept，来源只允许实际materials中的block。目标配置、lesson_ref、allowed_modes/time_limit从真实请求由owner复制；feedback_policy由owner按固定on_submit_or_reveal规则取得，不假称请求携带了该字段。以上均不由Provider自报。
+
+accepted_answers保留完整原数组、顺序及字符串，不trim、去重或改写大小写；空字符串是否满足题型沿既有评分兼容检查，不能因共享helper提取擅改Import语义。题面member SHA对完整QuestionDraftPublic；block member SHA对完整AuthoringGeneratedBlock，包含member_key/依赖及完整payload；provider给的局部key不单独证明对象身份。SolutionDraftPrivate.answer.question_key与question.member_key严格相同；每个question正好一项私解，顺序按根question顺序固定，禁止孤儿/多份/跨组绑定。lesson的questions/private_solutions为空；题目组的blocks为空。组响应的非空字段、root类型、plan类型和candidate.entity一致。grading_compatibility按原题型/评分方式矩阵；accepted_answer_membership在choice_exact只核所有允许选项ID属于本题choices，在numeric_tolerance只核每个原字符串可解析为有限数，其余评分方式只核完整允许答案数组的既有字段形状/保存，不宣称数学或语义集合成员判定。AuthoringGroupValidation的结构项PASS以及每题上述兼容/适用结构检查PASS才可建立组候选；其NOT_RUN语义检查绝不参与伪造批准。AuthoringGroupJobView仅在完整候选事务后summary.candidate非null/Job.completed；合法计划可在failed Job中保留，plan_ref与content_plan同时存在或同时null并核其真实receipt。普通Topic字符串无论是否含标题/题解文本仍是author-only学科payload。
+
+组数值预览从target对应block的worked_example numeric_plan或question的精确私解numeric_plan取值；其余没有计划的成员拒绝。operation_sha256=SHA256(规范JSON `{version:"group-numeric-operation-v1",workspace_id,check_id,candidate,target,plan,runtime}`)，URL组ID/成员key与body完整身份必须一致；沿既有revision旧412、hash/entity不符409、原命令回放与真实owner历史检查。GroupNumericCheckView的结果/状态/批准规则沿NumericCheckView，但须另核完整组、成员与操作关系；其中共享NumericCheckResult.input_sha256必须哈希实际AuthoringGroupNumericJobInput，不能沿用单块NumericJobInput或只哈希其中plan。数值preview/read/decision不返回其他成员私解。
+
+| 接口 | 严格请求 | 响应与语义 |
+|---|---|---|
+| POST `/authoring/group-jobs` | AuthoringGroupPrepareWrite；原Origin/CSRF/Idempotency-Key规则 | 202 JobRef，原kind=authoring，awaiting_approval；prepare零外发 |
+| GET `/authoring/draft-groups/{id}` | 无query/body | AuthoringGroupDraftView；组候选/计划/题面/私解hash清单，GET零写 |
+| GET `/authoring/draft-groups/{id}/solutions/{member_key}` | 无query/body | AuthoringPrivateSolutionView；显式读取本组确切question私解，重新核author/Policy与完整归属 |
+| POST `/authoring/draft-groups/{id}/members/{member_key}/numeric-checks` | AuthoringGroupNumericPreviewWrite；原写保护 | 201 AuthoringGroupNumericCheckView，冻结操作，零执行 |
+| GET `/authoring/group-numeric-checks/{id}` | 无query/body | AuthoringGroupNumericCheckView；GET零写，author/当前学科许可 |
+| POST `/authoring/group-numeric-checks/{id}/decision` | ApprovalDecision；原写保护 | NumericCheckDecisionAck；approve_once后202真实检查Job，decline后200且job=null |
+
+原POST `/authoring/jobs`、单块draft/numeric端点与wire形状保留。安全列表和通用Jobs控制不新增学科字段；组数值Job仍kind=authoring_numeric_check。上表只列六个真正新增操作；共享GET `/authoring/jobs/{id}`只在原路由表登记一次，其具名union按owner记录版本返回原worked_example或group详情，不猜ID前缀。全部详情读拒query/body并重新核author/当前学科权限。未实现时不得注册空handler或冒充runtime binding；新增DTO/schema存在本身不是路由或生成验收。
 
 ### 生成与覆盖核对规则
 
@@ -2553,17 +2678,30 @@ export interface NotesPort<D extends DTOMap> {save(ctx:WriteContext, note:D['Not
 export interface DraftCandidate {draft_id:string;draft_revision:number;entity:Entity;candidate_sha256:string}
 export interface AuthoringApplicationDTOMap {
  AuthoringPrepareWrite:unknown; AuthoringJobPage:unknown; AuthoringJobView:unknown;
- AuthoringDraftView:unknown; NumericCheckPreviewWrite:unknown; NumericCheckView:unknown;
+ AuthoringDraftView:unknown; AuthoringJobReadView:unknown; NumericCheckPreviewWrite:unknown; NumericCheckView:unknown;
  NumericCheckDecisionAck:unknown; ApprovalDecision:unknown;
 }
 export interface AuthoringApplicationPort<A extends AuthoringApplicationDTOMap> {
  prepareJob(ctx:WriteContext,request:A['AuthoringPrepareWrite']):Promise<JobRef>;
  listJobs(ctx:AuthContext,query:{cursor?:string;limit?:number}):Promise<A['AuthoringJobPage']>;
- readJob(ctx:AuthContext,id:string):Promise<A['AuthoringJobView']>;
+ readJob(ctx:AuthContext,id:string):Promise<A['AuthoringJobReadView']>;
  readDraft(ctx:AuthContext,id:string):Promise<A['AuthoringDraftView']>;
  previewNumeric(ctx:WriteContext,draftId:string,request:A['NumericCheckPreviewWrite']):Promise<A['NumericCheckView']>;
  readNumeric(ctx:AuthContext,id:string):Promise<A['NumericCheckView']>;
  decideNumeric(ctx:WriteContext,id:string,request:A['ApprovalDecision']):Promise<A['NumericCheckDecisionAck']>;
+}
+export interface AuthoringGroupApplicationDTOMap {
+ AuthoringGroupPrepareWrite:unknown; AuthoringGroupDraftView:unknown; AuthoringPrivateSolutionView:unknown;
+ AuthoringGroupNumericPreviewWrite:unknown; AuthoringGroupNumericCheckView:unknown;
+ NumericCheckDecisionAck:unknown; ApprovalDecision:unknown;
+}
+export interface AuthoringGroupApplicationPort<G extends AuthoringGroupApplicationDTOMap> {
+ prepareGroup(ctx:WriteContext,request:G['AuthoringGroupPrepareWrite']):Promise<JobRef>;
+ readGroup(ctx:AuthContext,id:string):Promise<G['AuthoringGroupDraftView']>;
+ readSolution(ctx:AuthContext,id:string,memberKey:string):Promise<G['AuthoringPrivateSolutionView']>;
+ previewGroupNumeric(ctx:WriteContext,id:string,memberKey:string,request:G['AuthoringGroupNumericPreviewWrite']):Promise<G['AuthoringGroupNumericCheckView']>;
+ readGroupNumeric(ctx:AuthContext,id:string):Promise<G['AuthoringGroupNumericCheckView']>;
+ decideGroupNumeric(ctx:WriteContext,id:string,request:G['ApprovalDecision']):Promise<G['NumericCheckDecisionAck']>;
 }
 export interface AuthoringPort<D extends DTOMap> {
  generate(ctx:WriteContext, request:D['AuthoringRequest']):Promise<JobRef>;
@@ -2773,6 +2911,37 @@ NumericJobInput = {
 Authoring owner 的 prepare_context/verify_context/read_context 使用调用方真实SQLite事务，在自己的准备表保存/核验；Content经现有ContentRetrievalSource.resolve_scope/read_material/revalidate_scope的public块端口提供真实refs/bytes/provenance，无需先建检索索引、无访问私题解。其source实现已有OutboundSourcePort的全部真实方法（含reference_summaries/record_proposal/bind_authorization/verify_dispatch/verify_output），只注册Jobs.kind=authoring；numeric_check不是外发source。Provider按原checked dispatch/read_result/read_control_result读口交付自身受检终态/产物，Authoring不直接查Provider SQL或读取任意artifact文件。新source结果许可必须核作者来源/同job/context/current Policy，不能普遍放宽private_artifact。
 
 Jobs-owned适配器提供两种kind的真实JobSnapshot和原cancel，所有命令回执绑定原route/body/key/actor/workspace，cancel终态no-op和旧ACK规则沿现有Jobs契约。生成完整候选事务与数值检查终态事务各自原子，不把数值等待挂在已完成生成Job上。新迁移只改所属新表/注册，不改0001和已有import记录。隔离runner为Quality/数值owner的 typed run(NumericJobInput, cancellation)->受检执行结果；实际runtime清单与operation一致、stdin/输出有界、进程启动与结束证据由该owner取得，不信任模型自报退出码。数值审批/开始/终态/结果与候选membership全回读校验；出现损坏failclosed，无GET修复。工具链固定与资源限制实现、lease公平性、错误分类等工程细化可写ADR，不扩大本节语言能力或改变审核语义。
+
+**M6.1 组候选内部协作：** 与原record版本并存，不重新解码或改写历史单块记录。下列闭合内部模型不直接成为HTTP输入，学科字段repr/log禁止。
+
+Content owner提供具名内部 `ContentAuthoringTargetSource`，端口为：
+
+```text
+resolve_targets(transaction:SQLiteTransaction,identity:SessionIdentity,
+  refs:ContentRef(entity=lesson|concept)[0..33]) -> AuthoringTargetMaterial[0..33]
+revalidate_targets(transaction:SQLiteTransaction,identity:SessionIdentity,
+  expected:AuthoringTargetMaterial[0..33]) -> null
+```
+
+SQLiteTransaction是调用方已经打开且仍在事务中的真实sqlite3.Connection，不是HTTP字段或可伪造事务ID；SessionIdentity由当前服务端会话取得。两个方法都只读，在该事务核workspace与当前Content读取Policy，逐项调用Content自有精确修订/完整性读口，不切换连接或从current指针替换。ref.entity、metadata实际类型、entity/id/revision及metadata规范JSON SHA须完全一致；拒缺失、损坏、重复/冲突ref、错类型及越工作区。返回与请求一一对应并保留顺序；practice_set为真实Lesson在先、随后原顺序Concept，另两种只有原顺序Concept，不隐式增加依赖。revalidate_targets对同批冻结refs重新取得元数据并逐项精确比较，变化拒绝，不改原快照、原Job或自动重批；空输入返回空列表/零写，不造空来源证明。调用方另先执行Authoring author/private_artifact/open_book guard；target只读端口不授予调用方绕过该guard或读取私有学科数据的权限。
+
+```text
+AuthoringGroupJobInput = {version:authoring-group-job-v1,workspace_id:Id,job_id:Id,request:AuthoringGroupPrepareWrite}
+PreparedAuthoringGroupContext = {version:authoring-group-context-v1,job_id:Id,snapshot:ContextSnapshot,
+  template_version:nonblank string,messages:GenerationMessage[2],evidence:EvidenceChunk[0..8],
+  materials:AuthoringInputMaterial[0..8],targets:AuthoringTargetMaterial[0..33],warnings:Warning[]}
+AuthoringContentPlanRecord = {version:authoring-content-plan-record-v1,workspace_id:Id,source_job_id:Id,
+  provider_receipt_id:Id,job_input_sha256:Sha256,plan_ref:AuthoringContentPlanRef,plan:AuthoringContentPlan,created_at:UTC}
+AuthoringGroupCandidateRecord = {version:authoring-group-record-v1,workspace_id:Id,candidate:AuthoringGroupCandidate,
+  source_job_id:Id,provider_receipt_id:Id,plan_ref:AuthoringContentPlanRef,
+  payload:AuthoringGroupCandidatePayload,validation:AuthoringGroupValidation,created_at:UTC}
+AuthoringGroupNumericJobInput = {version:authoring-group-numeric-job-v1,workspace_id:Id,job_id:Id,check_id:Id,
+  operation_sha256:Sha256,candidate:AuthoringGroupCandidate,target:AuthoringDraftMemberRef,plan:NumericPlan,runtime:NumericRuntimeProfile}
+```
+
+PreparedAuthoringGroupContext.targets与请求选择的targets严格一一对应：practice_set先放唯一lesson_ref，随后按target_concept_refs原顺序；另两种只按Concept原顺序，不缺项、不增项、不去重掩盖重复输入。每项ref.entity/id/revision等于metadata对应字段，ref.sha256等于metadata规范JSON SHA。messages固定为system版本模板与user规范JSON `{request:原GroupPrepareWrite,targets:完整AuthoringTargetMaterial数组}`；该包装及全部来源evidence按实际Provider规则完整计数。snapshot.resolved_refs仅等于materials中的source block refs原顺序，Provider references也只与evidence逐项配对；targets已进入受检user输入和上下文SHA/准备UI，不再伪装成额外evidence或破坏既有许可reference/evidence配对。prepared group snapshot.request_sha256对原GroupPrepareWrite；snapshot_sha256对完整PreparedAuthoringGroupContext仅排除snapshot.snapshot_sha256，目标元数据也在此SHA内。character_count按最终Provider封装实际计算，不能用目标refs数量或仅body替代；prepared/request-body完整输入证明仍依§20.5。Authoring owner只通过新增具名Content target读/复核端口取得public元数据；复用既有ContentRetrievalSource取得显式source block，禁止Authoring跨表SQL。Provider只按原OutboundSourcePort/受检结果接口执行同一真实Job；模型计量proof或请求形状不适配时零传输，并不因增加output_kind获得供应商structured_output能力。
+
+Authoring持有计划/组候选/成员-私解绑定与原命令账本，Jobs持有租约/开始许可/取消/唯一终态，Quality持有实际受控数值runtime。新增前向owner迁移及version dispatcher；原单块记录、Import草稿、Content发布表、PrivateSolution历史和0001不改。group生成终态事务共同提交完整候选与Job结果；合法plan但失败draft只提交计划/失败事实。每次受保护读取复核root/plan/member/private及真实Provider关联，不由GET补记录。shared纯答案规则函数不做权限、引用解析或数据库写，Import和Group各自保持真实身份边界。新增组路由、严格DTO生成器与真实OpenAPI绑定双向覆盖；具名union逐分支验证闭合模型、判别互斥和实际请求/响应绑定，不给含oneOf/anyOf的外层机械加additionalProperties=false而拒绝全部合法字段，也不跳过分支检查；不以改宽原unknown map或跳过原七操作断言凑成功。
 
 # 附录 E：确定性样例生成器
 

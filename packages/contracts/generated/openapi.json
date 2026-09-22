@@ -160,6 +160,65 @@
         "title": "AssessmentBlueprint",
         "type": "object"
       },
+      "AssessmentCandidateRoot": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed_modes": {
+            "items": {
+              "enum": [
+                "independent",
+                "assisted",
+                "open_book"
+              ],
+              "type": "string"
+            },
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Allowed Modes",
+            "type": "array"
+          },
+          "entity": {
+            "const": "assessment",
+            "title": "Entity",
+            "type": "string"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/AuthoringQuestionMemberRef"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Questions",
+            "type": "array"
+          },
+          "time_limit_seconds": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Limit Seconds"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity",
+          "title",
+          "questions",
+          "allowed_modes",
+          "time_limit_seconds"
+        ],
+        "title": "AssessmentCandidateRoot",
+        "type": "object"
+      },
       "AssessmentGradingJob": {
         "additionalProperties": false,
         "properties": {
@@ -591,6 +650,217 @@
         "title": "AttemptSubmit",
         "type": "object"
       },
+      "AuthoringAssessmentPrepareWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "allowed_modes": {
+            "items": {
+              "enum": [
+                "independent",
+                "assisted",
+                "open_book"
+              ],
+              "type": "string"
+            },
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Allowed Modes",
+            "type": "array"
+          },
+          "objectives": {
+            "items": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Objectives",
+            "type": "array"
+          },
+          "output_kind": {
+            "const": "assessment",
+            "title": "Output Kind",
+            "type": "string"
+          },
+          "prerequisites": {
+            "items": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Prerequisites",
+            "type": "array"
+          },
+          "proof_policy": {
+            "enum": [
+              "full",
+              "declared_dependencies"
+            ],
+            "title": "Proof Policy",
+            "type": "string"
+          },
+          "provider_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "source_refs": {
+            "items": {
+              "$ref": "#/components/schemas/AuthoringBlockRef"
+            },
+            "maxItems": 8,
+            "title": "Source Refs",
+            "type": "array"
+          },
+          "target_concept_refs": {
+            "items": {
+              "$ref": "#/components/schemas/AuthoringConceptRef"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Target Concept Refs",
+            "type": "array"
+          },
+          "time_limit_seconds": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Limit Seconds"
+          },
+          "topic": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Topic",
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic",
+          "prerequisites",
+          "objectives",
+          "proof_policy",
+          "source_refs",
+          "provider_id",
+          "target_concept_refs",
+          "output_kind",
+          "allowed_modes",
+          "time_limit_seconds"
+        ],
+        "title": "AuthoringAssessmentPrepareWrite",
+        "type": "object"
+      },
+      "AuthoringBlockMemberRef": {
+        "additionalProperties": false,
+        "properties": {
+          "entity": {
+            "const": "block",
+            "title": "Entity",
+            "type": "string"
+          },
+          "member_key": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Member Key",
+            "type": "string"
+          },
+          "member_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Member Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "member_key",
+          "entity",
+          "member_sha256"
+        ],
+        "title": "AuthoringBlockMemberRef",
+        "type": "object"
+      },
+      "AuthoringBlockPlanEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "depends_on_keys": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Depends On Keys",
+            "type": "array"
+          },
+          "entity": {
+            "const": "block",
+            "title": "Entity",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "orientation",
+              "definition",
+              "theorem",
+              "proof",
+              "intuition",
+              "worked_example",
+              "boundary",
+              "summary",
+              "text",
+              "code",
+              "figure"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "member_key": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Member Key",
+            "type": "string"
+          },
+          "objective_indexes": {
+            "items": {
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Objective Indexes",
+            "type": "array"
+          },
+          "prerequisite_indexes": {
+            "items": {
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "maxItems": 32,
+            "title": "Prerequisite Indexes",
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "member_key",
+          "entity",
+          "kind",
+          "title",
+          "objective_indexes",
+          "prerequisite_indexes",
+          "depends_on_keys"
+        ],
+        "title": "AuthoringBlockPlanEntry",
+        "type": "object"
+      },
       "AuthoringBlockRef": {
         "additionalProperties": false,
         "properties": {
@@ -655,6 +925,178 @@
           "candidate_sha256"
         ],
         "title": "AuthoringCandidate",
+        "type": "object"
+      },
+      "AuthoringConceptRef": {
+        "additionalProperties": false,
+        "properties": {
+          "entity": {
+            "const": "concept",
+            "title": "Entity",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity",
+          "id",
+          "revision",
+          "sha256"
+        ],
+        "title": "AuthoringConceptRef",
+        "type": "object"
+      },
+      "AuthoringContentPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "entries": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "block": "#/components/schemas/AuthoringBlockPlanEntry",
+                  "question": "#/components/schemas/AuthoringQuestionPlanEntry"
+                },
+                "propertyName": "entity"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/AuthoringBlockPlanEntry"
+                },
+                {
+                  "$ref": "#/components/schemas/AuthoringQuestionPlanEntry"
+                }
+              ]
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Entries",
+            "type": "array"
+          },
+          "objectives": {
+            "items": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Objectives",
+            "type": "array"
+          },
+          "output_kind": {
+            "enum": [
+              "lesson",
+              "practice_set",
+              "assessment"
+            ],
+            "title": "Output Kind",
+            "type": "string"
+          },
+          "prerequisites": {
+            "items": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Prerequisites",
+            "type": "array"
+          },
+          "proof_policy": {
+            "enum": [
+              "full",
+              "declared_dependencies"
+            ],
+            "title": "Proof Policy",
+            "type": "string"
+          },
+          "topic": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Topic",
+            "type": "string"
+          },
+          "version": {
+            "const": "authoring-content-plan-v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "output_kind",
+          "topic",
+          "prerequisites",
+          "objectives",
+          "proof_policy",
+          "entries"
+        ],
+        "title": "AuthoringContentPlan",
+        "type": "object"
+      },
+      "AuthoringContentPlanRef": {
+        "additionalProperties": false,
+        "properties": {
+          "plan_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Plan Sha256",
+            "type": "string"
+          },
+          "source_job_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Source Job Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_job_id",
+          "plan_sha256"
+        ],
+        "title": "AuthoringContentPlanRef",
+        "type": "object"
+      },
+      "AuthoringDraftMemberRef": {
+        "additionalProperties": false,
+        "properties": {
+          "entity": {
+            "enum": [
+              "block",
+              "question"
+            ],
+            "title": "Entity",
+            "type": "string"
+          },
+          "member_key": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Member Key",
+            "type": "string"
+          },
+          "member_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Member Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "member_key",
+          "entity",
+          "member_sha256"
+        ],
+        "title": "AuthoringDraftMemberRef",
         "type": "object"
       },
       "AuthoringDraftView": {
@@ -723,6 +1165,746 @@
           "warnings"
         ],
         "title": "AuthoringDraftView",
+        "type": "object"
+      },
+      "AuthoringGeneratedBlock": {
+        "additionalProperties": false,
+        "properties": {
+          "depends_on_keys": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Depends On Keys",
+            "type": "array"
+          },
+          "member_key": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Member Key",
+            "type": "string"
+          },
+          "payload": {
+            "discriminator": {
+              "mapping": {
+                "boundary": "#/components/schemas/AuthoringTextBlockPayload",
+                "code": "#/components/schemas/AuthoringTextBlockPayload",
+                "definition": "#/components/schemas/AuthoringTextBlockPayload",
+                "figure": "#/components/schemas/AuthoringTextBlockPayload",
+                "intuition": "#/components/schemas/AuthoringTextBlockPayload",
+                "orientation": "#/components/schemas/AuthoringTextBlockPayload",
+                "proof": "#/components/schemas/AuthoringTextBlockPayload",
+                "summary": "#/components/schemas/AuthoringTextBlockPayload",
+                "text": "#/components/schemas/AuthoringTextBlockPayload",
+                "theorem": "#/components/schemas/AuthoringTextBlockPayload",
+                "worked_example": "#/components/schemas/WorkedExamplePayload"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WorkedExamplePayload"
+              },
+              {
+                "$ref": "#/components/schemas/AuthoringTextBlockPayload"
+              }
+            ],
+            "title": "Payload"
+          }
+        },
+        "required": [
+          "member_key",
+          "depends_on_keys",
+          "payload"
+        ],
+        "title": "AuthoringGeneratedBlock",
+        "type": "object"
+      },
+      "AuthoringGroupCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Candidate Sha256",
+            "type": "string"
+          },
+          "draft_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Draft Id",
+            "type": "string"
+          },
+          "draft_revision": {
+            "minimum": 1.0,
+            "title": "Draft Revision",
+            "type": "integer"
+          },
+          "entity": {
+            "enum": [
+              "lesson",
+              "practice_set",
+              "assessment"
+            ],
+            "title": "Entity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft_id",
+          "draft_revision",
+          "entity",
+          "candidate_sha256"
+        ],
+        "title": "AuthoringGroupCandidate",
+        "type": "object"
+      },
+      "AuthoringGroupDraftView": {
+        "additionalProperties": false,
+        "properties": {
+          "base_ref": {
+            "title": "Base Ref",
+            "type": "null"
+          },
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/AuthoringGeneratedBlock"
+            },
+            "maxItems": 32,
+            "title": "Blocks",
+            "type": "array"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/AuthoringGroupCandidate"
+          },
+          "content_plan": {
+            "$ref": "#/components/schemas/AuthoringContentPlan"
+          },
+          "numeric_check_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Numeric Check Ids",
+            "type": "array"
+          },
+          "owner": {
+            "const": "authoring",
+            "title": "Owner",
+            "type": "string"
+          },
+          "plan_ref": {
+            "$ref": "#/components/schemas/AuthoringContentPlanRef"
+          },
+          "private_solution_refs": {
+            "items": {
+              "$ref": "#/components/schemas/AuthoringPrivateSolutionRef"
+            },
+            "maxItems": 32,
+            "title": "Private Solution Refs",
+            "type": "array"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionDraftPublic"
+            },
+            "maxItems": 32,
+            "title": "Questions",
+            "type": "array"
+          },
+          "root": {
+            "discriminator": {
+              "mapping": {
+                "assessment": "#/components/schemas/AssessmentCandidateRoot",
+                "lesson": "#/components/schemas/LessonCandidateRoot",
+                "practice_set": "#/components/schemas/PracticeSetCandidateRoot"
+              },
+              "propertyName": "entity"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LessonCandidateRoot"
+              },
+              {
+                "$ref": "#/components/schemas/PracticeSetCandidateRoot"
+              },
+              {
+                "$ref": "#/components/schemas/AssessmentCandidateRoot"
+              }
+            ],
+            "title": "Root"
+          },
+          "source_job_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Source Job Id",
+            "type": "string"
+          },
+          "state": {
+            "const": "draft",
+            "title": "State",
+            "type": "string"
+          },
+          "validation": {
+            "$ref": "#/components/schemas/AuthoringGroupValidation"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/Warning"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "owner",
+          "candidate",
+          "source_job_id",
+          "state",
+          "base_ref",
+          "plan_ref",
+          "content_plan",
+          "root",
+          "blocks",
+          "questions",
+          "private_solution_refs",
+          "validation",
+          "numeric_check_ids",
+          "warnings"
+        ],
+        "title": "AuthoringGroupDraftView",
+        "type": "object"
+      },
+      "AuthoringGroupJobSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthoringGroupCandidate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "job_revision": {
+            "minimum": 1.0,
+            "title": "Job Revision",
+            "type": "integer"
+          },
+          "kind": {
+            "const": "authoring",
+            "title": "Kind",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "awaiting_approval",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "updated_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "job_revision",
+          "status",
+          "title",
+          "candidate",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AuthoringGroupJobSummary",
+        "type": "object"
+      },
+      "AuthoringGroupJobView": {
+        "additionalProperties": false,
+        "properties": {
+          "consent_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consent Id"
+          },
+          "content_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthoringContentPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "plan_ref": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthoringContentPlanRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "preparation": {
+            "$ref": "#/components/schemas/AuthoringGroupPreparationSummary"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          },
+          "provider_outcome": {
+            "anyOf": [
+              {
+                "enum": [
+                  "completed",
+                  "failed",
+                  "incomplete",
+                  "cancelled",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Outcome"
+          },
+          "provider_receipt_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Receipt Id"
+          },
+          "raw_answer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Answer"
+          },
+          "raw_refusal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Refusal"
+          },
+          "request": {
+            "$ref": "#/components/schemas/AuthoringGroupPrepareWrite"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/AuthoringGroupJobSummary"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/UsageSnapshot"
+          },
+          "validation": {
+            "$ref": "#/components/schemas/AuthoringGroupValidation"
+          },
+          "variant": {
+            "const": "group",
+            "title": "Variant",
+            "type": "string"
+          }
+        },
+        "required": [
+          "variant",
+          "summary",
+          "request",
+          "preparation",
+          "proposal_id",
+          "consent_id",
+          "provider_receipt_id",
+          "provider_outcome",
+          "usage",
+          "raw_answer",
+          "raw_refusal",
+          "validation",
+          "error_code",
+          "plan_ref",
+          "content_plan"
+        ],
+        "title": "AuthoringGroupJobView",
+        "type": "object"
+      },
+      "AuthoringGroupNumericCheckView": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate": {
+            "$ref": "#/components/schemas/AuthoringGroupCandidate"
+          },
+          "created_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision": {
+            "enum": [
+              "pending",
+              "approve_once",
+              "decline"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "expired": {
+            "title": "Expired",
+            "type": "boolean"
+          },
+          "expires_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "job_revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Revision"
+          },
+          "operation_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Operation Sha256",
+            "type": "string"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/NumericPlan"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NumericCheckResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/NumericRuntimeProfile"
+          },
+          "target": {
+            "$ref": "#/components/schemas/AuthoringDraftMemberRef"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/Warning"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "candidate",
+          "target",
+          "plan",
+          "runtime",
+          "operation_sha256",
+          "decision",
+          "created_at",
+          "expires_at",
+          "expired",
+          "job",
+          "job_revision",
+          "result",
+          "warnings"
+        ],
+        "title": "AuthoringGroupNumericCheckView",
+        "type": "object"
+      },
+      "AuthoringGroupNumericPreviewWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate": {
+            "$ref": "#/components/schemas/AuthoringGroupCandidate"
+          },
+          "target": {
+            "$ref": "#/components/schemas/AuthoringDraftMemberRef"
+          }
+        },
+        "required": [
+          "candidate",
+          "target"
+        ],
+        "title": "AuthoringGroupNumericPreviewWrite",
+        "type": "object"
+      },
+      "AuthoringGroupPreparationSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "character_count": {
+            "maximum": 12000.0,
+            "minimum": 1.0,
+            "title": "Character Count",
+            "type": "integer"
+          },
+          "context_snapshot_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Context Snapshot Id",
+            "type": "string"
+          },
+          "job_input_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Job Input Sha256",
+            "type": "string"
+          },
+          "materials": {
+            "items": {
+              "$ref": "#/components/schemas/AuthoringInputMaterial"
+            },
+            "maxItems": 8,
+            "title": "Materials",
+            "type": "array"
+          },
+          "prepared_input_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Prepared Input Sha256",
+            "type": "string"
+          },
+          "snapshot_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Snapshot Sha256",
+            "type": "string"
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/AuthoringTargetMaterial"
+            },
+            "maxItems": 33,
+            "title": "Targets",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/Warning"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "context_snapshot_id",
+          "snapshot_sha256",
+          "job_input_sha256",
+          "prepared_input_sha256",
+          "character_count",
+          "materials",
+          "warnings",
+          "targets"
+        ],
+        "title": "AuthoringGroupPreparationSummary",
+        "type": "object"
+      },
+      "AuthoringGroupPrepareWrite": {
+        "description": "Named union whose JSON is the original flat request, never a root wrapper.",
+        "discriminator": {
+          "mapping": {
+            "assessment": "#/components/schemas/AuthoringAssessmentPrepareWrite",
+            "lesson": "#/components/schemas/AuthoringLessonPrepareWrite",
+            "practice_set": "#/components/schemas/AuthoringPracticePrepareWrite"
+          },
+          "propertyName": "output_kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AuthoringLessonPrepareWrite"
+          },
+          {
+            "$ref": "#/components/schemas/AuthoringPracticePrepareWrite"
+          },
+          {
+            "$ref": "#/components/schemas/AuthoringAssessmentPrepareWrite"
+          }
+        ],
+        "title": "AuthoringGroupPrepareWrite"
+      },
+      "AuthoringGroupValidation": {
+        "additionalProperties": false,
+        "properties": {
+          "independent_pedagogy": {
+            "const": "NOT_RUN",
+            "title": "Independent Pedagogy",
+            "type": "string"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/Warning"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "mathematical": {
+            "const": "NOT_RUN",
+            "title": "Mathematical",
+            "type": "string"
+          },
+          "plan_membership": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "NOT_RUN"
+            ],
+            "title": "Plan Membership",
+            "type": "string"
+          },
+          "private_bindings": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "NOT_RUN"
+            ],
+            "title": "Private Bindings",
+            "type": "string"
+          },
+          "question_checks": {
+            "items": {
+              "$ref": "#/components/schemas/AuthoringQuestionQuality"
+            },
+            "maxItems": 32,
+            "title": "Question Checks",
+            "type": "array"
+          },
+          "references": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "NOT_RUN"
+            ],
+            "title": "References",
+            "type": "string"
+          },
+          "schema": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "NOT_RUN"
+            ],
+            "title": "Schema",
+            "type": "string"
+          },
+          "sources": {
+            "const": "NOT_RUN",
+            "title": "Sources",
+            "type": "string"
+          },
+          "symbol_declarations": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "NOT_RUN"
+            ],
+            "title": "Symbol Declarations",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schema",
+          "references",
+          "symbol_declarations",
+          "issues",
+          "mathematical",
+          "sources",
+          "independent_pedagogy",
+          "plan_membership",
+          "private_bindings",
+          "question_checks"
+        ],
+        "title": "AuthoringGroupValidation",
         "type": "object"
       },
       "AuthoringInputMaterial": {
@@ -801,6 +1983,17 @@
         ],
         "title": "AuthoringJobPage",
         "type": "object"
+      },
+      "AuthoringJobReadView": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/AuthoringJobView"
+          },
+          {
+            "$ref": "#/components/schemas/AuthoringGroupJobView"
+          }
+        ],
+        "title": "AuthoringJobReadView"
       },
       "AuthoringJobSummary": {
         "additionalProperties": false,
@@ -995,6 +2188,200 @@
         "title": "AuthoringJobView",
         "type": "object"
       },
+      "AuthoringLessonPrepareWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "objectives": {
+            "items": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Objectives",
+            "type": "array"
+          },
+          "output_kind": {
+            "const": "lesson",
+            "title": "Output Kind",
+            "type": "string"
+          },
+          "prerequisites": {
+            "items": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Prerequisites",
+            "type": "array"
+          },
+          "proof_policy": {
+            "enum": [
+              "full",
+              "declared_dependencies"
+            ],
+            "title": "Proof Policy",
+            "type": "string"
+          },
+          "provider_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "source_refs": {
+            "items": {
+              "$ref": "#/components/schemas/AuthoringBlockRef"
+            },
+            "maxItems": 8,
+            "title": "Source Refs",
+            "type": "array"
+          },
+          "target_concept_refs": {
+            "items": {
+              "$ref": "#/components/schemas/AuthoringConceptRef"
+            },
+            "maxItems": 32,
+            "title": "Target Concept Refs",
+            "type": "array"
+          },
+          "topic": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Topic",
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic",
+          "prerequisites",
+          "objectives",
+          "proof_policy",
+          "source_refs",
+          "provider_id",
+          "target_concept_refs",
+          "output_kind"
+        ],
+        "title": "AuthoringLessonPrepareWrite",
+        "type": "object"
+      },
+      "AuthoringLessonRef": {
+        "additionalProperties": false,
+        "properties": {
+          "entity": {
+            "const": "lesson",
+            "title": "Entity",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity",
+          "id",
+          "revision",
+          "sha256"
+        ],
+        "title": "AuthoringLessonRef",
+        "type": "object"
+      },
+      "AuthoringPracticePrepareWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "lesson_ref": {
+            "$ref": "#/components/schemas/AuthoringLessonRef"
+          },
+          "objectives": {
+            "items": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Objectives",
+            "type": "array"
+          },
+          "output_kind": {
+            "const": "practice_set",
+            "title": "Output Kind",
+            "type": "string"
+          },
+          "prerequisites": {
+            "items": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Prerequisites",
+            "type": "array"
+          },
+          "proof_policy": {
+            "enum": [
+              "full",
+              "declared_dependencies"
+            ],
+            "title": "Proof Policy",
+            "type": "string"
+          },
+          "provider_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "source_refs": {
+            "items": {
+              "$ref": "#/components/schemas/AuthoringBlockRef"
+            },
+            "maxItems": 8,
+            "title": "Source Refs",
+            "type": "array"
+          },
+          "target_concept_refs": {
+            "items": {
+              "$ref": "#/components/schemas/AuthoringConceptRef"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Target Concept Refs",
+            "type": "array"
+          },
+          "topic": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Topic",
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic",
+          "prerequisites",
+          "objectives",
+          "proof_policy",
+          "source_refs",
+          "provider_id",
+          "target_concept_refs",
+          "output_kind",
+          "lesson_ref"
+        ],
+        "title": "AuthoringPracticePrepareWrite",
+        "type": "object"
+      },
       "AuthoringPreparationSummary": {
         "additionalProperties": false,
         "properties": {
@@ -1119,6 +2506,344 @@
           "provider_id"
         ],
         "title": "AuthoringPrepareWrite",
+        "type": "object"
+      },
+      "AuthoringPrivateSolutionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "question": {
+            "$ref": "#/components/schemas/AuthoringQuestionMemberRef"
+          },
+          "solution_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Solution Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question",
+          "solution_sha256"
+        ],
+        "title": "AuthoringPrivateSolutionRef",
+        "type": "object"
+      },
+      "AuthoringPrivateSolutionView": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate": {
+            "$ref": "#/components/schemas/AuthoringGroupCandidate"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/SolutionDraftPrivate"
+          },
+          "ref": {
+            "$ref": "#/components/schemas/AuthoringPrivateSolutionRef"
+          }
+        },
+        "required": [
+          "candidate",
+          "ref",
+          "payload"
+        ],
+        "title": "AuthoringPrivateSolutionView",
+        "type": "object"
+      },
+      "AuthoringQuestionMemberRef": {
+        "additionalProperties": false,
+        "properties": {
+          "entity": {
+            "const": "question",
+            "title": "Entity",
+            "type": "string"
+          },
+          "member_key": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Member Key",
+            "type": "string"
+          },
+          "member_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Member Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "member_key",
+          "entity",
+          "member_sha256"
+        ],
+        "title": "AuthoringQuestionMemberRef",
+        "type": "object"
+      },
+      "AuthoringQuestionPlanEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "depends_on_keys": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Depends On Keys",
+            "type": "array"
+          },
+          "entity": {
+            "const": "question",
+            "title": "Entity",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "single_choice",
+              "text_blank",
+              "numeric",
+              "expression",
+              "calculation"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "member_key": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Member Key",
+            "type": "string"
+          },
+          "objective_indexes": {
+            "items": {
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Objective Indexes",
+            "type": "array"
+          },
+          "prerequisite_indexes": {
+            "items": {
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "maxItems": 32,
+            "title": "Prerequisite Indexes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "member_key",
+          "entity",
+          "kind",
+          "objective_indexes",
+          "prerequisite_indexes",
+          "depends_on_keys"
+        ],
+        "title": "AuthoringQuestionPlanEntry",
+        "type": "object"
+      },
+      "AuthoringQuestionQuality": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted_answer_membership": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "NOT_RUN"
+            ],
+            "title": "Accepted Answer Membership",
+            "type": "string"
+          },
+          "answer_uniqueness": {
+            "const": "NOT_RUN",
+            "title": "Answer Uniqueness",
+            "type": "string"
+          },
+          "condition_sufficiency": {
+            "const": "NOT_RUN",
+            "title": "Condition Sufficiency",
+            "type": "string"
+          },
+          "distractor_reasonableness": {
+            "const": "NOT_RUN",
+            "title": "Distractor Reasonableness",
+            "type": "string"
+          },
+          "grading_compatibility": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "NOT_RUN"
+            ],
+            "title": "Grading Compatibility",
+            "type": "string"
+          },
+          "objective_alignment": {
+            "const": "NOT_RUN",
+            "title": "Objective Alignment",
+            "type": "string"
+          },
+          "prerequisite_sufficiency": {
+            "const": "NOT_RUN",
+            "title": "Prerequisite Sufficiency",
+            "type": "string"
+          },
+          "question": {
+            "$ref": "#/components/schemas/AuthoringQuestionMemberRef"
+          },
+          "solution_grading_semantics": {
+            "const": "NOT_RUN",
+            "title": "Solution Grading Semantics",
+            "type": "string"
+          },
+          "unit_semantics": {
+            "const": "NOT_RUN",
+            "title": "Unit Semantics",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question",
+          "grading_compatibility",
+          "accepted_answer_membership",
+          "answer_uniqueness",
+          "distractor_reasonableness",
+          "condition_sufficiency",
+          "unit_semantics",
+          "solution_grading_semantics",
+          "objective_alignment",
+          "prerequisite_sufficiency"
+        ],
+        "title": "AuthoringQuestionQuality",
+        "type": "object"
+      },
+      "AuthoringTargetMaterial": {
+        "additionalProperties": false,
+        "properties": {
+          "metadata": {
+            "discriminator": {
+              "mapping": {
+                "concept": "#/components/schemas/Concept",
+                "lesson": "#/components/schemas/Lesson"
+              },
+              "propertyName": "entity"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Lesson"
+              },
+              {
+                "$ref": "#/components/schemas/Concept"
+              }
+            ],
+            "title": "Metadata"
+          },
+          "ref": {
+            "$ref": "#/components/schemas/AuthoringTargetRef"
+          }
+        },
+        "required": [
+          "ref",
+          "metadata"
+        ],
+        "title": "AuthoringTargetMaterial",
+        "type": "object"
+      },
+      "AuthoringTargetRef": {
+        "additionalProperties": false,
+        "properties": {
+          "entity": {
+            "enum": [
+              "lesson",
+              "concept"
+            ],
+            "title": "Entity",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity",
+          "id",
+          "revision",
+          "sha256"
+        ],
+        "title": "AuthoringTargetRef",
+        "type": "object"
+      },
+      "AuthoringTextBlockPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "body_markdown": {
+            "maxLength": 400000,
+            "minLength": 1,
+            "title": "Body Markdown",
+            "type": "string"
+          },
+          "declared_source_refs": {
+            "items": {
+              "$ref": "#/components/schemas/AuthoringBlockRef"
+            },
+            "maxItems": 8,
+            "title": "Declared Source Refs",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "orientation",
+              "definition",
+              "theorem",
+              "proof",
+              "intuition",
+              "boundary",
+              "summary",
+              "text",
+              "code",
+              "figure"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "symbols": {
+            "items": {
+              "$ref": "#/components/schemas/WorkedExampleSymbol"
+            },
+            "maxItems": 64,
+            "title": "Symbols",
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "const": "content-block-candidate-v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "kind",
+          "title",
+          "body_markdown",
+          "symbols",
+          "declared_source_refs"
+        ],
+        "title": "AuthoringTextBlockPayload",
         "type": "object"
       },
       "AuthoringValidation": {
@@ -3209,6 +4934,114 @@
         "title": "FrozenOutboundSummary",
         "type": "object"
       },
+      "GeneratedSolutionAnswer": {
+        "additionalProperties": false,
+        "properties": {
+          "absolute_tolerance": {
+            "minimum": 0.0,
+            "title": "Absolute Tolerance",
+            "type": "number"
+          },
+          "accepted_answers": {
+            "items": {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Accepted Answers",
+            "type": "array"
+          },
+          "domain_assumptions": {
+            "items": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Domain Assumptions",
+            "type": "array"
+          },
+          "grading_kind": {
+            "enum": [
+              "choice_exact",
+              "text_normalized",
+              "numeric_tolerance",
+              "symbolic_review",
+              "rubric_review"
+            ],
+            "title": "Grading Kind",
+            "type": "string"
+          },
+          "numeric_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NumericPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "question_key": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Question Key",
+            "type": "string"
+          },
+          "relative_tolerance": {
+            "minimum": 0.0,
+            "title": "Relative Tolerance",
+            "type": "number"
+          },
+          "rubric_markdown": {
+            "maxLength": 400000,
+            "title": "Rubric Markdown",
+            "type": "string"
+          },
+          "solution_markdown": {
+            "maxLength": 400000,
+            "minLength": 1,
+            "title": "Solution Markdown",
+            "type": "string"
+          },
+          "symbols": {
+            "items": {
+              "$ref": "#/components/schemas/WorkedExampleSymbol"
+            },
+            "maxItems": 64,
+            "title": "Symbols",
+            "type": "array"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "question_key",
+          "grading_kind",
+          "accepted_answers",
+          "absolute_tolerance",
+          "relative_tolerance",
+          "unit",
+          "domain_assumptions",
+          "solution_markdown",
+          "rubric_markdown",
+          "symbols",
+          "numeric_plan"
+        ],
+        "title": "GeneratedSolutionAnswer",
+        "type": "object"
+      },
       "GradeHistoryEntry": {
         "additionalProperties": false,
         "properties": {
@@ -4242,6 +6075,69 @@
           "block_refs"
         ],
         "title": "Lesson",
+        "type": "object"
+      },
+      "LessonCandidateRoot": {
+        "additionalProperties": false,
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/AuthoringBlockMemberRef"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Blocks",
+            "type": "array"
+          },
+          "entity": {
+            "const": "lesson",
+            "title": "Entity",
+            "type": "string"
+          },
+          "objectives": {
+            "items": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Objectives",
+            "type": "array"
+          },
+          "prerequisites": {
+            "items": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Prerequisites",
+            "type": "array"
+          },
+          "proof_policy": {
+            "enum": [
+              "full",
+              "declared_dependencies"
+            ],
+            "title": "Proof Policy",
+            "type": "string"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity",
+          "title",
+          "objectives",
+          "prerequisites",
+          "proof_policy",
+          "blocks"
+        ],
+        "title": "LessonCandidateRoot",
         "type": "object"
       },
       "LocalExactInputTokens": {
@@ -5936,6 +7832,47 @@
         "title": "PracticeSet",
         "type": "object"
       },
+      "PracticeSetCandidateRoot": {
+        "additionalProperties": false,
+        "properties": {
+          "entity": {
+            "const": "practice_set",
+            "title": "Entity",
+            "type": "string"
+          },
+          "feedback_policy": {
+            "const": "on_submit_or_reveal",
+            "title": "Feedback Policy",
+            "type": "string"
+          },
+          "lesson_ref": {
+            "$ref": "#/components/schemas/AuthoringLessonRef"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/AuthoringQuestionMemberRef"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Questions",
+            "type": "array"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity",
+          "title",
+          "lesson_ref",
+          "questions",
+          "feedback_policy"
+        ],
+        "title": "PracticeSetCandidateRoot",
+        "type": "object"
+      },
       "PracticeSetSummary": {
         "additionalProperties": false,
         "properties": {
@@ -6779,6 +8716,109 @@
           "cost"
         ],
         "title": "ProviderUsageView",
+        "type": "object"
+      },
+      "QuestionDraftPublic": {
+        "additionalProperties": false,
+        "properties": {
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/Choice"
+            },
+            "maxItems": 32,
+            "title": "Choices",
+            "type": "array"
+          },
+          "concept_refs": {
+            "items": {
+              "$ref": "#/components/schemas/AuthoringConceptRef"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Concept Refs",
+            "type": "array"
+          },
+          "declared_source_refs": {
+            "items": {
+              "$ref": "#/components/schemas/AuthoringBlockRef"
+            },
+            "maxItems": 8,
+            "title": "Declared Source Refs",
+            "type": "array"
+          },
+          "depends_on_keys": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Depends On Keys",
+            "type": "array"
+          },
+          "exposure_family_key": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Exposure Family Key",
+            "type": "string"
+          },
+          "input_instructions": {
+            "maxLength": 4000,
+            "title": "Input Instructions",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "single_choice",
+              "text_blank",
+              "numeric",
+              "expression",
+              "calculation"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "max_score": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 100.0,
+            "title": "Max Score",
+            "type": "number"
+          },
+          "member_key": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Member Key",
+            "type": "string"
+          },
+          "skill": {
+            "enum": [
+              "recall",
+              "explain",
+              "compute",
+              "derive",
+              "transfer"
+            ],
+            "title": "Skill",
+            "type": "string"
+          },
+          "stem_markdown": {
+            "maxLength": 400000,
+            "minLength": 1,
+            "title": "Stem Markdown",
+            "type": "string"
+          }
+        },
+        "required": [
+          "member_key",
+          "kind",
+          "stem_markdown",
+          "choices",
+          "concept_refs",
+          "skill",
+          "exposure_family_key",
+          "max_score",
+          "input_instructions",
+          "declared_source_refs",
+          "depends_on_keys"
+        ],
+        "title": "QuestionDraftPublic",
         "type": "object"
       },
       "QuestionKindCount": {
@@ -9427,6 +11467,29 @@
           "active_open_book_attempt_id"
         ],
         "title": "SessionResponse",
+        "type": "object"
+      },
+      "SolutionDraftPrivate": {
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "$ref": "#/components/schemas/GeneratedSolutionAnswer"
+          },
+          "question": {
+            "$ref": "#/components/schemas/AuthoringQuestionMemberRef"
+          },
+          "review_status": {
+            "const": "needs_review",
+            "title": "Review Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question",
+          "answer",
+          "review_status"
+        ],
+        "title": "SolutionDraftPrivate",
         "type": "object"
       },
       "SourceResponse": {
@@ -12990,6 +15053,502 @@
         ]
       }
     },
+    "/api/v1/authoring/draft-groups/{id}": {
+      "get": {
+        "operationId": "draft_api_v1_authoring_draft_groups__id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthoringGroupDraftView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Draft",
+        "tags": [
+          "authoring"
+        ]
+      }
+    },
+    "/api/v1/authoring/draft-groups/{id}/members/{member_key}/numeric-checks": {
+      "post": {
+        "operationId": "preview_api_v1_authoring_draft_groups__id__members__member_key__numeric_checks_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "member_key",
+            "required": true,
+            "schema": {
+              "title": "Member Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "title": "Origin",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthoringGroupNumericPreviewWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthoringGroupNumericCheckView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Preview",
+        "tags": [
+          "authoring"
+        ]
+      }
+    },
+    "/api/v1/authoring/draft-groups/{id}/solutions/{member_key}": {
+      "get": {
+        "operationId": "solution_api_v1_authoring_draft_groups__id__solutions__member_key__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "member_key",
+            "required": true,
+            "schema": {
+              "title": "Member Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthoringPrivateSolutionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Solution",
+        "tags": [
+          "authoring"
+        ]
+      }
+    },
     "/api/v1/authoring/drafts/{id}": {
       "get": {
         "operationId": "draft_api_v1_authoring_drafts__id__get",
@@ -13316,6 +15875,522 @@
           }
         ],
         "summary": "Preview",
+        "tags": [
+          "authoring"
+        ]
+      }
+    },
+    "/api/v1/authoring/group-jobs": {
+      "post": {
+        "operationId": "prepare_api_v1_authoring_group_jobs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "title": "Origin",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthoringGroupPrepareWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRef"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Prepare",
+        "tags": [
+          "authoring"
+        ]
+      }
+    },
+    "/api/v1/authoring/group-numeric-checks/{id}": {
+      "get": {
+        "operationId": "read_api_v1_authoring_group_numeric_checks__id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthoringGroupNumericCheckView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Read",
+        "tags": [
+          "authoring"
+        ]
+      }
+    },
+    "/api/v1/authoring/group-numeric-checks/{id}/decision": {
+      "post": {
+        "operationId": "decide_api_v1_authoring_group_numeric_checks__id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "title": "Origin",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NumericCheckDecisionAck"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NumericCheckDecisionAck"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Decide",
         "tags": [
           "authoring"
         ]
@@ -13671,7 +16746,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AuthoringJobView"
+                  "$ref": "#/components/schemas/AuthoringJobReadView"
                 }
               }
             },
@@ -26246,7 +29321,7 @@
   },
   "x-source-spec": {
     "source": "PRODUCT_DESIGN.md",
-    "spec_sha256": "30220c34fe7312887f5bcb1c67406c9638f1719ff3ed7bc9e95d7d5085b5d924",
-    "spec_version": "3.0.6"
+    "spec_sha256": "2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d",
+    "spec_version": "3.0.7"
   }
 }
