@@ -2,9 +2,9 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-22T05:10:49Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
+更新：2026-09-22T05:36:25Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
 
-仓库发布：VERIFIED；Issues 同步：PENDING_AFTER_M6_2_CHECKPOINT
+仓库发布：VERIFIED；Issues 同步：VERIFIED_READBACK
 实施：IN_PROGRESS；当前任务：M6.2；下一任务：M6.2
 
 完成候选身份owner校验、迁移保留/失败回滚测试，再按规范补齐M6.2人工审核与发布接口；依赖PR54，M6.1真实模型/隔离数值仍blocked，PR54 Tutor CI失败独立诊断。
@@ -119,6 +119,8 @@
 - M6.1_counter_candidate: CACHE_ONLY：strict text Responses本地参考counter11方法PASS、独立审查完毕；未注册生产proof，不证明托管隐藏格式/alias版本映射，零vendor调用。原日志与哈希私有保存，见M6.2 start receipt。
 - M6.1_sealed_aaexec_preflight: REJECTED_CANDIDATE：实际sealed-aaexec进入bwrap//&unconfined(enforce)，完整bwrap仍RTM_NEWADDR EPERM exit1；不是数值执行。未改系统profile/sysctl，具体内核deny规则未独立确立；不采用该失败路线。
 - M6.2_candidate_identity: LOCAL_IDENTITY_FOUNDATION_GATES_PASS：固定b7c4355，946工程文件哈希前后及Git一致；2251 Python PASS/1数值环境SKIP，含新增82候选登记/迁移用例；Ruff、mypy180、spec54 core/76生成/119声明均PASS。独立审查和两项迁移修复完成。仅内部owner端口与0016迁移，没有新审核/发布HTTP或UI、人类审批、数值成功或真实Provider验收。前端/原生浏览器未新跑。
+- M6.2_publication: VERIFIED：PR55 draft/open/unmerged，89b9d22 head/ref/body实际GET一致；依赖PR54/2cf5。早期网络EOF/TLS timeout/停止旧push记录保留，无权限拒绝，未修改持久网络配置。
+- M6.2_issue_sync: 独立GET回读：既有36个Issues完整进度块/标签一致，正文其余部分及编号/标题/开闭状态保留，9个里程碑身份/状态/描述/到期日保留；M6.2下一任务修正及证据链接再单独回读一致。无新增或关闭Issue。
 
 ## 阻塞与待决项
 
