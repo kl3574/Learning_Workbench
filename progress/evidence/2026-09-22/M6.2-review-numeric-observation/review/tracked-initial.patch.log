@@ -1,0 +1,151 @@
+diff --git a/services/api/app/application/authoring_group_numeric_service.py b/services/api/app/application/authoring_group_numeric_service.py
+index 1aa1ce2..cc4c010 100644
+--- a/services/api/app/application/authoring_group_numeric_service.py
++++ b/services/api/app/application/authoring_group_numeric_service.py
+@@ -1,5 +1,7 @@
+ """Explicit numeric preview and separate approval; no process runs in HTTP calls."""
+ 
++import sqlite3
++
+ from packages.contracts import domain_models as dm
+ from packages.contracts.canonical import sha256_bytes
+ from ..authoring_dto import NumericCheckDecisionAck
+@@ -15,6 +17,7 @@ from .authoring_group_context import AuthoringGroupContext
+ from .authoring_group_validation import group_numeric_plan
+ from .authoring_numeric import NumericError, validate_plan
+ from .errors import ApiError
++from .review_numeric_models import ReviewNumericObservation
+ 
+ 
+ class GroupNumericService:
+@@ -99,6 +102,18 @@ class GroupNumericService:
+             repo.load(record.view.id)
+             return record.view
+ 
++    def read_review_numeric(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                            candidate: dm.DraftCandidate) -> ReviewNumericObservation:
++        from .review_numeric import read_owner_numeric
++        return read_owner_numeric(connection, identity, candidate,
++                                  GroupNumericRepository(connection, identity.workspace_id), self.authoring)
++
++    def verify_review_numeric(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                              observation: ReviewNumericObservation) -> None:
++        from .review_numeric import verify_owner_numeric
++        verify_owner_numeric(connection, identity, observation,
++                             GroupNumericRepository(connection, identity.workspace_id), self.authoring)
++
+     def read(self, identity: SessionIdentity, identifier: str) -> AuthoringGroupNumericCheckView:
+         with self.database.transaction(immediate=False) as conn:
+             self.context.check_access(conn, identity)
+diff --git a/services/api/app/application/authoring_numeric_service.py b/services/api/app/application/authoring_numeric_service.py
+index 2c75064..4a0eb5a 100644
+--- a/services/api/app/application/authoring_numeric_service.py
++++ b/services/api/app/application/authoring_numeric_service.py
+@@ -1,4 +1,6 @@
+ """Explicit numeric preview and separate approval; no process runs in HTTP calls."""
++import sqlite3
++
+ from packages.contracts import domain_models as dm
+ from packages.contracts.canonical import sha256_bytes
+ from ..authoring_dto import NumericCheckDecisionAck, NumericCheckPreviewWrite, NumericCheckView
+@@ -12,6 +14,7 @@ from .authoring import AuthoringService
+ from .authoring_context import AuthoringContext
+ from .authoring_numeric import NumericError, validate_plan
+ from .errors import ApiError
++from .review_numeric_models import ReviewNumericObservation
+ 
+ 
+ class NumericService:
+@@ -71,6 +74,18 @@ class NumericService:
+             repo.load(record.view.id)
+             return record.view
+ 
++    def read_review_numeric(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                            candidate: dm.DraftCandidate) -> ReviewNumericObservation:
++        from .review_numeric import read_owner_numeric
++        return read_owner_numeric(connection, identity, candidate,
++                                  NumericRepository(connection, identity.workspace_id), self.authoring)
++
++    def verify_review_numeric(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                              observation: ReviewNumericObservation) -> None:
++        from .review_numeric import verify_owner_numeric
++        verify_owner_numeric(connection, identity, observation,
++                             NumericRepository(connection, identity.workspace_id), self.authoring)
++
+     def read(self, identity: SessionIdentity, identifier: str) -> NumericCheckView:
+         with self.database.transaction(immediate=False) as conn:
+             self.context.check_access(conn, identity)
+diff --git a/services/api/app/infrastructure/authoring_group_numeric_repository.py b/services/api/app/infrastructure/authoring_group_numeric_repository.py
+index feb4cf0..2b0137d 100644
+--- a/services/api/app/infrastructure/authoring_group_numeric_repository.py
++++ b/services/api/app/infrastructure/authoring_group_numeric_repository.py
+@@ -3,7 +3,7 @@
+ import base64
+ import sqlite3
+ from datetime import datetime, timedelta
+-from typing import Literal, Self, TypeVar
++from typing import TYPE_CHECKING, Literal, Self, TypeVar
+ from uuid import uuid4
+ 
+ from pydantic import BaseModel, TypeAdapter, model_validator
+@@ -37,6 +37,10 @@ from .authoring_numeric_repository import NumericStart, NumericEnd
+ from .database import utc_now
+ from .security import SessionIdentity
+ 
++if TYPE_CHECKING:
++    from ..application.review_numeric_models import NumericReviewCheck
++
++
+ M = TypeVar("M", bound=BaseModel)
+ 
+ 
+@@ -216,6 +220,12 @@ class GroupNumericRepository:
+         value["result"] = result.model_dump(mode="json") if result else None
+         return AuthoringGroupNumericCheckView.model_validate(value)
+ 
++    def review_check(self, identifier: str, observed_at: str,
++                     original: 'NumericReviewCheck | None' = None) -> 'NumericReviewCheck':
++        """Checked read of the original approval/Job/execution prefix; no writes."""
++        from ..application.review_numeric import read_numeric_history
++        return read_numeric_history(self, identifier, observed_at, original)
++
+     def current(self, identifier: str) -> AuthoringGroupNumericCheckView:
+         record = self.load(identifier)
+         _, end = self._execution(record)
+diff --git a/services/api/app/infrastructure/authoring_numeric_repository.py b/services/api/app/infrastructure/authoring_numeric_repository.py
+index d41003f..f1786bd 100644
+--- a/services/api/app/infrastructure/authoring_numeric_repository.py
++++ b/services/api/app/infrastructure/authoring_numeric_repository.py
+@@ -2,7 +2,7 @@
+ import base64
+ import sqlite3
+ from datetime import datetime, timedelta
+-from typing import Literal, Self, TypeVar
++from typing import TYPE_CHECKING, Literal, Self, TypeVar
+ from uuid import uuid4
+ 
+ from pydantic import BaseModel, TypeAdapter, model_validator
+@@ -21,6 +21,10 @@ from .authoring_repository import AuthoringRepository
+ from .database import utc_now
+ from .security import SessionIdentity
+ 
++if TYPE_CHECKING:
++    from ..application.review_numeric_models import NumericReviewCheck
++
++
+ M = TypeVar('M', bound=BaseModel)
+ 
+ 
+@@ -215,6 +219,12 @@ class NumericRepository:
+         value['result'] = result.model_dump(mode='json') if result else None
+         return NumericCheckView.model_validate(value)
+ 
++    def review_check(self, identifier: str, observed_at: str,
++                     original: 'NumericReviewCheck | None' = None) -> 'NumericReviewCheck':
++        """Checked read of the original approval/Job/execution prefix; no writes."""
++        from ..application.review_numeric import read_numeric_history
++        return read_numeric_history(self, identifier, observed_at, original)
++
+     def current(self, identifier: str) -> NumericCheckView:
+         record = self.load(identifier)
+         _, end = self._execution(record)

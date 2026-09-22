@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-22T08:10:21Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
+更新：2026-09-22T09:02:00Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
 
-仓库发布：VERIFIED；Issues 同步：VERIFIED
+仓库发布：VERIFIED；Issues 同步：LOCAL_UPDATE_PENDING_REMOTE_READBACK
 实施：IN_PROGRESS；当前任务：M6.2；下一任务：M6.2
 
-同步并回读完整材料端口及9eb CI真实失败；继续原数值观察冻结/历史重验，再接review Job/read/作者decision及发布/版本/影响/恢复。生产proof和数值环境阻塞保留。
+同步416b532审核基础及实际组合门禁，独立回读新发布head的GitHub CI；继续0017审核历史前向迁移和约束审查，随后实现Quality repository/真实review worker/受保护报告/read/当前作者decision。Tutor浏览器原5秒失败仍需关联Run、SSE游标与真实状态接收的受限观察，不能放宽断言或以HTTP200代替帧消费。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -32,7 +32,7 @@
 | M5.3 Tutor 状态机、SSE/取消/重连/异步上下文 | review | [#28](https://github.com/kl3574/Learning_Workbench/issues/28) | 919a00532b499cff604ef2be4e90c88cc6378490 |
 | M5.4 真实模型与搜索评测 | blocked | [#29](https://github.com/kl3574/Learning_Workbench/issues/29) | e982a14644317c7be12a63ec0b31c1e615c72fa6 |
 | M6.1 教材/例题/题目生成 schema + 数值验证 | blocked | [#30](https://github.com/kl3574/Learning_Workbench/issues/30) | 9d4aa2e75c0583b4752e1a2669534ef621e6c7f9 |
-| M6.2 审校/发布/版本对比/影响分析/恢复旧内容 | in_progress | [#31](https://github.com/kl3574/Learning_Workbench/issues/31) | e100f1b2ce02ccd0af85e2596b53ba2a24da9cda |
+| M6.2 审校/发布/版本对比/影响分析/恢复旧内容 | in_progress | [#31](https://github.com/kl3574/Learning_Workbench/issues/31) | 416b53261dafa0ddbdec3adf4ef2deab058b866b |
 | M6.3 CodexBroker/App Server、操作审批、产物清单 | todo | [#32](https://github.com/kl3574/Learning_Workbench/issues/32) | 未验证提交 |
 | M7.1 全备份/学习者包/作者包/恢复预览和事务 | todo | [#33](https://github.com/kl3574/Learning_Workbench/issues/33) | 未验证提交 |
 | M7.2 安全/可访问性/性能/故障注入 | todo | [#34](https://github.com/kl3574/Learning_Workbench/issues/34) | 未验证提交 |
@@ -134,6 +134,13 @@
 - M6.2_producer_latest_ci: 07:56:53一次追加精确run/jobs快照：9eb9 push35700593259与PR35700598088均in_progress，各5success/仅browser运行；无失败job，因此未下载日志。actual checkout未核，不推定最终结果。07:42的旧快照和0cf8取消结果分别保留。
 - M6.2_9eb_terminal_ci: 9eb精确push35700593259/PR35700598088现已completed/failure，各5success/1browser failure。原07:56运行中快照保留；本次仅run/jobs终态，失败日志/实际checkout/附件另行采集，不将run head当checkout、不推定与旧Tutor同因。
 - M6.2_material_publication: VERIFIED：b70ab4a分支/ref/PR55 head、PR说明及Issue31进度正文已由独立GET核实；PR draft/open/unmerged，Issue原身份/状态/标签/里程碑及进度块外正文保留。全部新增提交blob扫描通过。初次PR head暂旧、随后精确一致，没有重复push。新CI push35703221981/PR35703225712仅08:09初态queued，无终态或checkout结论。
+- M6.2_numeric_observation_development: DEVELOPMENT_VERIFIED：b73953b整合acb9e22，原check顺序及command/event/start/end观察冻结，允许合法追加/推进而不升级原事实。同事务当前author/Policy/原Provider完整验真，零runtime/写入。修后39新及26受影响回归PASS（1deselected），原37/56与两次开发FAIL保留；Jobs事件跨模块SELECT已移入Jobs只读端口。248原alias/84公开文件及独立重放通过；不等于根完整门禁。
+- M6.2_numeric_initial_full_gate: ACTUAL_FAIL：acb9e22固定954源全Python2376PASS/1FAIL/1数值环境SKIP/2warning664.42s，唯一原Tutor取消测试:359的lease_until跨两事务不同；Ruff/mypy183/spec PASS。原日志SHA671d59f2066c3580450f7266cf92181304ee02b42a7a915e9fb9dffff5ad640a。保留失败，合法后台renew窗口正在受控诊断，不重跑到绿。
+- M6.2_review_job_lifecycle_development: DEVELOPMENT_VERIFIED：隔离d419562已整合6dee4b3，严格review请求/Job input与Jobs-owned受限kind/转换/租约/取消/历史端口。真实7RED→7GREEN，最终42新+50相关PASS、Ruff/mypy186 PASS，959源与Git一致；独立审查和真实SQLite probe确认事务guard、写前consumer/current校验、坏result/lease savepoint回滚。未注册Review HTTP/worker/人工决定/新Receipt；不宣称M6.2闭环已实现。
+- M6.2_9eb_tutor_mechanism: DIAGNOSIS_NOT_REPRODUCED：9eb双browser各99PASS1Tutor 5s FAIL，真实push9eb/PR7cdb5d1 checkout已核。原用例一次1PASS9.8s、另一次被动插桩1PASS10.6s，原selector首次未匹配NOT_RUN独立保留。queued仅UI投影、缺Provider引用仅Tutor view，不证明worker/Provider账本状态；HTTP200不是帧消费。共享机器并发，非性能基准；候选插桩未审/未接CI，根因未知。
+- M6.2_b70_terminal_ci: b70双CI实际终态：push35703221981为4success/2failure，PR35703225712为5success/1browserfailure。三失败job实际checkout分别b70/b70/2b1fc8f已取；两browser各99PASS1Tutor5sFAIL（17.8m/17.3m）；push integration1041PASS1Tutor取消lease FAIL1ENVSKIP849.84s。三原log、两ZIP及各4member/6实际checkout源码已核。其余9成功job的checkout未逐一读，不混推；所有历史失败保留。
+- M6.2_review_foundation: LOCAL_REVIEW_FOUNDATION_GATES_PASS：416b532固定960工程输入，完整Python2419PASS/1数值环境SKIP/2依赖warning683.08s，Ruff/mypy186/spec通过。本次为新组合门禁，所有输入前后与Git一致；数值观察、Jobs事务边界和Tutor取消测试修复已整合。原acb2376PASS1FAIL1SKIP、Jobs7RED、Tutor受控RED及Node准备失败完整保留。仅内部审核基础，无新Review HTTP/worker/人工决定/发布；前端/native未重跑，不继承为当前PASS。b70旧CI两browser及一integration失败分别记录；当前新head CI待独立读取。
+- M6.2_tutor_cancel_lease_repair: LOCAL_REPAIR_VERIFIED：7442033仅一测试文件整合416b532；实际watcher插入before/cancel间窗口原断言1RED，before/after移入实际cancel writer事务且保留原强断言，永久测试验证前可renew后停止。最终116相关PASS22.41s，已包含于本次2419完整套件。原Node缺link失败与受控RED保留；历史现场无watcher时序，不断言唯一同因。184原alias/69公开文件、954原输入/Git及精确fixture脱敏均由root重放。
 
 ## 阻塞与待决项
 
@@ -142,6 +149,7 @@
 - M61_NUMERIC_SANDBOX_ENVIRONMENT: 实际封存完整运行闭包的bwrap启动失败RTM_NEWADDR EPERM；sealed-aaexec候选同样失败，实际AppArmor label已取得但精确内核deny规则未独立确立。未改系统策略、未回退普通进程；真实隔离数值完成/取消仍未验收。
 - M62_PR55_GRADING_RESULT_CI_FAILED: 原89b9 push的409失败保留。2ab受控重现提交前409并修复测试ACK同步，原CI未记录body，唯一根因仍未知；本地2定向PASS不改写旧CI。
 - M62_B90_PDF_IMPORT_CI_FAILED: b90 push integration扫描PDF实际IMPORT_PARSE_FAILED；原失败保留。已受控复现子进程发送并退出时的pipe轮询竞态，4行生产修复及永久RED/GREEN、19相关/5原生导入通过；原CI没有该时序证据，不能认定同因或关闭历史失败。
-- M62_9EB_BROWSER_CI_FAILED: 9eb精确push35700593259/PR35700598088现已completed/failure，各5success/1browser failure。原07:56运行中快照保留；本次仅run/jobs终态，失败日志/实际checkout/附件另行采集，不将run head当checkout、不推定与旧Tutor同因。
+- M62_9EB_BROWSER_CI_FAILED: 9eb和b70的双browser均99PASS1Tutor原5秒FAIL，失败job实际checkout/日志/附件已核。9eb两次本地原/被动观察运行均PASS，未复现。queued仅UI投影，HTTP200不是帧消费；旧现场缺关联时序，具体原因仍未知。
+- M62_ACB_TUTOR_CANCEL_LEASE_GATE_FAILED: acb全套与b70 push的原Tutor取消lease失败保留。实际watcher受控1RED及同事务观察修复已独立审查，116相关和416b532全套2419PASS；未记录的历史时序不推定唯一同因，新发布head CI待读。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。
