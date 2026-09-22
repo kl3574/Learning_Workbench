@@ -1,7 +1,9 @@
 """Internal Quality persistence with explicit synthetic intent; no review application."""
 import pytest
 
+from services.api.app.application.errors import ApiError
 from services.api.app.application.review_history_models import ReviewCreateCommand, ReviewCancelCommand
+from services.api.app.infrastructure.authoring_job_repository import AuthoringJobRepository
 from services.api.app.infrastructure.database import utc_now
 from services.api.app.infrastructure.review_job_repository import ReviewJobRepository
 from services.api.app.infrastructure.review_repository import ReviewRepository
@@ -54,3 +56,68 @@ def test_cancel_ack_and_original_create_replay_do_not_use_latest_snapshot(prepar
         assert repo.replay(cancel.actor_id, cancel.route, cancel.command_key, cancel.request) == cancel
         assert repo.binding(value.review_id).job.status == 'cancelled'
         assert connection.execute('SELECT count(*) FROM reviews').fetchone()[0] == 0
+
+
+def test_failed_binding_is_rolled_back_when_caller_catches_and_commits_other_work(prepared):
+    database, identity, value = prepared
+    with database.transaction() as connection:
+        command = create_job(connection, identity.workspace_id, value)
+        connection.execute("UPDATE workspace SET title='unrelated outer change' WHERE id=?", (identity.workspace_id,))
+        connection.execute("CREATE TEMP TRIGGER reject_quality_command BEFORE INSERT ON review_commands "
+                           "BEGIN SELECT RAISE(ABORT,'synthetic injected failure'); END")
+        with pytest.raises(ApiError) as caught:
+            ReviewRepository(connection, identity.workspace_id).bind(value, command)
+        assert caught.value.code == 'REVIEW_INTEGRITY_ERROR'
+        assert connection.in_transaction
+    with database.connect() as connection:
+        assert connection.execute('SELECT count(*) FROM review_jobs').fetchone()[0] == 0
+        assert connection.execute('SELECT count(*) FROM review_commands').fetchone()[0] == 0
+        assert connection.execute('SELECT title FROM workspace WHERE id=?', (identity.workspace_id,)).fetchone()[0] == 'unrelated outer change'
+        # This method's savepoint does not undo the caller's earlier Jobs write.
+        assert connection.execute('SELECT count(*) FROM jobs WHERE id=?', (value.review_id,)).fetchone()[0] == 1
+
+
+@pytest.mark.parametrize('method', ['bind', 'binding', 'replay', 'record_cancel'])
+def test_each_operation_rechecks_current_transaction_even_after_construction(prepared, method):
+    database, identity, value = prepared
+    with database.connect() as connection:
+        connection.execute('BEGIN')
+        repo = ReviewRepository(connection, identity.workspace_id)
+        connection.commit()
+        with pytest.raises(ApiError) as caught:
+            if method == 'bind':
+                repo.bind(value, None)
+            elif method == 'record_cancel':
+                repo.record_cancel(None)
+            elif method == 'binding':
+                repo.binding(value.review_id)
+            else:
+                repo.replay(identity.id, 'POST /synthetic', 'synthetic', value.request)
+        assert caught.value.code == 'TRANSACTION_REQUIRED'
+
+
+def test_original_key_conflict_and_cross_workspace_do_not_mutate(prepared):
+    database, identity, value = prepared
+    with database.transaction() as connection:
+        command = create_job(connection, identity.workspace_id, value)
+        repo = ReviewRepository(connection, identity.workspace_id)
+        repo.bind(value, command)
+        with pytest.raises(ApiError) as caught:
+            repo.replay(command.actor_id, command.route, command.command_key,
+                        command.request.model_copy(update={'reviewer_note': 'different synthetic request'}))
+        assert caught.value.code == 'IDEMPOTENCY_CONFLICT'
+        assert repo.replay('another_actor', command.route, command.command_key, command.request) is None
+        with pytest.raises(ApiError) as caught:
+            ReviewRepository(connection, 'another_workspace').binding(value.review_id)
+        assert caught.value.status == 404
+        assert connection.execute('SELECT count(*) FROM review_commands').fetchone()[0] == 1
+
+
+def test_other_job_consumer_cannot_be_bound_as_a_review(prepared):
+    database, identity, value = prepared
+    with database.transaction() as connection:
+        AuthoringJobRepository(connection, identity.workspace_id).create(value.review_id, 'authoring', {})
+        with pytest.raises(ApiError) as caught:
+            ReviewRepository(connection, identity.workspace_id).bind(value, {})
+        assert caught.value.code == 'REVIEW_INTEGRITY_ERROR'
+        assert connection.execute('SELECT count(*) FROM review_jobs').fetchone()[0] == 0
