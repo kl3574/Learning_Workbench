@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-22T04:18:41Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
+更新：2026-09-22T05:10:49Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
 
-仓库发布：VERIFIED；Issues 同步：VERIFIED_READBACK
-实施：IN_PROGRESS；当前任务：M6.1；下一任务：M6.1
+仓库发布：VERIFIED；Issues 同步：PENDING_AFTER_M6_2_CHECKPOINT
+实施：IN_PROGRESS；当前任务：M6.2；下一任务：M6.2
 
-同步PR54确切head的CI状态与真实证据；继续生产输入计量checker候选工程和受限数值运行诊断，再推进M6.1验收。生产证明、数值环境、内容质量与既有PR53 CI失败边界保持。
+完成候选身份owner校验、迁移保留/失败回滚测试，再按规范补齐M6.2人工审核与发布接口；依赖PR54，M6.1真实模型/隔离数值仍blocked，PR54 Tutor CI失败独立诊断。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -31,8 +31,8 @@
 | M5.2 检索权限、中文 FTS、来源和修订哈希 | review | [#27](https://github.com/kl3574/Learning_Workbench/issues/27) | 69e54478ae3c3604a925f2cdb905ce03ddda2b8b |
 | M5.3 Tutor 状态机、SSE/取消/重连/异步上下文 | review | [#28](https://github.com/kl3574/Learning_Workbench/issues/28) | 919a00532b499cff604ef2be4e90c88cc6378490 |
 | M5.4 真实模型与搜索评测 | blocked | [#29](https://github.com/kl3574/Learning_Workbench/issues/29) | e982a14644317c7be12a63ec0b31c1e615c72fa6 |
-| M6.1 教材/例题/题目生成 schema + 数值验证 | in_progress | [#30](https://github.com/kl3574/Learning_Workbench/issues/30) | 9d4aa2e75c0583b4752e1a2669534ef621e6c7f9 |
-| M6.2 审校/发布/版本对比/影响分析/恢复旧内容 | todo | [#31](https://github.com/kl3574/Learning_Workbench/issues/31) | 未验证提交 |
+| M6.1 教材/例题/题目生成 schema + 数值验证 | blocked | [#30](https://github.com/kl3574/Learning_Workbench/issues/30) | 9d4aa2e75c0583b4752e1a2669534ef621e6c7f9 |
+| M6.2 审校/发布/版本对比/影响分析/恢复旧内容 | in_progress | [#31](https://github.com/kl3574/Learning_Workbench/issues/31) | b7c435569b043eec16e802f04880b31faca48b00 |
 | M6.3 CodexBroker/App Server、操作审批、产物清单 | todo | [#32](https://github.com/kl3574/Learning_Workbench/issues/32) | 未验证提交 |
 | M7.1 全备份/学习者包/作者包/恢复预览和事务 | todo | [#33](https://github.com/kl3574/Learning_Workbench/issues/33) | 未验证提交 |
 | M7.2 安全/可访问性/性能/故障注入 | todo | [#34](https://github.com/kl3574/Learning_Workbench/issues/34) | 未验证提交 |
@@ -115,11 +115,15 @@
 - M6.1_group_9d4_gates: LOCAL_GROUP_GATES_PASS_NOT_PUBLISHED_NOT_ACCEPTED：固定939源码9d4aa2e；Python2169PASS1环境SKIP，web441PASS74files，完整native99PASS9.1m，Ruff/mypy177/lint/types/build/spec76均通过。native实际改变4PNG+1缩放JSON，44前/44后文件保留；精确恢复后939全部匹配固定Git。三根生成/授权/真实进程重启/权限锁/安全取消，五题型与私解索引隔离及checked-result恢复有定向补证。仅受控loopback Provider；真正隔离算术BLOCKED，平台DeepSeek E2E及教学质量NOT_RUN。原62d3失败和PR53 CI失败保留。
 - M6.1_group_publication: VERIFIED：PR54 draft/open，35c5f26 head/branch/body实际一致；依赖PR53/bebf，未merge/关闭Issue。
 - M6.1_group_pr54_initial_ci: 35c5f26初始CI读取：push35686100865、PR35686102890均in_progress，各backend/frontend/security-publication success；browser/integration/spec-contracts仍running。仅初态，非全套终态。详见M6.1-group-pr54-initial-ci.json。
+- M6.1_group_pr54_current_ci: 2cf5精确run归属：push35686441973六success；PR35686445167五success一browserfailure，98PASS1Tutor :195原5秒FAIL。失败job实际checkout6aa987b已读；其余checkout未逐一核验，不将run head冒称checkout。原失败log/4成员artifact SHA与GitHub一致，私有缓存保留。
+- M6.1_counter_candidate: CACHE_ONLY：strict text Responses本地参考counter11方法PASS、独立审查完毕；未注册生产proof，不证明托管隐藏格式/alias版本映射，零vendor调用。原日志与哈希私有保存，见M6.2 start receipt。
+- M6.1_sealed_aaexec_preflight: REJECTED_CANDIDATE：实际sealed-aaexec进入bwrap//&unconfined(enforce)，完整bwrap仍RTM_NEWADDR EPERM exit1；不是数值执行。未改系统profile/sysctl，具体内核deny规则未独立确立；不采用该失败路线。
+- M6.2_candidate_identity: LOCAL_IDENTITY_FOUNDATION_GATES_PASS：固定b7c4355，946工程文件哈希前后及Git一致；2251 Python PASS/1数值环境SKIP，含新增82候选登记/迁移用例；Ruff、mypy180、spec54 core/76生成/119声明均PASS。独立审查和两项迁移修复完成。仅内部owner端口与0016迁移，没有新审核/发布HTTP或UI、人类审批、数值成功或真实Provider验收。前端/原生浏览器未新跑。
 
 ## 阻塞与待决项
 
 - M5_3_CI_TUTOR_COMPLETION_OBSERVATION_FAILED: 70b与001均实际11success1failure；001在同Node时钟4.779s已观察completed、约5s仍断言失败，具体轮询/交付原因待受控复现。不是已修复。
 - PRODUCTION_INPUT_PROOF_NOT_ESTABLISHED: 尚未建立当前托管模型完整请求格式的exact/严格upper-bound证明；已有官方编码资料允许继续离线工程审计。这是工程/证据缺口，不是权限或缺凭据。
-- M61_NUMERIC_SANDBOX_ENVIRONMENT: 实际封存完整运行闭包的bwrap启动被本机AppArmor拒绝EPERM；普通宿主路径对照不构成封存闭包验收。未修改系统profile，未回退普通进程；真实隔离数值完成/取消尚未验收，其余本地工作继续。
+- M61_NUMERIC_SANDBOX_ENVIRONMENT: 实际封存完整运行闭包的bwrap启动失败RTM_NEWADDR EPERM；sealed-aaexec候选同样失败，实际AppArmor label已取得但精确内核deny规则未独立确立。未改系统策略、未回退普通进程；真实隔离数值完成/取消仍未验收。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。
