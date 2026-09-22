@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-22T07:34:52Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
+更新：2026-09-22T07:58:47Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
 
-仓库发布：VERIFIED；Issues 同步：VERIFIED
+仓库发布：VERIFIED；Issues 同步：LOCAL_UPDATE_PENDING_REMOTE_READBACK
 实施：IN_PROGRESS；当前任务：M6.2；下一任务：M6.2
 
-继续同事务完整审核材料owner端口，再接入真实review Job/read/人工decision；后续原子发布/版本/影响/恢复。75b0ca5代码已发布至PR55草稿，0cf8双CI仍运行中；真实Provider proof/数值环境阻塞保留。
+发布并回读e100f1b已验证完整审核材料端口；继续原数值观察冻结/历史重验，再接真实review Job/read/作者decision及发布/版本/影响/恢复。生产proof/数值环境和历史Tutor CI诊断保持独立。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -32,7 +32,7 @@
 | M5.3 Tutor 状态机、SSE/取消/重连/异步上下文 | review | [#28](https://github.com/kl3574/Learning_Workbench/issues/28) | 919a00532b499cff604ef2be4e90c88cc6378490 |
 | M5.4 真实模型与搜索评测 | blocked | [#29](https://github.com/kl3574/Learning_Workbench/issues/29) | e982a14644317c7be12a63ec0b31c1e615c72fa6 |
 | M6.1 教材/例题/题目生成 schema + 数值验证 | blocked | [#30](https://github.com/kl3574/Learning_Workbench/issues/30) | 9d4aa2e75c0583b4752e1a2669534ef621e6c7f9 |
-| M6.2 审校/发布/版本对比/影响分析/恢复旧内容 | in_progress | [#31](https://github.com/kl3574/Learning_Workbench/issues/31) | 75b0ca5f83d809816b338c2d70cc5bfb9f1a3f83 |
+| M6.2 审校/发布/版本对比/影响分析/恢复旧内容 | in_progress | [#31](https://github.com/kl3574/Learning_Workbench/issues/31) | e100f1b2ce02ccd0af85e2596b53ba2a24da9cda |
 | M6.3 CodexBroker/App Server、操作审批、产物清单 | todo | [#32](https://github.com/kl3574/Learning_Workbench/issues/32) | 未验证提交 |
 | M7.1 全备份/学习者包/作者包/恢复预览和事务 | todo | [#33](https://github.com/kl3574/Learning_Workbench/issues/33) | 未验证提交 |
 | M7.2 安全/可访问性/性能/故障注入 | todo | [#34](https://github.com/kl3574/Learning_Workbench/issues/34) | 未验证提交 |
@@ -129,6 +129,9 @@
 - M6.2_current_tutor_artifacts: b90双browser实际failure artifact ZIP digest及6份实际checkout源码已核；两现场截止前最后交付DOM为queued且没有completed观察。push约284ms后才读到completed，PR post_assertion.run.state=failed表示诊断读取失败，不是业务Run.status失败。两次original断言仍5000ms，根因未确立；不将不同head/历史现场归为同一原因。
 - M6.2_producer_publication: VERIFIED：0cf8d84分支/ref/PR55 head、PR说明及Issue31完整进度块由push/PATCH后的独立GET核实；PR draft/open/unmerged，Issue身份/标题/开闭/标签/里程碑/正文进度块外原字节保留。实际完整新增提交blob扫描PASS。首次push后PR暂回旧b90而ref已新，原件保留；新GET一致后再完成说明同步，没有重复push。
 - M6.2_producer_initial_ci: 0cf8d84新head：push35700015507、PR35700019212在07:32:20实际in_progress；仅run metadata，不代表实际checkout或终态成功，后续head分别读取。
+- M6.2_review_material: LOCAL_REVIEW_MATERIAL_GATES_PASS：e100f1b固定951源完整Python2338PASS/1数值环境SKIP/2依赖warning634.31s，Ruff/mypy181/spec通过。951工程源与独立审查93130a候选实际Git字节相同。新增45材料边界用例及106旧回归保留独立开发回执、包含于完整套件不重复累计。原repr/ValidationError泄漏实际4FAIL2PASS后修复；07不充分repr反例和所有fixture断言错误保留。仅三owner同事务完整材料只读端口；没有新HTTP/UI/审核Job/人工决定/发布或数值执行。本切片不继承88原生结果为当前源码通过，未重跑前端/native。
+- M6.2_producer_current_ci: 07:42:46–47一次精确run/jobs快照：0cf8 push35700015507与PR35700019212均completed/cancelled，各4success及browser/integration cancelled；9eb9 push35700593259与PR35700598088均in_progress，各3success/3in_progress。24 jobs无failure，未取日志，actual checkout NOT_YET_READ；不以run head代替checkout、不推定终态。
+- M6.2_producer_latest_ci: 07:56:53一次追加精确run/jobs快照：9eb9 push35700593259与PR35700598088均in_progress，各5success/仅browser运行；无失败job，因此未下载日志。actual checkout未核，不推定最终结果。07:42的旧快照和0cf8取消结果分别保留。
 
 ## 阻塞与待决项
 
