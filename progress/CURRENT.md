@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-22T07:58:47Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
+更新：2026-09-22T08:06:59Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
 
 仓库发布：VERIFIED；Issues 同步：LOCAL_UPDATE_PENDING_REMOTE_READBACK
 实施：IN_PROGRESS；当前任务：M6.2；下一任务：M6.2
 
-发布并回读e100f1b已验证完整审核材料端口；继续原数值观察冻结/历史重验，再接真实review Job/read/作者decision及发布/版本/影响/恢复。生产proof/数值环境和历史Tutor CI诊断保持独立。
+同步并回读完整材料端口及9eb CI真实失败；继续原数值观察冻结/历史重验，再接review Job/read/作者decision及发布/版本/影响/恢复。生产proof和数值环境阻塞保留。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -132,6 +132,7 @@
 - M6.2_review_material: LOCAL_REVIEW_MATERIAL_GATES_PASS：e100f1b固定951源完整Python2338PASS/1数值环境SKIP/2依赖warning634.31s，Ruff/mypy181/spec通过。951工程源与独立审查93130a候选实际Git字节相同。新增45材料边界用例及106旧回归保留独立开发回执、包含于完整套件不重复累计。原repr/ValidationError泄漏实际4FAIL2PASS后修复；07不充分repr反例和所有fixture断言错误保留。仅三owner同事务完整材料只读端口；没有新HTTP/UI/审核Job/人工决定/发布或数值执行。本切片不继承88原生结果为当前源码通过，未重跑前端/native。
 - M6.2_producer_current_ci: 07:42:46–47一次精确run/jobs快照：0cf8 push35700015507与PR35700019212均completed/cancelled，各4success及browser/integration cancelled；9eb9 push35700593259与PR35700598088均in_progress，各3success/3in_progress。24 jobs无failure，未取日志，actual checkout NOT_YET_READ；不以run head代替checkout、不推定终态。
 - M6.2_producer_latest_ci: 07:56:53一次追加精确run/jobs快照：9eb9 push35700593259与PR35700598088均in_progress，各5success/仅browser运行；无失败job，因此未下载日志。actual checkout未核，不推定最终结果。07:42的旧快照和0cf8取消结果分别保留。
+- M6.2_9eb_terminal_ci: 9eb精确push35700593259/PR35700598088现已completed/failure，各5success/1browser failure。原07:56运行中快照保留；本次仅run/jobs终态，失败日志/实际checkout/附件另行采集，不将run head当checkout、不推定与旧Tutor同因。
 
 ## 阻塞与待决项
 
@@ -140,5 +141,6 @@
 - M61_NUMERIC_SANDBOX_ENVIRONMENT: 实际封存完整运行闭包的bwrap启动失败RTM_NEWADDR EPERM；sealed-aaexec候选同样失败，实际AppArmor label已取得但精确内核deny规则未独立确立。未改系统策略、未回退普通进程；真实隔离数值完成/取消仍未验收。
 - M62_PR55_GRADING_RESULT_CI_FAILED: 原89b9 push的409失败保留。2ab受控重现提交前409并修复测试ACK同步，原CI未记录body，唯一根因仍未知；本地2定向PASS不改写旧CI。
 - M62_B90_PDF_IMPORT_CI_FAILED: b90 push integration扫描PDF实际IMPORT_PARSE_FAILED；原失败保留。已受控复现子进程发送并退出时的pipe轮询竞态，4行生产修复及永久RED/GREEN、19相关/5原生导入通过；原CI没有该时序证据，不能认定同因或关闭历史失败。
+- M62_9EB_BROWSER_CI_FAILED: 9eb精确push35700593259/PR35700598088现已completed/failure，各5success/1browser failure。原07:56运行中快照保留；本次仅run/jobs终态，失败日志/实际checkout/附件另行采集，不将run head当checkout、不推定与旧Tutor同因。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。
