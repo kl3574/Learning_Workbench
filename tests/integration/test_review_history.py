@@ -1,5 +1,6 @@
 """Synthetic human intent exercises persistence only; no application approval."""
 import json
+import warnings
 
 import pytest
 
@@ -270,3 +271,19 @@ def test_sanitized_backup_session_null_preserves_closed_human_history(prepared):
         connection.execute('UPDATE reviews SET reviewer_session_id=NULL WHERE id=?', (value.review_id,))
         assert repo.load(value.review_id).records == [machine, record]
         assert repo.replay(command.actor_id, command.route, command.command_key, command.request) == command
+
+
+def test_revalidation_of_constructed_values_never_warns_private_input(prepared):
+    database, _, _ = prepared
+    with database.transaction() as connection:
+        repo, machine, _ = complete_machine(prepared, connection)
+        private = 'SYNTHETIC_PRIVATE_REVIEW_REVALIDATION_INPUT'
+        malformed = machine.model_copy(update={'material': {'private_synthetic_marker': private}})
+        before = quality_bytes(connection)
+        with warnings.catch_warnings(record=True) as emitted:
+            warnings.simplefilter('always')
+            with pytest.raises(ApiError) as caught:
+                repo.append_machine(malformed)
+        assert private not in str(caught.value) and private not in repr(caught.value)
+        assert not emitted, 'Revalidation must not emit serializer warnings containing private input'
+        assert quality_bytes(connection) == before
