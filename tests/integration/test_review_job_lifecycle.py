@@ -14,6 +14,17 @@ from tests.integration.test_draft_candidate_owners import imported_candidate as 
 from tests.integration.test_authoring_numeric_provider_history import table_hashes
 
 
+class PreparedReviewFixture:
+    def __init__(self, database, identity, value):
+        self.values = database, identity, value
+
+    def __iter__(self):
+        return iter(self.values)
+
+    def __repr__(self):
+        return 'PreparedReviewFixture()'
+
+
 @pytest.fixture
 def prepared(tmp_path):
     for database, identity, _, _, _, candidate in import_fixture.__wrapped__(tmp_path):
@@ -22,7 +33,7 @@ def prepared(tmp_path):
             request=DraftReviewWrite(expected_revision=candidate.draft_revision,
                 checks=['structure', 'sources'], reviewer_note='Synthetic review intent; no approval'),
             creator_session_id=identity.id, rules_version='draft-review-rules-v1', created_at=utc_now())
-        yield database, identity, value
+        yield PreparedReviewFixture(database, identity, value)
 
 
 def create(prepared):
@@ -199,3 +210,48 @@ def test_authoring_initial_statuses_and_consumer_isolation_remain_unchanged(prep
         with pytest.raises(ApiError) as caught:
             review.load('job_synthetic_legacy')
         assert caught.value.code == 'JOB_MISSING'
+
+
+@pytest.mark.parametrize('operation', ['load', 'snapshot', 'transition'])
+def test_no_autocommit_review_read_or_transition(prepared, operation):
+    database, identity, value = create(prepared)
+    with database.transaction(immediate=False) as conn:
+        original = ReviewJobRepository(conn, identity.workspace_id).load(value.review_id)
+    before = table_hashes(database)
+    with database.connect() as conn, pytest.raises(ApiError) as caught:
+        repo = ReviewJobRepository(conn, identity.workspace_id)
+        if operation == 'transition':
+            repo.transition(original, 'cancelled', result={'cancelled_before_report': True})
+        else:
+            getattr(repo, operation)(value.review_id)
+    assert caught.value.code == 'TRANSACTION_REQUIRED'
+    assert table_hashes(database) == before
+
+
+def test_caught_wrong_consumer_transition_never_changes_an_authoring_job(prepared):
+    database, identity, _ = prepared
+    with database.transaction() as conn:
+        repo = AuthoringJobRepository(conn, identity.workspace_id)
+        repo.create('job_original_authoring', 'authoring', {'version': 'synthetic_lifecycle_only'})
+    before = table_hashes(database)
+    with database.transaction() as conn:
+        original = AuthoringJobRepository(conn, identity.workspace_id).load('job_original_authoring')
+        with pytest.raises(ApiError):
+            ReviewJobRepository(conn, identity.workspace_id).transition(
+                original, 'cancelled', result={'must_not_be_written': True})
+        # Intentionally commit the outer transaction after catching the API error.
+    assert table_hashes(database) == before
+
+
+@pytest.mark.parametrize('target', ['awaiting_approval', 'completed', 'running'])
+def test_caught_invalid_transition_does_not_commit_corrupt_job_or_event(prepared, target):
+    database, identity, value = create(prepared)
+    with database.transaction() as conn:
+        ReviewJobRepository(conn, identity.workspace_id).claim(value.review_id)
+    before = table_hashes(database)
+    with database.transaction() as conn:
+        repo = ReviewJobRepository(conn, identity.workspace_id)
+        with pytest.raises(ApiError):
+            # Unavailable state, missing terminal result, or missing running lease.
+            repo.transition(repo.load(value.review_id), target)
+    assert table_hashes(database) == before
