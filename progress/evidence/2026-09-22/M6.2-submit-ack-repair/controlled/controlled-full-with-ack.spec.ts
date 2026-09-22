@@ -1,0 +1,170 @@
+import { execFileSync } from 'node:child_process'
+import { writeFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { expect, test, type Page, type APIResponse } from '../../apps/web/node_modules/@playwright/test/index.mjs'
+import type { AssessmentGradingResult, AttemptSnapshot } from '../../packages/contracts/generated/api-types'
+import { originalAssessmentPackage, importAssessmentPackage } from './assessmentTestData'
+import { RestartRuntime } from './restartRuntime'
+
+const root = resolve(import.meta.dirname, '../..')
+
+/** Deliberate storage fault in this test's private synthetic DB, never an HTTP capability. */
+function frozenAnswerFault(runtime: RestartRuntime, question: string, action: 'remove' | 'restore') {
+  const script = [
+    'import hashlib,json,os,sqlite3,sys',
+    'from pathlib import Path',
+    'directory=Path(sys.argv[1]); question=sys.argv[2]; action=sys.argv[3]',
+    'saved=directory/"synthetic-private-answer-fault.json"',
+    'd=sqlite3.connect(directory/"workspace.sqlite3"); d.row_factory=sqlite3.Row',
+    'if action=="remove":',
+    ' rows=[dict(r) for r in d.execute("SELECT * FROM solutions WHERE question_id=? ORDER BY solution_revision",(question,))]',
+    ' assert len(rows)==1 and rows[0]["review_status"]=="needs_review"',
+    ' payload=json.dumps(rows[0],ensure_ascii=False).encode()',
+    ' fd=os.open(saved,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)',
+    ' with os.fdopen(fd,"wb") as out: out.write(payload)',
+    ' d.execute("DELETE FROM solutions WHERE question_id=?",(question,)); d.commit()',
+    'else:',
+    ' row=json.loads(saved.read_bytes()); assert row["question_id"]==question',
+    ' d.execute("INSERT INTO solutions(question_id,question_revision,solution_revision,private_json,sha256,review_status) VALUES(?,?,?,?,?,?)",tuple(row[k] for k in ("question_id","question_revision","solution_revision","private_json","sha256","review_status"))); d.commit()',
+    ' assert dict(d.execute("SELECT * FROM solutions WHERE question_id=?",(question,)).fetchone())==row',
+    'print(json.dumps({"action":action,"saved_original_sha256":hashlib.sha256(saved.read_bytes()).hexdigest()}))',
+  ].join('\n')
+  return JSON.parse(execFileSync(`${root}/.venv/bin/python`, ['-B', '-c', script, runtime.data, question, action],
+    { cwd: root, encoding: 'utf8' })) as { action: string; saved_original_sha256: string }
+}
+
+let observeResult: ((response: APIResponse) => Promise<void>) | undefined
+
+async function result(page: Page, id: string, revision: number) {
+  let value: AssessmentGradingResult | undefined
+  await expect.poll(async () => {
+    const response = await page.request.get(`/api/v1/attempts/${id}/result`)
+    await observeResult?.(response)
+    if (response.status() === 202) return 0
+    expect(response.status()).toBe(200)
+    value = await response.json()
+    return value!.grading_revision
+  }).toBe(revision)
+  return value!
+}
+
+async function review(page: Page, reason: string) {
+  await page.getByLabel('人工复核理由', { exact: true }).fill(reason)
+  await page.getByRole('checkbox', { name: '复核第 2 题', exact: true }).check()
+  await page.getByLabel('第 2 题人工分数', { exact: true }).fill('1')
+  await page.getByLabel('第 2 题复核依据', { exact: true }).fill('合成软件验收复核依据；不是内容审核或学习效果声明。')
+  await page.getByRole('button', { name: '提交人工复核', exact: true }).click()
+  await page.getByRole('button', { name: '确认提交人工分数与依据', exact: true }).click()
+}
+
+test('a real failed regrade survives reload and can recover from the last actual grade without losing the old submission', async ({ playwright }, info) => {
+  test.setTimeout(120_000)
+  const runtime = await RestartRuntime.start(), fixture = originalAssessmentPackage('gradingrecover')
+  const errors: string[] = [], reviewCommands: string[] = []
+  const events: { kind: string; ms: number; status?: number; code?: string }[] = []
+  const mark = (kind: string, status?: number, code?: string) => events.push({ kind, ms: performance.now(), status, code })
+  let releaseSubmit: (() => void) | undefined, gateTimer: ReturnType<typeof setTimeout> | undefined
+  let routeFinished: Promise<void> | undefined
+  const dump = () => writeFileSync(info.outputPath('submission-order.json'), JSON.stringify({ scope: 'Owned synthetic exact submission request held before dispatch; real API responses, original result assertions and timeout unchanged.', events }, null, 2))
+  try {
+    const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]
+    page.on('pageerror', error => errors.push(error.message))
+    page.on('request', request => { if (request.method() === 'POST' && request.url().endsWith('/regrade')) reviewCommands.push(request.headers()['idempotency-key']) })
+    await runtime.authenticateOnly(page)
+    const imported = await importAssessmentPackage(page, fixture)
+    await imported.dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
+    await page.goto(`${runtime.origin}/?assessment=${encodeURIComponent(JSON.stringify({ assessment_ref: fixture.assessment, course_ref: fixture.course }))}`)
+    await page.getByRole('radio', { name: '独立测试', exact: true }).check()
+    await page.getByRole('checkbox', { name: '我已核对内容状态与模式，确认开始未评分测试', exact: true }).check()
+    const creating = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith(`/assessments/${fixture.assessment.id}/attempts`))
+    await page.getByRole('button', { name: '明确开始本次测试', exact: true }).click()
+    const created = await creating
+    expect(created.status()).toBe(201)
+    const attempt: AttemptSnapshot = await created.json()
+    await expect(page.getByText('服务端作答已保存', { exact: true })).toBeVisible()
+    const submitPath = `/api/v1/attempts/${attempt.id}/submit`
+    const gate = new Promise<void>(resolve => { releaseSubmit = resolve })
+    page.on('response', response => { if (response.request().method() === 'POST' && new URL(response.url()).pathname === submitPath) mark('submit_response', response.status()) })
+    await page.route(`**${submitPath}`, async route => {
+      if (route.request().method() !== 'POST') { await route.continue(); return }
+      let finished!: () => void
+      routeFinished = new Promise<void>(resolve => { finished = resolve })
+      mark('submit_held')
+      gateTimer = setTimeout(() => { mark('gate_deadline_release'); releaseSubmit?.() }, 1500)
+      try { await gate; mark('submit_released'); await route.continue() } finally { finished() }
+    })
+    observeResult = async response => {
+      observeResult = undefined
+      let code: string | undefined
+      if (response.status() === 409) {
+        const value = await response.json()
+        const actualCode = value?.error?.code ?? value?.code
+        code = actualCode === 'ATTEMPT_NOT_SUBMITTED' ? actualCode : 'OTHER_ERROR_CODE'
+      }
+      mark('first_actual_result', response.status(), code)
+      releaseSubmit?.(); clearTimeout(gateTimer)
+      await routeFinished
+      dump()
+    }
+    const initialSubmission = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === `/api/v1/attempts/${attempt.id}/submit`)
+    await page.getByRole('button', { name: '提交本次测试', exact: true }).click()
+    await page.getByRole('button', { name: '确认提交已保存作答', exact: true }).click()
+    const submissionAck = await initialSubmission
+    expect(submissionAck.status()).toBe(202)
+    const submittedAttempt: AttemptSnapshot = await submissionAck.json()
+    expect(submittedAttempt.id).toBe(attempt.id)
+    expect(submittedAttempt.status).toBe('submitted')
+    const original = await result(page, attempt.id, 1)
+    expect(original.items.every(item => item.score === null)).toBe(true)
+    const originalResponses = await (await page.request.get(`/api/v1/attempts/${attempt.id}/responses`)).json()
+    await page.getByRole('button', { name: '切换为作者角色以人工复核', exact: true }).click()
+    await page.getByRole('button', { name: '填写人工复核', exact: true }).click()
+    const removed = frozenAnswerFault(runtime, fixture.questions[0].id, 'remove')
+    const submitting = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith(`/attempts/${attempt.id}/regrade`))
+    await review(page, '首次合成复核：故障将由实际评分Worker检测。')
+    const submitted = await submitting
+    expect(submitted.status()).toBe(202)
+    const failedJob = await submitted.json()
+    await expect(page.getByRole('region', { name: '人工复核', exact: true })).toContainText('人工复核命令已被接收')
+    await expect(page.getByText('本机复核草稿存储可用', { exact: true })).toBeVisible()
+    await expect.poll(async () => (await (await page.request.get(`/api/v1/jobs/${failedJob.id}`)).json()).status).toBe('failed')
+    const restored = frozenAnswerFault(runtime, fixture.questions[0].id, 'restore')
+    expect(restored.saved_original_sha256).toBe(removed.saved_original_sha256)
+    await page.reload()
+    await expect(page.getByRole('heading', { name: '评分任务失败', exact: true })).toBeVisible()
+    expect(reviewCommands).toHaveLength(1)
+    const pending = await page.request.get(`/api/v1/attempts/${attempt.id}/result`)
+    expect(pending.status()).toBe(202)
+    const pendingBody = await pending.json()
+    expect(pendingBody.id).toBe(failedJob.id)
+    expect(pendingBody.status).toBe('failed')
+    expect(pendingBody.last_completed_result).toEqual(original)
+    // An acknowledged command is a receipt, not an unsubmitted recovery candidate.
+    // Reload does not replay it; start a new explicit command from the actual old grade.
+    await expect(page.getByRole('button', { name: '填写人工复核', exact: true })).toBeEnabled()
+    await page.getByRole('button', { name: '填写人工复核', exact: true }).click()
+    await expect(page.getByLabel('人工复核理由', { exact: true })).toBeVisible()
+    expect(reviewCommands).toHaveLength(1)
+    const recovering = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith(`/attempts/${attempt.id}/regrade`))
+    await review(page, '原固定答案已原样恢复；依据真实旧评分版本1明确提交新的复核命令。')
+    const accepted = await recovering
+    expect(accepted.status()).toBe(202)
+    expect((await accepted.json()).id).not.toBe(failedJob.id)
+    const final = await result(page, attempt.id, 2)
+    expect(final.status).toBe('needs_review')
+    expect(final.items.map(item => item.score)).toEqual([null, 1, null, null, null])
+    expect(final.manual_reviews).toHaveLength(1)
+    expect(reviewCommands).toHaveLength(2)
+    expect(new Set(reviewCommands).size).toBe(2)
+    expect((await (await page.request.get(`/api/v1/attempts/${attempt.id}/responses`)).json()).responses).toEqual(originalResponses.responses)
+    expect((await (await page.request.get(`/api/v1/jobs/${failedJob.id}`)).json()).status).toBe('failed')
+    expect(errors).toEqual([])
+    writeFileSync(info.outputPath('actual-failed-regrade-recovery.json'), JSON.stringify({
+      scope: 'Owned original-synthetic DB fault, actual UI/HTTP worker failure, original fixed answer restored byte-for-byte, browser reload and explicit UI recovery. No test-only public endpoint.',
+      initial_grading_revision: 1, failed_job_retained: true, frozen_answer_restored: true,
+      original_answer_row_sha256: restored.saved_original_sha256, recovered_grading_revision: final.grading_revision,
+      distinct_explicit_commands: new Set(reviewCommands).size, original_responses_preserved: true,
+      actual_human_math_approval: 'NOT_RUN', runtime_errors: errors,
+    }, null, 2))
+  } finally { releaseSubmit?.(); clearTimeout(gateTimer); await routeFinished; observeResult = undefined; dump(); await runtime.close() }
+})

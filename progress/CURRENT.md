@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-22T05:52:13Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
+更新：2026-09-22T06:30:32Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
 
-仓库发布：VERIFIED；Issues 同步：VERIFIED_READBACK
+仓库发布：VERIFIED；Issues 同步：LOCAL_UPDATE_PENDING_REMOTE_READBACK
 实施：IN_PROGRESS；当前任务：M6.2；下一任务：M6.2
 
-候选身份owner校验与0016迁移/保留/回滚测试已完成；原CI附件和单次本地PASS已保留；下一步构建能复现PR55评分结果GET409的受控反馈，再按唯一规范实现M6.2人工审核持久记录、具名契约与review/read/decision接口，随后实现受审原子发布、版本对比、影响分析和恢复。依赖PR54；M6.1真实模型/隔离数值仍blocked。
+已验证并提交评分测试ACK同步修复；继续真实producer事务内catalog登记与只读owner重验，随后review/read/decision、人工决定与受审原子发布/版本/恢复。独立诊断扫描PDF通用错误及Tutor完成观察失败；不放宽原断言。M6.1生产proof/封存数值阻塞保留。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -32,7 +32,7 @@
 | M5.3 Tutor 状态机、SSE/取消/重连/异步上下文 | review | [#28](https://github.com/kl3574/Learning_Workbench/issues/28) | 919a00532b499cff604ef2be4e90c88cc6378490 |
 | M5.4 真实模型与搜索评测 | blocked | [#29](https://github.com/kl3574/Learning_Workbench/issues/29) | e982a14644317c7be12a63ec0b31c1e615c72fa6 |
 | M6.1 教材/例题/题目生成 schema + 数值验证 | blocked | [#30](https://github.com/kl3574/Learning_Workbench/issues/30) | 9d4aa2e75c0583b4752e1a2669534ef621e6c7f9 |
-| M6.2 审校/发布/版本对比/影响分析/恢复旧内容 | in_progress | [#31](https://github.com/kl3574/Learning_Workbench/issues/31) | b7c435569b043eec16e802f04880b31faca48b00 |
+| M6.2 审校/发布/版本对比/影响分析/恢复旧内容 | in_progress | [#31](https://github.com/kl3574/Learning_Workbench/issues/31) | 2ab067b9d832c0aa64699a9a56e879d2ab6c6ac5 |
 | M6.3 CodexBroker/App Server、操作审批、产物清单 | todo | [#32](https://github.com/kl3574/Learning_Workbench/issues/32) | 未验证提交 |
 | M7.1 全备份/学习者包/作者包/恢复预览和事务 | todo | [#33](https://github.com/kl3574/Learning_Workbench/issues/33) | 未验证提交 |
 | M7.2 安全/可访问性/性能/故障注入 | todo | [#34](https://github.com/kl3574/Learning_Workbench/issues/34) | 未验证提交 |
@@ -123,12 +123,15 @@
 - M6.2_issue_sync: 独立GET回读：既有36个Issues完整进度块/标签一致，正文其余部分及编号/标题/开闭状态保留，9个里程碑身份/状态/描述/到期日保留；M6.2下一任务修正及证据链接再单独回读一致。无新增或关闭Issue。 CI事实追加后，Issue31完整进度块与PR55说明再次独立GET匹配，保持原有身份/开闭/标签/里程碑/草稿状态。
 - M6.2_ci: 原89b9d22：push run35689944640终态5success/1browser failure；job106624590630实际checkout89b9d22、98PASS1FAIL13.8m，grading-recovery结果GET409而期望200。PR run35690766229在05:36及05:40两次独立快照均4success/2运行中；未宣称双CI全绿。日志和响应已脱敏保存，完整原始hash可回放；后续纯进度提交CI不继承此结果。
 - M6.2_grading_ci_reproduction: 原89b9d22独立worktree：第1次exit1为Chrome SingletonSocket路径过长，未到评分请求；保留原件，仅改TMPDIR后第2次原用例1PASS/8.5s、零retry。946文件内容4份清单/Git blob/主树相同，实际CI附件ZIP及成员hash回验；这是未复现，非CI失败已修复。未改测试断言、超时或产品源码。
+- M6.2_submit_ack_repair: 2ab067b测试同步修复：保留真实提交请求可稳定3次RED（409/ATTEMPT_NOT_SUBMITTED），等待精确202/id/submitted后最小和原完整流程GREEN；最终2个原生用例PASS13.7s/零retry，补充strict类型检查PASS（显式真实Playwright声明关联），947源字节匹配固定提交。原断言/超时不变。仅测试文件，历史CI409具体原因未知，未重跑全量；原b7候选基础门禁独立保留。
+- M6.2_b90_terminal_ci: b90旧head双CI终态：push35692894284为4success/2failure，PR35692897917为5success/1failure；两个browser各98PASS1Tutor原5秒FAIL，push integration954PASS1FAIL1ENVSKIP，扫描PDF错误码IMPORT_PARSE_FAILED触发原断言。3个失败job实际checkout已核（push b90、PR2e3a0a7）。未取得三者原始故障机制。后续head不继承结果。
 
 ## 阻塞与待决项
 
 - M5_3_CI_TUTOR_COMPLETION_OBSERVATION_FAILED: 70b与001均实际11success1failure；001在同Node时钟4.779s已观察completed、约5s仍断言失败，具体轮询/交付原因待受控复现。不是已修复。
 - PRODUCTION_INPUT_PROOF_NOT_ESTABLISHED: 尚未建立当前托管模型完整请求格式的exact/严格upper-bound证明；已有官方编码资料允许继续离线工程审计。这是工程/证据缺口，不是权限或缺凭据。
 - M61_NUMERIC_SANDBOX_ENVIRONMENT: 实际封存完整运行闭包的bwrap启动失败RTM_NEWADDR EPERM；sealed-aaexec候选同样失败，实际AppArmor label已取得但精确内核deny规则未独立确立。未改系统策略、未回退普通进程；真实隔离数值完成/取消仍未验收。
-- M62_PR55_GRADING_RESULT_CI_FAILED: 原89b9d22的push run35689944640，browser job106624590630实际checkout同SHA；98PASS/1FAIL，grading-recovery.spec.ts:79初次result helper在:41收到409而期望200。日志未含错误body/error code，根因未确立；该次Tutor通过不关闭PR54旧失败。原失败不以重试或本地通过覆盖。
+- M62_PR55_GRADING_RESULT_CI_FAILED: 原89b9 push的409失败保留。2ab受控重现提交前409并修复测试ACK同步，原CI未记录body，唯一根因仍未知；本地2定向PASS不改写旧CI。
+- M62_B90_PDF_IMPORT_CI_FAILED: b90 push integration扫描PDF实际通用IMPORT_PARSE_FAILED，原断言要求明确安全错误码；954PASS1FAIL1SKIP，PR integration成功。原因未知，正在独立保留原断言诊断。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。

@@ -1,0 +1,40 @@
+
+> @learning-workbench/web@0.1.0 test:e2e
+> playwright test --config ../../tests/e2e/playwright.config.ts grading-recovery.spec.ts --retries=0
+
+[WebServer] INFO:     Started server process [239420]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+
+Running 1 test using 1 worker
+
+  ✘  1 ../../tests/e2e/grading-recovery.spec.ts:60:1 › a real failed regrade survives reload and can recover from the last actual grade without losing the old submission (4.8s)
+
+
+  1) ../../tests/e2e/grading-recovery.spec.ts:60:1 › a real failed regrade survives reload and can recover from the last actual grade without losing the old submission 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 409
+
+      42 |     await observeResult?.(response)
+      43 |     if (response.status() === 202) return 0
+    > 44 |     expect(response.status()).toBe(200)
+         |                               ^
+      45 |     value = await response.json()
+      46 |     return value!.grading_revision
+      47 |   }).toBe(revision)
+        at <USER_HOME>/.cache/learning-workbench-acceptance/m62-grading-submit-race-active/tests/e2e/grading-recovery.spec.ts:44:31
+        at result (<USER_HOME>/.cache/learning-workbench-acceptance/m62-grading-submit-race-active/tests/e2e/grading-recovery.spec.ts:40:3)
+        at <USER_HOME>/.cache/learning-workbench-acceptance/m62-grading-submit-race-active/tests/e2e/grading-recovery.spec.ts:111:22
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../m62-grading-submit-race-v1/02-controlled-red/test-results/grading-recovery-a-real-fa-8007b-t-losing-the-old-submission/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../m62-grading-submit-race-v1/02-controlled-red/test-results/grading-recovery-a-real-fa-8007b-t-losing-the-old-submission/error-context.md
+
+  1 failed
+    ../../tests/e2e/grading-recovery.spec.ts:60:1 › a real failed regrade survives reload and can recover from the last actual grade without losing the old submission 
