@@ -300,7 +300,7 @@ def test_generated_owner_history_preserves_exact_numeric_observation_without_run
     # Existing producers use explicit controlled loopback model bytes. This is
     # neither a vendor request nor mathematical review or numeric execution.
     state = single_fixture.__wrapped__(tmp_path) if kind == 'single' else generated_group(tmp_path, kind)
-    database, identity, owner, numeric, candidate, runtime = state
+    database, identity, owner, numeric, candidate, runtime, *_ = state
     source_kind = 'authoring_single' if kind == 'single' else 'authoring_group'
     value = ReviewJobInput(version='draft-review-job-v1', workspace_id=identity.workspace_id,
         review_id='synthetic_generated_review', source_kind=source_kind, candidate=candidate.model_dump(),
@@ -339,7 +339,7 @@ def test_running_cancel_original_ack_survives_later_terminal_and_terminal_noop(p
             review_id=value.review_id, basis_revision=2, resulting_revision=3, recorded_at=utc_now(),
             command_kind='cancel', request={'expected_revision': 2}, ack=ack.model_dump())
         repo.record_cancel(original)
-        jobs.transition(jobs.load(value.review_id), 'cancelled')
+        jobs.transition(jobs.load(value.review_id), 'cancelled', result={'synthetic_cancelled_before_report': True})
         terminal_ack = jobs.cancel(value.review_id, 1)
         terminal = original.model_copy(update={'command_key': 'synthetic_terminal_cancel', 'basis_revision': 4,
             'resulting_revision': 4, 'request': original.request.model_copy(update={'expected_revision': 1}),
