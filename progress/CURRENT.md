@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-22T07:25:56Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
+更新：2026-09-22T07:34:52Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
 
-仓库发布：VERIFIED；Issues 同步：LOCAL_UPDATE_PENDING_REMOTE_READBACK
+仓库发布：VERIFIED；Issues 同步：VERIFIED
 实施：IN_PROGRESS；当前任务：M6.2；下一任务：M6.2
 
-发布并回读75b0ca5已验证候选producer/parser切片与证据，继续完整审核材料owner端口、实际review/read/decision和人工决定；后续原子发布/版本/影响/恢复。生产proof、数值环境与Tutor旧CI诊断边界保留。
+继续同事务完整审核材料owner端口，再接入真实review Job/read/人工decision；后续原子发布/版本/影响/恢复。75b0ca5代码已发布至PR55草稿，0cf8双CI仍运行中；真实Provider proof/数值环境阻塞保留。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -127,6 +127,8 @@
 - M6.2_b90_terminal_ci: b90旧head双CI终态：push35692894284为4success/2failure，PR35692897917为5success/1failure；两个browser各98PASS1Tutor原5秒FAIL，push integration954PASS1FAIL1ENVSKIP，扫描PDF错误码IMPORT_PARSE_FAILED触发原断言。3个失败job实际checkout已核（push b90、PR2e3a0a7）。未取得三者原始故障机制。后续head不继承结果。
 - M6.2_producer_parser_candidate: LOCAL_PRODUCER_PARSER_GATES_PASS：75b0ca5固定949源完整Python2293PASS/1数值环境SKIP/2依赖弃用warning579.40s，Ruff/spec PASS。88daa0a实际12定向nativePASS1.3m、mypy180PASS；最终仅两historical fixture测试变化，947其余工程源（全部产品/native/config）同字节，明确沿用而非重跑native/mypy。原88完整3FAIL2290PASS1SKIP和全部开发RED、b90 CI失败保留。15PNG/13geometry及源码/迁移/历史fixture独立审查无阻断。仅候选登记/只读lookup和两项受控竞态修复；无新review/publish HTTP/UI、人工批准、生产模型或数值成功。
 - M6.2_current_tutor_artifacts: b90双browser实际failure artifact ZIP digest及6份实际checkout源码已核；两现场截止前最后交付DOM为queued且没有completed观察。push约284ms后才读到completed，PR post_assertion.run.state=failed表示诊断读取失败，不是业务Run.status失败。两次original断言仍5000ms，根因未确立；不将不同head/历史现场归为同一原因。
+- M6.2_producer_publication: VERIFIED：0cf8d84分支/ref/PR55 head、PR说明及Issue31完整进度块由push/PATCH后的独立GET核实；PR draft/open/unmerged，Issue身份/标题/开闭/标签/里程碑/正文进度块外原字节保留。实际完整新增提交blob扫描PASS。首次push后PR暂回旧b90而ref已新，原件保留；新GET一致后再完成说明同步，没有重复push。
+- M6.2_producer_initial_ci: 0cf8d84新head：push35700015507、PR35700019212在07:32:20实际in_progress；仅run metadata，不代表实际checkout或终态成功，后续head分别读取。
 
 ## 阻塞与待决项
 
