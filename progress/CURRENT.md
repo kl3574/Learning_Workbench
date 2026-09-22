@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-22T05:36:25Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
+更新：2026-09-22T05:52:13Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED_READBACK
 实施：IN_PROGRESS；当前任务：M6.2；下一任务：M6.2
 
-完成候选身份owner校验、迁移保留/失败回滚测试，再按规范补齐M6.2人工审核与发布接口；依赖PR54，M6.1真实模型/隔离数值仍blocked，PR54 Tutor CI失败独立诊断。
+候选身份owner校验与0016迁移/保留/回滚测试已完成；原CI附件和单次本地PASS已保留；下一步构建能复现PR55评分结果GET409的受控反馈，再按唯一规范实现M6.2人工审核持久记录、具名契约与review/read/decision接口，随后实现受审原子发布、版本对比、影响分析和恢复。依赖PR54；M6.1真实模型/隔离数值仍blocked。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -118,14 +118,17 @@
 - M6.1_group_pr54_current_ci: 2cf5精确run归属：push35686441973六success；PR35686445167五success一browserfailure，98PASS1Tutor :195原5秒FAIL。失败job实际checkout6aa987b已读；其余checkout未逐一核验，不将run head冒称checkout。原失败log/4成员artifact SHA与GitHub一致，私有缓存保留。
 - M6.1_counter_candidate: CACHE_ONLY：strict text Responses本地参考counter11方法PASS、独立审查完毕；未注册生产proof，不证明托管隐藏格式/alias版本映射，零vendor调用。原日志与哈希私有保存，见M6.2 start receipt。
 - M6.1_sealed_aaexec_preflight: REJECTED_CANDIDATE：实际sealed-aaexec进入bwrap//&unconfined(enforce)，完整bwrap仍RTM_NEWADDR EPERM exit1；不是数值执行。未改系统profile/sysctl，具体内核deny规则未独立确立；不采用该失败路线。
-- M6.2_candidate_identity: LOCAL_IDENTITY_FOUNDATION_GATES_PASS：固定b7c4355，946工程文件哈希前后及Git一致；2251 Python PASS/1数值环境SKIP，含新增82候选登记/迁移用例；Ruff、mypy180、spec54 core/76生成/119声明均PASS。独立审查和两项迁移修复完成。仅内部owner端口与0016迁移，没有新审核/发布HTTP或UI、人类审批、数值成功或真实Provider验收。前端/原生浏览器未新跑。
+- M6.2_candidate_identity: LOCAL_IDENTITY_FOUNDATION_GATES_PASS：固定b7c4355，946工程文件哈希前后及Git一致；2251 Python PASS/1数值环境SKIP，含新增82候选登记/迁移用例；Ruff、mypy180、spec54 core/76生成/119声明均PASS。独立审查和两项迁移修复完成。仅内部owner端口与0016迁移，没有新审核/发布HTTP或UI、人类审批、数值成功或真实Provider验收。完整前端/原生浏览器套件未重跑；CI诊断另在隔离89b9d22运行原评分恢复用例，首次Chrome临时路径过长失败，修正临时目录后1PASS，未复现或修复CI409。
 - M6.2_publication: VERIFIED：PR55 draft/open/unmerged，89b9d22 head/ref/body实际GET一致；依赖PR54/2cf5。早期网络EOF/TLS timeout/停止旧push记录保留，无权限拒绝，未修改持久网络配置。
-- M6.2_issue_sync: 独立GET回读：既有36个Issues完整进度块/标签一致，正文其余部分及编号/标题/开闭状态保留，9个里程碑身份/状态/描述/到期日保留；M6.2下一任务修正及证据链接再单独回读一致。无新增或关闭Issue。
+- M6.2_issue_sync: 独立GET回读：既有36个Issues完整进度块/标签一致，正文其余部分及编号/标题/开闭状态保留，9个里程碑身份/状态/描述/到期日保留；M6.2下一任务修正及证据链接再单独回读一致。无新增或关闭Issue。 CI事实追加后，Issue31完整进度块与PR55说明再次独立GET匹配，保持原有身份/开闭/标签/里程碑/草稿状态。
+- M6.2_ci: 原89b9d22：push run35689944640终态5success/1browser failure；job106624590630实际checkout89b9d22、98PASS1FAIL13.8m，grading-recovery结果GET409而期望200。PR run35690766229在05:36及05:40两次独立快照均4success/2运行中；未宣称双CI全绿。日志和响应已脱敏保存，完整原始hash可回放；后续纯进度提交CI不继承此结果。
+- M6.2_grading_ci_reproduction: 原89b9d22独立worktree：第1次exit1为Chrome SingletonSocket路径过长，未到评分请求；保留原件，仅改TMPDIR后第2次原用例1PASS/8.5s、零retry。946文件内容4份清单/Git blob/主树相同，实际CI附件ZIP及成员hash回验；这是未复现，非CI失败已修复。未改测试断言、超时或产品源码。
 
 ## 阻塞与待决项
 
 - M5_3_CI_TUTOR_COMPLETION_OBSERVATION_FAILED: 70b与001均实际11success1failure；001在同Node时钟4.779s已观察completed、约5s仍断言失败，具体轮询/交付原因待受控复现。不是已修复。
 - PRODUCTION_INPUT_PROOF_NOT_ESTABLISHED: 尚未建立当前托管模型完整请求格式的exact/严格upper-bound证明；已有官方编码资料允许继续离线工程审计。这是工程/证据缺口，不是权限或缺凭据。
 - M61_NUMERIC_SANDBOX_ENVIRONMENT: 实际封存完整运行闭包的bwrap启动失败RTM_NEWADDR EPERM；sealed-aaexec候选同样失败，实际AppArmor label已取得但精确内核deny规则未独立确立。未改系统策略、未回退普通进程；真实隔离数值完成/取消仍未验收。
+- M62_PR55_GRADING_RESULT_CI_FAILED: 原89b9d22的push run35689944640，browser job106624590630实际checkout同SHA；98PASS/1FAIL，grading-recovery.spec.ts:79初次result helper在:41收到409而期望200。日志未含错误body/error code，根因未确立；该次Tutor通过不关闭PR54旧失败。原失败不以重试或本地通过覆盖。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。
