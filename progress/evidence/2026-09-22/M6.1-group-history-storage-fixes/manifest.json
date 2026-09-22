@@ -1,0 +1,1438 @@
+{
+  "version": "m61-group-fixes-public-v2",
+  "created_at": "2026-09-22T03:52:47.229646+00:00",
+  "fixed_source_commit": "62d3b1af344c3f43cdfe25815512fff71f79d757",
+  "raw_roots": {
+    "numeric-provider-history": "m61-numeric-provider-history-verification-v1",
+    "web-ack-race": "m61-group-web-ack-race-verification-v1"
+  },
+  "transform_rules": [
+    {
+      "id": "temporary_session_id",
+      "kind": "regex",
+      "pattern": "session_[0-9a-f]{32}",
+      "replace": "<REDACTED_TEST_SESSION_ID>",
+      "purpose": "Remove actual temporary authenticated session identifiers if present in selected tracebacks."
+    },
+    {
+      "id": "temporary_csrf_full_or_pytest_truncated",
+      "kind": "regex",
+      "pattern": "((?:csrf_token|srf_token)\\s*[=:]\\s*['\\\"])[0-9a-f]{64}(['\\\"])",
+      "replace": "\\1<REDACTED_TEST_CSRF>\\2",
+      "purpose": "Remove actual temporary CSRF values including pytest truncated fields, only if present."
+    },
+    {
+      "id": "home_prefix",
+      "kind": "parameter",
+      "replace": "<LOCAL_HOME>",
+      "purpose": "Replace only the explicitly supplied raw_home prefix; retain every original per-alias count.",
+      "parameter": "raw_home"
+    }
+  ],
+  "files": [
+    {
+      "raw_alias": "numeric-provider-history/green/inputs-after.json",
+      "raw_bytes": 212257,
+      "raw_sha256": "421753f0aeb5131ac1e49b6a2023bf57579823ae086c4489f3eb71cb5c49abfe",
+      "public_path": "snapshots/421753f0aeb5131ac1e49b6a2023bf57579823ae086c4489f3eb71cb5c49abfe.json",
+      "public_bytes": 212257,
+      "public_sha256": "421753f0aeb5131ac1e49b6a2023bf57579823ae086c4489f3eb71cb5c49abfe",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/green/inputs-before.json",
+      "raw_bytes": 212257,
+      "raw_sha256": "421753f0aeb5131ac1e49b6a2023bf57579823ae086c4489f3eb71cb5c49abfe",
+      "public_path": "snapshots/421753f0aeb5131ac1e49b6a2023bf57579823ae086c4489f3eb71cb5c49abfe.json",
+      "public_bytes": 212257,
+      "public_sha256": "421753f0aeb5131ac1e49b6a2023bf57579823ae086c4489f3eb71cb5c49abfe",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/green/output.log",
+      "raw_bytes": 1083,
+      "raw_sha256": "1487f9fa5bca2fd77eba057349372c7e696296011d720d406e52353891c0db2f",
+      "public_path": "numeric-provider-history/green/output.log",
+      "public_bytes": 1089,
+      "public_sha256": "355df7c8857bfe4c032725d0f2b3f668dcac07bf27b0b7d275beb815261b39e6",
+      "transformations": [
+        {
+          "rule": "home_prefix",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "raw_alias": "numeric-provider-history/green/receipt.json",
+      "raw_bytes": 965,
+      "raw_sha256": "5bf50d2741a48fd68f4ea1f07ffbcb1b27165581b02c8b3d304d016a3255a7de",
+      "public_path": "numeric-provider-history/green/receipt.json",
+      "public_bytes": 977,
+      "public_sha256": "65fc40fa19fa9e3a304ce9d1d8a9433fbe2213d615548d6487c54915b85b64a1",
+      "transformations": [
+        {
+          "rule": "home_prefix",
+          "count": 4
+        }
+      ]
+    },
+    {
+      "raw_alias": "numeric-provider-history/mypy-green/inputs-after.json",
+      "raw_bytes": 212257,
+      "raw_sha256": "421753f0aeb5131ac1e49b6a2023bf57579823ae086c4489f3eb71cb5c49abfe",
+      "public_path": "snapshots/421753f0aeb5131ac1e49b6a2023bf57579823ae086c4489f3eb71cb5c49abfe.json",
+      "public_bytes": 212257,
+      "public_sha256": "421753f0aeb5131ac1e49b6a2023bf57579823ae086c4489f3eb71cb5c49abfe",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/mypy-green/inputs-before.json",
+      "raw_bytes": 212257,
+      "raw_sha256": "421753f0aeb5131ac1e49b6a2023bf57579823ae086c4489f3eb71cb5c49abfe",
+      "public_path": "snapshots/421753f0aeb5131ac1e49b6a2023bf57579823ae086c4489f3eb71cb5c49abfe.json",
+      "public_bytes": 212257,
+      "public_sha256": "421753f0aeb5131ac1e49b6a2023bf57579823ae086c4489f3eb71cb5c49abfe",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/mypy-green/output.log",
+      "raw_bytes": 43,
+      "raw_sha256": "ab35ee42183d4d6d3ba483825ab037d18a5a15622d03be01d82220b1564851ff",
+      "public_path": "numeric-provider-history/mypy-green/output.log",
+      "public_bytes": 43,
+      "public_sha256": "ab35ee42183d4d6d3ba483825ab037d18a5a15622d03be01d82220b1564851ff",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/mypy-green/receipt.json",
+      "raw_bytes": 1125,
+      "raw_sha256": "a087c9233479a26fbbe2ed9dd2c51175b49c18ad6a6e2701ef6f2dd4da3b1c76",
+      "public_path": "numeric-provider-history/mypy-green/receipt.json",
+      "public_bytes": 1134,
+      "public_sha256": "e2a40170da47db784cdf6dff9cdbe94dcb2689ef90dae58db4e09f6ba4a7e617",
+      "transformations": [
+        {
+          "rule": "home_prefix",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "raw_alias": "numeric-provider-history/red-fixture-repaired/inputs-after.json",
+      "raw_bytes": 212256,
+      "raw_sha256": "046a7d7f4a02646d6fbcf6fc5470b647e9914e6be795cee367ab94422ec1b2c3",
+      "public_path": "snapshots/046a7d7f4a02646d6fbcf6fc5470b647e9914e6be795cee367ab94422ec1b2c3.json",
+      "public_bytes": 212256,
+      "public_sha256": "046a7d7f4a02646d6fbcf6fc5470b647e9914e6be795cee367ab94422ec1b2c3",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/red-fixture-repaired/inputs-before.json",
+      "raw_bytes": 212256,
+      "raw_sha256": "046a7d7f4a02646d6fbcf6fc5470b647e9914e6be795cee367ab94422ec1b2c3",
+      "public_path": "snapshots/046a7d7f4a02646d6fbcf6fc5470b647e9914e6be795cee367ab94422ec1b2c3.json",
+      "public_bytes": 212256,
+      "public_sha256": "046a7d7f4a02646d6fbcf6fc5470b647e9914e6be795cee367ab94422ec1b2c3",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/red-fixture-repaired/output.log",
+      "raw_bytes": 22553,
+      "raw_sha256": "dd94182fcdd9f4806f525815c6926b6f0957543449477d2d377705afd6e8713e",
+      "public_path": "numeric-provider-history/red-fixture-repaired/output.log",
+      "public_bytes": 22559,
+      "public_sha256": "ad4ce9f87ca2f9d98ca489209ebd018dc6587c3847007a6ec6088228b4ee0b13",
+      "transformations": [
+        {
+          "rule": "home_prefix",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "raw_alias": "numeric-provider-history/red-fixture-repaired/receipt.json",
+      "raw_bytes": 980,
+      "raw_sha256": "1d0e5d3e6c2606d083ae70d463611e99bc07d86f6d68da21f9d29709a9451cc3",
+      "public_path": "numeric-provider-history/red-fixture-repaired/receipt.json",
+      "public_bytes": 992,
+      "public_sha256": "2e03b73b37ebc602781bdb4a8b2426f31a28ab7e00a885403acf0b600b42fe79",
+      "transformations": [
+        {
+          "rule": "home_prefix",
+          "count": 4
+        }
+      ]
+    },
+    {
+      "raw_alias": "numeric-provider-history/red/inputs-after.json",
+      "raw_bytes": 212256,
+      "raw_sha256": "1706f1277e3133a1562c77c47c23fc82a39e4cb3f7564c9606b16cacdd10c64d",
+      "public_path": "snapshots/1706f1277e3133a1562c77c47c23fc82a39e4cb3f7564c9606b16cacdd10c64d.json",
+      "public_bytes": 212256,
+      "public_sha256": "1706f1277e3133a1562c77c47c23fc82a39e4cb3f7564c9606b16cacdd10c64d",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/red/inputs-before.json",
+      "raw_bytes": 212256,
+      "raw_sha256": "1706f1277e3133a1562c77c47c23fc82a39e4cb3f7564c9606b16cacdd10c64d",
+      "public_path": "snapshots/1706f1277e3133a1562c77c47c23fc82a39e4cb3f7564c9606b16cacdd10c64d.json",
+      "public_bytes": 212256,
+      "public_sha256": "1706f1277e3133a1562c77c47c23fc82a39e4cb3f7564c9606b16cacdd10c64d",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/red/output.log",
+      "raw_bytes": 26472,
+      "raw_sha256": "44e9418453be462f9a8ad31605f06f03e36d4c18f70743bbb0d5efc1a1b1427f",
+      "public_path": "numeric-provider-history/red/output.log",
+      "public_bytes": 26478,
+      "public_sha256": "b45f771636c07e27718027a9a40795444362157c37e13749d6de5257e4cf4e91",
+      "transformations": [
+        {
+          "rule": "home_prefix",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "raw_alias": "numeric-provider-history/red/receipt.json",
+      "raw_bytes": 964,
+      "raw_sha256": "07fc30e5f8bdae7b1f42048ad12ebcc9515173d35dcf843d4334ce77379bb655",
+      "public_path": "numeric-provider-history/red/receipt.json",
+      "public_bytes": 976,
+      "public_sha256": "54baacfc50b102b518b37c29bffc16ef0960d83587d706d320cf2cb375070cd4",
+      "transformations": [
+        {
+          "rule": "home_prefix",
+          "count": 4
+        }
+      ]
+    },
+    {
+      "raw_alias": "numeric-provider-history/ruff-fixture-repaired/inputs-after.json",
+      "raw_bytes": 212256,
+      "raw_sha256": "046a7d7f4a02646d6fbcf6fc5470b647e9914e6be795cee367ab94422ec1b2c3",
+      "public_path": "snapshots/046a7d7f4a02646d6fbcf6fc5470b647e9914e6be795cee367ab94422ec1b2c3.json",
+      "public_bytes": 212256,
+      "public_sha256": "046a7d7f4a02646d6fbcf6fc5470b647e9914e6be795cee367ab94422ec1b2c3",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/ruff-fixture-repaired/inputs-before.json",
+      "raw_bytes": 212256,
+      "raw_sha256": "046a7d7f4a02646d6fbcf6fc5470b647e9914e6be795cee367ab94422ec1b2c3",
+      "public_path": "snapshots/046a7d7f4a02646d6fbcf6fc5470b647e9914e6be795cee367ab94422ec1b2c3.json",
+      "public_bytes": 212256,
+      "public_sha256": "046a7d7f4a02646d6fbcf6fc5470b647e9914e6be795cee367ab94422ec1b2c3",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/ruff-fixture-repaired/output.log",
+      "raw_bytes": 19,
+      "raw_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "public_path": "numeric-provider-history/ruff-fixture-repaired/output.log",
+      "public_bytes": 19,
+      "public_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/ruff-fixture-repaired/receipt.json",
+      "raw_bytes": 704,
+      "raw_sha256": "952892e381cccb7823600df1249f5b0bc8e7a9c54b39dc578ea42eed7f8ca60f",
+      "public_path": "numeric-provider-history/ruff-fixture-repaired/receipt.json",
+      "public_bytes": 710,
+      "public_sha256": "abbc61e95cc1e1870ba6f75d657930dae238a9634eb322e3c01bba3934fd9442",
+      "transformations": [
+        {
+          "rule": "home_prefix",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "raw_alias": "numeric-provider-history/ruff-green/inputs-after.json",
+      "raw_bytes": 212257,
+      "raw_sha256": "421753f0aeb5131ac1e49b6a2023bf57579823ae086c4489f3eb71cb5c49abfe",
+      "public_path": "snapshots/421753f0aeb5131ac1e49b6a2023bf57579823ae086c4489f3eb71cb5c49abfe.json",
+      "public_bytes": 212257,
+      "public_sha256": "421753f0aeb5131ac1e49b6a2023bf57579823ae086c4489f3eb71cb5c49abfe",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/ruff-green/inputs-before.json",
+      "raw_bytes": 212257,
+      "raw_sha256": "421753f0aeb5131ac1e49b6a2023bf57579823ae086c4489f3eb71cb5c49abfe",
+      "public_path": "snapshots/421753f0aeb5131ac1e49b6a2023bf57579823ae086c4489f3eb71cb5c49abfe.json",
+      "public_bytes": 212257,
+      "public_sha256": "421753f0aeb5131ac1e49b6a2023bf57579823ae086c4489f3eb71cb5c49abfe",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/ruff-green/output.log",
+      "raw_bytes": 19,
+      "raw_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "public_path": "numeric-provider-history/ruff-green/output.log",
+      "public_bytes": 19,
+      "public_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/ruff-green/receipt.json",
+      "raw_bytes": 1079,
+      "raw_sha256": "d8d3a6efd47b2f8eff00934421625c46b834eed1514a6886fe3c3833bb8c3e84",
+      "public_path": "numeric-provider-history/ruff-green/receipt.json",
+      "public_bytes": 1085,
+      "public_sha256": "60ebd412b5556c7a7a0ff58622365b54a91671c6a4f82c265f6baa36875d7c91",
+      "transformations": [
+        {
+          "rule": "home_prefix",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "raw_alias": "numeric-provider-history/ruff-red/inputs-after.json",
+      "raw_bytes": 212256,
+      "raw_sha256": "1706f1277e3133a1562c77c47c23fc82a39e4cb3f7564c9606b16cacdd10c64d",
+      "public_path": "snapshots/1706f1277e3133a1562c77c47c23fc82a39e4cb3f7564c9606b16cacdd10c64d.json",
+      "public_bytes": 212256,
+      "public_sha256": "1706f1277e3133a1562c77c47c23fc82a39e4cb3f7564c9606b16cacdd10c64d",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/ruff-red/inputs-before.json",
+      "raw_bytes": 212256,
+      "raw_sha256": "1706f1277e3133a1562c77c47c23fc82a39e4cb3f7564c9606b16cacdd10c64d",
+      "public_path": "snapshots/1706f1277e3133a1562c77c47c23fc82a39e4cb3f7564c9606b16cacdd10c64d.json",
+      "public_bytes": 212256,
+      "public_sha256": "1706f1277e3133a1562c77c47c23fc82a39e4cb3f7564c9606b16cacdd10c64d",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/ruff-red/output.log",
+      "raw_bytes": 1178,
+      "raw_sha256": "8fb2bdcb1bd2ad76845d6d6d3bc91ee069dc16e4035523e5767a4501a89b6931",
+      "public_path": "numeric-provider-history/ruff-red/output.log",
+      "public_bytes": 1178,
+      "public_sha256": "8fb2bdcb1bd2ad76845d6d6d3bc91ee069dc16e4035523e5767a4501a89b6931",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/ruff-red/receipt.json",
+      "raw_bytes": 707,
+      "raw_sha256": "4a95c050dccd91768089fa901e8139de03a0eccf197ef2b0a88ca386963adee7",
+      "public_path": "numeric-provider-history/ruff-red/receipt.json",
+      "public_bytes": 713,
+      "public_sha256": "801da1c64400e4e8f7032cf3d1a179becc4c38ebbb86cbf3d02ae0f736da6eb9",
+      "transformations": [
+        {
+          "rule": "home_prefix",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "raw_alias": "numeric-provider-history/run_check.py",
+      "raw_bytes": 2209,
+      "raw_sha256": "61de83cbc73bd970cd6e071562b7b86d368f32b947ce65c685e260f2c7ed92c5",
+      "public_path": "numeric-provider-history/run_check.py",
+      "public_bytes": 2212,
+      "public_sha256": "c67e106db4540ce2ae1191601967b9dcfc47e04f475210381cddd716be796460",
+      "transformations": [
+        {
+          "rule": "home_prefix",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-green.json",
+      "raw_bytes": 3843,
+      "raw_sha256": "8b8da445a92e8ce8571d4fc784be5b42872239adb95242b6fcf41fa0d31cc409",
+      "public_path": "numeric-provider-history/source-green.json",
+      "public_bytes": 3843,
+      "public_sha256": "8b8da445a92e8ce8571d4fc784be5b42872239adb95242b6fcf41fa0d31cc409",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-green/AGENTS.md",
+      "raw_bytes": 169,
+      "raw_sha256": "d0fccdf470d2af70cab9f9525dc70bb34af106ddc77d18d6430147d659746592",
+      "public_path": "sources/d0fccdf470d2af70cab9f9525dc70bb34af106ddc77d18d6430147d659746592/AGENTS.md",
+      "public_bytes": 169,
+      "public_sha256": "d0fccdf470d2af70cab9f9525dc70bb34af106ddc77d18d6430147d659746592",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-green/PRODUCT_DESIGN.md",
+      "raw_bytes": 391919,
+      "raw_sha256": "2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d",
+      "public_path": "sources/2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d/PRODUCT_DESIGN.md",
+      "public_bytes": 391919,
+      "public_sha256": "2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-green/services/api/app/application/authoring.py",
+      "raw_bytes": 12104,
+      "raw_sha256": "c6860f6c5e87e350c8240c4e38b5a3b2381fe38545408f0343780b4071f529e8",
+      "public_path": "sources/c6860f6c5e87e350c8240c4e38b5a3b2381fe38545408f0343780b4071f529e8/authoring.py",
+      "public_bytes": 12104,
+      "public_sha256": "c6860f6c5e87e350c8240c4e38b5a3b2381fe38545408f0343780b4071f529e8",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-green/services/api/app/application/authoring_context.py",
+      "raw_bytes": 11021,
+      "raw_sha256": "d96a84907870b01e194ab6435cf13e79a19a77682a2d15185108fa7f4e8c44ff",
+      "public_path": "sources/d96a84907870b01e194ab6435cf13e79a19a77682a2d15185108fa7f4e8c44ff/authoring_context.py",
+      "public_bytes": 11021,
+      "public_sha256": "d96a84907870b01e194ab6435cf13e79a19a77682a2d15185108fa7f4e8c44ff",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-green/services/api/app/application/authoring_group.py",
+      "raw_bytes": 8650,
+      "raw_sha256": "04b8f70a66cb278b71f1e1ba53e5dde1c66d052b77bf3962946510ea1c0f6a3c",
+      "public_path": "sources/04b8f70a66cb278b71f1e1ba53e5dde1c66d052b77bf3962946510ea1c0f6a3c/authoring_group.py",
+      "public_bytes": 8650,
+      "public_sha256": "04b8f70a66cb278b71f1e1ba53e5dde1c66d052b77bf3962946510ea1c0f6a3c",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-green/services/api/app/application/authoring_group_context.py",
+      "raw_bytes": 13173,
+      "raw_sha256": "d43ffea18f8db535864e52355a641d8931d3df6a07298d48291ced1306fdaf3f",
+      "public_path": "sources/d43ffea18f8db535864e52355a641d8931d3df6a07298d48291ced1306fdaf3f/authoring_group_context.py",
+      "public_bytes": 13173,
+      "public_sha256": "d43ffea18f8db535864e52355a641d8931d3df6a07298d48291ced1306fdaf3f",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-green/services/api/app/application/authoring_group_numeric_service.py",
+      "raw_bytes": 9905,
+      "raw_sha256": "697b8aafae0a8ff952b4cb00e558f3af21349869baa24ab1b9211f0e6eb97cf2",
+      "public_path": "sources/697b8aafae0a8ff952b4cb00e558f3af21349869baa24ab1b9211f0e6eb97cf2/authoring_group_numeric_service.py",
+      "public_bytes": 9905,
+      "public_sha256": "697b8aafae0a8ff952b4cb00e558f3af21349869baa24ab1b9211f0e6eb97cf2",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-green/services/api/app/application/authoring_group_numeric_worker.py",
+      "raw_bytes": 9134,
+      "raw_sha256": "ebae942ee191f999328e08051bd3a0174023801a2c90f59a8ac9b14a461cda1b",
+      "public_path": "sources/ebae942ee191f999328e08051bd3a0174023801a2c90f59a8ac9b14a461cda1b/authoring_group_numeric_worker.py",
+      "public_bytes": 9134,
+      "public_sha256": "ebae942ee191f999328e08051bd3a0174023801a2c90f59a8ac9b14a461cda1b",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-green/services/api/app/application/authoring_numeric_service.py",
+      "raw_bytes": 8845,
+      "raw_sha256": "0e9d03fff3235a5c16d4f3a0a8f8e0fa3c5272e1abddb5ef04a1034d54bcbcaa",
+      "public_path": "sources/0e9d03fff3235a5c16d4f3a0a8f8e0fa3c5272e1abddb5ef04a1034d54bcbcaa/authoring_numeric_service.py",
+      "public_bytes": 8845,
+      "public_sha256": "0e9d03fff3235a5c16d4f3a0a8f8e0fa3c5272e1abddb5ef04a1034d54bcbcaa",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-green/services/api/app/application/authoring_numeric_worker.py",
+      "raw_bytes": 8501,
+      "raw_sha256": "1899b5bf69aa6cd99f3f5b006faffaadb622fa42ffab527d497198a39cae3b5b",
+      "public_path": "sources/1899b5bf69aa6cd99f3f5b006faffaadb622fa42ffab527d497198a39cae3b5b/authoring_numeric_worker.py",
+      "public_bytes": 8501,
+      "public_sha256": "1899b5bf69aa6cd99f3f5b006faffaadb622fa42ffab527d497198a39cae3b5b",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-green/services/api/app/application/provider_dispatch.py",
+      "raw_bytes": 22492,
+      "raw_sha256": "4ee03ab36fee5288a15592ed3f4150cbe45993bcb57d7e18bca663c74179506e",
+      "public_path": "sources/4ee03ab36fee5288a15592ed3f4150cbe45993bcb57d7e18bca663c74179506e/provider_dispatch.py",
+      "public_bytes": 22492,
+      "public_sha256": "4ee03ab36fee5288a15592ed3f4150cbe45993bcb57d7e18bca663c74179506e",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-green/services/api/app/infrastructure/authoring_group_numeric_repository.py",
+      "raw_bytes": 29125,
+      "raw_sha256": "68f9552f00fa12a6038e35abbe6106f10f01d01946589d68ba7ec18a2c237e5e",
+      "public_path": "sources/68f9552f00fa12a6038e35abbe6106f10f01d01946589d68ba7ec18a2c237e5e/authoring_group_numeric_repository.py",
+      "public_bytes": 29125,
+      "public_sha256": "68f9552f00fa12a6038e35abbe6106f10f01d01946589d68ba7ec18a2c237e5e",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-green/services/api/app/infrastructure/authoring_numeric_repository.py",
+      "raw_bytes": 27601,
+      "raw_sha256": "5355131b195d6da1eec5e87534f0419e9144f3e6baaa6ea20266df4cb61bac03",
+      "public_path": "sources/5355131b195d6da1eec5e87534f0419e9144f3e6baaa6ea20266df4cb61bac03/authoring_numeric_repository.py",
+      "public_bytes": 27601,
+      "public_sha256": "5355131b195d6da1eec5e87534f0419e9144f3e6baaa6ea20266df4cb61bac03",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-green/services/api/app/infrastructure/consent_repository.py",
+      "raw_bytes": 26338,
+      "raw_sha256": "8d700426f2a938e38e596d77806a0aa69e5a4cc8a8ea84163e5ec9eb38731b2e",
+      "public_path": "sources/8d700426f2a938e38e596d77806a0aa69e5a4cc8a8ea84163e5ec9eb38731b2e/consent_repository.py",
+      "public_bytes": 26338,
+      "public_sha256": "8d700426f2a938e38e596d77806a0aa69e5a4cc8a8ea84163e5ec9eb38731b2e",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-green/services/api/app/infrastructure/provider_repository.py",
+      "raw_bytes": 15283,
+      "raw_sha256": "2e768d2c2fb6a7068764326e6c6457fe393c9f63e741f3517e532efc73fe6ba4",
+      "public_path": "sources/2e768d2c2fb6a7068764326e6c6457fe393c9f63e741f3517e532efc73fe6ba4/provider_repository.py",
+      "public_bytes": 15283,
+      "public_sha256": "2e768d2c2fb6a7068764326e6c6457fe393c9f63e741f3517e532efc73fe6ba4",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-green/tests/integration/test_authoring_group_numeric_service.py",
+      "raw_bytes": 21351,
+      "raw_sha256": "a4b40d99bc9649b11defa592c4af842bc9024edd771b6b4668bcdf0c2fd8e143",
+      "public_path": "sources/a4b40d99bc9649b11defa592c4af842bc9024edd771b6b4668bcdf0c2fd8e143/test_authoring_group_numeric_service.py",
+      "public_bytes": 21351,
+      "public_sha256": "a4b40d99bc9649b11defa592c4af842bc9024edd771b6b4668bcdf0c2fd8e143",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-green/tests/integration/test_authoring_numeric_provider_history.py",
+      "raw_bytes": 11458,
+      "raw_sha256": "e1cf499ff0c9ccebb799d818a83c718b0d7de6637981096da6b2d6b3c243ac7a",
+      "public_path": "sources/e1cf499ff0c9ccebb799d818a83c718b0d7de6637981096da6b2d6b3c243ac7a/test_authoring_numeric_provider_history.py",
+      "public_bytes": 11458,
+      "public_sha256": "e1cf499ff0c9ccebb799d818a83c718b0d7de6637981096da6b2d6b3c243ac7a",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-green/tests/integration/test_authoring_numeric_service.py",
+      "raw_bytes": 18857,
+      "raw_sha256": "4eb5056101ae11f3e8b7b13545b45c69a3dd66eb538f05cd951b0989b16da59d",
+      "public_path": "sources/4eb5056101ae11f3e8b7b13545b45c69a3dd66eb538f05cd951b0989b16da59d/test_authoring_numeric_service.py",
+      "public_bytes": 18857,
+      "public_sha256": "4eb5056101ae11f3e8b7b13545b45c69a3dd66eb538f05cd951b0989b16da59d",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red-fixture-repaired.json",
+      "raw_bytes": 3842,
+      "raw_sha256": "234d622cb853c561b636cad06e64173f289345d52acf892ca98e7499b1fd6f27",
+      "public_path": "numeric-provider-history/source-red-fixture-repaired.json",
+      "public_bytes": 3842,
+      "public_sha256": "234d622cb853c561b636cad06e64173f289345d52acf892ca98e7499b1fd6f27",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red-fixture-repaired/AGENTS.md",
+      "raw_bytes": 169,
+      "raw_sha256": "d0fccdf470d2af70cab9f9525dc70bb34af106ddc77d18d6430147d659746592",
+      "public_path": "sources/d0fccdf470d2af70cab9f9525dc70bb34af106ddc77d18d6430147d659746592/AGENTS.md",
+      "public_bytes": 169,
+      "public_sha256": "d0fccdf470d2af70cab9f9525dc70bb34af106ddc77d18d6430147d659746592",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red-fixture-repaired/PRODUCT_DESIGN.md",
+      "raw_bytes": 391919,
+      "raw_sha256": "2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d",
+      "public_path": "sources/2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d/PRODUCT_DESIGN.md",
+      "public_bytes": 391919,
+      "public_sha256": "2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red-fixture-repaired/services/api/app/application/authoring.py",
+      "raw_bytes": 11880,
+      "raw_sha256": "632e47dfbe0b2495cb588246f3309eed5b239071145365f48d4cca0877df2dfc",
+      "public_path": "sources/632e47dfbe0b2495cb588246f3309eed5b239071145365f48d4cca0877df2dfc/authoring.py",
+      "public_bytes": 11880,
+      "public_sha256": "632e47dfbe0b2495cb588246f3309eed5b239071145365f48d4cca0877df2dfc",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red-fixture-repaired/services/api/app/application/authoring_context.py",
+      "raw_bytes": 11021,
+      "raw_sha256": "d96a84907870b01e194ab6435cf13e79a19a77682a2d15185108fa7f4e8c44ff",
+      "public_path": "sources/d96a84907870b01e194ab6435cf13e79a19a77682a2d15185108fa7f4e8c44ff/authoring_context.py",
+      "public_bytes": 11021,
+      "public_sha256": "d96a84907870b01e194ab6435cf13e79a19a77682a2d15185108fa7f4e8c44ff",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red-fixture-repaired/services/api/app/application/authoring_group.py",
+      "raw_bytes": 8410,
+      "raw_sha256": "d553d6648e15aeffe5c9dfca5d81fc9f8cefa6065c3a00b09d422d67c62439e5",
+      "public_path": "sources/d553d6648e15aeffe5c9dfca5d81fc9f8cefa6065c3a00b09d422d67c62439e5/authoring_group.py",
+      "public_bytes": 8410,
+      "public_sha256": "d553d6648e15aeffe5c9dfca5d81fc9f8cefa6065c3a00b09d422d67c62439e5",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red-fixture-repaired/services/api/app/application/authoring_group_context.py",
+      "raw_bytes": 13173,
+      "raw_sha256": "d43ffea18f8db535864e52355a641d8931d3df6a07298d48291ced1306fdaf3f",
+      "public_path": "sources/d43ffea18f8db535864e52355a641d8931d3df6a07298d48291ced1306fdaf3f/authoring_group_context.py",
+      "public_bytes": 13173,
+      "public_sha256": "d43ffea18f8db535864e52355a641d8931d3df6a07298d48291ced1306fdaf3f",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red-fixture-repaired/services/api/app/application/authoring_group_numeric_service.py",
+      "raw_bytes": 9264,
+      "raw_sha256": "f44215987c4bc97536c52601c0d20420c6c707e370aa89913fe9a3cb737a11c7",
+      "public_path": "sources/f44215987c4bc97536c52601c0d20420c6c707e370aa89913fe9a3cb737a11c7/authoring_group_numeric_service.py",
+      "public_bytes": 9264,
+      "public_sha256": "f44215987c4bc97536c52601c0d20420c6c707e370aa89913fe9a3cb737a11c7",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red-fixture-repaired/services/api/app/application/authoring_group_numeric_worker.py",
+      "raw_bytes": 8824,
+      "raw_sha256": "c7bfe2571389c07687d9142d416a9627aa2b6c4712406e44c4d99108a3794d0c",
+      "public_path": "sources/c7bfe2571389c07687d9142d416a9627aa2b6c4712406e44c4d99108a3794d0c/authoring_group_numeric_worker.py",
+      "public_bytes": 8824,
+      "public_sha256": "c7bfe2571389c07687d9142d416a9627aa2b6c4712406e44c4d99108a3794d0c",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red-fixture-repaired/services/api/app/application/authoring_numeric_service.py",
+      "raw_bytes": 8220,
+      "raw_sha256": "0caf14cd8f54e620e6c04d355cb0cbdf38a76afdeb5957db706d47a138b28ea5",
+      "public_path": "sources/0caf14cd8f54e620e6c04d355cb0cbdf38a76afdeb5957db706d47a138b28ea5/authoring_numeric_service.py",
+      "public_bytes": 8220,
+      "public_sha256": "0caf14cd8f54e620e6c04d355cb0cbdf38a76afdeb5957db706d47a138b28ea5",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red-fixture-repaired/services/api/app/application/authoring_numeric_worker.py",
+      "raw_bytes": 8201,
+      "raw_sha256": "76489daa3dc3389d5e77775554152604c757196c2b228a488647cb364db8c611",
+      "public_path": "sources/76489daa3dc3389d5e77775554152604c757196c2b228a488647cb364db8c611/authoring_numeric_worker.py",
+      "public_bytes": 8201,
+      "public_sha256": "76489daa3dc3389d5e77775554152604c757196c2b228a488647cb364db8c611",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red-fixture-repaired/services/api/app/application/provider_dispatch.py",
+      "raw_bytes": 22492,
+      "raw_sha256": "4ee03ab36fee5288a15592ed3f4150cbe45993bcb57d7e18bca663c74179506e",
+      "public_path": "sources/4ee03ab36fee5288a15592ed3f4150cbe45993bcb57d7e18bca663c74179506e/provider_dispatch.py",
+      "public_bytes": 22492,
+      "public_sha256": "4ee03ab36fee5288a15592ed3f4150cbe45993bcb57d7e18bca663c74179506e",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red-fixture-repaired/services/api/app/infrastructure/authoring_group_numeric_repository.py",
+      "raw_bytes": 29125,
+      "raw_sha256": "68f9552f00fa12a6038e35abbe6106f10f01d01946589d68ba7ec18a2c237e5e",
+      "public_path": "sources/68f9552f00fa12a6038e35abbe6106f10f01d01946589d68ba7ec18a2c237e5e/authoring_group_numeric_repository.py",
+      "public_bytes": 29125,
+      "public_sha256": "68f9552f00fa12a6038e35abbe6106f10f01d01946589d68ba7ec18a2c237e5e",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red-fixture-repaired/services/api/app/infrastructure/authoring_numeric_repository.py",
+      "raw_bytes": 27601,
+      "raw_sha256": "5355131b195d6da1eec5e87534f0419e9144f3e6baaa6ea20266df4cb61bac03",
+      "public_path": "sources/5355131b195d6da1eec5e87534f0419e9144f3e6baaa6ea20266df4cb61bac03/authoring_numeric_repository.py",
+      "public_bytes": 27601,
+      "public_sha256": "5355131b195d6da1eec5e87534f0419e9144f3e6baaa6ea20266df4cb61bac03",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red-fixture-repaired/services/api/app/infrastructure/consent_repository.py",
+      "raw_bytes": 26338,
+      "raw_sha256": "8d700426f2a938e38e596d77806a0aa69e5a4cc8a8ea84163e5ec9eb38731b2e",
+      "public_path": "sources/8d700426f2a938e38e596d77806a0aa69e5a4cc8a8ea84163e5ec9eb38731b2e/consent_repository.py",
+      "public_bytes": 26338,
+      "public_sha256": "8d700426f2a938e38e596d77806a0aa69e5a4cc8a8ea84163e5ec9eb38731b2e",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red-fixture-repaired/services/api/app/infrastructure/provider_repository.py",
+      "raw_bytes": 15283,
+      "raw_sha256": "2e768d2c2fb6a7068764326e6c6457fe393c9f63e741f3517e532efc73fe6ba4",
+      "public_path": "sources/2e768d2c2fb6a7068764326e6c6457fe393c9f63e741f3517e532efc73fe6ba4/provider_repository.py",
+      "public_bytes": 15283,
+      "public_sha256": "2e768d2c2fb6a7068764326e6c6457fe393c9f63e741f3517e532efc73fe6ba4",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red-fixture-repaired/tests/integration/test_authoring_group_numeric_service.py",
+      "raw_bytes": 21309,
+      "raw_sha256": "fe4c6f09a7f565b15206e46bb1aff6a25c2ecd6975b4581c28d7f844231998fd",
+      "public_path": "sources/fe4c6f09a7f565b15206e46bb1aff6a25c2ecd6975b4581c28d7f844231998fd/test_authoring_group_numeric_service.py",
+      "public_bytes": 21309,
+      "public_sha256": "fe4c6f09a7f565b15206e46bb1aff6a25c2ecd6975b4581c28d7f844231998fd",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red-fixture-repaired/tests/integration/test_authoring_numeric_provider_history.py",
+      "raw_bytes": 9679,
+      "raw_sha256": "ca072d4390d560a896fdcd126a55c88d2ceac2d57674cf728bc40c26218c0a8e",
+      "public_path": "sources/ca072d4390d560a896fdcd126a55c88d2ceac2d57674cf728bc40c26218c0a8e/test_authoring_numeric_provider_history.py",
+      "public_bytes": 9679,
+      "public_sha256": "ca072d4390d560a896fdcd126a55c88d2ceac2d57674cf728bc40c26218c0a8e",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red-fixture-repaired/tests/integration/test_authoring_numeric_service.py",
+      "raw_bytes": 18815,
+      "raw_sha256": "a8df500fa264cdb0d0bc535acad719b6151e5996b569753ad9541a6df8634c14",
+      "public_path": "sources/a8df500fa264cdb0d0bc535acad719b6151e5996b569753ad9541a6df8634c14/test_authoring_numeric_service.py",
+      "public_bytes": 18815,
+      "public_sha256": "a8df500fa264cdb0d0bc535acad719b6151e5996b569753ad9541a6df8634c14",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red.json",
+      "raw_bytes": 3842,
+      "raw_sha256": "57064f2f4253390b749285f102805db5987e6746ba788120b9a15c4b3b6a93e0",
+      "public_path": "numeric-provider-history/source-red.json",
+      "public_bytes": 3842,
+      "public_sha256": "57064f2f4253390b749285f102805db5987e6746ba788120b9a15c4b3b6a93e0",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red/AGENTS.md",
+      "raw_bytes": 169,
+      "raw_sha256": "d0fccdf470d2af70cab9f9525dc70bb34af106ddc77d18d6430147d659746592",
+      "public_path": "sources/d0fccdf470d2af70cab9f9525dc70bb34af106ddc77d18d6430147d659746592/AGENTS.md",
+      "public_bytes": 169,
+      "public_sha256": "d0fccdf470d2af70cab9f9525dc70bb34af106ddc77d18d6430147d659746592",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red/PRODUCT_DESIGN.md",
+      "raw_bytes": 391919,
+      "raw_sha256": "2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d",
+      "public_path": "sources/2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d/PRODUCT_DESIGN.md",
+      "public_bytes": 391919,
+      "public_sha256": "2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red/services/api/app/application/authoring.py",
+      "raw_bytes": 11880,
+      "raw_sha256": "632e47dfbe0b2495cb588246f3309eed5b239071145365f48d4cca0877df2dfc",
+      "public_path": "sources/632e47dfbe0b2495cb588246f3309eed5b239071145365f48d4cca0877df2dfc/authoring.py",
+      "public_bytes": 11880,
+      "public_sha256": "632e47dfbe0b2495cb588246f3309eed5b239071145365f48d4cca0877df2dfc",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red/services/api/app/application/authoring_context.py",
+      "raw_bytes": 11021,
+      "raw_sha256": "d96a84907870b01e194ab6435cf13e79a19a77682a2d15185108fa7f4e8c44ff",
+      "public_path": "sources/d96a84907870b01e194ab6435cf13e79a19a77682a2d15185108fa7f4e8c44ff/authoring_context.py",
+      "public_bytes": 11021,
+      "public_sha256": "d96a84907870b01e194ab6435cf13e79a19a77682a2d15185108fa7f4e8c44ff",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red/services/api/app/application/authoring_group.py",
+      "raw_bytes": 8410,
+      "raw_sha256": "d553d6648e15aeffe5c9dfca5d81fc9f8cefa6065c3a00b09d422d67c62439e5",
+      "public_path": "sources/d553d6648e15aeffe5c9dfca5d81fc9f8cefa6065c3a00b09d422d67c62439e5/authoring_group.py",
+      "public_bytes": 8410,
+      "public_sha256": "d553d6648e15aeffe5c9dfca5d81fc9f8cefa6065c3a00b09d422d67c62439e5",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red/services/api/app/application/authoring_group_context.py",
+      "raw_bytes": 13173,
+      "raw_sha256": "d43ffea18f8db535864e52355a641d8931d3df6a07298d48291ced1306fdaf3f",
+      "public_path": "sources/d43ffea18f8db535864e52355a641d8931d3df6a07298d48291ced1306fdaf3f/authoring_group_context.py",
+      "public_bytes": 13173,
+      "public_sha256": "d43ffea18f8db535864e52355a641d8931d3df6a07298d48291ced1306fdaf3f",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red/services/api/app/application/authoring_group_numeric_service.py",
+      "raw_bytes": 9264,
+      "raw_sha256": "f44215987c4bc97536c52601c0d20420c6c707e370aa89913fe9a3cb737a11c7",
+      "public_path": "sources/f44215987c4bc97536c52601c0d20420c6c707e370aa89913fe9a3cb737a11c7/authoring_group_numeric_service.py",
+      "public_bytes": 9264,
+      "public_sha256": "f44215987c4bc97536c52601c0d20420c6c707e370aa89913fe9a3cb737a11c7",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red/services/api/app/application/authoring_group_numeric_worker.py",
+      "raw_bytes": 8824,
+      "raw_sha256": "c7bfe2571389c07687d9142d416a9627aa2b6c4712406e44c4d99108a3794d0c",
+      "public_path": "sources/c7bfe2571389c07687d9142d416a9627aa2b6c4712406e44c4d99108a3794d0c/authoring_group_numeric_worker.py",
+      "public_bytes": 8824,
+      "public_sha256": "c7bfe2571389c07687d9142d416a9627aa2b6c4712406e44c4d99108a3794d0c",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red/services/api/app/application/authoring_numeric_service.py",
+      "raw_bytes": 8220,
+      "raw_sha256": "0caf14cd8f54e620e6c04d355cb0cbdf38a76afdeb5957db706d47a138b28ea5",
+      "public_path": "sources/0caf14cd8f54e620e6c04d355cb0cbdf38a76afdeb5957db706d47a138b28ea5/authoring_numeric_service.py",
+      "public_bytes": 8220,
+      "public_sha256": "0caf14cd8f54e620e6c04d355cb0cbdf38a76afdeb5957db706d47a138b28ea5",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red/services/api/app/application/authoring_numeric_worker.py",
+      "raw_bytes": 8201,
+      "raw_sha256": "76489daa3dc3389d5e77775554152604c757196c2b228a488647cb364db8c611",
+      "public_path": "sources/76489daa3dc3389d5e77775554152604c757196c2b228a488647cb364db8c611/authoring_numeric_worker.py",
+      "public_bytes": 8201,
+      "public_sha256": "76489daa3dc3389d5e77775554152604c757196c2b228a488647cb364db8c611",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red/services/api/app/application/provider_dispatch.py",
+      "raw_bytes": 22492,
+      "raw_sha256": "4ee03ab36fee5288a15592ed3f4150cbe45993bcb57d7e18bca663c74179506e",
+      "public_path": "sources/4ee03ab36fee5288a15592ed3f4150cbe45993bcb57d7e18bca663c74179506e/provider_dispatch.py",
+      "public_bytes": 22492,
+      "public_sha256": "4ee03ab36fee5288a15592ed3f4150cbe45993bcb57d7e18bca663c74179506e",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red/services/api/app/infrastructure/authoring_group_numeric_repository.py",
+      "raw_bytes": 29125,
+      "raw_sha256": "68f9552f00fa12a6038e35abbe6106f10f01d01946589d68ba7ec18a2c237e5e",
+      "public_path": "sources/68f9552f00fa12a6038e35abbe6106f10f01d01946589d68ba7ec18a2c237e5e/authoring_group_numeric_repository.py",
+      "public_bytes": 29125,
+      "public_sha256": "68f9552f00fa12a6038e35abbe6106f10f01d01946589d68ba7ec18a2c237e5e",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red/services/api/app/infrastructure/authoring_numeric_repository.py",
+      "raw_bytes": 27601,
+      "raw_sha256": "5355131b195d6da1eec5e87534f0419e9144f3e6baaa6ea20266df4cb61bac03",
+      "public_path": "sources/5355131b195d6da1eec5e87534f0419e9144f3e6baaa6ea20266df4cb61bac03/authoring_numeric_repository.py",
+      "public_bytes": 27601,
+      "public_sha256": "5355131b195d6da1eec5e87534f0419e9144f3e6baaa6ea20266df4cb61bac03",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red/services/api/app/infrastructure/consent_repository.py",
+      "raw_bytes": 26338,
+      "raw_sha256": "8d700426f2a938e38e596d77806a0aa69e5a4cc8a8ea84163e5ec9eb38731b2e",
+      "public_path": "sources/8d700426f2a938e38e596d77806a0aa69e5a4cc8a8ea84163e5ec9eb38731b2e/consent_repository.py",
+      "public_bytes": 26338,
+      "public_sha256": "8d700426f2a938e38e596d77806a0aa69e5a4cc8a8ea84163e5ec9eb38731b2e",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red/services/api/app/infrastructure/provider_repository.py",
+      "raw_bytes": 15283,
+      "raw_sha256": "2e768d2c2fb6a7068764326e6c6457fe393c9f63e741f3517e532efc73fe6ba4",
+      "public_path": "sources/2e768d2c2fb6a7068764326e6c6457fe393c9f63e741f3517e532efc73fe6ba4/provider_repository.py",
+      "public_bytes": 15283,
+      "public_sha256": "2e768d2c2fb6a7068764326e6c6457fe393c9f63e741f3517e532efc73fe6ba4",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red/tests/integration/test_authoring_group_numeric_service.py",
+      "raw_bytes": 21309,
+      "raw_sha256": "fe4c6f09a7f565b15206e46bb1aff6a25c2ecd6975b4581c28d7f844231998fd",
+      "public_path": "sources/fe4c6f09a7f565b15206e46bb1aff6a25c2ecd6975b4581c28d7f844231998fd/test_authoring_group_numeric_service.py",
+      "public_bytes": 21309,
+      "public_sha256": "fe4c6f09a7f565b15206e46bb1aff6a25c2ecd6975b4581c28d7f844231998fd",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red/tests/integration/test_authoring_numeric_provider_history.py",
+      "raw_bytes": 9208,
+      "raw_sha256": "9c0ac7bd689f65c26a8337aad02b600b30cedcb97c6d50df97068c77ebc6a666",
+      "public_path": "sources/9c0ac7bd689f65c26a8337aad02b600b30cedcb97c6d50df97068c77ebc6a666/test_authoring_numeric_provider_history.py",
+      "public_bytes": 9208,
+      "public_sha256": "9c0ac7bd689f65c26a8337aad02b600b30cedcb97c6d50df97068c77ebc6a666",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/source-red/tests/integration/test_authoring_numeric_service.py",
+      "raw_bytes": 18815,
+      "raw_sha256": "a8df500fa264cdb0d0bc535acad719b6151e5996b569753ad9541a6df8634c14",
+      "public_path": "sources/a8df500fa264cdb0d0bc535acad719b6151e5996b569753ad9541a6df8634c14/test_authoring_numeric_service.py",
+      "public_bytes": 18815,
+      "public_sha256": "a8df500fa264cdb0d0bc535acad719b6151e5996b569753ad9541a6df8634c14",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/summary.json",
+      "raw_bytes": 3122,
+      "raw_sha256": "e0535120c3d5d48d82387db53c6a8c2696b26463980bdd7e697175803a2b4609",
+      "public_path": "numeric-provider-history/summary.json",
+      "public_bytes": 3122,
+      "public_sha256": "e0535120c3d5d48d82387db53c6a8c2696b26463980bdd7e697175803a2b4609",
+      "transformations": []
+    },
+    {
+      "raw_alias": "numeric-provider-history/test.patch",
+      "raw_bytes": 11783,
+      "raw_sha256": "d7e5b4c2fbbc0aa6fcdac16be83938a7e6ee0965931d2d71cac5855123e70bd1",
+      "public_path": "numeric-provider-history/test.patch",
+      "public_bytes": 11783,
+      "public_sha256": "d7e5b4c2fbbc0aa6fcdac16be83938a7e6ee0965931d2d71cac5855123e70bd1",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/green-and-related/inputs-after.json",
+      "raw_bytes": 212257,
+      "raw_sha256": "baa771b0a15a0037df5da2ce19dedcb12990a7a71823636c704ff42259054e25",
+      "public_path": "snapshots/baa771b0a15a0037df5da2ce19dedcb12990a7a71823636c704ff42259054e25.json",
+      "public_bytes": 212257,
+      "public_sha256": "baa771b0a15a0037df5da2ce19dedcb12990a7a71823636c704ff42259054e25",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/green-and-related/inputs-before.json",
+      "raw_bytes": 212257,
+      "raw_sha256": "baa771b0a15a0037df5da2ce19dedcb12990a7a71823636c704ff42259054e25",
+      "public_path": "snapshots/baa771b0a15a0037df5da2ce19dedcb12990a7a71823636c704ff42259054e25.json",
+      "public_bytes": 212257,
+      "public_sha256": "baa771b0a15a0037df5da2ce19dedcb12990a7a71823636c704ff42259054e25",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/green-and-related/output.log",
+      "raw_bytes": 577,
+      "raw_sha256": "2f5a9b5e5d8b37a78b976211fc80d51983018c305752754b41ce625a579f3001",
+      "public_path": "web-ack-race/green-and-related/output.log",
+      "public_bytes": 580,
+      "public_sha256": "d984fdc395609b50e9ccce13d2770b9a9516f9c1d6c8cba623d20f497a9832d6",
+      "transformations": [
+        {
+          "rule": "home_prefix",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "raw_alias": "web-ack-race/green-and-related/receipt.json",
+      "raw_bytes": 968,
+      "raw_sha256": "6c3204a98c9a6e4aea8c0d48737f84fb36d025e3aa9f66135b4535f8077b25d1",
+      "public_path": "web-ack-race/green-and-related/receipt.json",
+      "public_bytes": 971,
+      "public_sha256": "331374769f1aee1adccaebc4a91a53bc6b6983bcb60579fd9f30c5ac3cec2f07",
+      "transformations": [
+        {
+          "rule": "home_prefix",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "raw_alias": "web-ack-race/red/inputs-after.json",
+      "raw_bytes": 212257,
+      "raw_sha256": "1e1b16feab8e6391b1c578d10fc932a681a38a09a654eb00e0dc3ee775f31fdf",
+      "public_path": "snapshots/1e1b16feab8e6391b1c578d10fc932a681a38a09a654eb00e0dc3ee775f31fdf.json",
+      "public_bytes": 212257,
+      "public_sha256": "1e1b16feab8e6391b1c578d10fc932a681a38a09a654eb00e0dc3ee775f31fdf",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/red/inputs-before.json",
+      "raw_bytes": 212257,
+      "raw_sha256": "1e1b16feab8e6391b1c578d10fc932a681a38a09a654eb00e0dc3ee775f31fdf",
+      "public_path": "snapshots/1e1b16feab8e6391b1c578d10fc932a681a38a09a654eb00e0dc3ee775f31fdf.json",
+      "public_bytes": 212257,
+      "public_sha256": "1e1b16feab8e6391b1c578d10fc932a681a38a09a654eb00e0dc3ee775f31fdf",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/red/output.log",
+      "raw_bytes": 13684,
+      "raw_sha256": "103c6b5650187931e84cb554cbc1c07cc28580556d72bd2f6e6a69a643f479d1",
+      "public_path": "web-ack-race/red/output.log",
+      "public_bytes": 13687,
+      "public_sha256": "3cafe228d1d2a72632b1903dc192d0080b5c943d1d2ce9fa7daf617ba72afc64",
+      "transformations": [
+        {
+          "rule": "home_prefix",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "raw_alias": "web-ack-race/red/receipt.json",
+      "raw_bytes": 763,
+      "raw_sha256": "af631facfda6189aeba3617cf8f5369e61b8447ebb4161babbcb109e6d087bca",
+      "public_path": "web-ack-race/red/receipt.json",
+      "public_bytes": 766,
+      "public_sha256": "373931e60614b78ac7f21524f46a4836d0d1ae4ce3aef0812377ae4847e353be",
+      "transformations": [
+        {
+          "rule": "home_prefix",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "raw_alias": "web-ack-race/run_check.py",
+      "raw_bytes": 2209,
+      "raw_sha256": "61de83cbc73bd970cd6e071562b7b86d368f32b947ce65c685e260f2c7ed92c5",
+      "public_path": "web-ack-race/run_check.py",
+      "public_bytes": 2212,
+      "public_sha256": "c67e106db4540ce2ae1191601967b9dcfc47e04f475210381cddd716be796460",
+      "transformations": [
+        {
+          "rule": "home_prefix",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "raw_alias": "web-ack-race/source-before-tests.json",
+      "raw_bytes": 2098,
+      "raw_sha256": "e111c7057c9102e73a4672e13994482f3466f425e055bbc199569528b316b19f",
+      "public_path": "web-ack-race/source-before-tests.json",
+      "public_bytes": 2098,
+      "public_sha256": "e111c7057c9102e73a4672e13994482f3466f425e055bbc199569528b316b19f",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-before-tests/apps/web/src/api/client.ts",
+      "raw_bytes": 3757,
+      "raw_sha256": "1e39413dcd63ac19bdcd802f2550632365cf8bb70bd83805ed63b13f3bf4e49b",
+      "public_path": "sources/1e39413dcd63ac19bdcd802f2550632365cf8bb70bd83805ed63b13f3bf4e49b/client.ts",
+      "public_bytes": 3757,
+      "public_sha256": "1e39413dcd63ac19bdcd802f2550632365cf8bb70bd83805ed63b13f3bf4e49b",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-before-tests/apps/web/src/features/authoring/authoringClient.ts",
+      "raw_bytes": 2786,
+      "raw_sha256": "f2ced20dfc49b56995524c872cd4ce49ec3ac5123d9ee8a9be85b9c18eb922eb",
+      "public_path": "sources/f2ced20dfc49b56995524c872cd4ce49ec3ac5123d9ee8a9be85b9c18eb922eb/authoringClient.ts",
+      "public_bytes": 2786,
+      "public_sha256": "f2ced20dfc49b56995524c872cd4ce49ec3ac5123d9ee8a9be85b9c18eb922eb",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-before-tests/apps/web/src/features/authoring/authoringCommands.ts",
+      "raw_bytes": 7757,
+      "raw_sha256": "f2dce06ce3316be4361f9b9d7f5c3a213d0adb7b7b93b29aaa677295b2aa9f5e",
+      "public_path": "sources/f2dce06ce3316be4361f9b9d7f5c3a213d0adb7b7b93b29aaa677295b2aa9f5e/authoringCommands.ts",
+      "public_bytes": 7757,
+      "public_sha256": "f2dce06ce3316be4361f9b9d7f5c3a213d0adb7b7b93b29aaa677295b2aa9f5e",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-before-tests/apps/web/src/features/authoring/authoringGroupClient.ts",
+      "raw_bytes": 2146,
+      "raw_sha256": "e184d7028f564a02d9f76950770e356c52abc687d94050ae6c288998fd44c9a0",
+      "public_path": "sources/e184d7028f564a02d9f76950770e356c52abc687d94050ae6c288998fd44c9a0/authoringGroupClient.ts",
+      "public_bytes": 2146,
+      "public_sha256": "e184d7028f564a02d9f76950770e356c52abc687d94050ae6c288998fd44c9a0",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-before-tests/apps/web/src/features/authoring/authoringGroupCommands.test.ts",
+      "raw_bytes": 9069,
+      "raw_sha256": "d5307ad7218c49e7f28b1fe5442effe2b5aa765f841308cec3dec2913739a82a",
+      "public_path": "sources/d5307ad7218c49e7f28b1fe5442effe2b5aa765f841308cec3dec2913739a82a/authoringGroupCommands.test.ts",
+      "public_bytes": 9069,
+      "public_sha256": "d5307ad7218c49e7f28b1fe5442effe2b5aa765f841308cec3dec2913739a82a",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-before-tests/apps/web/src/features/authoring/useAuthoring.ts",
+      "raw_bytes": 15251,
+      "raw_sha256": "6b5076ab7f658abaaaa93db7e4f5611e184b9ef69b1c0cb3d27e6631ec14952c",
+      "public_path": "sources/6b5076ab7f658abaaaa93db7e4f5611e184b9ef69b1c0cb3d27e6631ec14952c/useAuthoring.ts",
+      "public_bytes": 15251,
+      "public_sha256": "6b5076ab7f658abaaaa93db7e4f5611e184b9ef69b1c0cb3d27e6631ec14952c",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-before-tests/apps/web/src/features/authoring/useAuthoringGroups.test.tsx",
+      "raw_bytes": 35461,
+      "raw_sha256": "cafa7303a897e6e453df2964e4633790757e95a6833bfa4ec3f52a5b14d24152",
+      "public_path": "sources/cafa7303a897e6e453df2964e4633790757e95a6833bfa4ec3f52a5b14d24152/useAuthoringGroups.test.tsx",
+      "public_bytes": 35461,
+      "public_sha256": "cafa7303a897e6e453df2964e4633790757e95a6833bfa4ec3f52a5b14d24152",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-before-tests/apps/web/src/workbench/DraftStore.ts",
+      "raw_bytes": 10626,
+      "raw_sha256": "dcbdf2d89d81e485335ee2167ddc48c20482dd1183b90c9bcfa2f3cb5402796b",
+      "public_path": "sources/dcbdf2d89d81e485335ee2167ddc48c20482dd1183b90c9bcfa2f3cb5402796b/DraftStore.ts",
+      "public_bytes": 10626,
+      "public_sha256": "dcbdf2d89d81e485335ee2167ddc48c20482dd1183b90c9bcfa2f3cb5402796b",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-before-tests/packages/contracts/generated/api-types.ts",
+      "raw_bytes": 61775,
+      "raw_sha256": "abece302c5bc8ffe61988febdda5ae9548df006c93bb60446d54fc153843d5ee",
+      "public_path": "sources/abece302c5bc8ffe61988febdda5ae9548df006c93bb60446d54fc153843d5ee/api-types.ts",
+      "public_bytes": 61775,
+      "public_sha256": "abece302c5bc8ffe61988febdda5ae9548df006c93bb60446d54fc153843d5ee",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-before-tests/packages/contracts/generated/openapi.json",
+      "raw_bytes": 778257,
+      "raw_sha256": "926af649cd2f08a8207ed1a7f31fdfe706676802dec1fa7889ee804a21149539",
+      "public_path": "sources/926af649cd2f08a8207ed1a7f31fdfe706676802dec1fa7889ee804a21149539/openapi.json",
+      "public_bytes": 778257,
+      "public_sha256": "926af649cd2f08a8207ed1a7f31fdfe706676802dec1fa7889ee804a21149539",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-green.json",
+      "raw_bytes": 2098,
+      "raw_sha256": "ef8f230daf40c01ead232bbe81bdf5e09094415a0be16ac262a8715c647a1838",
+      "public_path": "web-ack-race/source-green.json",
+      "public_bytes": 2098,
+      "public_sha256": "ef8f230daf40c01ead232bbe81bdf5e09094415a0be16ac262a8715c647a1838",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-green/apps/web/src/api/client.ts",
+      "raw_bytes": 3757,
+      "raw_sha256": "1e39413dcd63ac19bdcd802f2550632365cf8bb70bd83805ed63b13f3bf4e49b",
+      "public_path": "sources/1e39413dcd63ac19bdcd802f2550632365cf8bb70bd83805ed63b13f3bf4e49b/client.ts",
+      "public_bytes": 3757,
+      "public_sha256": "1e39413dcd63ac19bdcd802f2550632365cf8bb70bd83805ed63b13f3bf4e49b",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-green/apps/web/src/features/authoring/authoringClient.ts",
+      "raw_bytes": 2786,
+      "raw_sha256": "f2ced20dfc49b56995524c872cd4ce49ec3ac5123d9ee8a9be85b9c18eb922eb",
+      "public_path": "sources/f2ced20dfc49b56995524c872cd4ce49ec3ac5123d9ee8a9be85b9c18eb922eb/authoringClient.ts",
+      "public_bytes": 2786,
+      "public_sha256": "f2ced20dfc49b56995524c872cd4ce49ec3ac5123d9ee8a9be85b9c18eb922eb",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-green/apps/web/src/features/authoring/authoringCommands.ts",
+      "raw_bytes": 7939,
+      "raw_sha256": "ed1cdee0a5e1311b7b6d8874c7575eae6ba47e0a6641885db3d730225d731de2",
+      "public_path": "sources/ed1cdee0a5e1311b7b6d8874c7575eae6ba47e0a6641885db3d730225d731de2/authoringCommands.ts",
+      "public_bytes": 7939,
+      "public_sha256": "ed1cdee0a5e1311b7b6d8874c7575eae6ba47e0a6641885db3d730225d731de2",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-green/apps/web/src/features/authoring/authoringGroupClient.ts",
+      "raw_bytes": 2146,
+      "raw_sha256": "e184d7028f564a02d9f76950770e356c52abc687d94050ae6c288998fd44c9a0",
+      "public_path": "sources/e184d7028f564a02d9f76950770e356c52abc687d94050ae6c288998fd44c9a0/authoringGroupClient.ts",
+      "public_bytes": 2146,
+      "public_sha256": "e184d7028f564a02d9f76950770e356c52abc687d94050ae6c288998fd44c9a0",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-green/apps/web/src/features/authoring/authoringGroupCommands.test.ts",
+      "raw_bytes": 9069,
+      "raw_sha256": "d5307ad7218c49e7f28b1fe5442effe2b5aa765f841308cec3dec2913739a82a",
+      "public_path": "sources/d5307ad7218c49e7f28b1fe5442effe2b5aa765f841308cec3dec2913739a82a/authoringGroupCommands.test.ts",
+      "public_bytes": 9069,
+      "public_sha256": "d5307ad7218c49e7f28b1fe5442effe2b5aa765f841308cec3dec2913739a82a",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-green/apps/web/src/features/authoring/useAuthoring.ts",
+      "raw_bytes": 16337,
+      "raw_sha256": "2cc51678b4b4daedd2f3f67ebc7596d4f9f0b48fa8ee3412e9a41dfc1a9fb93f",
+      "public_path": "sources/2cc51678b4b4daedd2f3f67ebc7596d4f9f0b48fa8ee3412e9a41dfc1a9fb93f/useAuthoring.ts",
+      "public_bytes": 16337,
+      "public_sha256": "2cc51678b4b4daedd2f3f67ebc7596d4f9f0b48fa8ee3412e9a41dfc1a9fb93f",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-green/apps/web/src/features/authoring/useAuthoringGroups.test.tsx",
+      "raw_bytes": 47668,
+      "raw_sha256": "b6e47ce5bc46b344d68f002707cd0041e253087bc815c26c446271037862c54f",
+      "public_path": "sources/b6e47ce5bc46b344d68f002707cd0041e253087bc815c26c446271037862c54f/useAuthoringGroups.test.tsx",
+      "public_bytes": 47668,
+      "public_sha256": "b6e47ce5bc46b344d68f002707cd0041e253087bc815c26c446271037862c54f",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-green/apps/web/src/workbench/DraftStore.ts",
+      "raw_bytes": 12405,
+      "raw_sha256": "d3178b23ef3d82f5ca5b5764ee11b9b7cd0cc9eef0a6f7996d90a7d125f2a585",
+      "public_path": "sources/d3178b23ef3d82f5ca5b5764ee11b9b7cd0cc9eef0a6f7996d90a7d125f2a585/DraftStore.ts",
+      "public_bytes": 12405,
+      "public_sha256": "d3178b23ef3d82f5ca5b5764ee11b9b7cd0cc9eef0a6f7996d90a7d125f2a585",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-green/packages/contracts/generated/api-types.ts",
+      "raw_bytes": 61775,
+      "raw_sha256": "abece302c5bc8ffe61988febdda5ae9548df006c93bb60446d54fc153843d5ee",
+      "public_path": "sources/abece302c5bc8ffe61988febdda5ae9548df006c93bb60446d54fc153843d5ee/api-types.ts",
+      "public_bytes": 61775,
+      "public_sha256": "abece302c5bc8ffe61988febdda5ae9548df006c93bb60446d54fc153843d5ee",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-green/packages/contracts/generated/openapi.json",
+      "raw_bytes": 778257,
+      "raw_sha256": "926af649cd2f08a8207ed1a7f31fdfe706676802dec1fa7889ee804a21149539",
+      "public_path": "sources/926af649cd2f08a8207ed1a7f31fdfe706676802dec1fa7889ee804a21149539/openapi.json",
+      "public_bytes": 778257,
+      "public_sha256": "926af649cd2f08a8207ed1a7f31fdfe706676802dec1fa7889ee804a21149539",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-red.json",
+      "raw_bytes": 2098,
+      "raw_sha256": "290dfa99a5a4bdd7d70127b99f167d491c854dc56f69f5a2005610ac746ca5ca",
+      "public_path": "web-ack-race/source-red.json",
+      "public_bytes": 2098,
+      "public_sha256": "290dfa99a5a4bdd7d70127b99f167d491c854dc56f69f5a2005610ac746ca5ca",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-red/apps/web/src/api/client.ts",
+      "raw_bytes": 3757,
+      "raw_sha256": "1e39413dcd63ac19bdcd802f2550632365cf8bb70bd83805ed63b13f3bf4e49b",
+      "public_path": "sources/1e39413dcd63ac19bdcd802f2550632365cf8bb70bd83805ed63b13f3bf4e49b/client.ts",
+      "public_bytes": 3757,
+      "public_sha256": "1e39413dcd63ac19bdcd802f2550632365cf8bb70bd83805ed63b13f3bf4e49b",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-red/apps/web/src/features/authoring/authoringClient.ts",
+      "raw_bytes": 2786,
+      "raw_sha256": "f2ced20dfc49b56995524c872cd4ce49ec3ac5123d9ee8a9be85b9c18eb922eb",
+      "public_path": "sources/f2ced20dfc49b56995524c872cd4ce49ec3ac5123d9ee8a9be85b9c18eb922eb/authoringClient.ts",
+      "public_bytes": 2786,
+      "public_sha256": "f2ced20dfc49b56995524c872cd4ce49ec3ac5123d9ee8a9be85b9c18eb922eb",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-red/apps/web/src/features/authoring/authoringCommands.ts",
+      "raw_bytes": 7757,
+      "raw_sha256": "f2dce06ce3316be4361f9b9d7f5c3a213d0adb7b7b93b29aaa677295b2aa9f5e",
+      "public_path": "sources/f2dce06ce3316be4361f9b9d7f5c3a213d0adb7b7b93b29aaa677295b2aa9f5e/authoringCommands.ts",
+      "public_bytes": 7757,
+      "public_sha256": "f2dce06ce3316be4361f9b9d7f5c3a213d0adb7b7b93b29aaa677295b2aa9f5e",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-red/apps/web/src/features/authoring/authoringGroupClient.ts",
+      "raw_bytes": 2146,
+      "raw_sha256": "e184d7028f564a02d9f76950770e356c52abc687d94050ae6c288998fd44c9a0",
+      "public_path": "sources/e184d7028f564a02d9f76950770e356c52abc687d94050ae6c288998fd44c9a0/authoringGroupClient.ts",
+      "public_bytes": 2146,
+      "public_sha256": "e184d7028f564a02d9f76950770e356c52abc687d94050ae6c288998fd44c9a0",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-red/apps/web/src/features/authoring/authoringGroupCommands.test.ts",
+      "raw_bytes": 9069,
+      "raw_sha256": "d5307ad7218c49e7f28b1fe5442effe2b5aa765f841308cec3dec2913739a82a",
+      "public_path": "sources/d5307ad7218c49e7f28b1fe5442effe2b5aa765f841308cec3dec2913739a82a/authoringGroupCommands.test.ts",
+      "public_bytes": 9069,
+      "public_sha256": "d5307ad7218c49e7f28b1fe5442effe2b5aa765f841308cec3dec2913739a82a",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-red/apps/web/src/features/authoring/useAuthoring.ts",
+      "raw_bytes": 15251,
+      "raw_sha256": "6b5076ab7f658abaaaa93db7e4f5611e184b9ef69b1c0cb3d27e6631ec14952c",
+      "public_path": "sources/6b5076ab7f658abaaaa93db7e4f5611e184b9ef69b1c0cb3d27e6631ec14952c/useAuthoring.ts",
+      "public_bytes": 15251,
+      "public_sha256": "6b5076ab7f658abaaaa93db7e4f5611e184b9ef69b1c0cb3d27e6631ec14952c",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-red/apps/web/src/features/authoring/useAuthoringGroups.test.tsx",
+      "raw_bytes": 44871,
+      "raw_sha256": "5ae5f0220c15697afa2d255827fe18328ea5aefcae1afe4f002c290180459fa8",
+      "public_path": "sources/5ae5f0220c15697afa2d255827fe18328ea5aefcae1afe4f002c290180459fa8/useAuthoringGroups.test.tsx",
+      "public_bytes": 44871,
+      "public_sha256": "5ae5f0220c15697afa2d255827fe18328ea5aefcae1afe4f002c290180459fa8",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-red/apps/web/src/workbench/DraftStore.ts",
+      "raw_bytes": 10626,
+      "raw_sha256": "dcbdf2d89d81e485335ee2167ddc48c20482dd1183b90c9bcfa2f3cb5402796b",
+      "public_path": "sources/dcbdf2d89d81e485335ee2167ddc48c20482dd1183b90c9bcfa2f3cb5402796b/DraftStore.ts",
+      "public_bytes": 10626,
+      "public_sha256": "dcbdf2d89d81e485335ee2167ddc48c20482dd1183b90c9bcfa2f3cb5402796b",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-red/packages/contracts/generated/api-types.ts",
+      "raw_bytes": 61775,
+      "raw_sha256": "abece302c5bc8ffe61988febdda5ae9548df006c93bb60446d54fc153843d5ee",
+      "public_path": "sources/abece302c5bc8ffe61988febdda5ae9548df006c93bb60446d54fc153843d5ee/api-types.ts",
+      "public_bytes": 61775,
+      "public_sha256": "abece302c5bc8ffe61988febdda5ae9548df006c93bb60446d54fc153843d5ee",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/source-red/packages/contracts/generated/openapi.json",
+      "raw_bytes": 778257,
+      "raw_sha256": "926af649cd2f08a8207ed1a7f31fdfe706676802dec1fa7889ee804a21149539",
+      "public_path": "sources/926af649cd2f08a8207ed1a7f31fdfe706676802dec1fa7889ee804a21149539/openapi.json",
+      "public_bytes": 778257,
+      "public_sha256": "926af649cd2f08a8207ed1a7f31fdfe706676802dec1fa7889ee804a21149539",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/summary-red.json",
+      "raw_bytes": 1212,
+      "raw_sha256": "be40124d262b1d4290badfd0781a7cf2f31a74fc1f3876647afd2175ce4205ca",
+      "public_path": "web-ack-race/summary-red.json",
+      "public_bytes": 1212,
+      "public_sha256": "be40124d262b1d4290badfd0781a7cf2f31a74fc1f3876647afd2175ce4205ca",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/summary.json",
+      "raw_bytes": 2971,
+      "raw_sha256": "8470b93a8c3a0e9efb2c52b724ba6292a78580ef702f8082b2992b0c1bb18580",
+      "public_path": "web-ack-race/summary.json",
+      "public_bytes": 2971,
+      "public_sha256": "8470b93a8c3a0e9efb2c52b724ba6292a78580ef702f8082b2992b0c1bb18580",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/tests-increment.patch",
+      "raw_bytes": 13386,
+      "raw_sha256": "6d26cd25b86fb1dc8b6e4d626a852c3ad7c66cedf8dd006147f50de246074df8",
+      "public_path": "web-ack-race/tests-increment.patch",
+      "public_bytes": 13386,
+      "public_sha256": "6d26cd25b86fb1dc8b6e4d626a852c3ad7c66cedf8dd006147f50de246074df8",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/typecheck-green/inputs-after.json",
+      "raw_bytes": 212257,
+      "raw_sha256": "baa771b0a15a0037df5da2ce19dedcb12990a7a71823636c704ff42259054e25",
+      "public_path": "snapshots/baa771b0a15a0037df5da2ce19dedcb12990a7a71823636c704ff42259054e25.json",
+      "public_bytes": 212257,
+      "public_sha256": "baa771b0a15a0037df5da2ce19dedcb12990a7a71823636c704ff42259054e25",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/typecheck-green/inputs-before.json",
+      "raw_bytes": 212257,
+      "raw_sha256": "baa771b0a15a0037df5da2ce19dedcb12990a7a71823636c704ff42259054e25",
+      "public_path": "snapshots/baa771b0a15a0037df5da2ce19dedcb12990a7a71823636c704ff42259054e25.json",
+      "public_bytes": 212257,
+      "public_sha256": "baa771b0a15a0037df5da2ce19dedcb12990a7a71823636c704ff42259054e25",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/typecheck-green/output.log",
+      "raw_bytes": 59,
+      "raw_sha256": "2226e6b8da4fc06b00505a3719b993d066233c300edc12ea80fa62988b33dd6d",
+      "public_path": "web-ack-race/typecheck-green/output.log",
+      "public_bytes": 59,
+      "public_sha256": "2226e6b8da4fc06b00505a3719b993d066233c300edc12ea80fa62988b33dd6d",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/typecheck-green/receipt.json",
+      "raw_bytes": 637,
+      "raw_sha256": "909eb8e5e66220d159c6c818824fe75c9001c8f62caed44916c86d2ed8d45303",
+      "public_path": "web-ack-race/typecheck-green/receipt.json",
+      "public_bytes": 640,
+      "public_sha256": "dd6095bc8cfe1e340acff037dce91190e892952e31d959db1b3b3fe9dfbb41d1",
+      "transformations": [
+        {
+          "rule": "home_prefix",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "raw_alias": "web-ack-race/typecheck-red/inputs-after.json",
+      "raw_bytes": 212257,
+      "raw_sha256": "1e1b16feab8e6391b1c578d10fc932a681a38a09a654eb00e0dc3ee775f31fdf",
+      "public_path": "snapshots/1e1b16feab8e6391b1c578d10fc932a681a38a09a654eb00e0dc3ee775f31fdf.json",
+      "public_bytes": 212257,
+      "public_sha256": "1e1b16feab8e6391b1c578d10fc932a681a38a09a654eb00e0dc3ee775f31fdf",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/typecheck-red/inputs-before.json",
+      "raw_bytes": 212257,
+      "raw_sha256": "1e1b16feab8e6391b1c578d10fc932a681a38a09a654eb00e0dc3ee775f31fdf",
+      "public_path": "snapshots/1e1b16feab8e6391b1c578d10fc932a681a38a09a654eb00e0dc3ee775f31fdf.json",
+      "public_bytes": 212257,
+      "public_sha256": "1e1b16feab8e6391b1c578d10fc932a681a38a09a654eb00e0dc3ee775f31fdf",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/typecheck-red/output.log",
+      "raw_bytes": 59,
+      "raw_sha256": "2226e6b8da4fc06b00505a3719b993d066233c300edc12ea80fa62988b33dd6d",
+      "public_path": "web-ack-race/typecheck-red/output.log",
+      "public_bytes": 59,
+      "public_sha256": "2226e6b8da4fc06b00505a3719b993d066233c300edc12ea80fa62988b33dd6d",
+      "transformations": []
+    },
+    {
+      "raw_alias": "web-ack-race/typecheck-red/receipt.json",
+      "raw_bytes": 637,
+      "raw_sha256": "feb1e6481e687c22e02fd2313bf58628b01ddc20d870e3ef7e4833ffab6e9f89",
+      "public_path": "web-ack-race/typecheck-red/receipt.json",
+      "public_bytes": 640,
+      "public_sha256": "0bd90446ac6d3b3a21e2617e3845eea2ef2db06f53d2a6251950062bea6ac101",
+      "transformations": [
+        {
+          "rule": "home_prefix",
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "generated_files": [
+    {
+      "path": "README.md",
+      "bytes": 5287,
+      "sha256": "b6e54aff2b84eb006bd60800344c51c66000d350755a2732d84eb851b5f7341f"
+    },
+    {
+      "path": "verify_public.py",
+      "bytes": 7323,
+      "sha256": "ab51fbaa08888a49c8e2590a0df33a5f366b4293a9942362bf41af5f813fabb3"
+    },
+    {
+      "path": "scan_repo.py",
+      "bytes": 1445,
+      "sha256": "72e44214144e641fda69ffe875ac9ab64ae9c725bd82406b924eb2d578438473"
+    },
+    {
+      "path": "fixed-source-comparison.json",
+      "bytes": 11656,
+      "sha256": "d5a42e062319a4af3dd54f18c93daf0c263b151cca74343c319f2004db23527b"
+    },
+    {
+      "path": "verification-report.json",
+      "bytes": 2932,
+      "sha256": "1d11b445e580888e9db5f194db9591c9549e60a07430018be996b8dd5c64e355"
+    }
+  ],
+  "deduplication": "Exact transformed bytes only for source and input snapshots; all aliases individually mapped.",
+  "privacy_scan": {
+    "known_sensitive_values": 0,
+    "remaining_matches": 0,
+    "values_recorded": false
+  },
+  "boundary": "Only Provider-history and ACK storage race focused evidence; no complete gate, vendor, browser E2E or calculator execution claim.",
+  "parameterization_predecessor": {
+    "version": "m61-group-fixes-public-v1",
+    "manifest_sha256": "1f4bd6970f44df7797801054c1b6a16d6f41ce643b5f47690a586cee0e8ca471",
+    "raw_aliases_and_payloads_unchanged": true,
+    "parameter": "raw_home",
+    "value_recorded": false,
+    "raw_replay_requires": [
+      "--raw-base",
+      "--raw-home"
+    ]
+  }
+}

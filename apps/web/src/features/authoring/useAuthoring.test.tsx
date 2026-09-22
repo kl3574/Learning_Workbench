@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto'
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
-import type { JobSnapshot, SessionResponse } from '../../../../../packages/contracts/generated/api-types'
+import type { AuthoringJobView, JobSnapshot, SessionResponse } from '../../../../../packages/contracts/generated/api-types'
 import type { AuthoringPort } from './authoringClient'
 import { useAuthoring } from './useAuthoring'
 afterEach(cleanup)
@@ -44,7 +44,7 @@ test('a late control page from the old workspace cannot enter the replacement wo
   await act(async () => release({ items: [f.value], next_cursor: null }))
   expect(hook.result.current.jobs[0].workspace_id).toBe(next.workspace)
 })
-function detail(id: string): Awaited<ReturnType<AuthoringPort['read']>> {
+function detail(id: string): AuthoringJobView {
   return { summary: { id, kind: 'authoring', job_revision: 2, status: 'awaiting_approval', title: '受保护的原主题', candidate: null, created_at: '2026-09-16T00:00:00Z', updated_at: '2026-09-16T00:00:01Z' }, request: { topic: '受保护的题设', prerequisites: [], objectives: ['合成目标'], proof_policy: 'full', output_kind: 'worked_example', provider_id: 'provider_synthetic', source_refs: [] }, preparation: { context_snapshot_id: 'context_synthetic', snapshot_sha256: 'a'.repeat(64), job_input_sha256: 'b'.repeat(64), prepared_input_sha256: 'c'.repeat(64), character_count: 50, materials: [], warnings: [] }, proposal_id: null, consent_id: null, provider_receipt_id: null, provider_outcome: null, usage: { input_tokens: null, output_tokens: null }, raw_answer: null, raw_refusal: null, validation: { schema: 'NOT_RUN', references: 'NOT_RUN', symbol_declarations: 'NOT_RUN', issues: [], mathematical: 'NOT_RUN', sources: 'NOT_RUN', independent_pedagogy: 'NOT_RUN' }, error_code: null }
 }
 test('Policy change clears academic projection immediately and late read never restores it; safe discovery remains', async () => {

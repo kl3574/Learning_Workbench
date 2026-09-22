@@ -1,0 +1,221 @@
+--- a/apps/web/src/features/authoring/useAuthoringGroups.test.tsx
++++ b/apps/web/src/features/authoring/useAuthoringGroups.test.tsx
+@@ -3,7 +3,7 @@
+ import { afterEach, expect, test, vi } from 'vitest'
+ import type { AuthoringGroupDraftView, AuthoringGroupNumericCheckView, AuthoringJobReadView, AuthoringPrivateSolutionView, JobSnapshot, SessionResponse } from '../../../../../packages/contracts/generated/api-types'
+ import { ApiError, request } from '../../api/client'
+-import { authoringCommandStore, checkedAuthoring, readAuthoringCommand } from './authoringCommands'
++import { authoringCommandStore, authoringControlStore, checkedAuthoring, readAuthoringCommand, type AuthoringCommand } from './authoringCommands'
+ import type { AuthoringPort } from './authoringClient'
+ import { useAuthoring } from './useAuthoring'
+ 
+@@ -726,3 +726,209 @@
+   expect(f.port.cancel).toHaveBeenCalledTimes(1)
+   expect(hook.result.current.commands.find(value => value.command_id === originalCommand.command_id)).toEqual(saved)
+ })
++
++async function recoverOriginalPreview(f: ReturnType<typeof fixture>, originalCommand: AuthoringCommand) {
++  f.session.role = 'author'
++  const restored = renderHook(() => useAuthoring(f.workspace, false, f.port))
++  await waitFor(() => expect(restored.result.current.ready && restored.result.current.academic).toBe(true))
++  expect(restored.result.current.commands).toEqual([originalCommand])
++  await act(() => restored.result.current.execute(originalCommand))
++  expect(f.groups.preview).toHaveBeenNthCalledWith(2, f.input.draft_id, f.input.member_key, f.input.body, originalCommand.command_id)
++  expect(restored.result.current.commands[0].ack).toEqual(f.numeric)
++}
++
++test.each(['policy', 'workspace', 'session'] as const)('private ACK cannot persist when %s changes while its original journal load is pending', async change => {
++  const f = fixture(), next = fixture(), entered = deferred<void>(), release = deferred<void>()
++  const hook = renderHook(({ workspace, paused, port }) => useAuthoring(workspace, paused, port), { initialProps: { workspace: f.workspace, paused: false, port: f.port } })
++  await waitFor(() => expect(hook.result.current.ready && hook.result.current.academic).toBe(true))
++  const actualLoad = authoringCommandStore.load.bind(authoringCommandStore)
++  let previewReturned = false, held = false
++  f.groups.preview = vi.fn(async () => { previewReturned = true; return f.numeric })
++  vi.spyOn(authoringCommandStore, 'load').mockImplementation(async workspace => {
++    const values = await actualLoad(workspace)
++    if (workspace === f.workspace && previewReturned && !held) {
++      held = true; entered.resolve(); await release.promise
++    }
++    return values
++  })
++  let pending!: Promise<void>
++  act(() => { pending = hook.result.current.create(f.input) })
++  await entered.promise
++  const originalCommand = readAuthoringCommand(Object.values(await actualLoad(f.workspace))[0], f.workspace)
++  expect(originalCommand.ack).toBeNull()
++  if (change === 'session') {
++    f.session.role = 'learner'
++    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(f.session), { status: 200, headers: { 'Content-Type': 'application/json' } })))
++    await act(async () => { await request('POST /api/v1/session/role', { role: 'learner' }, { 'Idempotency-Key': 'synthetic-load-boundary-role' }) })
++  } else {
++    hook.rerender(change === 'workspace' ? { workspace: next.workspace, paused: false, port: next.port } : { workspace: f.workspace, paused: true, port: f.port })
++  }
++  await act(async () => { release.resolve(); await pending })
++  const durable = Object.values(await actualLoad(f.workspace))
++  expect(durable).toHaveLength(1)
++  expect(readAuthoringCommand(durable[0], f.workspace)).toEqual(originalCommand)
++  expect(hook.result.current.numeric).toBeNull()
++  expect(hook.result.current.commands.filter(value => value.kind !== 'cancel')).toEqual([])
++  expect(f.groups.preview).toHaveBeenCalledTimes(1)
++  hook.unmount()
++  await recoverOriginalPreview(f, originalCommand)
++})
++
++function onAckPutSuccess(workspace: string, kind: 'group_numeric_preview' | 'cancel', invalidate: () => void) {
++  const nativePut = IDBObjectStore.prototype.put
++  const observed = { matched: false, beforeCommit: false }
++  vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, ...args: Parameters<IDBObjectStore['put']>) {
++    const result = nativePut.apply(this, args)
++    const stored = args[0] as { workspaceId?: string; text?: string }
++    if (!observed.matched && stored.workspaceId === workspace && typeof stored.text === 'string') {
++      const command = readAuthoringCommand({ objectId: JSON.parse(stored.text).command_id, revision: 1, text: stored.text, updatedAt: '2026-09-22T00:00:00Z', conflicts: [] }, workspace)
++      if (command.kind === kind && command.ack !== null) {
++        observed.matched = true
++        let complete = false
++        this.transaction.addEventListener('complete', () => { complete = true })
++        // Real IDB request success occurs before transaction completion. This
++        // tests an already queued write, not a delayed post-commit save Promise.
++        result.addEventListener('success', () => {
++          observed.beforeCommit = !complete
++          invalidate()
++        })
++      }
++    }
++    return result
++  })
++  return observed
++}
++
++test.each(['policy', 'workspace', 'session'] as const)('private ACK cannot commit when %s changes after the real IDB put succeeds', async change => {
++  const f = fixture(), next = fixture()
++  const hook = renderHook(({ workspace, paused, port }) => useAuthoring(workspace, paused, port), { initialProps: { workspace: f.workspace, paused: false, port: f.port } })
++  await waitFor(() => expect(hook.result.current.ready && hook.result.current.academic).toBe(true))
++  let originalCommand!: AuthoringCommand
++  f.groups.preview = vi.fn(async () => {
++    originalCommand = readAuthoringCommand(Object.values(await authoringCommandStore.load(f.workspace))[0], f.workspace)
++    return f.numeric
++  })
++  let mutation: Promise<unknown> = Promise.resolve()
++  const observed = onAckPutSuccess(f.workspace, 'group_numeric_preview', () => {
++    act(() => {
++      if (change === 'session') {
++        f.session.role = 'learner'
++        vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(f.session), { status: 200, headers: { 'Content-Type': 'application/json' } })))
++        // The real client changes the access generation before awaiting fetch.
++        mutation = request('POST /api/v1/session/role', { role: 'learner' }, { 'Idempotency-Key': 'synthetic-put-boundary-role' })
++      } else {
++        hook.rerender(change === 'workspace' ? { workspace: next.workspace, paused: false, port: next.port } : { workspace: f.workspace, paused: true, port: f.port })
++      }
++    })
++  })
++  let pending!: Promise<void>
++  act(() => { pending = hook.result.current.create(f.input) })
++  await waitFor(() => expect(observed.beforeCommit).toBe(true))
++  await act(async () => { await mutation; await pending })
++  expect(observed.matched).toBe(true)
++  expect(originalCommand.ack).toBeNull()
++  const durable = Object.values(await authoringCommandStore.load(f.workspace))
++  expect(durable).toHaveLength(1)
++  expect(readAuthoringCommand(durable[0], f.workspace)).toEqual(originalCommand)
++  expect(hook.result.current.numeric).toBeNull()
++  expect(hook.result.current.commands.filter(value => value.kind !== 'cancel')).toEqual([])
++  expect(f.groups.preview).toHaveBeenCalledTimes(1)
++  hook.unmount()
++  await recoverOriginalPreview(f, originalCommand)
++})
++
++test('safe cancellation ACK remains durable when Policy changes before its real IDB transaction completes', async () => {
++  const f = fixture()
++  const hook = renderHook(({ paused }) => useAuthoring(f.workspace, paused, f.port), { initialProps: { paused: false } })
++  await waitFor(() => expect(hook.result.current.ready && hook.result.current.academic).toBe(true))
++  const observed = onAckPutSuccess(f.workspace, 'cancel', () => hook.rerender({ paused: true }))
++  await act(() => hook.result.current.cancel(f.job))
++  expect(observed.matched && observed.beforeCommit).toBe(true)
++  const durable = Object.values(await authoringControlStore.load(f.workspace))
++  expect(durable).toHaveLength(1)
++  const saved = readAuthoringCommand(durable[0], f.workspace)
++  expect(saved.kind === 'cancel' && saved.ack?.status).toBe('cancelled')
++  await waitFor(() => expect(hook.result.current.controlReady).toBe(true))
++  await act(() => hook.result.current.execute({ ...saved, ack: null }))
++  expect(f.port.cancel).toHaveBeenCalledTimes(1)
++  expect(readAuthoringCommand(Object.values(await authoringControlStore.load(f.workspace))[0], f.workspace)).toEqual(saved)
++})
++
++test('private ACK cannot reach PUT when Policy changes after the real readwrite lookup', async () => {
++  const f = fixture()
++  const hook = renderHook(({ paused }) => useAuthoring(f.workspace, paused, f.port), { initialProps: { paused: false } })
++  await waitFor(() => expect(hook.result.current.ready && hook.result.current.academic).toBe(true))
++  let originalCommand!: AuthoringCommand, previewReturned = false, entered = false
++  f.groups.preview = vi.fn(async () => {
++    originalCommand = readAuthoringCommand(Object.values(await authoringCommandStore.load(f.workspace))[0], f.workspace)
++    previewReturned = true
++    return f.numeric
++  })
++  const nativeGet = IDBObjectStore.prototype.get
++  vi.spyOn(IDBObjectStore.prototype, 'get').mockImplementation(function (this: IDBObjectStore, ...args: Parameters<IDBObjectStore['get']>) {
++    const result = nativeGet.apply(this, args)
++    if (!entered && previewReturned && this.transaction.mode === 'readwrite' && Array.isArray(args[0]) && args[0][0] === f.workspace) {
++      // Registered before DraftStore's lookup handler can enqueue the ACK PUT.
++      result.addEventListener('success', () => { entered = true; hook.rerender({ paused: true }) })
++    }
++    return result
++  })
++  let pending!: Promise<void>
++  act(() => { pending = hook.result.current.create(f.input) })
++  await waitFor(() => expect(entered).toBe(true))
++  await act(async () => { await pending })
++  expect(readAuthoringCommand(Object.values(await authoringCommandStore.load(f.workspace))[0], f.workspace)).toEqual(originalCommand)
++  expect(hook.result.current.numeric).toBeNull()
++  hook.unmount()
++  await recoverOriginalPreview(f, originalCommand)
++})
++
++test('an ACK admitted by explicit commit remains durable when Policy changes after admission', async () => {
++  const f = fixture()
++  const hook = renderHook(({ paused }) => useAuthoring(f.workspace, paused, f.port), { initialProps: { paused: false } })
++  await waitFor(() => expect(hook.result.current.ready && hook.result.current.academic).toBe(true))
++  let originalCommand!: AuthoringCommand, targetTransaction: IDBTransaction | null = null
++  let admitted = false, completed = false
++  f.groups.preview = vi.fn(async () => {
++    originalCommand = readAuthoringCommand(Object.values(await authoringCommandStore.load(f.workspace))[0], f.workspace)
++    return f.numeric
++  })
++  const nativePut = IDBObjectStore.prototype.put, nativeCommit = IDBTransaction.prototype.commit
++  vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, ...args: Parameters<IDBObjectStore['put']>) {
++    const result = nativePut.apply(this, args)
++    const stored = args[0] as { workspaceId?: string; text?: string }
++    if (stored.workspaceId === f.workspace && typeof stored.text === 'string') {
++      const command = JSON.parse(stored.text) as AuthoringCommand
++      if (command.kind === 'group_numeric_preview' && command.ack !== null) {
++        targetTransaction = this.transaction
++        this.transaction.addEventListener('complete', () => { completed = true })
++      }
++    }
++    return result
++  })
++  vi.spyOn(IDBTransaction.prototype, 'commit').mockImplementation(function (this: IDBTransaction) {
++    nativeCommit.call(this)
++    if (this === targetTransaction) {
++      // Successful native commit() is the guarded admission point. Revocation
++      // after this call must not claim to abort a committing transaction.
++      admitted = true
++      hook.rerender({ paused: true })
++    }
++  })
++  await act(() => hook.result.current.create(f.input))
++  expect(admitted && completed).toBe(true)
++  expect(hook.result.current.numeric).toBeNull()
++  expect(hook.result.current.commands.filter(value => value.kind !== 'cancel')).toEqual([])
++  const durable = Object.values(await authoringCommandStore.load(f.workspace))
++  expect(durable).toHaveLength(1)
++  const accepted = readAuthoringCommand(durable[0], f.workspace)
++  expect(accepted).toEqual({ ...originalCommand, ack: f.numeric })
++  expect(f.groups.preview).toHaveBeenCalledTimes(1)
++  hook.unmount()
++  const restored = renderHook(() => useAuthoring(f.workspace, false, f.port))
++  await waitFor(() => expect(restored.result.current.ready && restored.result.current.academic).toBe(true))
++  expect(restored.result.current.commands).toEqual([accepted])
++  await act(() => restored.result.current.execute(originalCommand))
++  expect(f.groups.preview).toHaveBeenCalledTimes(1)
++  expect(restored.result.current.commands).toEqual([accepted])
++})

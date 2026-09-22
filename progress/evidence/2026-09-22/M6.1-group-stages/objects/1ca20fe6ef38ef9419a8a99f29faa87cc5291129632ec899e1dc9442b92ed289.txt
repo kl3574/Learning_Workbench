@@ -1,0 +1,25 @@
+import datetime,hashlib,json,os,subprocess,sys
+from pathlib import Path
+ROOT=Path('<HOME>/.cache/learning-workbench-acceptance/m61-groups-active');OUT=Path(__file__).parent
+sha=lambda b:hashlib.sha256(b).hexdigest()
+def write(p,v):p.write_text(json.dumps(v,ensure_ascii=False,indent=2)+'\n')
+def now():return datetime.datetime.now(datetime.timezone.utc).isoformat()
+inputs=[]
+for name in subprocess.check_output(['git','ls-files','--cached','--others','--exclude-standard'],cwd=ROOT,text=True).splitlines():
+ p=ROOT/name
+ if not p.is_file():continue
+ if name=='PRODUCT_DESIGN.md' or name in ['pyproject.toml','uv.lock','apps/web/package.json','apps/web/package-lock.json','apps/web/vite.config.ts','apps/web/tsconfig.json','scripts/node.sh','scripts/authoring_numeric_entry.py'] or name.startswith(('services/','packages/contracts/','migrations/')) or name.startswith('apps/web/src/') and not name.endswith(('.test.ts','.test.tsx')) or name in ['tests/e2e/authoring-groups.spec.ts','tests/e2e/authoringRuntime.ts','tests/e2e/authoring.spec.ts','tests/e2e/playwright.config.ts','tests/authoring_native_fixture.py','tests/authoring_group_native_fixture.py','tests/provider_protocol_fixture.py','tests/provider_fixture.py','tests/practice_fixtures.py']:
+  inputs.append(name)
+def snapshot():
+ rows=[]
+ for name in sorted(set(inputs)):
+  p=ROOT/name;b=p.read_bytes();st=p.stat();rows.append({'path':name,'bytes':len(b),'sha256':sha(b),'mode':st.st_mode,'mtime_ns':st.st_mtime_ns})
+ return {'scope':'Declared production web/API/contracts/migrations, selected native fixture/helper/cases and package descriptors. Excludes unrelated concurrent tests/progress, installed binaries/dependencies, and runtime private data/profiles/bootstrap/session. No whole worktree unchanged claim.','files':rows,'count':len(rows),'aggregate_sha256':sha(json.dumps(rows,sort_keys=True,separators=(',',':')).encode())}
+name=sys.argv[1];case=sys.argv[2] if len(sys.argv)>2 else 'authoring-groups.spec.ts';folder=OUT/name;folder.mkdir();(folder/'artifacts').mkdir()
+command=['bash','scripts/node.sh','npm','--prefix','apps/web','run','test:e2e','--',case]
+before=snapshot();write(folder/'before.json',before);started=now()
+with (folder/'run.log').open('wb') as f:r=subprocess.run(command,cwd=ROOT,stdout=f,stderr=subprocess.STDOUT,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1',LEARNING_E2E_OUTPUT_DIR=str(folder/'artifacts')))
+after=snapshot();write(folder/'after.json',after)
+changed=[a['path'] for a,b in zip(before['files'],after['files'],strict=True) if a!=b]
+write(folder/'receipt.json',{'command':command,'started_at':started,'finished_at':now(),'exit_code':r.returncode,'head':subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),'spec_sha256':sha((ROOT/'PRODUCT_DESIGN.md').read_bytes()),'driver_sha256':sha(Path(__file__).read_bytes()),'before_sha256':sha((folder/'before.json').read_bytes()),'after_sha256':sha((folder/'after.json').read_bytes()),'declared_inputs_unchanged':before==after,'changed_paths':changed,'source_count':before['count'],'run_log_sha256':sha((folder/'run.log').read_bytes())})
+print((folder/'run.log').read_text()[-15000:]);print('CACHE',folder,'EXIT',r.returncode,'CHANGED',changed);sys.exit(r.returncode if before==after else 90)

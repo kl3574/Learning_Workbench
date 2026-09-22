@@ -1,0 +1,157 @@
+[
+  {
+    "commit": "79908fb941898eb2b515719ce175c68dde3c71ef",
+    "path": "services/api/app/application/authoring_worker.py",
+    "bytes": 12417,
+    "sha256": "9c9488eaa773eb7ffd6ba732a31f1acaaecc9c08bae6d6a6c38c2da6345a1937",
+    "excerpts": [
+      {
+        "line_start": 46,
+        "line_end": 78,
+        "text": "    def _loop(self) -> None:\n        while not self._stop.is_set():\n            try:\n                worked = self.run_once()\n                self.last_error_code = None\n            except (ApiError, sqlite3.Error) as error:\n                self.last_error_code = error.code if isinstance(error, ApiError) else 'AUTHORING_INTEGRITY_ERROR'\n                worked = False\n            if not worked:\n                self._stop.wait(0.25)\n\n    def claim(self) -> AuthoringLease | None:\n        workspace = self.database.workspace_id()\n        with self.database.transaction() as conn:\n            query = \"SELECT created_at,id FROM jobs WHERE workspace_id=? AND kind='authoring' AND (status='queued' OR (status='running' AND lease_until<=?))\"\n            rows = conn.execute(query + ' ORDER BY created_at,id', (workspace, utc_now())).fetchall()\n            if self._cursor is not None:\n                rows = [row for row in rows if tuple(row) > self._cursor] + [row for row in rows if tuple(row) <= self._cursor]\n            repo = AuthoringRepository(conn, workspace)\n            first_error = None\n            for row in rows[:32]:\n                self._cursor = tuple(row)\n                try:\n                    record = repo.load(row['id'])\n                except ApiError as error:\n                    first_error = first_error or error\n                    continue\n                lease = repo.jobs.claim(row['id'])\n                repo.sync(record)\n                return lease\n            if first_error is not None:\n                raise first_error\n            return None\n"
+      },
+      {
+        "line_start": 226,
+        "line_end": 237,
+        "text": "    def run_once(self) -> bool:\n        if self._stop.is_set() or not self._lock.acquire(blocking=False):\n            return False\n        try:\n            self.provider.recover_unfinished(self.database.workspace_id())\n            lease = self.claim()\n            if lease is None:\n                return False\n            asyncio.run(self.process(lease))\n            return True\n        finally:\n            self._lock.release()\n"
+      }
+    ]
+  },
+  {
+    "commit": "79908fb941898eb2b515719ce175c68dde3c71ef",
+    "path": "services/api/app/application/authoring_numeric_worker.py",
+    "bytes": 8133,
+    "sha256": "4e16c034956c72dec6e7e4cb166e326cfc3403a1fc3c52d2007696dfd90ae970",
+    "excerpts": [
+      {
+        "line_start": 41,
+        "line_end": 69,
+        "text": "    def _loop(self) -> None:\n        while not self._stop.is_set():\n            try:\n                worked = self.run_once()\n                self.last_error_code = None\n            except (ApiError, sqlite3.Error, NumericRuntimeError) as error:\n                self.last_error_code = error.code if isinstance(error, (ApiError, NumericRuntimeError)) else 'AUTHORING_INTEGRITY_ERROR'\n                worked = False\n            if not worked:\n                self._stop.wait(0.25)\n\n    def claim(self) -> tuple[AuthoringLease, NumericJobInput, str] | None:\n        workspace = self.database.workspace_id()\n        with self.database.transaction() as conn:\n            rows = conn.execute(\"SELECT created_at,id FROM jobs WHERE workspace_id=? AND kind='authoring_numeric_check' AND (status='queued' OR (status='running' AND lease_until<=?)) ORDER BY created_at,id\",\n                                (workspace, utc_now())).fetchall()\n            if self._cursor is not None:\n                rows = [row for row in rows if tuple(row) > self._cursor] + [row for row in rows if tuple(row) <= self._cursor]\n            repo = NumericRepository(conn, workspace)\n            first_error = None\n            for row in rows[:32]:\n                self._cursor = tuple(row)\n                try:\n                    return repo.claim(row['id'])\n                except ApiError as error:\n                    first_error = first_error or error\n            if first_error is not None:\n                raise first_error\n            return None\n"
+      }
+    ]
+  },
+  {
+    "commit": "79908fb941898eb2b515719ce175c68dde3c71ef",
+    "path": "services/api/app/application/tutor_worker.py",
+    "bytes": 15197,
+    "sha256": "7d60d0432596f3f0ea107d2b3135b9b9d6df1f8522e667c31f8efb7d2cd4bff7",
+    "excerpts": [
+      {
+        "line_start": 71,
+        "line_end": 114,
+        "text": "    def _loop(self) -> None:\n        while not self._stop.is_set() and not self.stopping():\n            try:\n                worked = self.run_once()\n                self.last_error_code = None\n            except (ApiError, sqlite3.Error) as error:\n                self.last_error_code = error.code if isinstance(error, ApiError) else 'TUTOR_INTEGRITY_ERROR'\n                worked = False\n            if not worked:\n                self._stop.wait(0.25)\n\n    @staticmethod\n    def _identity(workspace: str) -> SessionIdentity:\n        # Trusted worker identity derived from its actual Jobs-owned lease. This\n        # is not a browser-controlled role or a production Provider proof.\n        return SessionIdentity('tutor_worker', workspace, 'learner', '', expires_after(86400))\n\n    def claim(self) -> TutorLease | None:\n        if self._stop.is_set() or self.stopping():\n            return None\n        workspace = self.database.workspace_id()\n        with self.database.transaction() as connection:\n            repo = TutorRepository(connection, workspace)\n            first_error: ApiError | None = None\n            for position in repo.jobs.candidates(self._candidate_cursor):\n                # Advance even after a rejected original record; otherwise one\n                # damaged oldest job can prevent every other thread progressing.\n                self._candidate_cursor = position\n                identifier = position[1]\n                try:\n                    repo.source_state(identifier)\n                except ApiError as error:\n                    if error.code not in {'TUTOR_INTEGRITY_ERROR', 'THREAD_MISSING', 'JOB_MISSING'}:\n                        raise\n                    first_error = first_error or error\n                    continue\n                lease = repo.jobs.claim(repo.jobs.load(identifier), self.lease_seconds)\n                repo.sync_job(identifier)\n                return lease\n            if first_error is not None:\n                # Preserve the original explicit failure if nothing can advance.\n                # This does not create a fake terminal or permanent quarantine.\n                raise first_error\n            return None\n"
+      },
+      {
+        "line_start": 270,
+        "line_end": 285,
+        "text": "    def run_once(self) -> bool:\n        if not self._lock.acquire(blocking=False):\n            return False\n        try:\n            if self._stop.is_set() or self.stopping():\n                return False\n            # Recover before claiming: a new lease must not make an old unknown\n            # dispatch appear to have a live producer. This operation never sends.\n            self.provider.recover_unfinished(self.database.workspace_id())\n            lease = self.claim()\n            if lease is None:\n                return False\n            asyncio.run(self.process(lease))\n            return True\n        finally:\n            self._lock.release()\n"
+      }
+    ]
+  },
+  {
+    "commit": "79908fb941898eb2b515719ce175c68dde3c71ef",
+    "path": "services/api/app/application/provider_dispatch.py",
+    "bytes": 22492,
+    "sha256": "4ee03ab36fee5288a15592ed3f4150cbe45993bcb57d7e18bca663c74179506e",
+    "excerpts": [
+      {
+        "line_start": 90,
+        "line_end": 101,
+        "text": "    @contextmanager\n    def _transaction(self, *, readonly: bool = False) -> Iterator[sqlite3.Connection]:\n        entered = False\n        try:\n            with self.database.transaction(busy_timeout_ms=50, immediate=not readonly) as conn:\n                entered = True\n                yield conn\n        except sqlite3.OperationalError:\n            if entered:\n                # Includes commit uncertainty: never retry an entered operation.\n                raise ApiError(503, 'PROVIDER_OUTCOME_UNKNOWN', '本机记录暂不可确认，请回读原派发状态。') from None\n            raise\n"
+      },
+      {
+        "line_start": 383,
+        "line_end": 399,
+        "text": "    def recover_unfinished(self, workspace_id: str) -> list[ProviderTerminalReceipt]:\n        \"\"\"Explicit recovery; no network, credential read, or regenerated call.\n\n        Active real Jobs leases are skipped, even after cancel/status changes.\n        An expired lease can be recovered; no claim of immediate recovery is made\n        for crashed workers whose lease has not yet expired.\n        \"\"\"\n        with self._transaction() as conn:\n            repo = ConsentRepository(conn, workspace_id)\n            receipts = []\n            for record in repo.unfinished_dispatches():\n                if outbound_lease_active(conn, workspace_id, record.job_id, utc_now()):\n                    continue\n                terminal = CheckedProviderError(type='error', error_code='PROVIDER_OUTCOME_UNKNOWN',\n                    provider_outcome='unknown', output_state='none', usage=repo.usage(record.id))\n                receipts.append(repo.finish_dispatch(record.id, terminal, b'', b'', utc_now()))\n            return receipts\n"
+      }
+    ]
+  },
+  {
+    "commit": "79908fb941898eb2b515719ce175c68dde3c71ef",
+    "path": "services/api/app/infrastructure/database.py",
+    "bytes": 7864,
+    "sha256": "4afd9e4a60364da9e368121f20a84c9decef402a3db5d12444e7dccccb974d7f",
+    "excerpts": [
+      {
+        "line_start": 33,
+        "line_end": 59,
+        "text": "    @contextmanager\n    def connect(self, *, busy_timeout_ms: int = 10_000) -> Iterator[sqlite3.Connection]:\n        if type(busy_timeout_ms) is not int or not 0 <= busy_timeout_ms <= 10_000:\n            raise ValueError(\"SQLite busy timeout must be an integer between 0 and 10000 milliseconds.\")\n        connection = sqlite3.connect(self.path, timeout=busy_timeout_ms / 1000, isolation_level=None)\n        connection.row_factory = sqlite3.Row\n        try:\n            connection.execute(\"PRAGMA foreign_keys=ON\")\n            if connection.execute(\"PRAGMA foreign_keys\").fetchone()[0] != 1:\n                raise MigrationError(\"SQLite foreign keys could not be enabled.\")\n            if connection.execute(\"PRAGMA journal_mode=WAL\").fetchone()[0] != \"wal\":\n                raise MigrationError(\"SQLite WAL could not be enabled.\")\n            connection.execute(f\"PRAGMA busy_timeout={busy_timeout_ms}\")\n            yield connection\n        finally:\n            connection.close()\n\n    @contextmanager\n    def transaction(self, *, busy_timeout_ms: int = 10_000, immediate: bool = True) -> Iterator[sqlite3.Connection]:\n        with self.connect(busy_timeout_ms=busy_timeout_ms) as connection:\n            connection.execute(\"BEGIN IMMEDIATE\" if immediate else \"BEGIN\")\n            try:\n                yield connection\n                connection.commit()\n            except BaseException:\n                connection.rollback()\n                raise\n"
+      }
+    ]
+  },
+  {
+    "commit": "79908fb941898eb2b515719ce175c68dde3c71ef",
+    "path": "services/api/app/main.py",
+    "bytes": 7562,
+    "sha256": "102e18f1d7253dd63d694a482a41065ad7f1f1aa744a1804fa84bd2547cf8a77",
+    "excerpts": [
+      {
+        "line_start": 63,
+        "line_end": 96,
+        "text": "    provider_sources = (outbound_sources if outbound_sources is not None else OutboundSourceRegistry()).with_source(\n        'tutor', TutorOutboundSource(tutor_context)).with_source('authoring', AuthoringOutboundSource(authoring_context))\n    provider_preparer = request_preparer if request_preparer is not None else RequestPreparer(ProofRegistry())\n    provider_secrets = preferred_secret_store(settings.provider_secret_dir)\n    providers = ProviderService(database, provider_secrets, provider_preparer)\n    consents = ConsentsService(database, provider_secrets, provider_sources, provider_preparer)\n    provider_dispatch = CheckedDispatch(database, provider_secrets, provider_sources, provider_preparer)\n    tutor_worker = TutorWorker(database, tutor_context, provider_dispatch, build_outbound)\n    authoring_service = AuthoringService(database, authoring_context, provider_dispatch)\n    authoring_worker = AuthoringWorker(database, authoring_context, provider_dispatch)\n    numeric_runtime = NumericRuntime()\n    numeric_service = NumericService(database, authoring_context, numeric_runtime)\n    numeric_worker = NumericWorker(database, authoring_context, numeric_runtime)\n\n    @asynccontextmanager\n    async def lifespan(application: FastAPI):\n        workspace_id = database.initialize()\n        provider_secrets.initialize()\n        # Only consumed, abandoned records are terminated. Recovery cannot make\n        # another HTTP attempt and must skip a still-live source owner lease.\n        recovered = await asyncio.to_thread(provider_dispatch.recover_unfinished, workspace_id)\n        application.state.provider_recovered_count = len(recovered)\n        application.state.provenance_backfill = backfill_provenance(database)\n        import_worker.start()\n        tutor_worker.start()\n        authoring_worker.start()\n        numeric_worker.start()\n        try:\n            yield\n        finally:\n            numeric_worker.stop()\n            authoring_worker.stop()\n            tutor_worker.stop()\n            import_worker.stop()\n"
+      }
+    ]
+  },
+  {
+    "commit": "79908fb941898eb2b515719ce175c68dde3c71ef",
+    "path": "services/api/app/interfaces/tutor_http.py",
+    "bytes": 11815,
+    "sha256": "7bbe9588f9cd267adb0a4a70b9a24416494e7da0571fb5a9f62d1cdad5e8fd27",
+    "excerpts": [
+      {
+        "line_start": 192,
+        "line_end": 232,
+        "text": "    async def events(id: str, request: Request) -> TutorStreamResponse:\n        # Own/Policy/history validation precedes even a malformed cursor.\n        view = await run_in_threadpool(service.read, request.state.identity, id)\n        cursor = event_cursor(request, id, view.run.last_seq)\n\n        async def observe() -> AsyncIterator[bytes]:\n            nonlocal cursor\n            while not await request.is_disconnected():\n                try:\n                    fresh = await run_in_threadpool(authenticate, request.app.state.database, request)\n                    initial = request.state.identity\n                    if (fresh.id, fresh.workspace_id, fresh.role) != (initial.id, initial.workspace_id, initial.role):\n                        return\n                    batch = await run_in_threadpool(service.events, fresh, id, cursor)\n                    for item in batch:\n                        # A batch can pause under backpressure. Revalidate the\n                        # actual cookie and subject scope before each delivery,\n                        # not just before the earlier database read.\n                        delivery = await run_in_threadpool(authenticate, request.app.state.database, request)\n                        if (delivery.id, delivery.workspace_id, delivery.role) != (\n                                initial.id, initial.workspace_id, initial.role):\n                            return\n                        await run_in_threadpool(service.authorize, delivery, run_id=id)\n                        if item.run_id != id or item.seq != cursor + 1:\n                            raise ApiError(409, 'TUTOR_INTEGRITY_ERROR', '任务事件顺序未通过校验。')\n                        cursor = item.seq\n                        yield encode_event(item)\n                        if item.type in {'completed', 'failed', 'cancelled'}:\n                            return\n                    current = await run_in_threadpool(service.read, request.state.identity, id)\n                    if current.run.status in {'completed', 'failed', 'cancelled'} and cursor == current.run.last_seq:\n                        return\n                except ApiError:\n                    # Headers have already been sent. End this observer without\n                    # fabricating a persisted failed event or leaking error data.\n                    return\n                await asyncio.sleep(0.25)\n\n        return TutorStreamResponse(observe(), headers={\n            'Cache-Control': 'no-store', 'Vary': 'Cookie', 'X-Accel-Buffering': 'no',\n        })\n"
+      }
+    ]
+  },
+  {
+    "commit": "79908fb941898eb2b515719ce175c68dde3c71ef",
+    "path": "services/api/app/application/tutor.py",
+    "bytes": 13358,
+    "sha256": "a78eeea59179847a0bf6f4bb78752797002afabba83284ac9cbbd1ee8fd07278",
+    "excerpts": [
+      {
+        "line_start": 57,
+        "line_end": 64,
+        "text": "    def authorize(self, identity: SessionIdentity, thread_id: str | None = None, run_id: str | None = None) -> None:\n        with self.database.transaction(immediate=False) as connection:\n            self.context.check_access(connection, identity)\n            repo = TutorRepository(connection, identity.workspace_id)\n            if run_id is not None:\n                self._check_run(connection, identity, repo, run_id)\n                source = repo.source_state(run_id)\n                repo.messages(source.input.request.request.thread_id)\n"
+      },
+      {
+        "line_start": 105,
+        "line_end": 129,
+        "text": "\n    def read(self, identity: SessionIdentity, identifier: str) -> TutorRunView:\n        with self.database.transaction(immediate=False) as connection:\n            self.context.check_access(connection, identity)\n            repo = TutorRepository(connection, identity.workspace_id)\n            self._check_run(connection, identity, repo, identifier)\n            source = repo.source_state(identifier)\n            repo.messages(source.input.request.request.thread_id)\n            return repo.view(identifier)\n\n    def events(self, identity: SessionIdentity, identifier: str, after_seq: int) -> list[TutorSSEEvent]:\n        with self.database.transaction(immediate=False) as connection:\n            self.context.check_access(connection, identity)\n            repo = TutorRepository(connection, identity.workspace_id)\n            self._check_run(connection, identity, repo, identifier)\n            source = repo.source_state(identifier)\n            repo.messages(source.input.request.request.thread_id)\n            view = repo.view(identifier)\n            if type(after_seq) is not int or after_seq < 0:\n                raise ApiError(400, 'CURSOR_INVALID', '事件游标必须是非负整数。')\n            if after_seq > view.run.last_seq:\n                raise ApiError(409, 'CURSOR_AHEAD', '事件游标超过已持久记录。')\n            return repo.events_raw(identifier)[after_seq:after_seq + 200]\n\n    def cancel(self, identity: SessionIdentity, identifier: str, body: TutorRunCancel, key: str) -> TutorRunControlView:\n"
+      }
+    ]
+  },
+  {
+    "commit": "79908fb941898eb2b515719ce175c68dde3c71ef",
+    "path": "tests/e2e/tutor.spec.ts",
+    "bytes": 21434,
+    "sha256": "f4061a604f78634de551a015ab249df92191c4641ab607dade0d3c8f507a0a38",
+    "excerpts": [
+      {
+        "line_start": 188,
+        "line_end": 205,
+        "text": "    await expect(tutor.getByLabel('我已核对本次冻结范围、目的地、预算与到期时间', { exact: true })).toBeVisible()\n    expect(runtime.control().received_request_count).toBe(0)\n    await tutor.getByLabel('我已核对本次冻结范围、目的地、预算与到期时间', { exact: true }).check()\n    await tutor.getByRole('button', { name: '准备批准本次授权命令', exact: true }).click()\n    diagnostic.mark('grant_click')\n    await tutor.getByRole('button', { name: '确认发送批准授权', exact: true }).click()\n    await diagnostic.around(info, async () => {\n      await expect(tutor.getByRole('heading', { name: '真实任务状态：completed', exact: true })).toBeVisible()\n    })\n    const complete: TutorRunView = await page.request.get(`/api/v1/runs/${ack.run.id}`).then(value => value.json())\n    expect(complete.run.id).toBe(ack.run.id); expect(complete.run.thread_id).toBe(thread.id)\n    expect(complete.consent_id).toBeTruthy(); expect(complete.latest_proposal_id).toBeTruthy()\n    expect(complete.run.answer_markdown).toBe(initialControl.answer_markdown)\n    expect(complete.run.citations).toEqual([]); expect(complete.result.provider?.outcome).toBe('complete')\n    expect(complete.result.usage.input_tokens).toBeGreaterThan(0); expect(complete.result.usage.output_tokens).toBeGreaterThan(0)\n    await expect.poll(() => runtime.control().validated_request_count).toBe(1)\n    expect(runtime.control().received_request_count).toBe(1); expect(runtime.control().invalid_request_count).toBe(0)\n    await expect(tutor.getByLabel('本次模型回答原文', { exact: true })).toHaveText(initialControl.answer_markdown)\n"
+      },
+      {
+        "line_start": 222,
+        "line_end": 225,
+        "text": "    expect(errors).toEqual([])\n    writeFileSync(info.outputPath('actual-tutor-loopback.json'), JSON.stringify({ scope: 'Test-only complete-byte model, synthetic secret and original material; actual loopback HTTP, provider ledger, Tutor worker/SSE and native UI. No production input proof, vendor call or answer-quality acceptance.', thread, create_ack: ack, final: complete, observation: runtime.control(), runtime_errors: errors }, null, 2))\n  } finally { diagnostic?.dispose(); await runtime.close() }\n})\n"
+      }
+    ]
+  },
+  {
+    "commit": "79908fb941898eb2b515719ce175c68dde3c71ef",
+    "path": "tests/e2e/tutorDiagnostic.ts",
+    "bytes": 11153,
+    "sha256": "6a4ab24c2ebae6fe17ad34c7f230c2d0dab93829d95fdf479dc135a5d17bcb08",
+    "excerpts": [
+      {
+        "line_start": 110,
+        "line_end": 139,
+        "text": "    async around(info: TestInfo, assertion: () => Promise<unknown>) {\n      let original: unknown, failed = false\n      add({ kind: 'mark', label: 'completion_assertion_start' })\n      try { await assertion() } catch (error) { original = error; failed = true }\n      // Freeze already received metadata synchronously, before starting any\n      // post-assertion request. Late callbacks cannot alter this snapshot.\n      const frozenAt = elapsed(), frozen = { events: [...events], last_dom_delivered: lastDOM, omitted_events: omitted }\n      active = false\n      try {\n      const postStarted = elapsed()\n      let observedRun: ReadResult = { state: 'timeout' }, observedRuntime: ReadResult = { state: 'timeout' }\n      await within(Promise.all([\n        read(async () => { if (!runId) throw new Error('RUN_NOT_BOUND'); return safeRun(await readRun(runId), runId) }).then(value => { observedRun = value }),\n        read(async () => safeRuntime(await ports.readRuntime())).then(value => { observedRuntime = value }),\n      ]).then(() => true), 500, false)\n      const post = { run: observedRun, runtime: observedRuntime }\n      // Individual settled observations survive a slow peer; no timeout is\n      // converted to a null/zero/success result.\n      const record = { version: 1, started_at: startedAt, clock: 'Node performance.now, milliseconds since observer start',\n        assertion: { verdict: failed ? 'failed' : 'passed', frozen_at_ms: frozenAt, original_expect_timeout_ms: 5000 },\n        frozen_observation: frozen,\n        post_assertion: { phase: failed ? 'post-failure' : 'post-success', started_ms: postStarted, finished_ms: elapsed(), wait_limit_ms: 500, ...post },\n        scope: 'Only already delivered metadata is frozen at the assertion boundary. Last DOM receipt is not a synchronous browser-deadline snapshot. Later reads cannot establish earlier backend state. No headers, cookies, keys, request/answer bodies or SSE frames captured.' }\n      const target = info.outputPath('tutor-completion-diagnostic.json'), pending = target + '.pending', abort = new AbortController()\n      const saved = await within((async () => {\n        await writeFile(pending, JSON.stringify(record, null, 2) + '\\n', { signal: abort.signal })\n        if (abort.signal.aborted) return false\n        await rename(pending, target)\n        await info.attach('tutor-completion-diagnostic', { path: target, contentType: 'application/json' })\n        return true\n"
+      }
+    ]
+  }
+]

@@ -1,0 +1,355 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/authoring/useAuthoringGroups.test.tsx src/features/authoring/authoringGroupCommands.test.ts
+
+
+ RUN  v5.0.0 <HOME>/.cache/learning-workbench-acceptance/m61-groups-active/apps/web
+
+ ❯ src/features/authoring/useAuthoringGroups.test.tsx (25 tests | 7 failed) 2025ms
+   × private ACK cannot persist when policy changes while its original journal load is pending 60ms
+   × private ACK cannot persist when workspace changes while its original journal load is pending 56ms
+   × private ACK cannot persist when session changes while its original journal load is pending 56ms
+   × private ACK cannot commit when policy changes after the real IDB put succeeds 107ms
+   × private ACK cannot commit when workspace changes after the real IDB put succeeds 108ms
+   × private ACK cannot commit when session changes after the real IDB put succeeds 106ms
+   × private ACK cannot reach PUT when Policy changes after the real readwrite lookup 107ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/authoring/useAuthoringGroups.test.tsx > private ACK cannot persist when policy changes while its original journal load is pending
+ FAIL  src/features/authoring/useAuthoringGroups.test.tsx > private ACK cannot persist when session changes while its original journal load is pending
+AssertionError: expected { kind: 'group_numeric_preview', …(8) } to deeply equal { kind: 'group_numeric_preview', …(8) }
+
+- Expected
++ Received
+
+@@ -1,7 +1,63 @@
+  {
+-   "ack": null,
++   "ack": {
++     "candidate": {
++       "candidate_sha256": "2cd82733666949ffba83c790bfea7a8eb15f2f1c7fcb230498200ea840508bf3",
++       "draft_id": "authoring_group_825aaa0d6ba24c41b94b9a61ef85fe96",
++       "draft_revision": 1,
++       "entity": "practice_set",
++     },
++     "created_at": "2026-09-22T02:23:37.409161Z",
++     "decision": "pending",
++     "expired": false,
++     "expires_at": "2026-09-22T02:33:37.409161Z",
++     "id": "group_numeric_46e43273ff8d43b089fe3013b4bc5fcf",
++     "job": null,
++     "job_revision": null,
++     "operation_sha256": "20bc6be5f1bf22b536681706efaace955abb14de6b47f96b2224a2ad26994ceb",
++     "plan": {
++       "assertions": [
++         {
++           "atol": 0,
++           "expected": 42,
++           "expression": "x+25",
++           "id": "sum_check",
++           "rtol": 0,
++           "unit": "number",
++         },
++       ],
++       "seed": null,
++       "variables": [
++         {
++           "name": "x",
++           "unit": "number",
++           "value": 17,
++         },
++       ],
++       "version": "finite-arithmetic-v1",
++     },
++     "result": null,
++     "revision": 1,
++     "runtime": {
++       "cpu_seconds": 2,
++       "evaluator_process_limit": 1,
++       "evaluator_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
++       "evaluator_version": "finite-arithmetic-v1",
++       "memory_bytes": 268435456,
++       "output_bytes": 65536,
++       "python_version": "synthetic-ledger-only",
++       "runtime_manifest_sha256": "79b2ffc2a852bab302640621f459743129e33b32bf413c8321f538f72c8e8c8e",
++       "sandbox_version": "not-executed",
++       "wall_seconds": 5,
++     },
++     "target": {
++       "entity": "question",
++       "member_key": "numeric_question",
++       "member_sha256": "69e88f21ed45e78957194fa639320d5039fb8e7cf086bb36129f322e28cf118f",
++     },
++     "warnings": [],
++   },
+    "body": {
+      "candidate": {
+        "candidate_sha256": "2cd82733666949ffba83c790bfea7a8eb15f2f1c7fcb230498200ea840508bf3",
+        "draft_id": "authoring_group_825aaa0d6ba24c41b94b9a61ef85fe96",
+        "draft_revision": 1,
+
+ ❯ src/features/authoring/useAuthoringGroups.test.tsx:769:57
+    767|   const durable = Object.values(await actualLoad(f.workspace))
+    768|   expect(durable).toHaveLength(1)
+    769|   expect(readAuthoringCommand(durable[0], f.workspace)).toEqual(origin…
+       |                                                         ^
+    770|   expect(hook.result.current.numeric).toBeNull()
+    771|   expect(hook.result.current.commands.filter(value => value.kind !== '…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  src/features/authoring/useAuthoringGroups.test.tsx > private ACK cannot persist when workspace changes while its original journal load is pending
+AssertionError: expected { kind: 'group_numeric_preview', …(8) } to deeply equal { kind: 'group_numeric_preview', …(8) }
+
+- Expected
++ Received
+
+@@ -1,7 +1,63 @@
+  {
+-   "ack": null,
++   "ack": {
++     "candidate": {
++       "candidate_sha256": "2cd82733666949ffba83c790bfea7a8eb15f2f1c7fcb230498200ea840508bf3",
++       "draft_id": "authoring_group_825aaa0d6ba24c41b94b9a61ef85fe96",
++       "draft_revision": 1,
++       "entity": "practice_set",
++     },
++     "created_at": "2026-09-22T02:23:37.409161Z",
++     "decision": "pending",
++     "expired": false,
++     "expires_at": "2026-09-22T02:33:37.409161Z",
++     "id": "group_numeric_46e43273ff8d43b089fe3013b4bc5fcf",
++     "job": null,
++     "job_revision": null,
++     "operation_sha256": "20bc6be5f1bf22b536681706efaace955abb14de6b47f96b2224a2ad26994ceb",
++     "plan": {
++       "assertions": [
++         {
++           "atol": 0,
++           "expected": 42,
++           "expression": "x+25",
++           "id": "sum_check",
++           "rtol": 0,
++           "unit": "number",
++         },
++       ],
++       "seed": null,
++       "variables": [
++         {
++           "name": "x",
++           "unit": "number",
++           "value": 17,
++         },
++       ],
++       "version": "finite-arithmetic-v1",
++     },
++     "result": null,
++     "revision": 1,
++     "runtime": {
++       "cpu_seconds": 2,
++       "evaluator_process_limit": 1,
++       "evaluator_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
++       "evaluator_version": "finite-arithmetic-v1",
++       "memory_bytes": 268435456,
++       "output_bytes": 65536,
++       "python_version": "synthetic-ledger-only",
++       "runtime_manifest_sha256": "79b2ffc2a852bab302640621f459743129e33b32bf413c8321f538f72c8e8c8e",
++       "sandbox_version": "not-executed",
++       "wall_seconds": 5,
++     },
++     "target": {
++       "entity": "question",
++       "member_key": "numeric_question",
++       "member_sha256": "69e88f21ed45e78957194fa639320d5039fb8e7cf086bb36129f322e28cf118f",
++     },
++     "warnings": [],
++   },
+    "body": {
+      "candidate": {
+        "candidate_sha256": "2cd82733666949ffba83c790bfea7a8eb15f2f1c7fcb230498200ea840508bf3",
+        "draft_id": "authoring_group_825aaa0d6ba24c41b94b9a61ef85fe96",
+        "draft_revision": 1,
+
+ ❯ src/features/authoring/useAuthoringGroups.test.tsx:769:57
+    767|   const durable = Object.values(await actualLoad(f.workspace))
+    768|   expect(durable).toHaveLength(1)
+    769|   expect(readAuthoringCommand(durable[0], f.workspace)).toEqual(origin…
+       |                                                         ^
+    770|   expect(hook.result.current.numeric).toBeNull()
+    771|   expect(hook.result.current.commands.filter(value => value.kind !== '…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  src/features/authoring/useAuthoringGroups.test.tsx > private ACK cannot commit when policy changes after the real IDB put succeeds
+ FAIL  src/features/authoring/useAuthoringGroups.test.tsx > private ACK cannot commit when workspace changes after the real IDB put succeeds
+ FAIL  src/features/authoring/useAuthoringGroups.test.tsx > private ACK cannot commit when session changes after the real IDB put succeeds
+AssertionError: expected { kind: 'group_numeric_preview', …(8) } to deeply equal { kind: 'group_numeric_preview', …(8) }
+
+- Expected
++ Received
+
+@@ -1,7 +1,63 @@
+  {
+-   "ack": null,
++   "ack": {
++     "candidate": {
++       "candidate_sha256": "2cd82733666949ffba83c790bfea7a8eb15f2f1c7fcb230498200ea840508bf3",
++       "draft_id": "authoring_group_825aaa0d6ba24c41b94b9a61ef85fe96",
++       "draft_revision": 1,
++       "entity": "practice_set",
++     },
++     "created_at": "2026-09-22T02:23:37.409161Z",
++     "decision": "pending",
++     "expired": false,
++     "expires_at": "2026-09-22T02:33:37.409161Z",
++     "id": "group_numeric_46e43273ff8d43b089fe3013b4bc5fcf",
++     "job": null,
++     "job_revision": null,
++     "operation_sha256": "20bc6be5f1bf22b536681706efaace955abb14de6b47f96b2224a2ad26994ceb",
++     "plan": {
++       "assertions": [
++         {
++           "atol": 0,
++           "expected": 42,
++           "expression": "x+25",
++           "id": "sum_check",
++           "rtol": 0,
++           "unit": "number",
++         },
++       ],
++       "seed": null,
++       "variables": [
++         {
++           "name": "x",
++           "unit": "number",
++           "value": 17,
++         },
++       ],
++       "version": "finite-arithmetic-v1",
++     },
++     "result": null,
++     "revision": 1,
++     "runtime": {
++       "cpu_seconds": 2,
++       "evaluator_process_limit": 1,
++       "evaluator_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
++       "evaluator_version": "finite-arithmetic-v1",
++       "memory_bytes": 268435456,
++       "output_bytes": 65536,
++       "python_version": "synthetic-ledger-only",
++       "runtime_manifest_sha256": "79b2ffc2a852bab302640621f459743129e33b32bf413c8321f538f72c8e8c8e",
++       "sandbox_version": "not-executed",
++       "wall_seconds": 5,
++     },
++     "target": {
++       "entity": "question",
++       "member_key": "numeric_question",
++       "member_sha256": "69e88f21ed45e78957194fa639320d5039fb8e7cf086bb36129f322e28cf118f",
++     },
++     "warnings": [],
++   },
+    "body": {
+      "candidate": {
+        "candidate_sha256": "2cd82733666949ffba83c790bfea7a8eb15f2f1c7fcb230498200ea840508bf3",
+        "draft_id": "authoring_group_825aaa0d6ba24c41b94b9a61ef85fe96",
+        "draft_revision": 1,
+
+ ❯ src/features/authoring/useAuthoringGroups.test.tsx:832:57
+    830|   const durable = Object.values(await authoringCommandStore.load(f.wor…
+    831|   expect(durable).toHaveLength(1)
+    832|   expect(readAuthoringCommand(durable[0], f.workspace)).toEqual(origin…
+       |                                                         ^
+    833|   expect(hook.result.current.numeric).toBeNull()
+    834|   expect(hook.result.current.commands.filter(value => value.kind !== '…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  src/features/authoring/useAuthoringGroups.test.tsx > private ACK cannot reach PUT when Policy changes after the real readwrite lookup
+AssertionError: expected { kind: 'group_numeric_preview', …(8) } to deeply equal { kind: 'group_numeric_preview', …(8) }
+
+- Expected
++ Received
+
+@@ -1,7 +1,63 @@
+  {
+-   "ack": null,
++   "ack": {
++     "candidate": {
++       "candidate_sha256": "2cd82733666949ffba83c790bfea7a8eb15f2f1c7fcb230498200ea840508bf3",
++       "draft_id": "authoring_group_825aaa0d6ba24c41b94b9a61ef85fe96",
++       "draft_revision": 1,
++       "entity": "practice_set",
++     },
++     "created_at": "2026-09-22T02:23:37.409161Z",
++     "decision": "pending",
++     "expired": false,
++     "expires_at": "2026-09-22T02:33:37.409161Z",
++     "id": "group_numeric_46e43273ff8d43b089fe3013b4bc5fcf",
++     "job": null,
++     "job_revision": null,
++     "operation_sha256": "20bc6be5f1bf22b536681706efaace955abb14de6b47f96b2224a2ad26994ceb",
++     "plan": {
++       "assertions": [
++         {
++           "atol": 0,
++           "expected": 42,
++           "expression": "x+25",
++           "id": "sum_check",
++           "rtol": 0,
++           "unit": "number",
++         },
++       ],
++       "seed": null,
++       "variables": [
++         {
++           "name": "x",
++           "unit": "number",
++           "value": 17,
++         },
++       ],
++       "version": "finite-arithmetic-v1",
++     },
++     "result": null,
++     "revision": 1,
++     "runtime": {
++       "cpu_seconds": 2,
++       "evaluator_process_limit": 1,
++       "evaluator_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
++       "evaluator_version": "finite-arithmetic-v1",
++       "memory_bytes": 268435456,
++       "output_bytes": 65536,
++       "python_version": "synthetic-ledger-only",
++       "runtime_manifest_sha256": "79b2ffc2a852bab302640621f459743129e33b32bf413c8321f538f72c8e8c8e",
++       "sandbox_version": "not-executed",
++       "wall_seconds": 5,
++     },
++     "target": {
++       "entity": "question",
++       "member_key": "numeric_question",
++       "member_sha256": "69e88f21ed45e78957194fa639320d5039fb8e7cf086bb36129f322e28cf118f",
++     },
++     "warnings": [],
++   },
+    "body": {
+      "candidate": {
+        "candidate_sha256": "2cd82733666949ffba83c790bfea7a8eb15f2f1c7fcb230498200ea840508bf3",
+        "draft_id": "authoring_group_825aaa0d6ba24c41b94b9a61ef85fe96",
+        "draft_revision": 1,
+
+ ❯ src/features/authoring/useAuthoringGroups.test.tsx:880:110
+    878|   await waitFor(() => expect(entered).toBe(true))
+    879|   await act(async () => { await pending })
+    880|   expect(readAuthoringCommand(Object.values(await authoringCommandStor…
+       |                                                                                                              ^
+    881|   expect(hook.result.current.numeric).toBeNull()
+    882|   hook.unmount()
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  7 failed | 32 passed (39)
+   Start at  11:07:37
+   Duration  2.54s (tests 72%, environment 15%, transform 9%, import 4%)
+

@@ -1,7 +1,6 @@
 """Read complete learning-package payloads without extracting or executing files."""
 
 from io import BytesIO
-import math
 import stat
 import struct
 from urllib.parse import urlsplit
@@ -23,6 +22,7 @@ from packages.contracts.validation import (
 
 from ..infrastructure.import_archive import has_complete_archive_envelope
 from .import_parse_types import ImportParsingError, PARSER_VERSION, ParsedAsset, ParsedImport, warning
+from .question_solution_validation import validate_question_solutions
 
 # These bytes are preserved for controlled attachment delivery, never HTML insertion.
 ASSET_SIGNATURES = {
@@ -133,32 +133,7 @@ def passive_asset(entry: dm.FileEntry, data: bytes) -> ParsedAsset:
 
 
 def check_solutions(solutions: list[dm.SolutionPrivate], objects: list[PublishedModel]) -> None:
-    questions = {(value.id, value.revision): value for value in objects if isinstance(value, dm.QuestionPublic)}
-    identities: set[tuple[str, int]] = set()
-    targets: set[tuple[str, int, int]] = set()
-    grading = {
-        "single_choice": {"choice_exact"},
-        "text_blank": {"text_normalized"},
-        "numeric": {"numeric_tolerance"},
-        "expression": {"symbolic_review"},
-        "calculation": {"numeric_tolerance", "symbolic_review", "rubric_review"},
-    }
-    for solution in solutions:
-        question = questions[(solution.question_ref.id, solution.question_ref.revision)]
-        identity = (solution.id, solution.revision)
-        target = (question.id, question.revision, solution.revision)
-        if identity in identities or target in targets or solution.grading_kind not in grading[question.kind]:
-            raise ValueError("Duplicate or mismatched private solution")
-        identities.add(identity)
-        targets.add(target)
-        if solution.grading_kind == "choice_exact" and not set(solution.accepted_answers).issubset(
-            {choice.id for choice in question.choices}
-        ):
-            raise ValueError("Solution selects an absent option")
-        if solution.grading_kind == "numeric_tolerance" and any(
-            not math.isfinite(float(value)) for value in solution.accepted_answers
-        ):
-            raise ValueError("Non-finite numeric answer")
+    validate_question_solutions([value for value in objects if isinstance(value, dm.QuestionPublic)], solutions)
 
 
 def parse_package(data: bytes, *, budgets: ImportBudgets = ImportBudgets()) -> ParsedImport:

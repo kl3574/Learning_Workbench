@@ -1,0 +1,24 @@
+import 'fake-indexeddb/auto'
+import { cleanup, render, waitFor } from '@testing-library/react'
+import { useState } from 'react'
+import { afterEach, expect, test, vi } from 'vitest'
+import { AuthoringPanel } from './AuthoringPanel'
+import type { AuthoringPort } from './authoringClient'
+afterEach(cleanup)
+test('reporting close protection to a parent state does not cause a render feedback loop', async () => {
+  const workspace = `workspace_${crypto.randomUUID()}`
+  const unexpected = vi.fn(async (): Promise<never> => { throw new Error('Unexpected protected operation') })
+  const port: AuthoringPort = { session: vi.fn<AuthoringPort['session']>(async () => ({ workspace_id: workspace, role: 'learner', csrf_token: '<REDACTED_SYNTHETIC_TEST_CREDENTIAL>', active_independent_attempt_id: null, active_open_book_attempt_id: null })), list: vi.fn(async () => ({ items: [], next_cursor: null })), prepare: unexpected, read: unexpected, draft: unexpected, preview: unexpected, numeric: unexpected, decide: unexpected, job: unexpected, cancel: unexpected }
+  const reported = vi.fn()
+  function Host() {
+    const [value, setValue] = useState({ dirty: false, safe: false })
+    return <><output>{value.safe ? 'control-ready' : 'waiting'}</output><AuthoringPanel workspace={workspace} paused currentBlock={null} port={port} onState={next => { reported(next); if (reported.mock.calls.length < 30) setValue(next) }} /></>
+  }
+  const view = render(<Host />)
+  // A test-only update bound prevents a real feedback defect from exhausting
+  // the process; it does not alter the production component or its callback.
+  await waitFor(() => expect(port.session).toHaveBeenCalledTimes(1))
+  expect(reported.mock.calls.length).toBeLessThan(15)
+  await waitFor(() => expect(view.container.querySelector('output')?.textContent).toBe('control-ready'))
+  expect(unexpected).not.toHaveBeenCalled()
+})

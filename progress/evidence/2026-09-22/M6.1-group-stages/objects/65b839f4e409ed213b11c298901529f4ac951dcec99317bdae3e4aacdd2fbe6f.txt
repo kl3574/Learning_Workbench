@@ -1,0 +1,195 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+rootdir: <HOME>/.cache/learning-workbench-acceptance/m61-groups-active
+configfile: pyproject.toml
+plugins: anyio-4.15.1
+collected 3 items
+
+tests/integration/test_authoring_group_http.py .F.                       [100%]
+
+=================================== FAILURES ===================================
+_ test_group_private_answers_numeric_routes_and_revocation_use_current_identity[practice_set] _
+
+tmp_path = PosixPath('/tmp/pytest-of-lkx/pytest-3/test_group_private_answers_num0')
+kind = 'practice_set'
+
+    @pytest.mark.parametrize("kind", ["practice_set", "assessment"])
+    def test_group_private_answers_numeric_routes_and_revocation_use_current_identity(tmp_path, kind):
+        async def run():
+            request, output, objects, bodies = question_material(kind)
+            async with local_provider(text=canonical_bytes(output).decode()) as server:
+                database, identity, app, client, headers = session(tmp_path, test_preparer(server.base_url))
+                try:
+                    configure(identity, app, server)
+                    ContentService(database).publish(identity.workspace_id, objects, bodies)
+                    original = client.post(
+                        "/api/v1/authoring/group-jobs",
+                        json=request.model_dump(mode="json"),
+                        headers=command(headers, "group-prepare"),
+                    )
+                    assert original.status_code == 202, original.text
+                    job_id = original.json()["id"]
+                    assert not app.state.authoring_group_worker.run_once() and server.requests == []
+                    grant(client, headers, job_id)
+                    assert not app.state.authoring_worker.run_once()
+                    assert await asyncio.to_thread(app.state.authoring_group_worker.run_once)
+                    current = client.get("/api/v1/authoring/jobs/" + job_id)
+                    assert current.status_code == 200, current.text
+                    assert current.json()["summary"]["status"] == "completed"
+                    candidate = current.json()["summary"]["candidate"]
+                    path = "/api/v1/authoring/draft-groups/" + candidate["draft_id"]
+                    before = all_rows(database)
+                    draft = client.get(path)
+                    assert draft.status_code == 200, draft.text
+                    public = draft.json()
+                    assert public["candidate"] == candidate and public["state"] == "draft" and public["base_ref"] is None
+                    assert "accepted_answers" not in draft.text and "仅私解" not in draft.text
+                    target = public["root"]["questions"][0]
+                    solution_path = path + "/solutions/" + target["member_key"]
+                    private = client.get(solution_path)
+                    assert private.status_code == 200, private.text
+                    assert private.json()["payload"]["answer"]["accepted_answers"] == ["42", "42.0"]
+                    assert private.json()["payload"]["review_status"] == "needs_review"
+                    assert all_rows(database) == before
+                    assert client.get("/api/v1/authoring/drafts/" + candidate["draft_id"]).status_code == 404
+                    assert client.get("/api/v1/drafts/" + candidate["draft_id"]).status_code == 404
+                    assert client.get(solution_path + "?revision=1").status_code == 422
+                    numeric_path = path + "/members/" + target["member_key"] + "/numeric-checks"
+                    numeric_body = {"candidate": candidate, "target": target}
+                    first = client.post(
+                        numeric_path, json=numeric_body, headers=command(headers, "numeric-decline-preview")
+                    )
+                    assert first.status_code == 201, first.text
+                    assert first.json()["job"] is first.json()["result"] is None
+                    check_path = "/api/v1/authoring/group-numeric-checks/" + first.json()["id"]
+                    decline_body = {
+                        "expected_revision": 1,
+                        "operation_sha256": first.json()["operation_sha256"],
+                        "decision": "decline",
+                    }
+                    declined = client.post(check_path + "/decision", json=decline_body, headers=command(headers, "decline"))
+                    assert declined.status_code == 200 and declined.json()["job"] is None
+                    assert client.get(check_path).json()["decision"] == "decline"
+                    second = client.post(
+                        numeric_path, json=numeric_body, headers=command(headers, "numeric-approve-preview")
+                    )
+                    assert second.status_code == 201, second.text
+                    selected_path = "/api/v1/authoring/group-numeric-checks/" + second.json()["id"]
+                    approval_body = {
+                        "expected_revision": 1,
+                        "operation_sha256": second.json()["operation_sha256"],
+                        "decision": "approve_once",
+                    }
+                    approved = client.post(
+                        selected_path + "/decision", json=approval_body, headers=command(headers, "approve")
+                    )
+                    assert approved.status_code == 202, approved.text
+                    numeric_id = approved.json()["job"]["id"]
+                    assert numeric_id != job_id and not app.state.numeric_worker.run_once()
+                    assert safe_control(client.get("/api/v1/jobs/" + numeric_id))["status"] == "queued"
+                    switch = client.post(
+                        "/api/v1/session/role", json={"role": "learner"}, headers=command(headers, "demote")
+                    )
+                    assert switch.status_code == 200
+                    protected_paths = [path, solution_path, selected_path, "/api/v1/authoring/jobs/" + job_id]
+                    before = all_rows(database)
+                    for protected in protected_paths:
+                        denied = client.get(protected)
+                        assert denied.status_code == 403 and "仅私解" not in denied.text
+                    assert all_rows(database) == before
+                    cancelled = client.post(
+                        "/api/v1/jobs/" + numeric_id + "/cancel",
+                        json={"expected_revision": 1},
+                        headers=command(headers, "numeric-cancel"),
+                    )
+                    assert safe_control(cancelled)["status"] == "cancelled"
+                    assert not app.state.group_numeric_worker.run_once()
+                    restored = client.post(
+                        "/api/v1/session/role", json={"role": "author"}, headers=command(headers, "restore")
+                    )
+                    assert restored.status_code == 200
+                    result = client.get(selected_path)
+                    assert result.json()["result"]["outcome"] == "cancelled"
+                    assert result.json()["result"]["started_at"] is None
+                    assert (
+                        client.post(
+                            selected_path + "/decision", json=approval_body, headers=command(headers, "approve")
+                        ).json()
+                        == approved.json()
+                    )
+                    assert client.get(path).json()["candidate"] == candidate
+                    assert client.get("/api/v1/authoring/jobs/" + job_id).json() == current.json()
+                    if kind == "practice_set":
+                        # A different real learner starts independent work; the existing
+                        # author cookie must immediately lose all subject-private reads.
+                        fixture = assessment_fixture("group_http_policy")
+                        import_fixture(database, identity, fixture, "http-policy-source")
+                        _, learner = consume_bootstrap(database, issue_bootstrap_code(database))
+                        attempt = AssessmentService(database).create_attempt(
+                            learner,
+                            fixture.assessment.id,
+                            AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode="independent"),
+                            "independent",
+                        )
+                        assert attempt.status == "in_progress"
+                        before = all_rows(database)
+                        for protected in protected_paths:
+                            denied = client.get(protected)
+                            assert denied.status_code == 409 and "仅私解" not in denied.text
+                        assert all_rows(database) == before
+                        safe_control(client.get("/api/v1/jobs/" + numeric_id))
+                    # Retain the original cookie after the real logout mutation to prove
+                    # server revocation, rather than mere client cookie deletion.
+                    token = client.cookies.get(COOKIE_NAME)
+                    logout = client.post("/api/v1/session/logout", json={}, headers=headers)
+                    assert logout.status_code == 200
+                    client.cookies.set(COOKIE_NAME, token)
+                    before = all_rows(database)
+                    assert client.get(solution_path).status_code == 401
+                    assert all_rows(database) == before
+                    assert len(server.requests) == 1
+                finally:
+                    client.close()
+    
+>       asyncio.run(run())
+
+tests/integration/test_authoring_group_http.py:305: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests/integration/test_authoring_group_http.py:276: in run
+    fixture = assessment_fixture("group_http_policy")
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/assessment_fixtures.py:27: in assessment_fixture
+    original = practice_fixture(prefix, profile=profile, revision=revision)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+prefix = 'group_http_policy', profile = 'author', revision = 1
+
+    def practice_fixture(prefix: str = 'practice', *, profile: Literal['learner', 'author'] = 'author', revision: int = 1) -> PracticeFixture:
+        if not prefix.isascii() or not prefix.isalpha() or revision not in {1, 2}:
+>           raise ValueError('Use an ASCII alphabetic prefix and revision 1 or 2')
+E           ValueError: Use an ASCII alphabetic prefix and revision 1 or 2
+
+tests/practice_fixtures.py:34: ValueError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <HOME>/.cache/learning-workbench-acceptance/m61-groups-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <HOME>/.cache/learning-workbench-acceptance/m61-groups-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_authoring_group_http.py::test_group_private_answers_numeric_routes_and_revocation_use_current_identity[practice_set]
+=================== 1 failed, 2 passed, 2 warnings in 5.58s ====================

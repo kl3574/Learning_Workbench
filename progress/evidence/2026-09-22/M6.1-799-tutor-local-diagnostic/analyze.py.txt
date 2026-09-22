@@ -1,0 +1,123 @@
+"""Replay measurements only; no app/test/network execution."""
+from collections import defaultdict
+import json
+from pathlib import Path
+import statistics
+
+BASE = Path(__file__).resolve().parent
+
+
+def analyze(folder):
+    c = json.loads((folder / 'client.json').read_text())
+    start, end = [m['node_ms'] for m in c['marks']]
+    py_offsets = [(v['node_before_ms'] - v['python_ns'] / 1e6,
+                   v['node_after_ms'] - v['python_ns'] / 1e6) for v in c['calibrations']]
+    browser_offsets = [(v['node_browser_before_ms'] - v['browser']['ms'],
+                        v['node_browser_after_ms'] - v['browser']['ms']) for v in c['calibrations']]
+    # Use envelope, not intersection, so observed offset spread is retained.
+    py_low, py_high = min(v[0] for v in py_offsets), max(v[1] for v in py_offsets)
+    br_low, br_high = min(v[0] for v in browser_offsets), max(v[1] for v in browser_offsets)
+
+    def relative(t):
+        return [round(t / 1e6 + py_low - start, 4), round(t / 1e6 + py_high - start, 4)]
+
+    result = dict(assertion_duration_ms=end - start, original_timeout_ms=5000,
+                  clock_mapping=dict(python_to_node_offset_intervals_ms=py_offsets,
+                                     browser_to_node_offset_intervals_ms=browser_offsets,
+                                     python_envelope_width_ms=py_high-py_low,
+                                     browser_envelope_width_ms=br_high-br_low,
+                                     browser_origin_equal=len({v['browser']['origin'] for v in c['calibrations']}) == 1,
+                                     rule='Elapsed-clock offset envelope from before/after RTT brackets; no wall-clock subtraction. Assumes no rate change beyond bracket envelope over this short interval.'),
+                  browser=[dict(e, relative_assertion_ms=[round(e['browser_ms']+br_low-start, 4),
+                                                         round(e['browser_ms']+br_high-start, 4)]) for e in c['browser']])
+    if not (folder / 'backend.json').exists():
+        result['backend_measurement'] = 'MISSING: atexit export did not run; no backend inference permitted'
+        return result
+    data = json.loads((folder / 'backend.json').read_text())
+    events = data['events']
+    phases = {e['id']: e for e in events if e['kind'] == 'phase_start'}
+    ends = {e['id']: e for e in events if e['kind'] == 'phase_end'}
+    starts = {e['connection']: e for e in events if e['kind'] == 'begin_start'}
+    acquired = {e['connection']: e for e in events if e['kind'] == 'begin_acquired'}
+    closed = {e['connection']: e for e in events if e['kind'] == 'connection_close'}
+    commits = {e['connection']: e for e in events if e['kind'] in ('commit_return', 'rollback_return')}
+
+    def chain(span):
+        names = []
+        while span in phases:
+            item = phases[span]
+            names.append(item['phase'])
+            span = item['span']
+        return names
+
+    def overlaps(left, right):
+        return relative(right)[1] >= 0 and relative(left)[0] <= end-start
+
+    transactions = []
+    for identifier, enter in starts.items():
+        got, finish, close = acquired.get(identifier), commits.get(identifier), closed.get(identifier)
+        if not got or not finish or not overlaps(enter['t_ns'], finish['t_ns']):
+            continue
+        transactions.append(dict(connection=identifier, immediate=enter['immediate'],
+                                 thread=enter['thread'], owner_chain=chain(enter['span']),
+                                 begin_start_ns=enter['t_ns'], acquired_ns=got['t_ns'], commit_return_ns=finish['t_ns'],
+                                 wait_ms=got['elapsed_ns']/1e6,
+                                 held_until_commit_return_ms=(finish['t_ns']-got['t_ns'])/1e6,
+                                 begin_relative_assertion_ms=relative(enter['t_ns']),
+                                 acquired_relative_assertion_ms=relative(got['t_ns']),
+                                 commit_relative_assertion_ms=relative(finish['t_ns']),
+                                 execute_count=close.get('execute_count') if close else None,
+                                 execute_elapsed_ms=close['execute_elapsed_ns']/1e6 if close else None))
+    statistics_by_owner = defaultdict(list)
+    for item in transactions:
+        owner = item['owner_chain'][0] if item['owner_chain'] else item['thread'] + ' (unwrapped caller)'
+        statistics_by_owner[owner].append(item)
+    stats = {owner: dict(count=len(items), write_count=sum(i['immediate'] for i in items),
+                         max_wait_ms=max(i['wait_ms'] for i in items),
+                         max_hold_ms=max(i['held_until_commit_return_ms'] for i in items),
+                         total_hold_ms=sum(i['held_until_commit_return_ms'] for i in items))
+             for owner, items in statistics_by_owner.items()}
+    phase_values = defaultdict(list)
+    for identifier, enter in phases.items():
+        finish = ends.get(identifier)
+        if finish and overlaps(enter['t_ns'], finish['t_ns']):
+            phase_values[enter['phase']].append((finish['t_ns']-enter['t_ns'])/1e6)
+    phase_stats = {name: dict(count=len(values), maximum_ms=max(values), median_ms=statistics.median(values),
+                             inclusive_sum_ms=sum(values)) for name, values in phase_values.items()}
+    landmark_kinds = {'provider_receipt_return', 'tutor_finish_enter', 'asgi_send_start', 'asgi_send_return'}
+    landmarks = [dict(e, relative_assertion_ms=relative(e['t_ns']), owner_chain=chain(e['span']))
+                 for e in events if e['kind'] in landmark_kinds and overlaps(e['t_ns'], e['t_ns'])]
+    errors = [dict(e, relative_assertion_ms=relative(e['t_ns']), owner_chain=chain(e['span']))
+              for e in events if 'error' in e['kind']]
+    writer_intersections = []
+    for enter in starts.values():
+        got = acquired.get(enter['connection'])
+        fail = next((e for e in events if e['kind'] == 'begin_error' and e['connection'] == enter['connection']), None)
+        finish = got or fail
+        if not finish or finish['elapsed_ns'] < 10_000_000 or not overlaps(enter['t_ns'],finish['t_ns']):
+            continue
+        writers = [dict(connection=t['connection'], owner_chain=t['owner_chain'], thread=t['thread'],
+                        overlap_ms=max(0,min(t['commit_return_ns'],finish['t_ns'])-max(t['acquired_ns'],enter['t_ns']))/1e6)
+                   for t in transactions if t['immediate'] and t['connection'] != enter['connection']
+                   and t['acquired_ns'] < finish['t_ns'] and t['commit_return_ns'] > enter['t_ns']]
+        writer_intersections.append(dict(connection=enter['connection'], owner_chain=chain(enter['span']),
+                                         thread=enter['thread'], elapsed_ms=finish['elapsed_ns']/1e6,
+                                         result=finish['kind'], overlapping_observed_writers=writers))
+    result.update(backend_measurement=dict(event_count=len(events),dropped=data['dropped']),
+                  transactions_overlapping_assertion=transactions, transaction_owner_stats=stats,
+                  inclusive_phase_stats=phase_stats, backend_landmarks=landmarks, backend_errors=errors,
+                  waits_over_10ms_overlapping_writers=writer_intersections,
+                  caveat='BEGIN elapsed is observed call time including tiny instrumentation overhead; hold ends at commit return. Method spans are inclusive/nested and must not be summed into total wall time. Writer overlap is observed concurrency, not a causal experiment.')
+    return result
+
+
+if __name__ == '__main__':
+    for folder in sorted(BASE.glob('run-*')):
+        if not (folder/'client.json').exists():
+            continue
+        value = analyze(folder)
+        (folder/'analysis.json').write_text(json.dumps(value,indent=2)+'\n')
+        print(folder.name, 'assertion_ms', value['assertion_duration_ms'], value['backend_measurement'])
+        for owner, stats in value.get('transaction_owner_stats',{}).items():
+            print(owner, stats)
+        print('errors',value.get('backend_errors'))

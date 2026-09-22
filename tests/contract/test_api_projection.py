@@ -49,9 +49,15 @@ def test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec():
         ('POST', '/api/v1/authoring/drafts/{id}/numeric-checks'),
         ('GET', '/api/v1/authoring/numeric-checks/{id}'),
         ('POST', '/api/v1/authoring/numeric-checks/{id}/decision'),
+        ('POST', '/api/v1/authoring/group-jobs'),
+        ('GET', '/api/v1/authoring/draft-groups/{id}'),
+        ('GET', '/api/v1/authoring/draft-groups/{id}/solutions/{member_key}'),
+        ('POST', '/api/v1/authoring/draft-groups/{id}/members/{member_key}/numeric-checks'),
+        ('GET', '/api/v1/authoring/group-numeric-checks/{id}'),
+        ('POST', '/api/v1/authoring/group-numeric-checks/{id}/decision'),
     }
     assert authoring <= projection
-    assert len(projection) == 87
+    assert len(projection) == 93
     assert len(SPEC_ROUTES - projection) == 26
 
 
@@ -68,12 +74,30 @@ def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, meth
         if schema.get("type") == "object":
             assert schema["additionalProperties"] is False
         else:
-            # A named RootModel projects the two concrete block-read shapes.
-            # Every union branch must still be a closed named object contract.
-            assert schema["title"] == "BlockReadResponse"
-            assert {"anyOf", "title"} <= set(schema) <= {"anyOf", "title", "description"}
-            assert len(schema["anyOf"]) == 2
-            for alternative in schema["anyOf"]:
+            # Only these specified named unions may replace a concrete object.
+            unions = {
+                "BlockReadResponse": ("anyOf", ["ContentBlock", "BlockProvenanceResponse"]),
+                "AuthoringJobReadView": ("anyOf", ["AuthoringJobView", "AuthoringGroupJobView"]),
+                "AuthoringGroupPrepareWrite": ("oneOf", ["AuthoringLessonPrepareWrite",
+                    "AuthoringPracticePrepareWrite", "AuthoringAssessmentPrepareWrite"]),
+            }
+            assert schema["title"] in unions
+            key, names = unions[schema["title"]]
+            allowed = {key, "title", "description"}
+            if schema["title"] == "AuthoringGroupPrepareWrite":
+                allowed.add("discriminator")
+                assert schema["discriminator"] == {"propertyName": "output_kind", "mapping": {
+                    "lesson": "#/components/schemas/AuthoringLessonPrepareWrite",
+                    "practice_set": "#/components/schemas/AuthoringPracticePrepareWrite",
+                    "assessment": "#/components/schemas/AuthoringAssessmentPrepareWrite"}}
+            assert {key, "title"} <= set(schema) <= allowed
+            assert schema[key] == [{"$ref": "#/components/schemas/" + name} for name in names]
+            if schema["title"] == "AuthoringJobReadView":
+                old, group = [api["components"]["schemas"][name] for name in names]
+                assert "variant" not in old["properties"]
+                assert group["properties"]["variant"]["const"] == "group"
+                assert "variant" in group["required"]
+            for alternative in schema[key]:
                 assert set(alternative) == {"$ref"}
                 target = api["components"]["schemas"][alternative["$ref"].rsplit("/", 1)[1]]
                 assert target["type"] == "object"

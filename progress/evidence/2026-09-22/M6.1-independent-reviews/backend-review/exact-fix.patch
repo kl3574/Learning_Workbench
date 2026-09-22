@@ -1,0 +1,421 @@
+--- before/services/api/app/application/authoring.py
++++ current/services/api/app/application/authoring.py
+@@ -11,7 +11,7 @@
+ from ..authoring_dto import AuthoringDraftView, AuthoringJobPage, AuthoringJobView, AuthoringPreparationSummary, AuthoringPrepareWrite
+ from ..import_dto import JobCancelRequest, JobSnapshot
+ from ..infrastructure.authoring_job_repository import integrity
+-from ..infrastructure.authoring_repository import AuthoringRepository
++from ..infrastructure.authoring_repository import AuthoringRepository, AuthoringRecord
+ from ..infrastructure.database import Database
+ from ..infrastructure.security import SessionIdentity
+ from .authoring_context import AuthoringContext
+@@ -30,7 +30,10 @@
+         self.provider = provider
+         self._cursor_key = secrets.token_bytes(32)
+ 
+-    def _history(self, conn: sqlite3.Connection, identity: SessionIdentity, identifier: str):
++    def verify_history(self, conn: sqlite3.Connection, identity: SessionIdentity, identifier: str) -> AuthoringRecord:
++        """Verify protected source and Provider history within the caller's transaction."""
++        if not conn.in_transaction:
++            raise integrity()
+         record = AuthoringRepository(conn, identity.workspace_id).load(identifier)
+         context = self.context.read(conn, identity, record.view.preparation.context_snapshot_id)
+         actual = build_outbound(record.input, context, record.view.summary.job_revision)
+@@ -73,7 +76,7 @@
+             repo = AuthoringRepository(conn, identity.workspace_id)
+             previous = repo.replay(identity, 'POST /authoring/jobs', key, body, dm.JobRef)
+             if previous is not None:
+-                self._history(conn, identity, previous.id)
++                self.verify_history(conn, identity, previous.id)
+                 return previous
+             identifier = 'authoring_' + uuid4().hex
+             value = AuthoringJobInput(version='authoring-job-v1', workspace_id=identity.workspace_id,
+@@ -88,20 +91,20 @@
+             repo.create(identity, value, summary)
+             ack = dm.JobRef(id=identifier, status='awaiting_approval')
+             repo.record_command(identity, 'POST /authoring/jobs', key, body, ack, identifier, 1)
+-            self._history(conn, identity, identifier)
++            self.verify_history(conn, identity, identifier)
+             return ack
+ 
+     def read(self, identity: SessionIdentity, identifier: str) -> AuthoringJobView:
+         with self.database.transaction(immediate=False) as conn:
+             self.context.check_access(conn, identity)
+-            return self._history(conn, identity, identifier).view
++            return self.verify_history(conn, identity, identifier).view
+ 
+     def draft(self, identity: SessionIdentity, identifier: str) -> AuthoringDraftView:
+         with self.database.transaction(immediate=False) as conn:
+             self.context.check_access(conn, identity)
+             repo = AuthoringRepository(conn, identity.workspace_id)
+             result = repo.draft(identifier)
+-            self._history(conn, identity, result.source_job_id)
++            self.verify_history(conn, identity, result.source_job_id)
+             from ..infrastructure.authoring_numeric_repository import NumericRepository
+             numeric = NumericRepository(conn, identity.workspace_id)
+             if numeric.candidate_checks(identifier) != result.numeric_check_ids:
+--- before/services/api/app/application/authoring_group.py
++++ current/services/api/app/application/authoring_group.py
+@@ -7,7 +7,7 @@
+     AuthoringGroupPrepareWrite, AuthoringPrivateSolutionView)
+ from ..import_dto import JobCancelRequest, JobSnapshot
+ from ..infrastructure.authoring_job_repository import integrity
+-from ..infrastructure.authoring_group_repository import AuthoringGroupRepository
++from ..infrastructure.authoring_group_repository import AuthoringGroupRepository, AuthoringGroupRecord
+ from ..infrastructure.database import Database
+ from ..infrastructure.security import SessionIdentity
+ from .authoring_group_context import AuthoringGroupContext
+@@ -26,7 +26,10 @@
+         self.context = context or AuthoringGroupContext(database)
+         self.provider = provider
+ 
+-    def _history(self, conn: sqlite3.Connection, identity: SessionIdentity, identifier: str):
++    def verify_history(self, conn: sqlite3.Connection, identity: SessionIdentity, identifier: str) -> AuthoringGroupRecord:
++        """Verify protected source and Provider history within the caller's transaction."""
++        if not conn.in_transaction:
++            raise integrity()
+         record = AuthoringGroupRepository(conn, identity.workspace_id).load(identifier)
+         context = self.context.read_group(conn, identity, record.view.preparation.context_snapshot_id)
+         summary = group_preparation(record.input, context)
+@@ -65,7 +68,7 @@
+             repo = AuthoringGroupRepository(conn, identity.workspace_id)
+             previous = repo.replay(identity, 'POST /authoring/group-jobs', key, body, dm.JobRef)
+             if previous is not None:
+-                self._history(conn, identity, previous.id)
++                self.verify_history(conn, identity, previous.id)
+                 return previous
+             identifier = 'authoring_' + uuid4().hex
+             value = AuthoringGroupJobInput(version='authoring-group-job-v1', workspace_id=identity.workspace_id,
+@@ -76,20 +79,20 @@
+             repo.create(identity, value, summary)
+             ack = dm.JobRef(id=identifier, status='awaiting_approval')
+             repo.record_command(identity, 'POST /authoring/group-jobs', key, body, ack, identifier, 1)
+-            self._history(conn, identity, identifier)
++            self.verify_history(conn, identity, identifier)
+             return ack
+ 
+     def read(self, identity: SessionIdentity, identifier: str) -> AuthoringGroupJobView:
+         with self.database.transaction(immediate=False) as conn:
+             self.context.check_access(conn, identity)
+-            return self._history(conn, identity, identifier).view
++            return self.verify_history(conn, identity, identifier).view
+ 
+     def draft(self, identity: SessionIdentity, identifier: str) -> AuthoringGroupDraftView:
+         with self.database.transaction(immediate=False) as conn:
+             self.context.check_access(conn, identity)
+             repo = AuthoringGroupRepository(conn, identity.workspace_id)
+             result = repo.draft(identifier)
+-            self._history(conn, identity, result.source_job_id)
++            self.verify_history(conn, identity, result.source_job_id)
+             from ..infrastructure.authoring_group_numeric_repository import GroupNumericRepository
+             numeric = GroupNumericRepository(conn, identity.workspace_id)
+             if numeric.candidate_checks(identifier) != result.numeric_check_ids:
+@@ -136,7 +139,7 @@
+             self.context.check_access(conn, identity)
+             repo = AuthoringGroupRepository(conn, identity.workspace_id)
+             candidate = repo.candidate(identifier)
+-            self._history(conn, identity, candidate.source_job_id)
++            self.verify_history(conn, identity, candidate.source_job_id)
+             try:
+                 return group_private_solution_view(candidate, member_key)
+             except (ValueError, KeyError):
+--- before/services/api/app/application/authoring_numeric_service.py
++++ current/services/api/app/application/authoring_numeric_service.py
+@@ -8,19 +8,31 @@
+ from ..infrastructure.authoring_numeric_runtime import NumericRuntime, NumericRuntimeError
+ from ..infrastructure.database import Database, utc_now
+ from ..infrastructure.security import SessionIdentity
++from .authoring import AuthoringService
+ from .authoring_context import AuthoringContext
+ from .authoring_numeric import NumericError, validate_plan
+ from .errors import ApiError
+ 
+ 
+ class NumericService:
+-    def __init__(self, database: Database, context: AuthoringContext, runtime: NumericRuntime):
++    def __init__(self, database: Database, context: AuthoringContext, runtime: NumericRuntime,
++                 authoring: AuthoringService | None = None):
+         self.database, self.context, self.runtime = database, context, runtime
++        self.authoring = authoring
+ 
+-    def _candidate_history(self, conn, identity, repo, draft_id):
++    def _control_history(self, conn, identity, repo, draft_id):
+         candidate = repo.candidate(draft_id)
+         generation = repo.authoring.load(candidate.source_job_id)
+         self.context.verify_history(conn, identity, generation.input, generation.view.preparation)
++        return candidate
++
++    def _candidate_history(self, conn, identity, repo, draft_id):
++        candidate = self._control_history(conn, identity, repo, draft_id)
++        if self.authoring is None:
++            raise ApiError(503, 'AUTHORING_OUTPUT_UNAVAILABLE', '原生成结果当前无法核验。')
++        generation = self.authoring.verify_history(conn, identity, candidate.source_job_id)
++        if generation.view.summary.candidate != candidate.candidate:
++            raise integrity()
+         return candidate
+ 
+     @staticmethod
+@@ -105,7 +117,7 @@
+         with self.database.transaction(immediate=False) as conn:
+             repo = NumericRepository(conn, identity.workspace_id)
+             record = repo.load(repo.check_for_job(identifier))
+-            self._candidate_history(conn, identity, repo, record.view.candidate.draft_id)
++            self._control_history(conn, identity, repo, record.view.candidate.draft_id)
+             return repo.jobs.snapshot(identifier)
+ 
+     def cancel_job(self, identity: SessionIdentity, identifier: str,
+@@ -114,7 +126,7 @@
+         with self.database.transaction() as conn:
+             repo = NumericRepository(conn, identity.workspace_id)
+             record = repo.load(repo.check_for_job(identifier))
+-            self._candidate_history(conn, identity, repo, record.view.candidate.draft_id)
++            self._control_history(conn, identity, repo, record.view.candidate.draft_id)
+             previous = repo.replay(identity, route, key, body, JobSnapshot)
+             if previous is not None:
+                 return previous
+--- before/services/api/app/application/authoring_group_numeric_service.py
++++ current/services/api/app/application/authoring_group_numeric_service.py
+@@ -10,6 +10,7 @@
+ from ..infrastructure.authoring_numeric_runtime import NumericRuntime, NumericRuntimeError
+ from ..infrastructure.database import Database, utc_now
+ from ..infrastructure.security import SessionIdentity
++from .authoring_group import AuthoringGroupService
+ from .authoring_group_context import AuthoringGroupContext
+ from .authoring_group_validation import group_numeric_plan
+ from .authoring_numeric import NumericError, validate_plan
+@@ -17,13 +18,24 @@
+ 
+ 
+ class GroupNumericService:
+-    def __init__(self, database: Database, context: AuthoringGroupContext, runtime: NumericRuntime):
++    def __init__(self, database: Database, context: AuthoringGroupContext, runtime: NumericRuntime,
++                 authoring: AuthoringGroupService | None = None):
+         self.database, self.context, self.runtime = database, context, runtime
++        self.authoring = authoring
+ 
+-    def _candidate_history(self, conn, identity, repo, draft_id):
++    def _control_history(self, conn, identity, repo, draft_id):
+         candidate = repo.candidate(draft_id)
+         generation = repo.authoring.load(candidate.source_job_id)
+         self.context.verify_group_history(conn, identity, generation.input, generation.view.preparation)
++        return candidate
++
++    def _candidate_history(self, conn, identity, repo, draft_id):
++        candidate = self._control_history(conn, identity, repo, draft_id)
++        if self.authoring is None:
++            raise ApiError(503, 'AUTHORING_OUTPUT_UNAVAILABLE', '原生成结果当前无法核验。')
++        generation = self.authoring.verify_history(conn, identity, candidate.source_job_id)
++        if generation.view.summary.candidate != candidate.candidate:
++            raise integrity()
+         return candidate
+ 
+     @staticmethod
+@@ -142,7 +154,7 @@
+         with self.database.transaction(immediate=False) as conn:
+             repo = GroupNumericRepository(conn, identity.workspace_id)
+             record = repo.load(repo.check_for_job(identifier))
+-            self._candidate_history(conn, identity, repo, record.view.candidate.draft_id)
++            self._control_history(conn, identity, repo, record.view.candidate.draft_id)
+             return repo.jobs.snapshot(identifier)
+ 
+     def cancel_job(self, identity: SessionIdentity, identifier: str, body: JobCancelRequest, key: str) -> JobSnapshot:
+@@ -150,7 +162,7 @@
+         with self.database.transaction() as conn:
+             repo = GroupNumericRepository(conn, identity.workspace_id)
+             record = repo.load(repo.check_for_job(identifier))
+-            self._candidate_history(conn, identity, repo, record.view.candidate.draft_id)
++            self._control_history(conn, identity, repo, record.view.candidate.draft_id)
+             previous = repo.replay(identity, route, key, body, JobSnapshot)
+             if previous is not None:
+                 return previous
+--- before/services/api/app/application/authoring_numeric_worker.py
++++ current/services/api/app/application/authoring_numeric_worker.py
+@@ -8,14 +8,17 @@
+ from ..infrastructure.authoring_numeric_runtime import NumericExecution, NumericRuntime, NumericRuntimeError
+ from ..infrastructure.database import Database, utc_now
+ from ..infrastructure.security import author_execution_identity
++from .authoring import AuthoringService
+ from .authoring_context import AuthoringContext
+ from .authoring_models import NumericJobInput
+ from .errors import ApiError
+ 
+ 
+ class NumericWorker:
+-    def __init__(self, database: Database, context: AuthoringContext, runtime: NumericRuntime):
++    def __init__(self, database: Database, context: AuthoringContext, runtime: NumericRuntime,
++                 authoring: AuthoringService | None = None):
+         self.database, self.context, self.runtime = database, context, runtime
++        self.authoring = authoring
+         self._stop = threading.Event()
+         self._lock = threading.Lock()
+         self._thread: threading.Thread | None = None
+@@ -75,8 +78,11 @@
+         if repo.job_input(lease.job_id) != value:
+             raise integrity()
+         candidate = repo.candidate(value.candidate.draft_id)
+-        generation = repo.authoring.load(candidate.source_job_id)
+-        self.context.verify_history(conn, identity, generation.input, generation.view.preparation)
++        if self.authoring is None:
++            raise ApiError(503, 'AUTHORING_OUTPUT_UNAVAILABLE', '原生成结果当前无法核验。')
++        generation = self.authoring.verify_history(conn, identity, candidate.source_job_id)
++        if generation.view.summary.candidate != candidate.candidate:
++            raise integrity()
+         return repo
+ 
+     def _watch(self, lease: AuthoringLease, value: NumericJobInput, actor: str) -> bool:
+--- before/services/api/app/application/authoring_group_numeric_worker.py
++++ current/services/api/app/application/authoring_group_numeric_worker.py
+@@ -9,14 +9,17 @@
+ from ..infrastructure.authoring_numeric_runtime import NumericExecution, NumericRuntime, NumericRuntimeError
+ from ..infrastructure.database import Database, utc_now
+ from ..infrastructure.security import author_execution_identity
++from .authoring_group import AuthoringGroupService
+ from .authoring_group_context import AuthoringGroupContext
+ from .authoring_group_models import AuthoringGroupNumericJobInput
+ from .errors import ApiError
+ 
+ 
+ class GroupNumericWorker:
+-    def __init__(self, database: Database, context: AuthoringGroupContext, runtime: NumericRuntime):
++    def __init__(self, database: Database, context: AuthoringGroupContext, runtime: NumericRuntime,
++                 authoring: AuthoringGroupService | None = None):
+         self.database, self.context, self.runtime = database, context, runtime
++        self.authoring = authoring
+         self._stop = threading.Event()
+         self._lock = threading.Lock()
+         self._thread: threading.Thread | None = None
+@@ -84,8 +87,11 @@
+         if repo.job_input(lease.job_id) != value:
+             raise integrity()
+         candidate = repo.candidate(value.candidate.draft_id)
+-        generation = repo.authoring.load(candidate.source_job_id)
+-        self.context.verify_group_history(conn, identity, generation.input, generation.view.preparation)
++        if self.authoring is None:
++            raise ApiError(503, 'AUTHORING_OUTPUT_UNAVAILABLE', '原生成结果当前无法核验。')
++        generation = self.authoring.verify_history(conn, identity, candidate.source_job_id)
++        if generation.view.summary.candidate != candidate.candidate:
++            raise integrity()
+         return repo
+ 
+     def _watch(self, lease: AuthoringLease, value: AuthoringGroupNumericJobInput, actor: str) -> bool:
+--- before/services/api/app/main.py
++++ current/services/api/app/main.py
+@@ -83,11 +83,11 @@
+     authoring_group_service = AuthoringGroupService(database, authoring_group_context, provider_dispatch)
+     authoring_group_worker = AuthoringGroupWorker(database, authoring_group_context, provider_dispatch)
+     numeric_runtime = NumericRuntime()
+-    numeric_service = NumericService(database, authoring_context, numeric_runtime)
+-    numeric_worker = NumericWorker(database, authoring_context, numeric_runtime)
++    numeric_service = NumericService(database, authoring_context, numeric_runtime, authoring=authoring_service)
++    numeric_worker = NumericWorker(database, authoring_context, numeric_runtime, authoring=authoring_service)
+     group_numeric_runtime = NumericRuntime()
+-    group_numeric_service = GroupNumericService(database, authoring_group_context, group_numeric_runtime)
+-    group_numeric_worker = GroupNumericWorker(database, authoring_group_context, group_numeric_runtime)
++    group_numeric_service = GroupNumericService(database, authoring_group_context, group_numeric_runtime, authoring=authoring_group_service)
++    group_numeric_worker = GroupNumericWorker(database, authoring_group_context, group_numeric_runtime, authoring=authoring_group_service)
+ 
+     @asynccontextmanager
+     async def lifespan(application: FastAPI):
+--- before/tests/integration/test_authoring_numeric_service.py
++++ current/tests/integration/test_authoring_numeric_service.py
+@@ -62,7 +62,7 @@
+             candidate = authoring.read(identity, original.id).summary.candidate
+             assert candidate is not None and len(server.requests) == 1
+             runtime = LedgerRuntime()
+-            return Generated((database, identity, authoring, NumericService(database, authoring.context, runtime), candidate, runtime))
++            return Generated((database, identity, authoring, NumericService(database, authoring.context, runtime, authoring=authoring), candidate, runtime))
+     return asyncio.run(build())
+ 
+ 
+@@ -298,7 +298,7 @@
+         pytest.fail('numeric preview and approval must not spawn a process')
+     monkeypatch.setattr(subprocess, 'Popen', forbidden)
+     runtime = NumericRuntime()
+-    service = NumericService(database, authoring.context, runtime)
++    service = NumericService(database, authoring.context, runtime, authoring=authoring)
+     view = service.preview(identity, candidate.draft_id, NumericCheckPreviewWrite(candidate=candidate), 'actual-manifest')
+     manifest = runtime.manifest_document()
+     assert sha256_bytes(manifest) == view.runtime.runtime_manifest_sha256
+--- before/tests/integration/test_authoring_group_numeric_service.py
++++ current/tests/integration/test_authoring_group_numeric_service.py
+@@ -103,7 +103,7 @@
+             draft = authoring.draft(identity, completed.summary.candidate.draft_id)
+             target = draft.root.blocks[1] if kind == 'lesson' else draft.root.questions[0]
+             runtime = LedgerRuntime()
+-            numeric = GroupNumericService(database, authoring.context, runtime)
++            numeric = GroupNumericService(database, authoring.context, runtime, authoring=authoring)
+             return Generated((database, identity, authoring, numeric, completed.summary.candidate, target, runtime))
+     return asyncio.run(build())
+ 
+@@ -270,7 +270,7 @@
+     database, identity, authoring, _, candidate, target, _ = generated
+     monkeypatch.setattr(subprocess, 'Popen', lambda *args, **kwargs: pytest.fail('preview/approval started process'))
+     runtime = NumericRuntime()
+-    service = GroupNumericService(database, authoring.context, runtime)
++    service = GroupNumericService(database, authoring.context, runtime, authoring=authoring)
+     view = service.preview(identity, candidate.draft_id, target.member_key,
+         AuthoringGroupNumericPreviewWrite(candidate=candidate, target=target), 'actual-runtime')
+     assert sha256_bytes(runtime.manifest_document()) == view.runtime.runtime_manifest_sha256
+--- before/tests/integration/test_authoring_numeric_worker.py
++++ current/tests/integration/test_authoring_numeric_worker.py
+@@ -27,7 +27,7 @@
+ def test_numeric_recovery_of_committed_launch_never_executes_again(generated, monkeypatch, observed_start):
+     database, identity, authoring, numeric, _, runtime = generated
+     view, ack = approved_numeric(generated)
+-    worker = NumericWorker(database, authoring.context, runtime)
++    worker = NumericWorker(database, authoring.context, runtime, authoring=authoring)
+     work = worker.claim()
+     assert work is not None
+     lease, _, _ = work
+@@ -59,7 +59,7 @@
+     def forbidden(*args, **kwargs):
+         pytest.fail('a demoted original author cannot begin numerical execution')
+     monkeypatch.setattr(runtime, 'run_checked', forbidden, raising=False)
+-    worker = NumericWorker(database, authoring.context, runtime)
++    worker = NumericWorker(database, authoring.context, runtime, authoring=authoring)
+     assert worker.run_once()
+     with database.transaction(immediate=False) as conn:
+         repo = NumericRepository(conn, identity.workspace_id)
+--- before/tests/integration/test_authoring_group_numeric_worker.py
++++ current/tests/integration/test_authoring_group_numeric_worker.py
+@@ -36,7 +36,7 @@
+     generation = authoring.read(identity, authoring.draft(identity, candidate.draft_id).source_job_id)
+     view = preview(generated)
+     ack = numeric.decide(identity, view.id, decision(view), 'approve')
+-    worker = GroupNumericWorker(database, authoring.context, runtime)
++    worker = GroupNumericWorker(database, authoring.context, runtime, authoring=authoring)
+     lease, job, actor = worker.claim()
+     assert actor == identity.id
+     with database.transaction() as conn:
+@@ -56,7 +56,7 @@
+         pytest.fail('a committed permission cannot be submitted to another executor')
+ 
+     monkeypatch.setattr(runtime, 'run_checked', forbidden, raising=False)
+-    restarted = GroupNumericWorker(Database(database.settings), authoring.context, runtime)
++    restarted = GroupNumericWorker(Database(database.settings), authoring.context, runtime, authoring=authoring)
+     assert restarted.run_once()
+     current = numeric.read(identity, view.id)
+     assert current.job.status == 'failed' and current.result.outcome == 'outcome_unknown'
+@@ -82,7 +82,7 @@
+     ack = numeric.decide(identity, view.id, decision(view), 'approve')
+     SessionService(database).logout(identity)
+     monkeypatch.setattr(runtime, 'run_checked', lambda *args, **kwargs: pytest.fail('revoked author started process'), raising=False)
+-    worker = GroupNumericWorker(database, authoring.context, runtime)
++    worker = GroupNumericWorker(database, authoring.context, runtime, authoring=authoring)
+     assert worker.run_once()
+     with database.transaction(immediate=False) as conn:
+         repo = GroupNumericRepository(conn, identity.workspace_id)
+@@ -96,11 +96,11 @@
+ def test_real_group_worker_records_actual_environment_block_without_claiming_numeric_pass(generated):
+     database, identity, authoring, _, candidate, target, _ = generated
+     runtime = NumericRuntime()
+-    numeric = GroupNumericService(database, authoring.context, runtime)
++    numeric = GroupNumericService(database, authoring.context, runtime, authoring=authoring)
+     view = numeric.preview(identity, candidate.draft_id, target.member_key,
+         AuthoringGroupNumericPreviewWrite(candidate=candidate, target=target), 'real-environment')
+     ack = numeric.decide(identity, view.id, decision(view), 'approve-real-environment')
+-    worker = GroupNumericWorker(database, authoring.context, runtime)
++    worker = GroupNumericWorker(database, authoring.context, runtime, authoring=authoring)
+     assert worker.run_once()
+     current = numeric.read(identity, view.id)
+     assert current.job.status == 'failed' and current.result.outcome == 'environment_unavailable'

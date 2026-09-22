@@ -1,0 +1,84 @@
+
+> @learning-workbench/web@0.1.0 test:e2e
+> playwright test --config ../../tests/e2e/playwright.config.ts authoring-groups.spec.ts
+
+[WebServer] INFO:     Started server process [93365]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+[WebServer] (node:93391) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 2 tests using 1 worker
+
+(node:93447) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 ../../tests/e2e/authoring-groups.spec.ts:109:1 › native lesson group preserves its plan and formulas, then separately declines and executes one exact numeric member (7.3s)
+(node:93754) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  2 ../../tests/e2e/authoring-groups.spec.ts:153:1 › native practice group replays its lost prepare ACK with one key and clears explicitly read private answers after permission changes (7.1s)
+
+
+  1) ../../tests/e2e/authoring-groups.spec.ts:109:1 › native lesson group preserves its plan and formulas, then separately declines and executes one exact numeric member 
+
+    Error: expect(locator).toBeEnabled() failed
+
+    Locator: getByRole('dialog', { name: '创作', exact: true }).getByLabel('创作类型', { exact: true })
+    Expected: enabled
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeEnabled" getByRole('dialog', { name: '创作', exact: true }).getByLabel('创作类型', { exact: true }) with timeout 5000ms
+      - waiting for getByRole('dialog', { name: '创作', exact: true }).getByLabel('创作类型', { exact: true })
+
+
+      21 |   await page.getByRole('button', { name: '创作', exact: true }).click()
+      22 |   const dialog = page.getByRole('dialog', { name: '创作', exact: true })
+    > 23 |   await expect(dialog.getByLabel('创作类型', { exact: true })).toBeEnabled()
+         |                                                            ^
+      24 |   await dialog.getByLabel('创作类型', { exact: true }).selectOption(kind)
+      25 |   await dialog.getByLabel('创作主题', { exact: true }).fill(topic)
+      26 |   await dialog.getByLabel('学习目标（每行一条，至少一条）', { exact: true }).fill(objective)
+        at form (<HOME>/.cache/learning-workbench-acceptance/m61-groups-active/tests/e2e/authoring-groups.spec.ts:23:60)
+        at <HOME>/.cache/learning-workbench-acceptance/m61-groups-active/tests/e2e/authoring-groups.spec.ts:116:20
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../m61-group-native-development-v1/01-native-groups/artifacts/authoring-groups-native-le-f0866-es-one-exact-numeric-member/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../m61-group-native-development-v1/01-native-groups/artifacts/authoring-groups-native-le-f0866-es-one-exact-numeric-member/error-context.md
+
+  2) ../../tests/e2e/authoring-groups.spec.ts:153:1 › native practice group replays its lost prepare ACK with one key and clears explicitly read private answers after permission changes 
+
+    Error: expect(locator).toBeEnabled() failed
+
+    Locator: getByRole('dialog', { name: '创作', exact: true }).getByLabel('创作类型', { exact: true })
+    Expected: enabled
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeEnabled" getByRole('dialog', { name: '创作', exact: true }).getByLabel('创作类型', { exact: true }) with timeout 5000ms
+      - waiting for getByRole('dialog', { name: '创作', exact: true }).getByLabel('创作类型', { exact: true })
+
+
+      21 |   await page.getByRole('button', { name: '创作', exact: true }).click()
+      22 |   const dialog = page.getByRole('dialog', { name: '创作', exact: true })
+    > 23 |   await expect(dialog.getByLabel('创作类型', { exact: true })).toBeEnabled()
+         |                                                            ^
+      24 |   await dialog.getByLabel('创作类型', { exact: true }).selectOption(kind)
+      25 |   await dialog.getByLabel('创作主题', { exact: true }).fill(topic)
+      26 |   await dialog.getByLabel('学习目标（每行一条，至少一条）', { exact: true }).fill(objective)
+        at form (<HOME>/.cache/learning-workbench-acceptance/m61-groups-active/tests/e2e/authoring-groups.spec.ts:23:60)
+        at <HOME>/.cache/learning-workbench-acceptance/m61-groups-active/tests/e2e/authoring-groups.spec.ts:160:20
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../m61-group-native-development-v1/01-native-groups/artifacts/authoring-groups-native-pr-d6a94-rs-after-permission-changes/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../m61-group-native-development-v1/01-native-groups/artifacts/authoring-groups-native-pr-d6a94-rs-after-permission-changes/error-context.md
+
+  2 failed
+    ../../tests/e2e/authoring-groups.spec.ts:109:1 › native lesson group preserves its plan and formulas, then separately declines and executes one exact numeric member 
+    ../../tests/e2e/authoring-groups.spec.ts:153:1 › native practice group replays its lost prepare ACK with one key and clears explicitly read private answers after permission changes 

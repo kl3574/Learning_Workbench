@@ -1,0 +1,29 @@
+from pathlib import Path
+import datetime
+import hashlib
+import json
+import os
+import subprocess
+
+BASE = Path(__file__).parent
+ROOT = BASE.parent / 'm61-groups-active'
+sha = lambda value: hashlib.sha256(value).hexdigest()
+inputs = json.loads((BASE / 'before.json').read_text())['files'] + json.loads((BASE / 'input-additions.json').read_text())['files']
+paths = [(row['path'], ROOT / row['path']) for row in inputs] + [('repro/ack-race.test.tsx', BASE / 'repro/ack-race.test.tsx'), ('repro/vitest.config.mjs', BASE / 'repro/vitest.config.mjs')]
+def snapshot():
+    return [{'path': name, 'bytes': len(path.read_bytes()), 'sha256': sha(path.read_bytes()), 'mode': path.stat().st_mode, 'mtime_ns': path.stat().st_mtime_ns} for name, path in paths]
+def write(path, data):
+    with path.open('x') as output: output.write(json.dumps(data, ensure_ascii=False, indent=2) + '\n')
+before = snapshot()
+for row in inputs:
+    assert (ROOT / row['path']).read_bytes() == (BASE / 'inputs' / row['path']).read_bytes(), row['path']
+out = BASE / '01-red'; out.mkdir()
+write(out / 'before.json', before)
+started = datetime.datetime.now(datetime.timezone.utc).isoformat()
+command = ['bash', str(ROOT / 'scripts/node.sh'), str(ROOT / 'apps/web/node_modules/.bin/vitest'), 'run', '--config', 'vitest.config.mjs']
+with (out / 'run.log').open('wb') as output:
+    result = subprocess.run(command, cwd=BASE / 'repro', stdout=output, stderr=subprocess.STDOUT, env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1'))
+after = snapshot(); write(out / 'after.json', after)
+write(out / 'receipt.json', {'command': command, 'started_at': started, 'finished_at': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'exit_code': result.returncode, 'source_count': len(before), 'inputs_unchanged': before == after, 'driver_sha256': sha(Path(__file__).read_bytes()), 'before_sha256': sha((out / 'before.json').read_bytes()), 'after_sha256': sha((out / 'after.json').read_bytes()), 'run_log_sha256': sha((out / 'run.log').read_bytes()), 'scope': 'Only cache regression, current hook and actual DraftStore/fake IndexedDB. One deferred completion of a real IDB read creates the access-switch schedule. No product/test source writes, no browser, vendor, calculator or real workspace DB.'})
+print((out / 'run.log').read_text())
+print('EXIT', result.returncode, 'UNCHANGED', before == after)

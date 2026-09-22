@@ -1,0 +1,262 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: authoring-groups.spec.ts >> native lesson group preserves its plan and formulas, then separately declines and executes one exact numeric member
+- Location: ../../tests/e2e/authoring-groups.spec.ts:109:1
+
+# Error details
+
+```
+Error: expect(locator).toBeEnabled() failed
+
+Locator: getByRole('dialog', { name: '创作', exact: true }).getByLabel('创作类型', { exact: true })
+Expected: enabled
+Timeout: 5000ms
+Error: element(s) not found
+
+Call log:
+  - Expect "toBeEnabled" getByRole('dialog', { name: '创作', exact: true }).getByLabel('创作类型', { exact: true }) with timeout 5000ms
+  - waiting for getByRole('dialog', { name: '创作', exact: true }).getByLabel('创作类型', { exact: true })
+
+```
+
+```yaml
+- link "跳到学习内容":
+  - /url: "#reader-main"
+- banner:
+  - link "知径 学习工作台":
+    - /url: "#"
+    - strong: 知径
+    - text: 学习工作台
+  - button "搜索与命令 Ctrl ⇧ P"
+  - button "切换导航栏" [expanded]: 目录
+  - button "切换 Agent 栏" [expanded]: Agent
+  - button "专注"
+  - button "导入"
+- complementary "课程导航":
+  - text: 学习路线
+  - heading "目标与任务顺序" [level=2]
+  - paragraph: 阅读、自报、参与和独立证据分别记录。
+  - button "学习目标与基础"
+  - navigation "学习主导航":
+    - button "学习路线"
+    - button "教材 含例题"
+    - button "习题 含解答"
+    - button "测试题"
+  - region "学习路线目录":
+    - heading "路线与历史修订" [level=2]
+    - button "刷新路线"
+    - paragraph: 尚无正式学习路线。
+    - list
+    - button "创建路线"
+    - button "学习建议"
+    - button "查看概念与技能证据"
+  - button "笔记"
+  - button "创作"
+  - button "设置"
+- separator "导航栏宽度"
+- main:
+  - tablist "打开的学习对象":
+    - tab "学习路线" [selected]
+  - heading "从学习目标开始" [level=1]
+  - paragraph: 路线把真实教材、练习和测试排成任务顺序。先修提醒帮助选择顺序，完成标记不代表掌握。
+  - paragraph: 尚无正式学习路线。
+  - button "创建路线"
+  - button "学习建议"
+  - button "学习目标与基础"
+  - button "查看概念与技能证据"
+  - list
+- separator "Agent 栏宽度"
+- complementary "Agent 助教":
+  - heading "Agent" [level=2]
+  - text: 本地任务 · 明确授权
+  - group:
+    - text: 当前上下文
+    - paragraph: 尚未选择学习对象
+  - heading "先选择真实学习对象" [level=3]
+  - paragraph: 尚无可解析的学习对象；问题草稿仍可保留。
+  - button "讲解" [pressed]
+  - button "提示"
+  - button "推导"
+  - button "拓展"
+  - text: 问题草稿
+  - textbox "问题草稿":
+    - /placeholder: 写下问题，草稿按当前对象保留…
+  - text: 联网：未授权
+  - button "创建本次问答任务 ↑" [disabled]
+  - text: 本机草稿保留；发送与结果以本次任务记录为准。
+- status: ✓ UI 会话已保存 尚未选择对象 正常学习 · 本机
+- dialog "创作":
+  - banner:
+    - heading "创作" [level=2]
+    - button "关闭创作": ×
+  - paragraph: 可以准备例题、教材小节、习题集与测试题组草稿。模型调用与数值执行分别授权；数学、来源与教学质量均待审查。
+  - button "刷新安全任务列表与当前权限"
+  - region "创作任务安全控制":
+    - heading "已有创作与数值任务" [level=3]
+    - paragraph: 这里只显示任务状态。取消请求不保证远端尚未执行，也不撤销已发生的计算。
+    - paragraph: 本页没有任务。
+  - region "原创作命令回执":
+    - heading "本机保留的原命令" [level=3]
+  - region "准备单个例题候选":
+    - heading "准备一个例题候选" [level=3]
+    - paragraph: 先保存教学要求与准确材料，再另行核对模型调用授权。不会覆盖教材，也不会自动运行数值检查。
+    - group "本次教学要求":
+      - text: 本次教学要求 创作类型
+      - combobox "创作类型":
+        - option "单个例题" [selected]
+        - option "教材小节"
+        - option "习题集"
+        - option "测试题组"
+      - text: 例题主题
+      - textbox "例题主题"
+      - text: 已声明先修（每行一条）
+      - textbox "已声明先修（每行一条）"
+      - text: 学习目标（每行一条，至少一条）
+      - textbox "学习目标（每行一条，至少一条）"
+      - text: 证明策略
+      - combobox "证明策略":
+        - option "完整证明" [selected]
+        - option "明确声明所依赖的结论"
+      - text: 已配置的提供商 ID
+      - textbox "已配置的提供商 ID"
+      - paragraph: 请从设置中的实际配置选择 ID。配置存在不代表具备完整输入计量证明或已授权调用。
+      - heading "本次材料范围" [level=4]
+      - paragraph: 无已选教材来源。不会自动加入当前教材或父级内容。
+      - group: 明确加入其他准确内容块
+      - button "明确准备本次例题任务"
+```
+
+# Test source
+
+```ts
+  1   | import { writeFileSync } from 'node:fs'
+  2   | import { expect, test, type Locator, type Page, type TestInfo } from '../../apps/web/node_modules/@playwright/test/index.mjs'
+  3   | import type { AuthoringGroupDraftView, AuthoringGroupJobView, AuthoringGroupNumericCheckView, AuthoringPrivateSolutionView, ConsentProposalView, JobRef, SessionResponse } from '../../packages/contracts/generated/api-types'
+  4   | import { AuthoringRuntime } from './authoringRuntime'
+  5   | 
+  6   | const providerId = 'provider_authoring_group_native'
+  7   | const topic = '原创合成组合创作'
+  8   | const objective = '区分草稿结构、数值复算与教学审核。'
+  9   | async function configure(page: Page, runtime: AuthoringRuntime) {
+  10  |   const auth: SessionResponse = await page.request.get('/api/v1/session').then(value => value.json())
+  11  |   const headers = { Origin: runtime.origin, 'X-CSRF-Token': auth.csrf_token }
+  12  |   expect((await page.request.post('/api/v1/session/role', { data: { role: 'author' }, headers: { ...headers, 'Idempotency-Key': 'native-group-author' } })).status()).toBe(200)
+  13  |   const config = runtime.control()
+  14  |   expect(config.test_only).toBe(true); expect(config.proof_registered).toBe(true)
+  15  |   expect((await page.request.put(`/api/v1/providers/${providerId}/config`, { data: { expected_revision: 0, adapter: config.adapter, base_url: config.base_url, model: config.model, embedding_model: null, endpoint_policy: 'explicit_loopback', pricing: null }, headers: { ...headers, 'Idempotency-Key': 'native-group-config' } })).status()).toBe(200)
+  16  |   expect((await page.request.post(`/api/v1/providers/${providerId}/secret`, { data: { expected_revision: 1, secret: '<REDACTED_SYNTHETIC_TEST_CREDENTIAL>' }, headers: { ...headers, 'Idempotency-Key': 'native-group-secret' } })).status()).toBe(200)
+  17  |   await page.reload()
+  18  |   await expect(page.getByText('✓ UI 会话已保存', { exact: true })).toBeVisible()
+  19  | }
+  20  | async function form(page: Page, kind: 'lesson' | 'practice_set') {
+  21  |   await page.getByRole('button', { name: '创作', exact: true }).click()
+  22  |   const dialog = page.getByRole('dialog', { name: '创作', exact: true })
+> 23  |   await expect(dialog.getByLabel('创作类型', { exact: true })).toBeEnabled()
+      |                                                            ^ Error: expect(locator).toBeEnabled() failed
+  24  |   await dialog.getByLabel('创作类型', { exact: true }).selectOption(kind)
+  25  |   await dialog.getByLabel('创作主题', { exact: true }).fill(topic)
+  26  |   await dialog.getByLabel('学习目标（每行一条，至少一条）', { exact: true }).fill(objective)
+  27  |   await dialog.getByLabel('已配置的提供商 ID', { exact: true }).fill(providerId)
+  28  |   if (kind === 'practice_set') {
+  29  |     const target = dialog.getByRole('region', { name: '明确选择已有目标', exact: true })
+  30  |     await target.getByRole('button', { name: '读取课程目录以选择目标', exact: true }).click()
+  31  |     await target.getByRole('button', { name: '原创合成组目标课程 · r1 · 选择目标', exact: true }).click()
+  32  |     await target.getByRole('button', { name: '加入概念：concept_group_native · r1', exact: true }).click()
+  33  |     await target.getByRole('button', { name: '选择所属小节：原创合成已有小节 · r1', exact: true }).click()
+  34  |     await expect(target.getByText('已选概念 1 / 32', { exact: true })).toBeVisible()
+  35  |   }
+  36  |   return dialog
+  37  | }
+  38  | async function readPrepared(page: Page, dialog: Locator, ack: JobRef) {
+  39  |   expect(ack.status).toBe('awaiting_approval')
+  40  |   await dialog.getByRole('button', { name: `读取创作详情 ${ack.id}`, exact: true }).click()
+  41  |   await expect(dialog.getByRole('region', { name: '受保护创作详情', exact: true })).toBeVisible()
+  42  |   const result: AuthoringGroupJobView = await page.request.get(`/api/v1/authoring/jobs/${ack.id}`).then(value => value.json())
+  43  |   expect(result.variant).toBe('group'); expect(result.request.source_refs).toEqual([])
+  44  |   expect(result.raw_answer).toBeNull(); expect(result.consent_id).toBeNull(); expect(result.content_plan).toBeNull()
+  45  |   return result
+  46  | }
+  47  | async function grant(page: Page, dialog: Locator, ack: JobRef) {
+  48  |   const preview = dialog.getByRole('region', { name: '准备授权预览', exact: true })
+  49  |   await expect(preview.getByLabel('最大输入 token', { exact: true })).toBeEnabled()
+  50  |   await preview.getByLabel('最大输入 token', { exact: true }).fill('20000')
+  51  |   await preview.getByLabel('最大输出 token', { exact: true }).fill('10000')
+  52  |   await preview.getByLabel('总超时秒数', { exact: true }).fill('10')
+  53  |   await preview.getByLabel('到期时间 UTC', { exact: true }).fill(new Date(Date.now() + 300_000).toISOString())
+  54  |   await preview.getByRole('button', { name: '准备服务端预览命令', exact: true }).click()
+  55  |   const preparing = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith('/api/v1/consents/preview'))
+  56  |   await dialog.getByRole('button', { name: '确认发送授权预览', exact: true }).click()
+  57  |   const response = await preparing; expect(response.status()).toBe(201)
+  58  |   const proposal: ConsentProposalView = await response.json()
+  59  |   expect(proposal.summary.job_id).toBe(ack.id)
+  60  |   await dialog.getByLabel('我已核对本次组合草稿的冻结范围、提供商、预算与到期时间', { exact: true }).check()
+  61  |   await dialog.getByRole('button', { name: '准备批准组合草稿模型调用', exact: true }).click()
+  62  |   const granting = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith('/api/v1/consents'))
+  63  |   await dialog.getByRole('button', { name: '确认发送批准授权', exact: true }).click()
+  64  |   expect((await granting).status()).toBe(201)
+  65  |   let completed!: AuthoringGroupJobView
+  66  |   // Preserve Playwright's actual default 5 s assertion; failure is diagnosed,
+  67  |   // never converted into a longer hidden acceptance window.
+  68  |   await expect.poll(async () => { completed = await page.request.get(`/api/v1/authoring/jobs/${ack.id}`).then(value => value.json()); return completed.summary.status }).toBe('completed')
+  69  |   await dialog.getByRole('button', { name: '重新读取本次创作任务', exact: true }).click()
+  70  |   await dialog.getByRole('button', { name: '读取这份准确组合候选', exact: true }).click()
+  71  |   const group = dialog.getByRole('region', { name: '组合草稿候选', exact: true })
+  72  |   await expect(group).toBeVisible()
+  73  |   const draft: AuthoringGroupDraftView = await page.request.get(`/api/v1/authoring/draft-groups/${completed.summary.candidate!.draft_id}`).then(value => value.json())
+  74  |   expect(draft.candidate).toEqual(completed.summary.candidate)
+  75  |   expect(draft.content_plan).toEqual(completed.content_plan); expect(draft.plan_ref).toEqual(completed.plan_ref)
+  76  |   expect(draft.state).toBe('draft'); expect(draft.base_ref).toBeNull()
+  77  |   expect(draft.validation.mathematical).toBe('NOT_RUN'); expect(draft.validation.independent_pedagogy).toBe('NOT_RUN')
+  78  |   await expect(group.getByRole('region', { name: '冻结的内容计划', exact: true })).toContainText(objective)
+  79  |   return { completed, draft, group, proposal }
+  80  | }
+  81  | async function numericPreview(page: Page, dialog: Locator, group: Locator, draft: AuthoringGroupDraftView) {
+  82  |   const receiving = page.waitForResponse(value => value.request().method() === 'POST' && value.url().includes(`/api/v1/authoring/draft-groups/${draft.candidate.draft_id}/members/`) && value.url().endsWith('/numeric-checks'))
+  83  |   await group.getByRole('button', { name: '为例题 原创合成双倍例题 准备独立数值预览', exact: true }).click()
+  84  |   const response = await receiving; expect(response.status()).toBe(201)
+  85  |   const check: AuthoringGroupNumericCheckView = await response.json()
+  86  |   expect(check.target.member_key).toBe('example'); expect(check.candidate).toEqual(draft.candidate)
+  87  |   expect(check.job).toBeNull(); expect(check.result).toBeNull()
+  88  |   await group.getByRole('button', { name: '刷新组合候选的检查记录', exact: true }).click()
+  89  |   await group.getByRole('button', { name: `读取组数值检查 ${check.id}`, exact: true }).click()
+  90  |   await expect(dialog.getByRole('region', { name: '独立数值执行批准', exact: true })).toBeVisible()
+  91  |   return check
+  92  | }
+  93  | async function picture(page: Page, dialog: Locator, target: Locator, width: number, name: string, info: TestInfo) {
+  94  |   await page.setViewportSize({ width, height: 900 })
+  95  |   await target.scrollIntoViewIfNeeded(); await expect(target).toBeVisible()
+  96  |   const bounds = await dialog.evaluate(element => {
+  97  |     const inner = element.querySelector('.dialog-inner')!
+  98  |     return { client: element.clientWidth, scroll: element.scrollWidth, inner_client: inner.clientWidth, inner_scroll: inner.scrollWidth, left: element.getBoundingClientRect().left, right: element.getBoundingClientRect().right, viewport: innerWidth, document: document.documentElement.scrollWidth }
+  99  |   })
+  100 |   writeFileSync(info.outputPath(`${name}-geometry.json`), JSON.stringify(bounds, null, 2))
+  101 |   await page.screenshot({ path: info.outputPath(`${name}.png`) })
+  102 |   expect(bounds.inner_scroll).toBeLessThanOrEqual(bounds.inner_client + 1)
+  103 |   expect(bounds.scroll).toBeLessThanOrEqual(bounds.client + 1)
+  104 |   expect(bounds.left).toBeGreaterThanOrEqual(0); expect(bounds.right).toBeLessThanOrEqual(bounds.viewport)
+  105 |   expect(bounds.document).toBeLessThanOrEqual(bounds.viewport)
+  106 |   return bounds
+  107 | }
+  108 | 
+  109 | test('native lesson group preserves its plan and formulas, then separately declines and executes one exact numeric member', async ({ playwright }, info) => {
+  110 |   test.setTimeout(120_000)
+  111 |   const runtime = await AuthoringRuntime.start('lesson', 'groups'), errors: string[] = []
+  112 |   try {
+  113 |     const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]
+  114 |     page.on('pageerror', error => errors.push(error.message))
+  115 |     await runtime.authenticateOnly(page); await configure(page, runtime)
+  116 |     const dialog = await form(page, 'lesson')
+  117 |     const preparing = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith('/api/v1/authoring/group-jobs'))
+  118 |     await dialog.getByRole('button', { name: '明确准备本次组合创作任务', exact: true }).click()
+  119 |     const accepted = await preparing; expect(accepted.status()).toBe(202)
+  120 |     const ack: JobRef = await accepted.json(), prepared = await readPrepared(page, dialog, ack)
+  121 |     expect(runtime.control().received_request_count).toBe(0)
+  122 |     const { completed, draft, group, proposal } = await grant(page, dialog, ack)
+  123 |     expect(completed.raw_answer).toBe(runtime.control().answer_markdown)
+```

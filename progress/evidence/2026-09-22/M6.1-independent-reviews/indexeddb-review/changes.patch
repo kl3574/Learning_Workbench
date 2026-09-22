@@ -1,0 +1,217 @@
+--- before/apps/web/src/workbench/DraftStore.ts
++++ current/apps/web/src/workbench/DraftStore.ts
+@@ -15,7 +15,8 @@
+ }
+ interface StoredDraft extends DraftRecord { workspaceId: string }
+ export type DraftSaveResult = { kind: 'saved'; record: DraftRecord } | { kind: 'conflict'; record: DraftRecord; conflict: DraftConflict }
+-export type DraftStorageCode = 'UNAVAILABLE' | 'OPEN_FAILED' | 'BLOCKED' | 'READ_FAILED' | 'WRITE_FAILED' | 'QUOTA_EXCEEDED' | 'INVALID_INPUT'
++export type DraftWriteGuard = { allowed: () => boolean; signal: AbortSignal }
++export type DraftStorageCode = 'UNAVAILABLE' | 'OPEN_FAILED' | 'BLOCKED' | 'READ_FAILED' | 'WRITE_FAILED' | 'QUOTA_EXCEEDED' | 'INVALID_INPUT' | 'ACCESS_CHANGED'
+ export class DraftStorageError extends Error {
+   readonly code: DraftStorageCode
+   constructor(code: DraftStorageCode) {
+@@ -27,9 +28,13 @@
+       WRITE_FAILED: '草稿写入失败，当前文字尚未保存，请重试。',
+       QUOTA_EXCEEDED: '浏览器存储空间不足，当前文字尚未保存，请保留文字后重试。',
+       INVALID_INPUT: '草稿对象或基准修订无效，当前文字尚未保存。',
++      ACCESS_CHANGED: '当前权限或工作区已变化，未写入这次草稿。',
+     }
+     super(messages[code]); this.name = 'DraftStorageError'; this.code = code
+   }
++}
++export function assertDraftWriteAllowed(guard?: DraftWriteGuard): void {
++  if (guard && (guard.signal.aborted || !guard.allowed())) throw new DraftStorageError('ACCESS_CHANGED')
+ }
+ function storageError(code: DraftStorageCode, cause?: unknown) {
+   return new DraftStorageError(cause instanceof DOMException && cause.name === 'QuotaExceededError' ? 'QUOTA_EXCEEDED' : code)
+@@ -97,9 +102,11 @@
+       transaction.onerror = () => { /* onabort is the only failure settlement */ }
+     })
+   }
+-  async save(workspaceId: string, objectId: string, text: string, expectedRevision: number, resolvedConflictIds: readonly string[] = []): Promise<DraftSaveResult> {
++  async save(workspaceId: string, objectId: string, text: string, expectedRevision: number, resolvedConflictIds: readonly string[] = [], guard?: DraftWriteGuard): Promise<DraftSaveResult> {
+     if (!workspaceId || !objectId || typeof text !== 'string' || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0 || expectedRevision === Number.MAX_SAFE_INTEGER) throw new DraftStorageError('INVALID_INPUT')
++    assertDraftWriteAllowed(guard)
+     const database = await this.open()
++    assertDraftWriteAllowed(guard)
+     const result = await new Promise<DraftSaveResult>((resolve, reject) => {
+       let transaction: IDBTransaction
+       try { transaction = database.transaction('drafts', 'readwrite') } catch (error) { reject(storageError('WRITE_FAILED', error)); return }
+@@ -108,8 +115,33 @@
+       let outcome: DraftSaveResult | null = null
+       let invalid = false
+       let writeError: DraftStorageError | null = null
++      let committing = false
++      const abortWrite = (error: DraftStorageError) => {
++        if (committing) return
++        try { transaction.abort(); writeError = error }
++        catch { /* Already finishing: only the actual terminal event settles the write. */ }
++      }
++      const revoked = () => abortWrite(new DraftStorageError('ACCESS_CHANGED'))
++      const cleanup = () => guard?.signal.removeEventListener('abort', revoked)
++      guard?.signal.addEventListener('abort', revoked, { once: true })
++      const put = (value: StoredDraft) => {
++        assertDraftWriteAllowed(guard)
++        const written = store.put(value)
++        if (guard) written.onsuccess = () => {
++          try {
++            assertDraftWriteAllowed(guard)
++            // The final access check and explicit commit share one synchronous
++            // callback. Revocation after this admission cannot undo a committing
++            // transaction. Only oncomplete below establishes persistence.
++            transaction.commit()
++            committing = true
++            cleanup()
++          } catch (error) { abortWrite(error instanceof DraftStorageError ? error : storageError('WRITE_FAILED', error)) }
++        }
++      }
+       request.onsuccess = () => {
+         try {
++        assertDraftWriteAllowed(guard)
+         const current: StoredDraft | undefined = request.result
+         if (current !== undefined && !validRecord(current)) { invalid = true; transaction.abort(); return }
+         const revision = current?.revision ?? 0
+@@ -121,19 +153,20 @@
+           const duplicate = current.conflicts.find(conflict => conflict.expectedRevision === expectedRevision && conflict.text === text)
+           const conflict: DraftConflict = duplicate ?? { id: crypto.randomUUID(), expectedRevision, actualRevision: revision, text, createdAt: now }
+           const next: StoredDraft = { ...current, conflicts: duplicate ? current.conflicts : [...current.conflicts, conflict] }
+-          store.put(next)
++          put(next)
+           outcome = { kind: 'conflict', record: publicRecord(next), conflict: structuredClone(conflict) }
+         } else {
+           const next: StoredDraft = { workspaceId, objectId, revision: revision + 1, text, updatedAt: now,
+             conflicts: (current?.conflicts ?? []).filter(conflict => !resolvedConflictIds.includes(conflict.id)) }
+-          store.put(next)
++          put(next)
+           outcome = { kind: 'saved', record: publicRecord(next) }
+         }
+-        } catch (error) { writeError = storageError('WRITE_FAILED', error); transaction.abort() }
+-      }
+-      transaction.oncomplete = () => outcome ? resolve(outcome) : reject(new DraftStorageError('WRITE_FAILED'))
+-      transaction.onabort = () => reject(writeError ?? storageError(invalid ? 'READ_FAILED' : 'WRITE_FAILED', transaction.error))
++        } catch (error) { abortWrite(error instanceof DraftStorageError ? error : storageError('WRITE_FAILED', error)) }
++      }
++      transaction.oncomplete = () => { cleanup(); outcome ? resolve(outcome) : reject(new DraftStorageError('WRITE_FAILED')) }
++      transaction.onabort = () => { cleanup(); reject(writeError ?? storageError(invalid ? 'READ_FAILED' : 'WRITE_FAILED', transaction.error)) }
+       transaction.onerror = () => { /* do not report success before transaction commit */ }
++      if (guard?.signal.aborted) revoked()
+     })
+     this.notify(workspaceId)
+     return result
+--- before/apps/web/src/features/authoring/authoringCommands.ts
++++ current/apps/web/src/features/authoring/authoringCommands.ts
+@@ -1,5 +1,5 @@
+ import type { ApprovalDecision, AuthoringGroupPrepareWrite, AuthoringGroupNumericPreviewWrite, AuthoringGroupNumericCheckView, AuthoringPrepareWrite, JobRef, JobSnapshot, NumericCheckDecisionAck, NumericCheckPreviewWrite, NumericCheckView } from '../../../../../packages/contracts/generated/api-types'
+-import { DraftStore, type DraftRecord } from '../../workbench/DraftStore'
++import { assertDraftWriteAllowed, DraftStore, type DraftRecord, type DraftWriteGuard } from '../../workbench/DraftStore'
+ import { checkedProvider, exactObject, sameValue, validIdentity } from '../providers/providerSchema'
+ type Identity = { version: 1; workspace_id: string; command_id: string; rejection: { status: number; code: string | null } | null }
+ export type AuthoringCommand = Identity & (
+@@ -56,17 +56,20 @@
+   if (acks.some(v => !sameValue(v.ack, acks[0].ack))) throw new Error('原命令存在不同回执，保留全部事实。')
+   return acks[0] ?? all.find(v => v.rejection) ?? first
+ }
+-export async function persistAuthoringCommand(value: AuthoringCommand, store = value.kind === 'cancel' ? authoringControlStore : authoringCommandStore): Promise<AuthoringCommand> {
++export async function persistAuthoringCommand(value: AuthoringCommand, store = value.kind === 'cancel' ? authoringControlStore : authoringCommandStore, guard?: DraftWriteGuard): Promise<AuthoringCommand> {
++  assertDraftWriteAllowed(guard)
+   let desired = decodeAuthoringCommand(JSON.stringify(value), value.workspace_id)
+   for (let i = 0; i < 4; i++) {
++    assertDraftWriteAllowed(guard)
+     const old = (await store.load(value.workspace_id))[value.command_id]
++    assertDraftWriteAllowed(guard)
+     if (old) {
+       const current = readAuthoringCommand(old, value.workspace_id)
+       if (!sameValue(immutable(current), immutable(desired)) || current.ack && desired.ack && !sameValue(current.ack, desired.ack)) throw new Error('不可替换原命令或回执。')
+       if (current.ack || !desired.ack && current.rejection) desired = current
+       if (!old.conflicts.length && sameValue(current, desired)) return current
+     }
+-    const result = await store.save(value.workspace_id, value.command_id, JSON.stringify(desired), old?.revision ?? 0, old?.conflicts.map(v => v.id) ?? [])
++    const result = await store.save(value.workspace_id, value.command_id, JSON.stringify(desired), old?.revision ?? 0, old?.conflicts.map(v => v.id) ?? [], guard)
+     const resultValue = readAuthoringCommand(result.record, value.workspace_id)
+     if (!result.record.conflicts.length && sameValue(resultValue, desired)) return resultValue
+   }
+--- before/apps/web/src/features/authoring/useAuthoring.ts
++++ current/apps/web/src/features/authoring/useAuthoring.ts
+@@ -6,10 +6,14 @@
+ import { authoringClient, type AuthoringPort } from './authoringClient'
+ import { authoringCommandStore, authoringControlStore, checkedAuthoring, makeAuthoringCommand, persistAuthoringCommand, readAuthoringCommand, type AuthoringCommand, type AuthoringCommandInput } from './authoringCommands'
+ 
++const policyDenied = (reason: unknown) => reason instanceof ApiError && (reason.status === 401 || reason.status === 403 || ['ASSESSMENT_ACTIVE', 'POLICY_DENIED', 'ASSESSMENT_ANSWER_PROTECTED'].includes(reason.code ?? ''))
++
+ export function useAuthoring(workspace: string, paused: boolean, port: AuthoringPort = authoringClient) {
+   const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
+   const owner = JSON.stringify([workspace, access]), scope = useRef({ owner, paused }); scope.current = { owner, paused }
+   const operation = useRef(0), working = useRef(false)
++  const subjectWrites = useRef(new Set<AbortController>())
++  const abortSubjectWrites = () => { for (const controller of subjectWrites.current) controller.abort() }
+   const [renderOwner, setRenderOwner] = useState(owner), [permission, setPermission] = useState(false), [denied, setDenied] = useState(false)
+   const [jobs, setJobs] = useState<JobSnapshot[]>([]), [cursor, setCursor] = useState<string | null>(null)
+   const [detail, setDetail] = useState<AuthoringJobReadView | null>(null), [draft, setDraft] = useState<AuthoringDraftView | AuthoringGroupDraftView | null>(null), [numeric, setNumeric] = useState<NumericCheckView | AuthoringGroupNumericCheckView | null>(null)
+@@ -20,9 +24,9 @@
+   const academic = renderOwner === owner && permission && !paused && !denied
+   const academicRef = useRef(academic); academicRef.current = academic
+   const current = (subject = false) => scope.current.owner === owner && getSessionGeneration() === access && (!subject || !scope.current.paused && academicRef.current)
+-  const clearSubject = () => { setDetail(null); setDraft(null); setNumeric(null); setPrivateSolution(null); setSubjectReady(false); setCommands(old => old.filter(v => v.kind === 'cancel')) }
++  const clearSubject = () => { academicRef.current = false; abortSubjectWrites(); setDetail(null); setDraft(null); setNumeric(null); setPrivateSolution(null); setSubjectReady(false); setCommands(old => old.filter(v => v.kind === 'cancel')) }
+   const fail = (reason: unknown) => {
+-    const policy = reason instanceof ApiError && (reason.status === 401 || reason.status === 403 || ['ASSESSMENT_ACTIVE', 'POLICY_DENIED', 'ASSESSMENT_ANSWER_PROTECTED'].includes(reason.code ?? ''))
++    const policy = policyDenied(reason)
+     if (policy) { academicRef.current = false; setDenied(true); setPermission(false); clearSubject() }
+     const code = reason instanceof ApiError && /^[A-Z][A-Z0-9_]{0,79}$/.test(reason.code ?? '') ? `${reason.code}：` : ''
+     setError(code + (policy ? '当前权限或测试策略不允许学科读取；已有任务仍可在安全列表中取消。' : reason instanceof ApiError && reason.status === 412 ? '版本冲突：原 key、基准与候选保留。请另行读取当前状态，再明确准备新命令。' : '本次操作未确认或被服务端阻断。原命令保留；请回放原命令或重新读取，不会自动发送新 key。'))
+@@ -59,7 +63,7 @@
+       setPermission(allowed)
+       if (allowed) { const values = await loadCommands(true); if (valid() && !scope.current.paused) { setCommands(values); setSubjectReady(true) } }
+     }).catch(failure => { if (valid()) fail(failure) })
+-    return () => { live = false; ++operation.current; working.current = false }
++    return () => { live = false; ++operation.current; working.current = false; abortSubjectWrites() }
+   }, [owner, paused, port])
+   const begin = (subject: boolean) => { if (!current(subject) || working.current) return null; working.current = true; setBusy(true); setError(''); return ++operation.current }
+   const finish = (sequence: number) => { if (current() && sequence === operation.current) { working.current = false; setBusy(false) } }
+@@ -128,8 +132,12 @@
+   const execute = async (command: AuthoringCommand) => {
+     if (command.workspace_id !== workspace) return
+     const subject = command.kind !== 'cancel', sequence = ready && (!subject || subjectReady) ? begin(subject) : null; if (sequence === null) return
++    const controller = subject ? new AbortController() : null
++    if (controller) subjectWrites.current.add(controller)
++    const guard = controller ? { allowed: () => current(true) && sequence === operation.current, signal: controller.signal } : undefined
++    const unsubscribe = controller ? subscribeSessionAccess(() => controller.abort()) : undefined
+     try {
+-      const retained = await persistAuthoringCommand(command)
++      const retained = await persistAuthoringCommand(command, undefined, guard)
+       const pending = await loadCommands(academicRef.current && subjectReady)
+       if (current(subject) && sequence === operation.current) setCommands(pending)
+       if (!current(subject) || sequence !== operation.current) return
+@@ -143,24 +151,27 @@
+       // Admit academic replies only while their original access scope is current.
+       // Safe control ACKs remain durable after a Policy change.
+       if (subject && (!current(true) || sequence !== operation.current)) return
+-      await persistAuthoringCommand({ ...retained, rejection: null, ack } as AuthoringCommand)
++      await persistAuthoringCommand({ ...retained, rejection: null, ack } as AuthoringCommand, undefined, guard)
+       if (!current(subject) || sequence !== operation.current) return
+       const values = await loadCommands(academicRef.current && subjectReady)
+       if (!current(subject) || sequence !== operation.current) return
+       setCommands(values); await loadList()
+       if (current(subject) && sequence === operation.current) setError('原命令已确认。请另行读取当前详情；原回执不替代当前状态。')
+     } catch (reason) {
+-      if (reason instanceof ApiError && [400, 409, 412, 422].includes(reason.status)) {
++      // A Policy rejection invalidates subject writes before even persisting
++      // its error receipt. Original durable commands and safe controls remain.
++      if (policyDenied(reason) && current() && sequence === operation.current) fail(reason)
++      if (!policyDenied(reason) && reason instanceof ApiError && [400, 409, 412, 422].includes(reason.status)) {
+         try {
+-          await persistAuthoringCommand({ ...command, rejection: { status: reason.status, code: reason.code ?? null } })
++          await persistAuthoringCommand({ ...command, rejection: { status: reason.status, code: reason.code ?? null } }, undefined, guard)
+           if (current(subject) && sequence === operation.current) {
+             const values = await loadCommands(academicRef.current && subjectReady)
+             if (current(subject) && sequence === operation.current) setCommands(values)
+           }
+         } catch { /* Durable original remains unchanged. */ }
+       }
+-      if (current() && sequence === operation.current) fail(reason)
+-    } finally { finish(sequence) }
++      if (!policyDenied(reason) && current() && sequence === operation.current) fail(reason)
++    } finally { unsubscribe?.(); if (controller) subjectWrites.current.delete(controller); finish(sequence) }
+   }
+   const create = async (input: AuthoringCommandInput) => {
+     if (!current(input.kind !== 'cancel') || !ready || input.kind !== 'cancel' && !subjectReady || working.current) return

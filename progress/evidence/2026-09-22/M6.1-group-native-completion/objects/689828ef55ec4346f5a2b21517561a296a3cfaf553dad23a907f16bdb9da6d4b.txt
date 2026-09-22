@@ -1,0 +1,303 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: authoring-groups.spec.ts >> native practice group replays its lost prepare ACK with one key and clears explicitly read private answers after permission changes
+- Location: ../../tests/e2e/authoring-groups.spec.ts:292:1
+
+# Error details
+
+```
+Error: route.fetch: socket hang up
+Call log:
+  - → POST http://127.0.0.1:38205/api/v1/jobs/authoring_9b2c7eb8cdbf488ebc241a1667014d5a/cancel
+    - user-agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36
+    - accept: */*
+    - accept-encoding: gzip,deflate,br
+    - accept-language: en-US
+    - content-type: application/json
+    - cookie: learning_session=<REDACTED_TEMPORARY_SESSION>
+    - idempotency-key: authoring_91c0c228-8c91-403b-8568-e3ae4356587b
+    - origin: http://127.0.0.1:38205
+    - referer: http://127.0.0.1:38205/
+    - x-csrf-token: <REDACTED_TEMPORARY_CSRF>
+    - sec-ch-ua: "Google Chrome";v="153", "Not_A Brand";v="8", "Chromium";v="153"
+    - sec-ch-ua-mobile: ?0
+    - sec-ch-ua-platform: "Linux"
+    - content-length: 23
+
+```
+
+# Page snapshot
+
+```yaml
+- generic [ref=f1e3]:
+  - link "跳到学习内容" [ref=f1e4] [cursor=pointer]:
+    - /url: "#reader-main"
+  - banner [ref=f1e5]:
+    - link [ref=f1e6] [cursor=pointer]:
+      - /url: "#"
+      - generic [aria-hidden] [ref=f1e7]: 径
+      - strong [ref=f1e8]: 知径
+    - button "搜索与命令" [ref=f1e9] [cursor=pointer]:
+      - generic [aria-hidden] [ref=f1e10]: ⌕
+      - text: 搜索与命令
+    - generic [ref=f1e11]:
+      - button "切换导航栏" [ref=f1e12] [cursor=pointer]: 目录
+      - button "切换 Agent 栏" [ref=f1e13] [cursor=pointer]: Agent
+  - main [ref=f1e15]:
+    - tablist "打开的学习对象" [ref=f1e16]:
+      - tab "学习路线" [selected] [ref=f1e17] [cursor=pointer]
+    - generic [ref=f1e18]:
+      - heading "从学习目标开始" [level=1] [ref=f1e19]
+      - paragraph [ref=f1e20]: 路线把真实教材、练习和测试排成任务顺序。先修提醒帮助选择顺序，完成标记不代表掌握。
+      - paragraph [ref=f1e21]: 尚无正式学习路线。
+      - generic [ref=f1e22]:
+        - button "创建路线" [ref=f1e23] [cursor=pointer]
+        - button "学习建议" [ref=f1e24] [cursor=pointer]
+        - button "学习目标与基础" [ref=f1e25] [cursor=pointer]
+        - button "查看概念与技能证据" [ref=f1e26] [cursor=pointer]
+      - list
+  - status [ref=f1e27]:
+    - generic [ref=f1e28]: ✓ UI 会话已保存
+    - generic [ref=f1e29]: 正常学习 · 本机
+  - dialog "创作" [ref=f1e30]:
+    - generic [ref=f1e31]:
+      - banner [ref=f1e32]:
+        - heading "创作" [level=2] [ref=f1e33]
+        - button "关闭创作" [ref=f1e34] [cursor=pointer]: ×
+      - generic [ref=f1e35]:
+        - paragraph [ref=f1e36]: 可以准备例题、教材小节、习题集与测试题组草稿。模型调用与数值执行分别授权；数学、来源与教学质量均待审查。
+        - button "刷新安全任务列表与当前权限" [ref=f1e37] [cursor=pointer]
+        - status [ref=f1e38]: 本次操作未确认或被服务端阻断。原命令保留；请回放原命令或重新读取，不会自动发送新 key。
+        - region "创作任务安全控制" [ref=f1e39]:
+          - heading "已有创作与数值任务" [level=3] [ref=f1e40]
+          - paragraph [ref=f1e41]: 这里只显示任务状态。取消请求不保证远端尚未执行，也不撤销已发生的计算。
+          - article [ref=f1e42]:
+            - paragraph [ref=f1e43]: authoring_9b2c7eb8cdbf488ebc241a1667014d5a · awaiting_approval · r1
+            - paragraph [ref=f1e44]: 例题候选生成任务
+            - button "明确取消任务 authoring_9b2c7eb8cdbf488ebc241a1667014d5a" [ref=f1e45] [cursor=pointer]
+          - article [ref=f1e46]:
+            - paragraph [ref=f1e47]: authoring_31fd2ef4a11944d3becef243a9f6fb8b · completed · r4
+            - paragraph [ref=f1e48]: 例题候选生成任务
+            - button "明确取消任务 authoring_31fd2ef4a11944d3becef243a9f6fb8b" [disabled] [ref=f1e49]
+        - region "原创作命令回执" [ref=f1e50]:
+          - heading "本机保留的原命令" [level=3] [ref=f1e51]
+          - article [ref=f1e52]:
+            - paragraph [ref=f1e53]: 取消任务 · 结果未知，原 key 与完整命令保留
+            - group [ref=f1e54]:
+              - generic "核对原命令" [ref=f1e55]
+            - button "回放原命令 authoring_91c0c228-8c91-403b-8568-e3ae4356587b" [ref=f1e56] [cursor=pointer]
+        - status [ref=f1e57]: 当前只开放安全任务控制。主题、材料、候选、数值输入与结果已收起；请在作者会话且当前测试策略允许后明确重新读取。
+```
+
+# Test source
+
+```ts
+  66  |   const proposal: ConsentProposalView = await response.json()
+  67  |   expect(proposal.summary.job_id).toBe(ack.id)
+  68  |   await dialog.getByLabel('我已核对本次组合草稿的冻结范围、提供商、预算与到期时间', { exact: true }).check()
+  69  |   await dialog.getByRole('button', { name: '准备批准组合草稿模型调用', exact: true }).click()
+  70  |   const granting = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith('/api/v1/consents'))
+  71  |   await dialog.getByRole('button', { name: '确认发送批准授权', exact: true }).click()
+  72  |   expect((await granting).status()).toBe(201)
+  73  |   let completed!: AuthoringGroupJobView
+  74  |   // Preserve Playwright's actual default 5 s assertion; failure is diagnosed,
+  75  |   // never converted into a longer hidden acceptance window.
+  76  |   await expect.poll(async () => { completed = await page.request.get(`/api/v1/authoring/jobs/${ack.id}`).then(value => value.json()); return completed.summary.status }).toBe('completed')
+  77  |   await dialog.getByRole('button', { name: '重新读取本次创作任务', exact: true }).click()
+  78  |   await dialog.getByRole('button', { name: '读取这份准确组合候选', exact: true }).click()
+  79  |   const group = dialog.getByRole('region', { name: '组合草稿候选', exact: true })
+  80  |   await expect(group).toBeVisible()
+  81  |   const draft: AuthoringGroupDraftView = await page.request.get(`/api/v1/authoring/draft-groups/${completed.summary.candidate!.draft_id}`).then(value => value.json())
+  82  |   expect(draft.candidate).toEqual(completed.summary.candidate)
+  83  |   expect(draft.content_plan).toEqual(completed.content_plan); expect(draft.plan_ref).toEqual(completed.plan_ref)
+  84  |   expect(draft.state).toBe('draft'); expect(draft.base_ref).toBeNull()
+  85  |   expect(draft.validation.mathematical).toBe('NOT_RUN'); expect(draft.validation.independent_pedagogy).toBe('NOT_RUN')
+  86  |   await expect(group.getByRole('region', { name: '冻结的内容计划', exact: true })).toContainText(objective)
+  87  |   return { completed, draft, group, proposal }
+  88  | }
+  89  | async function numericPreview(page: Page, dialog: Locator, group: Locator, draft: AuthoringGroupDraftView, solution?: AuthoringPrivateSolutionView) {
+  90  |   if (solution) {
+  91  |     // Refreshing the candidate intentionally clears private reads. Explicitly
+  92  |     // request the exact solution again for each new question preview.
+  93  |     const reading = page.waitForResponse(value => value.request().method() === 'GET' && value.url().endsWith(`/api/v1/authoring/draft-groups/${draft.candidate.draft_id}/solutions/question_double`))
+  94  |     await group.getByRole('button', { name: '明确读取第 1 题的私有解答草稿', exact: true }).click()
+  95  |     const response = await reading; expect(response.status()).toBe(200); expect(await response.json()).toEqual(solution)
+  96  |   }
+  97  |   const receiving = page.waitForResponse(value => value.request().method() === 'POST' && value.url().includes(`/api/v1/authoring/draft-groups/${draft.candidate.draft_id}/members/`) && value.url().endsWith('/numeric-checks'))
+  98  |   await group.getByRole('button', { name: solution ? '为这份准确题目解答准备独立数值预览' : '为例题 原创合成双倍例题 准备独立数值预览', exact: true }).click()
+  99  |   const response = await receiving; expect(response.status()).toBe(201)
+  100 |   const check: AuthoringGroupNumericCheckView = await response.json()
+  101 |   expect(check.target.member_key).toBe(solution ? 'question_double' : 'example'); expect(check.candidate).toEqual(draft.candidate)
+  102 |   if (solution) { expect(check.target).toEqual(solution.payload.question); expect(check.plan).toEqual(solution.payload.answer.numeric_plan) }
+  103 |   expect(check.decision).toBe('pending'); expect(check.revision).toBe(1)
+  104 |   expect(check.job).toBeNull(); expect(check.result).toBeNull()
+  105 |   await group.getByRole('button', { name: '刷新组合候选的检查记录', exact: true }).click()
+  106 |   await group.getByRole('button', { name: `读取组数值检查 ${check.id}`, exact: true }).click()
+  107 |   await expect(dialog.getByRole('region', { name: '独立数值执行批准', exact: true })).toBeVisible()
+  108 |   return check
+  109 | }
+  110 | async function picture(page: Page, dialog: Locator, target: Locator, width: number, name: string, info: TestInfo) {
+  111 |   await page.setViewportSize({ width, height: 900 })
+  112 |   await target.scrollIntoViewIfNeeded(); await expect(target).toBeVisible()
+  113 |   const bounds = await dialog.evaluate(element => {
+  114 |     const inner = element.querySelector('.dialog-inner')!
+  115 |     return { client: element.clientWidth, scroll: element.scrollWidth, inner_client: inner.clientWidth, inner_scroll: inner.scrollWidth, left: element.getBoundingClientRect().left, right: element.getBoundingClientRect().right, viewport: innerWidth, document: document.documentElement.scrollWidth }
+  116 |   })
+  117 |   writeFileSync(info.outputPath(`${name}-geometry.json`), JSON.stringify(bounds, null, 2))
+  118 |   await page.screenshot({ path: info.outputPath(`${name}.png`) })
+  119 |   expect(bounds.inner_scroll).toBeLessThanOrEqual(bounds.inner_client + 1)
+  120 |   expect(bounds.scroll).toBeLessThanOrEqual(bounds.client + 1)
+  121 |   expect(bounds.left).toBeGreaterThanOrEqual(0); expect(bounds.right).toBeLessThanOrEqual(bounds.viewport)
+  122 |   expect(bounds.document).toBeLessThanOrEqual(bounds.viewport)
+  123 |   return bounds
+  124 | }
+  125 | 
+  126 | async function cancelSecondWithoutConsent(page: Page, dialog: Locator, runtime: AuthoringRuntime, first: JobRef, draft: AuthoringGroupDraftView) {
+  127 |   const originalGroup = dialog.getByRole('region', { name: '组合草稿候选', exact: true })
+  128 |   await expect(originalGroup).toBeVisible()
+  129 |   let privateBeforeLock: AuthoringPrivateSolutionView | null = null
+  130 |   if (draft.root.entity !== 'lesson') {
+  131 |     const reading = page.waitForResponse(value => value.request().method() === 'GET' && value.url().endsWith(`/api/v1/authoring/draft-groups/${draft.candidate.draft_id}/solutions/question_double`))
+  132 |     await originalGroup.getByRole('button', { name: '明确读取第 1 题的私有解答草稿', exact: true }).click()
+  133 |     const response = await reading; expect(response.status()).toBe(200); privateBeforeLock = await response.json()
+  134 |     expect(privateBeforeLock!.candidate).toEqual(draft.candidate); expect(privateBeforeLock!.ref).toEqual(draft.private_solution_refs[0])
+  135 |   }
+  136 |   // A second explicitly prepared Job has never received consent. The completed
+  137 |   // first Job and its already consumed Provider request are not being cancelled.
+  138 |   const preparing = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith('/api/v1/authoring/group-jobs'))
+  139 |   await dialog.getByRole('button', { name: '明确准备本次组合创作任务', exact: true }).click()
+  140 |   const accepted = await preparing; expect(accepted.status()).toBe(202)
+  141 |   const ack: JobRef = await accepted.json()
+  142 |   expect(ack.id).not.toBe(first.id); expect(ack.status).toBe('awaiting_approval')
+  143 |   const second: AuthoringGroupJobView = await page.request.get(`/api/v1/authoring/jobs/${ack.id}`).then(value => value.json())
+  144 |   expect(second.request.output_kind).toBe(draft.root.entity)
+  145 |   expect(second.consent_id).toBeNull(); expect(second.proposal_id).toBeNull(); expect(second.raw_answer).toBeNull(); expect(second.summary.candidate).toBeNull()
+  146 |   const before: JobSnapshot = await page.request.get(`/api/v1/jobs/${ack.id}`).then(value => value.json())
+  147 |   expect(before.status).toBe('awaiting_approval'); expect(runtime.control().received_request_count).toBe(1)
+  148 |   await expect(originalGroup.getByRole('heading', { name: draft.root.title, exact: true })).toBeVisible()
+  149 |   await expect(originalGroup.getByRole('region', { name: '冻结的内容计划', exact: true })).toBeVisible()
+  150 |   if (privateBeforeLock) await expect(originalGroup.getByRole('region', { name: '私有解答草稿', exact: true })).toContainText('私有合成解答')
+  151 |   const auth: SessionResponse = await page.request.get('/api/v1/session').then(value => value.json())
+  152 |   expect((await page.request.post('/api/v1/session/role', { data: { role: 'learner' }, headers: { Origin: runtime.origin, 'X-CSRF-Token': auth.csrf_token, 'Idempotency-Key': 'native-group-demote' } })).status()).toBe(200)
+  153 |   await dialog.getByRole('button', { name: '刷新安全任务列表与当前权限', exact: true }).click()
+  154 |   for (const name of ['私有解答草稿', '组合草稿候选', '受保护创作详情', '冻结的内容计划', '独立数值执行批准', '实际数值结果']) await expect(dialog.getByRole('region', { name, exact: true })).toHaveCount(0)
+  155 |   const control = dialog.getByRole('region', { name: '创作任务安全控制', exact: true })
+  156 |   await expect(control).toBeVisible()
+  157 |   expect((await page.request.get(`/api/v1/authoring/jobs/${first.id}`)).status()).toBe(403)
+  158 |   expect((await page.request.get(`/api/v1/authoring/draft-groups/${draft.candidate.draft_id}`)).status()).toBe(403)
+  159 |   if (draft.root.entity !== 'lesson') expect((await page.request.get(`/api/v1/authoring/draft-groups/${draft.candidate.draft_id}/solutions/question_double`)).status()).toBe(403)
+  160 |   const attempts: { key: string; body: unknown }[] = []
+  161 |   let original!: JobSnapshot
+  162 |   const routePattern = `**/api/v1/jobs/${ack.id}/cancel`
+  163 |   await page.route(routePattern, async route => {
+  164 |     const request = route.request(); attempts.push({ key: request.headers()['idempotency-key'], body: request.postDataJSON() })
+  165 |     if (attempts.length === 1) {
+> 166 |       const actual = await route.fetch(); expect(actual.status()).toBe(200); original = await actual.json()
+      |                                  ^ Error: route.fetch: socket hang up
+  167 |       await route.abort('failed')
+  168 |     } else await route.continue()
+  169 |   })
+  170 |   try {
+  171 |     await control.getByRole('button', { name: `明确取消任务 ${ack.id}`, exact: true }).click()
+  172 |     await expect(dialog.getByText('取消任务 · 结果未知，原 key 与完整命令保留', { exact: true })).toBeVisible()
+  173 |     expect(attempts).toHaveLength(1); expect(attempts[0].body).toEqual({ expected_revision: before.revision })
+  174 |     expect(original.id).toBe(ack.id); expect(original.status).toBe('cancelled'); expect(original.revision).toBe(before.revision + 1)
+  175 |     const replaying = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith(`/api/v1/jobs/${ack.id}/cancel`))
+  176 |     await dialog.getByRole('button', { name: `回放原命令 ${attempts[0].key}`, exact: true }).click()
+  177 |     const replay = await replaying; expect(replay.status()).toBe(200); expect(await replay.json()).toEqual(original)
+  178 |     expect(attempts).toHaveLength(2); expect(attempts[1]).toEqual(attempts[0])
+  179 |     await expect(control.getByText(`${ack.id} · cancelled · r${original.revision}`, { exact: true })).toBeVisible()
+  180 |     const final: JobSnapshot = await page.request.get(`/api/v1/jobs/${ack.id}`).then(value => value.json())
+  181 |     expect(final).toEqual(original); expect(final.result_refs).toEqual([])
+  182 |     await expect(control.getByRole('button', { name: `明确取消任务 ${first.id}`, exact: true })).toBeDisabled()
+  183 |     expect((await page.request.get(`/api/v1/jobs/${first.id}`).then(value => value.json())).status).toBe('completed')
+  184 |     expect(runtime.control().received_request_count).toBe(1)
+  185 |     return { second_prepare_ack: ack, second_prepared: second, private_before_lock: privateBeforeLock, before, attempts, original_cancel_ack: original, readback: final, permission: 'actual author-to-learner role change; academic endpoints denied with 403; safe control remains available' }
+  186 |   } finally { await page.unroute(routePattern) }
+  187 | }
+  188 | 
+  189 | async function restartAndReadOriginal(runtime: AuthoringRuntime, browser: BrowserType, completed: AuthoringGroupJobView, draft: AuthoringGroupDraftView, solution: AuthoringPrivateSolutionView | null, errors: string[]) {
+  190 |   const databaseBefore = runtime.databaseIdentity(), providerBefore = runtime.control(), processesBefore = [...runtime.generations]
+  191 |   expect(providerBefore.received_request_count).toBe(1); expect(providerBefore.validated_request_count).toBe(1)
+  192 |   expect(providerBefore.target_initialization).toBe('published_once')
+  193 |   await runtime.closeBrowser()
+  194 |   await runtime.restartApiAfterBrowserClosed()
+  195 |   expect(runtime.databaseIdentity()).toEqual(databaseBefore)
+  196 |   expect(runtime.generations).toHaveLength(processesBefore.length + 1)
+  197 |   const context = await runtime.openBrowser(browser), page = context.pages()[0]
+  198 |   page.on('pageerror', error => errors.push(error.message))
+  199 |   // Resume the existing workspace through the actual session endpoints. No
+  200 |   // provider config/secret write, fixture import, or content publication occurs.
+  201 |   await runtime.authenticateOnly(page)
+  202 |   const auth: SessionResponse = await page.request.get('/api/v1/session').then(value => value.json())
+  203 |   expect((await page.request.post('/api/v1/session/role', { data: { role: 'author' }, headers: { Origin: runtime.origin, 'X-CSRF-Token': auth.csrf_token, 'Idempotency-Key': 'native-group-author-after-restart' } })).status()).toBe(200)
+  204 |   await page.reload(); await expect(page.getByText('✓ UI 会话已保存', { exact: true })).toBeVisible()
+  205 |   await page.getByRole('button', { name: '创作', exact: true }).click()
+  206 |   const dialog = page.getByRole('dialog', { name: '创作', exact: true })
+  207 |   await dialog.getByRole('button', { name: `读取创作详情 ${completed.summary.id}`, exact: true }).click()
+  208 |   await expect(dialog.getByRole('region', { name: '受保护创作详情', exact: true })).toBeVisible()
+  209 |   const reloaded: AuthoringGroupJobView = await page.request.get(`/api/v1/authoring/jobs/${completed.summary.id}`).then(value => value.json())
+  210 |   expect(reloaded).toEqual(completed)
+  211 |   await dialog.getByRole('button', { name: '读取这份准确组合候选', exact: true }).click()
+  212 |   const group = dialog.getByRole('region', { name: '组合草稿候选', exact: true })
+  213 |   await expect(group.getByRole('heading', { name: draft.root.title, exact: true })).toBeVisible()
+  214 |   await expect(group.getByRole('region', { name: '冻结的内容计划', exact: true })).toContainText(objective)
+  215 |   const candidate: AuthoringGroupDraftView = await page.request.get(`/api/v1/authoring/draft-groups/${draft.candidate.draft_id}`).then(value => value.json())
+  216 |   expect(candidate).toEqual(draft)
+  217 |   let privateReadback: AuthoringPrivateSolutionView | null = null
+  218 |   if (solution) {
+  219 |     await expect(group.getByRole('region', { name: '私有解答草稿', exact: true })).toHaveCount(0)
+  220 |     const reading = page.waitForResponse(value => value.request().method() === 'GET' && value.url().endsWith(`/api/v1/authoring/draft-groups/${draft.candidate.draft_id}/solutions/question_double`))
+  221 |     await group.getByRole('button', { name: '明确读取第 1 题的私有解答草稿', exact: true }).click()
+  222 |     const response = await reading; expect(response.status()).toBe(200); privateReadback = await response.json()
+  223 |     expect(privateReadback).toEqual(solution)
+  224 |     await expect(group.getByRole('region', { name: '私有解答草稿', exact: true })).toContainText('私有合成解答')
+  225 |   }
+  226 |   const providerAfter = runtime.control()
+  227 |   expect(providerAfter.api_pid).not.toBe(providerBefore.api_pid)
+  228 |   expect(providerAfter.target_initialization).toBe('reused_exact'); expect(providerAfter.target_refs).toEqual(providerBefore.target_refs)
+  229 |   expect(providerAfter.received_request_count).toBe(0); expect(providerAfter.validated_request_count).toBe(0); expect(providerAfter.invalid_request_count).toBe(0)
+  230 |   return { database_before: databaseBefore, database_after: runtime.databaseIdentity(), api_processes: runtime.generations, provider_before: providerBefore, provider_after: providerAfter, job: reloaded, draft: candidate, private_solution: privateReadback, scope: 'Same SQLite file and exact targets; first process one Provider request, restarted process zero additional requests. Explicit author UI reopens original persisted plan, candidate and private solution. No re-seeding or provider reconfiguration.' }
+  231 | }
+  232 | 
+  233 | test('native lesson group preserves its plan and formulas, then separately declines and executes one exact numeric member', async ({ playwright }, info) => {
+  234 |   test.setTimeout(120_000)
+  235 |   const runtime = await AuthoringRuntime.start('lesson', 'groups'), errors: string[] = []
+  236 |   try {
+  237 |     const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]
+  238 |     page.on('pageerror', error => errors.push(error.message))
+  239 |     await runtime.authenticateOnly(page); await configure(page, runtime)
+  240 |     const dialog = await form(page, 'lesson')
+  241 |     const preparing = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith('/api/v1/authoring/group-jobs'))
+  242 |     await dialog.getByRole('button', { name: '明确准备本次组合创作任务', exact: true }).click()
+  243 |     const accepted = await preparing; expect(accepted.status()).toBe(202)
+  244 |     const ack: JobRef = await accepted.json(), prepared = await readPrepared(page, dialog, ack)
+  245 |     expect(runtime.control().received_request_count).toBe(0)
+  246 |     const { completed, draft, group, proposal } = await grant(page, dialog, ack)
+  247 |     expect(completed.raw_answer).toBe(runtime.control().answer_markdown)
+  248 |     await expect(group.locator('.formula svg').first()).toBeVisible()
+  249 |     const wide = await picture(page, dialog, group.getByRole('heading', { name: '原创合成倍数定义', exact: true }), 1440, 'group-lesson-1440', info)
+  250 |     const narrow = await picture(page, dialog, group.getByRole('heading', { name: '原创合成倍数定义', exact: true }), 390, 'group-lesson-390', info)
+  251 |     const first = await numericPreview(page, dialog, group, draft)
+  252 |     const declining = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith(`/api/v1/authoring/group-numeric-checks/${first.id}/decision`))
+  253 |     await dialog.getByRole('button', { name: '明确拒绝本次数值执行', exact: true }).click()
+  254 |     const declined = await declining; expect(declined.status()).toBe(200)
+  255 |     const declineAck: NumericCheckDecisionAck = await declined.json()
+  256 |     expect(declineAck).toEqual({ id: first.id, revision: 2, operation_sha256: first.operation_sha256, decision: 'decline', applied: true, job: null })
+  257 |     const declineReading = await page.request.get(`/api/v1/authoring/group-numeric-checks/${first.id}`)
+  258 |     expect(declineReading.status()).toBe(200)
+  259 |     const declineReadback: AuthoringGroupNumericCheckView = await declineReading.json()
+  260 |     expect(declineReadback).toEqual({ ...first, revision: 2, decision: 'decline', job: null, job_revision: null, result: null })
+  261 |     const second = await numericPreview(page, dialog, group, draft)
+  262 |     expect(second.id).not.toBe(first.id); expect(second.operation_sha256).not.toBe(first.operation_sha256)
+  263 |     await dialog.getByLabel('我已核对全部变量、表达式、容差、候选与本机隔离范围，单独批准这一次执行', { exact: true }).check()
+  264 |     const approving = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith(`/api/v1/authoring/group-numeric-checks/${second.id}/decision`))
+  265 |     await dialog.getByRole('button', { name: '明确批准本次数值执行', exact: true }).click()
+  266 |     const approved = await approving; expect(approved.status()).toBe(202)
+```

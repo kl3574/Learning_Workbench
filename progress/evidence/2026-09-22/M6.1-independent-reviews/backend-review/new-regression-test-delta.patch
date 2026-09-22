@@ -1,0 +1,59 @@
+--- before/tests/integration/test_authoring_numeric_provider_history.py
++++ current/tests/integration/test_authoring_numeric_provider_history.py
+@@ -67,17 +67,18 @@
+     def runtime(self):
+         return self.state[-1]
+ 
+-    def preview(self, key='original-numeric-preview'):
++    def preview(self, key='original-numeric-preview', numeric=None):
++        numeric = self.numeric if numeric is None else numeric
+         if self.variant == 'group':
+             target = self.state[5]
+-            return self.numeric.preview(self.identity, self.candidate.draft_id, target.member_key,
++            return numeric.preview(self.identity, self.candidate.draft_id, target.member_key,
+                 AuthoringGroupNumericPreviewWrite(candidate=self.candidate, target=target), key)
+-        return self.numeric.preview(self.identity, self.candidate.draft_id,
++        return numeric.preview(self.identity, self.candidate.draft_id,
+             NumericCheckPreviewWrite(candidate=self.candidate), key)
+ 
+     def worker(self):
+         worker = GroupNumericWorker if self.variant == 'group' else NumericWorker
+-        return worker(self.database, self.authoring.context, self.runtime)
++        return worker(self.database, self.authoring.context, self.runtime, authoring=self.authoring)
+ 
+     def damage_original_artifact(self):
+         draft = self.authoring.draft(self.identity, self.candidate.draft_id)
+@@ -193,3 +194,33 @@
+         assert start['admitted_at'] is None and start['actual_started_at'] is None
+         assert end['result']['outcome'] == 'cancelled' and end['result']['verdict'] == 'BLOCKED'
+         assert end['result']['started_at'] is None and end['result']['exit_code'] is None
++
++
++@pytest.mark.parametrize('boundary', ['preview', 'worker'])
++def test_missing_authoring_owner_fails_closed_without_numeric_launch(generated_history, boundary):
++    """New dependency-admission cases; distinct from the earlier artifact RED."""
++    case = generated_history
++    if boundary == 'preview':
++        unbound = type(case.numeric)(case.database, case.authoring.context, case.runtime)
++        before = table_hashes(case.database)
++        runtime_before = (case.runtime.prepares, case.runtime.checks)
++        with pytest.raises(ApiError) as caught:
++            case.preview(numeric=unbound)
++        assert (caught.value.status, caught.value.code) == (503, 'AUTHORING_OUTPUT_UNAVAILABLE')
++    else:
++        value = case.preview()
++        case.numeric.decide(case.identity, value.id, decision(value), 'original-approve')
++        worker_type = GroupNumericWorker if case.variant == 'group' else NumericWorker
++        unbound = worker_type(case.database, case.authoring.context, case.runtime)
++        work = unbound.claim()
++        assert work is not None
++        before = table_hashes(case.database)
++        runtime_before = (case.runtime.prepares, case.runtime.checks)
++        with case.database.transaction() as conn:
++            with pytest.raises(ApiError) as caught:
++                unbound._access(conn, *work)
++            assert (caught.value.status, caught.value.code) == (503, 'AUTHORING_OUTPUT_UNAVAILABLE')
++    assert table_hashes(case.database) == before
++    assert (case.runtime.prepares, case.runtime.checks) == runtime_before
++    with case.database.connect() as conn:
++        assert conn.execute('SELECT COUNT(*) FROM authoring_numeric_executions').fetchone()[0] == 0

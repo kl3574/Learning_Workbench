@@ -1,0 +1,56 @@
+--- source-red/apps/web/src/features/authoring/useAuthoringGroups.test.tsx
++++ source-green/apps/web/src/features/authoring/useAuthoringGroups.test.tsx
+@@ -882,3 +882,53 @@
+   hook.unmount()
+   await recoverOriginalPreview(f, originalCommand)
+ })
++
++test('an ACK admitted by explicit commit remains durable when Policy changes after admission', async () => {
++  const f = fixture()
++  const hook = renderHook(({ paused }) => useAuthoring(f.workspace, paused, f.port), { initialProps: { paused: false } })
++  await waitFor(() => expect(hook.result.current.ready && hook.result.current.academic).toBe(true))
++  let originalCommand!: AuthoringCommand, targetTransaction: IDBTransaction | null = null
++  let admitted = false, completed = false
++  f.groups.preview = vi.fn(async () => {
++    originalCommand = readAuthoringCommand(Object.values(await authoringCommandStore.load(f.workspace))[0], f.workspace)
++    return f.numeric
++  })
++  const nativePut = IDBObjectStore.prototype.put, nativeCommit = IDBTransaction.prototype.commit
++  vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, ...args: Parameters<IDBObjectStore['put']>) {
++    const result = nativePut.apply(this, args)
++    const stored = args[0] as { workspaceId?: string; text?: string }
++    if (stored.workspaceId === f.workspace && typeof stored.text === 'string') {
++      const command = JSON.parse(stored.text) as AuthoringCommand
++      if (command.kind === 'group_numeric_preview' && command.ack !== null) {
++        targetTransaction = this.transaction
++        this.transaction.addEventListener('complete', () => { completed = true })
++      }
++    }
++    return result
++  })
++  vi.spyOn(IDBTransaction.prototype, 'commit').mockImplementation(function (this: IDBTransaction) {
++    nativeCommit.call(this)
++    if (this === targetTransaction) {
++      // Successful native commit() is the guarded admission point. Revocation
++      // after this call must not claim to abort a committing transaction.
++      admitted = true
++      hook.rerender({ paused: true })
++    }
++  })
++  await act(() => hook.result.current.create(f.input))
++  expect(admitted && completed).toBe(true)
++  expect(hook.result.current.numeric).toBeNull()
++  expect(hook.result.current.commands.filter(value => value.kind !== 'cancel')).toEqual([])
++  const durable = Object.values(await authoringCommandStore.load(f.workspace))
++  expect(durable).toHaveLength(1)
++  const accepted = readAuthoringCommand(durable[0], f.workspace)
++  expect(accepted).toEqual({ ...originalCommand, ack: f.numeric })
++  expect(f.groups.preview).toHaveBeenCalledTimes(1)
++  hook.unmount()
++  const restored = renderHook(() => useAuthoring(f.workspace, false, f.port))
++  await waitFor(() => expect(restored.result.current.ready && restored.result.current.academic).toBe(true))
++  expect(restored.result.current.commands).toEqual([accepted])
++  await act(() => restored.result.current.execute(originalCommand))
++  expect(f.groups.preview).toHaveBeenCalledTimes(1)
++  expect(restored.result.current.commands).toEqual([accepted])
++})

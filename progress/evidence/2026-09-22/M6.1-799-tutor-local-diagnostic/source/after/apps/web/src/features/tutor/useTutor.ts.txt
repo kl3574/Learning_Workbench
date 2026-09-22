@@ -1,0 +1,170 @@
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import type { TutorMessage, TutorRunView, TutorThreadView } from '../../../../../packages/contracts/generated/api-types'
+import type { TutorRequest } from '../../../../../packages/contracts/generated/types'
+import { TutorStreamHTTPError } from '../../../../../packages/contracts/generated/tutor-sse'
+import { ApiError, getSessionGeneration, subscribeSessionAccess } from '../../api/client'
+import { tutorClient, type TutorPort } from './tutorClient'
+import { makeTutorCommand, persistTutorCommand, readTutorCommand, tutorCommandStore, type TutorCommand, type TutorCommandInput } from './tutorCommands'
+import { readTutorContext, type BoundTutorContext, type TutorLocation } from './tutorContext'
+import { acceptRun, contextIdentity, observeEvent, terminalRun, threadMatches } from './tutorState'
+
+const measurement = (kind: string, facts: object) => (window as unknown as { __m61_mark?: (kind: string, facts: object) => void }).__m61_mark?.(kind, facts)
+
+export function useTutor(workspace: string, location: TutorLocation | null, paused: boolean, port: TutorPort = tutorClient, bind = readTutorContext, store = tutorCommandStore) {
+  const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
+  const owner = JSON.stringify([workspace, access, location]), scope = useRef({ owner, paused }); scope.current = { owner, paused }
+  const operation = useRef(0), stream = useRef<AbortController | null>(null), working = useRef(false)
+  const [bound, setBound] = useState<BoundTutorContext | null>(null), [threads, setThreads] = useState<TutorThreadView[]>([]), [threadCursor, setThreadCursor] = useState<string | null>(null)
+  const [thread, setThread] = useState<TutorThreadView | null>(null), [messages, setMessages] = useState<TutorMessage[]>([]), [messageCursor, setMessageCursor] = useState<string | null>(null)
+  const [run, setRun] = useState<TutorRunView | null>(null), observed = useRef<TutorRunView | null>(null)
+  const [commands, setCommands] = useState<TutorCommand[]>([]), [ready, setReady] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState(''), [streamState, setStreamState] = useState('尚未观察任务')
+  const knownRuns = useRef<{ workspace: string; ids: string[] }>({ workspace, ids: [] })
+  if (knownRuns.current.workspace !== workspace) knownRuns.current = { workspace, ids: [] }
+  const remember = (id: string) => { if (!knownRuns.current.ids.includes(id)) knownRuns.current.ids.push(id) }
+  const [denied, setDenied] = useState(false), [renderOwner, setRenderOwner] = useState(owner)
+  const current = (captured = owner, allowPaused = false) => scope.current.owner === captured && getSessionGeneration() === access && (allowPaused || !scope.current.paused)
+  const begin = () => { if (working.current) return false; working.current = true; setBusy(true); return true }
+  const finish = (sequence: number) => { if (current(owner, true) && sequence === operation.current) { working.current = false; setBusy(false) } }
+  const fail = (reason: unknown) => {
+    const status = reason && typeof reason === 'object' && 'status' in reason ? reason.status : null
+    const code = reason && typeof reason === 'object' && 'code' in reason ? reason.code : null
+    if (status === 401 || status === 403 || reason instanceof TutorStreamHTTPError && status === 409 || ['ASSESSMENT_ACTIVE', 'POLICY_DENIED', 'ASSESSMENT_ANSWER_PROTECTED'].includes(String(code))) { setDenied(true); setMessages([]); setRun(null); observed.current = null; setThreads([]); setBound(null); stream.current?.abort() }
+    setError(reason instanceof Error ? reason.message : '任务状态尚未核实，请重新读取。')
+  }
+  const loadCommands = async () => {
+    const records = await store.load(workspace)
+    return Object.values(records).map(record => readTutorCommand(record, workspace))
+  }
+  const stop = () => { stream.current?.abort(); stream.current = null }
+  const observe = async (initial: TutorRunView, expectedThread: string, sequence: number) => {
+    stop(); const controller = new AbortController(); stream.current = controller
+    let value = initial
+    while (!terminalRun(value) && current() && sequence === operation.current && !controller.signal.aborted) {
+      setStreamState('正在观察任务；断开观察不会取消任务')
+      let reload = false
+      try {
+        for await (const event of port.events(value.run.id, value.run.last_seq, controller.signal)) {
+          measurement('sse_parsed', { run_id: event.run_id, seq: event.seq, type: event.type })
+          if (!current() || sequence !== operation.current || controller.signal.aborted) return
+          value = observeEvent(value, event); observed.current = value; setRun(value)
+          measurement('event_set_run', { run_id: value.run.id, seq: value.run.last_seq, status: value.run.status })
+          if (['context_ready', 'approval_required', 'completed', 'failed', 'cancelled'].includes(event.type)) { reload = true; break }
+        }
+        if (!current() || sequence !== operation.current || controller.signal.aborted) return
+        if (!reload) { setStreamState('连接中断，任务状态未知；先读取快照再恢复观察'); return }
+        measurement('observe_read_start', { run_id: value.run.id })
+        const fresh = acceptRun(value, await port.read(value.run.id), expectedThread)
+        measurement('observe_read_return', { run_id: fresh.run.id, seq: fresh.run.last_seq, status: fresh.run.status })
+        if (!current() || sequence !== operation.current || controller.signal.aborted) return
+        value = fresh; observed.current = fresh; setRun(fresh); setThread(old => old?.id === expectedThread ? { ...old, revision: fresh.thread_revision } : old)
+        measurement('snapshot_set_run', { run_id: fresh.run.id, seq: fresh.run.last_seq, status: fresh.run.status })
+      } catch (reason) { if (current() && sequence === operation.current && !controller.signal.aborted) { fail(reason); setStreamState('连接中断，任务状态未知；先读取快照再恢复观察') }; return }
+    }
+    if (current() && sequence === operation.current) setStreamState('已从服务端快照确认任务终态')
+  }
+  const readRun = async (id: string, expectedThread: string, sequence: number) => {
+    stop()
+    const previous = observed.current?.run.id === id ? observed.current : null
+    measurement('read_start', { run_id: id })
+    const value = acceptRun(previous, await port.read(id), expectedThread)
+    measurement('read_return', { run_id: value.run.id, seq: value.run.last_seq, status: value.run.status })
+    if (!current() || sequence !== operation.current) return
+    remember(value.run.id); observed.current = value; setRun(value); setThread(old => old?.id === expectedThread ? { ...old, revision: value.thread_revision } : old); setDenied(false)
+    if (!terminalRun(value)) void observe(value, expectedThread, sequence)
+    else setStreamState('已从服务端快照确认任务终态')
+  }
+  const readMessages = async (selected: TutorThreadView, context: BoundTutorContext, sequence: number, cursor?: string) => {
+    const page = await port.messages(selected.id, { limit: 20, ...(cursor ? { cursor } : {}) })
+    if (page.thread.id !== selected.id || !threadMatches(page.thread, context.scope, context.binding) || page.items.some(value => value.seq < 1)) throw new Error('线程回读与当前对象不一致。')
+    if (!current() || sequence !== operation.current) return
+    if (cursor && page.next_cursor === cursor) throw new Error('消息分页游标重复。')
+    const combined = cursor ? [...messages, ...page.items] : page.items
+    if (combined.some((message, index) => message.seq !== index + 1) || new Set(combined.map(message => message.id)).size !== combined.length) throw new Error('消息分页出现重复或缺口，未合并正文。')
+    setThread(page.thread); setMessages(combined); setMessageCursor(page.next_cursor)
+    const last = page.items.at(-1)
+    if (!page.next_cursor && last) await readRun(last.run_id, page.thread.id, sequence)
+  }
+  useEffect(() => {
+    const sequence = ++operation.current; stop(); working.current = false
+    setRenderOwner(owner); setBound(null); setThread(null); setThreads([]); setMessages([]); setRun(null); observed.current = null; setCommands([]); setReady(false); setBusy(false); setError(''); setDenied(false); setThreadCursor(null); setMessageCursor(null)
+    if (!workspace) return
+    let live = true
+    const local = async () => { try { const values = await loadCommands(); if (live && current(owner, true)) { setCommands(values); setReady(true) } } catch (reason) { if (live && current(owner, true)) { setReady(false); fail(reason) } } }
+    void local(); const unsubscribe = store.subscribe(workspace, () => void local())
+    if (!paused && location) void (async () => {
+      try { const context = await bind(workspace, location); if (!live || !current() || sequence !== operation.current) return
+        const page = await port.threads({ limit: 20 }); if (!live || !current() || sequence !== operation.current) return
+        setBound(context); setThreads(page.items); setThreadCursor(page.next_cursor)
+      } catch (reason) { if (live && current() && sequence === operation.current) fail(reason) }
+    })()
+    return () => { live = false; unsubscribe(); ++operation.current; stop(); working.current = false }
+  }, [owner, paused, port, bind, store])
+  const refreshThreads = async (more = false) => {
+    if (!location || paused || !begin()) return
+    const sequence = ++operation.current; stop()
+    try { const context = await bind(workspace, location); const page = await port.threads({ limit: 20, ...(more && threadCursor ? { cursor: threadCursor } : {}) }); if (!current() || sequence !== operation.current) return
+      if (more && threadCursor && page.next_cursor === threadCursor) throw new Error('线程分页游标重复。')
+      const combined = more ? [...threads, ...page.items] : page.items; if (new Set(combined.map(value => value.id)).size !== combined.length) throw new Error('线程分页重复，未猜测列表。'); setBound(context); setThreads(combined); setThreadCursor(page.next_cursor); setDenied(false); setError(''); if (run && thread) await readRun(run.run.id, thread.id, sequence)
+    } catch (reason) { if (current()) fail(reason) } finally { finish(sequence) }
+  }
+  const select = async (value: TutorThreadView, more = false) => {
+    if (!bound || !threadMatches(value, bound.scope, bound.binding) || paused || !begin()) return
+    const sequence = ++operation.current; stop()
+    if (!more) { setMessages([]); setRun(null); observed.current = null; setThread(value) }
+    try { await readMessages(value, bound, sequence, more ? messageCursor ?? undefined : undefined); if (current()) setError('') } catch (reason) { if (current()) fail(reason) } finally { finish(sequence) }
+  }
+  const execute = async (command: TutorCommand) => {
+    const control = command.kind === 'cancel'
+    if (!current(owner, control) || !ready || !begin()) return
+    if (!control && (!bound || command.root !== contextIdentity(bound.scope, bound.binding))) { working.current = false; setBusy(false); return }
+    const sequence = ++operation.current; stop(); setError('')
+    try {
+      const retained = await persistTutorCommand(command, store)
+      if (!current(owner, control) || sequence !== operation.current) return
+      const ack = retained.ack ?? (retained.kind === 'thread' ? await port.create(retained.body, retained.command_id) : retained.kind === 'run' ? await port.start(retained.body, retained.command_id) : await port.cancel(retained.run_id, retained.body, retained.command_id))
+      // Preserve an actual ACK in its original workspace even if the user moved;
+      // ownership checks below still prevent delivery into another context.
+      const acknowledged = await persistTutorCommand({ ...retained, rejection: null, ack } as TutorCommand, store)
+      if (!current(owner, control) || sequence !== operation.current) return
+      setCommands(await loadCommands())
+      if (!current(owner, control) || sequence !== operation.current) return
+      if (control) { setError('取消请求已登记；不代表远端已停止或退款。'); if (!paused && thread && acknowledged.kind === 'cancel') await readRun(acknowledged.run_id, thread.id, sequence) }
+      else if (bound && acknowledged.kind === 'thread' && acknowledged.ack) await readMessages(acknowledged.ack, bound, sequence)
+      else if (acknowledged.kind === 'run' && acknowledged.ack) await readRun(acknowledged.ack.run.id, acknowledged.body.request.thread_id, sequence)
+    } catch (reason) {
+      if (reason instanceof ApiError && [400, 409, 412, 422].includes(reason.status)) {
+        try { await persistTutorCommand({ ...command, rejection: { status: reason.status, code: reason.code ?? null } }, store); if (current(owner, control)) setCommands(await loadCommands()) } catch { /* Original command remains durable; never change its key or body. */ }
+      }
+      if (current(owner, control) && sequence === operation.current) { fail(reason); setStreamState('命令结果尚未确认；保留原 key、原正文与版本，可明确回放。') } } finally { finish(sequence) }
+  }
+  const createCommand = (input: TutorCommandInput) => {
+    if (!bound || !ready || paused) return
+    const root = contextIdentity(bound.scope, bound.binding)
+    if (commands.some(value => value.root === root && !value.ack && !value.rejection && value.kind === input.kind)) { setError('此对象已有未确认原命令，请先回放或核对；没有创建新 key。'); return }
+    return execute(makeTutorCommand(workspace, root, input))
+  }
+  const refreshRun = async () => {
+    if (!run || !thread || paused || !begin()) return
+    const sequence = ++operation.current
+    try { await readRun(run.run.id, thread.id, sequence); if (current()) setError('') } catch (reason) { if (current()) fail(reason) } finally { finish(sequence) }
+  }
+  const valid = renderOwner === owner && !paused && !denied
+  return { bound: valid ? bound : null, threads: valid && bound ? threads.filter(value => threadMatches(value, bound.scope, bound.binding)) : [], thread: valid ? thread : null, messages: valid ? messages : [], run: valid ? run : null, commands: renderOwner === owner ? commands : [], busy, ready, error: renderOwner === owner ? error : '', streamState, denied, threadCursor, messageCursor,
+    knownRunIds: knownRuns.current.ids, refreshThreads, select, execute, refreshRun,
+    createThread: (title: string) => { if (bound) createCommand({ kind: 'thread', body: { scope: bound.scope, binding: bound.binding, title } }) },
+    start: async (message: string, intent: TutorRequest['intent']) => {
+      if (!bound || !thread || !location || messageCursor || paused || !begin()) return
+      const sequence = ++operation.current; stop()
+      let input: TutorCommandInput | null = null
+      try {
+        const context = await bind(workspace, location), page = await port.messages(thread.id, { limit: 20 })
+        if (!current() || sequence !== operation.current) return
+        if (page.thread.id !== thread.id || !threadMatches(page.thread, context.scope, context.binding)) throw new Error('当前线程根已变化，请明确重新选择。')
+        setBound(context); setThread(page.thread)
+        input = { kind: 'run', body: { request: { thread_id: thread.id, workspace_id: workspace, message, intent, context: context.scope, web_search: false, consent_id: null }, expected_thread_revision: page.thread.revision, binding: context.binding } }
+      } catch (reason) { if (current()) fail(reason) } finally { finish(sequence) }
+      if (input && current() && sequence === operation.current) await createCommand(input)
+    },
+    cancel: () => { if (run && bound) void execute(makeTutorCommand(workspace, contextIdentity(bound.scope, bound.binding), { kind: 'cancel', run_id: run.run.id, body: { expected_revision: run.job_revision } })) },
+  }
+}

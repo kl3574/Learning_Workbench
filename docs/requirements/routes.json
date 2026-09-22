@@ -6,7 +6,7 @@
       "path": "/api/v1/approvals/{id}/decision",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1710,
+      "source_line": 1735,
       "source_path": "/approvals/{id}/decision",
       "source_row": "| POST `/approvals/{id}/decision` | ApprovalDecision | RunSnapshot；actor、操作hash、任务版本及过期时间校验 |",
       "task_id": "M5.3"
@@ -17,7 +17,7 @@
       "path": "/api/v1/artifacts/{id}/download",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1833,
+      "source_line": 1958,
       "source_path": "/artifacts/{id}/download",
       "source_row": "| GET `/artifacts/{id}/download` | 无 | 受权限控制字节流；验证manifest和路径，Content-Disposition attachment；独立测试期禁止学科资料下载 |",
       "task_id": "M7.1"
@@ -28,7 +28,7 @@
       "path": "/api/v1/assessments",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1258,
+      "source_line": 1283,
       "source_path": "/assessments",
       "source_row": "| GET `/assessments` | `course_id?`,`cursor?`,`limit?` | Page<{ref,title,question_count,allowed_modes,time_limit_seconds}>；不含抽题随机种子和答案 |",
       "task_id": "M3.2"
@@ -39,7 +39,7 @@
       "path": "/api/v1/assessments/{id}/attempts",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1259,
+      "source_line": 1284,
       "source_path": "/assessments/{id}/attempts",
       "source_row": "| POST `/assessments/{id}/attempts` | AttemptCreate | AttemptPublic；路径与assessment_ref.id必须相同，冻结题版本/策略 |",
       "task_id": "M3.2"
@@ -50,7 +50,7 @@
       "path": "/api/v1/attempts/{id}",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1260,
+      "source_line": 1285,
       "source_path": "/attempts/{id}",
       "source_row": "| GET `/attempts/{id}` | 无 | AttemptPublic；草稿读取使用 GET `/attempts/{id}/responses` 返回 `{revision,responses,saved_at}`；仅所有者 |",
       "task_id": "M3.2"
@@ -61,7 +61,7 @@
       "path": "/api/v1/attempts/{id}/abandon",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1263,
+      "source_line": 1288,
       "source_path": "/attempts/{id}/abandon",
       "source_row": "| POST `/attempts/{id}/abandon` | AttemptSubmit | AttemptPublic；active可弃；已交卷则409 |",
       "task_id": "M3.2"
@@ -72,7 +72,7 @@
       "path": "/api/v1/attempts/{id}/regrade",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1846,
+      "source_line": 1971,
       "source_path": "/attempts/{id}/regrade",
       "source_row": "| POST `/attempts/{id}/regrade` | `{expected_grading_revision,reason,item_reviews:[{question_id,score:finite>=0,feedback_markdown}]}` | 202 JobRef；人工复核已提交项，新grading_revision不改旧结果；score≤max |",
       "task_id": "M3.4"
@@ -83,7 +83,7 @@
       "path": "/api/v1/attempts/{id}/responses",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1260,
+      "source_line": 1285,
       "source_path": "/attempts/{id}/responses",
       "source_row": "| GET `/attempts/{id}` | 无 | AttemptPublic；草稿读取使用 GET `/attempts/{id}/responses` 返回 `{revision,responses,saved_at}`；仅所有者 |",
       "task_id": "M3.2"
@@ -94,7 +94,7 @@
       "path": "/api/v1/attempts/{id}/responses",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1261,
+      "source_line": 1286,
       "source_path": "/attempts/{id}/responses",
       "source_row": "| PUT `/attempts/{id}/responses` | ResponsesWrite | AttemptPublic；active且revision匹配；题目必须属于本次分配 |",
       "task_id": "M3.2"
@@ -105,7 +105,7 @@
       "path": "/api/v1/attempts/{id}/result",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1264,
+      "source_line": 1289,
       "source_path": "/attempts/{id}/result",
       "source_row": "| GET `/attempts/{id}/result` | 无 | GradingResult；未交卷409；尚未完成评分可返回202 JobRef；needs_review保留不确定项 |",
       "task_id": "M3.4"
@@ -116,7 +116,7 @@
       "path": "/api/v1/attempts/{id}/submit",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1262,
+      "source_line": 1287,
       "source_path": "/attempts/{id}/submit",
       "source_row": "| POST `/attempts/{id}/submit` | AttemptSubmit | 202 AttemptPublic；持久化submitted后排评分任务，不能重复计分 |",
       "task_id": "M3.2"
@@ -124,10 +124,43 @@
     {
       "location": "primary_cell",
       "method": "GET",
+      "path": "/api/v1/authoring/draft-groups/{id}",
+      "priority": "P0",
+      "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
+      "source_line": 1927,
+      "source_path": "/authoring/draft-groups/{id}",
+      "source_row": "| GET `/authoring/draft-groups/{id}` | 无query/body | AuthoringGroupDraftView；组候选/计划/题面/私解hash清单，GET零写 |",
+      "task_id": "M6.1"
+    },
+    {
+      "location": "primary_cell",
+      "method": "POST",
+      "path": "/api/v1/authoring/draft-groups/{id}/members/{member_key}/numeric-checks",
+      "priority": "P0",
+      "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
+      "source_line": 1929,
+      "source_path": "/authoring/draft-groups/{id}/members/{member_key}/numeric-checks",
+      "source_row": "| POST `/authoring/draft-groups/{id}/members/{member_key}/numeric-checks` | AuthoringGroupNumericPreviewWrite；原写保护 | 201 AuthoringGroupNumericCheckView，冻结操作，零执行 |",
+      "task_id": "M6.1"
+    },
+    {
+      "location": "primary_cell",
+      "method": "GET",
+      "path": "/api/v1/authoring/draft-groups/{id}/solutions/{member_key}",
+      "priority": "P0",
+      "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
+      "source_line": 1928,
+      "source_path": "/authoring/draft-groups/{id}/solutions/{member_key}",
+      "source_row": "| GET `/authoring/draft-groups/{id}/solutions/{member_key}` | 无query/body | AuthoringPrivateSolutionView；显式读取本组确切question私解，重新核author/Policy与完整归属 |",
+      "task_id": "M6.1"
+    },
+    {
+      "location": "primary_cell",
+      "method": "GET",
       "path": "/api/v1/authoring/drafts/{id}",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1704,
+      "source_line": 1729,
       "source_path": "/authoring/drafts/{id}",
       "source_row": "| GET `/authoring/drafts/{id}` | 无 | AuthoringDraftView；精确 DraftCandidate 与 immutable payload，非 ContentRef；不与 Import `/drafts/{id}` 争用 |",
       "task_id": "M6.1"
@@ -138,9 +171,42 @@
       "path": "/api/v1/authoring/drafts/{id}/numeric-checks",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1705,
+      "source_line": 1730,
       "source_path": "/authoring/drafts/{id}/numeric-checks",
       "source_row": "| POST `/authoring/drafts/{id}/numeric-checks` | NumericCheckPreviewWrite；Idempotency-Key | 201 NumericCheckView，冻结完整操作、有效10分钟；不创建执行Job、不运行 |",
+      "task_id": "M6.1"
+    },
+    {
+      "location": "primary_cell",
+      "method": "POST",
+      "path": "/api/v1/authoring/group-jobs",
+      "priority": "P0",
+      "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
+      "source_line": 1926,
+      "source_path": "/authoring/group-jobs",
+      "source_row": "| POST `/authoring/group-jobs` | AuthoringGroupPrepareWrite；原Origin/CSRF/Idempotency-Key规则 | 202 JobRef，原kind=authoring，awaiting_approval；prepare零外发 |",
+      "task_id": "M6.1"
+    },
+    {
+      "location": "primary_cell",
+      "method": "GET",
+      "path": "/api/v1/authoring/group-numeric-checks/{id}",
+      "priority": "P0",
+      "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
+      "source_line": 1930,
+      "source_path": "/authoring/group-numeric-checks/{id}",
+      "source_row": "| GET `/authoring/group-numeric-checks/{id}` | 无query/body | AuthoringGroupNumericCheckView；GET零写，author/当前学科许可 |",
+      "task_id": "M6.1"
+    },
+    {
+      "location": "primary_cell",
+      "method": "POST",
+      "path": "/api/v1/authoring/group-numeric-checks/{id}/decision",
+      "priority": "P0",
+      "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
+      "source_line": 1931,
+      "source_path": "/authoring/group-numeric-checks/{id}/decision",
+      "source_row": "| POST `/authoring/group-numeric-checks/{id}/decision` | ApprovalDecision；原写保护 | NumericCheckDecisionAck；approve_once后202真实检查Job，decline后200且job=null |",
       "task_id": "M6.1"
     },
     {
@@ -149,7 +215,7 @@
       "path": "/api/v1/authoring/jobs",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1702,
+      "source_line": 1727,
       "source_path": "/authoring/jobs",
       "source_row": "| GET `/authoring/jobs` | `cursor?`,`limit?`；默认20、最大100，拒未知/重复/null参数 | AuthoringJobPage；工作区内 authoring/authoring_numeric_check 两种真实Job的安全控制分页，learner/author均可；冻结创建序列，不下发正文/原标题/候选/父级学科关联 |",
       "task_id": "M6.1"
@@ -160,7 +226,7 @@
       "path": "/api/v1/authoring/jobs",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1701,
+      "source_line": 1726,
       "source_path": "/authoring/jobs",
       "source_row": "| POST `/authoring/jobs` | AuthoringPrepareWrite；Idempotency-Key | 202 JobRef，真实 authoring Job，初始 awaiting_approval；无外发 |",
       "task_id": "M6.1"
@@ -171,9 +237,9 @@
       "path": "/api/v1/authoring/jobs/{id}",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1703,
+      "source_line": 1728,
       "source_path": "/authoring/jobs/{id}",
-      "source_row": "| GET `/authoring/jobs/{id}` | 无 | AuthoringJobView；真实准备/许可/原生成结果，作者及当前学科读取许可 |",
+      "source_row": "| GET `/authoring/jobs/{id}` | 无 | AuthoringJobReadView；按真实记录版本返回原单块或§20.9组详情，作者及当前学科读取许可 |",
       "task_id": "M6.1"
     },
     {
@@ -182,7 +248,7 @@
       "path": "/api/v1/authoring/numeric-checks/{id}",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1706,
+      "source_line": 1731,
       "source_path": "/authoring/numeric-checks/{id}",
       "source_row": "| GET `/authoring/numeric-checks/{id}` | 无 | NumericCheckView；原预览/决定/真实Job与结果，GET零写 |",
       "task_id": "M6.1"
@@ -193,7 +259,7 @@
       "path": "/api/v1/authoring/numeric-checks/{id}/decision",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1707,
+      "source_line": 1732,
       "source_path": "/authoring/numeric-checks/{id}/decision",
       "source_row": "| POST `/authoring/numeric-checks/{id}/decision` | ApprovalDecision；Idempotency-Key | NumericCheckDecisionAck；approve_once后202真实检查Job，decline后200且job=null；expected_revision强CAS，操作SHA必须完全一致 |",
       "task_id": "M6.1"
@@ -204,7 +270,7 @@
       "path": "/api/v1/backups/restore-commit",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1227,
+      "source_line": 1252,
       "source_path": "/backups/restore-commit",
       "source_row": "| POST `/backups/restore-commit` | `{proposal_id,expected_backup_sha256,expected_workspace_revision,conflict_strategy:abort|restore_as_new_workspace}` | 202 JobRef；默认abort，不允许默认全量覆盖；执行前做可恢复快照 |",
       "task_id": "M7.1"
@@ -215,7 +281,7 @@
       "path": "/api/v1/backups/restore-preview",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1226,
+      "source_line": 1251,
       "source_path": "/backups/restore-preview",
       "source_row": "| POST `/backups/restore-preview` | multipart `file`；同导入安全预算 | 202 `{proposal_id,job:JobRef,backup_sha256}`。结果列冲突、版本、所需迁移和影响 |",
       "task_id": "M7.1"
@@ -226,7 +292,7 @@
       "path": "/api/v1/blocks/{id}",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1236,
+      "source_line": 1261,
       "source_path": "/blocks/{id}",
       "source_row": "| GET `/blocks/{id}` | `revision` 必需 | ContentBlock；Markdown body 由 GET `/blocks/{id}/body?revision=` 返回 `text/markdown`，ETag=body_sha256，并有同样权限检查 |",
       "task_id": "M2.4"
@@ -237,7 +303,7 @@
       "path": "/api/v1/blocks/{id}/body",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1236,
+      "source_line": 1261,
       "source_path": "/blocks/{id}/body?revision=",
       "source_row": "| GET `/blocks/{id}` | `revision` 必需 | ContentBlock；Markdown body 由 GET `/blocks/{id}/body?revision=` 返回 `text/markdown`，ETag=body_sha256，并有同样权限检查 |",
       "task_id": "M2.4"
@@ -248,7 +314,7 @@
       "path": "/api/v1/codex/capabilities",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1857,
+      "source_line": 1982,
       "source_path": "/codex/capabilities",
       "source_row": "| GET `/codex/capabilities` | 无 | `{available,authorized,adapter_version:string|null,sandbox_roots:[{id,label}],capabilities:{approvals,interrupt,artifacts}}`；默认沙盒ID为workspace_default；实际路径仅服务端映射 |",
       "task_id": "M6.3"
@@ -259,7 +325,7 @@
       "path": "/api/v1/codex/sessions",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1711,
+      "source_line": 1736,
       "source_path": "/codex/sessions",
       "source_row": "| POST `/codex/sessions` | `{sandbox_root_id,consent_id,allowed_actions:[read|write_proposal|execute_approved]}` | 201 `{id,revision,status,capabilities:{approvals,interrupt,artifacts},adapter_version}`；浏览器不得传任意绝对沙盒路径 |",
       "task_id": "M6.3"
@@ -270,7 +336,7 @@
       "path": "/api/v1/codex/sessions/{id}",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1858,
+      "source_line": 1983,
       "source_path": "/codex/sessions/{id}",
       "source_row": "| GET `/codex/sessions/{id}` | 无 | `{id,revision,status,active_turn_id:Id|null,adapter_version,capabilities}`；供expected_session_revision并发校验，不能要求客户端猜版本 |",
       "task_id": "M6.3"
@@ -281,7 +347,7 @@
       "path": "/api/v1/codex/sessions/{id}/artifacts/import",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1714,
+      "source_line": 1739,
       "source_path": "/codex/sessions/{id}/artifacts/import",
       "source_row": "| POST `/codex/sessions/{id}/artifacts/import` | `{turn_id,artifact_ids:Id[],expected_manifest_sha256}` | 202 JobRef；白名单路径、哈希、大小、审查后进入草稿 |",
       "task_id": "M6.3"
@@ -292,7 +358,7 @@
       "path": "/api/v1/codex/sessions/{id}/interrupt",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1713,
+      "source_line": 1738,
       "source_path": "/codex/sessions/{id}/interrupt",
       "source_row": "| POST `/codex/sessions/{id}/interrupt` | `{turn_id,expected_session_revision}` | `{id,turn_id,status:interrupt_requested|already_terminal}`；中断不证明已完成外部副作用全部撤销 |",
       "task_id": "M6.3"
@@ -303,7 +369,7 @@
       "path": "/api/v1/codex/sessions/{id}/turns",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1712,
+      "source_line": 1737,
       "source_path": "/codex/sessions/{id}/turns",
       "source_row": "| POST `/codex/sessions/{id}/turns` | `{message,context_refs:ContentRef[],expected_session_revision}` | 202 `{turn_id,session_revision,job:JobRef}`；文件/命令审批通过Broker事件传递 |",
       "task_id": "M6.3"
@@ -314,7 +380,7 @@
       "path": "/api/v1/connectors",
       "priority": "P1",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1716,
+      "source_line": 1741,
       "source_path": "/connectors",
       "source_row": "| GET `/connectors` | 无 | `{items:{id,name,configured,read_capabilities:string[],write_capabilities:string[],last_sync:UTC|null}[]}` |",
       "task_id": "E1"
@@ -325,7 +391,7 @@
       "path": "/api/v1/connectors/{id}/apply",
       "priority": "P1",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1718,
+      "source_line": 1743,
       "source_path": "/connectors/{id}/apply",
       "source_row": "| POST `/connectors/{id}/apply` | `{proposal_id,operation_sha256,consent_id,expected_remote_version:string|null}` | 202 JobRef；授权、版本和幂等检查；不支持的标准能力拒绝 |",
       "task_id": "E1"
@@ -336,7 +402,7 @@
       "path": "/api/v1/connectors/{id}/preview",
       "priority": "P1",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1717,
+      "source_line": 1742,
       "source_path": "/connectors/{id}/preview",
       "source_row": "| POST `/connectors/{id}/preview` | `{scope_ref_ids:Id[],direction:pull|push}` | 202 `{proposal_id,job:JobRef}`；连接不可用明示，预览不写远端 |",
       "task_id": "E1"
@@ -347,7 +413,7 @@
       "path": "/api/v1/consents",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1563,
+      "source_line": 1588,
       "source_path": "/consents",
       "source_row": "| GET `/consents` | ConsentQuery；普通列表 limit 默认20、最大100 | ConsentPage；按原 ID 或稳定创建位置分页回读 |",
       "task_id": "M5.1"
@@ -358,7 +424,7 @@
       "path": "/api/v1/consents",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1562,
+      "source_line": 1587,
       "source_path": "/consents",
       "source_row": "| POST `/consents` | ConsentCreate；Idempotency-Key | 201 ConsentCreateAck；只批准原提案，不同步调用模型 |",
       "task_id": "M5.1"
@@ -369,7 +435,7 @@
       "path": "/api/v1/consents/preview",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1560,
+      "source_line": 1585,
       "source_path": "/consents/preview",
       "source_row": "| POST `/consents/preview` | ConsentPreviewWrite；Idempotency-Key | 201 ConsentProposalView；服务端从真实持久 source 冻结提案；无真实来源/模型证明则安全拒绝，零外发 |",
       "task_id": "M5.1"
@@ -380,7 +446,7 @@
       "path": "/api/v1/consents/preview/{id}",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1561,
+      "source_line": 1586,
       "source_path": "/consents/preview/{id}",
       "source_row": "| GET `/consents/preview/{id}` | 无；拒未知/重复 query | ConsentProposalView；原不可变摘要及只读当前诊断 |",
       "task_id": "M5.1"
@@ -391,7 +457,7 @@
       "path": "/api/v1/consents/{id}/revoke",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1564,
+      "source_line": 1589,
       "source_path": "/consents/{id}/revoke",
       "source_row": "| POST `/consents/{id}/revoke` | ConsentRevoke；Idempotency-Key | MutationAck；仅安全控制回执，撤销后拒新派发；在途请求取消但不保证撤回/退款 |",
       "task_id": "M5.1"
@@ -402,7 +468,7 @@
       "path": "/api/v1/courses",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1233,
+      "source_line": 1258,
       "source_path": "/courses",
       "source_row": "| GET `/courses` | `q?`, `cursor?`, `limit?` | Page<{ref:ContentRef,title,language,lesson_count,review_state}>；没有正文 |",
       "task_id": "M2.4"
@@ -413,7 +479,7 @@
       "path": "/api/v1/courses/{id}",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1234,
+      "source_line": 1259,
       "source_path": "/courses/{id}",
       "source_row": "| GET `/courses/{id}` | `revision` 必需 | Course；文件里不含自己的hash，响应头ETag为该对象hash；正式服务可另设 resolve-current 查询，不把latest写入证据 |",
       "task_id": "M2.4"
@@ -424,7 +490,7 @@
       "path": "/api/v1/courses/{id}/directory-search",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1828,
+      "source_line": 1953,
       "source_path": "/courses/{id}/directory-search",
       "source_row": "| GET `/courses/{id}/directory-search` | `revision`,`q`,`limit`≤50 | `{hits:[{ref,title,ancestors:[{id,title}]}]}`；只找此课目录，不伪造内容 |",
       "task_id": "M2.4"
@@ -435,7 +501,7 @@
       "path": "/api/v1/courses/{id}/outline",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1827,
+      "source_line": 1952,
       "source_path": "/courses/{id}/outline",
       "source_row": "| GET `/courses/{id}/outline` | `revision`必需 | `{course_ref,sections:[{id,title,lessons:[{ref,title,blocks:[{ref,kind,title}],reading_state}]}]}`；不返回正文；当前活动对象由URL/UI决定 |",
       "task_id": "M2.4"
@@ -446,7 +512,7 @@
       "path": "/api/v1/deletions/commit",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1842,
+      "source_line": 1967,
       "source_path": "/deletions/commit",
       "source_row": "| POST `/deletions/commit` | `{proposal_id,operation_sha256,expected_workspace_revision,confirm_purge:boolean}` | 202 JobRef；执行前可恢复备份；purge需要额外明确确认 |",
       "task_id": "M7.1"
@@ -457,7 +523,7 @@
       "path": "/api/v1/deletions/preview",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1841,
+      "source_line": 1966,
       "source_path": "/deletions/preview",
       "source_row": "| POST `/deletions/preview` | `{target:workspace|course|personal_data,target_id,scope:archive|purge}` | `{proposal_id,operation_sha256,affected_counts,unresolved_dependencies,warnings}` |",
       "task_id": "M7.1"
@@ -468,7 +534,7 @@
       "path": "/api/v1/drafts",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1237,
+      "source_line": 1262,
       "source_path": "/drafts",
       "source_row": "| POST `/drafts` | `{kind:course|lesson|block|question|practice_set|assessment,base_ref:ContentRef|null,title:string}` | 201 `{draft_id,revision,base_ref,state:draft}`；不是发布对象 |",
       "task_id": "M6.2"
@@ -479,7 +545,7 @@
       "path": "/api/v1/drafts/{id}",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1843,
+      "source_line": 1968,
       "source_path": "/drafts/{id}",
       "source_row": "| GET `/drafts/{id}` | 无 | 既有 ImportDraftSnapshot：`{id,kind,revision,base_ref,state,candidate_sha256,payload,warnings}`；Import owner、按kind专用DTO，测试期受限；M6.1 Authoring 只用专属 `/authoring/drafts/{id}`，通用审核整合见§20.8 |",
       "task_id": "M6.2"
@@ -490,7 +556,7 @@
       "path": "/api/v1/drafts/{id}",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1238,
+      "source_line": 1263,
       "source_path": "/drafts/{id}",
       "source_row": "| PATCH `/drafts/{id}` | `{expected_revision,patches:{field:string,value:JSON}[]}` | `{draft_id,revision,validation_warnings}`。field 必须属于对应kind白名单；拒绝改对象id/基准hash/审核结论 |",
       "task_id": "M6.2"
@@ -501,7 +567,7 @@
       "path": "/api/v1/drafts/{id}/publish",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1240,
+      "source_line": 1265,
       "source_path": "/drafts/{id}/publish",
       "source_row": "| POST `/drafts/{id}/publish` | `{expected_revision,expected_content_sha256,review_receipt_id,acknowledged_warning_codes:string[]}` | 201 ContentRef；角色author；禁止活跃独立测试用此路获取答案；审核与hash绑定 |",
       "task_id": "M6.2"
@@ -512,7 +578,7 @@
       "path": "/api/v1/drafts/{id}/review",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1239,
+      "source_line": 1264,
       "source_path": "/drafts/{id}/review",
       "source_row": "| POST `/drafts/{id}/review` | `{expected_revision,checks:[structure|sources|mathematics|numerical_examples],reviewer_note:string}` | 202 JobRef；结构可自动，数学/来源未独立执行则 NOT_RUN，不自行批准 |",
       "task_id": "M6.2"
@@ -523,7 +589,7 @@
       "path": "/api/v1/exports",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1224,
+      "source_line": 1249,
       "source_path": "/exports",
       "source_row": "| POST `/exports` | `{profile:learner|author|full_backup,course_refs:ContentRef[],include_personal_notes:boolean}` | 202 JobRef。learner profile严格剔除私有解答；完整备份允许用户自身敏感学习记录但提示 |",
       "task_id": "M7.1"
@@ -534,7 +600,7 @@
       "path": "/api/v1/exports/{id}",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1225,
+      "source_line": 1250,
       "source_path": "/exports/{id}",
       "source_row": "| GET `/exports/{id}` | 无 | `{job:JobSnapshot,artifact:DownloadArtifact|null}`。只有完成才提供文件 |",
       "task_id": "M7.1"
@@ -545,7 +611,7 @@
       "path": "/api/v1/feedback",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1715,
+      "source_line": 1740,
       "source_path": "/feedback",
       "source_row": "| POST `/feedback` | `{module,severity:suggestion|minor|major|blocker,description,expected,steps:string[],include_diagnostics:boolean}` | 201 `{id,created_at}`；诊断不自动附私密正文或密钥 |",
       "task_id": "M7.3"
@@ -556,7 +622,7 @@
       "path": "/api/v1/imports",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1220,
+      "source_line": 1245,
       "source_path": "/imports",
       "source_row": "| POST `/imports` | multipart `file`，`kind:auto|markdown|text|html|pdf|docx|learnpack`，`target_course_id?`；最大字节数按正文 | 202 `{import_id,job:JobRef,input_sha256}`。仅暂存，不改正式课程 |",
       "task_id": "M2.2"
@@ -567,7 +633,7 @@
       "path": "/api/v1/imports/progress-commit",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1838,
+      "source_line": 1963,
       "source_path": "/imports/progress-commit",
       "source_row": "| POST `/imports/progress-commit` | `{proposal_id,expected_input_sha256,confirmed_mappings:[{old_id,new_ref}],expected_workspace_revision}` | MutationAck；追加origin=user_supplied_import事件 |",
       "task_id": "M4.1"
@@ -578,7 +644,7 @@
       "path": "/api/v1/imports/progress-preview",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1837,
+      "source_line": 1962,
       "source_path": "/imports/progress-preview",
       "source_row": "| POST `/imports/progress-preview` | multipart JSON文件，`kind:reading|route|legacy_workspace` | `{proposal_id,warnings,mappings:[{old_id,candidate_ref,confidence:exact|unresolved}]}`；不接受外来graded为native |",
       "task_id": "M4.1"
@@ -589,7 +655,7 @@
       "path": "/api/v1/imports/{id}",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1221,
+      "source_line": 1246,
       "source_path": "/imports/{id}",
       "source_row": "| GET `/imports/{id}` | 无 | `{id,status:staged|parsing|preview_ready|committed|cancelled|failed,input_sha256,warnings:Warning[],candidate_summary:{course_title,lesson_count,block_count,unresolved_refs},preview_refs:Id[]}`。预览标识不是已发布 ContentRef |",
       "task_id": "M2.2"
@@ -600,7 +666,7 @@
       "path": "/api/v1/imports/{id}/cancel",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1223,
+      "source_line": 1248,
       "source_path": "/imports/{id}/cancel",
       "source_row": "| POST `/imports/{id}/cancel` | `{expected_input_sha256}` | `{id,status:cancelled}`；已提交409，不以取消接口删除正式内容 |",
       "task_id": "M2.2"
@@ -611,7 +677,7 @@
       "path": "/api/v1/imports/{id}/commit",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1222,
+      "source_line": 1247,
       "source_path": "/imports/{id}/commit",
       "source_row": "| POST `/imports/{id}/commit` | `{expected_input_sha256,accepted_warning_codes:string[],id_mapping:{old_id,new_id}[]}` | `{course_refs:ContentRef[],migration_receipt_id}`；新哈希不一致409；error级警告不可绕过 |",
       "task_id": "M2.2"
@@ -622,7 +688,7 @@
       "path": "/api/v1/index/rebuild",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1847,
+      "source_line": 1972,
       "source_path": "/index/rebuild",
       "source_row": "| POST `/index/rebuild` | RetrievalIndexRebuildWrite；Idempotency-Key、会话/Origin/CSRF；expected_corpus_sha256强CAS | 202真实JobRef；provider/consent必须显式null，仅离线词法；同scope最多一个非终态Job，原ACK与当前状态分开 |",
       "task_id": "M5.2"
@@ -633,7 +699,7 @@
       "path": "/api/v1/index/status",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1848,
+      "source_line": 1973,
       "source_path": "/index/status",
       "source_row": "| GET `/index/status` | RetrievalIndexStatusQuery：单个scope_refs严格JSON字符串，或仅overview cursor/limit；两模式互斥 | RetrievalIndexStatusView；有scope只读算目标SHA/coldmissing，无scope分页已登记摘要，不表示全库ready，不读全库正文/写状态 |",
       "task_id": "M5.2"
@@ -644,7 +710,7 @@
       "path": "/api/v1/jobs/{id}",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1708,
+      "source_line": 1733,
       "source_path": "/jobs/{id}",
       "source_row": "| GET `/jobs/{id}` | 无 | JobSnapshot；敏感日志不下发原始完整请求 |",
       "task_id": "M5.3"
@@ -655,7 +721,7 @@
       "path": "/api/v1/jobs/{id}/cancel",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1709,
+      "source_line": 1734,
       "source_path": "/jobs/{id}/cancel",
       "source_row": "| POST `/jobs/{id}/cancel` | `{expected_revision}` | JobSnapshot；按任务终态约束 |",
       "task_id": "M5.3"
@@ -666,7 +732,7 @@
       "path": "/api/v1/learner/profile",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1834,
+      "source_line": 1959,
       "source_path": "/learner/profile",
       "source_row": "| GET `/learner/profile` | 无 | LearnerProfile；自报不修改可信证据 |",
       "task_id": "M4.1"
@@ -677,7 +743,7 @@
       "path": "/api/v1/learner/profile",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1835,
+      "source_line": 1960,
       "source_path": "/learner/profile",
       "source_row": "| PUT `/learner/profile` | `{expected_revision,goals,goal_concept_ids,weekly_minutes,language,preferred_difficulty,self_assessments:[{concept_id,level}]}` | LearnerProfile；origin与时间由服务端填，自报记录保留修订 |",
       "task_id": "M4.1"
@@ -688,7 +754,7 @@
       "path": "/api/v1/learning/actions",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1283,
+      "source_line": 1308,
       "source_path": "/learning/actions",
       "source_row": "| POST `/learning/actions` | `{kind:read_marked|bookmark_set,ref,expected_revision,value:boolean}` | `{event_id,progress_revision}`；客户端不能上传native grade_finalized事件 |",
       "task_id": "M4.1"
@@ -699,7 +765,7 @@
       "path": "/api/v1/learning/concept-states",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1836,
+      "source_line": 1961,
       "source_path": "/learning/concept-states",
       "source_row": "| GET `/learning/concept-states` | `course_id?` | `{items:[{concept_id,skill,evidence_state:none|preliminary|needs_support|consistent,independent_count,assisted_count,stale_count,self_report:SelfAssessment|null,evidence_ids,rule_version}]}`；不返回伪装校准概率 |",
       "task_id": "M4.1"
@@ -710,7 +776,7 @@
       "path": "/api/v1/learning/evidence",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1284,
+      "source_line": 1309,
       "source_path": "/learning/evidence",
       "source_row": "| GET `/learning/evidence` | `concept_id?`,`skill?`,`cursor?`,`limit?` | Page<Evidence>；区分有效、过期、辅助、重复和未知 |",
       "task_id": "M4.1"
@@ -721,7 +787,7 @@
       "path": "/api/v1/learning/progress",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1282,
+      "source_line": 1307,
       "source_path": "/learning/progress",
       "source_row": "| GET `/learning/progress` | `course_id?` | `{revision,readings:{ref,read,read_at}[],route_steps:{route_ref,step_id,completed}[]}`；无掌握概率 |",
       "task_id": "M4.1"
@@ -732,7 +798,7 @@
       "path": "/api/v1/lessons/{id}",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1235,
+      "source_line": 1260,
       "source_path": "/lessons/{id}",
       "source_row": "| GET `/lessons/{id}` | `revision` 必需 | Lesson；按引用读取各块，不默认整库下发 |",
       "task_id": "M2.4"
@@ -743,7 +809,7 @@
       "path": "/api/v1/notes",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1287,
+      "source_line": 1312,
       "source_path": "/notes",
       "source_row": "| GET `/notes` | `ref_id?`,`cursor?`,`limit?` | Page<Note>；anchor状态可为stale，不静默迁移到最新版本 |",
       "task_id": "M2.4"
@@ -754,7 +820,7 @@
       "path": "/api/v1/notes",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1288,
+      "source_line": 1313,
       "source_path": "/notes",
       "source_row": "| POST `/notes` | Note | 201 ContentRef；quote/codepoint与正文校验 |",
       "task_id": "M2.4"
@@ -765,7 +831,7 @@
       "path": "/api/v1/notes/{id}",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1839,
+      "source_line": 1964,
       "source_path": "/notes/{id}",
       "source_row": "| DELETE `/notes/{id}` | `If-Match` | `{id,deleted:true}`；软删当前视图、保留历史引用；彻底删除另走purge预览 |",
       "task_id": "M2.4"
@@ -776,7 +842,7 @@
       "path": "/api/v1/notes/{id}",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1289,
+      "source_line": 1314,
       "source_path": "/notes/{id}",
       "source_row": "| PATCH `/notes/{id}` | Note + If-Match | ContentRef；id一致、revision按新版本处理，冲突412 |",
       "task_id": "M2.4"
@@ -787,7 +853,7 @@
       "path": "/api/v1/objects/{id}/archive",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1840,
+      "source_line": 1965,
       "source_path": "/objects/{id}/archive",
       "source_row": "| POST `/objects/{id}/archive` | `{expected_revision,archived:boolean}` | MutationAck；变更对象lifecycle，不改旧修订正文 |",
       "task_id": "M7.1"
@@ -798,7 +864,7 @@
       "path": "/api/v1/objects/{id}/current",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1829,
+      "source_line": 1954,
       "source_path": "/objects/{id}/current",
       "source_row": "| GET `/objects/{id}/current` | 无 | ContentRef；只解析当前指针，后续证据冻结精确ref |",
       "task_id": "M2.1"
@@ -809,7 +875,7 @@
       "path": "/api/v1/objects/{id}/revisions",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1830,
+      "source_line": 1955,
       "source_path": "/objects/{id}/revisions",
       "source_row": "| GET `/objects/{id}/revisions` | 分页 | Page<{ref,created_at,review_state,lifecycle}>；归档旧版仍按权限查询 |",
       "task_id": "M2.1"
@@ -820,7 +886,7 @@
       "path": "/api/v1/practice/sessions",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1252,
+      "source_line": 1277,
       "source_path": "/practice/sessions",
       "source_row": "| POST `/practice/sessions` | `{practice_ref:ContentRef}` | 201 `{id,revision,practice_ref,questions:QuestionPublic[],responses:ResponseDraft[],status:active}`；没有答案 |",
       "task_id": "M3.1"
@@ -831,7 +897,7 @@
       "path": "/api/v1/practice/sessions/{id}",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1254,
+      "source_line": 1279,
       "source_path": "/practice/sessions/{id}",
       "source_row": "| GET `/practice/sessions/{id}` | 无 | `{id,revision,practice_ref,questions,responses,status,exposure_event_ids}`；已请求解答可按策略重新获取 |",
       "task_id": "M3.1"
@@ -842,7 +908,7 @@
       "path": "/api/v1/practice/sessions/{id}/hints",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1256,
+      "source_line": 1281,
       "source_path": "/practice/sessions/{id}/hints",
       "source_row": "| POST `/practice/sessions/{id}/hints` | `{question_id,expected_revision,level:1|2|3}` | `{markdown,exposure_event_id,revision}`；按规则或生成任务返回；生成需另有有效 consent |",
       "task_id": "M3.1"
@@ -853,7 +919,7 @@
       "path": "/api/v1/practice/sessions/{id}/responses",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1253,
+      "source_line": 1278,
       "source_path": "/practice/sessions/{id}/responses",
       "source_row": "| PUT `/practice/sessions/{id}/responses` | ResponsesWrite | `{id,revision,saved_at}`；刷新GET session可恢复，不能静默覆盖过期草稿 |",
       "task_id": "M3.1"
@@ -864,7 +930,7 @@
       "path": "/api/v1/practice/sessions/{id}/solutions",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1257,
+      "source_line": 1282,
       "source_path": "/practice/sessions/{id}/solutions",
       "source_row": "| POST `/practice/sessions/{id}/solutions` | `{question_id,expected_revision}` | `{solution_markdown,exposure_event_id,revision}`；在同一事务建立暴露事件，再下发答案 |",
       "task_id": "M3.1"
@@ -875,7 +941,7 @@
       "path": "/api/v1/practice/sessions/{id}/submit",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1255,
+      "source_line": 1280,
       "source_path": "/practice/sessions/{id}/submit",
       "source_row": "| POST `/practice/sessions/{id}/submit` | `{expected_revision}` | `{id,revision,results:ItemGrade[],evidence_label:practice}`；查看解答/提示发生过则明确辅助，不充独立测试 |",
       "task_id": "M3.1"
@@ -886,7 +952,7 @@
       "path": "/api/v1/practice/sets",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1831,
+      "source_line": 1956,
       "source_path": "/practice/sets",
       "source_row": "| GET `/practice/sets` | `course_id?`,`lesson_id?`,`cursor?`,`limit?` | Page<{ref,title,lesson_ref,question_count}>；Lesson不反向嵌入题集ref，避免hash循环 |",
       "task_id": "M3.1"
@@ -897,7 +963,7 @@
       "path": "/api/v1/providers/capabilities",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1555,
+      "source_line": 1580,
       "source_path": "/providers/capabilities",
       "source_row": "| GET `/providers/capabilities` | 无；拒未知/重复 query | ProviderCapabilitiesResponse；仅本工作区真实注册配置/可调度能力；零外发 |",
       "task_id": "M5.1"
@@ -908,7 +974,7 @@
       "path": "/api/v1/providers/{id}/config",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1556,
+      "source_line": 1581,
       "source_path": "/providers/{id}/config",
       "source_row": "| GET `/providers/{id}/config` | 无；拒未知/重复 query | ProviderConfigView；404 不存在/不可访问；零写 |",
       "task_id": "M5.1"
@@ -919,7 +985,7 @@
       "path": "/api/v1/providers/{id}/config",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1557,
+      "source_line": 1582,
       "source_path": "/providers/{id}/config",
       "source_row": "| PUT `/providers/{id}/config` | ProviderConfigWrite；Idempotency-Key | ProviderConfigAck；expected_revision=0 仅创建，成功 r1；更新强 CAS；零外发 |",
       "task_id": "M5.1"
@@ -930,7 +996,7 @@
       "path": "/api/v1/providers/{id}/secret",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1559,
+      "source_line": 1584,
       "source_path": "/providers/{id}/secret",
       "source_row": "| DELETE `/providers/{id}/secret` | 单个强 If-Match 与 Idempotency-Key；无 JSON body | ProviderSecretAck；成功 secret_present=false；引用删除不撤回已有请求 |",
       "task_id": "M5.1"
@@ -941,7 +1007,7 @@
       "path": "/api/v1/providers/{id}/secret",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1558,
+      "source_line": 1583,
       "source_path": "/providers/{id}/secret",
       "source_row": "| POST `/providers/{id}/secret` | ProviderSecretWrite；Idempotency-Key；write-only 敏感 body | ProviderSecretAck；成功 secret_present=true；空 secret 不覆盖旧值 |",
       "task_id": "M5.1"
@@ -952,7 +1018,7 @@
       "path": "/api/v1/readiness",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1820,
+      "source_line": 1945,
       "source_path": "/readiness",
       "source_row": "| GET `/readiness` | 已有本机会话 | `{database_ready:boolean,worker_ready:boolean,data_schema_version:string,migrations_pending:boolean}`；不联网、不测试密钥 |",
       "task_id": "M0.2"
@@ -963,7 +1029,7 @@
       "path": "/api/v1/recommendations",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1285,
+      "source_line": 1310,
       "source_path": "/recommendations",
       "source_row": "| GET `/recommendations` | `course_id?`,`recommendation_id?`,`cursor?`,`limit?`，默认全工作区，limit 默认20、最大100 | RecommendationPage；仅回读已持久化推荐投影并校验当前依据，不生成/写入/排队刷新；每条有真实原因与来源，空态/缺材料/更新状态显式返回 |",
       "task_id": "M4.2"
@@ -974,7 +1040,7 @@
       "path": "/api/v1/recommendations/{id}/decision",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1286,
+      "source_line": 1311,
       "source_path": "/recommendations/{id}/decision",
       "source_row": "| POST `/recommendations/{id}/decision` | RecommendationDecisionWrite，即 `{decision:accepted|dismissed,reason:string|null}`；Idempotency-Key；If-Match 为所读 RecommendationView.decision_sha256 的带引号强标签 | MutationAck；revision 是该推荐决定版本，applied 表示原命令是否真正改变决定；接受/拒绝不改变路线、成绩、学习事件或能力状态 |",
       "task_id": "M4.2"
@@ -985,7 +1051,7 @@
       "path": "/api/v1/retrieval/query",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1281,
+      "source_line": 1306,
       "source_path": "/retrieval/query",
       "source_row": "| POST `/retrieval/query` | RetrievalQueryWrite；会话/Origin/CSRF；不要求写命令幂等键 | RetrievalQueryView；只读精确scope，含scope/corpus hash和missing；完整块/资源遗漏/来源与未审事实明确，零排队/零外发 |",
       "task_id": "M5.2"
@@ -996,7 +1062,7 @@
       "path": "/api/v1/reviews/{id}",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1844,
+      "source_line": 1969,
       "source_path": "/reviews/{id}",
       "source_row": "| GET `/reviews/{id}` | 无 | ReviewReceipt；candidate绑定确切草稿版本，不返回未授权答案 |",
       "task_id": "M6.2"
@@ -1007,7 +1073,7 @@
       "path": "/api/v1/reviews/{id}/decision",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1845,
+      "source_line": 1970,
       "source_path": "/reviews/{id}/decision",
       "source_row": "| POST `/reviews/{id}/decision` | `{expected_revision,candidate_sha256,mathematical:APPROVED|REJECTED|NOT_APPLICABLE,sources:APPROVED|REJECTED|NOT_APPLICABLE,reason,evidence_artifact_ids:Id[]}` | ReviewReceipt；author会话显式人工确认，操作者从会话得出；不允许模型自报人工reviewer |",
       "task_id": "M6.2"
@@ -1018,7 +1084,7 @@
       "path": "/api/v1/routes",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1241,
+      "source_line": 1266,
       "source_path": "/routes",
       "source_row": "| GET `/routes` | `cursor?`,`limit?` | Page<Route>；路线内容与用户完成记录分开 |",
       "task_id": "M4.1"
@@ -1029,7 +1095,7 @@
       "path": "/api/v1/routes",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1242,
+      "source_line": 1267,
       "source_path": "/routes",
       "source_row": "| POST `/routes` | Route | 201 ContentRef；检查步骤ID、引用、DAG |",
       "task_id": "M4.1"
@@ -1040,7 +1106,7 @@
       "path": "/api/v1/routes/{id}",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1243,
+      "source_line": 1268,
       "source_path": "/routes/{id}",
       "source_row": "| PUT `/routes/{id}` | Route；If-Match | ContentRef；生成新路线revision，旧完成记录引用旧步 |",
       "task_id": "M4.1"
@@ -1051,7 +1117,7 @@
       "path": "/api/v1/routes/{id}/steps/{step_id}/complete",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1244,
+      "source_line": 1269,
       "source_path": "/routes/{id}/steps/{step_id}/complete",
       "source_row": "| POST `/routes/{id}/steps/{step_id}/complete` | `{route_revision,expected_progress_revision,completed:boolean,origin:manual}` | `{progress_revision,event_id}`；手动完成不授予掌握证据 |",
       "task_id": "M4.1"
@@ -1062,7 +1128,7 @@
       "path": "/api/v1/runs/{id}",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1278,
+      "source_line": 1303,
       "source_path": "/runs/{id}",
       "source_row": "| GET `/runs/{id}` | 无 | TutorRunView；只读，核归属、当前输出权限、自有历史 |",
       "task_id": "M5.3"
@@ -1073,7 +1139,7 @@
       "path": "/api/v1/runs/{id}/cancel",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1280,
+      "source_line": 1305,
       "source_path": "/runs/{id}/cancel",
       "source_row": "| POST `/runs/{id}/cancel` | TutorRunCancel；Idempotency-Key | TutorRunControlView；取消请求不等于远端已停，终态取消 no-op |",
       "task_id": "M5.3"
@@ -1084,7 +1150,7 @@
       "path": "/api/v1/runs/{id}/events",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1279,
+      "source_line": 1304,
       "source_path": "/runs/{id}/events",
       "source_row": "| GET `/runs/{id}/events` | TutorEventsQuery；Last-Event-ID? | text/event-stream；标准 SSE + 严格 TutorSSEEvent |",
       "task_id": "M5.3"
@@ -1095,7 +1161,7 @@
       "path": "/api/v1/session",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1823,
+      "source_line": 1948,
       "source_path": "/session",
       "source_row": "| GET `/session` | 无 | `{workspace_id,role:learner|author,csrf_token,active_independent_attempt_id:Id|null,active_open_book_attempt_id:Id|null}`；两个活动 ID 来自服务端 Policy，开卷只限制学科 Agent，不锁普通材料或导入 |",
       "task_id": "M0.2"
@@ -1106,7 +1172,7 @@
       "path": "/api/v1/session/bootstrap",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1821,
+      "source_line": 1946,
       "source_path": "/session/bootstrap",
       "source_row": "| POST `/session/bootstrap` | `{one_time_code:string}`，同源且有效Host | `{workspace_id,csrf_token,expires_at}`，设HttpOnly/SameSite cookie；一次性code消耗后禁止重用 |",
       "task_id": "M0.2"
@@ -1117,7 +1183,7 @@
       "path": "/api/v1/session/logout",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1822,
+      "source_line": 1947,
       "source_path": "/session/logout",
       "source_row": "| POST `/session/logout` | 空对象+CSRF | `{logged_out:true}`；使会话失效，不删除学习数据 |",
       "task_id": "M0.2"
@@ -1128,7 +1194,7 @@
       "path": "/api/v1/session/role",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1824,
+      "source_line": 1949,
       "source_path": "/session/role",
       "source_row": "| POST `/session/role` | `{role:learner|author}` | 同GET session；切author不绕过active测试策略 |",
       "task_id": "M0.2"
@@ -1139,7 +1205,7 @@
       "path": "/api/v1/sources/{id}",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1832,
+      "source_line": 1957,
       "source_path": "/sources/{id}",
       "source_row": "| GET `/sources/{id}` | 无 | `{id,media_type,size,sha256,rights,parser_version,warnings,artifact:DownloadArtifact}`；权限检查 |",
       "task_id": "M2.4"
@@ -1150,7 +1216,7 @@
       "path": "/api/v1/threads",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1275,
+      "source_line": 1300,
       "source_path": "/threads",
       "source_row": "| GET `/threads` | TutorPageQuery | TutorThreadPage；本工作区真实列表，恢复本机映射，不猜当前线程 |",
       "task_id": "M5.3"
@@ -1161,7 +1227,7 @@
       "path": "/api/v1/threads",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1274,
+      "source_line": 1299,
       "source_path": "/threads",
       "source_row": "| POST `/threads` | TutorThreadCreate；Idempotency-Key | 201 TutorThreadView；核实际 scope/binding，只建立本地线程 |",
       "task_id": "M5.3"
@@ -1172,7 +1238,7 @@
       "path": "/api/v1/threads/{id}/messages",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1276,
+      "source_line": 1301,
       "source_path": "/threads/{id}/messages",
       "source_row": "| GET `/threads/{id}/messages` | TutorPageQuery | TutorMessagePage；真实顺序/通道/状态，当前学科 Policy 先行 |",
       "task_id": "M5.3"
@@ -1183,7 +1249,7 @@
       "path": "/api/v1/tutor/runs",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1277,
+      "source_line": 1302,
       "source_path": "/tutor/runs",
       "source_row": "| POST `/tutor/runs` | TutorRunCreate；Idempotency-Key | 202 TutorRunView；原 key 回原创建回执，GET 回当前 |",
       "task_id": "M5.3"
@@ -1194,7 +1260,7 @@
       "path": "/api/v1/workbench/session",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1825,
+      "source_line": 1950,
       "source_path": "/workbench/session",
       "source_row": "| GET `/workbench/session` | 无 | WorkbenchSession；对象缺失显示unresolved且不丢原始快照 |",
       "task_id": "M1.3"
@@ -1205,7 +1271,7 @@
       "path": "/api/v1/workbench/session",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1826,
+      "source_line": 1951,
       "source_path": "/workbench/session",
       "source_row": "| PUT `/workbench/session` | `{expected_revision,session:WorkbenchSession}` | WorkbenchSession；会话revision由服务端递增，包含布局/展开/滚动/标签，成绩不在其中 |",
       "task_id": "M1.3"
@@ -1216,7 +1282,7 @@
       "path": "/api/v1/workspace",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1218,
+      "source_line": 1243,
       "source_path": "/workspace",
       "source_row": "| GET `/workspace` | 无 | `{id,title,revision,preferences:{language,reader_font_size,default_learning_minutes,auto_attach_current_lesson},layout:{nav_width,agent_width,nav_collapsed,agent_collapsed},data_schema_version}`。不返回密钥或全库正文 |",
       "task_id": "M2.1"
@@ -1227,7 +1293,7 @@
       "path": "/api/v1/workspace/preferences",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1219,
+      "source_line": 1244,
       "source_path": "/workspace/preferences",
       "source_row": "| PUT `/workspace/preferences` | `{expected_revision,preferences:{language?,reader_font_size?,default_learning_minutes?,auto_attach_current_lesson?}}` | MutationAck；读取字体范围14–28、每天分钟1–600；禁止通过此接口修改 provider secret |",
       "task_id": "M2.1"
@@ -1238,7 +1304,7 @@
       "path": "/health",
       "priority": "P0",
       "runtime_evidence_source": "progress/state.json_and_runtime_openapi",
-      "source_line": 1819,
+      "source_line": 1944,
       "source_path": "/health",
       "source_row": "| GET `/health`（无 /api/v1 前缀） | 无 | `{status:ok,build_version}`；不得泄露配置或路径 |",
       "task_id": "M0.2"
@@ -1246,6 +1312,6 @@
   ],
   "scope": "complete_spec_route_inventory_not_runtime_openapi",
   "source": "PRODUCT_DESIGN.md",
-  "spec_sha256": "30220c34fe7312887f5bcb1c67406c9638f1719ff3ed7bc9e95d7d5085b5d924",
-  "spec_version": "3.0.6"
+  "spec_sha256": "2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d",
+  "spec_version": "3.0.7"
 }

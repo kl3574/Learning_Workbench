@@ -1,0 +1,41 @@
+import 'fake-indexeddb/auto'
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
+import { afterEach, test, expect, vi } from 'vitest'
+import {useAuthoring} from './useAuthoring'
+import {authoringCommandStore} from './authoringCommands'
+import {ApiError} from '../../api/client'
+import type {AuthoringPort} from './authoringClient'
+afterEach(()=>{cleanup();vi.restoreAllMocks()})
+function fixture(){
+ const workspace=`workspace_${crypto.randomUUID()}`
+ const unavailable=vi.fn(async():Promise<never>=>{throw new Error('Unexpected operation')})
+ const port:AuthoringPort={session:vi.fn<AuthoringPort['session']>(async()=>({workspace_id:workspace,role:'author',csrf_token:'<REDACTED_SYNTHETIC_TEST_CREDENTIAL>',active_independent_attempt_id:null,active_open_book_attempt_id:null})),list:vi.fn(async()=>({items:[],next_cursor:null})),prepare:vi.fn(async()=>{throw new ApiError(412,'fixed synthetic conflict','REVISION_MISMATCH')}),read:unavailable,draft:unavailable,preview:unavailable,numeric:unavailable,decide:unavailable,job:unavailable,cancel:unavailable}
+ return {workspace,port}
+}
+test('late original rejection journal read cannot enter a replacement workspace',async()=>{
+ const old=fixture(),next=fixture()
+ const hook=renderHook(({workspace,port})=>useAuthoring(workspace,false,port),{initialProps:old})
+ await waitFor(()=>expect(hook.result.current.ready&&hook.result.current.academic).toBe(true))
+ const original=authoringCommandStore.load.bind(authoringCommandStore)
+ let release!:()=>void,entered=false
+ const gate=new Promise<void>(done=>{release=done})
+ const spy=vi.spyOn(authoringCommandStore,'load').mockImplementation(async workspace=>{
+  const values=await original(workspace)
+  if(workspace===old.workspace&&!entered&&Object.values(values).some(v=>JSON.parse(v.text).rejection?.status===412)){
+   entered=true;await gate
+  }
+  return values
+ })
+ let pending!:Promise<void>
+ try{
+  act(()=>{pending=hook.result.current.create({kind:'prepare',body:{topic:'OLD WORKSPACE PRIVATE REQUEST',prerequisites:[],objectives:['synthetic objective'],proof_policy:'full',output_kind:'worked_example',provider_id:'provider_test',source_refs:[]}})})
+  await waitFor(()=>expect(entered).toBe(true))
+  hook.rerender(next)
+  await waitFor(()=>expect(hook.result.current.ready&&hook.result.current.academic).toBe(true))
+  expect(hook.result.current.commands).toEqual([])
+  await act(async()=>{release();await pending})
+  expect(hook.result.current.commands).toEqual([])
+  expect(old.port.prepare).toHaveBeenCalledTimes(1)
+  expect(next.port.prepare).not.toHaveBeenCalled()
+ }finally{release();await pending;spy.mockRestore()}
+})
