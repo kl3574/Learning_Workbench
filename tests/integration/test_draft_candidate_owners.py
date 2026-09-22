@@ -17,6 +17,7 @@ from services.api.app.application.sessions import SessionService
 from services.api.app.dto import RoleRequest
 from services.api.app.infrastructure.config import Settings
 from services.api.app.infrastructure.database import Database
+from services.api.app.infrastructure.draft_candidate_repository import DraftCandidateRepository
 from services.api.app.infrastructure.import_worker import ImportWorker
 from services.api.app.infrastructure.security import consume_bootstrap, issue_bootstrap_code
 from tests.integration.test_authoring_numeric_provider_history import (
@@ -45,8 +46,8 @@ def test_admission_and_fresh_retry_preserve_original_payloads_and_do_not_create_
     before = table_hashes(case.database)
     result = admit(case)
     after = table_hashes(case.database)
-    assert {name for name in before if before[name] != after[name]} == {
-        'draft_candidate_identities', 'draft_candidate_revisions'}
+    # Actual producers already registered this exact candidate atomically.
+    assert after == before
     assert result.candidate.model_dump() == case.candidate.model_dump()
     assert result.workspace_id == case.identity.workspace_id and result.owner == 'authoring'
     assert result.source_kind == owner_kind(case)
@@ -64,8 +65,8 @@ def test_admission_and_fresh_retry_preserve_original_payloads_and_do_not_create_
 @pytest.mark.parametrize('registered', [False, True])
 def test_existing_catalog_never_masks_damaged_original_provider_history(generated_history, registered):
     case = generated_history
-    if registered:
-        admit(case)
+    if not registered:
+        remove_catalog_fixture(case.database, case.candidate.draft_id)
     before = case.damage_original_artifact()
     with pytest.raises(ApiError) as caught:
         admit(case)
@@ -143,8 +144,8 @@ def test_question_group_admits_complete_original_group_without_approving_private
     result = admit(case)
     after = table_hashes(case.database)
     assert result.candidate.entity == kind and result.candidate.model_dump() == case.candidate.model_dump()
-    assert {name for name in before if before[name] != after[name]} == {
-        'draft_candidate_identities', 'draft_candidate_revisions'}
+    # Actual producers already registered this exact candidate atomically.
+    assert after == before
     assert [case.authoring.solution(case.identity, case.candidate.draft_id, item.question.member_key)
             for item in original.private_solution_refs] == private
     assert table_hashes(case.database) == after
@@ -203,8 +204,8 @@ def test_import_identity_uses_real_import_preview_and_keeps_existing_read_contra
         result = DraftCandidates({'import': service}).admit(conn, identity, 'import', candidate)
     after = table_hashes(database)
     assert result.owner == result.source_kind == 'import' and result.candidate == candidate
-    assert {name for name in before if before[name] != after[name]} == {
-        'draft_candidate_identities', 'draft_candidate_revisions'}
+    # Actual producers already registered this exact candidate atomically.
+    assert after == before
     assert service.draft(identity, candidate.draft_id) == original
     with database.transaction() as conn:
         assert DraftCandidates({'import': ImportService(database)}).admit(conn, identity, 'import', candidate) == result
@@ -239,8 +240,7 @@ def test_imported_question_identity_does_not_approve_or_publish_its_private_solu
             result = DraftCandidates({'import': service}).admit(conn, identity, 'import', candidate)
         after = table_hashes(database)
         assert result.candidate == candidate
-        assert {name for name in before if before[name] != after[name]} == {
-            'draft_candidate_identities', 'draft_candidate_revisions'}
+        assert after == before
         with database.connect() as conn:
             for table in ['objects', 'revisions', 'solutions', 'reviews']:
                 assert conn.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0] == 0
@@ -275,8 +275,17 @@ def test_import_registration_rechecks_original_preview_and_actual_bytes(imported
     assert table_hashes(database) == before
 
 
+def remove_catalog_fixture(database, draft_id):
+    """Represent a legacy unregistered candidate while preserving real owner history."""
+    with database.transaction() as conn:
+        for table in ('draft_candidate_revisions', 'draft_candidate_identities'):
+            conn.execute(f'DROP TRIGGER {table}_no_delete')
+            conn.execute(f'DELETE FROM {table} WHERE draft_id=?', (draft_id,))
+
+
 def test_caller_rollback_includes_both_identity_tables(imported_candidate):
     database, identity, service, _, _, candidate = imported_candidate
+    remove_catalog_fixture(database, candidate.draft_id)
     before = table_hashes(database)
     with pytest.raises(RuntimeError, match='caller rollback'), database.transaction() as conn:
         DraftCandidates({'import': service}).admit(conn, identity, 'import', candidate)
@@ -298,8 +307,17 @@ def test_upgrade_of_real_original_owner_records_backfills_without_rewriting_payl
         if path.name < '0016_draft_candidate_identities.sql':
             shutil.copyfile(path, migrations / path.name)
     generation = single_generation if kind == 'single' else group_generation
+
+    def legacy_producer_registration(repository, value):
+        # This fixture intentionally runs the pre-0016 producer behavior against
+        # v15. Only the newly added registration is absent; actual generation,
+        # checked Provider artifacts and all original owner persistence stay real.
+        assert repository.connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE name='draft_candidate_identities'").fetchone() is None
+
     with monkeypatch.context() as patch:
         patch.setattr(generation, 'Settings', lambda **kwargs: Settings(migrations_dir=migrations, **kwargs))
+        patch.setattr(DraftCandidateRepository, 'register', legacy_producer_registration)
         state = single_fixture.__wrapped__(tmp_path) if kind == 'single' else generated_group(tmp_path, kind)
     case = ProviderHistoryCase('single' if kind == 'single' else 'group', state)
     before = table_hashes(case.database)

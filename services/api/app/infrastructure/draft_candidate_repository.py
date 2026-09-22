@@ -2,7 +2,10 @@
 
 import sqlite3
 
-from ..application.draft_candidate_models import ResolvedDraftCandidate
+from pydantic import TypeAdapter, ValidationError
+
+from packages.contracts import domain_models as dm
+from ..application.draft_candidate_models import DraftOwner, DraftSourceKind, ResolvedDraftCandidate
 from ..application.errors import ApiError
 
 
@@ -15,6 +18,46 @@ class DraftCandidateRepository:
         if not connection.in_transaction:
             raise ApiError(409, 'TRANSACTION_REQUIRED', '候选登记需要有效事务。')
         self.connection = connection
+
+    def lookup(self, workspace_id: str, draft_id: str, revision: int) -> ResolvedDraftCandidate:
+        """Locate an exact registered revision; this does not authenticate its owner."""
+        try:
+            draft_id = TypeAdapter(dm.Id).validate_python(draft_id, strict=True)
+            revision = TypeAdapter(dm.Revision).validate_python(revision, strict=True)
+        except ValidationError:
+            raise ApiError(422, 'SCHEMA_INVALID', '草稿候选身份无效。') from None
+        identity = self.connection.execute(
+            'SELECT * FROM draft_candidate_identities WHERE draft_id=? AND workspace_id=?',
+            (draft_id, workspace_id),
+        ).fetchone()
+        if identity is None:
+            raise ApiError(404, 'DRAFT_CANDIDATE_UNREGISTERED', '草稿候选未登记或不可访问。')
+        # The core Revision contract has no upper bound. A larger valid integer
+        # cannot identify a SQLite INTEGER revision; do not overflow its binding
+        # or reveal another workspace's identity before the scoped lookup above.
+        if revision > 2**63 - 1:
+            raise ApiError(412, 'DRAFT_REVISION_MISMATCH', '草稿候选修订未登记，请重新读取。')
+        row = self.connection.execute(
+            'SELECT * FROM draft_candidate_revisions WHERE draft_id=? AND draft_revision=?',
+            (draft_id, revision),
+        ).fetchone()
+        if row is None:
+            raise ApiError(412, 'DRAFT_REVISION_MISMATCH', '草稿候选修订未登记，请重新读取。')
+        try:
+            owner: DraftOwner = TypeAdapter(DraftOwner).validate_python(identity['owner'], strict=True)
+            kind: DraftSourceKind = TypeAdapter(DraftSourceKind).validate_python(identity['source_kind'], strict=True)
+            candidate = dm.DraftCandidate.model_validate(dict(
+                draft_id=row['draft_id'], draft_revision=row['draft_revision'],
+                entity=row['entity'], candidate_sha256=row['candidate_sha256']))
+            if (tuple(row[key] for key in ('draft_id', 'workspace_id', 'owner', 'entity'))
+                    != tuple(identity[key] for key in ('draft_id', 'workspace_id', 'owner', 'entity'))
+                    or owner != ('import' if kind == 'import' else 'authoring')
+                    or kind == 'authoring_single' and candidate.entity != 'block'
+                    or kind == 'authoring_group' and candidate.entity not in {'lesson', 'practice_set', 'assessment'}):
+                raise ValueError('Candidate registry linkage is inconsistent')
+        except (ValidationError, ValueError, TypeError, KeyError):
+            raise ApiError(503, 'DRAFT_OWNER_INTEGRITY', '草稿所属记录当前无法核验。') from None
+        return ResolvedDraftCandidate(workspace_id, owner, kind, candidate)
 
     def register(self, value: ResolvedDraftCandidate) -> None:
         """Called only after the source owner verified this candidate in this transaction.

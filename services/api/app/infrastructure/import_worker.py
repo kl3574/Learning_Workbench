@@ -14,6 +14,7 @@ from packages.contracts.canonical import metadata_sha256
 from packages.contracts.validation import ENTITY_MODELS
 
 from ..application.errors import ApiError
+from ..application.draft_candidate_models import ResolvedDraftCandidate
 from ..application.evidence import EvidenceRecovery
 from ..application.grading import GradingWorker
 from ..application.imports import ImportService, safe_filename
@@ -21,6 +22,7 @@ from ..application.recommendations import RecommendationWorker
 from ..application.retrieval import RetrievalWorker
 from .content_repository import damaged
 from .database import Database, utc_now
+from .draft_candidate_repository import DraftCandidateRepository
 from .document_sandbox import bind_parent_lifetime
 from .import_repository import ImportRepository, identifier, json_object, json_text
 from .security import expires_after, guard_subject_access
@@ -232,6 +234,10 @@ class ImportWorker:
                     (draft_id, lease.workspace_id, value.entity, 1, json_text({"import_id": lease.import_id, "metadata": value.model_dump(mode="json")}), metadata_sha256(value), utc_now()),
                 )
                 preview["draft_ids"].append(draft_id)
+                DraftCandidateRepository(connection).register(ResolvedDraftCandidate(
+                    lease.workspace_id, 'import', 'import', dm.DraftCandidate(
+                        draft_id=draft_id, draft_revision=1, entity=value.entity,
+                        candidate_sha256=metadata_sha256(value))))
             metadata = json_object(row["source_metadata"])
             preview_visibility = "author_private" if private else "learner"
             original_visibility = getattr(parsed, "original_visibility", None) or preview_visibility

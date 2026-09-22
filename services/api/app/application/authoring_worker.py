@@ -10,10 +10,12 @@ from ..authoring_dto import AuthoringCandidate, candidate_sha256, parse_worked_e
 from ..infrastructure.authoring_job_repository import AuthoringLease, TERMINAL, integrity
 from ..infrastructure.authoring_repository import AuthoringRepository, not_run
 from ..infrastructure.database import Database, utc_now
+from ..infrastructure.draft_candidate_repository import DraftCandidateRepository
 from ..infrastructure.security import SessionIdentity, author_execution_identity, expires_after
 from .authoring_context import AuthoringContext
 from .authoring_models import AuthoringCandidateRecord
 from .authoring_source import AuthoringOutboundSource
+from .draft_candidate_models import ResolvedDraftCandidate
 from .errors import ApiError
 from .provider_models import CheckedProviderFinished
 from .tutor_worker import TutorProviderPort
@@ -175,6 +177,8 @@ class AuthoringWorker:
                 conn.execute('INSERT INTO authoring_candidates VALUES(?,?,?,?,?)',
                     (candidate.draft_id, lease.workspace_id, lease.job_id, raw, sha256_bytes(raw.encode())))
                 view.summary.candidate = candidate
+                DraftCandidateRepository(conn).register(ResolvedDraftCandidate(
+                    lease.workspace_id, 'authoring', 'authoring_single', candidate))
             terminal_result = {'result_sha256': sha256_bytes(canonical_bytes(view.model_dump(mode='json', exclude={'summary'}))),
                                'candidate': view.summary.candidate.model_dump() if view.summary.candidate else None}
             repo.jobs.transition(row, status, result=terminal_result)
@@ -222,6 +226,11 @@ class AuthoringWorker:
                 await watcher
             await asyncio.to_thread(self._finish, lease)
         except ApiError as error:
+            if error.code == 'DRAFT_IDENTITY_CONFLICT':
+                # Keep the candidate/catalog/terminal transaction rolled back.
+                # An expired lease may recover the same checked Provider result;
+                # this process must not immediately retry with a different ID.
+                raise
             code = error.code if error.code in {'POLICY_DENIED', 'ASSESSMENT_ACTIVE', 'ASSESSMENT_ANSWER_PROTECTED',
                 'CAPABILITY_UNSUPPORTED', 'PROVIDER_CANCELLED'} else 'AUTHORING_CONTEXT_UNAVAILABLE'
             await asyncio.to_thread(self._finish, lease, code)

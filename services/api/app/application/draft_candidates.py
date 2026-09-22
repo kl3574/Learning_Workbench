@@ -22,6 +22,26 @@ class DraftCandidates:
     def __init__(self, owners: dict[DraftSourceKind, DraftCandidateOwner]):
         self._owners = dict(owners)
 
+    def lookup(self, connection: sqlite3.Connection, identity: SessionIdentity,
+               draft_id: str, expected_revision: int) -> ResolvedDraftCandidate:
+        """Read only: the catalog selects one owner, which rechecks complete history.
+
+        Missing registration is never repaired here, including for an otherwise
+        valid legacy candidate. No owner detection by ID prefix or fallback scan.
+        """
+        AuthoringContext.check_access(connection, identity)
+        current = author_execution_identity(connection, identity.workspace_id, identity.id)
+        AuthoringContext.check_access(connection, current)
+        registered = DraftCandidateRepository(connection).lookup(
+            current.workspace_id, draft_id, expected_revision)
+        owner = self._owners.get(registered.source_kind)
+        if owner is None:
+            raise ApiError(503, 'DRAFT_OWNER_UNAVAILABLE', '草稿所属服务当前无法核验。')
+        resolved = owner.resolve_candidate(connection, current, registered.candidate)
+        if resolved != registered:
+            raise ApiError(503, 'DRAFT_OWNER_INTEGRITY', '草稿所属记录当前无法核验。')
+        return resolved
+
     def admit(self, connection: sqlite3.Connection, identity: SessionIdentity,
               source_kind: DraftSourceKind, candidate: dm.DraftCandidate) -> ResolvedDraftCandidate:
         """No implicit owner detection, HTTP handler, review, content write or Provider call.
