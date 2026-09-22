@@ -7,7 +7,7 @@ import pytest
 from packages.contracts.canonical import canonical_bytes, metadata_sha256, sha256_bytes
 from services.api.app.application.errors import ApiError
 from services.api.app.application.review_history_models import (
-    ReviewCancelCommand, ReviewDecisionCommand, ReviewDecisionRecord, ReviewMachineRecord,
+    ReviewCancelCommand, ReviewDecisionCommand, ReviewDecisionRecord, ReviewMachineRecord, machine_job_result,
 )
 from services.api.app.application.review_models import ReviewJobInput
 from services.api.app.infrastructure.database import utc_now
@@ -275,17 +275,28 @@ def test_sanitized_backup_session_null_preserves_closed_human_history(prepared):
         assert repo.replay(command.actor_id, command.route, command.command_key, command.request) == command
 
 
-def test_revalidation_of_constructed_values_never_warns_private_input(prepared):
+@pytest.mark.parametrize('entry', ['append_machine', 'machine_job_result', 'replay'])
+def test_revalidation_of_constructed_values_never_warns_private_input(prepared, entry):
     database, _, _ = prepared
     with database.transaction() as connection:
         repo, machine, _ = complete_machine(prepared, connection)
         private = 'SYNTHETIC_PRIVATE_REVIEW_REVALIDATION_INPUT'
         malformed = machine.model_copy(update={'material': {'private_synthetic_marker': private}})
+        if entry == 'replay':
+            repo.append_machine(machine)
         before = quality_bytes(connection)
         with warnings.catch_warnings(record=True) as emitted:
             warnings.simplefilter('always')
             with pytest.raises(ApiError) as caught:
-                repo.append_machine(malformed)
+                if entry == 'machine_job_result':
+                    machine_job_result(malformed)
+                elif entry == 'replay':
+                    repo.replay(machine.material.workspace_id, 'missing', 'missing', malformed)
+                    create_row = connection.execute("SELECT actor_id,route,command_key FROM review_commands WHERE command_kind='create'").fetchone()
+                    request = repo.load(machine.review_id).binding.input.request.model_copy(update={'reviewer_note': {'private': private}})
+                    repo.replay(*create_row, request)
+                else:
+                    repo.append_machine(malformed)
         assert private not in str(caught.value) and private not in repr(caught.value)
         assert not emitted, 'Revalidation must not emit serializer warnings containing private input'
         assert quality_bytes(connection) == before
@@ -300,7 +311,8 @@ def test_generated_owner_history_preserves_exact_numeric_observation_without_run
     # Existing producers use explicit controlled loopback model bytes. This is
     # neither a vendor request nor mathematical review or numeric execution.
     state = single_fixture.__wrapped__(tmp_path) if kind == 'single' else generated_group(tmp_path, kind)
-    database, identity, owner, numeric, candidate, runtime, *_ = state
+    database, identity, owner, numeric, candidate, *_ = state
+    runtime = state[-1]
     source_kind = 'authoring_single' if kind == 'single' else 'authoring_group'
     value = ReviewJobInput(version='draft-review-job-v1', workspace_id=identity.workspace_id,
         review_id='synthetic_generated_review', source_kind=source_kind, candidate=candidate.model_dump(),
