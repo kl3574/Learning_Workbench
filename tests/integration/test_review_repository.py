@@ -86,7 +86,7 @@ def test_failed_binding_is_rolled_back_when_caller_catches_and_commits_other_wor
         assert connection.execute('SELECT count(*) FROM jobs WHERE id=?', (value.review_id,)).fetchone()[0] == 1
 
 
-@pytest.mark.parametrize('method', ['bind', 'binding', 'replay', 'record_cancel'])
+@pytest.mark.parametrize('method', ['bind', 'binding', 'load', 'replay', 'record_cancel', 'append_machine', 'append_decision'])
 def test_each_operation_rechecks_current_transaction_even_after_construction(prepared, method):
     database, identity, value = prepared
     with database.connect() as connection:
@@ -98,8 +98,12 @@ def test_each_operation_rechecks_current_transaction_even_after_construction(pre
                 repo.bind(value, None)
             elif method == 'record_cancel':
                 repo.record_cancel(None)
-            elif method == 'binding':
-                repo.binding(value.review_id)
+            elif method in ('binding', 'load'):
+                getattr(repo, method)(value.review_id)
+            elif method == 'append_machine':
+                repo.append_machine(None)
+            elif method == 'append_decision':
+                repo.append_decision(None, None)
             else:
                 repo.replay(identity.id, 'POST /synthetic', 'synthetic', value.request)
         assert caught.value.code == 'TRANSACTION_REQUIRED'
@@ -126,9 +130,14 @@ def test_other_job_consumer_cannot_be_bound_as_a_review(prepared):
     database, identity, value = prepared
     with database.transaction() as connection:
         AuthoringJobRepository(connection, identity.workspace_id).create(value.review_id, 'authoring', {})
+        command = ReviewCreateCommand(workspace_id=identity.workspace_id, actor_id=identity.id,
+            route=f'POST /drafts/{value.candidate.draft_id}/review', command_key='synthetic_other_owner',
+            review_id=value.review_id, basis_revision=value.candidate.draft_revision, resulting_revision=1,
+            recorded_at=utc_now(), command_kind='create', request=value.request,
+            ack={'id': value.review_id, 'status': 'queued'})
         with pytest.raises(ApiError) as caught:
-            ReviewRepository(connection, identity.workspace_id).bind(value, {})
-        assert caught.value.code == 'REVIEW_INTEGRITY_ERROR'
+            ReviewRepository(connection, identity.workspace_id).bind(value, command)
+        assert caught.value.code == 'JOB_MISSING'
         assert connection.execute('SELECT count(*) FROM review_jobs').fetchone()[0] == 0
 
 
