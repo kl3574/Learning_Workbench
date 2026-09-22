@@ -15,6 +15,7 @@ from .authoring_group_models import AuthoringGroupJobInput
 from .authoring_group_source import group_preparation
 from .authoring_group_validation import group_private_solution_view
 from .errors import ApiError
+from .draft_candidate_models import ResolvedDraftCandidate, match_candidate
 from .provider_models import CheckedProviderFinished
 from .tutor_worker import TutorProviderPort
 
@@ -25,6 +26,17 @@ class AuthoringGroupService:
         self.database = database
         self.context = context or AuthoringGroupContext(database)
         self.provider = provider
+
+    def resolve_candidate(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                          candidate: dm.DraftCandidate) -> ResolvedDraftCandidate:
+        self.context.check_access(connection, identity)
+        repository = AuthoringGroupRepository(connection, identity.workspace_id)
+        actual = repository.candidate(candidate.draft_id)
+        self.verify_history(connection, identity, actual.source_job_id)
+        expected = dm.DraftCandidate.model_validate(candidate.model_dump(mode='python'))
+        actual_identity = dm.DraftCandidate.model_validate(actual.candidate.model_dump(mode='python'))
+        match_candidate(expected, actual_identity)
+        return ResolvedDraftCandidate(identity.workspace_id, 'authoring', 'authoring_group', actual_identity)
 
     def verify_history(self, conn: sqlite3.Connection, identity: SessionIdentity, identifier: str) -> AuthoringGroupRecord:
         """Verify protected source and Provider history within the caller's transaction."""

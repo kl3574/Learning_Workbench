@@ -32,6 +32,7 @@ from ..infrastructure.provenance_repository import ProvenanceRepository
 from ..infrastructure.security import SessionIdentity, guard_subject_access
 from .content import ContentService
 from .errors import ApiError
+from .draft_candidate_models import ResolvedDraftCandidate, match_candidate
 from .policy import Policy
 
 
@@ -60,6 +61,52 @@ class ImportService:
         self.database = database
         self.blobs = BlobStore(database.settings.data_dir, max_bytes=max(database.settings.max_upload_bytes, database.settings.max_package_bytes))
         self.content = ContentService(database)
+
+    def resolve_candidate(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                          candidate: dm.DraftCandidate) -> ResolvedDraftCandidate:
+        """The Import candidate binds public metadata, never approval of private solutions."""
+        from .authoring_context import AuthoringContext
+
+        AuthoringContext.check_access(connection, identity)
+        repository = ImportRepository(connection, identity.workspace_id)
+        row = connection.execute('SELECT * FROM drafts WHERE id=? AND workspace_id=?',
+                                 (candidate.draft_id, identity.workspace_id)).fetchone()
+        if row is None:
+            raise missing()
+        try:
+            original = json_object(row['candidate_json'])
+            if set(original) != {'import_id', 'metadata'}:
+                raise damaged()
+            source = repository.load(original['import_id'])
+            self._private(identity, source)
+            self._guard_preview(repository, identity, source)
+            preview = self._preview_data(source)
+            if preview['draft_ids'].count(candidate.draft_id) != 1:
+                raise damaged()
+            value = ENTITY_MODELS[row['kind']].model_validate(original['metadata'])
+            if value.entity != row['kind'] or metadata_sha256(value) != row['candidate_sha256']:
+                raise damaged()
+            originals = [item for item in preview['objects'] if
+                         (item['entity'], item['id'], item['revision']) == (value.entity, value.id, value.revision)]
+            if originals != [value.model_dump(mode='json')]:
+                raise damaged()
+            source_info = repository.blob(source['blob_sha256'])
+            if source_info.sha256 != source['input_sha256']:
+                raise damaged()
+            store = self.frozen_store(source)
+            store.read(source_info.sha256, expected_size=source_info.size)
+            if isinstance(value, dm.ContentBlock):
+                if preview['bodies'].get(value.body_path) != value.body_sha256:
+                    raise damaged()
+                info = repository.blob(value.body_sha256)
+                body = store.read(info.sha256, expected_size=info.size)
+                ContentService._body_bytes(value, body, self.frozen_budgets(source))
+            actual = dm.DraftCandidate(draft_id=row['id'], draft_revision=row['revision'],
+                                       entity=value.entity, candidate_sha256=row['candidate_sha256'])
+        except (KeyError, ValueError, TypeError, AttributeError):
+            raise damaged() from None
+        match_candidate(candidate, actual)
+        return ResolvedDraftCandidate(identity.workspace_id, 'import', 'import', actual)
 
     @contextmanager
     def _access(self, identity: SessionIdentity) -> Iterator[ImportRepository]:

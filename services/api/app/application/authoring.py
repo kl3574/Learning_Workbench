@@ -18,6 +18,7 @@ from .authoring_context import AuthoringContext
 from .authoring_models import AuthoringJobInput
 from .authoring_source import build_outbound
 from .errors import ApiError
+from .draft_candidate_models import ResolvedDraftCandidate, match_candidate
 from .provider_models import CheckedProviderFinished
 from .tutor_worker import TutorProviderPort
 
@@ -29,6 +30,17 @@ class AuthoringService:
         self.context = context or AuthoringContext(database)
         self.provider = provider
         self._cursor_key = secrets.token_bytes(32)
+
+    def resolve_candidate(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                          candidate: dm.DraftCandidate) -> ResolvedDraftCandidate:
+        self.context.check_access(connection, identity)
+        repository = AuthoringRepository(connection, identity.workspace_id)
+        actual = repository.candidate(candidate.draft_id)
+        self.verify_history(connection, identity, actual.source_job_id)
+        expected = dm.DraftCandidate.model_validate(candidate.model_dump(mode='python'))
+        actual_identity = dm.DraftCandidate.model_validate(actual.candidate.model_dump(mode='python'))
+        match_candidate(expected, actual_identity)
+        return ResolvedDraftCandidate(identity.workspace_id, 'authoring', 'authoring_single', actual_identity)
 
     def verify_history(self, conn: sqlite3.Connection, identity: SessionIdentity, identifier: str) -> AuthoringRecord:
         """Verify protected source and Provider history within the caller's transaction."""
