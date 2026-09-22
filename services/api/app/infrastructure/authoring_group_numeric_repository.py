@@ -3,7 +3,7 @@
 import base64
 import sqlite3
 from datetime import datetime, timedelta
-from typing import Literal, Self, TypeVar
+from typing import TYPE_CHECKING, Literal, Self, TypeVar
 from uuid import uuid4
 
 from pydantic import BaseModel, TypeAdapter, model_validator
@@ -36,6 +36,10 @@ from .authoring_group_repository import AuthoringGroupRepository
 from .authoring_numeric_repository import NumericStart, NumericEnd
 from .database import utc_now
 from .security import SessionIdentity
+
+if TYPE_CHECKING:
+    from ..application.review_numeric_models import NumericReviewCheck
+
 
 M = TypeVar("M", bound=BaseModel)
 
@@ -215,6 +219,12 @@ class GroupNumericRepository:
             value["job_revision"] = job["revision"]
         value["result"] = result.model_dump(mode="json") if result else None
         return AuthoringGroupNumericCheckView.model_validate(value)
+
+    def review_check(self, identifier: str, observed_at: str,
+                     original: 'NumericReviewCheck | None' = None) -> 'NumericReviewCheck':
+        """Checked read of the original approval/Job/execution prefix; no writes."""
+        from ..application.review_numeric import read_numeric_history
+        return read_numeric_history(self, identifier, observed_at, original)
 
     def current(self, identifier: str) -> AuthoringGroupNumericCheckView:
         record = self.load(identifier)

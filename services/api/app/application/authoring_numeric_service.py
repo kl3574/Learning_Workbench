@@ -1,4 +1,6 @@
 """Explicit numeric preview and separate approval; no process runs in HTTP calls."""
+import sqlite3
+
 from packages.contracts import domain_models as dm
 from packages.contracts.canonical import sha256_bytes
 from ..authoring_dto import NumericCheckDecisionAck, NumericCheckPreviewWrite, NumericCheckView
@@ -12,6 +14,7 @@ from .authoring import AuthoringService
 from .authoring_context import AuthoringContext
 from .authoring_numeric import NumericError, validate_plan
 from .errors import ApiError
+from .review_numeric_models import ReviewNumericObservation
 
 
 class NumericService:
@@ -70,6 +73,18 @@ class NumericService:
             repo.command(identity, route, key, body, record.view, record.view.id, recorded_at=record.view.created_at)
             repo.load(record.view.id)
             return record.view
+
+    def read_review_numeric(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                            candidate: dm.DraftCandidate) -> ReviewNumericObservation:
+        from .review_numeric import read_owner_numeric
+        return read_owner_numeric(connection, identity, candidate,
+                                  NumericRepository(connection, identity.workspace_id), self.authoring)
+
+    def verify_review_numeric(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                              observation: ReviewNumericObservation) -> None:
+        from .review_numeric import verify_owner_numeric
+        verify_owner_numeric(connection, identity, observation,
+                             NumericRepository(connection, identity.workspace_id), self.authoring)
 
     def read(self, identity: SessionIdentity, identifier: str) -> NumericCheckView:
         with self.database.transaction(immediate=False) as conn:

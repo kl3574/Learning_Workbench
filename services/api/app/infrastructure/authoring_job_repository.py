@@ -42,6 +42,14 @@ class AuthoringLease:
         return DispatchLease(owner_id=self.owner, job_revision=self.revision, expires_at=self.expires_at)
 
 
+@dataclass(frozen=True, repr=False)
+class AuthoringJobEvent:
+    seq: int
+    type: str
+    payload_json: str
+    occurred_at: str
+
+
 class AuthoringJobRepository:
     def __init__(self, connection: sqlite3.Connection, workspace_id: str):
         self.conn, self.workspace_id = connection, workspace_id
@@ -139,6 +147,15 @@ class AuthoringJobRepository:
         return JobSnapshot(id=identifier, workspace_id=self.workspace_id, kind=row['kind'], status=event['type'],
             revision=revision, created_at=row['created_at'], updated_at=event['occurred_at'],
             progress=JobProgress(completed=0, total=None, label=event['type']), result_refs=[], warnings=[], error=None)
+
+    def event_prefix(self, identifier: str, revision: int) -> tuple[AuthoringJobEvent, ...]:
+        """Return exact owned events after checking complete history in this transaction."""
+        if not self.conn.in_transaction:
+            raise ApiError(409, 'TRANSACTION_REQUIRED', '任务历史需要当前事务核验。')
+        self.snapshot(identifier, revision)
+        rows = self.conn.execute('SELECT * FROM job_events WHERE job_id=? AND seq<=? ORDER BY seq',
+                                 (identifier, revision)).fetchall()
+        return tuple(AuthoringJobEvent(row['seq'], row['type'], row['payload_json'], row['occurred_at']) for row in rows)
 
     def transition(self, row: sqlite3.Row, status: str, *, result: dict | None = None,
                    cancel: bool | None = None, owner: str | None = None, until: str | None = None) -> None:
