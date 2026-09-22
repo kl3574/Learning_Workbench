@@ -28,7 +28,7 @@ export class DraftStorageError extends Error {
       WRITE_FAILED: '草稿写入失败，当前文字尚未保存，请重试。',
       QUOTA_EXCEEDED: '浏览器存储空间不足，当前文字尚未保存，请保留文字后重试。',
       INVALID_INPUT: '草稿对象或基准修订无效，当前文字尚未保存。',
-      ACCESS_CHANGED: '当前权限或工作区已变化，未写入这次草稿。',
+      ACCESS_CHANGED: '权限或工作区已变化，已停止当前保存；此前提交的记录保留。',
     }
     super(messages[code]); this.name = 'DraftStorageError'; this.code = code
   }

@@ -8,7 +8,7 @@ import { setTimeout as pause } from 'node:timers/promises'
 import { expect, type BrowserContext, type BrowserType, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
 
 const root = resolve(import.meta.dirname, '../..')
-type AuthoringScenario = 'complete' | 'no_proof' | 'lesson' | 'practice_set'
+type AuthoringScenario = 'complete' | 'no_proof' | 'lesson' | 'practice_set' | 'assessment'
 type AuthoringFactory = 'single' | 'groups'
 const factories = {
   single: 'tests.authoring_native_fixture:create_test_app',
@@ -96,10 +96,10 @@ export class AuthoringRuntime {
   }
 
   static async start(scenario: 'complete' | 'no_proof', factory?: 'single'): Promise<AuthoringRuntime>
-  static async start(scenario: 'lesson' | 'practice_set', factory: 'groups'): Promise<AuthoringRuntime>
+  static async start(scenario: 'lesson' | 'practice_set' | 'assessment', factory: 'groups'): Promise<AuthoringRuntime>
   static async start(): Promise<AuthoringRuntime>
   static async start(scenario: AuthoringScenario = 'no_proof', factory: AuthoringFactory = 'single') {
-    if (factory === 'single' ? !['complete', 'no_proof'].includes(scenario) : factory !== 'groups' || !['lesson', 'practice_set'].includes(scenario)) throw new Error('Unknown closed Authoring test factory/scenario')
+    if (factory === 'single' ? !['complete', 'no_proof'].includes(scenario) : factory !== 'groups' || !['lesson', 'practice_set', 'assessment'].includes(scenario)) throw new Error('Unknown closed Authoring test factory/scenario')
     const apiPort = await availablePort()
     let uiPort = await availablePort()
     while (uiPort === apiPort) uiPort = await availablePort()
@@ -152,7 +152,7 @@ export class AuthoringRuntime {
     await expect(page).toHaveURL(`${this.origin}/`)
   }
 
-  control(): { test_only: true; proof_registered: boolean; base_url: string; model: string; adapter: 'compatible_chat'; answer_markdown: string; received_request_count: number; validated_request_count: number; invalid_request_count: number; request_body_sha256: string[] } {
+  control(): { api_pid?: number; target_initialization?: 'published_once' | 'reused_exact'; target_refs?: unknown[]; test_only: true; proof_registered: boolean; base_url: string; model: string; adapter: 'compatible_chat'; answer_markdown: string; received_request_count: number; validated_request_count: number; invalid_request_count: number; request_body_sha256: string[] } {
     return JSON.parse(readFileSync(resolve(this.data, 'authoring-native-control.json'), 'utf8'))
   }
 

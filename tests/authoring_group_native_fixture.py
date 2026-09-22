@@ -19,7 +19,7 @@ from packages.contracts.canonical import canonical_bytes, sha256_bytes
 from services.api.app.application.content import ContentService
 from services.api.app.application.provider_budget import RequestPreparer
 from services.api.app.infrastructure.config import Settings
-from services.api.app.infrastructure.content_repository import reference
+from services.api.app.infrastructure.content_repository import ContentRepository, reference
 from services.api.app.main import create_app
 from tests.authoring_native_fixture import PAYLOAD as WORKED_EXAMPLE
 from tests.provider_protocol_fixture import MODEL, complete_byte_count, local_provider, test_preparer
@@ -56,7 +56,7 @@ def payload(scenario: str) -> dict[str, Any]:
             'title': block['payload']['title'], 'objective_indexes': [0], 'prerequisite_indexes': [],
             'depends_on_keys': block['depends_on_keys']} for block in blocks]
         draft: dict[str, Any] = {'output_kind': scenario, 'title': '原创合成教材组草稿', 'blocks': blocks}
-    elif scenario == 'practice_set':
+    elif scenario in {'practice_set', 'assessment'}:
         question = {'member_key': 'question_double', 'kind': 'numeric', 'stem_markdown': '当 $x=9$ 时，求 $2x$。',
             'choices': [], 'concept_refs': [reference(concept).model_dump()], 'skill': 'compute',
             'exposure_family_key': 'family_group_native', 'max_score': 1.0, 'input_instructions': '输入数值',
@@ -68,7 +68,8 @@ def payload(scenario: str) -> dict[str, Any]:
             'numeric_plan': WORKED_EXAMPLE['numeric_plan']}
         plan['entries'] = [{'member_key': question['member_key'], 'entity': 'question', 'kind': 'numeric',
             'objective_indexes': [0], 'prerequisite_indexes': [], 'depends_on_keys': []}]
-        draft = {'output_kind': scenario, 'title': '原创合成习题组草稿', 'questions': [question], 'solutions': [answer]}
+        draft = {'output_kind': scenario, 'title': '原创合成习题组草稿' if scenario == 'practice_set' else '原创合成测试组草稿',
+            'questions': [question], 'solutions': [answer]}
     else:
         raise ValueError('Unknown closed group native scenario')
     return {'version': 'authoring-group-generated-v1', 'content_plan': plan, 'draft': draft}
@@ -77,7 +78,7 @@ def payload(scenario: str) -> dict[str, Any]:
 def create_test_app() -> FastAPI:
     settings = Settings.from_env()
     scenario = os.environ.get('AUTHORING_NATIVE_SCENARIO')
-    if scenario not in {'lesson', 'practice_set'}:
+    if scenario not in {'lesson', 'practice_set', 'assessment'}:
         raise ValueError('Select a closed group native test scenario')
     answer = canonical_bytes(payload(scenario)).decode()
     preparer = RequestPreparer()
@@ -90,7 +91,24 @@ def create_test_app() -> FastAPI:
             preparer.registry = test_preparer(provider.base_url).registry
             async with original_lifespan(app) as state:
                 _, _, objects, bodies = targets()
-                ContentService(app.state.database).publish(app.state.database.workspace_id(), objects, bodies)
+                database = app.state.database
+                workspace = database.workspace_id()
+                with database.transaction(immediate=False) as conn:
+                    existing = conn.execute(
+                        "SELECT COUNT(*) FROM objects WHERE workspace_id=? AND id IN (?,?,?,?)",
+                        (workspace, *(value.id for value in objects)),
+                    ).fetchone()[0]
+                    if existing:
+                        if existing != len(objects):
+                            raise ValueError('Partial synthetic targets must not be reseeded')
+                        repo = ContentRepository(conn, workspace)
+                        for value in objects:
+                            stored = repo.load(value.entity, value.id, value.revision).value
+                            if reference(stored) != reference(value):
+                                raise ValueError('Restart target differs from the exact original')
+                if not existing:
+                    ContentService(database).publish(workspace, objects, bodies)
+                target_initialization = 'reused_exact' if existing else 'published_once'
                 path = settings.data_dir / 'authoring-native-control.json'
                 pending = path.with_suffix('.pending')
                 stopped = asyncio.Event()
@@ -107,6 +125,8 @@ def create_test_app() -> FastAPI:
                     value = {'version': 'authoring-group-native-fixture-v1', 'scenario': scenario,
                         'test_only': True, 'proof_registered': True, 'adapter': 'compatible_chat', 'model': MODEL,
                         'base_url': provider.base_url, 'answer_markdown': answer,
+                        'api_pid': os.getpid(), 'target_initialization': target_initialization,
+                        'target_refs': [reference(value).model_dump() for value in objects],
                         'received_request_count': len(provider.requests), 'validated_request_count': len(valid),
                         'invalid_request_count': invalid, 'request_body_sha256': valid}
                     raw = (json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + '\n').encode()
