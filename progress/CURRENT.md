@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-22T09:02:00Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
+更新：2026-09-28T01:23:45Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
 
-仓库发布：VERIFIED；Issues 同步：LOCAL_UPDATE_PENDING_REMOTE_READBACK
+仓库发布：VERIFIED；Issues 同步：LOCAL_IMPLEMENTATION_PENDING_NEXT_REMOTE_SYNC
 实施：IN_PROGRESS；当前任务：M6.2；下一任务：M6.2
 
-同步416b532审核基础及实际组合门禁，独立回读新发布head的GitHub CI；继续0017审核历史前向迁移和约束审查，随后实现Quality repository/真实review worker/受保护报告/read/当前作者decision。Tutor浏览器原5秒失败仍需关联Run、SSE游标与真实状态接收的受限观察，不能放宽断言或以HTTP200代替帧消费。
+同步已验证片段及1fff组合门禁真实结果到PR55/Issue31；继续9项native失败的隔离诊断。完成Review worker/HTTP owner边界修复、独审与整合；随后审核状态、发布/差异/影响/旧修订恢复。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -141,6 +141,16 @@
 - M6.2_b70_terminal_ci: b70双CI实际终态：push35703221981为4success/2failure，PR35703225712为5success/1browserfailure。三失败job实际checkout分别b70/b70/2b1fc8f已取；两browser各99PASS1Tutor5sFAIL（17.8m/17.3m）；push integration1041PASS1Tutor取消lease FAIL1ENVSKIP849.84s。三原log、两ZIP及各4member/6实际checkout源码已核。其余9成功job的checkout未逐一读，不混推；所有历史失败保留。
 - M6.2_review_foundation: LOCAL_REVIEW_FOUNDATION_GATES_PASS：416b532固定960工程输入，完整Python2419PASS/1数值环境SKIP/2依赖warning683.08s，Ruff/mypy186/spec通过。本次为新组合门禁，所有输入前后与Git一致；数值观察、Jobs事务边界和Tutor取消测试修复已整合。原acb2376PASS1FAIL1SKIP、Jobs7RED、Tutor受控RED及Node准备失败完整保留。仅内部审核基础，无新Review HTTP/worker/人工决定/发布；前端/native未重跑，不继承为当前PASS。b70旧CI两browser及一integration失败分别记录；当前新head CI待独立读取。
 - M6.2_tutor_cancel_lease_repair: LOCAL_REPAIR_VERIFIED：7442033仅一测试文件整合416b532；实际watcher插入before/cancel间窗口原断言1RED，before/after移入实际cancel writer事务且保留原强断言，永久测试验证前可renew后停止。最终116相关PASS22.41s，已包含于本次2419完整套件。原Node缺link失败与受控RED保留；历史现场无watcher时序，不断言唯一同因。184原alias/69公开文件、954原输入/Git及精确fixture脱敏均由root重放。
+- M6.2_foundation_publication: VERIFIED：21fc190分支/ref/PR55 head/title/body及Issue31完整进度块由push/PATCH后独立GET核实；PR draft/open/unmerged，Issue身份/标签/里程碑和进度块外正文保留。新提交逐blob扫描PASS。初次PR暂旧保留，后续GET精确一致，无重复push。
+- M6.2_foundation_initial_ci: 09:10:40实际push35708863885/PR35708867857均in_progress；仅run metadata，不推定实际checkout/最终CI。
+- M6.2_review_storage_development: DEVELOPMENT_VERIFIED：独审4bf176d四文件前向0017已整合72e4e64；101新SQLite/当前Ruff实际PASS，246相关+mypy186/spec归e0b30f0（最终只增强测试），964工程源固定。原migration缺失2FAIL、artifact fixture误列57FAIL20PASS、持久command事件FK真实5RED均保留；229早回归因期间新增test不作最终固定门禁。独审99及5反例修复拒绝、非空history/commands副本清session原字节保留已核，非M7恢复或Quality应用完成。147原alias/94公开文件root重放与scanner PASS。
+- M6.2_storage_initial_full_gate: ACTUAL_FAIL：72e4e64固定964工程源全Python2519PASS1FAIL1数值环境SKIP2warning698.43s，唯一失败为test_content_store.py:232的全进程FD计数15→14；原日志SHA43d9ffa352adae950ffa23ae1ab62d7ae49e602d409689258b5ce5c8cb331451。Ruff/mypy186/spec PASS。控制关闭实际无关fd已复现原断言；隔离子进程修复70相关PASS在独立树，仍待独审/整合，不能改写原失败。
+- M6.2_21fc_terminal_ci: ACTUAL_TERMINAL: push35708863885 five success/one browser failure98PASS2FAIL; PR35708867857 six success,100browserPASS. Both integration1105PASS1ENVSKIP. Four logs/actualpush21fc vsPR50dd557, ZIP digest/members/eight source blob comparisons verified. Tutor5s and group10s failures remain unresolved, no unique cause asserted.
+- M6.2_sep28_internal_review: INTEGRATED1fff separate scopes: structure/numeric102PASS, Quality313PASS, Artifact27new64regression, FD70PASS; Authoring list63webPASS and5boundary cases; Tutor57Python22webPASS plus independent review. These counts are not summed as full-suite success. Actual Review HTTP/worker under implementation in another tree.
+- M6.2_sep28_recovery: Remote GET revalidated PR55/ref at21fc190; draft/open/unmerged and Issue31open. Original repository worktree untouched. Sole specification3.0.7 exact SHA unchanged.
+- M6.2_sep28_combined_static_web: FIXED1fff981INPUTS: Ruff,mypy191,spec54core/76generated/119declared PASS; web453PASS77files5.14s; strict web TS and build741modules PASS(existing chunk warning). All original receipts retained. This source has no Review HTTP yet.
+- M6.2_sep28_combined_native: ACTUAL_FAIL: exact1fff one make test-e2e,101cases92PASS9FAIL10.3m(618.642s wrapper), exit2. Known5trackedoutputs changed during run and were precisely restored; no unexpected engineering changes. All3original Tutor cases and2controlled diagnostic cases PASS; new102API/33browser/10DOM/9request+4event joins complete. This does not rewrite historical Tutor failures/rejected snapshot. All9original failure contexts/logs retained; cause not collectively established.
+- M6.2_sep28_combined_python: FINAL_FRESH_ATTEMPT_PASS: unchanged1fff981actual Git inputs,2688PASS1sealed-numericENVSKIP2dependency warnings791.13s; logSHAd582fb97fd63a78684acc1f8ecf994668e375c253c730c0e66123ee74b9064c2,exit0. Initial attempt exit143/no final receipt remains INCOMPLETE_TERMINATED, actor/cause UNKNOWN, not overwritten. Native remains92PASS9FAIL.
 
 ## 阻塞与待决项
 
@@ -150,6 +160,8 @@
 - M62_PR55_GRADING_RESULT_CI_FAILED: 原89b9 push的409失败保留。2ab受控重现提交前409并修复测试ACK同步，原CI未记录body，唯一根因仍未知；本地2定向PASS不改写旧CI。
 - M62_B90_PDF_IMPORT_CI_FAILED: b90 push integration扫描PDF实际IMPORT_PARSE_FAILED；原失败保留。已受控复现子进程发送并退出时的pipe轮询竞态，4行生产修复及永久RED/GREEN、19相关/5原生导入通过；原CI没有该时序证据，不能认定同因或关闭历史失败。
 - M62_9EB_BROWSER_CI_FAILED: 9eb和b70的双browser均99PASS1Tutor原5秒FAIL，失败job实际checkout/日志/附件已核。9eb两次本地原/被动观察运行均PASS，未复现。queued仅UI投影，HTTP200不是帧消费；旧现场缺关联时序，具体原因仍未知。
-- M62_ACB_TUTOR_CANCEL_LEASE_GATE_FAILED: acb全套与b70 push的原Tutor取消lease失败保留。实际watcher受控1RED及同事务观察修复已独立审查，116相关和416b532全套2419PASS；未记录的历史时序不推定唯一同因，新发布head CI待读。
+- M62_ACB_TUTOR_CANCEL_LEASE_GATE_FAILED: 原acb完整及b70push取消lease断言失败保留。416本地组合通过后，21fc两个真实integration均1105PASS1ENVSKIP，原case在该后续环境通过；不据此关闭独立Tutor browser5s失败或反推旧现场唯一原因。
+- M62_STORAGE_FD_GATE_FAILED: 原72e4全Python2519PASS1FAIL1ENVSKIP保留。独立FD观察隔离修复70PASS及独审后整合；本次1fff完整后端2688PASS1ENVSKIP，原文件测试通过。原现场具体fd未记录，不断言唯一历史原因；9项native失败另行记录。
+- M62_SEP28_NATIVE_GATE_FAILED: 1fff唯一全套native101例92PASS9FAIL；assessment/import/grading/Authoring/learning-state分别保留实际失败与截图，不统一归因、不重跑冲掉FAIL。正在独立诊断group决定POST等待与learning-state重复route处理。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。

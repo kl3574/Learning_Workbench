@@ -1,0 +1,811 @@
+{
+  "task_id": "M6.2-review-storage",
+  "requirement_ids": [
+    "R-21",
+    "R-22",
+    "R-26"
+  ],
+  "spec_sha256": "2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d",
+  "baseline": "16f4ae1355c4398a6b419b2fa883ec5211624c3d",
+  "final": "4bf176de1cdf0a76cdf0fa965027ec3a5367551f",
+  "changed_paths": [
+    "docs/adr/0023-review-history-storage.md",
+    "migrations/0017_review_history.sql",
+    "tests/integration/test_review_storage_constraints.py",
+    "tests/integration/test_review_storage_migration.py"
+  ],
+  "commits_in_order": [
+    "b7dc7e6b2970fc61e0dc04d808fb47e4973a49eb",
+    "8cb23f9f31e986263a85a949aad1bc6e95632a91",
+    "69ad5b4defa2b23a271dccec177a7f3fe1aff694",
+    "118d3640e57eecc23898e9b012d445b02f12d206",
+    "4b0296f3334d580f22fd95a9cede5c8edfcf4a77",
+    "c2a93046e777142bd5a114954ea35a8670001467",
+    "e0b30f077cc760b8579f81939182f602cd5e992b",
+    "4bf176de1cdf0a76cdf0fa965027ec3a5367551f"
+  ],
+  "stages": [
+    {
+      "stage": "backup-regression",
+      "command": [
+        ".venv/bin/pytest",
+        "-q",
+        "tests/unit/test_backend_database.py",
+        "tests/unit/test_backup_command.py",
+        "tests/integration/test_provider_migration.py",
+        "tests/integration/test_retrieval_migration.py"
+      ],
+      "cwd": "<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-storage-active",
+      "started_at": "2026-09-22T08:56:29.096911+00:00",
+      "ended_at": "2026-09-22T08:56:30.074156+00:00",
+      "exit_code": 0,
+      "log_bytes": 99,
+      "log_sha256": "32eed2f5b8184ae9870e3673c8b8c0a3143bcf0e4c3bf33d4743342a4acb86d3",
+      "recorded_summary": "17 passed in 0.80s",
+      "actual_git_audit": {
+        "stage": "backup-regression",
+        "snapshots": [
+          {
+            "side": "before",
+            "head": "4b0296f3334d580f22fd95a9cede5c8edfcf4a77",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          },
+          {
+            "side": "after",
+            "head": "4b0296f3334d580f22fd95a9cede5c8edfcf4a77",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          }
+        ],
+        "changed_sources": []
+      }
+    },
+    {
+      "stage": "command-fk-green",
+      "command": [
+        ".venv/bin/pytest",
+        "-q",
+        "tests/integration/test_review_storage_constraints.py",
+        "-k",
+        "command_job_revision_binding or create_ack_cannot_reference"
+      ],
+      "cwd": "<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-storage-active",
+      "started_at": "2026-09-22T08:59:28.108751+00:00",
+      "ended_at": "2026-09-22T08:59:28.473044+00:00",
+      "exit_code": 0,
+      "log_bytes": 113,
+      "log_sha256": "4d129f2eaad054b08185919f56b566e64eece51962d7951009a8210b3e7201bd",
+      "recorded_summary": "5 passed, 90 deselected in 0.23s",
+      "actual_git_audit": {
+        "stage": "command-fk-green",
+        "snapshots": [
+          {
+            "side": "before",
+            "head": "e0b30f077cc760b8579f81939182f602cd5e992b",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          },
+          {
+            "side": "after",
+            "head": "e0b30f077cc760b8579f81939182f602cd5e992b",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          }
+        ],
+        "changed_sources": []
+      }
+    },
+    {
+      "stage": "command-fk-red",
+      "command": [
+        ".venv/bin/pytest",
+        "-q",
+        "tests/integration/test_review_storage_constraints.py",
+        "-k",
+        "command_job_revision_binding or create_ack_cannot_reference"
+      ],
+      "cwd": "<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-storage-active",
+      "started_at": "2026-09-22T08:58:39.776657+00:00",
+      "ended_at": "2026-09-22T08:58:40.144355+00:00",
+      "exit_code": 1,
+      "log_bytes": 6661,
+      "log_sha256": "b0ae22bd33ca56d6f801d38a8f11e22fadb55a34240a116cd128b890e776c519",
+      "recorded_summary": "5 failed, 90 deselected in 0.23s",
+      "actual_git_audit": {
+        "stage": "command-fk-red",
+        "snapshots": [
+          {
+            "side": "before",
+            "head": "c2a93046e777142bd5a114954ea35a8670001467",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          },
+          {
+            "side": "after",
+            "head": "c2a93046e777142bd5a114954ea35a8670001467",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          }
+        ],
+        "changed_sources": []
+      }
+    },
+    {
+      "stage": "constraints-corrected",
+      "command": [
+        ".venv/bin/pytest",
+        "-q",
+        "tests/integration/test_review_storage_constraints.py"
+      ],
+      "cwd": "<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-storage-active",
+      "started_at": "2026-09-22T08:53:12.368393+00:00",
+      "ended_at": "2026-09-22T08:53:14.242020+00:00",
+      "exit_code": 0,
+      "log_bytes": 179,
+      "log_sha256": "2f948730301be7b9a3e19f0cc3fbd74ab1ab6d78748452ffa3b84334c77f3909",
+      "recorded_summary": "77 passed in 1.74s",
+      "actual_git_audit": {
+        "stage": "constraints-corrected",
+        "snapshots": [
+          {
+            "side": "before",
+            "head": "118d3640e57eecc23898e9b012d445b02f12d206",
+            "source_count": 963,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          },
+          {
+            "side": "after",
+            "head": "118d3640e57eecc23898e9b012d445b02f12d206",
+            "source_count": 963,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          }
+        ],
+        "changed_sources": []
+      }
+    },
+    {
+      "stage": "constraints-initial",
+      "command": [
+        ".venv/bin/pytest",
+        "-q",
+        "tests/integration/test_review_storage_constraints.py"
+      ],
+      "cwd": "<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-storage-active",
+      "started_at": "2026-09-22T08:52:29.933602+00:00",
+      "ended_at": "2026-09-22T08:52:31.958505+00:00",
+      "exit_code": 1,
+      "log_bytes": 115875,
+      "log_sha256": "093c04bc1460f422119e05d7440735775523b4b95d500d1a12db42842d9589ad",
+      "recorded_summary": "57 failed, 20 passed in 1.89s",
+      "actual_git_audit": {
+        "stage": "constraints-initial",
+        "snapshots": [
+          {
+            "side": "before",
+            "head": "69ad5b4defa2b23a271dccec177a7f3fe1aff694",
+            "source_count": 963,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          },
+          {
+            "side": "after",
+            "head": "69ad5b4defa2b23a271dccec177a7f3fe1aff694",
+            "source_count": 963,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          }
+        ],
+        "changed_sources": []
+      }
+    },
+    {
+      "stage": "endpoint-new",
+      "command": [
+        ".venv/bin/pytest",
+        "-q",
+        "tests/integration/test_review_storage_migration.py",
+        "tests/integration/test_review_storage_constraints.py"
+      ],
+      "code_commit": "4bf176de1cdf0a76cdf0fa965027ec3a5367551f",
+      "started_at": "2026-09-22T09:03:28.427796+00:00",
+      "ended_at": "2026-09-22T09:03:31.048796+00:00",
+      "seconds": 2.6907855630015547,
+      "exit_code": 0,
+      "timeout": false,
+      "source_count": 964,
+      "source_unchanged": true,
+      "all_source_matches_git_before": true,
+      "all_source_matches_git_after": true,
+      "log_bytes": 180,
+      "log_sha256": "533ff0a517c14deedc562737f6b820a334eccd3b18af0f059d3ff2d665f4e994",
+      "recorded_summary": "101 passed in 2.43s",
+      "actual_git_audit": {
+        "stage": "endpoint-new",
+        "snapshots": [
+          {
+            "side": "before",
+            "head": "4bf176de1cdf0a76cdf0fa965027ec3a5367551f",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          },
+          {
+            "side": "after",
+            "head": "4bf176de1cdf0a76cdf0fa965027ec3a5367551f",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          }
+        ],
+        "changed_sources": []
+      }
+    },
+    {
+      "stage": "endpoint-ruff",
+      "command": [
+        ".venv/bin/ruff",
+        "check",
+        "."
+      ],
+      "code_commit": "4bf176de1cdf0a76cdf0fa965027ec3a5367551f",
+      "started_at": "2026-09-22T09:03:28.400218+00:00",
+      "ended_at": "2026-09-22T09:03:28.415960+00:00",
+      "seconds": 0.08562862799954019,
+      "exit_code": 0,
+      "timeout": false,
+      "source_count": 964,
+      "source_unchanged": true,
+      "all_source_matches_git_before": true,
+      "all_source_matches_git_after": true,
+      "log_bytes": 19,
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "recorded_summary": "All checks passed!",
+      "actual_git_audit": {
+        "stage": "endpoint-ruff",
+        "snapshots": [
+          {
+            "side": "before",
+            "head": "4bf176de1cdf0a76cdf0fa965027ec3a5367551f",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          },
+          {
+            "side": "after",
+            "head": "4bf176de1cdf0a76cdf0fa965027ec3a5367551f",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          }
+        ],
+        "changed_sources": []
+      }
+    },
+    {
+      "stage": "fixed-mypy",
+      "command": [
+        ".venv/bin/mypy",
+        "services/api"
+      ],
+      "code_commit": "e0b30f077cc760b8579f81939182f602cd5e992b",
+      "started_at": "2026-09-22T09:00:21.508899+00:00",
+      "ended_at": "2026-09-22T09:00:21.623008+00:00",
+      "seconds": 0.18073408700001892,
+      "exit_code": 0,
+      "timeout": false,
+      "source_count": 964,
+      "source_unchanged": true,
+      "all_source_matches_git_before": true,
+      "all_source_matches_git_after": true,
+      "log_bytes": 45,
+      "log_sha256": "65638be1b18ffeafcffbbb3243e3cc2c739a82ed3b00bca512594205965022a3",
+      "recorded_summary": "Success: no issues found in 186 source files",
+      "actual_git_audit": {
+        "stage": "fixed-mypy",
+        "snapshots": [
+          {
+            "side": "before",
+            "head": "e0b30f077cc760b8579f81939182f602cd5e992b",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          },
+          {
+            "side": "after",
+            "head": "e0b30f077cc760b8579f81939182f602cd5e992b",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          }
+        ],
+        "changed_sources": []
+      }
+    },
+    {
+      "stage": "fixed-new",
+      "command": [
+        ".venv/bin/pytest",
+        "-q",
+        "tests/integration/test_review_storage_migration.py",
+        "tests/integration/test_review_storage_constraints.py"
+      ],
+      "code_commit": "e0b30f077cc760b8579f81939182f602cd5e992b",
+      "started_at": "2026-09-22T09:00:21.444731+00:00",
+      "ended_at": "2026-09-22T09:00:24.064850+00:00",
+      "seconds": 2.685526885998115,
+      "exit_code": 0,
+      "timeout": false,
+      "source_count": 964,
+      "source_unchanged": true,
+      "all_source_matches_git_before": true,
+      "all_source_matches_git_after": true,
+      "log_bytes": 179,
+      "log_sha256": "1c1fc8d2f0975fa6c88a9de3a6c98afdf519a5cbe500981baa7718ef989ea22a",
+      "recorded_summary": "99 passed in 2.43s",
+      "actual_git_audit": {
+        "stage": "fixed-new",
+        "snapshots": [
+          {
+            "side": "before",
+            "head": "e0b30f077cc760b8579f81939182f602cd5e992b",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          },
+          {
+            "side": "after",
+            "head": "e0b30f077cc760b8579f81939182f602cd5e992b",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          }
+        ],
+        "changed_sources": []
+      }
+    },
+    {
+      "stage": "fixed-regression",
+      "command": [
+        ".venv/bin/pytest",
+        "-q",
+        "tests/integration/test_draft_candidate_migration.py",
+        "tests/integration/test_draft_candidate_catalog.py",
+        "tests/integration/test_draft_candidate_owners.py",
+        "tests/integration/test_review_job_lifecycle.py",
+        "tests/integration/test_review_materials.py",
+        "tests/integration/test_review_numeric_observations.py",
+        "tests/unit/test_backend_database.py",
+        "tests/unit/test_backup_command.py",
+        "tests/integration/test_provider_migration.py",
+        "tests/integration/test_retrieval_migration.py"
+      ],
+      "code_commit": "e0b30f077cc760b8579f81939182f602cd5e992b",
+      "started_at": "2026-09-22T09:00:21.465577+00:00",
+      "ended_at": "2026-09-22T09:02:46.478740+00:00",
+      "seconds": 145.07315695500074,
+      "exit_code": 0,
+      "timeout": false,
+      "source_count": 964,
+      "source_unchanged": true,
+      "all_source_matches_git_before": true,
+      "all_source_matches_git_after": true,
+      "log_bytes": 1335,
+      "log_sha256": "69420eedb82314d60a715bf210ef1d5fde533df2cf17788fa88e778ea54d7b47",
+      "recorded_summary": "246 passed, 2 warnings in 144.75s (0:02:24)",
+      "actual_git_audit": {
+        "stage": "fixed-regression",
+        "snapshots": [
+          {
+            "side": "before",
+            "head": "e0b30f077cc760b8579f81939182f602cd5e992b",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          },
+          {
+            "side": "after",
+            "head": "e0b30f077cc760b8579f81939182f602cd5e992b",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          }
+        ],
+        "changed_sources": []
+      }
+    },
+    {
+      "stage": "fixed-ruff",
+      "command": [
+        ".venv/bin/ruff",
+        "check",
+        "."
+      ],
+      "code_commit": "e0b30f077cc760b8579f81939182f602cd5e992b",
+      "started_at": "2026-09-22T09:00:21.486223+00:00",
+      "ended_at": "2026-09-22T09:00:21.502221+00:00",
+      "seconds": 0.07617690099868923,
+      "exit_code": 0,
+      "timeout": false,
+      "source_count": 964,
+      "source_unchanged": true,
+      "all_source_matches_git_before": true,
+      "all_source_matches_git_after": true,
+      "log_bytes": 19,
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "recorded_summary": "All checks passed!",
+      "actual_git_audit": {
+        "stage": "fixed-ruff",
+        "snapshots": [
+          {
+            "side": "before",
+            "head": "e0b30f077cc760b8579f81939182f602cd5e992b",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          },
+          {
+            "side": "after",
+            "head": "e0b30f077cc760b8579f81939182f602cd5e992b",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          }
+        ],
+        "changed_sources": []
+      }
+    },
+    {
+      "stage": "fixed-verify-spec",
+      "command": [
+        ".venv/bin/python",
+        "scripts/verify_spec.py"
+      ],
+      "code_commit": "e0b30f077cc760b8579f81939182f602cd5e992b",
+      "started_at": "2026-09-22T09:00:21.522516+00:00",
+      "ended_at": "2026-09-22T09:00:23.390642+00:00",
+      "seconds": 1.9339385599996604,
+      "exit_code": 0,
+      "timeout": false,
+      "source_count": 964,
+      "source_unchanged": true,
+      "all_source_matches_git_before": true,
+      "all_source_matches_git_after": true,
+      "log_bytes": 1098,
+      "log_sha256": "01a68f12c2440da91fef280d88f8a6aa7179d17cd05457f0e73cefc4656c7c48",
+      "recorded_summary": "}",
+      "actual_git_audit": {
+        "stage": "fixed-verify-spec",
+        "snapshots": [
+          {
+            "side": "before",
+            "head": "e0b30f077cc760b8579f81939182f602cd5e992b",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          },
+          {
+            "side": "after",
+            "head": "e0b30f077cc760b8579f81939182f602cd5e992b",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          }
+        ],
+        "changed_sources": []
+      }
+    },
+    {
+      "stage": "migration-green",
+      "command": [
+        ".venv/bin/pytest",
+        "-q",
+        "tests/integration/test_review_storage_migration.py"
+      ],
+      "cwd": "<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-storage-active",
+      "started_at": "2026-09-22T08:50:00.145209+00:00",
+      "ended_at": "2026-09-22T08:50:00.424382+00:00",
+      "exit_code": 0,
+      "log_bytes": 98,
+      "log_sha256": "0a97b591ab7ce9644866a9aea8e19c37ff6647585418c546d0481e0cb92bfbc7",
+      "recorded_summary": "2 passed in 0.14s",
+      "actual_git_audit": {
+        "stage": "migration-green",
+        "snapshots": [
+          {
+            "side": "before",
+            "head": "8cb23f9f31e986263a85a949aad1bc6e95632a91",
+            "source_count": 962,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          },
+          {
+            "side": "after",
+            "head": "8cb23f9f31e986263a85a949aad1bc6e95632a91",
+            "source_count": 962,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          }
+        ],
+        "changed_sources": []
+      }
+    },
+    {
+      "stage": "migration-red",
+      "command": [
+        ".venv/bin/pytest",
+        "-q",
+        "tests/integration/test_review_storage_migration.py"
+      ],
+      "cwd": "<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-storage-active",
+      "started_at": "2026-09-22T08:48:49.647882+00:00",
+      "ended_at": "2026-09-22T08:48:49.933702+00:00",
+      "exit_code": 1,
+      "log_bytes": 5047,
+      "log_sha256": "486bc82db13ed322f51968b9669e704a37c004a4e336f6d35ca8951420a71f69",
+      "recorded_summary": "2 failed in 0.15s",
+      "actual_git_audit": {
+        "stage": "migration-red",
+        "snapshots": [
+          {
+            "side": "before",
+            "head": "b7dc7e6b2970fc61e0dc04d808fb47e4973a49eb",
+            "source_count": 961,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          },
+          {
+            "side": "after",
+            "head": "b7dc7e6b2970fc61e0dc04d808fb47e4973a49eb",
+            "source_count": 961,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          }
+        ],
+        "changed_sources": []
+      }
+    },
+    {
+      "stage": "mypy",
+      "command": [
+        ".venv/bin/mypy",
+        "services/api"
+      ],
+      "cwd": "<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-storage-active",
+      "started_at": "2026-09-22T08:56:19.233412+00:00",
+      "ended_at": "2026-09-22T08:56:22.537607+00:00",
+      "exit_code": 0,
+      "log_bytes": 45,
+      "log_sha256": "65638be1b18ffeafcffbbb3243e3cc2c739a82ed3b00bca512594205965022a3",
+      "recorded_summary": "Success: no issues found in 186 source files",
+      "actual_git_audit": {
+        "stage": "mypy",
+        "snapshots": [
+          {
+            "side": "before",
+            "head": "4b0296f3334d580f22fd95a9cede5c8edfcf4a77",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          },
+          {
+            "side": "after",
+            "head": "4b0296f3334d580f22fd95a9cede5c8edfcf4a77",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          }
+        ],
+        "changed_sources": []
+      }
+    },
+    {
+      "stage": "regression",
+      "command": [
+        ".venv/bin/pytest",
+        "-q",
+        "tests/integration/test_draft_candidate_migration.py",
+        "tests/integration/test_draft_candidate_catalog.py",
+        "tests/integration/test_draft_candidate_owners.py",
+        "tests/integration/test_review_job_lifecycle.py",
+        "tests/integration/test_review_materials.py",
+        "tests/integration/test_review_numeric_observations.py"
+      ],
+      "cwd": "<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-storage-active",
+      "started_at": "2026-09-22T08:56:17.379272+00:00",
+      "ended_at": "2026-09-22T08:58:46.263873+00:00",
+      "exit_code": 0,
+      "log_bytes": 1335,
+      "log_sha256": "2994a03122a2a5c960b886b3db0b518053ea389b4377f515bbdc8b29233be7ff",
+      "recorded_summary": "229 passed, 2 warnings in 148.65s (0:02:28)",
+      "actual_git_audit": {
+        "stage": "regression",
+        "snapshots": [
+          {
+            "side": "before",
+            "head": "4b0296f3334d580f22fd95a9cede5c8edfcf4a77",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          },
+          {
+            "side": "after",
+            "head": "c2a93046e777142bd5a114954ea35a8670001467",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          }
+        ],
+        "changed_sources": [
+          "tests/integration/test_review_storage_constraints.py"
+        ]
+      }
+    },
+    {
+      "stage": "ruff",
+      "command": [
+        ".venv/bin/ruff",
+        "check",
+        "."
+      ],
+      "cwd": "<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-storage-active",
+      "started_at": "2026-09-22T08:56:18.555425+00:00",
+      "ended_at": "2026-09-22T08:56:18.573841+00:00",
+      "exit_code": 0,
+      "log_bytes": 19,
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "recorded_summary": "All checks passed!",
+      "actual_git_audit": {
+        "stage": "ruff",
+        "snapshots": [
+          {
+            "side": "before",
+            "head": "4b0296f3334d580f22fd95a9cede5c8edfcf4a77",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          },
+          {
+            "side": "after",
+            "head": "4b0296f3334d580f22fd95a9cede5c8edfcf4a77",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          }
+        ],
+        "changed_sources": []
+      }
+    },
+    {
+      "stage": "storage-final",
+      "command": [
+        ".venv/bin/pytest",
+        "-q",
+        "tests/integration/test_review_storage_migration.py",
+        "tests/integration/test_review_storage_constraints.py"
+      ],
+      "cwd": "<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-storage-active",
+      "started_at": "2026-09-22T08:55:30.132636+00:00",
+      "ended_at": "2026-09-22T08:55:32.579172+00:00",
+      "exit_code": 0,
+      "log_bytes": 179,
+      "log_sha256": "fe86119e19a198a73c10853547a4c7c4d19b6b8e4d2e7f52b8ea3df3450bc1e8",
+      "recorded_summary": "94 passed in 2.29s",
+      "actual_git_audit": {
+        "stage": "storage-final",
+        "snapshots": [
+          {
+            "side": "before",
+            "head": "4b0296f3334d580f22fd95a9cede5c8edfcf4a77",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          },
+          {
+            "side": "after",
+            "head": "4b0296f3334d580f22fd95a9cede5c8edfcf4a77",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          }
+        ],
+        "changed_sources": []
+      }
+    },
+    {
+      "stage": "verify-spec",
+      "command": [
+        ".venv/bin/python",
+        "scripts/verify_spec.py"
+      ],
+      "cwd": "<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-storage-active",
+      "started_at": "2026-09-22T08:56:29.104545+00:00",
+      "ended_at": "2026-09-22T08:56:30.926111+00:00",
+      "exit_code": 0,
+      "log_bytes": 1098,
+      "log_sha256": "01a68f12c2440da91fef280d88f8a6aa7179d17cd05457f0e73cefc4656c7c48",
+      "recorded_summary": "}",
+      "actual_git_audit": {
+        "stage": "verify-spec",
+        "snapshots": [
+          {
+            "side": "before",
+            "head": "4b0296f3334d580f22fd95a9cede5c8edfcf4a77",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          },
+          {
+            "side": "after",
+            "head": "4b0296f3334d580f22fd95a9cede5c8edfcf4a77",
+            "source_count": 964,
+            "all_source_bytes_match_actual_git": true,
+            "discrepancies": []
+          }
+        ],
+        "changed_sources": []
+      }
+    }
+  ],
+  "stage_count": 19,
+  "final_engineering_source_count": 964,
+  "independent_manifest": {
+    "path": "m62-review-storage-independent-v1/MANIFEST.json",
+    "sha256": "41902aea53cdbd32c5f829aac96297df4a16c26bb06083bad399adadde7974c3",
+    "files": 28
+  },
+  "test_boundary": "Final 101 storage tests/Ruff at 4bf176d; 246 related regression/mypy186/verify-spec at e0b30f0. The sole final difference is stronger tests; results retain actual commit attribution and are not added as coverage.",
+  "failures": [
+    {
+      "stage": "migration-red",
+      "classification": "expected pre-implementation absence of 0017/new tables",
+      "failed": 2
+    },
+    {
+      "stage": "constraints-initial",
+      "classification": "test fixture defect: nonexistent content_blobs.media_type; not product RED",
+      "failed": 57,
+      "passed": 20
+    },
+    {
+      "stage": "command-fk-red",
+      "classification": "real persistent command event reference gap",
+      "failed": 5
+    }
+  ],
+  "non_final_run": "regression: 229 actual PASS but one new test file changed during the run; not a fixed-source final gate",
+  "backup_facts": [
+    "16-to-17 online backup preserves original old review/jobs/catalog bytes with 16 migration records",
+    "deliberate failure after DDL rolls back schema/index/new tables/migration record and original rows",
+    "actual backup script permits NULL legacy reviewer_session_id and removes sessions without rewriting receipt",
+    "nonempty new history/commands retained in online-copy session cleanup; original synthetic database unchanged"
+  ],
+  "migrations": [
+    "0017_review_history.sql forward only; new tables empty on migration; no approval/history backfill"
+  ],
+  "scope": "Quality persistence schema, actual SQLite tests and short ADR only",
+  "security_review": "SQL FK/JSON/hash shape do not authenticate owner, Policy, content verdict or canonical hashes; future checked ports required",
+  "not_run": [
+    "Quality repository/worker/HTTP",
+    "real provider",
+    "numeric execution",
+    "production user database migration",
+    "M7 restore acceptance",
+    "full repository/browser suite on storage branch"
+  ],
+  "blockers": [],
+  "next_task_id": "M6.2 Quality checked repository and atomic machine/human history integration",
+  "publication": "NOT_PUBLISHED; root main untouched",
+  "toolchain": {
+    "python": "3.12.13",
+    "sqlite": "3.53.1"
+  }
+}

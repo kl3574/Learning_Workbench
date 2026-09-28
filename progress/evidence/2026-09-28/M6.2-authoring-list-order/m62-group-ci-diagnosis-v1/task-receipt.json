@@ -1,0 +1,203 @@
+{
+  "task_id": "M6.2",
+  "slice_id": "M6.2-authoring-control-list-order",
+  "requirement_ids": [
+    "R-21",
+    "R-22",
+    "R-27",
+    "R-29"
+  ],
+  "spec_sha256": "2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d",
+  "spec_version": "3.0.7",
+  "implementation_commit": "f18c92c1ad74598a70b731ce9caf241e40d8e841",
+  "implementation_status": "LOCAL_VERIFIED_CANDIDATE_NOT_INTEGRATED",
+  "historical_ci_root_cause": "UNRESOLVED",
+  "changed_paths": [
+    "apps/web/src/features/authoring/useAuthoring.ts",
+    "apps/web/src/features/authoring/useAuthoringListOrder.test.tsx"
+  ],
+  "commands": [
+    {
+      "stage": "native-original",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "test:e2e",
+        "--",
+        "--config",
+        "<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-group-ci-diagnosis-v1/playwright.config.ts",
+        "authoring-groups.spec.ts",
+        "--grep",
+        "native practice group replays its lost prepare ACK"
+      ],
+      "exit_code": 1,
+      "receipt": "native-original-receipt.json",
+      "log": "native-original.log"
+    },
+    {
+      "stage": "native-original-module-fixed",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "test:e2e",
+        "--",
+        "--config",
+        "<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-group-ci-diagnosis-v1/playwright.config.ts",
+        "authoring-groups.spec.ts",
+        "--grep",
+        "native practice group replays its lost prepare ACK"
+      ],
+      "exit_code": 0,
+      "receipt": "native-original-module-fixed-receipt.json",
+      "log": "native-original-module-fixed.log"
+    },
+    {
+      "stage": "list-order-controlled-red",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "test",
+        "--",
+        "src/features/authoring/useAuthoringListOrder.test.tsx"
+      ],
+      "exit_code": 1,
+      "receipt": "list-order-controlled-red-receipt.json",
+      "log": "list-order-controlled-red.log"
+    },
+    {
+      "stage": "list-order-pinned-red",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "test",
+        "--",
+        "src/features/authoring/useAuthoringListOrder.test.tsx"
+      ],
+      "exit_code": 1,
+      "receipt": "list-order-pinned-red-receipt.json",
+      "log": "list-order-pinned-red.log"
+    },
+    {
+      "stage": "list-order-green",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "test",
+        "--",
+        "src/features/authoring/useAuthoringListOrder.test.tsx"
+      ],
+      "exit_code": 0,
+      "receipt": "list-order-green-receipt.json",
+      "log": "list-order-green.log"
+    },
+    {
+      "stage": "authoring-related-green",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "test",
+        "--",
+        "src/features/authoring"
+      ],
+      "exit_code": 0,
+      "receipt": "authoring-related-green-receipt.json",
+      "log": "authoring-related-green.log"
+    },
+    {
+      "stage": "authoring-typecheck",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "lint"
+      ],
+      "exit_code": 0,
+      "receipt": "authoring-typecheck-receipt.json",
+      "log": "authoring-typecheck.log"
+    },
+    {
+      "stage": "native-fixed",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "test:e2e",
+        "--",
+        "--config",
+        "<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-group-ci-diagnosis-v1/playwright-fixed.config.ts",
+        "authoring-groups.spec.ts",
+        "--grep",
+        "native practice group replays its lost prepare ACK"
+      ],
+      "exit_code": 0,
+      "receipt": "native-fixed-receipt.json",
+      "log": "native-fixed.log"
+    }
+  ],
+  "exit_codes": {
+    "native-original": 1,
+    "native-original-module-fixed": 0,
+    "list-order-controlled-red": 1,
+    "list-order-pinned-red": 1,
+    "list-order-green": 0,
+    "authoring-related-green": 0,
+    "authoring-typecheck": 0,
+    "native-fixed": 0
+  },
+  "test_summary": {
+    "before_fix_native": "1 PASS 10.6s; unchanged original test, private config omits unrelated fixed-port servers",
+    "controlled_pinned_red": "2 FAIL / 1 PASS; fixed 236fbc9 and 965 exact Git inputs",
+    "minimal_green": "3 PASS; unchanged production bytes later committed f18c92c; this early stage was not a clean fixed HEAD",
+    "final_authoring_web": "63 PASS / 11 files; 3.17s; includes five new list tests",
+    "typecheck": "PASS: tsc --noEmit --noUnusedLocals --noUnusedParameters",
+    "after_fix_native": "1 PASS 9.0s; original spec and action/assertion timeouts unchanged; no retries",
+    "source_binding": "All 965 final engineering inputs compared with actual Git blobs and before/after files"
+  },
+  "screenshot_paths": [
+    "m62-21fc-current-ci-v1/push-failure-members/authoring-groups-native-pr-d6a94-rs-after-permission-changes/test-failed-1.png",
+    "m62-group-ci-diagnosis-v1/native-fixed-output/authoring-groups-native-pr-d6a94-rs-after-permission-changes/group-practice-1440.png",
+    "m62-group-ci-diagnosis-v1/native-fixed-output/authoring-groups-native-pr-d6a94-rs-after-permission-changes/group-practice-390.png",
+    "m62-group-ci-diagnosis-v1/native-fixed-output/authoring-groups-native-pr-d6a94-rs-after-permission-changes/group-private-390.png"
+  ],
+  "migrations": "None; no database, API, generated contracts or worker changes",
+  "security_review": "Current owner/session checks remain. A list response also must be the newest request in its live lifecycle before decode/admission. Safe control fields only. Original command key/body/ACK and current list remain separate. No key accessed and no vendor request.",
+  "not_run": [
+    "Historical failing CI runtime request/IDB/list/render causal timeline unavailable",
+    "Full browser suite after this candidate",
+    "Real hosted Provider and paid DeepSeek",
+    "Production rollout and remote CI of this candidate",
+    "Independent candidate review; requested from parent"
+  ],
+  "blockers": [
+    "Historical 21fc push browser failure remains unresolved; local PASS and separate race fix cannot close it"
+  ],
+  "next_task_id": "M6.2",
+  "next_action": "Independently review and integrate the bounded list fix if accepted. Add bounded passive list request/response/decode/admission observations to the unchanged CI case before attributing its busy/empty-list failure.",
+  "recorded_at": "2026-09-28T00:46:02.465018+00:00"
+}

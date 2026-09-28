@@ -1,0 +1,89 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/authoring/useAuthoringListOrder.test.tsx
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-group-ci-diagnosis-active/apps/web[39m
+
+ [31m❯[39m src/features/authoring/useAuthoringListOrder.test.tsx [2m([22m[2m3 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[32m 281[2mms[22m[39m
+   [32m✓[39m a held post-replay list leaves the durable original ACK separate from current controls until that list resolves[32m 117[2mms[22m[39m
+[31m   [31m×[31m an earlier empty list cannot erase current controls after the same original group command is replayed[39m[32m 58[2mms[22m[39m
+[31m   [31m×[31m a previous Policy lifecycle list cannot replace a later current same-workspace control revision[39m[32m 106[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m src/features/authoring/useAuthoringListOrder.test.tsx[2m > [22man earlier empty list cannot erase current controls after the same original group command is replayed
+[31m[1mAssertionError[22m: expected [] to deeply equal [ { …(11) } ][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [[39m
+[32m-   {[39m
+[32m-     "created_at": "2026-09-22T00:00:00Z",[39m
+[32m-     "error": null,[39m
+[32m-     "id": "authoring_list_order",[39m
+[32m-     "kind": "authoring",[39m
+[32m-     "progress": {[39m
+[32m-       "completed": 0,[39m
+[32m-       "label": "等待明确授权",[39m
+[32m-       "total": null,[39m
+[32m-     },[39m
+[32m-     "result_refs": [],[39m
+[32m-     "revision": 1,[39m
+[32m-     "status": "awaiting_approval",[39m
+[32m-     "updated_at": "2026-09-22T00:00:00Z",[39m
+[32m-     "warnings": [],[39m
+[32m-     "workspace_id": "workspace_32267da8-3a1a-4b7a-8329-4cb1ec316eb4",[39m
+[32m-   },[39m
+[32m- ][39m
+[31m+ [][39m
+
+[36m [2m❯[22m src/features/authoring/useAuthoringListOrder.test.tsx:[2m62:36[22m[39m
+    [90m 60|[39m   expect(hook.result.current.busy).toBe(false)
+    [90m 61|[39m   await act(async () => { initial.resolve({ items: [], next_cursor: nu…
+    [90m 62|[39m   expect(hook.result.current.jobs).toEqual([f.value])
+    [90m   |[39m                                    [31m^[39m
+    [90m 63|[39m   expect(f.prepare).toHaveBeenNthCalledWith(2, original.body, original…
+    [90m 64|[39m   expect(f.prepare).toHaveBeenCalledTimes(2)
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/features/authoring/useAuthoringListOrder.test.tsx[2m > [22ma previous Policy lifecycle list cannot replace a later current same-workspace control revision
+[31m[1mAssertionError[22m: expected [ { …(11) } ] to deeply equal [ { …(11) } ][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[33m@@ -8,12 +8,12 @@[39m
+[2m        "completed": 0,[22m
+[2m        "label": "等待明确授权",[22m
+[2m        "total": null,[22m
+[2m      },[22m
+[2m      "result_refs": [],[22m
+[32m-     "revision": 2,[39m
+[32m-     "status": "cancelled",[39m
+[31m+     "revision": 1,[39m
+[31m+     "status": "awaiting_approval",[39m
+[2m      "updated_at": "2026-09-22T00:00:00Z",[22m
+[2m      "warnings": [],[22m
+[2m      "workspace_id": "workspace_414b8f72-77de-4510-9c28-81020a8addad",[22m
+[2m    },[22m
+[2m  ][22m
+
+[36m [2m❯[22m src/features/authoring/useAuthoringListOrder.test.tsx:[2m75:36[22m[39m
+    [90m 73|[39m   await waitFor(() => expect(hook.result.current.jobs).toEqual([next]))
+    [90m 74|[39m   await act(async () => { initial.resolve({ items: [f.value], next_cur…
+    [90m 75|[39m   expect(hook.result.current.jobs).toEqual([next])
+    [90m   |[39m                                    [31m^[39m
+    [90m 76|[39m   expect(hook.result.current.academic).toBe(false)
+    [90m 77|[39m   expect(f.prepare).not.toHaveBeenCalled()
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m1 passed[39m[22m[90m (3)[39m
+[2m   Start at [22m 08:41:19
+[2m   Duration [22m 792ms[2m (tests 39%, environment 28%, transform 20%, import 12%)[22m
+

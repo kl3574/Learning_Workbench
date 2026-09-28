@@ -1,0 +1,75 @@
+........................................................................ [  2%]
+........................................................................ [  5%]
+........................................................................ [  8%]
+........................................................................ [ 11%]
+........................................................................ [ 14%]
+........................................................................ [ 17%]
+........................................................................ [ 19%]
+........................................................................ [ 22%]
+........................................................................ [ 25%]
+........................................................................ [ 28%]
+...............................................s........................ [ 31%]
+........................................................................ [ 34%]
+........................................................................ [ 37%]
+........................................................................ [ 39%]
+........................................................................ [ 42%]
+........................................................................ [ 45%]
+........................................................................ [ 48%]
+........................................................................ [ 51%]
+........................................................................ [ 54%]
+........................................................................ [ 57%]
+........................................................................ [ 59%]
+........................................................................ [ 62%]
+........................................................................ [ 65%]
+........................................................................ [ 68%]
+........................................................................ [ 71%]
+........................................................................ [ 74%]
+........................................................................ [ 77%]
+.......................................................................F [ 79%]
+........................................................................ [ 82%]
+........................................................................ [ 85%]
+........................................................................ [ 88%]
+........................................................................ [ 91%]
+........................................................................ [ 94%]
+........................................................................ [ 97%]
+........................................................................ [ 99%]
+.                                                                        [100%]
+=================================== FAILURES ===================================
+______ test_repeated_unsafe_reads_and_writes_do_not_leak_file_descriptors ______
+
+tmp_path = PosixPath('<PYTEST_ROOT>/pytest-158/test_repeated_unsafe_reads_and0')
+
+    def test_repeated_unsafe_reads_and_writes_do_not_leak_file_descriptors(tmp_path):
+        store = BlobStore(tmp_path)
+        info = store.write(b"data")
+        path = tmp_path / info.relative_path
+        path.unlink()
+        path.mkdir(mode=0o700)
+        before = len(os.listdir("/proc/self/fd"))
+        for _ in range(10):
+            assert_error(lambda: store.read(info.sha256), 503, "BLOB_STORAGE_UNAVAILABLE")
+            assert_error(lambda: store.write(b"data"), 503, "BLOB_STORAGE_UNAVAILABLE")
+>       assert len(os.listdir("/proc/self/fd")) == before
+E       AssertionError: assert 14 == 15
+E        +  where 14 = len(['0', '1', '2', '3', '4', '5', ...])
+E        +    where ['0', '1', '2', '3', '4', '5', ...] = <built-in function listdir>('/proc/self/fd')
+E        +      where <built-in function listdir> = os.listdir
+
+tests/unit/test_content_store.py:232: AssertionError
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/integration/test_authoring_numeric_runtime.py:46: BLOCKED_ENVIRONMENT: real sealed runtime did not execute the calculator; original FAIL retained
+FAILED tests/unit/test_content_store.py::test_repeated_unsafe_reads_and_writes_do_not_leak_file_descriptors - AssertionError: assert 14 == 15
+ +  where 14 = len(['0', '1', '2', '3', '4', '5', ...])
+ +    where ['0', '1', '2', '3', '4', '5', ...] = <built-in function listdir>('/proc/self/fd')
+ +      where <built-in function listdir> = os.listdir
+1 failed, 2519 passed, 1 skipped, 2 warnings in 698.43s (0:11:38)

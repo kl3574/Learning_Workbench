@@ -1,0 +1,157 @@
+diff --git a/docs/adr/0023-review-history-storage.md b/docs/adr/0023-review-history-storage.md
+new file mode 100644
+index 0000000..d3e68f3
+--- /dev/null
++++ b/docs/adr/0023-review-history-storage.md
+@@ -0,0 +1,17 @@
++# 0023 — Quality review history storage
++
++M6.2 engineering decision under PRODUCT_DESIGN.md 3.0.7, sections 7, 15, 20.1, 20.3, 20.4, 20.6 and Appendices A–C. This is a forward storage slice, not review or publication acceptance.
++
++Migration 0017 adds four empty Quality-owned tables. It does not change 0001, 0016, core contracts, or existing receipt bytes, and never backfills a Job, machine report or human approval from a legacy review. The migration runner's existing transaction and online backup protect both schema and data on failure. Legacy reviews retain their original claims; new checked application reads must distinguish them from authenticated new history.
++
++`review_jobs.review_id` is the actual `draft_review` Job ID. Composite foreign keys bind its workspace and kind, complete catalog candidate revision, and immutable catalog source kind. The extra source-kind unique index is necessary because 0016's revision key alone does not distinguish Authoring single and group producers. Additional parent unique indexes are redundant with their primary keys and do not rewrite parent rows. Jobs ports remain the only production writers of Jobs/events; migration tests use explicitly synthetic SQL fixtures.
++
++`review_revisions` starts with machine revision 1. Later rows are human-decision records with a generated immediate predecessor number and a foreign key to that same review's predecessor receipt hash. History insertion also requires the current `reviews` projection to name the exact candidate registered for that Job. `reviews` remains mutable: the future Quality transaction must CAS its current revision and atomically append the complete record/artifact/command history, and every protected read must check the complete chain against the current projection. These SQL constraints alone do not establish those application transactions or authenticate human verdicts.
++
++`review_artifact_bindings` preserves original attachment order and binds an actual artifact's ID, workspace and blob hash to an actual review revision. Its owner label is a closed dispatch tag, not an authenticated ownership claim. Future Import/Quality ports must check the real profile, manifest, bytes, current permissions and original owner history. Numeric ledgers remain with their existing owners; they are not cast into Import artifacts. All four new tables reject UPDATE, DELETE and REPLACE during normal operation. The artifact guard covers both ordinal and artifact-ID uniqueness even with SQLite recursive triggers disabled.
++
++`review_commands` retains the exact workspace/actor/route/key and original request/ACK JSON and hashes. Its command kind separates revision domains: create binds the candidate basis and initial Job revision, decision binds adjacent retained Review revisions, and cancel binds actual Jobs event sequence numbers for its basis/result. Object-specific routes include their original IDs. Creation requires no nonexistent ReviewReceipt; cancellation before a machine report also remains representable. These relational checks do not validate ACK shape, request equality, canonical JSON/hash authenticity, event semantics or current actor permission. Checked owner/Jobs ports must do that before replay. A same-key operation is never overwritten with a new ACK.
++
++Historical actor IDs are opaque identities, not session tokens and not foreign keys conferring current access. `reviews.reviewer_session_id=NULL` remains legal, including the existing backup script's isolated-copy cleanup; original receipt and immutable history bytes stay unchanged. Removing replay-only command material during full export requires a separately reviewed owner backup port and explicit manifest exclusions. This migration does not claim M7 export/restore completeness. Append-only guards protect normal operations and do not remove the documented future maintenance/purge workflow.
++
++SQLite JSON validity, integer/hash shape and foreign keys are not proof of current Policy, owner authenticity, actual machine work, mathematical/source approval or hash integrity. Those checks belong to the subsequent Quality repository/worker/HTTP slice. No worker, HTTP route, provider call, numeric execution, generated ReviewReceipt, or publication path is introduced here.
+diff --git a/tests/integration/test_review_storage_constraints.py b/tests/integration/test_review_storage_constraints.py
+index d63a8b2..61d630a 100644
+--- a/tests/integration/test_review_storage_constraints.py
++++ b/tests/integration/test_review_storage_constraints.py
+@@ -5,6 +5,7 @@ JSON validity and relational identity do not certify a machine or human review.
+ """
+ import json
+ import sqlite3
++from contextlib import closing
+ 
+ import pytest
+ 
+@@ -318,3 +319,49 @@ def test_sql_does_not_authenticate_hashes_owner_claims_or_current_actor(storage)
+         insert(connection, 'review_commands', {**command(registered), 'ack_json': json.dumps({'fixture_only': True})})
+         assert connection.execute('SELECT count(*) FROM local_sessions').fetchone()[0] == 0
+         assert connection.execute('PRAGMA foreign_key_check').fetchall() == []
++
++
++def test_copy_can_clear_live_reviewer_without_rewriting_immutable_history(storage, tmp_path):
++    database, registered, _ = populated(storage)
++    with database.transaction() as connection:
++        connection.execute('INSERT INTO local_sessions(id,workspace_id,token_hash,csrf_hash,role,expires_at) '
++                           "VALUES('synthetic_actor',?,?,?,'author','2099-01-01T00:00:00Z')",
++                           (registered['workspace_id'], 'c' * 64, 'd' * 64))
++        connection.execute("UPDATE reviews SET reviewer_session_id='synthetic_actor'")
++        before = {table: rows(connection, table) for table in TABLES}
++        original = connection.execute('SELECT receipt_json FROM reviews').fetchone()[0]
++    backup = database.online_backup(tmp_path / 'copy.sqlite3')
++    with closing(sqlite3.connect(backup)) as connection:
++        connection.execute('PRAGMA foreign_keys=ON')
++        connection.execute('UPDATE reviews SET reviewer_session_id=NULL')
++        connection.execute('DELETE FROM local_sessions')
++        connection.commit()
++        assert connection.execute('SELECT receipt_json,reviewer_session_id FROM reviews').fetchone() == (original, None)
++        assert {table: rows(connection, table) for table in TABLES} == before
++        assert connection.execute('PRAGMA foreign_key_check').fetchall() == []
++    with database.connect() as connection:
++        assert connection.execute('SELECT reviewer_session_id FROM reviews').fetchone()[0] == 'synthetic_actor'
++
++
++@pytest.mark.parametrize(('table', 'field', 'value'), [
++    ('review_jobs', 'input_sha256', 'A' * 64), ('review_jobs', 'draft_revision', 1.5),
++    ('review_revisions', 'receipt_sha256', 'g' * 64), ('review_revisions', 'record_sha256', 'a' * 63),
++    ('review_revisions', 'revision', 0), ('review_artifact_bindings', 'ordinal', 0.5),
++    ('review_artifact_bindings', 'binding_sha256', 'A' * 64), ('review_artifact_bindings', 'manifest_sha256', 'g' * 64),
++    ('review_commands', 'basis_revision', 1.5), ('review_commands', 'request_sha256', 'a' * 63),
++    ('review_commands', 'ack_sha256', 'A' * 64), ('review_commands', 'command_key', ''),
++])
++def test_invalid_digest_and_numeric_storage_shapes_fail(storage, table, field, value):
++    database, registered = storage
++    with database.transaction() as connection:
++        revision = None
++        if table != 'review_jobs':
++            insert(connection, 'review_jobs', registered)
++            revision = receipt(connection, registered)
++        if table == 'review_artifact_bindings':
++            insert(connection, 'review_revisions', revision)
++            artifact(connection, registered['workspace_id'])
++    source = {'review_jobs': registered, 'review_revisions': revision,
++              'review_artifact_bindings': binding(registered), 'review_commands': command(registered)}[table]
++    with pytest.raises(sqlite3.IntegrityError), database.transaction() as connection:
++        insert(connection, table, {**source, field: value})
+diff --git a/tests/integration/test_review_storage_migration.py b/tests/integration/test_review_storage_migration.py
+index a4ee27d..c3f7001 100644
+--- a/tests/integration/test_review_storage_migration.py
++++ b/tests/integration/test_review_storage_migration.py
+@@ -1,7 +1,11 @@
+ """SQLite schema boundaries only; SQL fixtures do not authenticate a review."""
+ from contextlib import closing
++import json
+ import shutil
+ import sqlite3
++import zipfile
++
++import pytest
+ 
+ from services.api.app.infrastructure.config import REPOSITORY_ROOT, Settings
+ from services.api.app.infrastructure.database import Database
+@@ -59,3 +63,55 @@ def test_empty_install_has_no_machine_or_human_review(tmp_path):
+     with database.connect() as connection:
+         assert all(rows(connection, table) == [] for table in (*TABLES, 'reviews', 'jobs'))
+         assert connection.execute('PRAGMA foreign_key_check').fetchall() == []
++
++
++def test_failure_after_new_schema_rolls_back_tables_indexes_and_migration_record(tmp_path):
++    database, workspace = before_catalog(tmp_path)
++    with database.transaction() as connection:
++        legacy_review(connection, workspace, source_candidate(connection, workspace, 'draft_legacy', 'import'))
++    enable_catalog(database)
++    database.initialize()
++    with database.connect() as connection:
++        before = {table: rows(connection, table) for table in ('reviews', 'jobs', 'schema_migrations')}
++        schema = rows(connection, 'sqlite_master')
++    backups_before = set((database.settings.data_dir / 'backups').glob('*.sqlite3'))
++    target = enable_migration(database)
++    with target.open('a') as stream:
++        stream.write('\nINVALID SQL;\n')
++    with pytest.raises(sqlite3.OperationalError):
++        database.initialize()
++    with database.connect() as connection:
++        assert {table: rows(connection, table) for table in before} == before
++        assert rows(connection, 'sqlite_master') == schema
++        assert connection.execute('PRAGMA foreign_key_check').fetchall() == []
++    backups = set((database.settings.data_dir / 'backups').glob('*.sqlite3')) - backups_before
++    assert len(backups) == 1
++    with closing(sqlite3.connect(backups.pop())) as backup:
++        assert {table: rows(backup, table) for table in before} == before
++        assert backup.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
++
++
++def test_actual_backup_script_can_clear_legacy_session_without_changing_receipt(tmp_path):
++    from scripts.backup import create_backup
++
++    database, workspace = before_catalog(tmp_path)
++    with database.transaction() as connection:
++        original = legacy_review(connection, workspace, source_candidate(connection, workspace, 'draft_legacy', 'import'))
++    enable_catalog(database)
++    database.initialize()
++    enable_migration(database)
++    database.initialize()
++    archive = create_backup(database.settings)
++    snapshot = tmp_path / 'readback.sqlite3'
++    with zipfile.ZipFile(archive) as backup:
++        snapshot.write_bytes(backup.read('workspace.sqlite3'))
++        manifest = json.loads(backup.read('manifest.json'))
++        assert manifest['restore_acceptance'] == 'NOT_RUN'
++    with closing(sqlite3.connect(snapshot)) as connection:
++        assert connection.execute('SELECT receipt_json,reviewer_session_id FROM reviews').fetchone() == (original, None)
++        assert connection.execute('SELECT count(*) FROM local_sessions').fetchone()[0] == 0
++        assert all(rows(connection, table) == [] for table in TABLES)
++        assert connection.execute('PRAGMA foreign_key_check').fetchall() == []
++    with database.connect() as connection:
++        assert connection.execute('SELECT receipt_json FROM reviews').fetchone()[0] == original
++        assert connection.execute('SELECT reviewer_session_id FROM reviews').fetchone()[0] is not None

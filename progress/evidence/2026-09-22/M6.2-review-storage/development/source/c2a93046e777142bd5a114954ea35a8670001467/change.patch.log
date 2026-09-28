@@ -1,0 +1,36 @@
+diff --git a/tests/integration/test_review_storage_constraints.py b/tests/integration/test_review_storage_constraints.py
+index 61d630a..3b30458 100644
+--- a/tests/integration/test_review_storage_constraints.py
++++ b/tests/integration/test_review_storage_constraints.py
+@@ -290,6 +290,31 @@ def test_same_original_command_key_cannot_be_reused_for_another_review(storage):
+         insert(connection, 'review_commands', command(other), replace=True)
+ 
+ 
++@pytest.mark.parametrize('kind', ['create', 'cancel'])
++@pytest.mark.parametrize('operation', ['DELETE', 'UPDATE'])
++def test_command_job_revision_binding_survives_later_event_mutations(storage, kind, operation):
++    database, registered = storage
++    with database.transaction() as connection:
++        insert(connection, 'review_jobs', registered)
++        insert(connection, 'review_commands', command(registered, kind))
++        before = rows(connection, 'job_events')
++    sql = 'DELETE FROM job_events' if operation == 'DELETE' else 'UPDATE job_events SET seq=seq+1'
++    with pytest.raises(sqlite3.IntegrityError), database.transaction() as connection:
++        connection.execute(sql)
++    with database.connect() as connection:
++        assert rows(connection, 'job_events') == before
++        assert connection.execute('PRAGMA foreign_key_check').fetchall() == []
++
++
++def test_create_ack_cannot_reference_a_missing_initial_job_event(storage):
++    database, registered = storage
++    with database.transaction() as connection:
++        insert(connection, 'review_jobs', registered)
++        connection.execute('DELETE FROM job_events')
++    with pytest.raises(sqlite3.IntegrityError), database.transaction() as connection:
++        insert(connection, 'review_commands', command(registered))
++
++
+ @pytest.mark.parametrize(('table', 'field'), [
+     ('review_jobs', 'input_json'), ('review_revisions', 'receipt_json'), ('review_revisions', 'record_json'),
+     ('review_artifact_bindings', 'binding_json'), ('review_commands', 'request_json'), ('review_commands', 'ack_json'),

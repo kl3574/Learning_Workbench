@@ -1,0 +1,38 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/tutor/tutorObservation.test.ts
+
+
+ RUN  v5.0.0 <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-tutor-ci-observation-active/apps/web
+
+ ❯ src/features/tutor/tutorObservation.test.ts (3 tests | 1 failed) 165ms
+   ❯ observation of the unchanged strict SSE codec (1)
+     × joins one actual fetch/cursor and only validated yields without collecting answer bytes 159ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/tutor/tutorObservation.test.ts > observation of the unchanged strict SSE codec > joins one actual fetch/cursor and only validated yields without collecting answer bytes
+AssertionError: expected null to be '4e907820-d53f-455a-9bec-0734a75c595f:1' // Object.is equality
+
+- Expected:
+"4e907820-d53f-455a-9bec-0734a75c595f:1"
+
++ Received:
+null
+
+ ❯ src/features/tutor/tutorObservation.test.ts:55:74
+     53|       expect(request[0]).toBe('/api/v1/runs/run_unit/events?after_seq=…
+     54|       expect(request[1]).toMatchObject({ credentials: 'same-origin', c…
+     55|       expect(new Headers(request[1].headers).get('X-Tutor-Observation'…
+       |                                                                          ^
+     56|       await new Promise(resolve => setTimeout(resolve, 0))
+     57|       const records = batches.flat() as { stage: string; span: string …
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  17:18:54
+   Duration  462ms (environment 50%, tests 42%, transform 5%, import 2%, worker 1%)
+

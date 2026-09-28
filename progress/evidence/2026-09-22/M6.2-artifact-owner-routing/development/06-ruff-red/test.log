@@ -1,0 +1,188 @@
+E701 Multiple statements on one line (colon)
+  --> tests/integration/test_artifact_owners.py:63:45
+   |
+61 |         elif corruption.startswith('manifest_'):
+62 |             manifest = json.loads(row['manifest_json'])
+63 |             if corruption == 'manifest_size': manifest['size'] += 1
+   |                                             ^
+64 |             if corruption == 'manifest_hash': manifest['sha256'] = '0' * 64
+65 |             if corruption == 'manifest_filename': manifest['filename'] = '../PRIVATE_SENTINEL'
+   |
+
+E701 Multiple statements on one line (colon)
+  --> tests/integration/test_artifact_owners.py:64:45
+   |
+62 |             manifest = json.loads(row['manifest_json'])
+63 |             if corruption == 'manifest_size': manifest['size'] += 1
+64 |             if corruption == 'manifest_hash': manifest['sha256'] = '0' * 64
+   |                                             ^
+65 |             if corruption == 'manifest_filename': manifest['filename'] = '../PRIVATE_SENTINEL'
+66 |             if corruption == 'manifest_missing_field': del manifest['filename']
+   |
+
+E701 Multiple statements on one line (colon)
+  --> tests/integration/test_artifact_owners.py:65:49
+   |
+63 |             if corruption == 'manifest_size': manifest['size'] += 1
+64 |             if corruption == 'manifest_hash': manifest['sha256'] = '0' * 64
+65 |             if corruption == 'manifest_filename': manifest['filename'] = '../PRIVATE_SENTINEL'
+   |                                                 ^
+66 |             if corruption == 'manifest_missing_field': del manifest['filename']
+67 |             if corruption == 'manifest_extra_field': manifest['unexpected'] = 'PRIVATE_SENTINEL'
+   |
+
+E701 Multiple statements on one line (colon)
+  --> tests/integration/test_artifact_owners.py:66:54
+   |
+64 |             if corruption == 'manifest_hash': manifest['sha256'] = '0' * 64
+65 |             if corruption == 'manifest_filename': manifest['filename'] = '../PRIVATE_SENTINEL'
+66 |             if corruption == 'manifest_missing_field': del manifest['filename']
+   |                                                      ^
+67 |             if corruption == 'manifest_extra_field': manifest['unexpected'] = 'PRIVATE_SENTINEL'
+68 |             if corruption == 'manifest_bool_version': manifest['version'] = True
+   |
+
+E701 Multiple statements on one line (colon)
+  --> tests/integration/test_artifact_owners.py:67:52
+   |
+65 |             if corruption == 'manifest_filename': manifest['filename'] = '../PRIVATE_SENTINEL'
+66 |             if corruption == 'manifest_missing_field': del manifest['filename']
+67 |             if corruption == 'manifest_extra_field': manifest['unexpected'] = 'PRIVATE_SENTINEL'
+   |                                                    ^
+68 |             if corruption == 'manifest_bool_version': manifest['version'] = True
+69 |             connection.execute('UPDATE artifacts SET manifest_json=? WHERE id=?', (json.dumps(manifest), artifact['artifact_id']))
+   |
+
+E701 Multiple statements on one line (colon)
+  --> tests/integration/test_artifact_owners.py:68:53
+   |
+66 |             if corruption == 'manifest_missing_field': del manifest['filename']
+67 |             if corruption == 'manifest_extra_field': manifest['unexpected'] = 'PRIVATE_SENTINEL'
+68 |             if corruption == 'manifest_bool_version': manifest['version'] = True
+   |                                                     ^
+69 |             connection.execute('UPDATE artifacts SET manifest_json=? WHERE id=?', (json.dumps(manifest), artifact['artifact_id']))
+70 |         else:
+   |
+
+E701 Multiple statements on one line (colon)
+  --> tests/integration/test_artifact_owners.py:73:37
+   |
+71 |             path = settings.data_dir / connection.execute('SELECT relative_path FROM content_blobs WHERE sha256=?',
+72 |                                                          (row['blob_sha256'],)).fetchone()[0]
+73 |             if corruption == 'bytes': path.write_bytes(b'PRIVATE_SENTINEL')
+   |                                     ^
+74 |             else: path.unlink()
+75 |     if corruption == 'other_import_job':
+   |
+
+E701 Multiple statements on one line (colon)
+  --> tests/integration/test_artifact_owners.py:74:17
+   |
+72 |                                                          (row['blob_sha256'],)).fetchone()[0]
+73 |             if corruption == 'bytes': path.write_bytes(b'PRIVATE_SENTINEL')
+74 |             else: path.unlink()
+   |                 ^
+75 |     if corruption == 'other_import_job':
+76 |         other = upload(client, settings, b'# Another real source\n', key='another')
+   |
+
+E701 Multiple statements on one line (colon)
+  --> tests/integration/test_artifact_owners.py:92:31
+   |
+90 |     identity = current_test_identity(app)
+91 |     with app.state.database.transaction() as connection:
+92 |         if change == 'revoked': connection.execute("UPDATE local_sessions SET revoked_at='2026-01-01T00:00:00Z'")
+   |                               ^
+93 |         if change == 'expired': connection.execute("UPDATE local_sessions SET expires_at='2000-01-01T00:00:00Z'")
+94 |         if change == 'missing': connection.execute('DELETE FROM local_sessions')
+   |
+
+E701 Multiple statements on one line (colon)
+  --> tests/integration/test_artifact_owners.py:93:31
+   |
+91 |     with app.state.database.transaction() as connection:
+92 |         if change == 'revoked': connection.execute("UPDATE local_sessions SET revoked_at='2026-01-01T00:00:00Z'")
+93 |         if change == 'expired': connection.execute("UPDATE local_sessions SET expires_at='2000-01-01T00:00:00Z'")
+   |                               ^
+94 |         if change == 'missing': connection.execute('DELETE FROM local_sessions')
+95 |         if change == 'different_workspace': identity = replace(identity, workspace_id='workspace_unrelated')
+   |
+
+E701 Multiple statements on one line (colon)
+  --> tests/integration/test_artifact_owners.py:94:31
+   |
+92 |         if change == 'revoked': connection.execute("UPDATE local_sessions SET revoked_at='2026-01-01T00:00:00Z'")
+93 |         if change == 'expired': connection.execute("UPDATE local_sessions SET expires_at='2000-01-01T00:00:00Z'")
+94 |         if change == 'missing': connection.execute('DELETE FROM local_sessions')
+   |                               ^
+95 |         if change == 'different_workspace': identity = replace(identity, workspace_id='workspace_unrelated')
+96 |         with pytest.raises(ApiError) as rejected:
+   |
+
+E701 Multiple statements on one line (colon)
+  --> tests/integration/test_artifact_owners.py:95:43
+   |
+93 |         if change == 'expired': connection.execute("UPDATE local_sessions SET expires_at='2000-01-01T00:00:00Z'")
+94 |         if change == 'missing': connection.execute('DELETE FROM local_sessions')
+95 |         if change == 'different_workspace': identity = replace(identity, workspace_id='workspace_unrelated')
+   |                                           ^
+96 |         with pytest.raises(ApiError) as rejected:
+97 |             ImportService(app.state.database).read_artifact(connection, identity, artifact['artifact_id'])
+   |
+
+E701 Multiple statements on one line (colon)
+   --> tests/integration/test_artifact_owners.py:142:32
+    |
+140 |         connection.execute('INSERT INTO workspace(' + ','.join(workspace) + ') VALUES(' +
+141 |                            ','.join('?' for _ in workspace) + ')', tuple(workspace.values()))
+142 |         if table == 'artifacts': identifier = artifact['artifact_id']
+    |                                ^
+143 |         elif table == 'jobs': identifier = staged['job']['id']
+144 |         else: identifier = connection.execute('SELECT source_id FROM ingestion_imports WHERE id=?',
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/integration/test_artifact_owners.py:143:29
+    |
+141 |                            ','.join('?' for _ in workspace) + ')', tuple(workspace.values()))
+142 |         if table == 'artifacts': identifier = artifact['artifact_id']
+143 |         elif table == 'jobs': identifier = staged['job']['id']
+    |                             ^
+144 |         else: identifier = connection.execute('SELECT source_id FROM ingestion_imports WHERE id=?',
+145 |                                               (staged['import_id'],)).fetchone()[0]
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/integration/test_artifact_owners.py:144:13
+    |
+142 |         if table == 'artifacts': identifier = artifact['artifact_id']
+143 |         elif table == 'jobs': identifier = staged['job']['id']
+144 |         else: identifier = connection.execute('SELECT source_id FROM ingestion_imports WHERE id=?',
+    |             ^
+145 |                                               (staged['import_id'],)).fetchone()[0]
+146 |         connection.execute(f"UPDATE {table} SET workspace_id='workspace_unrelated' WHERE id=?", (identifier,))
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/integration/test_artifact_owners.py:178:47
+    |
+176 |         assert response.headers['content-disposition'].startswith('attachment;')
+177 |         assert response.headers['etag'] == '"' + hashlib.sha256(data).hexdigest() + '"'
+178 |         if row['profile'] == 'import_original': assert data == raw
+    |                                               ^
+179 |         if row['profile'] == 'import_asset': assert data == b'synthetic passive resource'
+180 |         if row['profile'] == 'untrusted_quality_receipt':
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/integration/test_artifact_owners.py:179:44
+    |
+177 |         assert response.headers['etag'] == '"' + hashlib.sha256(data).hexdigest() + '"'
+178 |         if row['profile'] == 'import_original': assert data == raw
+179 |         if row['profile'] == 'import_asset': assert data == b'synthetic passive resource'
+    |                                            ^
+180 |         if row['profile'] == 'untrusted_quality_receipt':
+181 |             assert data == b'{"mathematical":"APPROVED","fixture_only":true}'
+    |
+
+Found 17 errors.

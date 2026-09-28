@@ -1,0 +1,209 @@
+{
+  "task_id": "M6.2",
+  "requirement_ids": [
+    "R-21",
+    "R-22",
+    "R-24",
+    "R-38"
+  ],
+  "spec_sha256": "2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d",
+  "implementation_commit": "1fffd996e9334f7f28dcdeb970430c9aa4052ee3",
+  "scope": "Current fixed source, partial M6.2 backend groundwork and two separately reviewed observation/ordering changes; native gate failed.",
+  "changed_paths": [
+    "apps/web/src/api/client.ts",
+    "apps/web/src/features/authoring/useAuthoring.ts",
+    "apps/web/src/features/authoring/useAuthoringListOrder.test.tsx",
+    "apps/web/src/features/tutor/TutorWorkflow.tsx",
+    "apps/web/src/features/tutor/tutorClient.ts",
+    "apps/web/src/features/tutor/tutorObservation.test.ts",
+    "apps/web/src/features/tutor/tutorObservation.ts",
+    "apps/web/src/features/tutor/useTutor.ts",
+    "apps/web/src/features/tutor/useTutorObservation.test.tsx",
+    "docs/adr/0023-review-history-storage.md",
+    "docs/adr/0024-quality-review-persistence.md",
+    "migrations/0017_review_history.sql",
+    "services/api/app/application/artifacts.py",
+    "services/api/app/application/imports.py",
+    "services/api/app/application/jobs.py",
+    "services/api/app/application/review_checks.py",
+    "services/api/app/application/review_history_models.py",
+    "services/api/app/application/review_numeric.py",
+    "services/api/app/application/tutor_worker.py",
+    "services/api/app/infrastructure/artifact_repository.py",
+    "services/api/app/infrastructure/review_repository.py",
+    "services/api/app/infrastructure/security.py",
+    "services/api/app/interfaces/import_http.py",
+    "tests/blob_fd_probe.py",
+    "tests/e2e/tutor-diagnostic.spec.ts",
+    "tests/e2e/tutorDiagnostic.ts",
+    "tests/e2e/tutorRuntime.ts",
+    "tests/integration/test_artifact_owners.py",
+    "tests/integration/test_review_history.py",
+    "tests/integration/test_review_numeric_observations.py",
+    "tests/integration/test_review_repository.py",
+    "tests/integration/test_review_storage_constraints.py",
+    "tests/integration/test_review_storage_migration.py",
+    "tests/integration/test_review_structure_checks.py",
+    "tests/integration/test_tutor_observation.py",
+    "tests/tutor_native_fixture.py",
+    "tests/tutor_observation.py",
+    "tests/unit/test_content_store.py"
+  ],
+  "commands": [
+    {
+      "command": [
+        ".venv/bin/ruff",
+        "check",
+        "."
+      ],
+      "exit_code": 0,
+      "source_commit": "1fffd996e9334f7f28dcdeb970430c9aa4052ee3",
+      "cache": "m62-sep28-combined-gates-v1",
+      "stage": "ruff",
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "seconds": 0.056602986000143574
+    },
+    {
+      "command": [
+        ".venv/bin/mypy",
+        "services/api"
+      ],
+      "exit_code": 0,
+      "source_commit": "1fffd996e9334f7f28dcdeb970430c9aa4052ee3",
+      "cache": "m62-sep28-combined-gates-v1",
+      "stage": "mypy",
+      "log_sha256": "d9d12c8bee9454137f2a97af320cf042670ce8556a268e95376f71ca63fff9bd",
+      "seconds": 1.8628583760000765
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "scripts/verify_spec.py"
+      ],
+      "exit_code": 0,
+      "source_commit": "1fffd996e9334f7f28dcdeb970430c9aa4052ee3",
+      "cache": "m62-sep28-combined-gates-v1",
+      "stage": "spec",
+      "log_sha256": "01a68f12c2440da91fef280d88f8a6aa7179d17cd05457f0e73cefc4656c7c48",
+      "seconds": 2.6199922719999904
+    },
+    {
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "test"
+      ],
+      "exit_code": 0,
+      "source_commit": "1fffd996e9334f7f28dcdeb970430c9aa4052ee3",
+      "cache": "m62-sep28-combined-gates-v1",
+      "stage": "web",
+      "log_sha256": "0d97c4fae4580ecaac672d4ffe08338ae259308d9020ad2831f604df7e5e4c5b",
+      "seconds": 7.472268140999859
+    },
+    {
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "lint"
+      ],
+      "exit_code": 0,
+      "source_commit": "1fffd996e9334f7f28dcdeb970430c9aa4052ee3",
+      "cache": "m62-sep28-combined-gates-v1",
+      "stage": "web-lint",
+      "log_sha256": "b9df407f06dd3350bcb5d41df640c2603d5d70f268d57fe256fe1159da11cc68",
+      "seconds": 1.1216263199999048
+    },
+    {
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "build"
+      ],
+      "exit_code": 0,
+      "source_commit": "1fffd996e9334f7f28dcdeb970430c9aa4052ee3",
+      "cache": "m62-sep28-combined-gates-v1",
+      "stage": "web-build",
+      "log_sha256": "cc75211048f3e7cb1eef53b7d3ed7ebb91f203feb10d605c2ae2ec92787a6fdc",
+      "seconds": 1.564180820999809
+    },
+    {
+      "command": [
+        ".venv/bin/pytest",
+        "-q"
+      ],
+      "exit_code": 0,
+      "source_commit": "1fffd996e9334f7f28dcdeb970430c9aa4052ee3",
+      "cache": "m62-sep28-combined-python-retry-v1",
+      "stage": "python",
+      "log_sha256": "d582fb97fd63a78684acc1f8ecf994668e375c253c730c0e66123ee74b9064c2",
+      "seconds": 791.7527853610004
+    },
+    {
+      "command": [
+        "make",
+        "test-e2e"
+      ],
+      "exit_code": 2,
+      "source_commit": "1fffd996e9334f7f28dcdeb970430c9aa4052ee3",
+      "cache": "m62-sep28-native-gate-v1",
+      "log_sha256": "573bde09580919283cf778bed18e29ff32a321ac78e93eca3151e5ae4fa6ea22",
+      "seconds": 618.642
+    }
+  ],
+  "exit_codes": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    2
+  ],
+  "test_summary": {
+    "python": "2688 PASS / 1 real sealed-numeric environment SKIP / 2 dependency warnings, 791.13s",
+    "web": "453 PASS / 77 files,5.14s",
+    "native": "92 PASS / 9 FAIL /101 cases,10.3min; no retries or altered assertions/timeouts",
+    "static": "Ruff,mypy191,spec,strict TS,build PASS; existing chunk warning retained",
+    "previous_python_attempt": "INCOMPLETE_TERMINATED(exit143/no final receipt), actor/cause UNKNOWN; not overwritten by new independent attempt"
+  },
+  "screenshot_paths": [
+    "Private originals enumerated/hash-bound in M6.2-combined-native-gate receipts; no screenshots bundled in the public excerpt."
+  ],
+  "migrations": {
+    "new": "0017 Quality append-only review history",
+    "verified": "real fixture16->17, constraints, rollback and backup boundary in storage evidence; no actual personal database migration claimed"
+  },
+  "security_review": [
+    "Independent owner/Quality/structure/FD/Tutor and root list reviews preserved. Actual public originals replayed with literal path aliases or explicitly recorded exact synthetic-credential spans in Tutor development logs; no scanner exceptions.",
+    "Current production ProofRegistry remains empty; no key/vault/runtime database in publication."
+  ],
+  "not_run": [
+    "Platform DeepSeek E2E",
+    "real sealed numeric execution",
+    "real Codex",
+    "human mathematical/source content review",
+    "learning effectiveness",
+    "Review HTTP/worker on this main source",
+    "review UI",
+    "publish/diff/impact/old-content recovery"
+  ],
+  "blockers": [
+    "Native nine failures remain; causes assessed separately.",
+    "InputProof production completeness unproven.",
+    "Sealed numeric runtime bwrap RTM_NEWADDR denied."
+  ],
+  "next_task_id": "M6.2",
+  "next_action": "同步已验证片段及1fff组合门禁真实结果到PR55/Issue31；继续9项native失败的隔离诊断。完成Review worker/HTTP owner边界修复、独审与整合；随后审核状态、发布/差异/影响/旧修订恢复。"
+}

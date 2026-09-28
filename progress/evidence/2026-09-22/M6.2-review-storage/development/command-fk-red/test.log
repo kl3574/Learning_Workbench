@@ -1,0 +1,99 @@
+FFFFF                                                                    [100%]
+=================================== FAILURES ===================================
+_ test_command_job_revision_binding_survives_later_event_mutations[DELETE-create] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7e7904115160>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_7fbe64ec8c9e470abdf781f1235c7b88', 'owner': 'import', 'source_kind': 'import', ...})
+kind = 'create', operation = 'DELETE'
+
+    @pytest.mark.parametrize('kind', ['create', 'cancel'])
+    @pytest.mark.parametrize('operation', ['DELETE', 'UPDATE'])
+    def test_command_job_revision_binding_survives_later_event_mutations(storage, kind, operation):
+        database, registered = storage
+        with database.transaction() as connection:
+            insert(connection, 'review_jobs', registered)
+            insert(connection, 'review_commands', command(registered, kind))
+            before = rows(connection, 'job_events')
+        sql = 'DELETE FROM job_events' if operation == 'DELETE' else 'UPDATE job_events SET seq=seq+1'
+>       with pytest.raises(sqlite3.IntegrityError), database.transaction() as connection:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE IntegrityError
+
+tests/integration/test_review_storage_constraints.py:302: Failed
+_ test_command_job_revision_binding_survives_later_event_mutations[DELETE-cancel] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7e7904955850>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_3b4dcad499f24e3fad27a5c6c80e8787', 'owner': 'import', 'source_kind': 'import', ...})
+kind = 'cancel', operation = 'DELETE'
+
+    @pytest.mark.parametrize('kind', ['create', 'cancel'])
+    @pytest.mark.parametrize('operation', ['DELETE', 'UPDATE'])
+    def test_command_job_revision_binding_survives_later_event_mutations(storage, kind, operation):
+        database, registered = storage
+        with database.transaction() as connection:
+            insert(connection, 'review_jobs', registered)
+            insert(connection, 'review_commands', command(registered, kind))
+            before = rows(connection, 'job_events')
+        sql = 'DELETE FROM job_events' if operation == 'DELETE' else 'UPDATE job_events SET seq=seq+1'
+>       with pytest.raises(sqlite3.IntegrityError), database.transaction() as connection:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE IntegrityError
+
+tests/integration/test_review_storage_constraints.py:302: Failed
+_ test_command_job_revision_binding_survives_later_event_mutations[UPDATE-create] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7e790412b440>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_ce795cb61f5747ac934a2688e7a7e070', 'owner': 'import', 'source_kind': 'import', ...})
+kind = 'create', operation = 'UPDATE'
+
+    @pytest.mark.parametrize('kind', ['create', 'cancel'])
+    @pytest.mark.parametrize('operation', ['DELETE', 'UPDATE'])
+    def test_command_job_revision_binding_survives_later_event_mutations(storage, kind, operation):
+        database, registered = storage
+        with database.transaction() as connection:
+            insert(connection, 'review_jobs', registered)
+            insert(connection, 'review_commands', command(registered, kind))
+            before = rows(connection, 'job_events')
+        sql = 'DELETE FROM job_events' if operation == 'DELETE' else 'UPDATE job_events SET seq=seq+1'
+>       with pytest.raises(sqlite3.IntegrityError), database.transaction() as connection:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE IntegrityError
+
+tests/integration/test_review_storage_constraints.py:302: Failed
+_ test_command_job_revision_binding_survives_later_event_mutations[UPDATE-cancel] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7e790412bfe0>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_92a519a4ed9744b79f13d81524daec0c', 'owner': 'import', 'source_kind': 'import', ...})
+kind = 'cancel', operation = 'UPDATE'
+
+    @pytest.mark.parametrize('kind', ['create', 'cancel'])
+    @pytest.mark.parametrize('operation', ['DELETE', 'UPDATE'])
+    def test_command_job_revision_binding_survives_later_event_mutations(storage, kind, operation):
+        database, registered = storage
+        with database.transaction() as connection:
+            insert(connection, 'review_jobs', registered)
+            insert(connection, 'review_commands', command(registered, kind))
+            before = rows(connection, 'job_events')
+        sql = 'DELETE FROM job_events' if operation == 'DELETE' else 'UPDATE job_events SET seq=seq+1'
+>       with pytest.raises(sqlite3.IntegrityError), database.transaction() as connection:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE IntegrityError
+
+tests/integration/test_review_storage_constraints.py:302: Failed
+_________ test_create_ack_cannot_reference_a_missing_initial_job_event _________
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7e790412b170>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_550b242190834fd4a184aa984bfa5824', 'owner': 'import', 'source_kind': 'import', ...})
+
+    def test_create_ack_cannot_reference_a_missing_initial_job_event(storage):
+        database, registered = storage
+        with database.transaction() as connection:
+            insert(connection, 'review_jobs', registered)
+            connection.execute('DELETE FROM job_events')
+>       with pytest.raises(sqlite3.IntegrityError), database.transaction() as connection:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE IntegrityError
+
+tests/integration/test_review_storage_constraints.py:314: Failed
+=========================== short test summary info ============================
+FAILED tests/integration/test_review_storage_constraints.py::test_command_job_revision_binding_survives_later_event_mutations[DELETE-create]
+FAILED tests/integration/test_review_storage_constraints.py::test_command_job_revision_binding_survives_later_event_mutations[DELETE-cancel]
+FAILED tests/integration/test_review_storage_constraints.py::test_command_job_revision_binding_survives_later_event_mutations[UPDATE-create]
+FAILED tests/integration/test_review_storage_constraints.py::test_command_job_revision_binding_survives_later_event_mutations[UPDATE-cancel]
+FAILED tests/integration/test_review_storage_constraints.py::test_create_ack_cannot_reference_a_missing_initial_job_event
+5 failed, 90 deselected in 0.23s

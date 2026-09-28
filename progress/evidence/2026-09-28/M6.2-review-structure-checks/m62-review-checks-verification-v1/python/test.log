@@ -1,0 +1,52 @@
+...............F........................................                 [100%]
+=================================== FAILURES ===================================
+_ test_self_consistent_foreign_declared_source_is_fail_without_owner_authentication _
+
+tmp_path = PosixPath('<PYTEST_ROOT>/pytest-162/test_self_consistent_foreign_d0')
+
+    def test_self_consistent_foreign_declared_source_is_fail_without_owner_authentication(tmp_path):
+        # This is deliberately synthesized from real material after the owner read.
+        # Recomputing its hashes does not make it authenticated owner history.
+        state = single_fixture.__wrapped__(tmp_path)
+        database, identity, owner, _, candidate, *_ = state
+        case = MaterialCase(database, identity, owner, candidate, 'authoring_single', state)
+        material = read_case(case)
+        raw = material.model_dump(mode='json')
+        record = raw['payload']['record']
+        record['payload']['declared_source_refs'] = [
+            {'entity': 'block', 'id': 'block_unprepared', 'revision': 1, 'content_sha256': 'a' * 64}]
+        candidate_sha = sha256_bytes(canonical_bytes(record['payload']))
+        record['candidate']['candidate_sha256'] = candidate_sha
+        raw['candidate']['candidate_sha256'] = candidate_sha
+        raw['owner_record_sha256'] = sha256_bytes(canonical_bytes(record))
+        raw['descriptor_sha256'] = sha256_bytes(canonical_bytes({k: v for k, v in raw.items() if k != 'descriptor_sha256'}))
+>       synthetic = CheckedReviewMaterial.model_validate(raw)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 2 validation errors for CheckedReviewMaterial
+E       payload.authoring-single-review-material-v1.record.payload.declared_source_refs.0.sha256
+E         Field required [type=missing]
+E           For further information visit https://errors.pydantic.dev/2.13/v/missing
+E       payload.authoring-single-review-material-v1.record.payload.declared_source_refs.0.content_sha256
+E         Extra inputs are not permitted [type=extra_forbidden]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests/integration/test_review_structure_checks.py:84: ValidationError
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_review_structure_checks.py::test_self_consistent_foreign_declared_source_is_fail_without_owner_authentication - pydantic_core._pydantic_core.ValidationError: 2 validation errors for CheckedReviewMaterial
+payload.authoring-single-review-material-v1.record.payload.declared_source_refs.0.sha256
+  Field required [type=missing]
+    For further information visit https://errors.pydantic.dev/2.13/v/missing
+payload.authoring-single-review-material-v1.record.payload.declared_source_refs.0.content_sha256
+  Extra inputs are not permitted [type=extra_forbidden]
+    For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+1 failed, 55 passed, 2 warnings in 43.15s

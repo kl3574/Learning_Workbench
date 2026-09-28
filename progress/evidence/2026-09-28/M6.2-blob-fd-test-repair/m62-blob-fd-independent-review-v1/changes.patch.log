@@ -1,0 +1,144 @@
+diff --git a/tests/blob_fd_probe.py b/tests/blob_fd_probe.py
+new file mode 100644
+index 0000000..98319fb
+--- /dev/null
++++ b/tests/blob_fd_probe.py
+@@ -0,0 +1,66 @@
++"""Fresh-process BlobStore descriptor probe; fault modes are test-only controls."""
++import argparse
++import errno
++import os
++from pathlib import Path
++
++from services.api.app.application.errors import ApiError
++from services.api.app.infrastructure.blobs import BlobStore
++
++
++def descriptors() -> dict[int, tuple[int, int, int, int]]:
++    result = {}
++    for value in os.listdir('/proc/self/fd'):
++        try:
++            info = os.fstat(int(value))
++        except OSError as error:
++            if error.errno == errno.EBADF:
++                # The directory reader used to enumerate /proc is already closed.
++                continue
++            raise
++        result[int(value)] = (info.st_dev, info.st_ino, info.st_mode, info.st_rdev)
++    return result
++
++
++def probe(directory: Path, fault: str) -> None:
++    store = BlobStore(directory)
++    info = store.write(b'data')
++    path = directory / info.relative_path
++    path.unlink()
++    path.mkdir(mode=0o700)
++    sentinel = os.open('/dev/null', os.O_RDONLY)
++    injected = None
++    try:
++        before = descriptors()
++        for index in range(10):
++            for operation in [lambda: store.read(info.sha256), lambda: store.write(b'data')]:
++                try:
++                    operation()
++                except ApiError as error:
++                    assert (error.status, error.code) == (503, 'BLOB_STORAGE_UNAVAILABLE')
++                else:
++                    raise AssertionError('Unsafe blob operation was accepted')
++            if index == 0:
++                if fault == 'leak':
++                    injected = os.open('/dev/null', os.O_RDONLY)
++                elif fault in {'close', 'replace'}:
++                    os.close(sentinel)
++                    sentinel = None
++                    if fault == 'replace':
++                        injected = os.open(directory / 'replacement-control', os.O_CREAT | os.O_RDONLY, 0o600)
++        after = descriptors()
++        assert after == before, 'Blob descriptor identities changed: ' + repr((before, after))
++        assert not list(directory.rglob('.blob-*.tmp'))
++    finally:
++        if injected is not None:
++            os.close(injected)
++        if sentinel is not None:
++            os.close(sentinel)
++
++
++if __name__ == '__main__':
++    parser = argparse.ArgumentParser()
++    parser.add_argument('directory', type=Path)
++    parser.add_argument('fault', choices=['none', 'leak', 'close', 'replace'])
++    args = parser.parse_args()
++    probe(args.directory, args.fault)
+diff --git a/tests/unit/test_content_store.py b/tests/unit/test_content_store.py
+index 85add92..72d0fe0 100644
+--- a/tests/unit/test_content_store.py
++++ b/tests/unit/test_content_store.py
+@@ -5,6 +5,9 @@ import hashlib
+ import io
+ import os
+ import stat
++import subprocess
++import sys
++from pathlib import Path
+ from concurrent.futures import ThreadPoolExecutor
+ from dataclasses import FrozenInstanceError
+ 
+@@ -219,20 +222,47 @@ def test_nonregular_or_aliased_targets_are_refused(tmp_path, operation, kind):
+     assert_no_temporary_files(tmp_path)
+ 
+ 
++def blob_fd_probe(tmp_path, fault='none'):
++    # The process running the full suite owns unrelated asynchronous resources.
++    # Compare exact descriptor identities in a fresh process, keeping the real
++    # twenty unsafe operations and their original error/temporary-file checks.
++    return subprocess.run([sys.executable, '-m', 'tests.blob_fd_probe', str(tmp_path), fault],
++        cwd=Path(__file__).resolve().parents[2], capture_output=True, text=True, timeout=10, close_fds=True)
++
++
+ def test_repeated_unsafe_reads_and_writes_do_not_leak_file_descriptors(tmp_path):
+-    store = BlobStore(tmp_path)
+-    info = store.write(b"data")
+-    path = tmp_path / info.relative_path
+-    path.unlink()
+-    path.mkdir(mode=0o700)
+-    before = len(os.listdir("/proc/self/fd"))
+-    for _ in range(10):
+-        assert_error(lambda: store.read(info.sha256), 503, "BLOB_STORAGE_UNAVAILABLE")
+-        assert_error(lambda: store.write(b"data"), 503, "BLOB_STORAGE_UNAVAILABLE")
+-    assert len(os.listdir("/proc/self/fd")) == before
++    result = blob_fd_probe(tmp_path)
++    assert result.returncode == 0, result.stdout + result.stderr
+     assert_no_temporary_files(tmp_path)
+ 
+ 
++@pytest.mark.parametrize('fault', ['leak', 'close', 'replace'])
++def test_blob_fd_probe_rejects_leaks_foreign_closure_and_same_count_replacement(tmp_path, fault):
++    result = blob_fd_probe(tmp_path, fault)
++    assert result.returncode == 1
++    assert 'Blob descriptor identities changed' in result.stderr
++
++
++def test_blob_fd_probe_is_unaffected_by_actual_parent_descriptor_closure(tmp_path, monkeypatch):
++    descriptor = os.open('/dev/null', os.O_RDONLY)
++    closed = False
++    real_run = subprocess.run
++
++    def close_parent(*args, **kwargs):
++        nonlocal closed
++        os.close(descriptor)
++        closed = True
++        return real_run(*args, **kwargs)
++
++    monkeypatch.setattr(subprocess, 'run', close_parent)
++    try:
++        result = blob_fd_probe(tmp_path)
++        assert closed and result.returncode == 0, result.stdout + result.stderr
++    finally:
++        if not closed:
++            os.close(descriptor)
++
++
+ def test_predictable_name_collision_does_not_remove_someone_elses_temporary(tmp_path, monkeypatch):
+     class FixedUuid:
+         hex = "0" * 32
