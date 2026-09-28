@@ -30,6 +30,14 @@ async function transport(path: string, init: RequestInit, responseKind: Response
   return responseKind === 'text' ? response.text() : responseKind === 'blob' ? response.blob() : response.json()
 }
 export const request = createApiClient(transport)
+/** Optional correlation on an existing Tutor GET, never authentication or a new request.
+ * The ordinary transport still owns credentials, errors and response parsing. */
+export function readTutorRunWithObservation(id: string, label: string): Promise<ApiResponse<'GET /api/v1/runs/{id}'>> {
+  const client = createApiClient((path, init, kind) => transport(path,
+    init.method === 'GET' && /^\/api\/v1\/runs\/run_[A-Za-z0-9_-]{1,75}$/.test(path) && /^[A-Za-z0-9_-]{1,96}:\d{1,16}$/.test(label)
+      ? { ...init, headers: { ...init.headers, 'X-Tutor-Observation': label } } : init, kind))
+  return client('GET /api/v1/runs/{id}', undefined, undefined, { path: { id } })
+}
 export async function requestWithMetadata<K extends EndpointKey>(operation: K, ...args: ApiArgs<K>): Promise<{ data: ApiResponse<K>; etag: string | null }> {
   let etag: string | null = null
   const client = createApiClient((path, init, kind) => transport(path, init, kind, value => { etag = value }))

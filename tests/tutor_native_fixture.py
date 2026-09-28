@@ -17,6 +17,7 @@ from fastapi import FastAPI
 from services.api.app.infrastructure.config import Settings
 from services.api.app.main import create_app
 from services.api.app.application.provider_budget import RequestPreparer
+from tests.tutor_observation import TutorObservation, TutorObservationMiddleware, install_owner_observation
 from tests.provider_protocol_fixture import MODEL, complete_byte_count, local_provider, test_preparer
 
 
@@ -31,6 +32,10 @@ def create_test_app() -> FastAPI:
         raise ValueError('Unknown explicit Tutor test scenario')
     preparer = RequestPreparer()
     application = create_app(settings, request_preparer=preparer)
+    recorder = TutorObservation()
+    install_owner_observation(application.state.tutor_service, application.state.tutor_worker,
+        application.state.provider_dispatch, recorder)
+    application.add_middleware(TutorObservationMiddleware, recorder=recorder)
     production_lifespan = application.router.lifespan_context
 
     @asynccontextmanager
@@ -59,7 +64,7 @@ def create_test_app() -> FastAPI:
                         'base_url': provider.base_url, 'answer_markdown': ANSWER,
                         'connections': provider.connections, 'headers_received': provider.headers_received,
                         'received_request_count': len(provider.requests), 'validated_request_count': len(valid),
-                        'invalid_request_count': invalid, 'request_body_sha256': valid}
+                        'invalid_request_count': invalid, 'request_body_sha256': valid, 'mechanism': recorder.snapshot()}
                     raw = (json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + '\n').encode()
                     descriptor = os.open(pending, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
                     with os.fdopen(descriptor, 'wb') as stream:

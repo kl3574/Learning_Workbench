@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+import { safeTutorObservation, type TutorObservationRecord } from '../../apps/web/src/features/tutor/tutorObservation'
 import { performance } from 'node:perf_hooks'
 import { rename, writeFile } from 'node:fs/promises'
 import type { Page, Request, Response, TestInfo } from '../../apps/web/node_modules/@playwright/test/index.mjs'
@@ -37,9 +39,36 @@ export function safeRuntime(value: unknown) {
     validated_request_count: item.validated_request_count, invalid_request_count: item.invalid_request_count }
 }
 
+/** Validate again at the publication boundary; arbitrary fixture fields never survive. */
+export function safeAPIMechanism(value: unknown, expected: string) {
+  const item = value as Record<string, unknown> | null
+  if (!item || typeof item.epoch !== 'string' || !/^[a-f0-9]{32}$/.test(item.epoch) || item.selected_run !== expected
+    || integer(item.snapshot_source_ns) === null || integer(item.omitted) === null || integer(item.invalid) === null || typeof item.snapshot_contended !== 'boolean'
+    || !Array.isArray(item.records) || item.records.length > 1024) throw new Error('INVALID_API_MECHANISM')
+  const stages = ['run_bound', 'request_entered', 'request_returned', 'request_raised', 'response_started', 'frame_offered', 'asgi_send_returned', 'owner_read_entered', 'owner_read_returned', 'owner_events_entered', 'owner_events_returned', 'owner_authorize_returned', 'provider_terminal_commit_returned', 'consumer_step_returned', 'tutor_terminal_committed']
+  const events = ['queued', 'context_ready', 'retrieval_completed', 'answer_delta', 'citation', 'approval_required', 'usage', 'completed', 'failed', 'cancelled']
+  const records = item.records.map((raw: unknown, index: number) => {
+    const row = raw as Record<string, unknown>
+    if (!row || Object.keys(row).some(key => !['epoch', 'ordinal', 'source_ns', 'stage', 'run', 'seq', 'revision', 'after', 'http_status', 'status', 'event', 'request', 'correlation', 'receipt', 'dispatch'].includes(key))
+      || row.epoch !== item.epoch || row.run !== expected || row.ordinal !== index + 1 || integer(row.source_ns) === null
+      || (typeof row.stage !== 'string' || !stages.includes(row.stage))
+      || ['seq', 'revision', 'after', 'http_status'].some(key => row[key] !== undefined && integer(row[key]) === null)
+      || row.status !== undefined && (typeof row.status !== 'string' || !states.has(row.status)) || row.event !== undefined && (typeof row.event !== 'string' || !events.includes(row.event))
+      || ['request', 'receipt', 'dispatch'].some(key => row[key] !== undefined && (typeof row[key] !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,79}$/.test(row[key])))
+      || row.correlation !== undefined && (typeof row.correlation !== 'string' || !/^[A-Za-z0-9_-]{1,96}:\d{1,16}$/.test(row.correlation))) throw new Error('INVALID_API_MECHANISM')
+    return { ...row }
+  })
+  return { epoch: item.epoch, selected_run: expected, snapshot_source_ns: item.snapshot_source_ns, records, omitted: item.omitted, invalid: item.invalid, snapshot_contended: item.snapshot_contended,
+    timing: 'API ring from the periodic fixture control file, read after assertion. Capture time is on the API clock and may precede this file read. No cross-clock deadline placement.' }
+}
+
 /** Passive metadata only. Request identity is the actual Playwright Request object.
  * SSE request cursors are observed; streamed frames/bodies are deliberately not read. */
 export async function observeTutorCompletion(page: Page, ports: ReadPort) {
+  const nodeEpoch = randomUUID()
+  const mechanism: Array<TutorObservationRecord & { delivered_ms: number }> = []
+  let mechanismInvalid = 0, mechanismOmitted = 0
+  const projections: Array<{ token: string; run: string; seq: number; revision: number; status: string; source_ms: number; ordinal: number; delivered_ms: number }> = []
   const started = performance.now(), startedAt = new Date().toISOString()
   const requests = new WeakMap<Request, number>(), events: object[] = []
   let serial = 0, omitted = 0, active = true, runId: string | null = null
@@ -64,22 +93,56 @@ export async function observeTutorCompletion(page: Page, ports: ReadPort) {
   page.on('requestfinished', requestFinished); page.on('requestfailed', requestFailed)
   // Only this binding's arrival gets a Node-clock timestamp. Browser-clock values
   // are never subtracted from it. No arbitrary DOM text crosses the binding.
-  await page.exposeBinding('__tutorDiagnosticDOM', (_source, value: SafeDOM) => {
+  await page.exposeBinding('__tutorDiagnosticMechanism', (_source, batch: unknown) => {
     if (!active) return
+    if (!Array.isArray(batch) || batch.length > 64) { mechanismInvalid++; return }
+    for (const item of batch) {
+      if (!safeTutorObservation(item)) { mechanismInvalid++; continue }
+      if (runId && item.run !== runId) continue
+      if (mechanism.length >= 1024) { mechanismOmitted++; continue }
+      mechanism.push({ ...item, delivered_ms: elapsed() })
+    }
+  })
+  await page.exposeBinding('__tutorDiagnosticDOM', (_source, value: SafeDOM & { projection?: unknown; omitted_dom?: unknown }) => {
+    if (!active) return
+    if (!value || typeof value !== 'object') return
     if (value.run_status !== null && !states.has(value.run_status)) return
     lastDOM = { elapsed_ms: elapsed(), state: { run_status: value.run_status,
       tutor_present: value.tutor_present === true, observing: value.observing === true,
       answer_present: value.answer_present === true, grant_ack_present: value.grant_ack_present === true,
       consent_linked: value.consent_linked === true } }
-    add({ kind: 'dom', state: lastDOM.state })
+    add({ kind: 'dom', state: lastDOM.state, omitted_dom: integer(value.omitted_dom) })
+    const projection = value.projection as Record<string, unknown> | null
+    if (projection && typeof projection.token === 'string' && /^[A-Za-z0-9_-]{1,96}:\d{1,16}$/.test(projection.token)
+      && typeof projection.run === 'string' && /^run_[A-Za-z0-9_-]{1,75}$/.test(projection.run)
+      && integer(projection.seq) !== null && integer(projection.revision) !== null && integer(projection.ordinal) !== null
+      && typeof projection.source_ms === 'number' && Number.isFinite(projection.source_ms) && projection.source_ms >= 0
+      && typeof projection.status === 'string' && states.has(projection.status) && projections.length < 1024) {
+      projections.push({ token: projection.token, run: projection.run, seq: projection.seq as number, revision: projection.revision as number,
+        ordinal: projection.ordinal as number, source_ms: projection.source_ms, status: projection.status, delivered_ms: elapsed() })
+    }
   })
   const install = () => {
-    const host = window as unknown as { __tutorDiagnosticDOM?: (value: object) => Promise<void>; __tutorDiagnosticInstalled?: boolean }
+    const host = window as unknown as { __tutorDiagnosticDOM?: (value: object) => Promise<void>; __tutorDiagnosticInstalled?: boolean; __tutorObservationEnabled?: boolean }
     if (host.__tutorDiagnosticInstalled) return
     host.__tutorDiagnosticInstalled = true
-    let previous = ''
+    host.__tutorObservationEnabled = true
+    let ordinal = 0
+    let previous = '', pending = false, latest: object | undefined, omitted = 0
+    const flush = () => {
+      if (pending || !latest) return
+      pending = true
+      const value = latest; latest = undefined
+      void (async () => {
+        try { await host.__tutorDiagnosticDOM?.(value) } catch { /* No observer failure escapes. */ }
+        finally { pending = false; flush() }
+      })()
+    }
     const inspect = () => {
       const region = document.querySelector('[aria-label="真实问答线程与任务"]')
+      const task = region?.querySelector('[aria-label="当前问答任务"]')
+      const token = task?.getAttribute('data-tutor-observation') ?? null
+      const tuple = [...(task?.querySelectorAll('p') ?? [])].map(node => node.textContent ?? '').map(text => text.match(/^(run_[A-Za-z0-9_-]{1,75}) · Jobs r(\d+) · 事件水位 (\d+)$/)).find(Boolean)
       const status = region?.querySelector('[aria-label="当前问答任务"] h3')?.textContent?.match(/^真实任务状态：(queued|running|awaiting_approval|completed|failed|cancelled)$/)?.[1] ?? null
       const statuses = [...(region?.querySelectorAll('[role="status"]') ?? [])].map(node => node.textContent ?? '')
       const state = { run_status: status, tutor_present: !!region,
@@ -87,10 +150,16 @@ export async function observeTutorCompletion(page: Page, ports: ReadPort) {
         answer_present: !!region?.querySelector('[aria-label="本次模型回答原文"]')?.textContent,
         grant_ack_present: [...(region?.querySelectorAll('[aria-label="当前原命令"]') ?? [])].some(node => node.querySelector('h4')?.textContent === '批准授权' && [...node.querySelectorAll('[role="status"]')].some(item => item.textContent?.startsWith('原命令已确认'))),
         consent_linked: [...(region?.querySelectorAll('p') ?? [])].some(node => node.textContent?.startsWith('此 Run 已关联授权 ')) }
-      const serialized = JSON.stringify(state)
-      if (serialized !== previous) { previous = serialized; void host.__tutorDiagnosticDOM?.(state).catch(() => undefined) }
+      const projection = token && tuple && status ? { token, run: tuple[1], revision: Number(tuple[2]), seq: Number(tuple[3]), status } : null
+      const serialized = JSON.stringify({ state, projection })
+      if (serialized !== previous) {
+        previous = serialized
+        const value = { ...state, projection: projection ? { ...projection, ordinal: ++ordinal, source_ms: performance.now() } : null }
+        if (latest) omitted++
+        latest = { ...value, omitted_dom: omitted }; queueMicrotask(flush)
+      }
     }
-    new MutationObserver(inspect).observe(document, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['aria-label', 'role'] })
+    new MutationObserver(inspect).observe(document, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['aria-label', 'role', 'data-tutor-observation'] })
     inspect()
   }
   await page.addInitScript(install)
@@ -117,10 +186,27 @@ export async function observeTutorCompletion(page: Page, ports: ReadPort) {
       active = false
       try {
       const postStarted = elapsed()
-      let observedRun: ReadResult = { state: 'timeout' }, observedRuntime: ReadResult = { state: 'timeout' }
+      let observedRun: ReadResult = { state: 'timeout' }, observedRuntime: ReadResult = { state: 'timeout' }, observedAPI: ReadResult = { state: 'timeout' }, observedBrowser: ReadResult = { state: 'timeout' }
       await within(Promise.all([
         read(async () => { if (!runId) throw new Error('RUN_NOT_BOUND'); return safeRun(await readRun(runId), runId) }).then(value => { observedRun = value }),
-        read(async () => safeRuntime(await ports.readRuntime())).then(value => { observedRuntime = value }),
+        read(async () => {
+          const runtime = await ports.readRuntime()
+          try { observedAPI = { state: 'complete', value: safeAPIMechanism((runtime as { mechanism?: unknown })?.mechanism, runId ?? '') } } catch { observedAPI = { state: 'failed' } }
+          return safeRuntime(runtime)
+        }).then(value => { observedRuntime = value }),
+        read(async () => {
+          const snapshot = await page.evaluate(() => {
+            const host = globalThis as { __tutorObservationSnapshot?: () => unknown }
+            return { fence_source_ms: performance.now(), snapshot: host.__tutorObservationSnapshot?.() }
+          })
+          const value = snapshot.snapshot as { epoch?: unknown; records?: unknown; omitted?: unknown; invalid?: unknown; delivery_failures?: unknown; delivery_pending?: unknown }
+          if (!value || typeof value.epoch !== 'string' || !/^[A-Za-z0-9_-]{1,96}$/.test(value.epoch) || !Array.isArray(value.records) || value.records.length > 1024
+            || value.records.some(item => !safeTutorObservation(item) || item.epoch !== value.epoch)
+            || [value.omitted, value.invalid, value.delivery_failures, value.delivery_pending].some(item => integer(item) === null)) throw new Error('INVALID_BROWSER_MECHANISM')
+          return { fence_source_ms: snapshot.fence_source_ms, epoch: value.epoch, records: value.records.filter(item => item.run === runId).map(item => ({ ...item })),
+            omitted: value.omitted, invalid: value.invalid, delivery_failures: value.delivery_failures, delivery_pending: value.delivery_pending,
+            timing: 'Later browser snapshot. Source timestamps are not Node receipt/deadline timestamps.' }
+        }).then(value => { observedBrowser = value }),
       ]).then(() => true), 500, false)
       const post = { run: observedRun, runtime: observedRuntime }
       // Individual settled observations survive a slow peer; no timeout is
@@ -128,8 +214,16 @@ export async function observeTutorCompletion(page: Page, ports: ReadPort) {
       const record = { version: 1, started_at: startedAt, clock: 'Node performance.now, milliseconds since observer start',
         assertion: { verdict: failed ? 'failed' : 'passed', frozen_at_ms: frozenAt, original_expect_timeout_ms: 5000 },
         frozen_observation: frozen,
+        mechanism: { version: 1, node_epoch: nodeEpoch, frozen_browser_records: mechanism.filter(value => value.run === runId),
+          invalid_deliveries: mechanismInvalid, omitted_deliveries: mechanismOmitted,
+          frozen_dom_projections: projections.filter(value => value.run === runId).map(value => {
+            const matches = mechanism.filter(item => `${item.epoch}:${item.ordinal}` === value.token)
+            const source = matches.length === 1 ? matches[0] : undefined
+            return { ...value, matched_source: !!source && ['snapshot_accepted', 'event_applied'].includes(source.stage) && source.run === value.run && source.seq === value.seq && source.revision === value.revision && source.status === value.status }
+          }), post_assertion_api: observedAPI, post_assertion_browser: observedBrowser,
+          boundary: 'Source epochs have independent clocks. Only Node-delivered frozen records precede this assertion boundary. Missing or dropped records are unknown, never evidence of absence.' },
         post_assertion: { phase: failed ? 'post-failure' : 'post-success', started_ms: postStarted, finished_ms: elapsed(), wait_limit_ms: 500, ...post },
-        scope: 'Only already delivered metadata is frozen at the assertion boundary. Last DOM receipt is not a synchronous browser-deadline snapshot. Later reads cannot establish earlier backend state. No headers, cookies, keys, request/answer bodies or SSE frames captured.' }
+        scope: 'Only already delivered metadata is frozen at the assertion boundary. Last DOM receipt is not a synchronous browser-deadline snapshot. Later reads cannot establish earlier backend state. Only explicit non-authoritative observation labels accompany existing GETs. No credential headers, cookies, keys, request/answer bodies or SSE frame payloads captured.' }
       const target = info.outputPath('tutor-completion-diagnostic.json'), pending = target + '.pending', abort = new AbortController()
       const saved = await within((async () => {
         await writeFile(pending, JSON.stringify(record, null, 2) + '\n', { signal: abort.signal })

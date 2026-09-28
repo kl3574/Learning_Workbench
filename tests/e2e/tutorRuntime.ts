@@ -149,7 +149,7 @@ export class TutorRuntime {
   async diagnosticControl(): Promise<unknown> {
     const value = JSON.parse(await readFile(resolve(this.data, 'tutor-native-control.json'), 'utf8'))
     return { test_only: value.test_only, received_request_count: value.received_request_count,
-      validated_request_count: value.validated_request_count, invalid_request_count: value.invalid_request_count }
+      validated_request_count: value.validated_request_count, invalid_request_count: value.invalid_request_count, mechanism: value.mechanism }
   }
 
   databaseIdentity() {

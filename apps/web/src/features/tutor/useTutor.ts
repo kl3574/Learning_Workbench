@@ -3,6 +3,7 @@ import type { TutorMessage, TutorRunView, TutorThreadView } from '../../../../..
 import type { TutorRequest } from '../../../../../packages/contracts/generated/types'
 import { TutorStreamHTTPError } from '../../../../../packages/contracts/generated/tutor-sse'
 import { ApiError, getSessionGeneration, subscribeSessionAccess } from '../../api/client'
+import { tutorMark, tutorRender, tutorTrace } from './tutorObservation'
 import { tutorClient, type TutorPort } from './tutorClient'
 import { makeTutorCommand, persistTutorCommand, readTutorCommand, tutorCommandStore, type TutorCommand, type TutorCommandInput } from './tutorCommands'
 import { readTutorContext, type BoundTutorContext, type TutorLocation } from './tutorContext'
@@ -40,16 +41,20 @@ export function useTutor(workspace: string, location: TutorLocation | null, paus
     while (!terminalRun(value) && current() && sequence === operation.current && !controller.signal.aborted) {
       setStreamState('正在观察任务；断开观察不会取消任务')
       let reload = false
+      const trace = tutorTrace(value.run.id, sequence, value.run.last_seq)
       try {
-        for await (const event of port.events(value.run.id, value.run.last_seq, controller.signal)) {
-          if (!current() || sequence !== operation.current || controller.signal.aborted) return
-          value = observeEvent(value, event); observed.current = value; setRun(value)
-          if (['context_ready', 'approval_required', 'completed', 'failed', 'cancelled'].includes(event.type)) { reload = true; break }
+        for await (const event of port.events(value.run.id, value.run.last_seq, controller.signal, trace)) {
+          if (!current() || sequence !== operation.current || controller.signal.aborted) { tutorMark(trace, 'scope_discarded'); return }
+          value = observeEvent(value, event); tutorRender(value, trace, 'event_applied'); observed.current = value; setRun(value)
+          if (['context_ready', 'approval_required', 'completed', 'failed', 'cancelled'].includes(event.type)) { tutorMark(trace, 'reload_trigger', { seq: event.seq, event: event.type }); reload = true; break }
         }
-        if (!current() || sequence !== operation.current || controller.signal.aborted) return
+        if (!current() || sequence !== operation.current || controller.signal.aborted) { tutorMark(trace, 'scope_discarded'); return }
+        tutorMark(trace, 'iterator_closed')
         if (!reload) { setStreamState('连接中断，任务状态未知；先读取快照再恢复观察'); return }
-        const fresh = acceptRun(value, await port.read(value.run.id), expectedThread)
-        if (!current() || sequence !== operation.current || controller.signal.aborted) return
+        const readTrace = tutorTrace(value.run.id, sequence, value.run.last_seq, trace?.span)
+        const fresh = acceptRun(value, await (readTrace ? port.read(value.run.id, readTrace) : port.read(value.run.id)), expectedThread)
+        if (!current() || sequence !== operation.current || controller.signal.aborted) { tutorMark(readTrace, 'scope_discarded'); return }
+        tutorRender(fresh, readTrace, 'snapshot_accepted')
         value = fresh; observed.current = fresh; setRun(fresh); setThread(old => old?.id === expectedThread ? { ...old, revision: fresh.thread_revision } : old)
       } catch (reason) { if (current() && sequence === operation.current && !controller.signal.aborted) { fail(reason); setStreamState('连接中断，任务状态未知；先读取快照再恢复观察') }; return }
     }
@@ -58,8 +63,10 @@ export function useTutor(workspace: string, location: TutorLocation | null, paus
   const readRun = async (id: string, expectedThread: string, sequence: number) => {
     stop()
     const previous = observed.current?.run.id === id ? observed.current : null
-    const value = acceptRun(previous, await port.read(id), expectedThread)
-    if (!current() || sequence !== operation.current) return
+    const trace = tutorTrace(id, sequence, previous?.run.last_seq ?? 0)
+    const value = acceptRun(previous, await (trace ? port.read(id, trace) : port.read(id)), expectedThread)
+    if (!current() || sequence !== operation.current) { tutorMark(trace, 'scope_discarded'); return }
+    tutorRender(value, trace, 'snapshot_accepted')
     remember(value.run.id); observed.current = value; setRun(value); setThread(old => old?.id === expectedThread ? { ...old, revision: value.thread_revision } : old); setDenied(false)
     if (!terminalRun(value)) void observe(value, expectedThread, sequence)
     else setStreamState('已从服务端快照确认任务终态')

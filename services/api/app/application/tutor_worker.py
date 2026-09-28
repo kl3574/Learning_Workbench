@@ -43,12 +43,14 @@ def summarize(context: PreparedTutorContext) -> TutorContextSummary:
 class TutorWorker:
     def __init__(self, database: Database, context: TutorContextPort, provider: TutorProviderPort,
                  build_outbound: Callable[[TutorJobInput, PreparedTutorContext, int], PreparedOutboundMaterial],
-                 *, stopping: Callable[[], bool] | None = None):
+                 *, stopping: Callable[[], bool] | None = None,
+                 terminal_observer: Callable[[str, str], None] | None = None):
         self.database, self.context, self.provider, self.build_outbound = database, context, provider, build_outbound
         self._stop = threading.Event()
         self.stopping = stopping or self._stop.is_set
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
+        self.terminal_observer = terminal_observer
         self.lease_seconds = 30
         self.last_error_code: str | None = None
         self._candidate_cursor: tuple[str, str] | None = None
@@ -210,6 +212,15 @@ class TutorWorker:
             if access_error is None and source.input.request.binding.practice is not None:
                 from .practice_model_help import record_model_help
                 record_model_help(connection, identity, lease.job_id)
+
+        # This branch reached repo.finish and the transaction context committed.
+        # Early returns and failed commits cannot reach this optional notification.
+        # It carries no text/identity/receipt and cannot alter the committed result.
+        if self.terminal_observer is not None:
+            try:
+                self.terminal_observer(lease.job_id, status)
+            except Exception:
+                pass
 
     def _has_result(self, identity: SessionIdentity, lease: TutorLease, consent_id: str) -> bool:
         with self.database.transaction(immediate=False) as connection:
