@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
 const state = vi.hoisted(() => ({ workspace: 'workspace_review_shell', importConfirmed: false, publication: false, commit: vi.fn() }))
 vi.mock('../../workbench/useWorkbench', async () => {
@@ -24,7 +24,7 @@ import { publicationDraft, publicationReceipt } from '../draftPublication/public
 import { publicationCommandStore } from '../draftPublication/publicationCommands'
 import { machineReceipt, reviewSession, safeReviewJob } from './reviewFixtures'
 import { rememberReviewJob, reviewCommandStore, reviewControlStore, reviewJobStore } from './reviewCommands'
-afterEach(async () => { state.publication = false; cleanup(); vi.unstubAllGlobals(); await Promise.all([reviewCommandStore.close(), reviewControlStore.close(), reviewJobStore.close(), publicationCommandStore.close()]) })
+afterEach(async () => { state.publication = false; cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); await Promise.all([reviewCommandStore.close(), reviewControlStore.close(), reviewJobStore.close(), publicationCommandStore.close()]) })
 
 test('actual Import and Shell preserve review reason until explicit close without submitting import or review', async () => {
   state.workspace = `workspace_${crypto.randomUUID()}`
@@ -47,6 +47,7 @@ test('actual Import and Shell preserve review reason until explicit close withou
   const read = await screen.findByRole('button', { name: '另行读取当前审核回执' })
   await waitFor(() => expect((read as HTMLButtonElement).disabled).toBe(false)); fireEvent.click(read)
   const reason = await screen.findByLabelText('审核理由')
+  await waitFor(() => expect((reason as HTMLTextAreaElement).disabled).toBe(false))
   fireEvent.change(reason, { target: { value: 'Synthetic unsubmitted reason' } })
   fireEvent.click(within(dialog).getByRole('button', { name: '关闭导入' }))
   const confirm = await screen.findByRole('dialog', { name: '保留审核原命令' })
@@ -54,10 +55,67 @@ test('actual Import and Shell preserve review reason until explicit close withou
   fireEvent.click(within(confirm).getByRole('button', { name: '返回导入与审核' }))
   expect((screen.getByLabelText('审核理由') as HTMLTextAreaElement).value).toBe('Synthetic unsubmitted reason')
   fireEvent.click(within(dialog).getByRole('button', { name: '关闭导入' }))
-  fireEvent.click(screen.getByRole('button', { name: '保留审核原命令，明确丢弃临时表单并关闭' }))
+  const discard = screen.getByRole('button', { name: '保留审核原命令，明确丢弃临时表单并关闭' }) as HTMLButtonElement
+  await waitFor(() => expect(discard.disabled).toBe(false)); fireEvent.click(discard)
   await waitFor(() => expect(screen.queryByRole('dialog', { name: '导入' })).toBeNull())
   expect(state.commit).not.toHaveBeenCalled(); expect(state.importConfirmed).toBe(false)
   expect(calls.every(value => value.startsWith('GET '))).toBe(true)
+})
+
+test('Import close stays blocked during the current publication ledger read and requires a new explicit enabled click', async () => {
+  state.workspace = `workspace_${crypto.randomUUID()}`
+  let holdPublication = false, release!: () => void, heldLoads = 0
+  const barrier = new Promise<void>(done => { release = done }), calls: string[] = []
+  const originalLoad = publicationCommandStore.load.bind(publicationCommandStore)
+  vi.spyOn(publicationCommandStore, 'load').mockImplementation(async (...args) => {
+    if (holdPublication) { heldLoads++; await barrier }
+    return originalLoad(...args)
+  })
+  vi.stubGlobal('fetch', vi.fn(async (path: string, init: RequestInit) => {
+    calls.push(`${init.method} ${path}`)
+    const value = path === '/api/v1/session' ? reviewSession(state.workspace)
+      : path === `/api/v1/jobs/${machineReceipt.id}` ? safeReviewJob(state.workspace)
+        : path === `/api/v1/reviews/${machineReceipt.id}` ? machineReceipt : undefined
+    if (!value || init.method !== 'GET') throw new Error('Unexpected write or endpoint in close guard fixture')
+    return new Response(JSON.stringify(value))
+  }))
+  try {
+    await rememberReviewJob(state.workspace, machineReceipt.id)
+    render(<Shell />); fireEvent.click(screen.getByRole('button', { name: '导入' }))
+    const dialog = screen.getByRole('dialog', { name: '导入' })
+    fireEvent.click(within(dialog).getByRole('button', { name: '打开候选审核与恢复' }))
+    const job = await screen.findByRole('button', { name: `读取审核任务 ${machineReceipt.id}` })
+    await waitFor(() => expect((job as HTMLButtonElement).disabled).toBe(false)); fireEvent.click(job)
+    const read = await screen.findByRole('button', { name: '另行读取当前审核回执' })
+    await waitFor(() => expect((read as HTMLButtonElement).disabled).toBe(false)); fireEvent.click(read)
+    const reason = await screen.findByLabelText('审核理由') as HTMLTextAreaElement
+    await waitFor(() => expect(reason.disabled).toBe(false))
+    fireEvent.change(reason, { target: { value: 'Synthetic unsubmitted reason' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: '关闭导入' }))
+    const initialConfirmation = await screen.findByRole('dialog', { name: '保留审核原命令' })
+    fireEvent.click(within(initialConfirmation).getByRole('button', { name: '返回导入与审核' }))
+    const refresh = screen.getByRole('button', { name: '重新核验发布权限与本机记录' }) as HTMLButtonElement
+    await waitFor(() => expect(refresh.disabled).toBe(false))
+    holdPublication = true; fireEvent.click(refresh)
+    await waitFor(() => expect(heldLoads).toBe(1))
+    expect(reason.disabled).toBe(true)
+    fireEvent.click(within(dialog).getByRole('button', { name: '关闭导入' }))
+    const confirmation = await screen.findByRole('dialog', { name: '保留审核原命令' })
+    const discard = within(confirmation).getByRole('button', { name: '保留审核原命令，明确丢弃临时表单并关闭' }) as HTMLButtonElement
+    expect(discard.disabled).toBe(true)
+    fireEvent.click(discard)
+    expect(screen.getByRole('dialog', { name: '导入' })).toBe(dialog)
+    expect(reason.value).toBe('Synthetic unsubmitted reason')
+    await act(async () => { release() })
+    await waitFor(() => expect(discard.disabled).toBe(false))
+    expect(reason.disabled).toBe(false)
+    expect(reason.value).toBe('Synthetic unsubmitted reason')
+    expect(screen.getByRole('dialog', { name: '导入' })).toBe(dialog)
+    fireEvent.click(discard)
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '导入' })).toBeNull())
+    expect(state.commit).not.toHaveBeenCalled()
+    expect(calls.every(value => value.startsWith('GET '))).toBe(true)
+  } finally { release() }
 })
 
 
