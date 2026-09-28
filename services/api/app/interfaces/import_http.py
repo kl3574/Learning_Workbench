@@ -18,6 +18,7 @@ from ..import_dto import (
     SourceResponse, ImportDraftSnapshot,
 )
 from .http import current_identity, reject_query_fields, verify_write
+from .tutor_http import unique_headers
 
 if TYPE_CHECKING:
     from ..application.imports import ImportService
@@ -39,7 +40,7 @@ def create_import_router(settings: Settings, service: "ImportService", *,
     jobs = jobs or JobService(service.database)
     artifacts = artifacts or ArtifactsService(service.database, {(profile, 'import'): service for profile in IMPORT_ARTIFACT_PROFILES})
     router = APIRouter(prefix="/api/v1", tags=["imports"],
-                       dependencies=[Depends(current_identity), Depends(reject_query_fields)])
+                       dependencies=[Depends(current_identity), Depends(unique_headers), Depends(reject_query_fields)])
 
     @router.post("/imports", status_code=202, response_model=ImportStaged,
                  dependencies=[Depends(verify_write), Depends(strict_upload_fields)])
