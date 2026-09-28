@@ -159,7 +159,7 @@ class ReviewService:
                 if not isinstance(replay, ReviewCreateCommand):
                     raise integrity()
                 return replay.ack
-            material = self.candidates.read_review_material(conn, current, draft_id, body.expected_revision)
+            material = self.candidates.read_current_review_material(conn, current, draft_id, body.expected_revision)
             self.numeric.read_review_numeric(conn, current, draft_id, body.expected_revision)
             identifier, now = 'review_' + uuid4().hex, utc_now()
             value = ReviewJobInput(version='draft-review-job-v1', workspace_id=current.workspace_id,

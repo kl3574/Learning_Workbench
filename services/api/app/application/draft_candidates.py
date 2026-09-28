@@ -1,7 +1,7 @@
 """Explicit owner routing and same-transaction admission for M6.2 candidate identities."""
 
 import sqlite3
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from pydantic import ValidationError
 
@@ -12,6 +12,12 @@ from .authoring_context import AuthoringContext
 from .draft_candidate_models import DraftSourceKind, ResolvedDraftCandidate
 from .errors import ApiError
 from .review_material_models import CheckedReviewMaterial
+
+
+@runtime_checkable
+class CurrentDraftCandidateOwner(Protocol):
+    def require_current_candidate(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                                  candidate: dm.DraftCandidate) -> None: ...
 
 
 class DraftCandidateOwner(Protocol):
@@ -64,6 +70,16 @@ class DraftCandidates:
                 or result.source_kind != registered.source_kind or result.candidate != registered.candidate):
             raise ApiError(503, 'DRAFT_OWNER_INTEGRITY', '审核材料当前无法完整核验。')
         return result
+
+    def read_current_review_material(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                                     draft_id: str, expected_revision: int) -> CheckedReviewMaterial:
+        """New Review command gate only; original ACK/history/worker remain exact reads."""
+        current, registered, owner = self._registered_owner(connection, identity, draft_id, expected_revision)
+        if registered.source_kind == 'authoring_edit':
+            if not isinstance(owner, CurrentDraftCandidateOwner):
+                raise ApiError(503, 'DRAFT_OWNER_UNAVAILABLE', '当前编辑所属服务无法核验头版本。')
+            owner.require_current_candidate(connection, current, registered.candidate)
+        return self.read_review_material(connection, current, draft_id, expected_revision)
 
     def admit(self, connection: sqlite3.Connection, identity: SessionIdentity,
               source_kind: DraftSourceKind, candidate: dm.DraftCandidate) -> ResolvedDraftCandidate:

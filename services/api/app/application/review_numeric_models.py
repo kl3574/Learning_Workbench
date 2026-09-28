@@ -100,11 +100,11 @@ class ReviewNumericObservation(AuthoringModel):
 
     @model_validator(mode='after')
     def complete_observation(self) -> Self:
-        import_owner = self.source_kind == 'import'
+        import_owner = self.source_kind in {'import', 'authoring_edit'}
         identities = [self.candidate_record_sha256, self.source_job_id, self.provider_receipt_id]
         if import_owner:
             if self.coverage != 'no_numeric_owner_pipeline' or self.checks or any(x is not None for x in identities):
-                raise ValueError('Import has no execution ledger; this does not establish absence of mathematics')
+                raise ValueError('This owner has no execution ledger; this does not establish absence of mathematics')
         elif self.coverage != 'authoring_numeric_ledger' or any(x is None for x in identities):
             raise ValueError('generated observation requires the actual original owner history')
         if len({check.view.id for check in self.checks}) != len(self.checks):

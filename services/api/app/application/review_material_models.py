@@ -17,6 +17,7 @@ from .authoring_group_models import (
     AuthoringContentPlanRecord, AuthoringGroupCandidateRecord, AuthoringGroupJobInput,
     PreparedAuthoringGroupContext, group_context_sha256, validate_group_context_binding,
 )
+from .draft_edit_models import DraftEditRecord
 from .draft_candidate_models import DraftOwner, DraftSourceKind, ResolvedDraftCandidate
 
 
@@ -79,7 +80,12 @@ class GroupReviewMaterial(AuthoringModel):
         return self
 
 
-ReviewPayload = Annotated[ImportReviewMaterial | SingleReviewMaterial | GroupReviewMaterial,
+class EditReviewMaterial(AuthoringModel):
+    version: Literal['authoring-edit-review-material-v1'] = 'authoring-edit-review-material-v1'
+    record: DraftEditRecord
+
+
+ReviewPayload = Annotated[ImportReviewMaterial | SingleReviewMaterial | GroupReviewMaterial | EditReviewMaterial,
                           Field(discriminator='version')]
 
 
@@ -102,6 +108,13 @@ class CheckedReviewMaterial(AuthoringModel):
             candidate = self.payload.candidate
             record_sha = metadata_sha256(self.payload)
             refs: list[dm.ContentRef] = []
+        elif isinstance(self.payload, EditReviewMaterial):
+            expected_owner, expected_kind = 'authoring', 'authoring_edit'
+            candidate = self.payload.record.candidate
+            record_sha = metadata_sha256(self.payload.record)
+            refs = [self.payload.record.base.ref]
+            if self.workspace_id != self.payload.record.workspace_id or self.warnings != self.payload.record.warnings:
+                raise ValueError('Edit material must retain its complete workspace and warnings')
         else:
             expected_owner = 'authoring'
             expected_kind = 'authoring_single' if isinstance(self.payload, SingleReviewMaterial) else 'authoring_group'
@@ -126,6 +139,10 @@ def checked_material(identity: ResolvedDraftCandidate, payload: ReviewPayload) -
         record_sha = metadata_sha256(payload)
         refs: list[dm.ContentRef] = []
         warnings = payload.warnings
+    elif isinstance(payload, EditReviewMaterial):
+        record_sha = metadata_sha256(payload.record)
+        refs = [payload.record.base.ref]
+        warnings = payload.record.warnings
     else:
         record_sha = metadata_sha256(payload.record)
         refs = payload.context.snapshot.resolved_refs

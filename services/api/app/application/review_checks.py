@@ -15,7 +15,7 @@ from ..authoring_dto import AuthoringBlockRef, AuthoringModel, WorkedExamplePayl
 from ..authoring_group_dto import AuthoringTextBlockPayload, GeneratedSolutionAnswer
 from .errors import ApiError
 from .review_material_models import (
-    CheckedReviewMaterial, ImportReviewMaterial, SingleReviewMaterial, GroupReviewMaterial,
+    CheckedReviewMaterial, ImportReviewMaterial, SingleReviewMaterial, GroupReviewMaterial, EditReviewMaterial,
 )
 
 CheckCode = Literal['material_schema', 'candidate_byte_binding', 'declared_source_membership',
@@ -113,7 +113,7 @@ def review_structure(material: CheckedReviewMaterial, *, requested: bool) -> Str
         # The complete model validation recomputes descriptor, candidate/body,
         # plan, member and private-solution relationships for its exact profile.
         checks = [_check('material_schema', 'PASS'), _check('candidate_byte_binding', 'PASS')]
-        if isinstance(material.payload, ImportReviewMaterial):
+        if isinstance(material.payload, (ImportReviewMaterial, EditReviewMaterial)):
             checks += [_check(code, 'NOT_RUN', 'no_authoring_declaration_schema') for code in ORDER[2:]]
         else:
             source_lists, declarations = _declarations(material)

@@ -11,7 +11,7 @@ from .authoring_group_validation import member_ref
 from .errors import ApiError
 from .publication_admission_models import DraftPublishWrite, PublicationAdmission
 from .review_history_models import ReviewDecisionRecord, ReviewMachineRecord
-from .review_material_models import CheckedReviewMaterial, ImportReviewMaterial, SingleReviewMaterial, GroupReviewMaterial
+from .review_material_models import CheckedReviewMaterial, ImportReviewMaterial, SingleReviewMaterial, GroupReviewMaterial, EditReviewMaterial
 from .review_numeric_models import NumericReviewCheck
 from .review_service import ReviewService
 
@@ -27,6 +27,8 @@ class PublicationAdmissionService:
     @staticmethod
     def _plans(material: CheckedReviewMaterial) -> list[tuple[AuthoringDraftMemberRef | None, NumericPlan]]:
         payload = material.payload
+        if isinstance(payload, EditReviewMaterial):
+            raise blocked('PUBLISH_EDIT_OWNER_UNSUPPORTED', '当前编辑候选尚未接入真实发布所属端口。')
         if isinstance(payload, ImportReviewMaterial):
             if material.candidate.entity == 'question':
                 raise blocked('PUBLISH_PRIVATE_COVERAGE_UNAVAILABLE', '当前导入审核不包含私有解答，不能据此准入题目发布。')
