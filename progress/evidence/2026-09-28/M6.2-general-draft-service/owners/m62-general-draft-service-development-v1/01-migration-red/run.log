@@ -1,0 +1,36 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_______ test_real_review_publication_history_survives_edit_owner_schema ________
+
+previous = (<services.api.app.infrastructure.database.Database object at 0x7699749a71a0>, Settings(data_dir=PosixPath('/tmp/pytes...6='acf5081ff757ccbb5b64607b2111d6083f142c7c080a6861eb59dbd7f5e542dd'), StoredReviewReceipt(), DraftPublishWrite(), ...)
+
+    def test_real_review_publication_history_survives_edit_owner_schema(previous):
+        old, settings, identity, candidate, receipt, request, ref = previous
+        before = table_hashes(old)
+        upgraded = Database(settings)
+        upgraded.initialize()
+        after = table_hashes(upgraded)
+        assert {k: after[k] for k in before if k != 'schema_migrations'} == {k: v for k, v in before.items() if k != 'schema_migrations'}
+        imports, reviews, publication = owners(upgraded)
+        assert reviews.read(identity, receipt.id) == receipt
+        assert publication.publish(identity, candidate.draft_id, request, 'publication') == ref
+        with upgraded.transaction() as conn:
+            assert conn.execute('PRAGMA foreign_key_check').fetchall() == []
+>           conn.execute("INSERT INTO draft_candidate_identities VALUES('draft_synthetic_edit',?,'authoring','authoring_edit','block')",
+                         (identity.workspace_id,))
+E           sqlite3.IntegrityError: CHECK constraint failed: source_kind IN ('import','authoring_single','authoring_group')
+
+tests/integration/test_draft_edit_migration.py:77: IntegrityError
+=============================== warnings summary ===============================
+../m62-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../m62-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_draft_edit_migration.py::test_real_review_publication_history_survives_edit_owner_schema
+1 failed, 2 warnings in 1.43s

@@ -1,0 +1,88 @@
+diff --git a/services/api/app/application/review_service.py b/services/api/app/application/review_service.py
+index c5ec44b..bff8191 100644
+--- a/services/api/app/application/review_service.py
++++ b/services/api/app/application/review_service.py
+@@ -130,21 +130,23 @@ class ReviewService:
+     @staticmethod
+     def _decision_applicability(material: CheckedReviewMaterial, request: ReviewDecisionWrite) -> None:
+         if request.mathematical == 'NOT_APPLICABLE':
+-            def declares_math(value: object) -> bool:
++            def declares_math(value: object, *, include_title: bool = False) -> bool:
+                 if isinstance(value, dict):
+                     if (value.get('kind') in {'worked_example', 'theorem', 'proof', 'formula', 'numeric', 'expression', 'calculation'}
+                             or value.get('numeric_plan') is not None or bool(value.get('symbols'))):
+                         return True
+                     for key, item in value.items():
+-                        if isinstance(item, str) and ('markdown' in key or key in {'formula', 'proof'}):
++                        if isinstance(item, str) and ('markdown' in key or key in {'formula', 'proof'}
++                                or (include_title and key == 'title')):
+                             if re.search(r'\\(?:\(|\[|begin\{(?:equation|align|math|gather)\*?\})|\$[^$]+\$', item):
+                                 return True
+-                    return any(declares_math(item) for item in value.values())
+-                return isinstance(value, list) and any(declares_math(item) for item in value)
++                    return any(declares_math(item, include_title=include_title) for item in value.values())
++                return isinstance(value, list) and any(declares_math(item, include_title=include_title) for item in value)
+             # An edit's frozen base is provenance, not its current candidate.
+             # Owner/history reads still authenticate that complete original base.
+             payload = material.payload.record.payload if isinstance(material.payload, EditReviewMaterial) else material.payload
+-            if declares_math(payload.model_dump(mode='python', warnings='error')):
++            if declares_math(payload.model_dump(mode='python', warnings='error'),
++                    include_title=isinstance(material.payload, EditReviewMaterial)):
+                 raise ApiError(409, 'MATHEMATICAL_REVIEW_REQUIRED', '原材料包含数学结构或数值计划，不能标为数学审校不适用。')
+             # Absence of these explicit signals is not automatic classification.
+             # The current author's explicit N/A and original nonblank reason are
+diff --git a/tests/integration/test_draft_edit_integrity.py b/tests/integration/test_draft_edit_integrity.py
+index 5b00af3..171e82a 100644
+--- a/tests/integration/test_draft_edit_integrity.py
++++ b/tests/integration/test_draft_edit_integrity.py
+@@ -14,7 +14,7 @@ from services.api.app.application.publication_admission_models import DraftPubli
+ from services.api.app.application.review_numeric import ReviewNumeric
+ from services.api.app.application.review_service import ReviewService
+ from services.api.app.application.review_worker import ReviewWorker
+-from services.api.app.draft_dto import DraftCreateWrite
++from services.api.app.draft_dto import DraftCreateWrite, DraftPatch, DraftPatchWrite
+ from services.api.app.infrastructure.draft_edit_repository import DraftEditRepository
+ from tests.integration.test_draft_edit_boundaries import case as case, patch
+ from tests.integration.test_draft_edit_migration import previous as previous, owners
+@@ -116,11 +116,31 @@ def test_actual_edit_mathematics_cannot_be_approved_as_na(case, formula):
+     assert reviews.read(identity, job.id).mathematical == 'NOT_RUN'
+ 
+ 
++@pytest.mark.parametrize('formula', ['$x^2$', r'\(x=1\)'])
++def test_actual_edit_title_mathematics_with_plain_body_cannot_claim_na(case, formula):
++    database, identity, _, service, _, created = case
++    service.patch(identity, created.draft_id, DraftPatchWrite(expected_revision=1,
++        patches=[DraftPatch(field='title', value=f'Synthetic title {formula}')]), 'math-title')
++    current = service.read(identity, created.draft_id, 2)
++    assert current.payload.body_markdown == 'Synthetic source for local editing.\n'
++    registry = DraftCandidates({'authoring_edit': service})
++    reviews = ReviewService(database, registry, ReviewNumeric(registry, {}), {})
++    job = reviews.create(identity, created.draft_id, request(current.candidate), 'review-title')
++    assert ReviewWorker(reviews).run_once()
++    receipt = reviews.read(identity, job.id)
++    before = table_hashes(database)
++    with pytest.raises(ApiError) as error:
++        reviews.decide(identity, job.id, decision(receipt, mathematical='NOT_APPLICABLE'), 'synthetic-human')
++    assert error.value.code == 'MATHEMATICAL_REVIEW_REQUIRED'
++    assert reviews.read(identity, job.id).mathematical == 'NOT_RUN'
++    assert table_hashes(database) == before
++
++
+ def test_edit_na_uses_current_body_while_retaining_exact_historical_formula_base(case):
+     database, identity, _, service, _, _ = case
+     content = ContentService(database)
+     raw = b'Synthetic old formula: \\begin{equation*}x=1\\end{equation*}\n'
+-    block = dm.ContentBlock(id='synthetic_formula_base', revision=1, kind='text', title='Old synthetic text',
++    block = dm.ContentBlock(id='synthetic_formula_base', revision=1, kind='text', title='Old $z^2$ formula title',
+         body_path='content/synthetic-formula-base.md', body_sha256=sha256_bytes(raw))
+     base = content.publish(identity.workspace_id, [block], {block.body_path: raw})[0]
+     later = b'Different later published synthetic text.\n'
+@@ -132,6 +152,8 @@ def test_edit_na_uses_current_body_while_retaining_exact_historical_formula_base
+     service.patch(identity, created.draft_id, patch(text=prose), 'remove-formula')
+     current = service.read(identity, created.draft_id, 2)
+     assert current.base.ref == base and current.base.body_markdown.encode() == raw
++    assert current.base.metadata.title == 'Old $z^2$ formula title'
++    assert current.payload.title == 'Synthetic edited prose'
+     assert current.payload.body_markdown == prose
+     registry = DraftCandidates({'authoring_edit': service})
+     reviews = ReviewService(database, registry, ReviewNumeric(registry, {}), {})

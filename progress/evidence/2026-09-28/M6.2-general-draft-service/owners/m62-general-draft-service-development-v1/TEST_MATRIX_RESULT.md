@@ -1,0 +1,37 @@
+# Actual bounded behavior coverage
+
+Fixed source 5c6d9959fee4ef7cf22fe2cca8e0f07fa524c18d. This maps the earlier inventory's proposed cases to actual final stage25 results, not a claim that the inventory became a new specification. Stage25 selects sixteen integration files, including four new files with83 parameterized cases. The source and exact node IDs are in final-source-pins.json and new-behavior-test-results.json. The earlier stage22 interruption is separate and is not a completed gate.
+
+Short test file names below are relative to tests/integration/. All human decisions and academic materials are explicitly synthetic. All statement counts refer to this selected gate, not whole platform acceptance.
+
+| Design case | Actual evidence and precise scope |
+|---|---|
+| D01 | `test_draft_edits::test_exact_base_copy_and_atomic_whitelisted_edit_preserve_old_content`: actual Import worker, Review worker, explicit synthetic decision, real publication produces base; create copies exact public bytes. `test_draft_edit_integrity::test_frozen_origin_descriptor_is_inherited_without_reading_private_original` also uses actual ordinary Import.commit as base producer. |
+| D02 | `test_draft_edit_boundaries::test_original_ack_after_later_edits_restart_expiry_and_later_content`: actual later Content r2; explicitly new Draft still reads selected historical r1. The test uses current r2, not a claimed r3-specific fixture. |
+| D03 | Five base-identity/scope parameter cases and real separately published foreign-workspace base rejection; table hashes unchanged. |
+| D04 | Null/other create kind rejected; actual nontext/concept/dependency bases rejected. Public Content owner forbids private body paths; a persisted corrupt private-path Content case is not separately exercised in this gate. |
+| D05 | Two-field atomic PATCH with Chinese/astral Unicode/LF; real owner rereads recompute canonical payload and body hashes; old Content and exact Draft r1 remain unchanged. |
+| D06 | Thirteen forbidden or unknown fields, each after a valid title patch in the same request; zero partial writes. |
+| D07 | Six JSON-but-wrong-field types; empty/duplicate patches; no-op/CRLF rejection; no fake revision increment. |
+| D08 | Recursive JSON legitimate transport values, nonfinite nested values, depth and byte budget rejection, model_construct warning guard, Unicode scalar and ordinary representation tests. Every specific node-count boundary is not separately parameterized. |
+| D09 | Two real concurrent SQLite connections to PATCH: distinct keys produce one success/one412; same key produces the same original ACK with exactly one revision. |
+| D10 | Original create and PATCH ACK across restart, later Draft revisions and generic24h cache expiry. Same-key PATCH race tested; a separate two-connection create race is not claimed. |
+| D11 | Exact complete-body key conflicts for create/PATCH; no-key retry with stale expected_revision returns412. Keys are intentionally actor/workspace/route scoped; no cross-route global-key rule is invented. |
+| D12 | Original create r1 and PATCH r2 ACKs survive r3 and later Content r2; new explicit historical Draft still uses r1. |
+| D13 | Role reduction, revocation, expiry, captured workspace mismatch and another actual session/workspace reject material/new writes/original ACK; no JSON payload grants access. |
+| D14 | Real independent/open_book/assisted assessment started before the edit operation rejects original ACK and new work. Caller transaction observes immediate role changes. Two-connection edit CAS is tested separately; no additional simultaneous assessment-start race is claimed. |
+| D15 | Seven SQL AFTER INSERT fault points across head/version/command/catalog create and PATCH roll back all SQL changes. Repository append fault also rolls back when outer caller catches and commits. That last boundary had a real RED in10. |
+| D16 | Payload, record SHA, parent link, head, command, physical base body, provenance and catalog corruption reject exact reads/replay/new PATCH; no repair writes. Constructed invalid values emit no private serialization warning. |
+| D17 | Actual create→queued Review→worker→report→receipt through edit registry. Two actual structure checks PASS, absent declaration checks NOT_RUN, numeric observation has no ledger entries/identities, machine math/source/pedagogy NOT_RUN. |
+| D18 | Current synthetic actor gives explicit nonmath N/A and source approval; old complete receipt is retained. Formula and TeX equation* cannot claim N/A; existing generic Review regressions retain starred-environment/source/actor/reason boundaries. This is not real human approval. |
+| D19 | Enqueue r1, PATCH r2, then execute original worker; the report remains r1 and new r2 Review has machine NOT_RUN. |
+| D20 | Original Review ACK and receipt remain readable after edit, while a new Review command selecting old r1 gets412. No current-head rule is applied to original workers/ACKs. |
+| D21 | Editing admission and actual Import publication both explicitly reject this owner; mismatched new revision with old approved receipt returns412. An r3 byte reversion/published restoration workflow is not implemented or claimed. |
+| D22 | Original citation IDs/frozen descriptor and warnings retained, unresolved case remains unresolved. Synthetic private-visibility original bytes can be unreadable while public parsed body and descriptor remain usable. This proves no private-original read; it does not verify original-source bytes or source truth. |
+| D23 | Edit's actual report bytes and a recursively attached Quality report's bytes corruption reject receipt/original decision ACK/download. Existing selected Review cases also cover recursive membership and cycle rejection without weakening current Policy. |
+| D24 | Migration actual nonempty Import/Review/publication histories preserve table hashes, all11 rebuilt tables' rows+rowid, original approved Review and publication ACK. Additional persisted synthetic single/group/Import owner shapes and all prior FK definitions preserve exactly; no authentic generation is attributed to that schema fixture. |
+| D25 | Two forward migration failure points restore full schema/data/checksum; self-FK real multi-revision history, repeated initialization, immutable update/delete/replace and existing sanitized-backup Review regressions pass. No old migration file changes. |
+| D26/D27 | NOT_RUN/NOT_IMPLEMENTED here: actual POST/PATCH HTTP/session headers/CSRF and generated contract wiring are the next independent adapter slice. Core54, all older migrations, spec, main/routes/generated/coverage unchanged. |
+| D28 | Stage25 actual450PASS,20deselected,2environment warnings across selected catalog/Review/storage/Jobs/Import publication plus new service cases. No full-suite claim. The omitted generation/numeric execution paths were not required for this owner. Stage22 accidentally ran two controlled loopback fixtures and was interrupted; its precise separate scope is retained in controlled-fixture-scope-audit.md. |
+
+The service's local implementation is complete for the stated narrow base/whitelist scope, with independent review pending. HTTP/editor UI, nullable-base/other-kind creation, general lifecycle state projection, editing publication, higher Content restoration revision, dependency impact and M6.2 completion remain unimplemented here. All runtime fixture data is temporary and excluded from the package; raw execution logs, receipts and source input bytes remain retained.

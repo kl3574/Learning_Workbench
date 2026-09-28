@@ -1,0 +1,2230 @@
+diff --git a/docs/adr/0032-general-draft-edit-owner.md b/docs/adr/0032-general-draft-edit-owner.md
+new file mode 100644
+index 0000000..eae58b2
+--- /dev/null
++++ b/docs/adr/0032-general-draft-edit-owner.md
+@@ -0,0 +1,17 @@
++# 0032: Exact historical text-block Draft editing
++
++PRODUCT_DESIGN.md §§6.5, 7, 20.1–20.3, 20.8 and Appendix A 1262–1265 define the contract. This service slice implements a nonnull exact public text-block base, create and atomic title/body_markdown PATCH. Other kinds, null bases, nontext blocks and concept/dependency/private-body scope are explicitly unsupported. Strict application DTOs retain the full create-kind enum and recursive JSON patch values; this change does not register HTTP routes or expand Import GET.
++
++The `authoring_edit` candidate owner is distinct from Import, single generation and group generation. Three owned tables retain the current editable head, immutable complete versions and permanent actor/workspace/route/key commands. A version binds its complete typed payload, physical UTF-8/LF body hash, exact historical base metadata and frozen provenance descriptor. Candidate revision is an edit CAS, not a publication lifecycle revision. No future ContentRef or approval is fabricated. Body/title changes produce exactly r+1, retaining the base and parent record hash; a complete no-op is rejected. Restoring old text here remains an unreviewed Draft; publishing old text as a higher Content revision needs a later explicit publishing slice.
++
++Content and Provenance ports read on the caller's actual transaction. The exact public body is read and hashed; inherited citations, rights and warnings come from the frozen descriptor. This does not download or verify the private original's physical bytes, prove source truth, or transfer source approval. Missing provenance retains original citation IDs and an unresolved warning. A later Content current pointer does not substitute new text for the selected historical base. Every read, replay, write and Review material read revalidates the current session/author and current Authoring access Policy. This slice uses the existing protected authoring-material gate, including its open-book/protected-attempt restrictions; it does not define all future manual-edit access capabilities.
++
++Create requires a key. PATCH requires expected_revision and optionally accepts a key; without one a stale retry returns 412. With a key, the original complete command and ACK survive restart, later edits and the generic 24-hour cache. Current access, exact base, entire immutable edit history and registered candidate history are checked before returning that original ACK. A new request with an occupied key and different body returns 409. SQLite writer serialization and a real head CAS prevent lost updates. Repository append uses a savepoint even when a wider transaction catches its error; service command/version/catalog writes roll back together. This owner does not stage new blobs or write Content/outbox records.
++
++The forward migration preserves the existing 11-table FK closure under enabled foreign keys. It copies every ordinary column and rowid, rebuilds the original table names with only the two source-kind constraints extended, restores parent-before-child rows and all existing triggers, and checks bidirectional row equality before dropping temporary snapshots. Historic review and publication trigger transitions are not re-enacted. No old migration, core model or producer row is rewritten. The migration uses the existing online backup and transaction mechanism; actual nonempty Import/Review/publication history, synthetic persisted single/group shapes, full prior FK definitions and two rollback points are tested.
++
++Quality receives an exact edit material union member. A new Review command requires the current editable head; an already queued worker, old Review read and original Review ACK remain bound to their original immutable candidate after later editing. A new revision receives no prior human decision. Machine structure reports only the schema and exact-byte checks actually performed; absent generated declarations and the absent numeric pipeline remain NOT_RUN. Mathematics, sources and independent pedagogy are never machine-approved. Existing current Policy, full Quality history, recursive evidence and physical report checks remain in force. Both admission and actual Import publication explicitly reject editing publication.
++
++Resource limits are implementation budgets, not new content-quality rules: up to eight distinct patches; each JSON value up to depth 32, 10,000 nodes/container members and 2,000,000 string/key UTF-8 bytes; bodies up to 400,000 characters and 2,000,000 bytes; frozen provenance up to 2,000,000 bytes; complete owner history up to 1,000 versions and 32,000,000 stored JSON bytes. Invalid/nonfinite JSON, invalid Unicode scalars and CRLF body input are rejected rather than silently normalized. Errors and ordinary representations omit academic payloads; protected DTOs are fully reconstructed with serialization warnings treated as errors.
++
++Tests use real local SQLite, Import/Review workers, Content/Provenance ports, current assessment Policy, competing connections, immutable storage constraints and injected failures. Persisted generated-owner migration shapes and explicit human decisions are labeled synthetic; no Provider, numeric executor or real human approval is claimed. HTTP/CSRF/header/generated-route integration, editor UI, general Draft GET/state projection, editing publication, dependency impact and overall M6.2 acceptance remain outside this slice.
+diff --git a/migrations/0019_draft_edits.sql b/migrations/0019_draft_edits.sql
+new file mode 100644
+index 0000000..38596c6
+--- /dev/null
++++ b/migrations/0019_draft_edits.sql
+@@ -0,0 +1,533 @@
++-- Authoring edit owner; preserve all historical bytes with FK enforcement enabled.
++
++-- No original migration or producer records are changed.
++
++CREATE TEMP TABLE edit_saved_draft_candidate_identities AS SELECT rowid AS saved_rowid,draft_id,workspace_id,owner,source_kind,entity FROM draft_candidate_identities;
++
++CREATE TEMP TABLE edit_saved_draft_candidate_revisions AS SELECT rowid AS saved_rowid,draft_id,workspace_id,owner,entity,draft_revision,candidate_sha256 FROM draft_candidate_revisions;
++
++CREATE TEMP TABLE edit_saved_reviews AS SELECT rowid AS saved_rowid,id,draft_id,draft_revision,candidate_sha256,revision,receipt_json,reviewer_session_id,created_at,workspace_id,owner,entity FROM reviews;
++
++CREATE TEMP TABLE edit_saved_review_jobs AS SELECT rowid AS saved_rowid,review_id,workspace_id,job_kind,owner,source_kind,draft_id,draft_revision,entity,candidate_sha256,creator_actor_id,input_json,input_sha256,created_at FROM review_jobs;
++
++CREATE TEMP TABLE edit_saved_review_revisions AS SELECT rowid AS saved_rowid,review_id,revision,receipt_json,receipt_sha256,record_kind,record_json,record_sha256,previous_receipt_sha256,recorded_at FROM review_revisions;
++
++CREATE TEMP TABLE edit_saved_review_artifact_bindings AS SELECT rowid AS saved_rowid,review_id,workspace_id,review_revision,ordinal,artifact_id,artifact_owner,artifact_sha256,manifest_sha256,binding_json,binding_sha256 FROM review_artifact_bindings;
++
++CREATE TEMP TABLE edit_saved_review_commands AS SELECT rowid AS saved_rowid,workspace_id,actor_id,route,command_key,command_kind,review_id,request_json,request_sha256,ack_json,ack_sha256,basis_revision,resulting_revision,recorded_at FROM review_commands;
++
++CREATE TEMP TABLE edit_saved_draft_publications AS SELECT rowid AS saved_rowid,id,workspace_id,draft_id,draft_revision,owner,entity,candidate_sha256,state,revision,adopted_at FROM draft_publications;
++
++CREATE TEMP TABLE edit_saved_draft_publication_events AS SELECT rowid AS saved_rowid,publication_id,revision,event_json,sha256 FROM draft_publication_events;
++
++CREATE TEMP TABLE edit_saved_draft_publication_results AS SELECT rowid AS saved_rowid,publication_id,record_json,sha256 FROM draft_publication_results;
++
++CREATE TEMP TABLE edit_saved_draft_publication_commands AS SELECT rowid AS saved_rowid,workspace_id,actor_id,route,command_key,publication_id FROM draft_publication_commands;
++
++DROP TRIGGER draft_candidate_identities_no_replace;
++
++DROP TRIGGER draft_candidate_identities_no_update;
++
++DROP TRIGGER draft_candidate_identities_no_delete;
++
++DROP TRIGGER draft_candidate_revisions_no_replace;
++
++DROP TRIGGER draft_candidate_revisions_no_update;
++
++DROP TRIGGER draft_candidate_revisions_no_delete;
++
++DROP TRIGGER review_revision_candidate;
++
++DROP TRIGGER review_command_binding;
++
++DROP TRIGGER review_jobs_no_replace;
++
++DROP TRIGGER review_jobs_no_update;
++
++DROP TRIGGER review_jobs_no_delete;
++
++DROP TRIGGER review_revisions_no_replace;
++
++DROP TRIGGER review_revisions_no_update;
++
++DROP TRIGGER review_revisions_no_delete;
++
++DROP TRIGGER review_artifacts_no_replace;
++
++DROP TRIGGER review_artifacts_no_update;
++
++DROP TRIGGER review_artifacts_no_delete;
++
++DROP TRIGGER review_commands_no_replace;
++
++DROP TRIGGER review_commands_no_update;
++
++DROP TRIGGER review_commands_no_delete;
++
++DROP TRIGGER draft_publication_initial;
++
++DROP TRIGGER draft_publication_transition;
++
++DROP TRIGGER draft_publications_no_delete;
++
++DROP TRIGGER draft_publication_events_no_update;
++
++DROP TRIGGER draft_publication_events_no_delete;
++
++DROP TRIGGER draft_publication_results_no_update;
++
++DROP TRIGGER draft_publication_results_no_delete;
++
++DROP TRIGGER draft_publication_commands_no_update;
++
++DROP TRIGGER draft_publication_commands_no_delete;
++
++DROP TABLE review_commands;
++
++DROP TABLE review_artifact_bindings;
++
++DROP TABLE review_revisions;
++
++DROP TABLE draft_publication_commands;
++
++DROP TABLE draft_publication_events;
++
++DROP TABLE draft_publication_results;
++
++DROP TABLE draft_publications;
++
++DROP TABLE reviews;
++
++DROP TABLE review_jobs;
++
++DROP TABLE draft_candidate_revisions;
++
++DROP TABLE draft_candidate_identities;
++
++CREATE TABLE draft_candidate_identities(
++ draft_id TEXT PRIMARY KEY NOT NULL CHECK(length(draft_id) BETWEEN 1 AND 80 AND substr(draft_id,1,1) GLOB '[A-Za-z]' AND draft_id NOT GLOB '*[^A-Za-z0-9_-]*'),
++ workspace_id TEXT NOT NULL REFERENCES workspace(id),
++ owner TEXT NOT NULL CHECK(owner IN ('import','authoring')),
++ source_kind TEXT NOT NULL CHECK(source_kind IN ('import','authoring_single','authoring_group','authoring_edit')),
++ entity TEXT NOT NULL CHECK(entity IN ('course','lesson','block','concept','route','question','practice_set','assessment','note')),
++ CHECK((owner='import' AND source_kind='import') OR (owner='authoring' AND source_kind IN ('authoring_single','authoring_group','authoring_edit'))),
++ CHECK(source_kind NOT IN ('authoring_single','authoring_edit') OR entity='block'),
++ CHECK(source_kind<>'authoring_group' OR entity IN ('lesson','practice_set','assessment')),
++ UNIQUE(draft_id,workspace_id,owner,entity)
++);
++
++CREATE TABLE draft_candidate_revisions(
++ draft_id TEXT NOT NULL,
++ workspace_id TEXT NOT NULL,
++ owner TEXT NOT NULL,
++ entity TEXT NOT NULL,
++ draft_revision INTEGER NOT NULL CHECK(typeof(draft_revision)='integer' AND draft_revision>=1),
++ candidate_sha256 TEXT NOT NULL CHECK(length(candidate_sha256)=64 AND candidate_sha256 NOT GLOB '*[^a-f0-9]*'),
++ PRIMARY KEY(draft_id,draft_revision),
++ FOREIGN KEY(draft_id,workspace_id,owner,entity) REFERENCES draft_candidate_identities(draft_id,workspace_id,owner,entity),
++ UNIQUE(workspace_id,draft_id,draft_revision,owner,entity,candidate_sha256)
++);
++
++CREATE TABLE reviews(
++ id TEXT PRIMARY KEY NOT NULL,
++ draft_id TEXT NOT NULL,
++ draft_revision INTEGER NOT NULL CHECK(typeof(draft_revision)='integer' AND draft_revision>=1),
++ candidate_sha256 TEXT NOT NULL,
++ revision INTEGER NOT NULL CHECK(revision>=1),
++ receipt_json TEXT NOT NULL CHECK(json_valid(receipt_json)),
++ reviewer_session_id TEXT REFERENCES local_sessions(id),
++ created_at TEXT NOT NULL,
++ workspace_id TEXT NOT NULL,
++ owner TEXT NOT NULL,
++ entity TEXT NOT NULL,
++ FOREIGN KEY(workspace_id,draft_id,draft_revision,owner,entity,candidate_sha256)
++  REFERENCES draft_candidate_revisions(workspace_id,draft_id,draft_revision,owner,entity,candidate_sha256)
++);
++
++CREATE TABLE review_jobs(
++ review_id TEXT PRIMARY KEY NOT NULL,
++ workspace_id TEXT NOT NULL REFERENCES workspace(id),
++ job_kind TEXT NOT NULL DEFAULT 'draft_review' CHECK(job_kind='draft_review'),
++ owner TEXT NOT NULL CHECK(owner IN ('import','authoring')),
++ source_kind TEXT NOT NULL CHECK(source_kind IN ('import','authoring_single','authoring_group','authoring_edit')),
++ draft_id TEXT NOT NULL,
++ draft_revision INTEGER NOT NULL CHECK(typeof(draft_revision)='integer' AND draft_revision>=1),
++ entity TEXT NOT NULL,
++ candidate_sha256 TEXT NOT NULL CHECK(length(candidate_sha256)=64 AND candidate_sha256 NOT GLOB '*[^a-f0-9]*'),
++ creator_actor_id TEXT NOT NULL CHECK(length(creator_actor_id)>0),
++ input_json TEXT NOT NULL CHECK(json_valid(input_json)),
++ input_sha256 TEXT NOT NULL CHECK(length(input_sha256)=64 AND input_sha256 NOT GLOB '*[^a-f0-9]*'),
++ created_at TEXT NOT NULL,
++ UNIQUE(review_id,workspace_id),
++ FOREIGN KEY(review_id,workspace_id,job_kind) REFERENCES jobs(id,workspace_id,kind),
++ FOREIGN KEY(draft_id,workspace_id,owner,source_kind,entity)
++  REFERENCES draft_candidate_identities(draft_id,workspace_id,owner,source_kind,entity),
++ FOREIGN KEY(workspace_id,draft_id,draft_revision,owner,entity,candidate_sha256)
++  REFERENCES draft_candidate_revisions(workspace_id,draft_id,draft_revision,owner,entity,candidate_sha256)
++);
++
++CREATE TABLE review_revisions(
++ review_id TEXT NOT NULL REFERENCES reviews(id),
++ revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision>=1),
++ receipt_json TEXT NOT NULL CHECK(json_valid(receipt_json)),
++ receipt_sha256 TEXT NOT NULL CHECK(length(receipt_sha256)=64 AND receipt_sha256 NOT GLOB '*[^a-f0-9]*'),
++ record_kind TEXT NOT NULL CHECK(record_kind IN ('machine','human_decision')),
++ record_json TEXT NOT NULL CHECK(json_valid(record_json)),
++ record_sha256 TEXT NOT NULL CHECK(length(record_sha256)=64 AND record_sha256 NOT GLOB '*[^a-f0-9]*'),
++ previous_receipt_sha256 TEXT CHECK(previous_receipt_sha256 IS NULL OR
++  (length(previous_receipt_sha256)=64 AND previous_receipt_sha256 NOT GLOB '*[^a-f0-9]*')),
++ previous_revision INTEGER GENERATED ALWAYS AS (CASE WHEN revision>1 THEN revision-1 END) VIRTUAL,
++ recorded_at TEXT NOT NULL,
++ PRIMARY KEY(review_id,revision),
++ UNIQUE(review_id,revision,receipt_sha256),
++ FOREIGN KEY(review_id) REFERENCES review_jobs(review_id),
++ FOREIGN KEY(review_id,previous_revision,previous_receipt_sha256)
++  REFERENCES review_revisions(review_id,revision,receipt_sha256),
++ CHECK((revision=1 AND record_kind='machine' AND previous_receipt_sha256 IS NULL)
++    OR (revision>1 AND record_kind='human_decision' AND previous_receipt_sha256 IS NOT NULL))
++);
++
++CREATE TABLE review_artifact_bindings(
++ review_id TEXT NOT NULL,
++ workspace_id TEXT NOT NULL,
++ review_revision INTEGER NOT NULL CHECK(typeof(review_revision)='integer' AND review_revision>=1),
++ ordinal INTEGER NOT NULL CHECK(typeof(ordinal)='integer' AND ordinal>=0),
++ artifact_id TEXT NOT NULL,
++ artifact_owner TEXT NOT NULL CHECK(artifact_owner IN ('import','quality')),
++ artifact_sha256 TEXT NOT NULL CHECK(length(artifact_sha256)=64 AND artifact_sha256 NOT GLOB '*[^a-f0-9]*'),
++ manifest_sha256 TEXT NOT NULL CHECK(length(manifest_sha256)=64 AND manifest_sha256 NOT GLOB '*[^a-f0-9]*'),
++ binding_json TEXT NOT NULL CHECK(json_valid(binding_json)),
++ binding_sha256 TEXT NOT NULL CHECK(length(binding_sha256)=64 AND binding_sha256 NOT GLOB '*[^a-f0-9]*'),
++ PRIMARY KEY(review_id,review_revision,ordinal),
++ UNIQUE(review_id,review_revision,artifact_id),
++ FOREIGN KEY(review_id,workspace_id) REFERENCES review_jobs(review_id,workspace_id),
++ FOREIGN KEY(review_id,review_revision) REFERENCES review_revisions(review_id,revision),
++ FOREIGN KEY(artifact_id,workspace_id,artifact_sha256) REFERENCES artifacts(id,workspace_id,blob_sha256)
++);
++
++CREATE TABLE review_commands(
++ workspace_id TEXT NOT NULL,
++ actor_id TEXT NOT NULL CHECK(length(actor_id)>0),
++ route TEXT NOT NULL,
++ command_key TEXT NOT NULL CHECK(length(command_key)>0),
++ command_kind TEXT NOT NULL CHECK(command_kind IN ('create','decision','cancel')),
++ review_id TEXT NOT NULL,
++ request_json TEXT NOT NULL CHECK(json_valid(request_json)),
++ request_sha256 TEXT NOT NULL CHECK(length(request_sha256)=64 AND request_sha256 NOT GLOB '*[^a-f0-9]*'),
++ ack_json TEXT NOT NULL CHECK(json_valid(ack_json)),
++ ack_sha256 TEXT NOT NULL CHECK(length(ack_sha256)=64 AND ack_sha256 NOT GLOB '*[^a-f0-9]*'),
++ basis_revision INTEGER NOT NULL CHECK(typeof(basis_revision)='integer' AND basis_revision>=1),
++ resulting_revision INTEGER NOT NULL CHECK(typeof(resulting_revision)='integer' AND resulting_revision>=1),
++ job_basis_revision INTEGER GENERATED ALWAYS AS
++  (CASE WHEN command_kind='cancel' THEN basis_revision END) VIRTUAL,
++ job_resulting_revision INTEGER GENERATED ALWAYS AS
++  (CASE WHEN command_kind IN ('create','cancel') THEN resulting_revision END) VIRTUAL,
++ review_basis_revision INTEGER GENERATED ALWAYS AS
++  (CASE WHEN command_kind='decision' THEN basis_revision END) VIRTUAL,
++ review_resulting_revision INTEGER GENERATED ALWAYS AS
++  (CASE WHEN command_kind='decision' THEN resulting_revision END) VIRTUAL,
++ recorded_at TEXT NOT NULL,
++ PRIMARY KEY(workspace_id,actor_id,route,command_key),
++ FOREIGN KEY(review_id,workspace_id) REFERENCES review_jobs(review_id,workspace_id),
++ FOREIGN KEY(review_id,job_basis_revision) REFERENCES job_events(job_id,seq),
++ FOREIGN KEY(review_id,job_resulting_revision) REFERENCES job_events(job_id,seq),
++ FOREIGN KEY(review_id,review_basis_revision) REFERENCES review_revisions(review_id,revision),
++ FOREIGN KEY(review_id,review_resulting_revision) REFERENCES review_revisions(review_id,revision),
++ CHECK((command_kind='create' AND resulting_revision=1)
++    OR (command_kind='decision' AND resulting_revision=basis_revision+1)
++    OR (command_kind='cancel' AND resulting_revision IN (basis_revision,basis_revision+1)))
++);
++
++CREATE TABLE draft_publications(
++ id TEXT PRIMARY KEY NOT NULL,
++ workspace_id TEXT NOT NULL,
++ draft_id TEXT NOT NULL,
++ draft_revision INTEGER NOT NULL CHECK(typeof(draft_revision)='integer' AND draft_revision>=1),
++ owner TEXT NOT NULL CHECK(owner='import'),
++ entity TEXT NOT NULL CHECK(entity='block'),
++ candidate_sha256 TEXT NOT NULL,
++ state TEXT NOT NULL CHECK(state IN ('draft','in_review','approved','published')),
++ revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision BETWEEN 1 AND 4),
++ adopted_at TEXT NOT NULL,
++ FOREIGN KEY(workspace_id,draft_id,draft_revision,owner,entity,candidate_sha256)
++  REFERENCES draft_candidate_revisions(workspace_id,draft_id,draft_revision,owner,entity,candidate_sha256),
++ UNIQUE(workspace_id,draft_id,draft_revision)
++);
++
++CREATE TABLE draft_publication_events(
++ publication_id TEXT NOT NULL REFERENCES draft_publications(id),
++ revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision BETWEEN 1 AND 4),
++ event_json TEXT NOT NULL CHECK(json_valid(event_json)),
++ sha256 TEXT NOT NULL CHECK(length(sha256)=64),
++ PRIMARY KEY(publication_id,revision)
++);
++
++CREATE TABLE draft_publication_results(
++ publication_id TEXT PRIMARY KEY NOT NULL REFERENCES draft_publications(id),
++ record_json TEXT NOT NULL CHECK(json_valid(record_json)),
++ sha256 TEXT NOT NULL CHECK(length(sha256)=64)
++);
++
++CREATE TABLE draft_publication_commands(
++ workspace_id TEXT NOT NULL REFERENCES workspace(id),
++ actor_id TEXT NOT NULL REFERENCES local_sessions(id),
++ route TEXT NOT NULL,
++ command_key TEXT NOT NULL,
++ publication_id TEXT NOT NULL UNIQUE REFERENCES draft_publication_results(publication_id),
++ PRIMARY KEY(workspace_id,actor_id,route,command_key)
++);
++
++CREATE UNIQUE INDEX review_candidate_source ON draft_candidate_identities(draft_id,workspace_id,owner,source_kind,entity);
++
++-- EDIT_SCHEMA_REBUILT
++
++INSERT INTO draft_candidate_identities(rowid,draft_id,workspace_id,owner,source_kind,entity) SELECT saved_rowid,draft_id,workspace_id,owner,source_kind,entity FROM edit_saved_draft_candidate_identities;
++
++INSERT INTO draft_candidate_revisions(rowid,draft_id,workspace_id,owner,entity,draft_revision,candidate_sha256) SELECT saved_rowid,draft_id,workspace_id,owner,entity,draft_revision,candidate_sha256 FROM edit_saved_draft_candidate_revisions;
++
++INSERT INTO reviews(rowid,id,draft_id,draft_revision,candidate_sha256,revision,receipt_json,reviewer_session_id,created_at,workspace_id,owner,entity) SELECT saved_rowid,id,draft_id,draft_revision,candidate_sha256,revision,receipt_json,reviewer_session_id,created_at,workspace_id,owner,entity FROM edit_saved_reviews;
++
++INSERT INTO review_jobs(rowid,review_id,workspace_id,job_kind,owner,source_kind,draft_id,draft_revision,entity,candidate_sha256,creator_actor_id,input_json,input_sha256,created_at) SELECT saved_rowid,review_id,workspace_id,job_kind,owner,source_kind,draft_id,draft_revision,entity,candidate_sha256,creator_actor_id,input_json,input_sha256,created_at FROM edit_saved_review_jobs;
++
++INSERT INTO review_revisions(rowid,review_id,revision,receipt_json,receipt_sha256,record_kind,record_json,record_sha256,previous_receipt_sha256,recorded_at) SELECT saved_rowid,review_id,revision,receipt_json,receipt_sha256,record_kind,record_json,record_sha256,previous_receipt_sha256,recorded_at FROM edit_saved_review_revisions ORDER BY review_id,revision;
++
++INSERT INTO review_artifact_bindings(rowid,review_id,workspace_id,review_revision,ordinal,artifact_id,artifact_owner,artifact_sha256,manifest_sha256,binding_json,binding_sha256) SELECT saved_rowid,review_id,workspace_id,review_revision,ordinal,artifact_id,artifact_owner,artifact_sha256,manifest_sha256,binding_json,binding_sha256 FROM edit_saved_review_artifact_bindings;
++
++INSERT INTO review_commands(rowid,workspace_id,actor_id,route,command_key,command_kind,review_id,request_json,request_sha256,ack_json,ack_sha256,basis_revision,resulting_revision,recorded_at) SELECT saved_rowid,workspace_id,actor_id,route,command_key,command_kind,review_id,request_json,request_sha256,ack_json,ack_sha256,basis_revision,resulting_revision,recorded_at FROM edit_saved_review_commands;
++
++INSERT INTO draft_publications(rowid,id,workspace_id,draft_id,draft_revision,owner,entity,candidate_sha256,state,revision,adopted_at) SELECT saved_rowid,id,workspace_id,draft_id,draft_revision,owner,entity,candidate_sha256,state,revision,adopted_at FROM edit_saved_draft_publications;
++
++INSERT INTO draft_publication_events(rowid,publication_id,revision,event_json,sha256) SELECT saved_rowid,publication_id,revision,event_json,sha256 FROM edit_saved_draft_publication_events;
++
++INSERT INTO draft_publication_results(rowid,publication_id,record_json,sha256) SELECT saved_rowid,publication_id,record_json,sha256 FROM edit_saved_draft_publication_results;
++
++INSERT INTO draft_publication_commands(rowid,workspace_id,actor_id,route,command_key,publication_id) SELECT saved_rowid,workspace_id,actor_id,route,command_key,publication_id FROM edit_saved_draft_publication_commands;
++
++-- EDIT_HISTORY_RESTORED
++
++CREATE TRIGGER draft_candidate_identities_no_replace BEFORE INSERT ON draft_candidate_identities
++ WHEN EXISTS(SELECT 1 FROM draft_candidate_identities WHERE draft_id=NEW.draft_id)
++ BEGIN SELECT RAISE(ABORT,'draft candidate identity immutable'); END;
++
++CREATE TRIGGER draft_candidate_identities_no_update BEFORE UPDATE ON draft_candidate_identities
++ BEGIN SELECT RAISE(ABORT,'draft candidate identity immutable'); END;
++
++CREATE TRIGGER draft_candidate_identities_no_delete BEFORE DELETE ON draft_candidate_identities
++ BEGIN SELECT RAISE(ABORT,'draft candidate identity immutable'); END;
++
++CREATE TRIGGER draft_candidate_revisions_no_replace BEFORE INSERT ON draft_candidate_revisions
++ WHEN EXISTS(SELECT 1 FROM draft_candidate_revisions WHERE draft_id=NEW.draft_id AND draft_revision=NEW.draft_revision)
++ BEGIN SELECT RAISE(ABORT,'draft candidate revision immutable'); END;
++
++CREATE TRIGGER draft_candidate_revisions_no_update BEFORE UPDATE ON draft_candidate_revisions
++ BEGIN SELECT RAISE(ABORT,'draft candidate revision immutable'); END;
++
++CREATE TRIGGER draft_candidate_revisions_no_delete BEFORE DELETE ON draft_candidate_revisions
++ BEGIN SELECT RAISE(ABORT,'draft candidate revision immutable'); END;
++
++CREATE TRIGGER review_revision_candidate BEFORE INSERT ON review_revisions
++WHEN NOT EXISTS(
++ SELECT 1 FROM reviews r JOIN review_jobs j ON r.id=j.review_id
++ WHERE r.id=NEW.review_id AND r.workspace_id=j.workspace_id
++  AND r.draft_id=j.draft_id AND r.draft_revision=j.draft_revision
++  AND r.owner=j.owner AND r.entity=j.entity AND r.candidate_sha256=j.candidate_sha256
++)
++BEGIN SELECT RAISE(ABORT,'review projection candidate mismatch'); END;
++
++CREATE TRIGGER review_command_binding BEFORE INSERT ON review_commands
++WHEN NOT EXISTS(
++ SELECT 1 FROM review_jobs j WHERE j.review_id=NEW.review_id AND j.workspace_id=NEW.workspace_id
++ AND ((NEW.command_kind='create' AND NEW.route='POST /drafts/'||j.draft_id||'/review'
++       AND NEW.actor_id=j.creator_actor_id AND NEW.basis_revision=j.draft_revision)
++   OR (NEW.command_kind='decision' AND NEW.route='POST /reviews/'||j.review_id||'/decision'
++       AND EXISTS(SELECT 1 FROM review_revisions r WHERE r.review_id=j.review_id
++        AND r.revision=NEW.resulting_revision AND r.previous_revision=NEW.basis_revision
++        AND r.record_kind='human_decision'))
++   OR (NEW.command_kind='cancel' AND NEW.route='POST /jobs/'||j.review_id||'/cancel'))
++)
++BEGIN SELECT RAISE(ABORT,'review command binding mismatch'); END;
++
++CREATE TRIGGER review_jobs_no_replace BEFORE INSERT ON review_jobs
++WHEN EXISTS(SELECT 1 FROM review_jobs WHERE review_id=NEW.review_id)
++BEGIN SELECT RAISE(ABORT,'review jobs append-only'); END;
++
++CREATE TRIGGER review_jobs_no_update BEFORE UPDATE ON review_jobs
++BEGIN SELECT RAISE(ABORT,'review jobs append-only'); END;
++
++CREATE TRIGGER review_jobs_no_delete BEFORE DELETE ON review_jobs
++BEGIN SELECT RAISE(ABORT,'review jobs append-only'); END;
++
++CREATE TRIGGER review_revisions_no_replace BEFORE INSERT ON review_revisions
++WHEN EXISTS(SELECT 1 FROM review_revisions WHERE review_id=NEW.review_id AND revision=NEW.revision)
++BEGIN SELECT RAISE(ABORT,'review revisions append-only'); END;
++
++CREATE TRIGGER review_revisions_no_update BEFORE UPDATE ON review_revisions
++BEGIN SELECT RAISE(ABORT,'review revisions append-only'); END;
++
++CREATE TRIGGER review_revisions_no_delete BEFORE DELETE ON review_revisions
++BEGIN SELECT RAISE(ABORT,'review revisions append-only'); END;
++
++CREATE TRIGGER review_artifacts_no_replace BEFORE INSERT ON review_artifact_bindings
++WHEN EXISTS(SELECT 1 FROM review_artifact_bindings WHERE review_id=NEW.review_id
++ AND review_revision=NEW.review_revision AND (ordinal=NEW.ordinal OR artifact_id=NEW.artifact_id))
++BEGIN SELECT RAISE(ABORT,'review artifacts append-only'); END;
++
++CREATE TRIGGER review_artifacts_no_update BEFORE UPDATE ON review_artifact_bindings
++BEGIN SELECT RAISE(ABORT,'review artifacts append-only'); END;
++
++CREATE TRIGGER review_artifacts_no_delete BEFORE DELETE ON review_artifact_bindings
++BEGIN SELECT RAISE(ABORT,'review artifacts append-only'); END;
++
++CREATE TRIGGER review_commands_no_replace BEFORE INSERT ON review_commands
++WHEN EXISTS(SELECT 1 FROM review_commands WHERE workspace_id=NEW.workspace_id
++ AND actor_id=NEW.actor_id AND route=NEW.route AND command_key=NEW.command_key)
++BEGIN SELECT RAISE(ABORT,'review commands append-only'); END;
++
++CREATE TRIGGER review_commands_no_update BEFORE UPDATE ON review_commands
++BEGIN SELECT RAISE(ABORT,'review commands append-only'); END;
++
++CREATE TRIGGER review_commands_no_delete BEFORE DELETE ON review_commands
++BEGIN SELECT RAISE(ABORT,'review commands append-only'); END;
++
++CREATE TRIGGER draft_publication_initial BEFORE INSERT ON draft_publications
++ WHEN NEW.state<>'draft' OR NEW.revision<>1
++ BEGIN SELECT RAISE(ABORT,'publication must start at current adoption'); END;
++
++CREATE TRIGGER draft_publication_transition BEFORE UPDATE ON draft_publications
++ WHEN OLD.id<>NEW.id OR OLD.workspace_id<>NEW.workspace_id OR OLD.draft_id<>NEW.draft_id
++ OR OLD.draft_revision<>NEW.draft_revision OR OLD.owner<>NEW.owner OR OLD.entity<>NEW.entity
++ OR OLD.candidate_sha256<>NEW.candidate_sha256 OR OLD.adopted_at<>NEW.adopted_at
++ OR NEW.revision<>OLD.revision+1
++ OR NOT ((OLD.state='draft' AND NEW.state='in_review') OR (OLD.state='in_review' AND NEW.state='approved')
++ OR (OLD.state='approved' AND NEW.state='published'))
++ BEGIN SELECT RAISE(ABORT,'immutable identity or invalid publication transition'); END;
++
++CREATE TRIGGER draft_publications_no_delete BEFORE DELETE ON draft_publications
++ BEGIN SELECT RAISE(ABORT,'publication history immutable'); END;
++
++CREATE TRIGGER draft_publication_events_no_update BEFORE UPDATE ON draft_publication_events
++ BEGIN SELECT RAISE(ABORT,'publication events immutable'); END;
++
++CREATE TRIGGER draft_publication_events_no_delete BEFORE DELETE ON draft_publication_events
++ BEGIN SELECT RAISE(ABORT,'publication events immutable'); END;
++
++CREATE TRIGGER draft_publication_results_no_update BEFORE UPDATE ON draft_publication_results
++ BEGIN SELECT RAISE(ABORT,'publication result immutable'); END;
++
++CREATE TRIGGER draft_publication_results_no_delete BEFORE DELETE ON draft_publication_results
++ BEGIN SELECT RAISE(ABORT,'publication result immutable'); END;
++
++CREATE TRIGGER draft_publication_commands_no_update BEFORE UPDATE ON draft_publication_commands
++ BEGIN SELECT RAISE(ABORT,'publication command immutable'); END;
++
++CREATE TRIGGER draft_publication_commands_no_delete BEFORE DELETE ON draft_publication_commands
++ BEGIN SELECT RAISE(ABORT,'publication command immutable'); END;
++
++CREATE TEMP TABLE edit_migration_guard(ok INTEGER NOT NULL CHECK(ok=1));
++
++INSERT INTO edit_migration_guard SELECT NOT EXISTS(SELECT saved_rowid,draft_id,workspace_id,owner,source_kind,entity FROM edit_saved_draft_candidate_identities EXCEPT SELECT rowid,draft_id,workspace_id,owner,source_kind,entity FROM draft_candidate_identities) AND NOT EXISTS(SELECT rowid,draft_id,workspace_id,owner,source_kind,entity FROM draft_candidate_identities EXCEPT SELECT saved_rowid,draft_id,workspace_id,owner,source_kind,entity FROM edit_saved_draft_candidate_identities);
++
++INSERT INTO edit_migration_guard SELECT NOT EXISTS(SELECT saved_rowid,draft_id,workspace_id,owner,entity,draft_revision,candidate_sha256 FROM edit_saved_draft_candidate_revisions EXCEPT SELECT rowid,draft_id,workspace_id,owner,entity,draft_revision,candidate_sha256 FROM draft_candidate_revisions) AND NOT EXISTS(SELECT rowid,draft_id,workspace_id,owner,entity,draft_revision,candidate_sha256 FROM draft_candidate_revisions EXCEPT SELECT saved_rowid,draft_id,workspace_id,owner,entity,draft_revision,candidate_sha256 FROM edit_saved_draft_candidate_revisions);
++
++INSERT INTO edit_migration_guard SELECT NOT EXISTS(SELECT saved_rowid,id,draft_id,draft_revision,candidate_sha256,revision,receipt_json,reviewer_session_id,created_at,workspace_id,owner,entity FROM edit_saved_reviews EXCEPT SELECT rowid,id,draft_id,draft_revision,candidate_sha256,revision,receipt_json,reviewer_session_id,created_at,workspace_id,owner,entity FROM reviews) AND NOT EXISTS(SELECT rowid,id,draft_id,draft_revision,candidate_sha256,revision,receipt_json,reviewer_session_id,created_at,workspace_id,owner,entity FROM reviews EXCEPT SELECT saved_rowid,id,draft_id,draft_revision,candidate_sha256,revision,receipt_json,reviewer_session_id,created_at,workspace_id,owner,entity FROM edit_saved_reviews);
++
++INSERT INTO edit_migration_guard SELECT NOT EXISTS(SELECT saved_rowid,review_id,workspace_id,job_kind,owner,source_kind,draft_id,draft_revision,entity,candidate_sha256,creator_actor_id,input_json,input_sha256,created_at FROM edit_saved_review_jobs EXCEPT SELECT rowid,review_id,workspace_id,job_kind,owner,source_kind,draft_id,draft_revision,entity,candidate_sha256,creator_actor_id,input_json,input_sha256,created_at FROM review_jobs) AND NOT EXISTS(SELECT rowid,review_id,workspace_id,job_kind,owner,source_kind,draft_id,draft_revision,entity,candidate_sha256,creator_actor_id,input_json,input_sha256,created_at FROM review_jobs EXCEPT SELECT saved_rowid,review_id,workspace_id,job_kind,owner,source_kind,draft_id,draft_revision,entity,candidate_sha256,creator_actor_id,input_json,input_sha256,created_at FROM edit_saved_review_jobs);
++
++INSERT INTO edit_migration_guard SELECT NOT EXISTS(SELECT saved_rowid,review_id,revision,receipt_json,receipt_sha256,record_kind,record_json,record_sha256,previous_receipt_sha256,recorded_at FROM edit_saved_review_revisions EXCEPT SELECT rowid,review_id,revision,receipt_json,receipt_sha256,record_kind,record_json,record_sha256,previous_receipt_sha256,recorded_at FROM review_revisions) AND NOT EXISTS(SELECT rowid,review_id,revision,receipt_json,receipt_sha256,record_kind,record_json,record_sha256,previous_receipt_sha256,recorded_at FROM review_revisions EXCEPT SELECT saved_rowid,review_id,revision,receipt_json,receipt_sha256,record_kind,record_json,record_sha256,previous_receipt_sha256,recorded_at FROM edit_saved_review_revisions);
++
++INSERT INTO edit_migration_guard SELECT NOT EXISTS(SELECT saved_rowid,review_id,workspace_id,review_revision,ordinal,artifact_id,artifact_owner,artifact_sha256,manifest_sha256,binding_json,binding_sha256 FROM edit_saved_review_artifact_bindings EXCEPT SELECT rowid,review_id,workspace_id,review_revision,ordinal,artifact_id,artifact_owner,artifact_sha256,manifest_sha256,binding_json,binding_sha256 FROM review_artifact_bindings) AND NOT EXISTS(SELECT rowid,review_id,workspace_id,review_revision,ordinal,artifact_id,artifact_owner,artifact_sha256,manifest_sha256,binding_json,binding_sha256 FROM review_artifact_bindings EXCEPT SELECT saved_rowid,review_id,workspace_id,review_revision,ordinal,artifact_id,artifact_owner,artifact_sha256,manifest_sha256,binding_json,binding_sha256 FROM edit_saved_review_artifact_bindings);
++
++INSERT INTO edit_migration_guard SELECT NOT EXISTS(SELECT saved_rowid,workspace_id,actor_id,route,command_key,command_kind,review_id,request_json,request_sha256,ack_json,ack_sha256,basis_revision,resulting_revision,recorded_at FROM edit_saved_review_commands EXCEPT SELECT rowid,workspace_id,actor_id,route,command_key,command_kind,review_id,request_json,request_sha256,ack_json,ack_sha256,basis_revision,resulting_revision,recorded_at FROM review_commands) AND NOT EXISTS(SELECT rowid,workspace_id,actor_id,route,command_key,command_kind,review_id,request_json,request_sha256,ack_json,ack_sha256,basis_revision,resulting_revision,recorded_at FROM review_commands EXCEPT SELECT saved_rowid,workspace_id,actor_id,route,command_key,command_kind,review_id,request_json,request_sha256,ack_json,ack_sha256,basis_revision,resulting_revision,recorded_at FROM edit_saved_review_commands);
++
++INSERT INTO edit_migration_guard SELECT NOT EXISTS(SELECT saved_rowid,id,workspace_id,draft_id,draft_revision,owner,entity,candidate_sha256,state,revision,adopted_at FROM edit_saved_draft_publications EXCEPT SELECT rowid,id,workspace_id,draft_id,draft_revision,owner,entity,candidate_sha256,state,revision,adopted_at FROM draft_publications) AND NOT EXISTS(SELECT rowid,id,workspace_id,draft_id,draft_revision,owner,entity,candidate_sha256,state,revision,adopted_at FROM draft_publications EXCEPT SELECT saved_rowid,id,workspace_id,draft_id,draft_revision,owner,entity,candidate_sha256,state,revision,adopted_at FROM edit_saved_draft_publications);
++
++INSERT INTO edit_migration_guard SELECT NOT EXISTS(SELECT saved_rowid,publication_id,revision,event_json,sha256 FROM edit_saved_draft_publication_events EXCEPT SELECT rowid,publication_id,revision,event_json,sha256 FROM draft_publication_events) AND NOT EXISTS(SELECT rowid,publication_id,revision,event_json,sha256 FROM draft_publication_events EXCEPT SELECT saved_rowid,publication_id,revision,event_json,sha256 FROM edit_saved_draft_publication_events);
++
++INSERT INTO edit_migration_guard SELECT NOT EXISTS(SELECT saved_rowid,publication_id,record_json,sha256 FROM edit_saved_draft_publication_results EXCEPT SELECT rowid,publication_id,record_json,sha256 FROM draft_publication_results) AND NOT EXISTS(SELECT rowid,publication_id,record_json,sha256 FROM draft_publication_results EXCEPT SELECT saved_rowid,publication_id,record_json,sha256 FROM edit_saved_draft_publication_results);
++
++INSERT INTO edit_migration_guard SELECT NOT EXISTS(SELECT saved_rowid,workspace_id,actor_id,route,command_key,publication_id FROM edit_saved_draft_publication_commands EXCEPT SELECT rowid,workspace_id,actor_id,route,command_key,publication_id FROM draft_publication_commands) AND NOT EXISTS(SELECT rowid,workspace_id,actor_id,route,command_key,publication_id FROM draft_publication_commands EXCEPT SELECT saved_rowid,workspace_id,actor_id,route,command_key,publication_id FROM edit_saved_draft_publication_commands);
++
++DROP TABLE edit_migration_guard;
++
++DROP TABLE edit_saved_draft_candidate_identities;
++
++DROP TABLE edit_saved_draft_candidate_revisions;
++
++DROP TABLE edit_saved_reviews;
++
++DROP TABLE edit_saved_review_jobs;
++
++DROP TABLE edit_saved_review_revisions;
++
++DROP TABLE edit_saved_review_artifact_bindings;
++
++DROP TABLE edit_saved_review_commands;
++
++DROP TABLE edit_saved_draft_publications;
++
++DROP TABLE edit_saved_draft_publication_events;
++
++DROP TABLE edit_saved_draft_publication_results;
++
++DROP TABLE edit_saved_draft_publication_commands;
++
++CREATE TABLE draft_edits(
++ draft_id TEXT PRIMARY KEY NOT NULL,
++ workspace_id TEXT NOT NULL REFERENCES workspace(id),
++ kind TEXT NOT NULL CHECK(kind='block'),
++ revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision>=1),
++ base_ref_json TEXT NOT NULL CHECK(json_valid(base_ref_json)),
++ created_at TEXT NOT NULL,
++ UNIQUE(draft_id,workspace_id)
++);
++CREATE TABLE draft_edit_versions(
++ draft_id TEXT NOT NULL,
++ workspace_id TEXT NOT NULL,
++ revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision>=1),
++ candidate_sha256 TEXT NOT NULL CHECK(length(candidate_sha256)=64),
++ record_json TEXT NOT NULL CHECK(json_valid(record_json)),
++ record_sha256 TEXT NOT NULL CHECK(length(record_sha256)=64),
++ parent_sha256 TEXT,
++ previous_revision INTEGER GENERATED ALWAYS AS (CASE WHEN revision>1 THEN revision-1 END) VIRTUAL,
++ created_at TEXT NOT NULL,
++ PRIMARY KEY(draft_id,revision),
++ UNIQUE(draft_id,revision,record_sha256),
++ FOREIGN KEY(draft_id,workspace_id) REFERENCES draft_edits(draft_id,workspace_id),
++ FOREIGN KEY(draft_id,previous_revision,parent_sha256) REFERENCES draft_edit_versions(draft_id,revision,record_sha256),
++ CHECK((revision=1 AND parent_sha256 IS NULL) OR (revision>1 AND length(parent_sha256)=64))
++);
++CREATE TABLE draft_edit_commands(
++ workspace_id TEXT NOT NULL REFERENCES workspace(id),
++ actor_id TEXT NOT NULL,
++ route TEXT NOT NULL,
++ command_key TEXT NOT NULL,
++ draft_id TEXT NOT NULL,
++ revision INTEGER NOT NULL,
++ record_json TEXT NOT NULL CHECK(json_valid(record_json)),
++ record_sha256 TEXT NOT NULL CHECK(length(record_sha256)=64),
++ PRIMARY KEY(workspace_id,actor_id,route,command_key),
++ FOREIGN KEY(draft_id,revision) REFERENCES draft_edit_versions(draft_id,revision)
++);
++CREATE TRIGGER draft_edit_head_initial BEFORE INSERT ON draft_edits
++ WHEN NEW.revision<>1 OR EXISTS(SELECT 1 FROM draft_edits WHERE draft_id=NEW.draft_id)
++ BEGIN SELECT RAISE(ABORT,'invalid initial edit'); END;
++CREATE TRIGGER draft_edit_head_transition BEFORE UPDATE ON draft_edits
++ WHEN NEW.draft_id<>OLD.draft_id OR NEW.workspace_id<>OLD.workspace_id OR NEW.kind<>OLD.kind
++ OR NEW.base_ref_json<>OLD.base_ref_json OR NEW.created_at<>OLD.created_at OR NEW.revision<>OLD.revision+1
++ BEGIN SELECT RAISE(ABORT,'invalid edit head change'); END;
++CREATE TRIGGER draft_edit_head_no_delete BEFORE DELETE ON draft_edits
++ BEGIN SELECT RAISE(ABORT,'edit history immutable'); END;
++CREATE TRIGGER draft_edit_version_no_replace BEFORE INSERT ON draft_edit_versions
++ WHEN EXISTS(SELECT 1 FROM draft_edit_versions WHERE draft_id=NEW.draft_id AND revision=NEW.revision)
++ BEGIN SELECT RAISE(ABORT,'edit version immutable'); END;
++CREATE TRIGGER draft_edit_version_no_update BEFORE UPDATE ON draft_edit_versions
++ BEGIN SELECT RAISE(ABORT,'edit version immutable'); END;
++CREATE TRIGGER draft_edit_version_no_delete BEFORE DELETE ON draft_edit_versions
++ BEGIN SELECT RAISE(ABORT,'edit version immutable'); END;
++CREATE TRIGGER draft_edit_command_no_replace BEFORE INSERT ON draft_edit_commands
++ WHEN EXISTS(SELECT 1 FROM draft_edit_commands WHERE workspace_id=NEW.workspace_id AND actor_id=NEW.actor_id AND route=NEW.route AND command_key=NEW.command_key)
++ BEGIN SELECT RAISE(ABORT,'edit command immutable'); END;
++CREATE TRIGGER draft_edit_command_no_update BEFORE UPDATE ON draft_edit_commands
++ BEGIN SELECT RAISE(ABORT,'edit command immutable'); END;
++CREATE TRIGGER draft_edit_command_no_delete BEFORE DELETE ON draft_edit_commands
++ BEGIN SELECT RAISE(ABORT,'edit command immutable'); END;
+diff --git a/services/api/app/application/content_draft_source.py b/services/api/app/application/content_draft_source.py
+new file mode 100644
+index 0000000..f05ee5a
+--- /dev/null
++++ b/services/api/app/application/content_draft_source.py
+@@ -0,0 +1,36 @@
++"""Content-owned exact public base and retained provenance, in the caller transaction."""
++import sqlite3
++
++from packages.contracts import domain_models as dm
++from ..infrastructure.database import Database
++from ..infrastructure.provenance_repository import ProvenanceRepository
++from ..infrastructure.security import SessionIdentity, current_session_identity
++from .authoring_context import AuthoringContext
++from .content import ContentService
++from .draft_edit_models import DraftBaseMaterial, checked, integrity, unsupported, unresolved_warning
++
++
++class ContentDraftSource:
++    def __init__(self, database: Database):
++        self.content = ContentService(database)
++
++    def read_exact(self, conn: sqlite3.Connection, identity: SessionIdentity, ref: dm.ContentRef) -> DraftBaseMaterial:
++        current = current_session_identity(conn, identity)
++        AuthoringContext.check_access(conn, current)
++        ref = checked(dm.ContentRef, ref, request=True)
++        if ref.entity != 'block':
++            raise unsupported()
++        block, raw = self.content.verify_publication_in_transaction(conn, current.workspace_id, ref)
++        if block.kind != 'text' or block.concepts or block.depends_on or block.body_path.startswith('private/'):
++            raise unsupported()
++        provenance = ProvenanceRepository(conn, current.workspace_id).bounded_frozen(block, max_bytes=2_000_000)
++        try:
++            return DraftBaseMaterial(ref=ref, metadata=block, body_markdown=raw.decode('utf-8'), provenance=provenance,
++                warnings=provenance.warnings if provenance else [unresolved_warning()])
++        except (ValueError, TypeError, UnicodeError):
++            raise integrity() from None
++
++    def verify_exact(self, conn: sqlite3.Connection, identity: SessionIdentity, expected: DraftBaseMaterial) -> None:
++        expected = checked(DraftBaseMaterial, expected)
++        if self.read_exact(conn, identity, expected.ref) != expected:
++            raise integrity()
+diff --git a/services/api/app/application/draft_candidate_models.py b/services/api/app/application/draft_candidate_models.py
+index f4f1d23..6904e70 100644
+--- a/services/api/app/application/draft_candidate_models.py
++++ b/services/api/app/application/draft_candidate_models.py
+@@ -6,7 +6,7 @@ from typing import Literal
+ from packages.contracts import domain_models as dm
+ 
+ DraftOwner = Literal['import', 'authoring']
+-DraftSourceKind = Literal['import', 'authoring_single', 'authoring_group']
++DraftSourceKind = Literal['import', 'authoring_single', 'authoring_group', 'authoring_edit']
+ 
+ 
+ @dataclass(frozen=True)
+diff --git a/services/api/app/application/draft_candidates.py b/services/api/app/application/draft_candidates.py
+index cd2bbaf..7a1c902 100644
+--- a/services/api/app/application/draft_candidates.py
++++ b/services/api/app/application/draft_candidates.py
+@@ -1,7 +1,7 @@
+ """Explicit owner routing and same-transaction admission for M6.2 candidate identities."""
+ 
+ import sqlite3
+-from typing import Protocol
++from typing import Protocol, runtime_checkable
+ 
+ from pydantic import ValidationError
+ 
+@@ -14,6 +14,12 @@ from .errors import ApiError
+ from .review_material_models import CheckedReviewMaterial
+ 
+ 
++@runtime_checkable
++class CurrentDraftCandidateOwner(Protocol):
++    def require_current_candidate(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                                  candidate: dm.DraftCandidate) -> None: ...
++
++
+ class DraftCandidateOwner(Protocol):
+     def resolve_candidate(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                           candidate: dm.DraftCandidate) -> ResolvedDraftCandidate: ...
+@@ -65,6 +71,16 @@ class DraftCandidates:
+             raise ApiError(503, 'DRAFT_OWNER_INTEGRITY', '审核材料当前无法完整核验。')
+         return result
+ 
++    def read_current_review_material(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                                     draft_id: str, expected_revision: int) -> CheckedReviewMaterial:
++        """New Review command gate only; original ACK/history/worker remain exact reads."""
++        current, registered, owner = self._registered_owner(connection, identity, draft_id, expected_revision)
++        if registered.source_kind == 'authoring_edit':
++            if not isinstance(owner, CurrentDraftCandidateOwner):
++                raise ApiError(503, 'DRAFT_OWNER_UNAVAILABLE', '当前编辑所属服务无法核验头版本。')
++            owner.require_current_candidate(connection, current, registered.candidate)
++        return self.read_review_material(connection, current, draft_id, expected_revision)
++
+     def admit(self, connection: sqlite3.Connection, identity: SessionIdentity,
+               source_kind: DraftSourceKind, candidate: dm.DraftCandidate) -> ResolvedDraftCandidate:
+         """No implicit owner detection, HTTP handler, review, content write or Provider call.
+diff --git a/services/api/app/application/draft_edit_models.py b/services/api/app/application/draft_edit_models.py
+new file mode 100644
+index 0000000..e78bcfb
+--- /dev/null
++++ b/services/api/app/application/draft_edit_models.py
+@@ -0,0 +1,163 @@
++"""Immutable local edit facts. Construction and stored hashes grant no access."""
++from typing import Literal, Self, TypeVar
++
++from pydantic import BaseModel, Field, model_validator
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import metadata_sha256, sha256_bytes
++from ..draft_dto import DraftCreateWrite, DraftPatchWrite, DraftCreated, DraftPatched, DraftModel
++from ..infrastructure.provenance_repository import FrozenProvenance
++from .errors import ApiError
++
++M = TypeVar('M', bound=BaseModel)
++MAX_BODY_BYTES = 2_000_000
++MAX_VERSIONS = 1000
++
++
++def integrity() -> ApiError:
++    return ApiError(503, 'DRAFT_EDIT_INTEGRITY', '草稿的原始材料或历史当前无法核验。')
++
++
++def invalid() -> ApiError:
++    return ApiError(422, 'DRAFT_EDIT_INVALID', '草稿字段或完整编辑请求无效。')
++
++
++def unsupported() -> ApiError:
++    return ApiError(409, 'DRAFT_EDIT_SCOPE_UNSUPPORTED', '当前只支持从精确公开文本块修订创建并编辑标题和正文。')
++
++
++def checked(model: type[M], value: object, *, request: bool = False) -> M:
++    try:
++        return model.model_validate(value.model_dump(mode='python', warnings='error') if isinstance(value, BaseModel) else value)
++    except (ValueError, TypeError, AttributeError, RecursionError):
++        raise (invalid() if request else integrity()) from None
++
++
++def body_hash(text: str) -> str:
++    raw = text.encode('utf-8')
++    if '\r' in text or len(raw) > MAX_BODY_BYTES:
++        raise ValueError('draft body must be bounded UTF-8/LF')
++    return sha256_bytes(raw)
++
++
++class DraftBaseMaterial(DraftModel):
++    version: Literal['draft-base-material-v1'] = 'draft-base-material-v1'
++    ref: dm.ContentRef
++    metadata: dm.ContentBlock
++    body_markdown: str = Field(max_length=400000)
++    provenance: FrozenProvenance | None
++    warnings: list[dm.Warning]
++
++    @model_validator(mode='after')
++    def exact(self) -> Self:
++        value = self.metadata
++        if (self.ref.entity != 'block' or self.ref.id != value.id or self.ref.revision != value.revision
++                or self.ref.sha256 != metadata_sha256(value) or value.kind != 'text' or value.concepts or value.depends_on
++                or value.body_path.startswith('private/') or value.body_sha256 != body_hash(self.body_markdown)):
++            raise ValueError('base must be the exact supported historical text block')
++        if self.provenance is not None:
++            if (self.provenance.block_ref != self.ref or {x.id for x in self.provenance.citations} != set(value.citations)
++                    or len(self.provenance.citations) != len(value.citations) or self.warnings != self.provenance.warnings):
++                raise ValueError('base provenance must bind its exact metadata and original warnings')
++        elif self.warnings != [unresolved_warning()]:
++            raise ValueError('unresolved sources must retain their actual warning')
++        return self
++
++
++def unresolved_warning() -> dm.Warning:
++    return dm.Warning(code='PROVENANCE_UNRESOLVED', severity='warning',
++                      message='此精确修订尚无可核验的冻结来源记录；原始引用保留，未猜测来源。')
++
++
++class DraftEditPayload(DraftModel):
++    version: Literal['text-block-edit-v1'] = 'text-block-edit-v1'
++    entity: Literal['block'] = 'block'
++    kind: Literal['text'] = 'text'
++    base_ref: dm.ContentRef
++    body_path: str
++    citations: list[dm.Id]
++    title: dm.Text
++    body_markdown: str = Field(max_length=400000)
++    body_sha256: dm.Sha256
++    base_material_sha256: dm.Sha256
++
++    @model_validator(mode='after')
++    def exact_body(self) -> Self:
++        if self.body_sha256 != body_hash(self.body_markdown):
++            raise ValueError('candidate must cover the actual full body bytes')
++        return self
++
++
++def initial_payload(base: DraftBaseMaterial, title: str) -> DraftEditPayload:
++    return DraftEditPayload(base_ref=base.ref, body_path=base.metadata.body_path, citations=base.metadata.citations,
++        title=title, body_markdown=base.body_markdown, body_sha256=base.metadata.body_sha256,
++        base_material_sha256=metadata_sha256(base))
++
++
++def apply_patch(payload: DraftEditPayload, request: DraftPatchWrite) -> DraftEditPayload:
++    data = payload.model_dump(mode='python', warnings='error')
++    for patch in request.patches:
++        if patch.field not in {'title', 'body_markdown'} or type(patch.value) is not str:
++            raise invalid()
++        data[patch.field] = patch.value
++    try:
++        data['body_sha256'] = body_hash(data['body_markdown'])
++        result = DraftEditPayload.model_validate(data)
++    except (ValueError, TypeError, UnicodeError):
++        raise invalid() from None
++    if result == payload:
++        raise invalid()
++    return result
++
++
++def edit_warnings(base: DraftBaseMaterial) -> list[dm.Warning]:
++    return [*base.warnings, dm.Warning(code='DRAFT_EDIT_UNREVIEWED', severity='warning',
++        message='此编辑候选尚未取得数学、来源或教学批准；继承来源不是对新正文的认证。')]
++
++
++class DraftEditRecord(DraftModel):
++    version: Literal['draft-edit-record-v1'] = 'draft-edit-record-v1'
++    workspace_id: dm.Id
++    candidate: dm.DraftCandidate
++    base: DraftBaseMaterial
++    payload: DraftEditPayload
++    actor_id: dm.Id
++    command_key: str | None
++    request: DraftCreateWrite | DraftPatchWrite
++    parent_sha256: dm.Sha256 | None
++    created_at: dm.UTC
++    warnings: list[dm.Warning]
++
++    @model_validator(mode='after')
++    def exact(self) -> Self:
++        c, p, b = self.candidate, self.payload, self.base
++        if (c.entity != 'block' or c.candidate_sha256 != metadata_sha256(p) or p.base_ref != b.ref
++                or p.body_path != b.metadata.body_path or p.citations != b.metadata.citations
++                or p.base_material_sha256 != metadata_sha256(b) or self.warnings != edit_warnings(b)):
++            raise ValueError('edit record must bind the complete candidate and original base')
++        if c.draft_revision == 1:
++            if (not isinstance(self.request, DraftCreateWrite) or self.request.kind != 'block'
++                    or self.request.base_ref != b.ref or self.parent_sha256 is not None or not self.command_key
++                    or p != initial_payload(b, self.request.title)):
++                raise ValueError('initial edit must preserve its actual create command')
++        elif (not isinstance(self.request, DraftPatchWrite) or self.parent_sha256 is None
++                or self.request.expected_revision != c.draft_revision - 1):
++            raise ValueError('edit version must retain its exact predecessor request')
++        return self
++
++
++def ack(record: DraftEditRecord) -> DraftCreated | DraftPatched:
++    c = record.candidate
++    if c.draft_revision == 1:
++        return DraftCreated(draft_id=c.draft_id, revision=1, base_ref=record.base.ref)
++    return DraftPatched(draft_id=c.draft_id, revision=c.draft_revision, validation_warnings=record.warnings)
++
++
++class DraftEditCommand(DraftModel):
++    version: Literal['draft-edit-command-v1'] = 'draft-edit-command-v1'
++    workspace_id: dm.Id
++    actor_id: dm.Id
++    route: str
++    key: str
++    record_sha256: dm.Sha256
++    request: DraftCreateWrite | DraftPatchWrite
++    ack: DraftCreated | DraftPatched
+diff --git a/services/api/app/application/draft_edits.py b/services/api/app/application/draft_edits.py
+new file mode 100644
+index 0000000..d08341d
+--- /dev/null
++++ b/services/api/app/application/draft_edits.py
+@@ -0,0 +1,154 @@
++"""Local text-block draft create/edit, with immutable history and exact owner reads."""
++from contextlib import contextmanager
++import sqlite3
++from uuid import uuid4
++
++from pydantic import TypeAdapter
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import metadata_sha256
++from ..draft_dto import DraftCreateWrite, DraftPatchWrite, DraftCreated, DraftPatched
++from ..infrastructure.database import Database, utc_now
++from ..infrastructure.draft_candidate_repository import DraftCandidateRepository
++from ..infrastructure.draft_edit_repository import DraftEditRepository
++from ..infrastructure.security import SessionIdentity, current_session_identity
++from .authoring_context import AuthoringContext
++from .content_draft_source import ContentDraftSource
++from .draft_candidate_models import ResolvedDraftCandidate, match_candidate
++from .draft_candidates import DraftCandidates
++from .draft_edit_models import (
++    DraftEditRecord, MAX_VERSIONS, ack, apply_patch, checked, initial_payload, invalid, edit_warnings, unsupported, integrity,
++)
++from .errors import ApiError
++from .providers import validate_key
++
++
++class DraftEditService:
++    def __init__(self, database: Database, source: ContentDraftSource | None = None):
++        self.database = database
++        self.source = source or ContentDraftSource(database)
++        self.candidates = DraftCandidates({'authoring_edit': self})
++
++    @staticmethod
++    def _identity(conn: sqlite3.Connection, identity: SessionIdentity) -> SessionIdentity:
++        current = current_session_identity(conn, identity)
++        AuthoringContext.check_access(conn, current)
++        return current
++
++    @staticmethod
++    def _id(value: str) -> str:
++        try:
++            return TypeAdapter(dm.Id).validate_python(value, strict=True)
++        except (ValueError, TypeError):
++            raise invalid() from None
++
++    @contextmanager
++    def _transaction(self):
++        try:
++            with self.database.transaction() as conn:
++                yield conn
++        except sqlite3.Error:
++            raise ApiError(503, 'DRAFT_EDIT_STORAGE_UNAVAILABLE', '草稿存储暂不可用，未确认新的修改。', True) from None
++
++    def _history(self, conn: sqlite3.Connection, identity: SessionIdentity, identifier: str) -> list[DraftEditRecord]:
++        current = self._identity(conn, identity)
++        records = DraftEditRepository(conn, current.workspace_id).history(self._id(identifier))
++        self.source.verify_exact(conn, current, records[0].base)
++        return records
++
++    def _registered_history(self, conn: sqlite3.Connection, identity: SessionIdentity,
++                            identifier: str) -> list[DraftEditRecord]:
++        records = self._history(conn, identity, identifier)
++        catalog = DraftCandidateRepository(conn)
++        for record in records:
++            expected = ResolvedDraftCandidate(record.workspace_id, 'authoring', 'authoring_edit', record.candidate)
++            if catalog.lookup(record.workspace_id, identifier, record.candidate.draft_revision) != expected:
++                raise integrity()
++        return records
++
++    def read(self, identity: SessionIdentity, draft_id: str, revision: int) -> DraftEditRecord:
++        """Internal exact read; not a new HTTP endpoint or an Import snapshot."""
++        try:
++            revision = TypeAdapter(dm.Revision).validate_python(revision, strict=True)
++        except (ValueError, TypeError):
++            raise invalid() from None
++        with self._transaction() as conn:
++            records = self._registered_history(conn, identity, draft_id)
++            if revision > len(records):
++                raise ApiError(412, 'DRAFT_REVISION_MISMATCH', '草稿修订不存在，请重新读取。')
++            record = records[revision - 1]
++            match_candidate(record.candidate, DraftCandidateRepository(conn).lookup(
++                record.workspace_id, draft_id, revision).candidate)
++            return record
++
++    def create(self, identity: SessionIdentity, body: DraftCreateWrite, key: str) -> DraftCreated:
++        body, key = checked(DraftCreateWrite, body, request=True), validate_key(key)
++        with self._transaction() as conn:
++            current = self._identity(conn, identity)
++            repo = DraftEditRepository(conn, current.workspace_id)
++            replay = repo.replay(current.id, 'POST /drafts', key, body)
++            if replay:
++                self._registered_history(conn, current, replay.candidate.draft_id)
++                return checked(DraftCreated, ack(replay))
++            if body.kind != 'block' or body.base_ref is None:
++                raise unsupported()
++            base = self.source.read_exact(conn, current, body.base_ref)
++            payload = initial_payload(base, body.title)
++            candidate = dm.DraftCandidate(draft_id='draft_' + uuid4().hex, draft_revision=1,
++                                           entity='block', candidate_sha256=metadata_sha256(payload))
++            record = DraftEditRecord(workspace_id=current.workspace_id, candidate=candidate, base=base, payload=payload,
++                actor_id=current.id, command_key=key, request=body, parent_sha256=None, created_at=utc_now(),
++                warnings=edit_warnings(base))
++            repo.append(record)
++            self.candidates.admit(conn, current, 'authoring_edit', candidate)
++            self._registered_history(conn, current, candidate.draft_id)
++            return checked(DraftCreated, ack(record))
++
++    def patch(self, identity: SessionIdentity, draft_id: str, body: DraftPatchWrite, key: str | None = None) -> DraftPatched:
++        draft_id = self._id(draft_id)
++        body = checked(DraftPatchWrite, body, request=True)
++        key = validate_key(key) if key is not None else None
++        with self._transaction() as conn:
++            current = self._identity(conn, identity)
++            repo = DraftEditRepository(conn, current.workspace_id)
++            if key is not None:
++                replay = repo.replay(current.id, f'PATCH /drafts/{draft_id}', key, body)
++                if replay:
++                    self._registered_history(conn, current, draft_id)
++                    return checked(DraftPatched, ack(replay))
++            history = self._registered_history(conn, current, draft_id)
++            prior = history[-1]
++            if body.expected_revision != prior.candidate.draft_revision:
++                raise ApiError(412, 'DRAFT_REVISION_MISMATCH', '草稿已变化，请重新读取当前修订。')
++            if len(history) >= MAX_VERSIONS:
++                raise ApiError(413, 'DRAFT_HISTORY_BUDGET', '草稿历史达到当前本地核验上限。')
++            payload = apply_patch(prior.payload, body)
++            candidate = dm.DraftCandidate(draft_id=draft_id, draft_revision=body.expected_revision + 1,
++                                           entity='block', candidate_sha256=metadata_sha256(payload))
++            record = DraftEditRecord(workspace_id=current.workspace_id, candidate=candidate, base=prior.base,
++                payload=payload, actor_id=current.id, command_key=key, request=body,
++                parent_sha256=metadata_sha256(prior), created_at=utc_now(), warnings=edit_warnings(prior.base))
++            repo.append(record)
++            self.candidates.admit(conn, current, 'authoring_edit', candidate)
++            self._registered_history(conn, current, draft_id)
++            return checked(DraftPatched, ack(record))
++
++    def resolve_candidate(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                          candidate: dm.DraftCandidate) -> ResolvedDraftCandidate:
++        candidate = checked(dm.DraftCandidate, candidate)
++        records = self._history(connection, identity, candidate.draft_id)
++        if candidate.draft_revision > len(records):
++            raise ApiError(412, 'DRAFT_REVISION_MISMATCH', '草稿修订不存在。')
++        match_candidate(candidate, records[candidate.draft_revision - 1].candidate)
++        return ResolvedDraftCandidate(identity.workspace_id, 'authoring', 'authoring_edit', candidate)
++
++    def require_current_candidate(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                                  candidate: dm.DraftCandidate) -> None:
++        candidate = checked(dm.DraftCandidate, candidate)
++        records = self._history(connection, identity, candidate.draft_id)
++        match_candidate(candidate, records[-1].candidate)
++
++    def read_review_material(self, connection: sqlite3.Connection, identity: SessionIdentity, candidate: dm.DraftCandidate):
++        from .review_material_models import EditReviewMaterial, checked_material
++        resolved = self.resolve_candidate(connection, identity, candidate)
++        records = self._history(connection, identity, candidate.draft_id)
++        return checked_material(resolved, EditReviewMaterial(record=records[candidate.draft_revision - 1]))
+diff --git a/services/api/app/application/publication_admission.py b/services/api/app/application/publication_admission.py
+index fc0136a..5d14065 100644
+--- a/services/api/app/application/publication_admission.py
++++ b/services/api/app/application/publication_admission.py
+@@ -11,7 +11,7 @@ from .authoring_group_validation import member_ref
+ from .errors import ApiError
+ from .publication_admission_models import DraftPublishWrite, PublicationAdmission
+ from .review_history_models import ReviewDecisionRecord, ReviewMachineRecord
+-from .review_material_models import CheckedReviewMaterial, ImportReviewMaterial, SingleReviewMaterial, GroupReviewMaterial
++from .review_material_models import CheckedReviewMaterial, ImportReviewMaterial, SingleReviewMaterial, GroupReviewMaterial, EditReviewMaterial
+ from .review_numeric_models import NumericReviewCheck
+ from .review_service import ReviewService
+ 
+@@ -27,6 +27,8 @@ class PublicationAdmissionService:
+     @staticmethod
+     def _plans(material: CheckedReviewMaterial) -> list[tuple[AuthoringDraftMemberRef | None, NumericPlan]]:
+         payload = material.payload
++        if isinstance(payload, EditReviewMaterial):
++            raise blocked('PUBLISH_EDIT_OWNER_UNSUPPORTED', '当前编辑候选尚未接入真实发布所属端口。')
+         if isinstance(payload, ImportReviewMaterial):
+             if material.candidate.entity == 'question':
+                 raise blocked('PUBLISH_PRIVATE_COVERAGE_UNAVAILABLE', '当前导入审核不包含私有解答，不能据此准入题目发布。')
+diff --git a/services/api/app/application/review_checks.py b/services/api/app/application/review_checks.py
+index 8d6867c..cdedf71 100644
+--- a/services/api/app/application/review_checks.py
++++ b/services/api/app/application/review_checks.py
+@@ -15,7 +15,7 @@ from ..authoring_dto import AuthoringBlockRef, AuthoringModel, WorkedExamplePayl
+ from ..authoring_group_dto import AuthoringTextBlockPayload, GeneratedSolutionAnswer
+ from .errors import ApiError
+ from .review_material_models import (
+-    CheckedReviewMaterial, ImportReviewMaterial, SingleReviewMaterial, GroupReviewMaterial,
++    CheckedReviewMaterial, ImportReviewMaterial, SingleReviewMaterial, GroupReviewMaterial, EditReviewMaterial,
+ )
+ 
+ CheckCode = Literal['material_schema', 'candidate_byte_binding', 'declared_source_membership',
+@@ -113,7 +113,7 @@ def review_structure(material: CheckedReviewMaterial, *, requested: bool) -> Str
+         # The complete model validation recomputes descriptor, candidate/body,
+         # plan, member and private-solution relationships for its exact profile.
+         checks = [_check('material_schema', 'PASS'), _check('candidate_byte_binding', 'PASS')]
+-        if isinstance(material.payload, ImportReviewMaterial):
++        if isinstance(material.payload, (ImportReviewMaterial, EditReviewMaterial)):
+             checks += [_check(code, 'NOT_RUN', 'no_authoring_declaration_schema') for code in ORDER[2:]]
+         else:
+             source_lists, declarations = _declarations(material)
+diff --git a/services/api/app/application/review_material_models.py b/services/api/app/application/review_material_models.py
+index 5d623ee..d64eeac 100644
+--- a/services/api/app/application/review_material_models.py
++++ b/services/api/app/application/review_material_models.py
+@@ -17,6 +17,7 @@ from .authoring_group_models import (
+     AuthoringContentPlanRecord, AuthoringGroupCandidateRecord, AuthoringGroupJobInput,
+     PreparedAuthoringGroupContext, group_context_sha256, validate_group_context_binding,
+ )
++from .draft_edit_models import DraftEditRecord
+ from .draft_candidate_models import DraftOwner, DraftSourceKind, ResolvedDraftCandidate
+ 
+ 
+@@ -79,7 +80,12 @@ class GroupReviewMaterial(AuthoringModel):
+         return self
+ 
+ 
+-ReviewPayload = Annotated[ImportReviewMaterial | SingleReviewMaterial | GroupReviewMaterial,
++class EditReviewMaterial(AuthoringModel):
++    version: Literal['authoring-edit-review-material-v1'] = 'authoring-edit-review-material-v1'
++    record: DraftEditRecord
++
++
++ReviewPayload = Annotated[ImportReviewMaterial | SingleReviewMaterial | GroupReviewMaterial | EditReviewMaterial,
+                           Field(discriminator='version')]
+ 
+ 
+@@ -102,6 +108,13 @@ class CheckedReviewMaterial(AuthoringModel):
+             candidate = self.payload.candidate
+             record_sha = metadata_sha256(self.payload)
+             refs: list[dm.ContentRef] = []
++        elif isinstance(self.payload, EditReviewMaterial):
++            expected_owner, expected_kind = 'authoring', 'authoring_edit'
++            candidate = self.payload.record.candidate
++            record_sha = metadata_sha256(self.payload.record)
++            refs = [self.payload.record.base.ref]
++            if self.workspace_id != self.payload.record.workspace_id or self.warnings != self.payload.record.warnings:
++                raise ValueError('Edit material must retain its complete workspace and warnings')
+         else:
+             expected_owner = 'authoring'
+             expected_kind = 'authoring_single' if isinstance(self.payload, SingleReviewMaterial) else 'authoring_group'
+@@ -126,6 +139,10 @@ def checked_material(identity: ResolvedDraftCandidate, payload: ReviewPayload) -
+         record_sha = metadata_sha256(payload)
+         refs: list[dm.ContentRef] = []
+         warnings = payload.warnings
++    elif isinstance(payload, EditReviewMaterial):
++        record_sha = metadata_sha256(payload.record)
++        refs = [payload.record.base.ref]
++        warnings = payload.record.warnings
+     else:
+         record_sha = metadata_sha256(payload.record)
+         refs = payload.context.snapshot.resolved_refs
+diff --git a/services/api/app/application/review_numeric.py b/services/api/app/application/review_numeric.py
+index 109980d..e141c13 100644
+--- a/services/api/app/application/review_numeric.py
++++ b/services/api/app/application/review_numeric.py
+@@ -165,9 +165,9 @@ class ReviewNumeric:
+     def read_review_numeric(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                             draft_id: str, expected_revision: int) -> ReviewNumericObservation:
+         resolved = self.candidates.lookup(connection, identity, draft_id, expected_revision)
+-        if resolved.source_kind == 'import':
++        if resolved.source_kind == 'import' or resolved.source_kind == 'authoring_edit':
+             return _observation(dict(version='review-numeric-observation-v1', workspace_id=resolved.workspace_id,
+-                source_kind='import', candidate=resolved.candidate.model_dump(mode='json'), candidate_record_sha256=None,
++                source_kind=resolved.source_kind, candidate=resolved.candidate.model_dump(mode='json'), candidate_record_sha256=None,
+                 source_job_id=None, provider_receipt_id=None, coverage='no_numeric_owner_pipeline', observed_at=utc_now(), checks=[]))
+         owner = self.owners.get(resolved.source_kind)
+         if owner is None:
+@@ -185,7 +185,7 @@ class ReviewNumeric:
+         if (original.workspace_id != resolved.workspace_id or original.source_kind != resolved.source_kind
+                 or original.candidate != resolved.candidate):
+             raise integrity()
+-        if resolved.source_kind != 'import':
++        if resolved.source_kind == 'authoring_single' or resolved.source_kind == 'authoring_group':
+             owner = self.owners.get(resolved.source_kind)
+             if owner is None:
+                 raise ApiError(503, 'NUMERIC_OWNER_UNAVAILABLE', '数值观察所属服务当前不可用。')
+diff --git a/services/api/app/application/review_numeric_models.py b/services/api/app/application/review_numeric_models.py
+index 4a40a92..fa6f1cc 100644
+--- a/services/api/app/application/review_numeric_models.py
++++ b/services/api/app/application/review_numeric_models.py
+@@ -100,11 +100,11 @@ class ReviewNumericObservation(AuthoringModel):
+ 
+     @model_validator(mode='after')
+     def complete_observation(self) -> Self:
+-        import_owner = self.source_kind == 'import'
++        import_owner = self.source_kind in {'import', 'authoring_edit'}
+         identities = [self.candidate_record_sha256, self.source_job_id, self.provider_receipt_id]
+         if import_owner:
+             if self.coverage != 'no_numeric_owner_pipeline' or self.checks or any(x is not None for x in identities):
+-                raise ValueError('Import has no execution ledger; this does not establish absence of mathematics')
++                raise ValueError('This owner has no execution ledger; this does not establish absence of mathematics')
+         elif self.coverage != 'authoring_numeric_ledger' or any(x is None for x in identities):
+             raise ValueError('generated observation requires the actual original owner history')
+         if len({check.view.id for check in self.checks}) != len(self.checks):
+diff --git a/services/api/app/application/review_service.py b/services/api/app/application/review_service.py
+index 0a038a8..f9d41fc 100644
+--- a/services/api/app/application/review_service.py
++++ b/services/api/app/application/review_service.py
+@@ -159,7 +159,7 @@ class ReviewService:
+                 if not isinstance(replay, ReviewCreateCommand):
+                     raise integrity()
+                 return replay.ack
+-            material = self.candidates.read_review_material(conn, current, draft_id, body.expected_revision)
++            material = self.candidates.read_current_review_material(conn, current, draft_id, body.expected_revision)
+             self.numeric.read_review_numeric(conn, current, draft_id, body.expected_revision)
+             identifier, now = 'review_' + uuid4().hex, utc_now()
+             value = ReviewJobInput(version='draft-review-job-v1', workspace_id=current.workspace_id,
+diff --git a/services/api/app/draft_dto.py b/services/api/app/draft_dto.py
+new file mode 100644
+index 0000000..236fe2e
+--- /dev/null
++++ b/services/api/app/draft_dto.py
+@@ -0,0 +1,84 @@
++"""Appendix A 1262/1263 application DTOs; no new HTTP route or core model."""
++from typing import Literal
++
++from pydantic import Field, JsonValue, model_validator, field_validator, ConfigDict
++from packages.contracts import domain_models as dm
++
++
++class DraftModel(dm.StrictModel):
++    model_config = ConfigDict(hide_input_in_errors=True)
++
++    def __repr_args__(self):
++        return []
++
++
++class DraftCreateWrite(DraftModel):
++    kind: Literal['course', 'lesson', 'block', 'question', 'practice_set', 'assessment']
++    base_ref: dm.ContentRef | None
++    title: dm.Text
++
++    @field_validator('title')
++    @classmethod
++    def valid_title(cls, value: str) -> str:
++        try:
++            value.encode('utf-8')
++        except UnicodeError:
++            raise ValueError('title must contain valid Unicode scalar values') from None
++        return value
++
++
++class DraftCreated(DraftModel):
++    draft_id: dm.Id
++    revision: dm.Revision
++    base_ref: dm.ContentRef | None
++    state: Literal['draft'] = 'draft'
++
++
++class DraftPatch(DraftModel):
++    field: str = Field(min_length=1, max_length=80)
++    value: JsonValue
++
++    @field_validator('value', mode='before')
++    @classmethod
++    def bounded_json(cls, value):
++        pending = [(value, 0)]
++        nodes, size = 0, 0
++        while pending:
++            item, depth = pending.pop()
++            nodes += 1
++            if nodes > 10000 or depth > 32:
++                raise ValueError('JSON patch value exceeds local structural budget')
++            if isinstance(item, str):
++                size += len(item.encode('utf-8'))
++            elif isinstance(item, dict):
++                if len(item) > 10000:
++                    raise ValueError('JSON patch value exceeds local structural budget')
++                for key, child in item.items():
++                    if not isinstance(key, str):
++                        raise ValueError('JSON object keys must be strings')
++                    size += len(key.encode('utf-8'))
++                    pending.append((child, depth + 1))
++            elif isinstance(item, list):
++                if len(item) > 10000:
++                    raise ValueError('JSON patch value exceeds local structural budget')
++                pending.extend((child, depth + 1) for child in item)
++            if size > 2_000_000:
++                raise ValueError('JSON patch value exceeds local byte budget')
++        return value
++
++
++class DraftPatchWrite(DraftModel):
++    expected_revision: dm.Revision
++    patches: list[DraftPatch] = Field(min_length=1, max_length=8)
++
++    @model_validator(mode='after')
++    def unique_fields(self):
++        if len({item.field for item in self.patches}) != len(self.patches):
++            raise ValueError('patch fields must be distinct')
++        return self
++
++
++class DraftPatched(DraftModel):
++    draft_id: dm.Id
++    revision: dm.Revision
++    validation_warnings: list[dm.Warning]
+diff --git a/services/api/app/infrastructure/draft_candidate_repository.py b/services/api/app/infrastructure/draft_candidate_repository.py
+index 86e623d..80649ac 100644
+--- a/services/api/app/infrastructure/draft_candidate_repository.py
++++ b/services/api/app/infrastructure/draft_candidate_repository.py
+@@ -52,7 +52,7 @@ class DraftCandidateRepository:
+             if (tuple(row[key] for key in ('draft_id', 'workspace_id', 'owner', 'entity'))
+                     != tuple(identity[key] for key in ('draft_id', 'workspace_id', 'owner', 'entity'))
+                     or owner != ('import' if kind == 'import' else 'authoring')
+-                    or kind == 'authoring_single' and candidate.entity != 'block'
++                    or kind in {'authoring_single', 'authoring_edit'} and candidate.entity != 'block'
+                     or kind == 'authoring_group' and candidate.entity not in {'lesson', 'practice_set', 'assessment'}):
+                 raise ValueError('Candidate registry linkage is inconsistent')
+         except (ValidationError, ValueError, TypeError, KeyError):
+diff --git a/services/api/app/infrastructure/draft_edit_repository.py b/services/api/app/infrastructure/draft_edit_repository.py
+new file mode 100644
+index 0000000..b26b273
+--- /dev/null
++++ b/services/api/app/infrastructure/draft_edit_repository.py
+@@ -0,0 +1,139 @@
++"""Edit-owned append-only versions, checked heads and permanent original commands."""
++import sqlite3
++from uuid import uuid4
++
++from packages.contracts.canonical import canonical_bytes, metadata_sha256, sha256_bytes, strict_json
++from ..application.draft_edit_models import (
++    DraftEditRecord, DraftEditCommand, MAX_VERSIONS, ack, apply_patch, checked, integrity,
++)
++from ..application.errors import ApiError
++from ..draft_dto import DraftCreateWrite, DraftPatchWrite
++
++
++class DraftEditRepository:
++    def __init__(self, conn: sqlite3.Connection, workspace_id: str):
++        if not conn.in_transaction:
++            raise ApiError(409, 'TRANSACTION_REQUIRED', '草稿操作需要当前事务。')
++        self.conn, self.workspace_id = conn, workspace_id
++
++    @staticmethod
++    def decode(model, row):
++        try:
++            value = checked(model, strict_json(row['record_json']))
++            if canonical_bytes(value).decode() != row['record_json'] or metadata_sha256(value) != row['record_sha256']:
++                raise integrity()
++            return value
++        except (ValueError, TypeError, AttributeError):
++            raise integrity() from None
++
++    def history(self, draft_id: str) -> list[DraftEditRecord]:
++        head = self.conn.execute('SELECT * FROM draft_edits WHERE draft_id=? AND workspace_id=?',
++                                 (draft_id, self.workspace_id)).fetchone()
++        if head is None:
++            raise ApiError(404, 'DRAFT_EDIT_UNAVAILABLE', '草稿不存在或不可访问。')
++        if type(head['revision']) is not int or not 1 <= head['revision'] <= MAX_VERSIONS:
++            raise integrity()
++        size = self.conn.execute('SELECT COALESCE(SUM(length(CAST(record_json AS BLOB))),0) FROM draft_edit_versions WHERE draft_id=?',
++                                 (draft_id,)).fetchone()[0]
++        if size > 32_000_000:
++            raise ApiError(413, 'DRAFT_HISTORY_BUDGET', '草稿历史超过当前完整核验字节上限。')
++        rows = self.conn.execute('SELECT * FROM draft_edit_versions WHERE draft_id=? ORDER BY revision LIMIT ?',
++                                 (draft_id, MAX_VERSIONS + 1)).fetchall()
++        if len(rows) != head['revision']:
++            raise integrity()
++        records: list[DraftEditRecord] = []
++        for ordinal, row in enumerate(rows, 1):
++            record = self.decode(DraftEditRecord, row)
++            c = record.candidate
++            if (c.draft_id != draft_id or c.draft_revision != ordinal or record.workspace_id != self.workspace_id
++                    or row['workspace_id'] != self.workspace_id or row['revision'] != ordinal
++                    or row['candidate_sha256'] != c.candidate_sha256 or row['created_at'] != record.created_at
++                    or row['parent_sha256'] != record.parent_sha256
++                    or canonical_bytes(record.base.ref).decode() != head['base_ref_json'] or head['kind'] != 'block'):
++                raise integrity()
++            if ordinal == 1:
++                if head['created_at'] != record.created_at:
++                    raise integrity()
++            else:
++                prior = records[-1]
++                if (record.base != prior.base or record.parent_sha256 != metadata_sha256(prior)
++                        or not isinstance(record.request, DraftPatchWrite)):
++                    raise integrity()
++                try:
++                    expected = apply_patch(prior.payload, record.request)
++                except ApiError:
++                    raise integrity() from None
++                if expected != record.payload:
++                    raise integrity()
++            commands = self.conn.execute('SELECT * FROM draft_edit_commands WHERE draft_id=? AND revision=?',
++                                          (draft_id, ordinal)).fetchall()
++            if len(commands) != (1 if record.command_key is not None else 0):
++                raise integrity()
++            if commands:
++                command = self.decode(DraftEditCommand, commands[0])
++                expected_route = 'POST /drafts' if ordinal == 1 else f'PATCH /drafts/{draft_id}'
++                expected_command = DraftEditCommand(workspace_id=self.workspace_id, actor_id=record.actor_id,
++                    route=expected_route, key=record.command_key, record_sha256=metadata_sha256(record),
++                    request=record.request, ack=ack(record))
++                if (command != expected_command or tuple(commands[0][key] for key in
++                        ('workspace_id', 'actor_id', 'route', 'command_key')) !=
++                        (self.workspace_id, record.actor_id, expected_route, record.command_key)):
++                    raise integrity()
++            records.append(record)
++        return records
++
++    def replay(self, actor_id: str, route: str, key: str, request: DraftCreateWrite | DraftPatchWrite) -> DraftEditRecord | None:
++        row = self.conn.execute('SELECT * FROM draft_edit_commands WHERE workspace_id=? AND actor_id=? AND route=? AND command_key=?',
++                                (self.workspace_id, actor_id, route, key)).fetchone()
++        if row is None:
++            return None
++        records = self.history(row['draft_id'])
++        revision = row['revision']
++        if type(revision) is not int or not 1 <= revision <= len(records):
++            raise integrity()
++        record = records[revision - 1]
++        if (record.actor_id != actor_id or record.command_key != key
++                or (route != 'POST /drafts' if revision == 1 else route != f'PATCH /drafts/{record.candidate.draft_id}')):
++            raise integrity()
++        if canonical_bytes(record.request) != canonical_bytes(request):
++            raise ApiError(409, 'IDEMPOTENCY_CONFLICT', '原草稿命令键已用于不同的完整请求。')
++        return record
++
++    def append(self, record: DraftEditRecord) -> None:
++        # Preserve atomicity even when an outer owner catches the SQL error.
++        savepoint = 'edit_append_' + uuid4().hex
++        self.conn.execute('SAVEPOINT ' + savepoint)
++        try:
++            self._append(record)
++            self.conn.execute('RELEASE ' + savepoint)
++        except BaseException:
++            self.conn.execute('ROLLBACK TO ' + savepoint)
++            self.conn.execute('RELEASE ' + savepoint)
++            raise
++
++    def _append(self, record: DraftEditRecord) -> None:
++        record = checked(DraftEditRecord, record)
++        c = record.candidate
++        if record.workspace_id != self.workspace_id:
++            raise integrity()
++        if c.draft_revision == 1:
++            self.conn.execute('INSERT INTO draft_edits VALUES(?,?,?,?,?,?)',
++                (c.draft_id, self.workspace_id, 'block', 1, canonical_bytes(record.base.ref).decode(), record.created_at))
++        else:
++            changed = self.conn.execute('UPDATE draft_edits SET revision=? WHERE draft_id=? AND workspace_id=? AND revision=?',
++                (c.draft_revision, c.draft_id, self.workspace_id, c.draft_revision - 1))
++            if changed.rowcount != 1:
++                raise ApiError(412, 'DRAFT_REVISION_MISMATCH', '草稿已变化，请重新读取当前修订。')
++        raw = canonical_bytes(record)
++        self.conn.execute('INSERT INTO draft_edit_versions(draft_id,workspace_id,revision,candidate_sha256,record_json,'
++            'record_sha256,parent_sha256,created_at) VALUES(?,?,?,?,?,?,?,?)',
++            (c.draft_id, self.workspace_id, c.draft_revision, c.candidate_sha256, raw.decode(), sha256_bytes(raw),
++             record.parent_sha256, record.created_at))
++        if record.command_key is not None:
++            command = DraftEditCommand(workspace_id=self.workspace_id, actor_id=record.actor_id,
++                route='POST /drafts' if c.draft_revision == 1 else f'PATCH /drafts/{c.draft_id}',
++                key=record.command_key, record_sha256=metadata_sha256(record), request=record.request, ack=ack(record))
++            raw = canonical_bytes(command)
++            self.conn.execute('INSERT INTO draft_edit_commands VALUES(?,?,?,?,?,?,?,?)',
++                (self.workspace_id, record.actor_id, command.route, command.key, c.draft_id, c.draft_revision,
++                 raw.decode(), sha256_bytes(raw)))
+diff --git a/services/api/app/infrastructure/review_repository.py b/services/api/app/infrastructure/review_repository.py
+index 1b480c0..f2f56c3 100644
+--- a/services/api/app/infrastructure/review_repository.py
++++ b/services/api/app/infrastructure/review_repository.py
+@@ -18,7 +18,7 @@ from ..application.review_history_models import (
+     ReviewRecord, ReviewHistory, StoredReviewReceipt, instant, machine_job_result,
+ )
+ from ..application.review_checks import review_structure
+-from ..application.review_material_models import ImportReviewMaterial
++from ..application.review_material_models import ImportReviewMaterial, EditReviewMaterial
+ from ..application.review_models import ReviewJobInput
+ from ..import_dto import JobSnapshot
+ from .draft_candidate_repository import DraftCandidateRepository
+@@ -237,7 +237,7 @@ class ReviewRepository:
+                 or instant(record.checked_at) > instant(row['updated_at'])):
+             raise integrity()
+         payload = record.material.payload
+-        if not isinstance(payload, ImportReviewMaterial):
++        if not isinstance(payload, (ImportReviewMaterial, EditReviewMaterial)):
+             if (record.numeric.candidate_record_sha256 != record.material.owner_record_sha256
+                     or record.numeric.source_job_id != payload.record.source_job_id
+                     or record.numeric.provider_receipt_id != payload.record.provider_receipt_id):
+diff --git a/tests/integration/test_draft_edit_boundaries.py b/tests/integration/test_draft_edit_boundaries.py
+new file mode 100644
+index 0000000..4f15738
+--- /dev/null
++++ b/tests/integration/test_draft_edit_boundaries.py
+@@ -0,0 +1,296 @@
++"""Actual SQLite edit boundaries; every identity and human decision is synthetic."""
++from concurrent.futures import ThreadPoolExecutor
++from dataclasses import replace
++from threading import Barrier
++import warnings
++
++import pytest
++from pydantic import ValidationError
++from packages.contracts.canonical import sha256_bytes
++from services.api.app.application.content import ContentService
++from services.api.app.application.draft_edits import DraftEditService
++from services.api.app.application.errors import ApiError
++from services.api.app.draft_dto import DraftCreateWrite, DraftPatch, DraftPatchWrite
++from services.api.app.infrastructure.database import Database
++from tests.integration.test_draft_edit_migration import previous as previous
++from tests.integration.test_authoring_numeric_provider_history import table_hashes
++
++
++class Case(tuple):
++    def __repr__(self):
++        return 'SyntheticDraftEditCase()'
++
++
++@pytest.fixture
++def case(previous):
++    _, settings, identity, _, _, _, base = previous
++    database = Database(settings)
++    database.initialize()
++    service = DraftEditService(database)
++    body = DraftCreateWrite(kind='block', base_ref=base, title='Synthetic draft')
++    created = service.create(identity, body, 'create')
++    return Case((database, identity, base, service, body, created))
++
++
++def patch(revision=1, text='Changed synthetic text.\n'):
++    return DraftPatchWrite(expected_revision=revision, patches=[DraftPatch(field='body_markdown', value=text)])
++
++
++@pytest.mark.parametrize('field', ['id', 'revision', 'base_ref', 'base_hash', 'body_path', 'kind', 'candidate_sha256',
++                                  'state', 'reviewer', 'mathematical', 'citations', 'depends_on', 'unknown'])
++def test_non_whitelisted_fields_have_no_partial_side_effects(case, field):
++    database, identity, _, service, _, created = case
++    before = table_hashes(database)
++    with pytest.raises(ApiError):
++        service.patch(identity, created.draft_id, DraftPatchWrite(expected_revision=1, patches=[
++            DraftPatch(field='title', value='Must never commit'), DraftPatch(field=field, value='invalid')]), 'bad')
++    assert table_hashes(database) == before
++    assert service.read(identity, created.draft_id, 1).payload.title == 'Synthetic draft'
++
++
++@pytest.mark.parametrize('value', [True, 1, 1.5, None, [], {'nested': ['json', 1, False]}])
++def test_json_values_are_real_json_but_wrong_field_types_never_coerce(case, value):
++    database, identity, _, service, _, created = case
++    body = DraftPatchWrite(expected_revision=1, patches=[DraftPatch(field='title', value=value)])
++    before = table_hashes(database)
++    with pytest.raises(ApiError):
++        service.patch(identity, created.draft_id, body, 'bad-value')
++    assert table_hashes(database) == before
++
++
++@pytest.mark.parametrize('bad', [float('inf'), float('nan'), {'nested': float('inf')}])
++def test_nonfinite_json_is_rejected_by_strict_transport_model(bad):
++    with pytest.raises(ValidationError):
++        DraftPatch(field='title', value=bad)
++
++
++def test_deep_json_and_large_value_have_explicit_bounds():
++    value = 'leaf'
++    for _ in range(40):
++        value = [value]
++    with pytest.raises(ValidationError):
++        DraftPatch(field='title', value=value)
++    with pytest.raises(ValidationError):
++        DraftPatch(field='title', value='x' * 2_000_001)
++
++
++@pytest.mark.parametrize('change', ['hash', 'id', 'revision', 'null', 'kind'])
++def test_create_exact_base_identity_and_supported_scope(case, change):
++    database, identity, base, service, _, _ = case
++    data = dict(kind='block', base_ref=base, title='Another synthetic draft')
++    if change == 'null':
++        data['base_ref'] = None
++    elif change == 'kind':
++        data['kind'] = 'lesson'
++    else:
++        data['base_ref'] = base.model_copy(update={change if change != 'hash' else 'sha256':
++            '0' * 64 if change == 'hash' else 'missing_block' if change == 'id' else 999})
++    before = table_hashes(database)
++    with pytest.raises(ApiError):
++        service.create(identity, DraftCreateWrite(**data), 'other')
++    assert table_hashes(database) == before
++
++
++def test_original_ack_after_later_edits_restart_expiry_and_later_content(case, monkeypatch):
++    database, identity, base, service, body, created = case
++    first = patch()
++    ack = service.patch(identity, created.draft_id, first, 'patch')
++    service.patch(identity, created.draft_id, patch(2, 'Third synthetic body.\n'), 'third')
++    content = ContentService(database)
++    block = content.read(identity.workspace_id, 'block', base.id, base.revision)
++    new_body = b'Later actual published synthetic text.\n'
++    newer = block.model_copy(update={'revision': 2, 'body_sha256': sha256_bytes(new_body)})
++    content.publish(identity.workspace_id, [newer], {newer.body_path: new_body})
++    with database.transaction() as conn:
++        conn.execute("UPDATE idempotency SET expires_at='2000-01-01T00:00:00Z'")
++    fresh = DraftEditService(Database(database.settings))
++    before = table_hashes(database)
++    assert fresh.create(identity, body, 'create') == created
++    assert fresh.patch(identity, created.draft_id, first, 'patch') == ack
++    assert fresh.read(identity, created.draft_id, 1).base.ref == base
++    historical = fresh.create(identity, body, 'new-from-historical')
++    assert fresh.read(identity, historical.draft_id, 1).payload.body_markdown != new_body.decode()
++    # A no-key repeat remains a new command with stale CAS, never guessed replay.
++    with pytest.raises(ApiError) as error:
++        fresh.patch(identity, created.draft_id, first)
++    assert error.value.status == 412
++    assert table_hashes(database) != before  # only the explicitly new historical draft above
++    assert content.current(identity.workspace_id, base.id).revision == 2
++
++
++@pytest.mark.parametrize('same_key', [False, True])
++def test_actual_connections_serialize_competing_edit_commands(case, same_key):
++    database, identity, _, service, _, created = case
++    barrier = Barrier(2)
++    def write(key):
++        barrier.wait(timeout=10)
++        try:
++            return service.patch(identity, created.draft_id, patch(), key)
++        except ApiError as error:
++            return error.status
++    with ThreadPoolExecutor(max_workers=2) as pool:
++        results = list(pool.map(write, ['one', 'one' if same_key else 'two']))
++    successes = [item for item in results if not isinstance(item, int)]
++    assert len(successes) == (2 if same_key else 1)
++    if same_key:
++        assert successes[0] == successes[1]
++    else:
++        assert 412 in results
++    assert service.read(identity, created.draft_id, 2).candidate.draft_revision == 2
++    with pytest.raises(ApiError):
++        service.read(identity, created.draft_id, 3)
++
++
++@pytest.mark.parametrize('change', ['role', 'revoked', 'expired', 'workspace'])
++def test_current_identity_before_original_ack_and_private_material(case, change):
++    database, identity, _, service, body, created = case
++    with database.transaction() as conn:
++        if change == 'role':
++            conn.execute("UPDATE local_sessions SET role='learner' WHERE id=?", (identity.id,))
++        elif change == 'revoked':
++            conn.execute("UPDATE local_sessions SET revoked_at='2000-01-01T00:00:00Z' WHERE id=?", (identity.id,))
++        elif change == 'expired':
++            conn.execute("UPDATE local_sessions SET expires_at='2000-01-01T00:00:00Z' WHERE id=?", (identity.id,))
++        else:
++            identity = replace(identity, workspace_id='workspace_nonexistent')
++    before = table_hashes(database)
++    for call in [lambda: service.create(identity, body, 'create'), lambda: service.read(identity, created.draft_id, 1),
++                 lambda: service.patch(identity, created.draft_id, patch(), 'patch')]:
++        with pytest.raises(ApiError):
++            call()
++    assert table_hashes(database) == before
++
++
++@pytest.mark.parametrize('mode', ['independent', 'open_book', 'assisted'])
++def test_real_current_assessment_policy_blocks_new_writes_and_original_ack(case, mode):
++    from services.api.app.application.assessment import AssessmentService
++    from services.api.app.assessment_dto import AssessmentAttemptCreate
++    from services.api.app.infrastructure.content_repository import reference
++    from tests.assessment_fixtures import assessment_fixture
++    from tests.integration.test_assessment_attempts import import_fixture
++    database, identity, _, service, body, created = case
++    fixture = assessment_fixture('drafteditpolicy')
++    import_fixture(database, identity, fixture, 'assessment-material')
++    AssessmentService(database).create_attempt(identity, fixture.assessment.id,
++        AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode=mode), 'attempt')
++    before = table_hashes(database)
++    for call in [lambda: service.create(identity, body, 'create'), lambda: service.read(identity, created.draft_id, 1),
++                 lambda: service.patch(identity, created.draft_id, patch(), 'patch')]:
++        with pytest.raises(ApiError):
++            call()
++    assert table_hashes(database) == before
++
++
++@pytest.mark.parametrize('operation,table', [('create', 'draft_edits'), ('create', 'draft_edit_versions'),
++    ('create', 'draft_edit_commands'), ('create', 'draft_candidate_identities'),
++    ('patch', 'draft_edit_versions'), ('patch', 'draft_edit_commands'), ('patch', 'draft_candidate_revisions')])
++def test_fault_after_actual_write_rolls_back_whole_operation(case, operation, table):
++    database, identity, _, service, body, created = case
++    with database.transaction() as conn:
++        conn.execute(f"CREATE TRIGGER synthetic_edit_failure AFTER INSERT ON {table} "
++                     "BEGIN SELECT RAISE(ABORT,'synthetic failure'); END")
++    before = table_hashes(database)
++    with pytest.raises(ApiError):
++        if operation == 'create':
++            service.create(identity, body, 'other')
++        else:
++            service.patch(identity, created.draft_id, patch(), 'patch')
++    assert table_hashes(database) == before
++
++
++def test_invalid_constructed_request_never_emits_sensitive_serializer_warning(case):
++    _, identity, _, service, _, created = case
++    secret_marker = 'synthetic-private-draft-marker'
++    invalid = DraftPatchWrite.model_construct(expected_revision=1,
++        patches=[DraftPatch.model_construct(field='title', value=object())], hidden=secret_marker)
++    with warnings.catch_warnings(record=True) as emitted:
++        warnings.simplefilter('always')
++        with pytest.raises(ApiError) as error:
++            service.patch(identity, created.draft_id, invalid, 'invalid')
++    assert emitted == []
++    assert secret_marker not in str(error.value)
++
++
++@pytest.mark.parametrize('operation', ['original_ack', 'new_patch'])
++def test_damaged_original_catalog_cannot_be_bypassed_by_edit_owner(case, operation):
++    database, identity, _, service, body, created = case
++    with database.transaction() as conn:
++        conn.execute('DROP TRIGGER draft_candidate_revisions_no_update')
++        conn.execute("UPDATE draft_candidate_revisions SET candidate_sha256=? WHERE draft_id=?", ('0' * 64, created.draft_id))
++    before = table_hashes(database)
++    with pytest.raises(ApiError):
++        if operation == 'original_ack':
++            service.create(identity, body, 'create')
++        else:
++            service.patch(identity, created.draft_id, patch(), 'patch')
++    assert table_hashes(database) == before
++
++
++def test_create_title_requires_unicode_scalar_values():
++    with pytest.raises(ValidationError):
++        DraftCreateWrite(kind='block', base_ref=None, title='bad\ud800title')
++
++
++def test_private_edit_models_never_expand_content_in_ordinary_representations(case):
++    _, identity, _, service, body, created = case
++    record = service.read(identity, created.draft_id, 1)
++    for value in [body, record, record.payload, record.base]:
++        assert 'Synthetic' not in repr(value)
++        assert 'Synthetic' not in str(value)
++
++
++@pytest.mark.parametrize('payload', [[], [DraftPatch(field='title', value='one'), DraftPatch(field='title', value='two')]])
++def test_empty_or_duplicate_patch_commands_are_rejected(payload):
++    with pytest.raises(ValidationError):
++        DraftPatchWrite(expected_revision=1, patches=payload)
++
++
++@pytest.mark.parametrize('text', ['Synthetic draft', 'bad\r\nbody'])
++def test_noop_or_noncanonical_body_never_creates_a_revision(case, text):
++    database, identity, _, service, _, created = case
++    field = 'title' if text == 'Synthetic draft' else 'body_markdown'
++    before = table_hashes(database)
++    with pytest.raises(ApiError):
++        service.patch(identity, created.draft_id, DraftPatchWrite(expected_revision=1,
++            patches=[DraftPatch(field=field, value=text)]), 'bad')
++    assert table_hashes(database) == before
++
++
++def test_same_key_conflicts_bind_complete_create_and_patch_requests(case):
++    database, identity, _, service, body, created = case
++    first = patch()
++    service.patch(identity, created.draft_id, first, 'patch')
++    before = table_hashes(database)
++    for call in [lambda: service.create(identity, body.model_copy(update={'title': 'Different'}), 'create'),
++                 lambda: service.patch(identity, created.draft_id, patch(text='Different'), 'patch')]:
++        with pytest.raises(ApiError) as error:
++            call()
++        assert error.value.status == 409
++    assert table_hashes(database) == before
++
++
++def test_import_candidate_and_other_workspace_cannot_be_edited(case):
++    from services.api.app.application.sessions import SessionService
++    from services.api.app.dto import RoleRequest
++    from services.api.app.infrastructure.security import consume_bootstrap, issue_bootstrap_code
++    database, identity, _, service, _, created = case
++    with database.connect() as conn:
++        foreign_owner = conn.execute('SELECT id FROM drafts LIMIT 1').fetchone()[0]
++    before = table_hashes(database)
++    with pytest.raises(ApiError) as error:
++        service.patch(identity, foreign_owner, patch(), 'foreign-owner')
++    assert error.value.status == 404
++    assert table_hashes(database) == before
++    _, learner = consume_bootstrap(database, issue_bootstrap_code(database))
++    SessionService(database).switch_role(learner, RoleRequest(role='author'), 'other-role')
++    other = replace(learner, role='author')
++    with database.transaction() as conn:
++        conn.execute("INSERT INTO workspace(id,title,created_at) VALUES('workspace_other_edit','Synthetic other','2026-09-28T00:00:00Z')")
++        conn.execute("UPDATE local_sessions SET workspace_id='workspace_other_edit' WHERE id=?", (other.id,))
++    other = replace(other, workspace_id='workspace_other_edit')
++    before = table_hashes(database)
++    for call in [lambda: service.read(other, created.draft_id, 1), lambda: service.patch(other, created.draft_id, patch(), 'foreign')]:
++        with pytest.raises(ApiError) as error:
++            call()
++        assert error.value.status == 404
++    assert table_hashes(database) == before
+diff --git a/tests/integration/test_draft_edit_integrity.py b/tests/integration/test_draft_edit_integrity.py
+new file mode 100644
+index 0000000..45e4c87
+--- /dev/null
++++ b/tests/integration/test_draft_edit_integrity.py
+@@ -0,0 +1,284 @@
++"""Exact owner history and physical source bytes; no inferred authorizations."""
++import json
++import sqlite3
++
++import pytest
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import metadata_sha256, sha256_bytes
++from services.api.app.application.content import ContentService
++from services.api.app.application.content_draft_source import ContentDraftSource
++from services.api.app.application.draft_candidates import DraftCandidates
++from services.api.app.application.errors import ApiError
++from services.api.app.application.publication_admission import PublicationAdmissionService
++from services.api.app.application.publication_admission_models import DraftPublishWrite
++from services.api.app.application.review_numeric import ReviewNumeric
++from services.api.app.application.review_service import ReviewService
++from services.api.app.application.review_worker import ReviewWorker
++from services.api.app.draft_dto import DraftCreateWrite
++from services.api.app.infrastructure.draft_edit_repository import DraftEditRepository
++from tests.integration.test_draft_edit_boundaries import case as case, patch
++from tests.integration.test_draft_edit_migration import previous as previous, owners
++from tests.integration.test_authoring_numeric_provider_history import table_hashes
++from tests.integration.test_review_workflow import request, decision
++
++
++@pytest.mark.parametrize('fault', ['payload', 'record_hash', 'parent', 'head', 'command', 'base_body', 'provenance'])
++def test_bad_original_history_or_physical_base_rejects_reads_and_original_ack(case, fault):
++    database, identity, base, service, body, created = case
++    original = service.read(identity, created.draft_id, 1)
++    service.patch(identity, created.draft_id, patch(), 'patch')
++    with database.transaction() as conn:
++        if fault in {'payload', 'record_hash', 'parent'}:
++            conn.execute('DROP TRIGGER draft_edit_version_no_update')
++            if fault == 'payload':
++                conn.execute("UPDATE draft_edit_versions SET record_json='{}' WHERE draft_id=? AND revision=1", (created.draft_id,))
++            elif fault == 'record_hash':
++                conn.execute('UPDATE draft_edit_versions SET record_sha256=? WHERE draft_id=? AND revision=2', ('0' * 64, created.draft_id))
++            else:
++                # Real FK stays enabled; bind an existing but wrong parent SHA is refused.
++                with pytest.raises(sqlite3.IntegrityError):
++                    conn.execute('UPDATE draft_edit_versions SET parent_sha256=? WHERE draft_id=? AND revision=2', ('0' * 64, created.draft_id))
++                conn.execute("UPDATE draft_edit_versions SET record_json=json_set(record_json,'$.parent_sha256',?) WHERE draft_id=? AND revision=2",
++                             ('0' * 64, created.draft_id))
++        elif fault == 'head':
++            conn.execute('DROP TRIGGER draft_edit_head_transition')
++            conn.execute('UPDATE draft_edits SET revision=1 WHERE draft_id=?', (created.draft_id,))
++        elif fault == 'command':
++            conn.execute('DROP TRIGGER draft_edit_command_no_update')
++            conn.execute("UPDATE draft_edit_commands SET record_json='{}' WHERE draft_id=?", (created.draft_id,))
++        elif fault == 'provenance':
++            conn.execute('DROP TRIGGER block_provenance_no_update')
++            conn.execute("UPDATE block_provenance SET snapshot_json='{}' WHERE block_id=?", (base.id,))
++        else:
++            digest = original.base.metadata.body_sha256
++            (database.settings.data_dir / 'blobs' / digest[:2] / digest).write_bytes(b'Synthetic corrupt physical bytes')
++    before = table_hashes(database)
++    for call in [lambda: service.read(identity, created.draft_id, 1), lambda: service.create(identity, body, 'create'),
++                 lambda: service.patch(identity, created.draft_id, patch(), 'patch')]:
++        with pytest.raises(ApiError):
++            call()
++    assert table_hashes(database) == before
++
++
++def review(case):
++    database, identity, _, service, _, created = case
++    candidate = service.read(identity, created.draft_id, 1).candidate
++    registry = DraftCandidates({'authoring_edit': service})
++    reviews = ReviewService(database, registry, ReviewNumeric(registry, {}), {})
++    worker = ReviewWorker(reviews)
++    job = reviews.create(identity, created.draft_id, request(candidate), 'review')
++    assert worker.run_once()
++    receipt = reviews.read(identity, job.id)
++    approved = reviews.decide(identity, job.id, decision(receipt, mathematical='NOT_APPLICABLE', sources='APPROVED'), 'synthetic-human')
++    return reviews, approved
++
++
++def test_edited_candidate_never_inherits_old_approval_or_publishes_through_import_owner(case):
++    database, identity, _, service, _, created = case
++    reviews, approved = review(case)
++    old = approved.candidate
++    body = DraftPublishWrite(expected_revision=1, expected_content_sha256=old.candidate_sha256,
++        review_receipt_id=approved.id, acknowledged_warning_codes=['DRAFT_EDIT_UNREVIEWED'])
++    before = table_hashes(database)
++    with database.transaction() as conn:
++        with pytest.raises(ApiError) as error:
++            PublicationAdmissionService(reviews).check(conn, identity, created.draft_id, body)
++        assert error.value.code == 'PUBLISH_EDIT_OWNER_UNSUPPORTED'
++    from services.api.app.application.draft_publication import DraftPublicationService
++    publication = DraftPublicationService(database, reviews, owners(database)[0])
++    with pytest.raises(ApiError) as error:
++        publication.publish(identity, created.draft_id, body, 'publish')
++    assert error.value.code == 'PUBLICATION_OWNER_SCOPE_UNSUPPORTED'
++    assert table_hashes(database) == before
++    service.patch(identity, created.draft_id, patch(), 'patch')
++    current = service.read(identity, created.draft_id, 2)
++    changed = body.model_copy(update={'expected_revision': 2, 'expected_content_sha256': current.candidate.candidate_sha256})
++    with database.transaction() as conn:
++        with pytest.raises(ApiError) as error:
++            PublicationAdmissionService(reviews).check(conn, identity, created.draft_id, changed)
++        assert error.value.status == 412
++    assert reviews.read(identity, approved.id) == approved
++
++
++@pytest.mark.parametrize('formula', ['$x^2$', r'\begin{equation*}x=1\end{equation*}'])
++def test_actual_edit_mathematics_cannot_be_approved_as_na(case, formula):
++    database, identity, _, service, _, created = case
++    service.patch(identity, created.draft_id, patch(text=formula), 'math')
++    candidate = service.read(identity, created.draft_id, 2).candidate
++    registry = DraftCandidates({'authoring_edit': service})
++    reviews = ReviewService(database, registry, ReviewNumeric(registry, {}), {})
++    job = reviews.create(identity, created.draft_id, request(candidate), 'review')
++    assert ReviewWorker(reviews).run_once()
++    receipt = reviews.read(identity, job.id)
++    with pytest.raises(ApiError) as error:
++        reviews.decide(identity, job.id, decision(receipt, mathematical='NOT_APPLICABLE'), 'synthetic-human')
++    assert error.value.code == 'MATHEMATICAL_REVIEW_REQUIRED'
++    assert reviews.read(identity, job.id).mathematical == 'NOT_RUN'
++
++
++def test_quality_physical_report_remains_checked_for_edit_owner(case):
++    database, identity, _, _, _, _ = case
++    reviews, receipt = review(case)
++    identifier = receipt.evidence_paths[0].split('/')[-2]
++    with database.transaction() as conn:
++        raw, artifact = reviews.read_artifact(conn, identity, identifier)
++    report = json.loads(raw)
++    assert [x['status'] for x in report['structure']['checks']] == ['PASS', 'PASS', 'NOT_RUN', 'NOT_RUN']
++    assert report['numeric_observation']['checks'] == []
++    assert report['numeric_observation']['source_job_id'] is None
++    digest = artifact.sha256
++    (database.settings.data_dir / 'blobs' / digest[:2] / digest).write_bytes(b'Synthetic corrupt report')
++    with pytest.raises(ApiError):
++        reviews.read(identity, receipt.id)
++
++
++def test_unresolved_sources_are_preserved_without_inventing_origin_or_approval(case):
++    database, identity, _, service, _, _ = case
++    raw = b'Synthetic public block without retained original.\n'
++    block = dm.ContentBlock(id='synthetic_unresolved', revision=1, kind='text', title='Unresolved',
++        body_path='content/unresolved.md', body_sha256=sha256_bytes(raw), citations=['synthetic_missing_citation'])
++    ref = ContentService(database).publish(identity.workspace_id, [block], {block.body_path: raw})[0]
++    created = service.create(identity, DraftCreateWrite(kind='block', base_ref=ref, title='Unresolved copy'), 'unresolved')
++    record = service.read(identity, created.draft_id, 1)
++    assert record.base.provenance is None and record.payload.citations == ['synthetic_missing_citation']
++    assert [x.code for x in record.warnings] == ['PROVENANCE_UNRESOLVED', 'DRAFT_EDIT_UNREVIEWED']
++
++
++def test_content_source_uses_callers_transaction_and_does_not_require_current_pointer(case):
++    database, identity, base, _, _, _ = case
++    source = ContentDraftSource(database)
++    with database.transaction() as conn:
++        original = source.read_exact(conn, identity, base)
++        raw = b'Synthetic later version.\n'
++        block = original.metadata.model_copy(update={'revision': 2, 'body_sha256': sha256_bytes(raw)})
++        ContentService(database).publish_in_transaction(conn, identity.workspace_id, [block], {block.body_path: raw})
++        assert source.read_exact(conn, identity, base) == original
++        conn.execute("UPDATE local_sessions SET role='learner' WHERE id=?", (identity.id,))
++        with pytest.raises(ApiError):
++            source.verify_exact(conn, identity, original)
++
++
++def test_repository_append_fault_is_atomic_even_if_outer_caller_commits(case):
++    database, identity, _, service, _, created = case
++    original = service.read(identity, created.draft_id, 1)
++    # A synthetic proposed r2 uses the actual owner r1; the SQL failure is real.
++    from services.api.app.application.draft_edit_models import DraftEditRecord, apply_patch, edit_warnings
++    from services.api.app.infrastructure.database import utc_now
++    payload = apply_patch(original.payload, patch())
++    record = DraftEditRecord(workspace_id=identity.workspace_id, candidate=dm.DraftCandidate(draft_id=created.draft_id,
++        draft_revision=2, entity='block', candidate_sha256=metadata_sha256(payload)), base=original.base,
++        payload=payload, actor_id=identity.id, command_key='patch', request=patch(), parent_sha256=metadata_sha256(original),
++        created_at=utc_now(), warnings=edit_warnings(original.base))
++    with database.transaction() as conn:
++        conn.execute("CREATE TRIGGER synthetic_append_failure AFTER INSERT ON draft_edit_versions "
++                     "BEGIN SELECT RAISE(ABORT,'synthetic append failure'); END")
++    before = table_hashes(database)
++    with database.transaction() as conn:
++        with pytest.raises(sqlite3.Error):
++            DraftEditRepository(conn, identity.workspace_id).append(record)
++        # Catching the storage error must not leave head r2 without its version.
++    assert table_hashes(database) == before
++    assert service.read(identity, created.draft_id, 1) == original
++
++
++@pytest.mark.parametrize('scope', ['kind', 'concept', 'dependency', 'foreign_workspace'])
++def test_real_published_bases_outside_first_scope_create_no_edit(case, scope):
++    database, identity, base, service, _, _ = case
++    content = ContentService(database)
++    original = content.read(identity.workspace_id, 'block', base.id, base.revision)
++    raw = content.body(identity.workspace_id, base.id, base.revision)[0]
++    changes = {'id': 'synthetic_scope', 'citations': []}
++    values = []
++    workspace = identity.workspace_id
++    if scope == 'kind':
++        changes['kind'] = 'worked_example'
++    elif scope == 'concept':
++        concept = dm.Concept(id='synthetic_concept', revision=1, title='Synthetic concept')
++        values.append(concept)
++        changes['concepts'] = [concept.id]
++    elif scope == 'dependency':
++        changes['depends_on'] = [base]
++    else:
++        workspace = 'synthetic_other_workspace'
++        with database.transaction() as conn:
++            conn.execute("INSERT INTO workspace(id,title,created_at) VALUES(?,'Synthetic other','2026-09-28T00:00:00Z')", (workspace,))
++    block = dm.ContentBlock.model_validate(original.model_dump() | changes)
++    values.append(block)
++    ref = content.publish(workspace, values, {block.body_path: raw})[-1]
++    before = table_hashes(database)
++    with pytest.raises(ApiError) as error:
++        service.create(identity, DraftCreateWrite(kind='block', base_ref=ref, title='Synthetic copy'), 'out-of-scope')
++    assert error.value.status == (404 if scope == 'foreign_workspace' else 409)
++    assert table_hashes(database) == before
++
++
++def test_edit_review_revalidates_recursive_quality_evidence_bytes(case):
++    from services.api.app.application.artifacts import ArtifactsService
++    database, identity, _, _, _, _ = case
++    reviews, original = review(case)
++    other_job = reviews.create(identity, original.candidate.draft_id, request(original.candidate), 'other-review')
++    assert ReviewWorker(reviews).run_once()
++    other = reviews.read(identity, other_job.id)
++    evidence_id = other.evidence_paths[0].split('/')[-2]
++    command = decision(original, [evidence_id], mathematical='NOT_APPLICABLE', sources='APPROVED')
++    accepted = reviews.decide(identity, original.id, command, 'recursive-human-synthetic')
++    assert reviews.read(identity, original.id) == accepted
++    with database.transaction() as conn:
++        _, artifact = reviews.read_artifact(conn, identity, evidence_id)
++    digest = artifact.sha256
++    (database.settings.data_dir / 'blobs' / digest[:2] / digest).write_bytes(b'Synthetic damaged recursive evidence')
++    before = table_hashes(database)
++    for call in [lambda: reviews.read(identity, original.id),
++                 lambda: reviews.decide(identity, original.id, command, 'recursive-human-synthetic'),
++                 lambda: ArtifactsService(database, reviews.readers()).download(identity, original.evidence_paths[0].split('/')[-2])]:
++        with pytest.raises(ApiError):
++            call()
++    assert table_hashes(database) == before
++
++
++def test_edit_storage_rejects_replace_update_and_delete(case):
++    database, _, _, _, _, _ = case
++    before = table_hashes(database)
++    with database.transaction() as conn:
++        for table in ['draft_edits', 'draft_edit_versions', 'draft_edit_commands']:
++            columns = ','.join(row['name'] for row in conn.execute(f'PRAGMA table_info({table})'))
++            for statement in [f'DELETE FROM {table}', f'INSERT OR REPLACE INTO {table}({columns}) SELECT {columns} FROM {table}',
++                              f'UPDATE {table} SET ' + ('revision=revision+2' if table == 'draft_edits' else "record_json='{}'")]:
++                with pytest.raises(sqlite3.IntegrityError):
++                    conn.execute(statement)
++    assert table_hashes(database) == before
++
++
++def test_frozen_origin_descriptor_is_inherited_without_reading_private_original(case):
++    """Synthetic private visibility fixture; descriptor inheritance is not source verification."""
++    from services.api.app.import_dto import ImportCommitRequest
++    from services.api.app.infrastructure.import_worker import ImportWorker
++    database, identity, _, service, _, _ = case
++    imports = owners(database)[0]
++    raw = b'# Synthetic origin\n\nFirst separate paragraph.\n\nSecond separate paragraph.\n'
++    staged = imports.stage(identity, data=raw, kind='markdown', filename='origin.md', key='origin')
++    worker = ImportWorker(database)
++    try:
++        assert worker.run_once()
++    finally:
++        worker.stop()
++    preview = imports.preview(identity, staged.import_id)
++    block = next(item.payload.metadata for item in
++        (imports.draft(identity, identifier) for identifier in preview.preview_refs) if item.kind == 'block')
++    imports.commit(identity, staged.import_id, ImportCommitRequest(expected_input_sha256=preview.input_sha256,
++        accepted_warning_codes=[item.code for item in preview.warnings], id_mapping=[]), 'commit-origin')
++    ref = dm.ContentRef(entity='block', id=block.id, revision=block.revision, sha256=metadata_sha256(block))
++    assert block.body_sha256 != sha256_bytes(raw)
++    digest = sha256_bytes(raw)
++    with database.transaction() as conn:
++        changed = conn.execute("UPDATE artifacts SET visibility='author_private' WHERE blob_sha256=? AND profile='import_original'", (digest,))
++        assert changed.rowcount == 1
++    # An actual read of this original would now fail its SHA. Its public parsed
++    # body is a different physical blob and is still verified normally.
++    (database.settings.data_dir / 'blobs' / digest[:2] / digest).write_bytes(b'Synthetic unreadable private original')
++    created = service.create(identity, DraftCreateWrite(kind='block', base_ref=ref, title='Descriptor only'), 'copy-origin')
++    record = service.read(identity, created.draft_id, 1)
++    assert record.base.provenance.source.sha256 == digest
++    assert record.payload.citations == block.citations
++    assert record.base.provenance.block_ref == ref
++    assert [item.code for item in record.warnings][-1] == 'DRAFT_EDIT_UNREVIEWED'
+diff --git a/tests/integration/test_draft_edit_migration.py b/tests/integration/test_draft_edit_migration.py
+new file mode 100644
+index 0000000..da09aa3
+--- /dev/null
++++ b/tests/integration/test_draft_edit_migration.py
+@@ -0,0 +1,144 @@
++"""Actual nonempty owner histories survive an editing-owner forward migration."""
++from dataclasses import replace
++import shutil
++import sqlite3
++
++import pytest
++
++from packages.contracts import domain_models as dm
++from services.api.app.application.draft_candidates import DraftCandidates
++from services.api.app.application.draft_publication import DraftPublicationService
++from services.api.app.application.imports import ImportService, IMPORT_ARTIFACT_PROFILES
++from services.api.app.application.review_numeric import ReviewNumeric
++from services.api.app.application.review_service import ReviewService
++from services.api.app.application.sessions import SessionService
++from services.api.app.dto import RoleRequest
++from services.api.app.infrastructure.config import Settings
++from services.api.app.infrastructure.database import Database
++from services.api.app.infrastructure.import_worker import ImportWorker
++from services.api.app.infrastructure.security import consume_bootstrap, issue_bootstrap_code
++from tests.integration.test_authoring_numeric_provider_history import table_hashes
++from tests.integration.test_publication_admission import reviewed, publish_request
++
++MIGRATION = '0019_draft_edits.sql'
++
++
++def owners(database):
++    imports = ImportService(database)
++    candidates = DraftCandidates({'import': imports})
++    reviews = ReviewService(database, candidates, ReviewNumeric(candidates, {}),
++        {(profile, 'import'): imports for profile in IMPORT_ARTIFACT_PROFILES})
++    return imports, reviews, DraftPublicationService(database, reviews, imports)
++
++
++@pytest.fixture
++def previous(tmp_path):
++    settings = Settings(data_dir=tmp_path / 'data')
++    prior = tmp_path / 'prior'
++    prior.mkdir()
++    for path in settings.migrations_dir.glob('*.sql'):
++        if path.name < '0019':
++            shutil.copyfile(path, prior / path.name)
++    database = Database(replace(settings, migrations_dir=prior))
++    database.initialize()
++    _, learner = consume_bootstrap(database, issue_bootstrap_code(database))
++    SessionService(database).switch_role(learner, RoleRequest(role='author'), 'role')
++    identity = replace(learner, role='author')
++    imports, reviews, publication = owners(database)
++    worker = ImportWorker(database)
++    try:
++        staged = imports.stage(identity, data=b'Synthetic source for local editing.\n', kind='markdown',
++            filename='synthetic.md', key='source')
++        assert worker.run_once()
++    finally:
++        worker.stop()
++    draft = next(d for d in (imports.draft(identity, item) for item in imports.preview(identity, staged.import_id).preview_refs)
++                 if d.kind == 'block')
++    candidate = dm.DraftCandidate(draft_id=draft.id, draft_revision=1, entity='block', candidate_sha256=draft.candidate_sha256)
++    receipt = reviewed(database, identity, candidate, reviews, math='NOT_APPLICABLE')
++    request = publish_request(database, identity, candidate, reviews, receipt)
++    ref = publication.publish(identity, candidate.draft_id, request, 'publication')
++    return database, settings, identity, candidate, receipt, request, ref
++
++
++def test_real_review_publication_history_survives_edit_owner_schema(previous):
++    old, settings, identity, candidate, receipt, request, ref = previous
++    before = table_hashes(old)
++    migrated_tables = ['draft_candidate_identities', 'draft_candidate_revisions', 'reviews', 'review_jobs',
++        'review_revisions', 'review_artifact_bindings', 'review_commands', 'draft_publications',
++        'draft_publication_events', 'draft_publication_results', 'draft_publication_commands']
++    with old.connect() as conn:
++        original_rows = {name: [tuple(row) for row in conn.execute(f'SELECT rowid,* FROM {name} ORDER BY rowid')]
++                         for name in migrated_tables}
++    upgraded = Database(settings)
++    upgraded.initialize()
++    after = table_hashes(upgraded)
++    assert {k: after[k] for k in before if k != 'schema_migrations'} == {k: v for k, v in before.items() if k != 'schema_migrations'}
++    with upgraded.connect() as conn:
++        assert {name: [tuple(row) for row in conn.execute(f'SELECT rowid,* FROM {name} ORDER BY rowid')]
++                for name in migrated_tables} == original_rows
++    imports, reviews, publication = owners(upgraded)
++    assert reviews.read(identity, receipt.id) == receipt
++    assert publication.publish(identity, candidate.draft_id, request, 'publication') == ref
++    with upgraded.transaction() as conn:
++        assert conn.execute('PRAGMA foreign_key_check').fetchall() == []
++        conn.execute("INSERT INTO draft_candidate_identities VALUES('draft_synthetic_edit',?,'authoring','authoring_edit','block')",
++                     (identity.workspace_id,))
++        assert conn.execute("SELECT name FROM sqlite_master WHERE name='draft_edit_versions'").fetchone()
++    upgraded.initialize()
++    assert list((settings.data_dir / 'backups').glob('*.sqlite3'))
++
++
++@pytest.mark.parametrize('failure', ['after_schema', 'after_history'])
++def test_forward_failure_restores_original_schema_and_history(previous, tmp_path, failure):
++    old, settings, identity, candidate, receipt, request, ref = previous
++    before = table_hashes(old)
++    with old.connect() as conn:
++        original_schema = [tuple(r) for r in conn.execute('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name')]
++    broken = tmp_path / 'broken'
++    shutil.copytree(settings.migrations_dir, broken)
++    target = broken / MIGRATION
++    text = target.read_text()
++    marker = '-- EDIT_SCHEMA_REBUILT' if failure == 'after_schema' else '-- EDIT_HISTORY_RESTORED'
++    assert marker in text
++    target.write_text(text.replace(marker, 'SELECT * FROM synthetic_missing_migration_table;\n' + marker))
++    with pytest.raises(sqlite3.Error):
++        Database(replace(settings, migrations_dir=broken)).initialize()
++    assert table_hashes(old) == before
++    with old.connect() as conn:
++        assert [tuple(r) for r in conn.execute('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name')] == original_schema
++        assert conn.execute('PRAGMA foreign_key_check').fetchall() == []
++    _, reviews, publication = owners(old)
++    assert reviews.read(identity, receipt.id) == receipt
++    assert publication.publish(identity, candidate.draft_id, request, 'publication') == ref
++
++
++def test_all_legacy_owner_shapes_and_foreign_keys_survive_forward_rebuild(tmp_path):
++    """Synthetic persisted shapes only; these are not authenticated Provider results."""
++    from tests.integration.test_draft_candidate_migration import database_before_migration, source_candidate, legacy_review
++    database, workspace = database_before_migration(tmp_path)
++    with database.transaction() as conn:
++        for index, (source, entity) in enumerate([('import', 'concept'), ('authoring_single', 'block'),
++                ('authoring_group', 'lesson'), ('authoring_group', 'practice_set'), ('authoring_group', 'assessment')]):
++            candidate = source_candidate(conn, workspace, f'draft_shape_{index}', source, entity=entity)
++            if source == 'import':
++                legacy_review(conn, workspace, candidate, identifier=f'review_shape_{index}')
++    real = Settings(data_dir=tmp_path / 'unused').migrations_dir
++    for name in ['0016_draft_candidate_identities.sql', '0017_review_history.sql', '0018_draft_publications.sql']:
++        shutil.copyfile(real / name, database.settings.migrations_dir / name)
++    database.initialize()
++    before = table_hashes(database)
++    with database.connect() as conn:
++        foreign_keys = {name: [tuple(row) for row in conn.execute(f'PRAGMA foreign_key_list({name})')]
++                        for name in before}
++        originals = [tuple(row) for row in conn.execute('SELECT rowid,* FROM reviews ORDER BY rowid')]
++    shutil.copyfile(real / MIGRATION, database.settings.migrations_dir / MIGRATION)
++    database.initialize()
++    after = table_hashes(database)
++    assert {name: after[name] for name in before if name != 'schema_migrations'} == {
++        name: value for name, value in before.items() if name != 'schema_migrations'}
++    with database.connect() as conn:
++        assert {name: [tuple(row) for row in conn.execute(f'PRAGMA foreign_key_list({name})')]
++                for name in before} == foreign_keys
++        assert [tuple(row) for row in conn.execute('SELECT rowid,* FROM reviews ORDER BY rowid')] == originals
++        assert conn.execute('PRAGMA foreign_key_check').fetchall() == []
+diff --git a/tests/integration/test_draft_edits.py b/tests/integration/test_draft_edits.py
+new file mode 100644
+index 0000000..08e8ff4
+--- /dev/null
++++ b/tests/integration/test_draft_edits.py
+@@ -0,0 +1,72 @@
++"""Real local edit owner and Quality; human decisions are explicitly synthetic."""
++import pytest
++
++from services.api.app.application.content import ContentService
++from tests.integration.test_draft_edit_migration import previous as previous
++from tests.integration.test_draft_edit_migration import owners
++from services.api.app.infrastructure.database import Database
++
++
++def test_exact_base_copy_and_atomic_whitelisted_edit_preserve_old_content(previous):
++    from services.api.app.application.draft_edits import DraftEditService
++    from services.api.app.draft_dto import DraftCreateWrite, DraftPatchWrite, DraftPatch
++    old, settings, identity, _, _, _, base = previous
++    database = Database(settings)
++    database.initialize()
++    service = DraftEditService(database)
++    source = ContentService(database).body(identity.workspace_id, base.id, base.revision)
++    created = service.create(identity, DraftCreateWrite(kind='block', base_ref=base, title='Synthetic edited title'), 'create')
++    assert created.revision == 1 and created.state == 'draft' and created.base_ref == base
++    original = service.read(identity, created.draft_id, 1)
++    assert original.payload.body_markdown.encode() == source[0]
++    assert original.payload.title == 'Synthetic edited title'
++    changed = service.patch(identity, created.draft_id, DraftPatchWrite(expected_revision=1, patches=[
++        DraftPatch(field='title', value='Second synthetic title'),
++        DraftPatch(field='body_markdown', value='精确正文 🌏\nSecond line.\n')]), 'patch')
++    assert changed.revision == 2
++    current = service.read(identity, created.draft_id, 2)
++    assert current.payload.title == 'Second synthetic title'
++    assert current.payload.body_markdown == '精确正文 🌏\nSecond line.\n'
++    assert current.candidate != original.candidate and current.base == original.base
++    assert service.read(identity, created.draft_id, 1) == original
++    assert ContentService(database).body(identity.workspace_id, base.id, base.revision) == source
++    assert owners(database)[2].content.current(identity.workspace_id, base.id) == base
++
++
++def test_real_edit_review_new_head_gate_and_historical_report_survive_patch(previous):
++    from services.api.app.application.draft_edits import DraftEditService
++    from services.api.app.application.draft_candidates import DraftCandidates
++    from services.api.app.application.review_service import ReviewService
++    from services.api.app.application.review_numeric import ReviewNumeric
++    from services.api.app.application.review_worker import ReviewWorker
++    from services.api.app.application.errors import ApiError
++    from services.api.app.draft_dto import DraftCreateWrite, DraftPatchWrite, DraftPatch
++    from tests.integration.test_review_workflow import request, decision
++    _, settings, identity, _, _, _, base = previous
++    database = Database(settings)
++    database.initialize()
++    edits = DraftEditService(database)
++    created = edits.create(identity, DraftCreateWrite(kind='block', base_ref=base, title='Synthetic local draft'), 'create')
++    record = edits.read(identity, created.draft_id, 1)
++    candidates = DraftCandidates({'authoring_edit': edits})
++    reviews = ReviewService(database, candidates, ReviewNumeric(candidates, {}), {})
++    worker = ReviewWorker(reviews)
++    command = request(record.candidate)
++    job = reviews.create(identity, created.draft_id, command, 'review')
++    edits.patch(identity, created.draft_id, DraftPatchWrite(expected_revision=1,
++        patches=[DraftPatch(field='body_markdown', value='Changed synthetic prose.\n')]), 'patch')
++    assert worker.run_once()
++    receipt = reviews.read(identity, job.id)
++    assert receipt.candidate == record.candidate and receipt.structural == 'PASS'
++    assert receipt.mathematical == receipt.sources == receipt.independent_pedagogy == 'NOT_RUN'
++    approved = reviews.decide(identity, receipt.id, decision(receipt, mathematical='NOT_APPLICABLE', sources='APPROVED'), 'human-synthetic')
++    assert approved.reviewer == identity.id
++    assert reviews.create(identity, created.draft_id, command, 'review') == job
++    assert reviews.read(identity, job.id) == approved
++    with pytest.raises(ApiError) as error:
++        reviews.create(identity, created.draft_id, command, 'new-stale-review')
++    assert error.value.status == 412
++    current = edits.read(identity, created.draft_id, 2)
++    new_job = reviews.create(identity, created.draft_id, request(current.candidate), 'review-new')
++    assert worker.run_once()
++    assert reviews.read(identity, new_job.id).mathematical == 'NOT_RUN'

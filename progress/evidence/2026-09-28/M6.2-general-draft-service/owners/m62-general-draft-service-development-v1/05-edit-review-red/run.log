@@ -1,0 +1,61 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+___ test_real_edit_review_new_head_gate_and_historical_report_survive_patch ____
+
+previous = (<services.api.app.infrastructure.database.Database object at 0x7a9e4f508680>, Settings(data_dir=PosixPath('/tmp/pytes...6='0d171aa8fb9b27117bd0ac5ba9ee9c02514c32ae11143c4921ea1c83015b5e25'), StoredReviewReceipt(), DraftPublishWrite(), ...)
+
+    def test_real_edit_review_new_head_gate_and_historical_report_survive_patch(previous):
+        from services.api.app.application.draft_edits import DraftEditService
+        from services.api.app.application.draft_candidates import DraftCandidates
+        from services.api.app.application.review_service import ReviewService
+        from services.api.app.application.review_numeric import ReviewNumeric
+        from services.api.app.application.review_worker import ReviewWorker
+        from services.api.app.application.errors import ApiError
+        from services.api.app.draft_dto import DraftCreateWrite, DraftPatchWrite, DraftPatch
+        from tests.integration.test_review_workflow import request, decision
+        _, settings, identity, _, _, _, base = previous
+        database = Database(settings)
+        database.initialize()
+        edits = DraftEditService(database)
+        created = edits.create(identity, DraftCreateWrite(kind='block', base_ref=base, title='Synthetic local draft'), 'create')
+        record = edits.read(identity, created.draft_id, 1)
+        candidates = DraftCandidates({'authoring_edit': edits})
+        reviews = ReviewService(database, candidates, ReviewNumeric(candidates, {}), {})
+        worker = ReviewWorker(reviews)
+        command = request(record.candidate)
+>       job = reviews.create(identity, created.draft_id, command, 'review')
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_draft_edits.py:56: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/api/app/application/review_service.py:162: in create
+    material = self.candidates.read_review_material(conn, current, draft_id, body.expected_revision)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+services/api/app/application/draft_candidates.py:58: in read_review_material
+    result = owner.read_review_material(connection, current, registered.candidate)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.application.draft_edits.DraftEditService object at 0x7a9e4f174560>
+connection = <sqlite3.Connection object at 0x7a9e4f45ef20>
+identity = SessionIdentity(id='session_0da2926d0a284ec6a830931ed13225ce', workspace_id='workspace_3d1034baebfe43ec8aab0f79264c1993', role='author', csrf_token='', expires_at='2026-09-28T17:10:33.386795Z')
+candidate = DraftCandidate(draft_id='draft_a71c71bdefae4ed6875387c97fa96183', draft_revision=1, entity='block', candidate_sha256='c886c4c42410d98522130e83fc3ac475b27ffe108f8e6fd427f523f10c06f84f')
+
+    def read_review_material(self, connection: sqlite3.Connection, identity: SessionIdentity, candidate: dm.DraftCandidate):
+>       from .review_material_models import EditReviewMaterial, checked_material
+E       ImportError: cannot import name 'EditReviewMaterial' from 'services.api.app.application.review_material_models' (<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-general-draft-service-active/services/api/app/application/review_material_models.py)
+
+services/api/app/application/draft_edits.py:141: ImportError
+=============================== warnings summary ===============================
+../m62-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../m62-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_draft_edits.py::test_real_edit_review_new_head_gate_and_historical_report_survive_patch
+1 failed, 2 warnings in 1.40s

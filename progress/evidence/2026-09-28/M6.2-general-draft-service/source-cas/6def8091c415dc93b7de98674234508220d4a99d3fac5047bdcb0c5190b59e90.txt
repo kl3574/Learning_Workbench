@@ -1,0 +1,68 @@
+"""Appendix A 1262/1263 application DTOs; no new HTTP route or core model."""
+from typing import Literal
+
+from pydantic import Field, JsonValue, model_validator, field_validator
+from packages.contracts import domain_models as dm
+
+
+class DraftCreateWrite(dm.StrictModel):
+    kind: Literal['course', 'lesson', 'block', 'question', 'practice_set', 'assessment']
+    base_ref: dm.ContentRef | None
+    title: dm.Text
+
+
+class DraftCreated(dm.StrictModel):
+    draft_id: dm.Id
+    revision: dm.Revision
+    base_ref: dm.ContentRef | None
+    state: Literal['draft'] = 'draft'
+
+
+class DraftPatch(dm.StrictModel):
+    field: str = Field(min_length=1, max_length=80)
+    value: JsonValue
+
+    @field_validator('value', mode='before')
+    @classmethod
+    def bounded_json(cls, value):
+        pending = [(value, 0)]
+        nodes, size = 0, 0
+        while pending:
+            item, depth = pending.pop()
+            nodes += 1
+            if nodes > 10000 or depth > 32:
+                raise ValueError('JSON patch value exceeds local structural budget')
+            if isinstance(item, str):
+                size += len(item.encode('utf-8'))
+            elif isinstance(item, dict):
+                if len(item) > 10000:
+                    raise ValueError('JSON patch value exceeds local structural budget')
+                for key, child in item.items():
+                    if not isinstance(key, str):
+                        raise ValueError('JSON object keys must be strings')
+                    size += len(key.encode('utf-8'))
+                    pending.append((child, depth + 1))
+            elif isinstance(item, list):
+                if len(item) > 10000:
+                    raise ValueError('JSON patch value exceeds local structural budget')
+                pending.extend((child, depth + 1) for child in item)
+            if size > 2_000_000:
+                raise ValueError('JSON patch value exceeds local byte budget')
+        return value
+
+
+class DraftPatchWrite(dm.StrictModel):
+    expected_revision: dm.Revision
+    patches: list[DraftPatch] = Field(min_length=1, max_length=8)
+
+    @model_validator(mode='after')
+    def unique_fields(self):
+        if len({item.field for item in self.patches}) != len(self.patches):
+            raise ValueError('patch fields must be distinct')
+        return self
+
+
+class DraftPatched(dm.StrictModel):
+    draft_id: dm.Id
+    revision: dm.Revision
+    validation_warnings: list[dm.Warning]

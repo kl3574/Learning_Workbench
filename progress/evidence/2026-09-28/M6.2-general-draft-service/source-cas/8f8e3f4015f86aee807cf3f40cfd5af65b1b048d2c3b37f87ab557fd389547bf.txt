@@ -1,0 +1,34 @@
+"""Real local edit owner and Quality; human decisions are explicitly synthetic."""
+import pytest
+
+from packages.contracts import domain_models as dm
+from services.api.app.application.content import ContentService
+from tests.integration.test_draft_edit_migration import previous as previous
+from tests.integration.test_draft_edit_migration import owners
+from services.api.app.infrastructure.database import Database
+
+
+def test_exact_base_copy_and_atomic_whitelisted_edit_preserve_old_content(previous):
+    from services.api.app.application.draft_edits import DraftEditService
+    from services.api.app.draft_dto import DraftCreateWrite, DraftPatchWrite, DraftPatch
+    old, settings, identity, _, _, _, base = previous
+    database = Database(settings)
+    database.initialize()
+    service = DraftEditService(database)
+    source = ContentService(database).body(identity.workspace_id, base.id, base.revision)
+    created = service.create(identity, DraftCreateWrite(kind='block', base_ref=base, title='Synthetic edited title'), 'create')
+    assert created.revision == 1 and created.state == 'draft' and created.base_ref == base
+    original = service.read(identity, created.draft_id, 1)
+    assert original.payload.body_markdown.encode() == source[0]
+    assert original.payload.title == 'Synthetic edited title'
+    changed = service.patch(identity, created.draft_id, DraftPatchWrite(expected_revision=1, patches=[
+        DraftPatch(field='title', value='Second synthetic title'),
+        DraftPatch(field='body_markdown', value='精确正文 🌏\nSecond line.\n')]), 'patch')
+    assert changed.revision == 2
+    current = service.read(identity, created.draft_id, 2)
+    assert current.payload.title == 'Second synthetic title'
+    assert current.payload.body_markdown == '精确正文 🌏\nSecond line.\n'
+    assert current.candidate != original.candidate and current.base == original.base
+    assert service.read(identity, created.draft_id, 1) == original
+    assert ContentService(database).body(identity.workspace_id, base.id, base.revision) == source
+    assert owners(database)[2].content.current(identity.workspace_id, base.id) == base

@@ -1,0 +1,62 @@
+.............F                                                           [100%]
+=================================== FAILURES ===================================
+_____ test_repository_append_fault_is_atomic_even_if_outer_caller_commits ______
+
+case = SyntheticDraftEditCase()
+
+    def test_repository_append_fault_is_atomic_even_if_outer_caller_commits(case):
+        database, identity, _, service, _, created = case
+        original = service.read(identity, created.draft_id, 1)
+        # Capture an actual second version, then roll its full SQL back as a synthetic fault fixture.
+        @contextmanager
+        def outer():
+            with database.transaction() as conn:
+                conn.execute('SAVEPOINT synthetic_capture')
+                yield conn
+                conn.execute('ROLLBACK TO synthetic_capture')
+                conn.execute('RELEASE synthetic_capture')
+        original_transaction = service._transaction
+        service._transaction = outer
+        try:
+            service.patch(identity, created.draft_id, patch(), 'patch')
+            # The public operation returned but its synthetic caller intentionally rolled it back.
+        finally:
+            service._transaction = original_transaction
+        # Build the storage proposal from a real committed version in a separate rollback-controlled transaction.
+        from services.api.app.application.draft_edit_models import DraftEditRecord, apply_patch, edit_warnings
+        from services.api.app.infrastructure.database import utc_now
+        payload = apply_patch(original.payload, patch())
+        record = DraftEditRecord(workspace_id=identity.workspace_id, candidate=dm.DraftCandidate(draft_id=created.draft_id,
+            draft_revision=2, entity='block', candidate_sha256=metadata_sha256(payload)), base=original.base,
+            payload=payload, actor_id=identity.id, command_key='patch', request=patch(), parent_sha256=metadata_sha256(original),
+            created_at=utc_now(), warnings=edit_warnings(original.base))
+        with database.transaction() as conn:
+            conn.execute("CREATE TRIGGER synthetic_append_failure AFTER INSERT ON draft_edit_versions "
+                         "BEGIN SELECT RAISE(ABORT,'synthetic append failure'); END")
+        before = table_hashes(database)
+        with database.transaction() as conn:
+            with pytest.raises(sqlite3.Error):
+                DraftEditRepository(conn, identity.workspace_id).append(record)
+            # Catching the storage error must not leave head r2 without its version.
+>       assert table_hashes(database) == before
+E       AssertionError: assert {'approvals':...202b945', ...} == {'approvals':...202b945', ...}
+E         
+E         Omitting 130 identical items, use -vv to show
+E         Differing items:
+E         {'draft_edits': '293a4746b0ae0f9704e0177bfb7b35c80d9118c3a7527f5f92b986bef7199d87'} != {'draft_edits': '80ee3a18d6c1e36e0f9cd213acddd7ac6fca26bb9099cf66344fcb84aeb3cbc8'}
+E         Use -v to get more diff
+
+tests/integration/test_draft_edit_integrity.py:197: AssertionError
+=============================== warnings summary ===============================
+../m62-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../m62-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_draft_edit_integrity.py::test_repository_append_fault_is_atomic_even_if_outer_caller_commits
+1 failed, 13 passed, 2 warnings in 9.35s
