@@ -126,6 +126,13 @@ class ContentRepository:
             raise damaged()
         return value
 
+    def require_absent(self, object_id: str) -> None:
+        """New-object publication CAS, including shells and other workspaces."""
+        if not self.connection.in_transaction:
+            raise ApiError(409, 'TRANSACTION_REQUIRED', '新对象发布需要当前事务。')
+        if self.connection.execute('SELECT 1 FROM objects WHERE id=?', (object_id,)).fetchone() is not None:
+            raise ApiError(409, 'PUBLICATION_ID_UNAVAILABLE', '候选对象 ID 已被使用，不能作为新对象发布。')
+
     def ensure_new(self, values: list[PublishedModel]) -> None:
         for value in values:
             row = self.connection.execute("SELECT * FROM objects WHERE id=?", (value.id,)).fetchone()

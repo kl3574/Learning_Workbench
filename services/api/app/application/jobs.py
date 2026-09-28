@@ -77,6 +77,36 @@ def outbound_lease_active(connection: sqlite3.Connection, workspace_id: str, job
         raise ApiError(503, 'JOB_LEASE_INVALID', '任务租约完整性无法确认。') from None
 
 
+@dataclass(frozen=True)
+class ImportConfirmationState:
+    status: str
+    cancel_requested: bool
+
+
+def import_confirmation_state(connection: sqlite3.Connection, workspace_id: str,
+                              job_id: str, input_sha256: str) -> ImportConfirmationState:
+    """Jobs-owned origin facts, including after a legitimate cancellation/commit."""
+    from .errors import ApiError
+    if not connection.in_transaction:
+        raise ApiError(409, 'TRANSACTION_REQUIRED', '导入任务核验需要当前事务。')
+    row = connection.execute('SELECT kind,status,cancel_requested,input_sha256 FROM jobs '
+                             'WHERE id=? AND workspace_id=?', (job_id, workspace_id)).fetchone()
+    if (row is None or row['kind'] != 'import' or row['input_sha256'] != input_sha256
+            or row['status'] not in {'queued', 'running', 'awaiting_approval', 'completed', 'failed', 'cancelled'}
+            or row['cancel_requested'] not in (0, 1)):
+        raise ApiError(409, 'PUBLICATION_IMPORT_JOB_INVALID', '导入任务的原始身份和输入无法核验。')
+    return ImportConfirmationState(row['status'], bool(row['cancel_requested']))
+
+
+def require_pending_import_confirmation(connection: sqlite3.Connection, workspace_id: str,
+                                        job_id: str, input_sha256: str) -> None:
+    """Current eligibility for a new command; not the historical ACK read gate."""
+    from .errors import ApiError
+    state = import_confirmation_state(connection, workspace_id, job_id, input_sha256)
+    if state.status != 'awaiting_approval' or state.cancel_requested:
+        raise ApiError(409, 'PUBLICATION_IMPORT_NOT_PENDING', '导入任务当前不能新发布候选。')
+
+
 class JobService:
     """Dispatch only implemented job kinds to their owning application service."""
     def __init__(self, database, review: 'ReviewService | None' = None):

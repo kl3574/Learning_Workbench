@@ -349,6 +349,47 @@ class ContentService:
             dependencies[key(course)].extend((reference(value), "concept") for value in concepts.values())
         return registry, dependencies, course_concepts
 
+    def verify_publication_in_transaction(self, connection: sqlite3.Connection, workspace_id: str,
+                                          expected: dm.ContentRef) -> tuple[dm.ContentBlock, bytes]:
+        """Read exact historical metadata/body; a later current pointer is not a new ACK."""
+        if not connection.in_transaction:
+            raise ApiError(409, 'TRANSACTION_REQUIRED', '发布回读需要当前事务。')
+        guard_subject_access(connection, workspace_id)
+        repository = ContentRepository(connection, workspace_id)
+        repository.require_workspace()
+        try:
+            expected = dm.ContentRef.model_validate(expected.model_dump(mode='python', warnings='error'))
+        except (ValueError, TypeError, AttributeError):
+            raise invalid() from None
+        value = repository.load(expected.entity, expected.id, expected.revision).value
+        if not isinstance(value, dm.ContentBlock) or reference(value) != expected:
+            raise damaged()
+        info = repository.body_info(value)
+        raw = BlobStore(self.database.settings.data_dir, max_bytes=max(self.blobs.max_bytes, info.size)).read(
+            info.sha256, expected_size=info.size)
+        self._body_bytes(value, raw)
+        return value, raw
+
+    def publish_new_block_in_transaction(self, connection: sqlite3.Connection, workspace_id: str,
+                                         block: dm.ContentBlock, body: bytes, budgets: ImportBudgets) -> dm.ContentRef:
+        """Only creates an absent object's first revision, in the caller's transaction."""
+        if not connection.in_transaction:
+            raise ApiError(409, 'TRANSACTION_REQUIRED', '发布需要当前事务。')
+        guard_subject_access(connection, workspace_id)
+        repository = ContentRepository(connection, workspace_id)
+        repository.require_workspace()
+        try:
+            block = dm.ContentBlock.model_validate(block.model_dump(mode='python', warnings='error'))
+        except (ValueError, TypeError, AttributeError):
+            raise invalid() from None
+        if block.revision != 1:
+            raise invalid()
+        repository.require_absent(block.id)
+        refs = self.publish_in_transaction(connection, workspace_id, [block], {block.body_path: body}, budgets=budgets)
+        if refs != [reference(block)] or reference(repository.current(block.id).value) != refs[0]:
+            raise damaged()
+        return refs[0]
+
     def publish(self, workspace_id: str, objects: Iterable[PublishedModel], bodies: Mapping[str, bytes]) -> list[dm.ContentRef]:
         """Internal trusted port; callers still own import/review approval workflows.
 

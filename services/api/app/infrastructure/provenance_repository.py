@@ -113,6 +113,18 @@ class ProvenanceRepository:
             raise ApiError(413, 'SCOPE_BUDGET_EXCEEDED', '所选范围超过本地检索资源预算。')
         return self.frozen(block)
 
+    def frozen_for_import(self, import_id: str, block: dm.ContentBlock) -> FrozenProvenance:
+        """Exact persisted origin membership, including its original Import owner."""
+        if not self.connection.in_transaction:
+            raise ApiError(409, 'TRANSACTION_REQUIRED', '来源回读需要当前事务。')
+        row = self.connection.execute('SELECT import_id FROM block_provenance WHERE workspace_id=? '
+            'AND block_id=? AND block_revision=? AND block_sha256=?',
+            (self.workspace_id, block.id, block.revision, metadata_sha256(block))).fetchone()
+        snapshot = self.frozen(block)
+        if row is None or row['import_id'] != import_id or snapshot is None:
+            raise damaged()
+        return snapshot
+
     def frozen(self, block: dm.ContentBlock) -> FrozenProvenance | None:
         row = self.connection.execute(
             'SELECT * FROM block_provenance WHERE workspace_id=? AND block_id=? AND block_revision=? AND block_sha256=?',

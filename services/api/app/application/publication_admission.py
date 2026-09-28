@@ -72,14 +72,36 @@ class PublicationAdmissionService:
               draft_id: str, body: DraftPublishWrite) -> PublicationAdmission:
         body = validated(DraftPublishWrite, body)
         history, material = self.reviews.read_publication_basis(connection, identity, body.review_receipt_id)
+        if (not history.records or not isinstance(history.records[0], ReviewMachineRecord)
+                or not isinstance(history.records[-1], ReviewDecisionRecord)):
+            raise blocked('PUBLISH_HUMAN_REVIEW_REQUIRED', '发布准入需要绑定此候选的明确人工审核决定。')
+        return self._evaluate(material, history.records[0], history.records[-1], draft_id, body)
+
+    def verify_recorded(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                        draft_id: str, body: DraftPublishWrite, expected: PublicationAdmission) -> None:
+        """Verify a committed historical observation, never authorize a new publish.
+
+        Read the complete current chain and all bytes first; later decisions stay
+        authenticated even though this comparison names one original revision.
+        The caller separately proves an actual immutable publication/command.
+        """
+        body, expected = validated(DraftPublishWrite, body), validated(PublicationAdmission, expected)
+        history, material = self.reviews.read_publication_basis(connection, identity, body.review_receipt_id)
+        matches = [r for r in history.records if isinstance(r, ReviewDecisionRecord)
+                   and r.receipt.revision == expected.review_revision
+                   and metadata_sha256(r.receipt) == expected.receipt_sha256]
+        if not history.records or not isinstance(history.records[0], ReviewMachineRecord) or len(matches) != 1:
+            raise blocked('PUBLISH_RECORDED_ADMISSION_INVALID', '原发布的审核观察无法完整核验。')
+        actual = self._evaluate(material, history.records[0], matches[0], draft_id, body)
+        if canonical_bytes(actual) != canonical_bytes(expected):
+            raise blocked('PUBLISH_RECORDED_ADMISSION_INVALID', '原发布的准入观察与真实所属事实不符。')
+
+    def _evaluate(self, material: CheckedReviewMaterial, machine: ReviewMachineRecord,
+                  human: ReviewDecisionRecord, draft_id: str, body: DraftPublishWrite) -> PublicationAdmission:
         candidate = material.candidate
         if (candidate.draft_id != draft_id or candidate.draft_revision != body.expected_revision
                 or candidate.candidate_sha256 != body.expected_content_sha256):
             raise ApiError(412, 'PUBLISH_CANDIDATE_MISMATCH', '发布请求与审核的精确候选版本不一致。')
-        if (not history.records or not isinstance(history.records[0], ReviewMachineRecord)
-                or not isinstance(history.records[-1], ReviewDecisionRecord)):
-            raise blocked('PUBLISH_HUMAN_REVIEW_REQUIRED', '发布准入需要绑定此候选的明确人工审核决定。')
-        machine, human = history.records[0], history.records[-1]
         if machine.structural_report.structural != 'PASS':
             raise blocked('PUBLISH_STRUCTURE_REQUIRED', '结构检查尚未通过，不能准入发布。')
         if human.receipt.mathematical not in {'APPROVED', 'NOT_APPLICABLE'} or human.receipt.sources not in {'APPROVED', 'NOT_APPLICABLE'}:
