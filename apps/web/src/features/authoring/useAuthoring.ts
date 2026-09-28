@@ -11,7 +11,7 @@ const policyDenied = (reason: unknown) => reason instanceof ApiError && (reason.
 export function useAuthoring(workspace: string, paused: boolean, port: AuthoringPort = authoringClient) {
   const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
   const owner = JSON.stringify([workspace, access]), scope = useRef({ owner, paused }); scope.current = { owner, paused }
-  const operation = useRef(0), working = useRef(false)
+  const operation = useRef(0), listOperation = useRef(0), working = useRef(false)
   const subjectWrites = useRef(new Set<AbortController>())
   const abortSubjectWrites = () => { for (const controller of subjectWrites.current) controller.abort() }
   const [renderOwner, setRenderOwner] = useState(owner), [permission, setPermission] = useState(false), [denied, setDenied] = useState(false)
@@ -43,7 +43,11 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
     return [...control, ...Object.values(await authoringCommandStore.load(workspace)).map(v => readAuthoringCommand(v, workspace))]
   }
   const loadList = async (more = false) => {
+    const sequence = ++listOperation.current
     const page = await port.list(more ? cursor ?? undefined : undefined)
+    // Initial discovery can overlap a post-command refresh. Only the current
+    // lifecycle's newest list may replace controls, including its cursor.
+    if (!current() || sequence !== listOperation.current) return
     const values = page.items.map(checkedJob), combined = more ? [...jobs, ...values] : values
     if (new Set(combined.map(v => v.id)).size !== combined.length || more && cursor && page.next_cursor === cursor) throw new Error('Control pagination mismatch')
     if (current()) { setJobs(combined); setCursor(page.next_cursor) }
@@ -63,7 +67,7 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
       setPermission(allowed)
       if (allowed) { const values = await loadCommands(true); if (valid() && !scope.current.paused) { setCommands(values); setSubjectReady(true) } }
     }).catch(failure => { if (valid()) fail(failure) })
-    return () => { live = false; ++operation.current; working.current = false; abortSubjectWrites() }
+    return () => { live = false; ++operation.current; ++listOperation.current; working.current = false; abortSubjectWrites() }
   }, [owner, paused, port])
   const begin = (subject: boolean) => { if (!current(subject) || working.current) return null; working.current = true; setBusy(true); setError(''); return ++operation.current }
   const finish = (sequence: number) => { if (current() && sequence === operation.current) { working.current = false; setBusy(false) } }

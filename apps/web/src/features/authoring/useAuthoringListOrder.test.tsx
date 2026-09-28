@@ -76,3 +76,32 @@ test('a previous Policy lifecycle list cannot replace a later current same-works
   expect(hook.result.current.academic).toBe(false)
   expect(f.prepare).not.toHaveBeenCalled()
 })
+
+test('a late initial cursor cannot alter the cursor used to read the next current control page', async () => {
+  const f = fixture(), initial = deferred<AuthoringJobPage>(), next = { ...f.value, id: 'authoring_next_page' }
+  f.port.list = vi.fn<AuthoringPort['list']>()
+    .mockReturnValueOnce(initial.promise)
+    .mockResolvedValueOnce({ items: [f.value], next_cursor: 'current_cursor' })
+    .mockResolvedValueOnce({ items: [next], next_cursor: null })
+  const hook = renderHook(() => useAuthoring(f.workspace, false, f.port))
+  await waitFor(() => expect(hook.result.current.ready && hook.result.current.academic).toBe(true))
+  await act(() => hook.result.current.refresh())
+  await act(async () => { initial.resolve({ items: [], next_cursor: 'old_cursor' }); await initial.promise })
+  expect(hook.result.current.cursor).toBe('current_cursor')
+  await act(() => hook.result.current.refresh(true))
+  expect(f.port.list).toHaveBeenNthCalledWith(3, 'current_cursor')
+  expect(hook.result.current.jobs).toEqual([f.value, next])
+  expect(hook.result.current.cursor).toBeNull()
+})
+
+test('the newest successful empty page is still authoritative and clears the earlier controls', async () => {
+  const f = fixture()
+  f.port.list = vi.fn<AuthoringPort['list']>().mockResolvedValueOnce({ items: [f.value], next_cursor: 'current_cursor' }).mockResolvedValueOnce({ items: [], next_cursor: null })
+  const hook = renderHook(() => useAuthoring(f.workspace, false, f.port))
+  await waitFor(() => expect(hook.result.current.jobs).toEqual([f.value]))
+  await act(() => hook.result.current.refresh())
+  expect(hook.result.current.jobs).toEqual([])
+  expect(hook.result.current.cursor).toBeNull()
+  expect(hook.result.current.busy).toBe(false)
+  expect(f.prepare).not.toHaveBeenCalled()
+})
