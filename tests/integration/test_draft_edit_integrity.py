@@ -116,6 +116,59 @@ def test_actual_edit_mathematics_cannot_be_approved_as_na(case, formula):
     assert reviews.read(identity, job.id).mathematical == 'NOT_RUN'
 
 
+def test_edit_na_uses_current_body_while_retaining_exact_historical_formula_base(case):
+    database, identity, _, service, _, _ = case
+    content = ContentService(database)
+    raw = b'Synthetic old formula: \\begin{equation*}x=1\\end{equation*}\n'
+    block = dm.ContentBlock(id='synthetic_formula_base', revision=1, kind='text', title='Old synthetic text',
+        body_path='content/synthetic-formula-base.md', body_sha256=sha256_bytes(raw))
+    base = content.publish(identity.workspace_id, [block], {block.body_path: raw})[0]
+    later = b'Different later published synthetic text.\n'
+    content.publish(identity.workspace_id, [block.model_copy(update={'revision': 2, 'body_sha256': sha256_bytes(later)})],
+                    {block.body_path: later})
+    create_body = DraftCreateWrite(kind='block', base_ref=base, title='Synthetic edited prose')
+    created = service.create(identity, create_body, 'formula-base')
+    prose = 'Synthetic historical note with no mathematical content.\n'
+    service.patch(identity, created.draft_id, patch(text=prose), 'remove-formula')
+    current = service.read(identity, created.draft_id, 2)
+    assert current.base.ref == base and current.base.body_markdown.encode() == raw
+    assert current.payload.body_markdown == prose
+    registry = DraftCandidates({'authoring_edit': service})
+    reviews = ReviewService(database, registry, ReviewNumeric(registry, {}), {})
+    create_review = request(current.candidate)
+    job = reviews.create(identity, created.draft_id, create_review, 'prose-review')
+    assert ReviewWorker(reviews).run_once()
+    machine = reviews.read(identity, job.id)
+    assert machine.mathematical == machine.sources == machine.independent_pedagogy == 'NOT_RUN'
+    reason = 'Synthetic human fixture: this edited candidate contains historical prose only; no real approval.'
+    human = decision(machine, mathematical='NOT_APPLICABLE', reason=reason)
+    accepted = reviews.decide(identity, job.id, human, 'synthetic-na-prose')
+    assert accepted.mathematical == 'NOT_APPLICABLE' and accepted.sources == 'REJECTED'
+    assert accepted.reviewer == identity.id and accepted.decision_reason == reason
+    assert accepted.candidate == current.candidate
+    assert reviews.read(identity, job.id) == accepted
+    artifact_id = machine.evidence_paths[0].split('/')[-2]
+    with database.transaction() as conn:
+        report, _ = reviews.read_artifact(conn, identity, artifact_id)
+    assert json.loads(report)['mathematical'] == 'NOT_RUN'
+    # A later edit must neither change this historical judgment nor inherit it.
+    service.patch(identity, created.draft_id, patch(2, '$y^2$\n'), 'later-math')
+    assert reviews.decide(identity, job.id, human, 'synthetic-na-prose') == accepted
+    assert reviews.create(identity, created.draft_id, create_review, 'prose-review') == job
+    # Applicability excludes the old base from current-content scanning, but
+    # every read/replay still verifies those exact original physical bytes.
+    digest = block.body_sha256
+    (database.settings.data_dir / 'blobs' / digest[:2] / digest).write_bytes(b'Synthetic damaged historical base')
+    before = table_hashes(database)
+    for call in [lambda: service.create(identity, create_body, 'formula-base'),
+                 lambda: reviews.read(identity, job.id),
+                 lambda: reviews.decide(identity, job.id, human, 'synthetic-na-prose'),
+                 lambda: reviews.create(identity, created.draft_id, create_review, 'prose-review')]:
+        with pytest.raises(ApiError):
+            call()
+    assert table_hashes(database) == before
+
+
 def test_quality_physical_report_remains_checked_for_edit_owner(case):
     database, identity, _, _, _, _ = case
     reviews, receipt = review(case)
