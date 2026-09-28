@@ -8,7 +8,13 @@ from fastapi.staticfiles import StaticFiles
 
 from packages.contracts.domain_models import ErrorEnvelope
 
-from .application.imports import ImportService
+from .application.imports import ImportService, IMPORT_ARTIFACT_PROFILES
+from .application.artifacts import ArtifactsService
+from .application.jobs import JobService
+from .application.draft_candidates import DraftCandidates
+from .application.review_numeric import ReviewNumeric
+from .application.review_service import ReviewService
+from .application.review_worker import ReviewWorker
 from .application.consents import ConsentsService
 from .application.provider_budget import ProofRegistry, RequestPreparer
 from .application.provider_dispatch import CheckedDispatch
@@ -50,6 +56,7 @@ from .interfaces.route_http import create_route_router
 from .interfaces.tutor_http import create_tutor_router
 from .interfaces.authoring_http import create_authoring_router
 from .interfaces.authoring_group_http import create_authoring_group_router
+from .interfaces.review_http import create_review_router
 from .infrastructure.import_worker import ImportWorker
 from .infrastructure.provider_secret_store import preferred_secret_store
 from .infrastructure.authoring_numeric_runtime import NumericRuntime
@@ -88,6 +95,14 @@ def create_app(settings: Settings | None = None, *,
     group_numeric_runtime = NumericRuntime()
     group_numeric_service = GroupNumericService(database, authoring_group_context, group_numeric_runtime, authoring=authoring_group_service)
     group_numeric_worker = GroupNumericWorker(database, authoring_group_context, group_numeric_runtime, authoring=authoring_group_service)
+    candidates = DraftCandidates({'import': import_service, 'authoring_single': authoring_service,
+                                  'authoring_group': authoring_group_service})
+    review_service = ReviewService(database, candidates,
+        ReviewNumeric(candidates, {'authoring_single': numeric_service, 'authoring_group': group_numeric_service}),
+        {(profile, 'import'): import_service for profile in IMPORT_ARTIFACT_PROFILES})
+    review_worker = ReviewWorker(review_service)
+    artifacts = ArtifactsService(database, review_service.readers())
+    jobs = JobService(database, review=review_service)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
@@ -104,9 +119,11 @@ def create_app(settings: Settings | None = None, *,
         authoring_group_worker.start()
         numeric_worker.start()
         group_numeric_worker.start()
+        review_worker.start()
         try:
             yield
         finally:
+            review_worker.stop()
             group_numeric_worker.stop()
             numeric_worker.stop()
             authoring_group_worker.stop()
@@ -140,12 +157,15 @@ def create_app(settings: Settings | None = None, *,
     application.state.group_numeric_service = group_numeric_service
     application.state.group_numeric_runtime = group_numeric_runtime
     application.state.group_numeric_worker = group_numeric_worker
+    application.state.review_service = review_service
+    application.state.review_worker = review_worker
+    application.state.artifacts_service = artifacts
     application.state.outbound_sources = provider_sources
     application.state.request_preparer = provider_preparer
     install_boundary(application, settings, database)
     application.include_router(create_router(settings, database, worker_ready=import_worker.is_alive))
     application.include_router(create_content_router(database))
-    application.include_router(create_import_router(settings, import_service))
+    application.include_router(create_import_router(settings, import_service, jobs=jobs, artifacts=artifacts))
     application.include_router(create_learning_router(database))
     application.include_router(create_practice_router(database))
     application.include_router(create_assessment_router(database))
@@ -158,6 +178,7 @@ def create_app(settings: Settings | None = None, *,
     application.include_router(create_tutor_router(tutor_service))
     application.include_router(create_authoring_router(authoring_service, numeric_service, authoring_group_service))
     application.include_router(create_authoring_group_router(authoring_group_service, group_numeric_service))
+    application.include_router(create_review_router(review_service))
     if settings.static_dir.is_dir():
         application.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="workbench")
     return application

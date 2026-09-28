@@ -3,6 +3,10 @@
 from dataclasses import dataclass
 from datetime import datetime
 import sqlite3
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .review_service import ReviewService
 
 
 @dataclass(frozen=True)
@@ -75,8 +79,9 @@ def outbound_lease_active(connection: sqlite3.Connection, workspace_id: str, job
 
 class JobService:
     """Dispatch only implemented job kinds to their owning application service."""
-    def __init__(self, database):
+    def __init__(self, database, review: 'ReviewService | None' = None):
         self.database = database
+        self.review = review
 
     def _owner(self, identity, identifier):
         from .errors import ApiError
@@ -86,6 +91,8 @@ class JobService:
             row = connection.execute("SELECT kind FROM jobs WHERE id=? AND workspace_id=?", (identifier, identity.workspace_id)).fetchone()
         if row is None:
             raise ApiError(404, "JOB_MISSING", "任务不存在或不可访问。")
+        if row['kind'] == 'draft_review' and self.review is not None:
+            return self.review
         if row["kind"] == "assessment_grading":
             return GradingService(self.database)
         if row["kind"] == "import":
@@ -122,11 +129,16 @@ class JobService:
         raise ApiError(409, "JOB_KIND_UNAVAILABLE", "此任务类型尚未实现受控读取。")
 
     def job(self, identity, identifier):
-        return self._owner(identity, identifier).job(identity, identifier)
+        owner = self._owner(identity, identifier)
+        if self.review is not None and owner is self.review:
+            return self.review.read_job(identity, identifier)
+        return owner.job(identity, identifier)
 
     def cancel(self, identity, identifier, request, key):
         from .grading import GradingService
         owner = self._owner(identity, identifier)
+        if self.review is not None and owner is self.review:
+            return self.review.cancel(identity, identifier, request, key)
         if isinstance(owner, GradingService):
             return owner.cancel(identity, identifier, request, key)
         return owner.cancel_job(identity, identifier, request, key)

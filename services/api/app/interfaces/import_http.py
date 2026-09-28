@@ -34,9 +34,10 @@ async def strict_upload_fields(request: Request) -> None:
         raise ApiError(422, "SCHEMA_INVALID", "上传字段未知或重复。")
 
 
-def create_import_router(settings: Settings, service: "ImportService") -> APIRouter:
-    jobs = JobService(service.database)
-    artifacts = ArtifactsService(service.database, {(profile, 'import'): service for profile in IMPORT_ARTIFACT_PROFILES})
+def create_import_router(settings: Settings, service: "ImportService", *,
+                         jobs: JobService | None = None, artifacts: ArtifactsService | None = None) -> APIRouter:
+    jobs = jobs or JobService(service.database)
+    artifacts = artifacts or ArtifactsService(service.database, {(profile, 'import'): service for profile in IMPORT_ARTIFACT_PROFILES})
     router = APIRouter(prefix="/api/v1", tags=["imports"],
                        dependencies=[Depends(current_identity), Depends(reject_query_fields)])
 
@@ -88,6 +89,7 @@ def create_import_router(settings: Settings, service: "ImportService") -> APIRou
         disposition = "attachment; filename=download; filename*=UTF-8''" + quote(artifact.filename, safe="")
         return Response(data, media_type="application/octet-stream", headers={
             "Content-Disposition": disposition, "ETag": f'"{artifact.sha256}"',
+            "Cache-Control": "no-store", "Vary": "Cookie",
         })
 
     return router
