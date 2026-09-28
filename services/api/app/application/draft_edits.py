@@ -10,6 +10,7 @@ from ..draft_dto import DraftCreateWrite, DraftPatchWrite, DraftCreated, DraftPa
 from ..infrastructure.database import Database, utc_now
 from ..infrastructure.draft_candidate_repository import DraftCandidateRepository
 from ..infrastructure.draft_edit_repository import DraftEditRepository
+from ..infrastructure.publication_repository import PublicationRepository
 from ..infrastructure.security import SessionIdentity, current_session_identity
 from .authoring_context import AuthoringContext
 from .content_draft_source import ContentDraftSource
@@ -116,6 +117,7 @@ class DraftEditService:
                     self._registered_history(conn, current, draft_id)
                     return checked(DraftPatched, ack(replay))
             history = self._registered_history(conn, current, draft_id)
+            PublicationRepository(conn, current.workspace_id).require_unpublished_draft(draft_id)
             prior = history[-1]
             if body.expected_revision != prior.candidate.draft_revision:
                 raise ApiError(412, 'DRAFT_REVISION_MISMATCH', '草稿已变化，请重新读取当前修订。')

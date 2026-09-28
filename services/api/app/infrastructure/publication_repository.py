@@ -74,6 +74,14 @@ class PublicationRepository:
             raise integrity()
         return history
 
+    def require_unpublished_draft(self, draft_id: str) -> None:
+        """A committed publication is terminal for new commands on this producer Draft."""
+        row = self.conn.execute('SELECT id FROM draft_publications WHERE workspace_id=? AND draft_id=? LIMIT 1',
+                                (self.workspace_id, draft_id)).fetchone()
+        if row is not None:
+            self.load(row['id'])
+            raise ApiError(409, 'DRAFT_ALREADY_PUBLISHED', '此草稿已经发布；请从明确选择的正式修订创建新草稿。')
+
     def _event(self, identifier: str, revision: int, state: PublicationState, now: str) -> None:
         value = validated(PublicationEvent, dict(version='draft-publication-event-v1', publication_id=identifier,
                                                  revision=revision, state=state, recorded_at=now))

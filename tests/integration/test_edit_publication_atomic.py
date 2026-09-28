@@ -128,23 +128,30 @@ def test_patch_and_publish_serialize_without_publishing_unreviewed_new_head(edit
 
     def patch():
         barrier.wait(timeout=10)
-        return edits.patch(
-            identity,
-            created.draft_id,
-            DraftPatchWrite(
-                expected_revision=2, patches=[DraftPatch(field="title", value="Unreviewed concurrent title")]
-            ),
-            "concurrent-patch",
-        )
+        try:
+            return edits.patch(
+                identity,
+                created.draft_id,
+                DraftPatchWrite(
+                    expected_revision=2, patches=[DraftPatch(field="title", value="Unreviewed concurrent title")]
+                ),
+                "concurrent-patch",
+            )
+        except ApiError as error:
+            return error.status, error.code
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         first, second = pool.submit(publish), pool.submit(patch)
         published, changed = first.result(), second.result()
-    assert changed.revision == 3
     if isinstance(published, int):
+        assert changed.revision == 3
         assert published == 412 and ContentService(database).current(identity.workspace_id, base.id) == base
     else:
+        assert changed == (409, "DRAFT_ALREADY_PUBLISHED")
         assert published.revision == 2
+        with pytest.raises(ApiError) as caught:
+            edits.read(identity, created.draft_id, 3)
+        assert caught.value.code == "DRAFT_REVISION_MISMATCH"
         assert publisher(editing).publish(identity, created.draft_id, body, "publish") == published
         assert (
             ContentService(database).read(identity.workspace_id, "block", base.id, 2).title == "Synthetic revised title"

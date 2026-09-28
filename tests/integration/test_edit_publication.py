@@ -142,19 +142,21 @@ def test_reader_does_not_relabel_edited_content_as_original_import_provenance(ed
     assert receipt.sources == "APPROVED"  # This is a synthetic exact Draft decision, not Reader source attribution.
 
 
-def test_original_ack_survives_later_edit_content_and_rejection_without_authorizing_new_publish(editing):
+def test_original_ack_survives_content_advancement_and_rejection_without_authorizing_new_publish(editing):
     from services.api.app.application.errors import ApiError
     from tests.integration.test_authoring_numeric_provider_history import table_hashes
 
     database, identity, base, edits, created, reviews = editing
     record, receipt, body = approved(editing)
     first = publisher(editing).publish(identity, created.draft_id, body, "permanent")
-    edits.patch(
-        identity,
-        created.draft_id,
-        DraftPatchWrite(expected_revision=2, patches=[DraftPatch(field="title", value="Another draft title")]),
-        "later",
-    )
+    with pytest.raises(ApiError) as error:
+        edits.patch(
+            identity,
+            created.draft_id,
+            DraftPatchWrite(expected_revision=2, patches=[DraftPatch(field="title", value="Another draft title")]),
+            "later",
+        )
+    assert error.value.code == "DRAFT_ALREADY_PUBLISHED"
     content = ContentService(database)
     block = content.read(identity.workspace_id, "block", first.id, first.revision)
     content.publish(
