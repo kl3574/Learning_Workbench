@@ -15,6 +15,7 @@ from .application.draft_candidates import DraftCandidates
 from .application.review_numeric import ReviewNumeric
 from .application.review_service import ReviewService
 from .application.review_worker import ReviewWorker
+from .application.draft_publication import DraftPublicationService
 from .application.consents import ConsentsService
 from .application.provider_budget import ProofRegistry, RequestPreparer
 from .application.provider_dispatch import CheckedDispatch
@@ -57,6 +58,7 @@ from .interfaces.tutor_http import create_tutor_router
 from .interfaces.authoring_http import create_authoring_router
 from .interfaces.authoring_group_http import create_authoring_group_router
 from .interfaces.review_http import create_review_router
+from .interfaces.publication_http import create_publication_router
 from .infrastructure.import_worker import ImportWorker
 from .infrastructure.provider_secret_store import preferred_secret_store
 from .infrastructure.authoring_numeric_runtime import NumericRuntime
@@ -101,6 +103,7 @@ def create_app(settings: Settings | None = None, *,
         ReviewNumeric(candidates, {'authoring_single': numeric_service, 'authoring_group': group_numeric_service}),
         {(profile, 'import'): import_service for profile in IMPORT_ARTIFACT_PROFILES})
     review_worker = ReviewWorker(review_service)
+    publication_service = DraftPublicationService(database, review_service, import_service)
     artifacts = ArtifactsService(database, review_service.readers())
     jobs = JobService(database, review=review_service)
 
@@ -159,6 +162,7 @@ def create_app(settings: Settings | None = None, *,
     application.state.group_numeric_worker = group_numeric_worker
     application.state.review_service = review_service
     application.state.review_worker = review_worker
+    application.state.publication_service = publication_service
     application.state.artifacts_service = artifacts
     application.state.outbound_sources = provider_sources
     application.state.request_preparer = provider_preparer
@@ -179,6 +183,7 @@ def create_app(settings: Settings | None = None, *,
     application.include_router(create_authoring_router(authoring_service, numeric_service, authoring_group_service))
     application.include_router(create_authoring_group_router(authoring_group_service, group_numeric_service))
     application.include_router(create_review_router(review_service))
+    application.include_router(create_publication_router(publication_service))
     if settings.static_dir.is_dir():
         application.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="workbench")
     return application

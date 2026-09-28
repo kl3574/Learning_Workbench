@@ -1,7 +1,10 @@
 """Actual HTTP publication of synthetic reviewed input; no real academic approval."""
+import pytest
+
 from packages.contracts import domain_models as dm
 from packages.contracts.canonical import metadata_sha256
 from tests.integration.test_authoring_http import command
+from tests.integration.test_authoring_numeric_provider_history import table_hashes
 from tests.integration.test_review_http import prepared_review_http as prepared_review_http
 
 
@@ -58,3 +61,97 @@ def test_actual_http_publish_returns_persisted_ref_and_original_201_on_replay(pr
         assert connection.execute('SELECT count(*) FROM objects').fetchone()[0] == 1
         assert connection.execute('SELECT count(*) FROM revisions').fetchone()[0] == 1
         assert connection.execute('SELECT count(*) FROM review_revisions').fetchone()[0] == 2
+
+
+def test_new_publication_requires_current_human_approval_and_keeps_machine_history(prepared_review_http):
+    case = prepared_review_http
+    body, _, human = approve_for_publication(case)
+    rejected = case.client.post('/api/v1/reviews/' + body['review_receipt_id'] + '/decision', json={
+        'expected_revision': human['revision'], 'candidate_sha256': case.candidate['candidate_sha256'],
+        'mathematical': 'REJECTED', 'sources': 'REJECTED',
+        'reason': 'Synthetic later rejection before publication.', 'evidence_artifact_ids': []},
+        headers=command(case.headers, 'reject-before-publish'))
+    assert rejected.status_code == 200, rejected.text
+    response = case.client.post('/api/v1/drafts/' + case.candidate['draft_id'] + '/publish',
+        json=body, headers=command(case.headers, 'publish-rejected'))
+    assert response.status_code == 409, response.text
+    assert case.client.get('/api/v1/reviews/' + body['review_receipt_id']).json() == rejected.json()
+    with case.database.connect() as connection:
+        assert connection.execute('SELECT count(*) FROM objects').fetchone()[0] == 0
+        assert connection.execute('SELECT count(*) FROM review_revisions').fetchone()[0] == 3
+
+
+def test_committed_publication_ack_is_historical_after_later_review_rejection(prepared_review_http):
+    case = prepared_review_http
+    body, _, human = approve_for_publication(case)
+    path = '/api/v1/drafts/' + case.candidate['draft_id'] + '/publish'
+    first = case.client.post(path, json=body, headers=command(case.headers, 'historical-publish'))
+    assert first.status_code == 201, first.text
+    rejected = case.client.post('/api/v1/reviews/' + body['review_receipt_id'] + '/decision', json={
+        'expected_revision': human['revision'], 'candidate_sha256': case.candidate['candidate_sha256'],
+        'mathematical': 'REJECTED', 'sources': 'REJECTED',
+        'reason': 'Synthetic later decision; original publication is a historical fact.',
+        'evidence_artifact_ids': []}, headers=command(case.headers, 'reject-after-publish'))
+    assert rejected.status_code == 200, rejected.text
+    replay = case.client.post(path, json=body, headers=command(case.headers, 'historical-publish'))
+    assert replay.status_code == 201 and replay.json() == first.json()
+    other = case.client.post(path, json=body, headers=command(case.headers, 'new-publish-after-reject'))
+    assert other.status_code == 409, other.text
+    assert case.client.get('/api/v1/reviews/' + body['review_receipt_id']).json() == rejected.json()
+    with case.database.connect() as connection:
+        assert connection.execute('SELECT count(*) FROM revisions').fetchone()[0] == 1
+
+
+@pytest.mark.parametrize('fault', ['missing_key', 'invalid_key', 'csrf', 'origin', 'extra_body',
+                                  'bool_revision', 'unknown_query', 'duplicate_key', 'duplicate_csrf'])
+def test_publication_transport_rejects_ambiguous_or_unauthorized_writes_before_mutation(prepared_review_http, fault):
+    case = prepared_review_http
+    body, _, _ = approve_for_publication(case)
+    path = '/api/v1/drafts/' + case.candidate['draft_id'] + '/publish'
+    headers = command(case.headers, 'guarded-publication')
+    expected = 400
+    if fault == 'missing_key':
+        headers.pop('Idempotency-Key')
+    elif fault == 'invalid_key':
+        headers['Idempotency-Key'] = 'invalid key'
+    elif fault in {'csrf', 'origin'}:
+        headers['X-CSRF-Token' if fault == 'csrf' else 'Origin'] = (
+            'synthetic-invalid' if fault == 'csrf' else 'https://invalid.example')
+        expected = 403
+    elif fault == 'extra_body':
+        body['reviewer'] = 'client-claimed-actor'
+        expected = 422
+    elif fault == 'bool_revision':
+        body['expected_revision'] = True
+        expected = 422
+    elif fault == 'unknown_query':
+        path += '?reuse=true'
+        expected = 422
+    actual_headers = list(headers.items())
+    if fault.startswith('duplicate_'):
+        actual_headers.append(('Idempotency-Key', 'second-command') if fault == 'duplicate_key'
+                              else ('X-CSRF-Token', headers['X-CSRF-Token']))
+    before = table_hashes(case.database)
+    response = case.client.post(path, json=body, headers=actual_headers)
+    assert response.status_code == expected, response.text
+    assert 'client-claimed-actor' not in response.text and 'synthetic-invalid' not in response.text
+    assert table_hashes(case.database) == before
+
+
+@pytest.mark.parametrize('change', ['role', 'logout'])
+def test_original_publication_ack_requires_current_session_authority(prepared_review_http, change):
+    case = prepared_review_http
+    body, _, _ = approve_for_publication(case)
+    path = '/api/v1/drafts/' + case.candidate['draft_id'] + '/publish'
+    original = case.client.post(path, json=body, headers=command(case.headers, 'access-publish'))
+    assert original.status_code == 201, original.text
+    if change == 'role':
+        switched = case.client.post('/api/v1/session/role', json={'role': 'learner'},
+                                    headers=command(case.headers, 'switch-learner'))
+        assert switched.status_code == 200
+    else:
+        case.client.cookies.clear()
+    before = table_hashes(case.database)
+    replay = case.client.post(path, json=body, headers=command(case.headers, 'access-publish'))
+    assert replay.status_code == (403 if change == 'role' else 401), replay.text
+    assert table_hashes(case.database) == before
