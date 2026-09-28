@@ -230,3 +230,24 @@ def test_app_lifespan_runs_and_stops_real_review_worker(prepared_review_http):
         assert response.status_code == 200, response.text
         assert response.json()['mathematical'] == response.json()['sources'] == 'NOT_RUN'
     assert not worker.is_alive()
+
+
+def test_valid_foreign_workspace_cannot_discover_review_or_report(prepared_review_http):
+    case = prepared_review_http
+    path, body, read_path = review_create(case)
+    assert case.app.state.review_worker.run_once()
+    report_path = case.client.get(read_path).json()['evidence_paths'][0]
+    with case.database.transaction() as connection:
+        workspace = dict(connection.execute('SELECT * FROM workspace WHERE id=?', (case.identity.workspace_id,)).fetchone())
+        workspace['id'] = 'workspace_other_review'
+        connection.execute('INSERT INTO workspace(' + ','.join(workspace) + ') VALUES(' +
+                           ','.join('?' for _ in workspace) + ')', tuple(workspace.values()))
+        connection.execute('UPDATE local_sessions SET workspace_id=? WHERE id=?', (workspace['id'], case.identity.id))
+    before = table_hashes(case.database)
+    results = [case.client.get(read_path), case.client.get(report_path),
+               case.client.get('/api/v1/jobs/' + read_path.rsplit('/', 1)[1]),
+               case.client.post(path, json=body, headers=command(case.headers, 'create')),
+               case.client.post(read_path + '/decision', json=rejected_decision(case), headers=command(case.headers, 'decision'))]
+    assert [item.status_code for item in results] == [404] * 5
+    assert all(body['reviewer_note'] not in item.text for item in results)
+    assert table_hashes(case.database) == before
