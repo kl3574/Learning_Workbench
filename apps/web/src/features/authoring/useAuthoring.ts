@@ -5,6 +5,7 @@ import { digest } from '../retrieval/retrievalModel'
 import { sameValue } from '../providers/providerSchema'
 import { authoringClient, type AuthoringPort } from './authoringClient'
 import { authoringCommandStore, authoringControlStore, checkedAuthoring, makeAuthoringCommand, persistAuthoringCommand, readAuthoringCommand, type AuthoringCommand, type AuthoringCommandInput } from './authoringCommands'
+import { authoringMark, authoringObservationHandle } from './authoringObservation'
 
 const policyDenied = (reason: unknown) => reason instanceof ApiError && (reason.status === 401 || reason.status === 403 || ['ASSESSMENT_ACTIVE', 'POLICY_DENIED', 'ASSESSMENT_ANSWER_PROTECTED'].includes(reason.code ?? ''))
 
@@ -12,6 +13,10 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
   const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
   const owner = JSON.stringify([workspace, access]), scope = useRef({ owner, paused }); scope.current = { owner, paused }
   const operation = useRef(0), listOperation = useRef(0), working = useRef(false)
+  const observation = useRef<ReturnType<typeof authoringObservationHandle>>(undefined)
+  if (!observation.current) observation.current = authoringObservationHandle()
+  const mark = (stage: Parameters<typeof authoringMark>[1], facts: Partial<Parameters<typeof authoringMark>[2]> = {}) =>
+    authoringMark(observation.current, stage, { operation: operation.current, list_sequence: listOperation.current, working: working.current, ...facts })
   const subjectWrites = useRef(new Set<AbortController>())
   const abortSubjectWrites = () => { for (const controller of subjectWrites.current) controller.abort() }
   const [renderOwner, setRenderOwner] = useState(owner), [permission, setPermission] = useState(false), [denied, setDenied] = useState(false)
@@ -44,16 +49,24 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
   }
   const loadList = async (more = false) => {
     const sequence = ++listOperation.current
-    const page = await port.list(more ? cursor ?? undefined : undefined)
-    // Initial discovery can overlap a post-command refresh. Only the current
-    // lifecycle's newest list may replace controls, including its cursor.
-    if (!current() || sequence !== listOperation.current) return
-    const values = page.items.map(checkedJob), combined = more ? [...jobs, ...values] : values
-    if (new Set(combined.map(v => v.id)).size !== combined.length || more && cursor && page.next_cursor === cursor) throw new Error('Control pagination mismatch')
-    if (current()) { setJobs(combined); setCursor(page.next_cursor) }
+    mark('list_requested', { basis_list_sequence: sequence })
+    try {
+      const page = await port.list(more ? cursor ?? undefined : undefined)
+      mark('list_returned', { basis_list_sequence: sequence })
+      // Initial discovery can overlap a post-command refresh. Only the current
+      // lifecycle's newest list may replace controls, including its cursor.
+      const inScope = current()
+      if (!inScope || sequence !== listOperation.current) { mark('list_discarded', { basis_list_sequence: sequence, reason: inScope ? 'superseded' : 'scope' }); return }
+      const values = page.items.map(checkedJob), combined = more ? [...jobs, ...values] : values
+      if (new Set(combined.map(v => v.id)).size !== combined.length || more && cursor && page.next_cursor === cursor) throw new Error('Control pagination mismatch')
+      if (current()) { setJobs(combined); setCursor(page.next_cursor); mark('list_accepted', { basis_list_sequence: sequence, job_count: combined.length }) }
+      else mark('list_discarded', { basis_list_sequence: sequence, reason: 'scope' })
+    } catch (reason) { mark('list_error', { basis_list_sequence: sequence }); throw reason }
+    finally { mark('list_finally', { basis_list_sequence: sequence }) }
   }
   useEffect(() => {
     const sequence = ++operation.current; working.current = false; academicRef.current = false
+    mark('lifecycle_reset')
     setRenderOwner(owner); setPermission(false); setDenied(false); clearSubject(); setJobs([]); setCursor(null); setCommands([]); setReady(false); setBusy(false); setError('')
     if (!workspace) return
     let live = true
@@ -67,10 +80,15 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
       setPermission(allowed)
       if (allowed) { const values = await loadCommands(true); if (valid() && !scope.current.paused) { setCommands(values); setSubjectReady(true) } }
     }).catch(failure => { if (valid()) fail(failure) })
-    return () => { live = false; ++operation.current; ++listOperation.current; working.current = false; abortSubjectWrites() }
+    return () => { live = false; ++operation.current; ++listOperation.current; working.current = false; abortSubjectWrites(); mark('lifecycle_cleanup') }
   }, [owner, paused, port])
-  const begin = (subject: boolean) => { if (!current(subject) || working.current) return null; working.current = true; setBusy(true); setError(''); return ++operation.current }
-  const finish = (sequence: number) => { if (current() && sequence === operation.current) { working.current = false; setBusy(false) } }
+  useEffect(() => { mark('rendered', { busy, ready, academic, job_count: jobs.length }) }, [busy, ready, academic, jobs])
+  const begin = (subject: boolean) => { if (!current(subject) || working.current) return null; working.current = true; setBusy(true); setError(''); const sequence = ++operation.current; mark('operation_started', { basis_operation: sequence }); return sequence }
+  const finish = (sequence: number) => {
+    mark('operation_finally', { basis_operation: sequence })
+    if (current() && sequence === operation.current) { working.current = false; setBusy(false); mark('operation_finished', { basis_operation: sequence }) }
+    else mark('operation_discarded', { basis_operation: sequence })
+  }
   const refresh = async (more = false) => {
     const sequence = begin(false); if (sequence === null) return
     try {
@@ -154,8 +172,10 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
                   : await groupPort().decide(retained.check_id, retained.body, retained.command_id))
       // Admit academic replies only while their original access scope is current.
       // Safe control ACKs remain durable after a Policy change.
+      mark('ack_received', { basis_operation: sequence })
       if (subject && (!current(true) || sequence !== operation.current)) return
       await persistAuthoringCommand({ ...retained, rejection: null, ack } as AuthoringCommand, undefined, guard)
+      mark('ack_persisted', { basis_operation: sequence })
       if (!current(subject) || sequence !== operation.current) return
       const values = await loadCommands(academicRef.current && subjectReady)
       if (!current(subject) || sequence !== operation.current) return
@@ -164,6 +184,7 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
     } catch (reason) {
       // A Policy rejection invalidates subject writes before even persisting
       // its error receipt. Original durable commands and safe controls remain.
+      mark('operation_error', { basis_operation: sequence })
       if (policyDenied(reason) && current() && sequence === operation.current) fail(reason)
       if (!policyDenied(reason) && reason instanceof ApiError && [400, 409, 412, 422].includes(reason.status)) {
         try {

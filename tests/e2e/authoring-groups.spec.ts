@@ -2,6 +2,7 @@ import { writeFileSync } from 'node:fs'
 import { expect, test, type BrowserType, type Locator, type Page, type TestInfo } from '../../apps/web/node_modules/@playwright/test/index.mjs'
 import type { AuthoringGroupDraftView, AuthoringGroupJobView, AuthoringGroupNumericCheckView, AuthoringPrivateSolutionView, ConsentProposalView, JobRef, JobSnapshot, NumericCheckDecisionAck, SessionResponse } from '../../packages/contracts/generated/api-types'
 import { AuthoringRuntime } from './authoringRuntime'
+import { observeAuthoringPrepare } from './authoringDiagnostic'
 
 const providerId = 'provider_authoring_group_native'
 const topic = '原创合成组合创作'
@@ -43,9 +44,11 @@ async function form(page: Page, kind: 'lesson' | 'practice_set' | 'assessment') 
   }
   return dialog
 }
-async function readPrepared(page: Page, dialog: Locator, ack: JobRef) {
+async function readPrepared(page: Page, dialog: Locator, ack: JobRef, diagnostic?: { observer: Awaited<ReturnType<typeof observeAuthoringPrepare>>; info: TestInfo }) {
   expect(ack.status).toBe('awaiting_approval')
-  await dialog.getByRole('button', { name: `读取创作详情 ${ack.id}`, exact: true }).click()
+  const click = () => dialog.getByRole('button', { name: `读取创作详情 ${ack.id}`, exact: true }).click()
+  if (diagnostic) await diagnostic.observer.around(diagnostic.info, click)
+  else await click()
   await expect(dialog.getByRole('region', { name: '受保护创作详情', exact: true })).toBeVisible()
   const result: AuthoringGroupJobView = await page.request.get(`/api/v1/authoring/jobs/${ack.id}`).then(value => value.json())
   expect(result.variant).toBe('group'); expect(result.request.source_refs).toEqual([])
@@ -294,8 +297,10 @@ test('native lesson group preserves its plan and formulas, then separately decli
 test('native practice group replays its lost prepare ACK with one key and clears explicitly read private answers after permission changes', async ({ playwright }, info) => {
   test.setTimeout(120_000)
   const runtime = await AuthoringRuntime.start('practice_set', 'groups'), errors: string[] = []
+  let observer: Awaited<ReturnType<typeof observeAuthoringPrepare>> | undefined
   try {
     const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]
+    observer = await observeAuthoringPrepare(page)
     page.on('pageerror', error => errors.push(error.message))
     await runtime.authenticateOnly(page); await configure(page, runtime)
     const dialog = await form(page, 'practice_set')
@@ -319,7 +324,7 @@ test('native practice group replays its lost prepare ACK with one key and clears
     const replay = await replaying; expect(replay.status()).toBe(202); expect(await replay.json()).toEqual(originalAck)
     expect(attempts).toHaveLength(2); expect(attempts[1]).toEqual(attempts[0])
     await page.unroute('**/api/v1/authoring/group-jobs')
-    const prepared = await readPrepared(page, dialog, originalAck)
+    const prepared = await readPrepared(page, dialog, originalAck, { observer, info })
     expect(prepared.preparation.targets.map(value => value.ref.entity)).toEqual(['lesson', 'concept'])
     const { completed, draft, group, proposal } = await grant(page, dialog, originalAck)
     expect(draft.root.entity).toBe('practice_set')
@@ -343,7 +348,7 @@ test('native practice group replays its lost prepare ACK with one key and clears
     const recovery = await restartAndReadOriginal(runtime, playwright.chromium, completed, draft, solution, errors)
     expect(errors).toEqual([])
     writeFileSync(info.outputPath('group-practice-actual.json'), JSON.stringify({ scope: 'Lost browser prepare response after actual server commit, then explicit identical original command replay. One original Job and one actual loopback model dispatch. Exact existing Content targets, public/private separation and real role change clearing without page reload. No review or publication.', prepare_attempts: attempts, original_prepare_ack: originalAck, prepared, completed, proposal_id: proposal.id, draft, solution, cancellation, recovery, runtime: recovery.provider_before, bounds: { wide, narrow }, page_errors: errors }, null, 2))
-  } finally { await runtime.close() }
+  } finally { observer?.dispose(); await runtime.close() }
 })
 
 
