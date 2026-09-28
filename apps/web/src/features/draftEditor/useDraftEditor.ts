@@ -5,34 +5,39 @@ import { sameValue, validIdentity } from '../providers/providerSchema'
 import { editClient, type EditPort } from './editClient'
 import { checkedEdit, editSnapshot, editText, snapshotText, type EditText } from './editSchema'
 import { decodeBuffer, decodeCommand, editBuffers, editCommands, editPage, patchBody, persistCommand, readCommand, type EditBuffer, type EditCommand } from './editJournal'
+import { discardEditMemory, editMemoryVersion, pendingEditMemory, recoverableEditMemory, releaseEditMemory, retainEditMemory, subscribeEditMemory } from './editMemory'
 
 type Conflict = { command: EditCommand; base: EditDraftSnapshot; server: EditDraftSnapshot; local: EditText }
 const denied = (e: unknown) => e instanceof ApiError && ([401, 403].includes(e.status) || ['POLICY_DENIED', 'ASSESSMENT_ACTIVE', 'ASSESSMENT_ANSWER_PROTECTED'].includes(e.code ?? ''))
 export function useDraftEditor(workspace: string, baseRef: ContentRef, paused: boolean, port: EditPort = editClient) {
   const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
+  useSyncExternalStore(subscribeEditMemory, editMemoryVersion, editMemoryVersion)
   const owner = JSON.stringify([workspace, baseRef, access]), scope = useRef({ owner, paused }); scope.current = { owner, paused }
   const live = useRef(false), admitted = useRef(false), working = useRef(false), sequence = useRef(0), abort = useRef(new AbortController())
   const queue = useRef<Promise<void>>(Promise.resolve()), revisions = useRef(new Map<string, number>()), work = useRef<EditBuffer | null>(null), saveSerial = useRef(0), localDurable = useRef(true)
   const [renderOwner, setRenderOwner] = useState(owner), [allowed, setAllowed] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('')
   const [commands, setCommands] = useState<EditCommand[]>([]), [buffers, setBuffers] = useState<EditBuffer[]>([]), [buffer, setBuffer] = useState<EditBuffer | null>(null)
   const [saving, setSaving] = useState(false), [storageFailed, setStorageFailed] = useState(false), [conflict, setConflict] = useState<Conflict | null>(null)
+  const memorySession = useRef('')
+  const pendingMemory = pendingEditMemory(workspace, baseRef)
   const ready = renderOwner === owner && allowed && !paused
   admitted.current = ready
   const current = (subject = true) => live.current && scope.current.owner === owner && getSessionGeneration() === access && (!subject || admitted.current && !scope.current.paused)
-  const clear = () => { admitted.current = false; setAllowed(false); setBuffer(null); work.current = null; setBuffers([]); setCommands([]); setConflict(null); abort.current.abort() }
+  const retain = () => { if (work.current && !localDurable.current && memorySession.current) retainEditMemory(work.current, memorySession.current) }
+  const clear = () => { retain(); admitted.current = false; setAllowed(false); setBuffer(null); work.current = null; memorySession.current = ''; setBuffers([]); setCommands([]); setConflict(null); abort.current.abort() }
   const fail = (e: unknown) => {
     if (denied(e)) clear()
     setError(denied(e) ? '当前权限或测试策略不允许编辑，正文已收起，本机原记录保留。'
       : '本次操作未确认或数据无法核验；原命令、本机文字与基准保留，未自动重发或覆盖。')
   }
-  const begin = (subject = true) => { if (!current(subject) || working.current) return null; if (work.current && !localDurable.current) { setError('本机文字尚未安全保存，请先重试本机保存；未替换文字或精确基准。'); return null }; working.current = true; setBusy(true); setError(''); return ++sequence.current }
+  const begin = (subject = true, memoryRecovery = false) => { if (!current(subject) || working.current) return null; if (work.current && !localDurable.current || !memoryRecovery && pendingEditMemory(workspace, baseRef)) { setError('本机文字尚未安全保存，请先重试本机保存或恢复隔离副本；未替换文字或精确基准。'); return null }; working.current = true; setBusy(true); setError(''); return ++sequence.current }
   const valid = (token: number, subject = true) => token === sequence.current && current(subject)
   const finish = (token: number) => { if (valid(token, false)) { working.current = false; setBusy(false) } }
   const guard = () => ({ allowed: () => current(), signal: abort.current.signal })
   const loadCommands = async () => Object.values(await editCommands.load(workspace)).map(r => readCommand(r, workspace)).filter(c => sameValue(c.base_ref, baseRef))
   const loadBuffers = async () => Object.values(await editBuffers.load(workspace)).flatMap(r => [r.text, ...r.conflicts.map(c => c.text)].map(x => decodeBuffer(x, workspace))).filter(b => sameValue(b.base_ref, baseRef))
   const refresh = async () => {
-    const token = begin(false); if (token === null) return
+    const token = begin(false, true); if (token === null) return
     clear(); abort.current = new AbortController()
     try {
       const session = checkedEdit<SessionResponse>('SessionResponse', await port.session())
@@ -40,14 +45,14 @@ export function useDraftEditor(workspace: string, baseRef: ContentRef, paused: b
       if (session.workspace_id !== workspace) throw new Error('Workspace changed')
       const can = session.role === 'author' && !session.active_independent_attempt_id && !session.active_open_book_attempt_id && !scope.current.paused
       const [cs, bs] = can ? await Promise.all([loadCommands(), loadBuffers()]) : [[], []]
-      if (valid(token, false)) { setAllowed(can); setCommands(cs); setBuffers(bs) }
+      if (valid(token, false)) { memorySession.current = can ? session.csrf_token : ''; setAllowed(can); setCommands(cs); setBuffers(bs) }
     } catch (e) { if (valid(token, false)) fail(e) } finally { finish(token) }
   }
   useEffect(() => {
     live.current = true; ++sequence.current; working.current = false; setRenderOwner(owner); clear(); localDurable.current = true; setBusy(false); setSaving(false); setStorageFailed(false); setError('')
     if (!paused) void refresh()
     const stop = subscribeSessionAccess(() => abort.current.abort())
-    return () => { live.current = false; ++sequence.current; working.current = false; abort.current.abort(); stop() }
+    return () => { retain(); live.current = false; ++sequence.current; working.current = false; abort.current.abort(); stop() }
   }, [owner, paused, port])
   const saveBuffer = (next: EditBuffer) => {
     if (!current()) return Promise.resolve()
@@ -83,6 +88,20 @@ export function useDraftEditor(workspace: string, baseRef: ContentRef, paused: b
       const exact = editSnapshot(await port.read(b.baseline.candidate.draft_id, b.baseline.candidate.draft_revision), baseRef, b.baseline.candidate.draft_id, b.baseline.candidate.draft_revision)
       if (!sameValue(exact.candidate, b.baseline.candidate) || !sameValue(exact.payload, b.baseline.payload)) throw new Error('Historical baseline changed')
       if (valid(token)) { await adopt(exact, b.local); if (valid(token)) setConflict(null) }
+    } catch (e) { if (valid(token, false)) fail(e) } finally { finish(token) }
+  }
+  const recoverMemory = async () => {
+    const token = begin(true, true); if (token === null) return
+    const session = memorySession.current
+    try {
+      const saved = recoverableEditMemory(workspace, baseRef, session)
+      if (!saved) throw new Error('No memory copy for the current session')
+      const exact = editSnapshot(await port.read(saved.baseline.candidate.draft_id, saved.baseline.candidate.draft_revision), baseRef, saved.baseline.candidate.draft_id, saved.baseline.candidate.draft_revision)
+      if (!sameValue(exact.candidate, saved.baseline.candidate) || !sameValue(exact.payload, saved.baseline.payload)) throw new Error('Historical baseline changed')
+      if (valid(token) && memorySession.current === session) {
+        await adopt(exact, saved.local)
+        if (valid(token) && memorySession.current === session) { releaseEditMemory(saved.id, session); setConflict(null) }
+      }
     } catch (e) { if (valid(token, false)) fail(e) } finally { finish(token) }
   }
   const update = (local: EditText) => {
@@ -168,7 +187,9 @@ export function useDraftEditor(workspace: string, baseRef: ContentRef, paused: b
     } catch (e) { if (valid(token, false)) fail(e) } finally { finish(token) }
   }
   const dirty = !!buffer && !sameValue(snapshotText(buffer.baseline), buffer.local) || commands.some(c => !c.ack && c.rejection === null)
-  return { ready, busy: renderOwner === owner && busy, saving: ready && saving, safe: !ready || !busy && !saving && !storageFailed,
+  return { ready, busy: renderOwner === owner && busy, saving: ready && saving, safe: !pendingMemory && (!ready || !busy && !saving && !storageFailed), pendingMemory,
+    canRecoverMemory: ready && !!recoverableEditMemory(workspace, baseRef, memorySession.current), recoverMemory,
+    discardMemory: () => { if (current(false) && !working.current) discardEditMemory(workspace, baseRef) },
     error: renderOwner === owner ? error : '', buffer: ready ? buffer : null, buffers: ready ? buffers : [], commands: ready ? commands : [], conflict: ready ? conflict : null, dirty: ready && dirty,
     refresh, read, restore, update, create, submit, execute, readConflict, resolve,
     retrySave: () => work.current && saveBuffer(work.current).catch(() => {}),

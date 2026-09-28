@@ -3,14 +3,15 @@ import type { LoadedBlock } from '../reader/contentClient'
 import type { EditPort } from './editClient'
 import type { EditText } from './editSchema'
 import { useDraftEditor } from './useDraftEditor'
+import { pendingEditMemory } from './editMemory'
 import './editor.css'
 
-export type EditorStatus = { dirty: boolean; safe: boolean }
-export function DraftEditor({ workspace, block, onState, port }: { workspace: string; block: LoadedBlock; onState?: (state: EditorStatus) => void; port?: EditPort }) {
-  const [open, setOpen] = useState(false), [closing, setClosing] = useState(false), [draftId, setDraftId] = useState('')
-  const state = useDraftEditor(workspace, block.block_ref, !open, port), callback = useRef(onState); callback.current = onState
-  useEffect(() => { callback.current?.({ dirty: state.dirty, safe: state.safe }) }, [state.dirty, state.safe])
-  useEffect(() => () => callback.current?.({ dirty: false, safe: true }), [])
+export type EditorStatus = { dirty: boolean; safe: boolean; closeSafe: boolean }
+export function DraftEditor({ workspace, block, onState, port, paused = false }: { workspace: string; block: LoadedBlock; onState?: (state: EditorStatus) => void; port?: EditPort; paused?: boolean }) {
+  const [open, setOpen] = useState(false), [closing, setClosing] = useState(false), [discarding, setDiscarding] = useState(false), [draftId, setDraftId] = useState('')
+  const state = useDraftEditor(workspace, block.block_ref, !open || paused, port), callback = useRef(onState); callback.current = onState
+  useEffect(() => { callback.current?.({ dirty: state.dirty || state.pendingMemory, safe: state.pendingMemory || state.safe, closeSafe: state.safe }) }, [state.dirty, state.safe, state.pendingMemory])
+  useEffect(() => () => { const pending = pendingEditMemory(workspace, block.block_ref); callback.current?.({ dirty: pending, safe: true, closeSafe: !pending }) }, [workspace, block.block_ref.id, block.block_ref.revision, block.block_ref.sha256])
   useEffect(() => {
     const guard = (event: BeforeUnloadEvent) => { if (!state.safe) { event.preventDefault(); event.returnValue = '' } }
     window.addEventListener('beforeunload', guard); return () => window.removeEventListener('beforeunload', guard)
@@ -23,7 +24,9 @@ export function DraftEditor({ workspace, block, onState, port }: { workspace: st
     <button aria-expanded={open} onClick={() => open ? close() : setOpen(true)}>{open ? '收起文本编辑' : '编辑此精确文本块'}</button>
     {open && <div><h3>编辑未发布草稿</h3><p>基于此块修订 {block.block_ref.revision} · <code>{block.block_ref.sha256}</code>。只编辑标题和正文；不会批准质量、发布或替换正式教材。</p>
       {state.busy && <p role="status">正在核对原记录…</p>}{state.error && <p role="alert">{state.error}</p>}
+      {state.pendingMemory && <><p role="alert">有尚未落盘的文字隔离保留在本页内存中，刷新或关闭浏览器仍可能丢失。恢复原会话的作者权限后，需重新核验准确基准并明确保存。</p><button disabled={state.busy || state.saving} onClick={() => setDiscarding(true)}>放弃此块未落盘的隔离内存</button></>}
       {!state.ready ? <p>需要当前作者角色，且当前测试策略允许读取学科材料。</p> : <>
+        {state.pendingMemory && <button disabled={!state.canRecoverMemory || state.busy || state.saving} onClick={() => void state.recoverMemory()}>核验原会话与精确基准，恢复内存副本</button>}
         <button disabled={!state.safe} onClick={() => void state.create(block.block.title)}>从此准确修订明确创建编辑稿</button>
         <label>读取已有编辑稿 ID<input value={draftId} onChange={e => setDraftId(e.target.value)} /></label><button disabled={!state.safe || !draftId.trim()} onClick={() => void state.read(draftId)}>另行读取服务端草稿头</button>
         {state.buffers.length > 0 && <section aria-label="本机工作副本"><h4>本机工作副本</h4><p>恢复会复制原副本；重新核验原精确草稿修订，不自动采用服务端新头。</p>{state.buffers.map(b => <button key={b.id} disabled={!state.safe} onClick={() => void state.restore(b)}>恢复本机副本 {b.id} · {b.local.title} · 草稿 r{b.baseline.candidate.draft_revision}</button>)}</section>}
@@ -44,9 +47,10 @@ export function DraftEditor({ workspace, block, onState, port }: { workspace: st
           {c.operation.kind === 'patch' && c.rejection === 412 && <button disabled={!state.safe} onClick={() => void state.readConflict(c)}>读取原冲突三方内容 {c.key}</button>}
         </div>)}</section>
       </>}
-      <button disabled={!state.safe} onClick={() => void state.refresh()}>重新核对编辑权限与本机记录</button>
+      <button disabled={state.busy || state.saving || !!state.buffer && !state.safe} onClick={() => void state.refresh()}>重新核对编辑权限与本机记录</button>
     </div>}
     {closing && <div role="dialog" aria-label="保留本机编辑"><p>本机副本与原命令会保留；关闭不会提交或解决冲突。</p><button disabled={!state.safe} onClick={() => { setClosing(false); setOpen(false) }}>保留本机编辑并收起</button><button onClick={() => setClosing(false)}>返回编辑</button></div>}
+    {discarding && <div role="dialog" aria-label="放弃尚未落盘的内存副本"><p>明确放弃此精确块尚未落盘的隔离文字，无法恢复。已保存的本机副本、原命令和服务端内容不受影响。</p><button disabled={state.busy || state.saving} onClick={() => { state.discardMemory(); setDiscarding(false) }}>确认放弃隔离文字</button><button onClick={() => setDiscarding(false)}>取消放弃</button></div>}
   </section>
 }
 function ConflictResolution({ base, local, server, disabled, resolve }: { base: EditText; local: EditText; server: EditText; disabled: boolean; resolve: (value: EditText) => Promise<void> }) {

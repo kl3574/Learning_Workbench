@@ -122,12 +122,43 @@ test('real editor retains IndexedDB originals through competing tabs, 412 resolu
     expect(runtime.databaseIdentity()).toEqual(database)
     const history = await page.request.get(`/api/v1/draft-edits/${id}?revision=1`); expect(history.status()).toBe(200); expect((await history.json()).payload.title).toBe('原创合成编辑标题')
     const official = await page.request.get(`/api/v1/blocks/${fixture.blocks[0].id}/body?revision=1`); expect(await official.text()).toBe(fixture.bodies[fixture.blocks[0].id])
+    // Controlled storage failure, actual browser IDB transactions and actual
+    // role endpoints. No response or snapshot is fabricated.
+    await page.evaluate(() => {
+      const transaction = IDBDatabase.prototype.transaction
+      Object.assign(window, { restoreEditorIdb: () => { IDBDatabase.prototype.transaction = transaction } })
+      IDBDatabase.prototype.transaction = function (...args: Parameters<IDBDatabase['transaction']>) {
+        const tx = transaction.apply(this, args)
+        if (this.name === 'learning-workbench.edit-buffers.v1' && args[1] === 'readwrite') queueMicrotask(() => tx.abort())
+        return tx
+      }
+    })
+    await panel(page).getByLabel('本机标题', { exact: true }).fill('尚未落盘的原会话标题')
+    await panel(page).getByLabel('本机正文', { exact: true }).fill('权限变化后仍须保留的内存正文\n')
+    await expect(panel(page).getByRole('button', { name: '重试保存本机工作副本', exact: true })).toBeVisible()
     await page.getByRole('button', { name: '导入', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: '导入', exact: true }); await dialog.getByRole('button', { name: '切换为学习者角色', exact: true }).click()
     await expect(dialog.getByText('操作角色：学习者', { exact: true })).toBeVisible(); await dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
     await expect(panel(page).getByLabel('本机正文', { exact: true })).toHaveCount(0)
     expect((await page.request.get(`/api/v1/draft-edits/${id}`)).status()).toBe(403)
+    // Policy invalidation unmounts the Reader. Reopen its new component;
+    // memory retention must survive that actual lifecycle transition.
+    await panel(page).getByRole('button', { name: '编辑此精确文本块', exact: true }).click()
+    await expect(panel(page).getByText(/有尚未落盘的文字隔离保留在本页内存中/)).toBeVisible()
+    await page.getByRole('button', { name: '关闭标签 原创合成编辑标题 · r1', exact: true }).click()
+    const closeGuard = page.getByRole('dialog', { name: '保留文本编辑草稿', exact: true })
+    await expect(closeGuard.getByRole('button', { name: '保留本机编辑并关闭标签', exact: true })).toBeDisabled()
+    await closeGuard.getByRole('button', { name: '返回文本编辑', exact: true }).click()
+    await page.evaluate(() => { (window as unknown as { restoreEditorIdb(): void }).restoreEditorIdb(); delete (window as unknown as { restoreEditorIdb?: unknown }).restoreEditorIdb })
+    await page.getByRole('button', { name: '导入', exact: true }).click()
+    await dialog.getByRole('button', { name: '切换为作者角色', exact: true }).click()
+    await expect(dialog.getByText('操作角色：作者', { exact: true })).toBeVisible(); await dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
+    await panel(page).getByRole('button', { name: '编辑此精确文本块', exact: true }).click()
+    await panel(page).getByRole('button', { name: '核验原会话与精确基准，恢复内存副本', exact: true }).click()
+    await expect(panel(page).getByLabel('本机正文', { exact: true })).toHaveValue('权限变化后仍须保留的内存正文\n')
+    await expect(panel(page).getByText('本机工作副本已保存；不代表已同步到服务端。', { exact: true })).toBeVisible()
+    expect((await page.request.get(`/api/v1/draft-edits/${id}`).then(r => r.json())).candidate.draft_revision).toBe(4)
     expect(errors).toEqual([])
-    writeFileSync(info.outputPath('editor-flow.json'), JSON.stringify({ scope: 'Real synthetic Import/SQLite/HTTP/IndexedDB, two pages, exact 412 recovery, original ACK replay, browser/API restart and role denial; no provider or content approval', created, current, rejected, writes, lostCommands, generations: runtime.generations.length, originalContentUnchanged: true, errors }, null, 2))
+    writeFileSync(info.outputPath('editor-flow.json'), JSON.stringify({ scope: 'Real synthetic Import/SQLite/HTTP/IndexedDB, two pages, exact 412 recovery, same-page original ACK replay, browser/API restart, actual IDB abort and role-denied memory recovery; no provider or content approval', created, current, rejected, writes, lostCommands, generations: runtime.generations.length, originalContentUnchanged: true, unsavedMemoryRecoveredAfterRoleDenial: true, errors }, null, 2))
   } finally { await runtime.close() }
 })
