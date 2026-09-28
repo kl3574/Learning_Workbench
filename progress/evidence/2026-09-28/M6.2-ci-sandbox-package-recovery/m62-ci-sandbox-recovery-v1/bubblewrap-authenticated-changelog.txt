@@ -1,0 +1,111 @@
+bubblewrap (0.11.1-1ubuntu0.3) resolute-security; urgency=medium
+
+  * SECURITY REGRESSION: Incompatibility with Flatpak (LP: #2167621)
+    - debian: Drop CVE-2026-87766
+
+ -- Kyle Kernick <kyle.kernick@canonical.com>  Thu, 17 Sep 2026 14:12:13 -0600
+
+bubblewrap (0.11.1-1ubuntu0.2) resolute-security; urgency=medium
+
+  * SECURITY UPDATE: Improper link resolution during sandbox setup
+    - debian/patches/CVE-2026-87766-1.patch: Import safe_openat() from crun
+      in chroot_realpath.c, meson.build, safe_openat.c, and utils.h
+    - debian/patches/CVE-2026-87766-2.patch: Create and resolve destinations
+      without following symlinks, and reject mount operations on symlink
+      destinations in bubblewrap.c
+    - CVE-2026-87766
+
+ -- Kyle Kernick <kyle.kernick@canonical.com>  Mon, 14 Sep 2026 12:42:51 -0600
+
+bubblewrap (0.11.1-1ubuntu0.1) resolute-security; urgency=medium
+
+  * SECURITY UPDATE: Privilege escalation via ptrace.
+    - debian/patches/CVE-2026-41163.patch: Disallow ptrace while running
+      privileged code in bubblewrap.c
+    - CVE-2026-41163
+
+ -- Kyle Kernick <kyle.kernick@canonical.com>  Tue, 28 Apr 2026 14:17:30 -0600
+
+bubblewrap (0.11.1-1) unstable; urgency=medium
+
+  * New upstream release
+  * Stop overriding kernel.unprivileged_userns_clone sysctl.
+    The setting we use has been the default for several years.
+  * d/control: Remove Recommends on procps.
+    This was only needed as a way to force the required value of
+    kernel.unprivileged_userns_clone during the transition from Debian 10
+    to 11, and even then, only on non-systemd systems.
+  * d/p/debian/Change-EPERM-error-message-to-show-Debian-specific-inform.patch:
+    Refresh patch to apply after a grammatical fix upstream
+  * d/control: Replace transitional libselinux1-dev with libselinux-dev
+  * d/control: Bump Standards-Version to 4.7.3.
+    Remove Priority: optional, no longer required with current dpkg-dev.
+  * d/copyright: Stop quoting the FSF's former postal address
+  * d/rules: Stop overriding build system.
+    This was only necessary while bubblewrap supported both Meson and
+    Autotools builds, which it hasn't since 0.11.0.
+  * d/clean: Remove another Autotools remnant
+  * d/rules: Install NEWS.md as the upstream changelog
+  * Stop using debhelper's historical special case for a single binary
+    package. Explicitly list what we intend to install, instead.
+  * d/watch: Update to v5 format
+  * d/README.Debian: Mention glycin as a prominent use of bubblewrap
+  * d/README.Debian: Reduce focus on pre-Debian-10 kernels
+
+ -- Simon McVittie <smcv@debian.org>  Sat, 21 Mar 2026 18:52:56 +0000
+
+bubblewrap (0.11.0-2) unstable; urgency=medium
+
+  [ Helmut Grohne ]
+  * d/tests: Drop obsolete upstream-usrmerge autopkgtest.
+    This test was added to additionally run the upstream test suite on
+    a /usr-merged system. Now that all systems are merged-/usr, this
+    test no longer provides any benefit, and removing it will unblock
+    removal of the usrmerge package. (Closes: #1091676)
+
+  [ Simon McVittie ]
+  * Also remove d/tests/upstream-usrmerge symlink
+
+ -- Simon McVittie <smcv@debian.org>  Mon, 30 Dec 2024 11:17:50 +0000
+
+bubblewrap (0.11.0-1) unstable; urgency=medium
+
+  * New upstream release
+
+ -- Simon McVittie <smcv@debian.org>  Wed, 30 Oct 2024 16:15:12 +0000
+
+bubblewrap (0.10.0+30+g0545e72-1) experimental; urgency=low
+
+  * New upstream snapshot
+    - New options to create overlay mounts (--overlay, etc.)
+    - New option --level-prefix
+    - Handle EINTR
+    - Ensure socket control message data is aligned correctly
+    - Remove Autotools build system
+    - Silence Meson and compiler warnings
+  * d/salsa-ci.yml: Don't run Salsa-CI for branches targeting Ubuntu
+  * Standards-Version: 4.7.0 (no changes required)
+
+ -- Simon McVittie <smcv@debian.org>  Fri, 18 Oct 2024 19:52:17 +0100
+
+bubblewrap (0.10.0-1) unstable; urgency=high
+
+  * New upstream release
+    - This version adds the --[ro-]bind-fd option, which is necessary to
+      resolve CVE-2024-42472 in Flatpak without introducing a potentially
+      exploitable race condition.
+
+ -- Simon McVittie <smcv@debian.org>  Wed, 14 Aug 2024 09:43:11 +0100
+
+bubblewrap (0.9.0-1) unstable; urgency=medium
+
+  * New upstream release
+  * d/copyright: Update
+  * d/p/tests-Explicitly-unshare-userns-when-testing-disable-user.patch,
+    d/p/tests-Try-harder-to-evade-disable-userns.patch:
+    Drop patches that were included upstream
+
+ -- Simon McVittie <smcv@debian.org>  Tue, 26 Mar 2024 21:16:50 +0000
+
+# Older entries have been removed from this changelog.
+# To read the complete changelog use `apt changelog bubblewrap`.

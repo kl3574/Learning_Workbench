@@ -1,0 +1,34 @@
+bubblewrap (0.11.1-1ubuntu0.3) resolute-security; urgency=medium
+
+  * SECURITY REGRESSION: Incompatibility with Flatpak (LP: #2167621)
+    - debian: Drop CVE-2026-87766
+
+ -- Kyle Kernick <kyle.kernick@canonical.com>  Thu, 17 Sep 2026 14:12:13 -0600
+
+bubblewrap (0.11.1-1ubuntu0.2) resolute-security; urgency=medium
+
+  * SECURITY UPDATE: Improper link resolution during sandbox setup
+    - debian/patches/CVE-2026-87766-1.patch: Import safe_openat() from crun
+      in chroot_realpath.c, meson.build, safe_openat.c, and utils.h
+    - debian/patches/CVE-2026-87766-2.patch: Create and resolve destinations
+      without following symlinks, and reject mount operations on symlink
+      destinations in bubblewrap.c
+    - CVE-2026-87766
+
+ -- Kyle Kernick <kyle.kernick@canonical.com>  Mon, 14 Sep 2026 12:42:51 -0600
+
+bubblewrap (0.11.1-1ubuntu0.1) resolute-security; urgency=medium
+
+  * SECURITY UPDATE: Privilege escalation via ptrace.
+    - debian/patches/CVE-2026-41163.patch: Disallow ptrace while running
+      privileged code in bubblewrap.c
+    - CVE-2026-41163
+
+ -- Kyle Kernick <kyle.kernick@canonical.com>  Tue, 28 Apr 2026 14:17:30 -0600
+
+
+Authenticated current patch series:
+debian/Change-EPERM-error-message-to-show-Debian-specific-inform.patch
+CVE-2026-41163.patch
+
+{"checked_at": "2026-09-28T01:44:28.020202+00:00", "packages": {"apparmor_5.0.2-0ubuntu1~26.04.1_amd64.deb": "Package: apparmor\nVersion: 5.0.2-0ubuntu1~26.04.1\nArchitecture: amd64\n", "bubblewrap_0.11.1-1ubuntu0.3_amd64.deb": "Package: bubblewrap\nVersion: 0.11.1-1ubuntu0.3\nArchitecture: amd64\n", "libapparmor1_5.0.2-0ubuntu1~26.04.1_amd64.deb": "Package: libapparmor1\nVersion: 5.0.2-0ubuntu1~26.04.1\nArchitecture: amd64\n", "libseccomp2_2.6.0-2ubuntu5_amd64.deb": "Package: libseccomp2\nVersion: 2.6.0-2ubuntu5\nArchitecture: amd64\n"}, "host_files": {"usr/sbin/apparmor_parser": {"package_sha256": "11e9595527b8bb5b775709e4626ec69dc682585760ec7c6d0b045e759f1c0df2", "installed_sha256": "11e9595527b8bb5b775709e4626ec69dc682585760ec7c6d0b045e759f1c0df2", "equal": true, "mode": 493}, "etc/apparmor.d/bwrap-userns-restrict": {"package_sha256": "d61facde27707b9c47ffe47921b7273e788784484cb5530eb819e6daac1f1990", "installed_sha256": "d61facde27707b9c47ffe47921b7273e788784484cb5530eb819e6daac1f1990", "equal": true, "mode": 420}, "usr/bin/bwrap": {"package_sha256": "523da3e7399044be5163aee6f57a77a6bef7454376e28f0a0627920bae1b76b6", "installed_sha256": "523da3e7399044be5163aee6f57a77a6bef7454376e28f0a0627920bae1b76b6", "equal": true, "mode": 493}}, "source_patches": {"debian/patches/CVE-2026-41163.patch": "5d6a88e72352aa74b86252db19620ecc6da97bb96d904677279f4d8e4e3d82dc", "debian/patches/debian/Change-EPERM-error-message-to-show-Debian-specific-inform.patch": "877d9c584d15adf2762035d4c4d6cb8b962cdc718b968f160b6964b911ee1883", "debian/patches/series": "211c8e9111a2074e31c2b490c7cf70ca8b978369dd4d600d6f93d255d6e14c12"}, "installed_versions": "apparmor\t5.0.2-0ubuntu1~26.04.1\nbubblewrap\t0.11.1-1ubuntu0.3\nlibapparmor1:amd64\t5.0.2-0ubuntu1~26.04.1\nlibseccomp2:amd64\t2.6.0-2ubuntu5\n", "bwrap_version": "bubblewrap 0.11.1", "apparmor_restrict_unprivileged_userns": "1", "script_sha256": "eec153dfe7f2cb364222f8e6b487479778bc6efcb132effaf959b571a0e5cc19"}

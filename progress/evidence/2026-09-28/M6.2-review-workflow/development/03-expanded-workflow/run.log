@@ -1,0 +1,46 @@
+...............................F.........                                [100%]
+=================================== FAILURES ===================================
+_ test_report_reads_reject_damaged_ownership_history_and_physical_bytes[visibility] _
+
+workflow = SyntheticReviewWorkflow(), fault = 'visibility'
+
+    @pytest.mark.parametrize('fault', ['file', 'bytes', 'visibility', 'manifest', 'profile', 'job', 'history'])
+    def test_report_reads_reject_damaged_ownership_history_and_physical_bytes(workflow, fault):
+        database, identity, _, service, _ = workflow
+        ack, receipt = completed(workflow)
+        artifact_id = receipt.evidence_paths[0].split('/')[-2]
+        with database.transaction() as conn:
+            row = conn.execute('SELECT * FROM artifacts WHERE id=?', (artifact_id,)).fetchone()
+            if fault in {'file', 'bytes'}:
+                path = database.settings.data_dir / conn.execute('SELECT relative_path FROM content_blobs WHERE sha256=?', (row['blob_sha256'],)).fetchone()[0]
+                if fault == 'file':
+                    path.unlink()
+                else:
+                    path.write_bytes(b'SYNTHETIC_DAMAGED_REPORT')
+            elif fault == 'history':
+                conn.execute('DROP TRIGGER review_commands_no_delete')
+                conn.execute('DELETE FROM review_commands WHERE review_id=?', (ack.id,))
+            else:
+                field, value = {'visibility':('visibility','public'), 'manifest':('manifest_json','{}'),
+                                'profile':('profile','unregistered'), 'job':('job_id',None)}[fault]
+>               conn.execute(f'UPDATE artifacts SET {field}=? WHERE id=?', (value, artifact_id))
+E               sqlite3.IntegrityError: CHECK constraint failed: visibility IN ('learner','author_private','personal_private')
+
+tests/integration/test_review_workflow.py:259: IntegrityError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-workflow-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-workflow-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+tests/integration/test_review_workflow.py::test_pending_receipt_and_stale_or_different_commands_do_not_change_history
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-workflow-active/.venv/lib/python3.12/site-packages/_pytest/raises.py:613: PytestWarning: matching against an empty string will *always* pass. If you want to check for an empty message you need to pass '^$'. If you don't want to match you should pass `None` or leave out the parameter.
+    super().__init__(match=match, check=check)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_review_workflow.py::test_report_reads_reject_damaged_ownership_history_and_physical_bytes[visibility]
+1 failed, 40 passed, 3 warnings in 32.79s

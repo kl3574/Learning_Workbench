@@ -1,0 +1,86 @@
+{
+  "task_id": "M6.2-learning-state-route-cleanup-diagnosis",
+  "requirement_ids": [
+    "R-29"
+  ],
+  "spec_sha256": "2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d",
+  "implementation_commit": "e618f3d919656206c6428f1bb7a41f34c3fd6136",
+  "base_commit": "1fffd996e9334f7f28dcdeb970430c9aa4052ee3",
+  "changed_paths": [
+    "tests/e2e/learning-state.spec.ts"
+  ],
+  "commands": [
+    [
+      "bash",
+      "scripts/node.sh",
+      "apps/web/node_modules/.bin/playwright",
+      "test",
+      "-c",
+      "<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-learning-route-diagnosis-v1/original-case.config.ts",
+      "--grep",
+      "actual unreviewed submission stays excluded"
+    ],
+    [
+      "bash",
+      "scripts/node.sh",
+      "node",
+      "<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-learning-route-diagnosis-v1/probeRouteCleanup.mjs"
+    ],
+    [
+      "bash",
+      "scripts/node.sh",
+      "node",
+      "<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-learning-route-diagnosis-v1/probeActualRouteCleanup.mjs"
+    ],
+    [
+      "bash",
+      "scripts/node.sh",
+      "node",
+      "<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-learning-route-diagnosis-v1/probeActualRouteCleanup.mjs"
+    ],
+    [
+      "bash",
+      "scripts/node.sh",
+      "apps/web/node_modules/.bin/playwright",
+      "test",
+      "-c",
+      "<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-learning-route-diagnosis-v1/original-case.config.ts",
+      "--grep",
+      "actual unreviewed submission stays excluded"
+    ],
+    [
+      "git",
+      "diff",
+      "--check"
+    ]
+  ],
+  "exit_codes": [
+    0,
+    1,
+    1,
+    0,
+    0,
+    0
+  ],
+  "test_summary": {
+    "native_before": "1 PASS, historical other-page failure not reproduced",
+    "controlled_copy": "3 RED, external source captured post-run only",
+    "actual_callsite_before": "3 RED exact route error",
+    "actual_callsite_after": "3 GREEN",
+    "native_after": "1 PASS",
+    "diff_check": "PASS"
+  },
+  "migrations": null,
+  "security_review": "No credentials/vendor access or publication; owned private loopback/browser only; no ignored errors",
+  "not_run": [
+    "full native suite",
+    "CI",
+    "historical other-page timeout cause",
+    "other native eight failure causes"
+  ],
+  "blockers": [
+    "Historical other-page visibility timeout remains UNKNOWN"
+  ],
+  "next_task_id": "root-independent-adoption-and-native-other-page-diagnosis",
+  "evidence_scope": "test-fixture teardown only; not product/platform completion"
+}

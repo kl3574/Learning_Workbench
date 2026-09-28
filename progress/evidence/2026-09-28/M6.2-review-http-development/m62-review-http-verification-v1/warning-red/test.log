@@ -1,0 +1,33 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_____ test_real_http_review_worker_receipt_and_explicit_rejected_decision ______
+
+prepared_review_http = <test_review_http.ReviewHttpCase object at 0x756e112c5a60>
+
+    def test_real_http_review_worker_receipt_and_explicit_rejected_decision(prepared_review_http):
+        case = prepared_review_http
+        path = '/api/v1/drafts/' + case.candidate['draft_id'] + '/review'
+        body = {'expected_revision': 1, 'checks': ['structure', 'numerical_examples', 'sources', 'mathematics'],
+                'reviewer_note': 'Synthetic HTTP intent; no real content approval.'}
+        created = case.client.post(path, json=body, headers=command(case.headers, 'review-create'))
+>       assert created.status_code == 202, created.text
+E       AssertionError: {"error":{"code":"REFERENCE_MISSING","message":"请求的资源或操作不可用。","request_id":"request_eb15f67bf96b49f18537b13cb2c318e9","retryable":false,"details":[]}}
+E       assert 404 == 202
+E        +  where 404 = <Response [404 Not Found]>.status_code
+
+tests/integration/test_review_http.py:44: AssertionError
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_review_http.py::test_real_http_review_worker_receipt_and_explicit_rejected_decision - AssertionError: {"error":{"code":"REFERENCE_MISSING","message":"请求的资源或操作不可用。","request_id":"request_eb15f67bf96b49f18537b13cb2c318e9","retryable":false,"details":[]}}
+assert 404 == 202
+ +  where 404 = <Response [404 Not Found]>.status_code
+1 failed, 2 warnings in 1.50s

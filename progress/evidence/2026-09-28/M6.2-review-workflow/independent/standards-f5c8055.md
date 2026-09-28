@@ -1,0 +1,9 @@
+# Standards follow-up: two prior owner violations
+
+Fixed e3fd9795c54b901e075015f168b1114ed7cb74e5 → f5c80556a48e348cc6dbdebe6482ff54ad822693. Read-only review, no tests rerun. Scope is the two previously reported P2 owner violations and their immediate persistence movement; the peer separately reviews the entire workflow increment and test evidence.
+
+Both prior P2 findings are closed in the inspected diff. `review_worker.py:55–70` obtains typed scheduling facts through `ReviewJobRepository.claimable_candidates`, keeps Quality history admission before Jobs.claim, and contains no scheduling SQL. `review_job_repository.py:42–65` owns scheduling SQL, validates each UTC/ID row separately, and returns invalid-row count without suppressing valid candidates; `last_queue_error_code` retains a bounded integrity code. This conforms to PRODUCT_DESIGN.md:349 and Jobs ownership at366/440.
+
+`review_service.py:109–116` invokes the registered owner's actual byte reader, validates descriptor/hash/size, then calls `ArtifactRepository.manifest_sha256` in the same transaction; no application-layer artifact manifest SQL remains. The owner port validates descriptor reserialization, stored blob metadata and the complete canonical manifest before returning its hash. Quality report blob/row persistence has moved out of the application into `ReviewArtifactRepository`; byte authentication remains and `created_at == bound_at` is now checked. This addresses PRODUCT_DESIGN.md:349's application/owner boundary.
+
+No new blocking Standards finding in this bounded follow-up. This does not independently certify the full workflow behavior, starvation tests, HTTP integration or any unexecuted test. Generated source copies include all eight changed files to bind the fixed commit; copied tests are not claimed independently executed.
