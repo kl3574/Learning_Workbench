@@ -1,0 +1,989 @@
+diff --git a/apps/web/src/features/draftPublication/PublicationPanel.test.tsx b/apps/web/src/features/draftPublication/PublicationPanel.test.tsx
+new file mode 100644
+index 0000000..caf9f95
+--- /dev/null
++++ b/apps/web/src/features/draftPublication/PublicationPanel.test.tsx
+@@ -0,0 +1,29 @@
++import 'fake-indexeddb/auto'
++import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
++import { afterEach, expect, test, vi } from 'vitest'
++import { reviewSession } from '../draftReview/reviewFixtures'
++import { PublicationPanel } from './PublicationPanel'
++import { publicationDraft, publicationReceipt, publicationRef } from './publicationFixtures'
++import { publicationCommandStore } from './publicationCommands'
++import type { PublicationPort } from './publicationClient'
++
++afterEach(async () => { cleanup(); vi.restoreAllMocks(); await publicationCommandStore.close() })
++test('each warning instance needs explicit confirmation before deduplicating codes in the real four-field command', async () => {
++  const workspace = `workspace_${crypto.randomUUID()}`, onState = vi.fn()
++  const port: PublicationPort = { session: async () => reviewSession(workspace), draft: vi.fn(async () => publicationDraft), review: vi.fn(async () => publicationReceipt), publish: vi.fn(async () => publicationRef), current: vi.fn(async () => publicationRef) }
++  render(<PublicationPanel workspace={workspace} paused={false} blocked={false} draft={publicationDraft} receipt={publicationReceipt} port={port} onState={onState} />)
++  const prepare = await screen.findByRole('button', { name: '选择此审核并重新读取发布基准' })
++  await waitFor(() => expect(prepare.hasAttribute('disabled')).toBe(false)); fireEvent.click(prepare)
++  const first = await screen.findByRole('checkbox', { name: /Synthetic first source warning/ }), second = screen.getByRole('checkbox', { name: /Synthetic second source warning/ })
++  const publish = screen.getByRole('button', { name: '明确发布这一文本块' })
++  fireEvent.click(first); expect((second as HTMLInputElement).checked).toBe(false)
++  fireEvent.click(screen.getByRole('checkbox', { name: /我已核对这份发布候选/ }))
++  expect(publish.hasAttribute('disabled')).toBe(true); expect(port.publish).not.toHaveBeenCalled()
++  fireEvent.click(second); expect(publish.hasAttribute('disabled')).toBe(false)
++  await waitFor(() => expect(onState).toHaveBeenLastCalledWith({ dirty: true, safe: true }))
++  fireEvent.click(publish)
++  await screen.findByText('原发布 ACK 已保存', { exact: true })
++  expect(vi.mocked(port.publish).mock.calls[0][1]).toEqual({ expected_revision: 1, expected_content_sha256: publicationRef.sha256, review_receipt_id: publicationReceipt.id, acknowledged_warning_codes: ['SOURCE_CONFIRM'] })
++  expect(port.current).not.toHaveBeenCalled()
++  expect(screen.getByText(/当前指针尚未在本面板另行读取/).isConnected).toBe(true)
++})
+diff --git a/apps/web/src/features/draftPublication/PublicationPanel.tsx b/apps/web/src/features/draftPublication/PublicationPanel.tsx
+new file mode 100644
+index 0000000..6a28b18
+--- /dev/null
++++ b/apps/web/src/features/draftPublication/PublicationPanel.tsx
+@@ -0,0 +1,62 @@
++import { useEffect, useRef, useState } from 'react'
++import type { ImportDraftSnapshot, StoredReviewReceipt } from '../../../../../packages/contracts/generated/api-types'
++import { matchesPublicationCandidate } from './publicationSchema'
++import type { PublicationPort } from './publicationClient'
++import { usePublication } from './usePublication'
++
++export function PublicationPanel({ workspace, paused, blocked, draft, receipt, port, onState }: {
++  workspace: string; paused: boolean; blocked: boolean; draft: ImportDraftSnapshot | null; receipt: StoredReviewReceipt | null; port?: PublicationPort
++  onState?: (value: { dirty: boolean; safe: boolean }) => void
++}) {
++  const selection = JSON.stringify([draft && { id: draft.id, revision: draft.revision, sha256: draft.candidate_sha256, warnings: draft.warnings }, receipt])
++  const state = usePublication(workspace, paused, selection, port)
++  const key = `${selection}:${state.preparedAt}`
++  const [form, setForm] = useState({ key: '', selected: [] as number[], confirmed: false })
++  const value = state.basis && form.key === key ? form : { key, selected: [] as number[], confirmed: false }
++  const callback = useRef(onState); callback.current = onState
++  const dirty = state.ready && (!!value.selected.length || value.confirmed || state.commands.some(command => !command.ack && !command.rejection))
++  const safe = !state.busy
++  useEffect(() => { if (!state.ready) setForm({ key: '', selected: [], confirmed: false }) }, [state.ready])
++  useEffect(() => { callback.current?.({ dirty, safe }) }, [dirty, safe])
++  useEffect(() => () => callback.current?.({ dirty: false, safe: true }), [])
++  const busy = blocked || state.busy, basis = state.basis
++  const matches = draft && receipt && matchesPublicationCandidate(draft, receipt.candidate)
++  const eligible = !!draft && draft.kind === 'block' && draft.state === 'draft' && !!matches && receipt?.structural === 'PASS'
++    && receipt.mathematical === 'NOT_APPLICABLE' && receipt.sources === 'APPROVED' && !!receipt.decision_reason.trim()
++  const warningsConfirmed = basis && basis.warnings.every((warning, index) => warning.severity !== 'error' && (warning.severity !== 'warning' || value.selected.includes(index)))
++  return <section className="publication-panel" aria-label="Import 文本块发布与恢复"><h4>发布这一 Import 文本块</h4>
++    <p>当前仅支持待确认导入中无依赖的公开纯文本块。须已有明确的数学“不适用”及理由、来源批准；服务端仍会核验原件、审核与完整证据。这里不会替你填写人工判断。</p>
++    <p>发布只生成此块的不可变修订，不确认整份导入。随后整份导入会遇到该对象 ID 冲突；如继续导入，需要明确映射冲突 ID。复制内容不会继承本次审核批准。</p>
++    {state.error && <p role="status">{state.error}</p>}
++    {!state.ready ? <p>正在核验或当前权限不允许发布；本机原命令保留，保护内容已收起。</p> : <>
++      {receipt && <p>待选择审核：{receipt.id} · 页面已读回执 r{receipt.revision}。创建时间不代表全局唯一审批；只使用你明确选择的这份审核。</p>}
++      <button disabled={busy || !eligible} onClick={() => { if (draft && receipt) void state.prepare(draft, receipt) }}>选择此审核并重新读取发布基准</button>
++      {!eligible && <p>请先明确读取匹配的 Import 文本块及其当前人工审核回执。机器 NOT_RUN、拒绝或不匹配的回执不能用于本次发布。</p>}
++      {basis && <section aria-label="本次发布基准"><h5>本次实际重新读取的基准</h5>
++        <p>候选 {basis.candidate.draft_id} · r{basis.candidate.draft_revision}</p><code>{basis.candidate.candidate_sha256}</code>
++        <p>目标对象 {basis.target.object_id} · r{basis.target.object_revision}（尚不作为发布回执）</p>
++        <p>所选审核 {basis.review.id} · 本页读取 r{basis.review.revision}；结构 {basis.review.structural}；数学 {basis.review.mathematical}；来源 {basis.review.sources}；独立教学 NOT_RUN。</p>
++        <p>记录操作者：{basis.review.reviewer}；已保存理由：{basis.review.decision_reason}</p>
++        <p>提交会重新核验所选审核的当前决定；本页读取的回执版本不作为另一个写入字段，也不预先保证发布成功。</p>
++        <fieldset disabled={busy}><legend>逐条确认此块警告</legend>{basis.warnings.map((warning, index) => <div key={index}>
++          {warning.severity === 'warning' ? <label><input type="checkbox" checked={value.selected.includes(index)} onChange={event => setForm({ ...value, selected: event.target.checked ? [...value.selected, index] : value.selected.filter(item => item !== index) })} />{warning.code} · {warning.message} · {warning.locator ?? '无定位'}</label>
++            : <p>{warning.severity} · {warning.code} · {warning.message} · {warning.locator ?? '无定位'}</p>}
++        </div>)}{!basis.warnings.length && <p>此候选没有返回警告。</p>}</fieldset>
++        <label><input type="checkbox" checked={value.confirmed} disabled={busy} onChange={event => setForm({ ...value, confirmed: event.target.checked })} />我已核对这份发布候选、所选人工审核与逐条警告，明确发布这一文本块。</label>
++        <button disabled={busy || !warningsConfirmed || !value.confirmed} onClick={() => void state.publish(value.selected)}>明确发布这一文本块</button>
++      </section>}
++      <section aria-label="原发布命令"><h5>本机原发布命令与历史引用</h5>{state.commands.map(command => <article key={command.command_id}>
++        <p>{command.ack ? '原发布 ACK 已保存' : command.rejection ? '服务端拒绝，原发布基准保留' : '发布结果未知，原 key 与完整命令保留'}</p>
++        <details><summary>核对原发布命令与基准</summary><p>{command.command_id}</p><pre>{JSON.stringify(command.body, null, 2)}</pre><pre>{JSON.stringify(command.basis, null, 2)}</pre></details>
++        {!state.canReplay(command) && <p>无法核对原操作者；旧页面或旧访问代次的命令只读保留，不能用当前会话冒充原 key 回放。</p>}
++        <button disabled={busy || !state.canReplay(command)} onClick={() => void state.execute(command)}>显式回放原发布命令 {command.command_id}</button>
++        {command.ack && <><p>原发布历史引用：{command.ack.entity} · {command.ack.id} · r{command.ack.revision}</p><code>{command.ack.sha256}</code>
++          <button disabled={busy} onClick={() => void state.readCurrent(command)}>另行读取当前引用 {command.ack.id}</button>
++          {state.currentRead?.command_id === command.command_id ? <section aria-label="另行读取的当前引用"><p>本次 GET current 的实际结果：{state.currentRead.ref.id} · r{state.currentRead.ref.revision}</p><code>{state.currentRead.ref.sha256}</code><p>此结果独立于原发布 ACK，后续变更需再次读取。</p></section>
++            : <p>当前指针尚未在本面板另行读取；原 ACK 不代表对象现在的 current。</p>}</>}
++      </article>)}</section>
++    </>}
++    <button disabled={busy || dirty} onClick={() => void state.refresh()}>重新核验发布权限与本机记录</button>
++    <p>网络中断不等于服务端回滚。结果未知时只显式恢复原命令，不自动重发；关闭前保留本页确认选择和已保存的原命令。</p>
++  </section>
++}
+diff --git a/apps/web/src/features/draftPublication/publicationClient.test.ts b/apps/web/src/features/draftPublication/publicationClient.test.ts
+new file mode 100644
+index 0000000..7547722
+--- /dev/null
++++ b/apps/web/src/features/draftPublication/publicationClient.test.ts
+@@ -0,0 +1,27 @@
++import { afterEach, expect, test, vi } from 'vitest'
++import { connectSession } from '../../api/client'
++import { reviewSession } from '../draftReview/reviewFixtures'
++import { publicationClient } from './publicationClient'
++import { publicationDraft, publicationReceipt, publicationRef } from './publicationFixtures'
++
++afterEach(() => vi.unstubAllGlobals())
++test('actual generated publication/current routes preserve exact four fields, original key and session transport', async () => {
++  const session = reviewSession('workspace_publication_transport'), requests: { path: string; init: RequestInit }[] = []
++  const responses = [session, session, publicationDraft, publicationReceipt, publicationRef, { ...publicationRef, revision: 2 }]
++  vi.stubGlobal('fetch', vi.fn(async (path: string, init: RequestInit) => { requests.push({ path, init }); return new Response(JSON.stringify(responses.shift())) }))
++  await connectSession(); await publicationClient.session(); await publicationClient.draft(publicationDraft.id); await publicationClient.review(publicationReceipt.id)
++  const body = { expected_revision: 1, expected_content_sha256: publicationDraft.candidate_sha256, review_receipt_id: publicationReceipt.id, acknowledged_warning_codes: ['SOURCE_CONFIRM'] }
++  await publicationClient.publish(publicationDraft.id, body, 'original_publication_key'); await publicationClient.current(publicationRef.id)
++  expect(requests.map(value => `${value.init.method} ${value.path}`)).toEqual(['GET /api/v1/session', 'GET /api/v1/session', `GET /api/v1/drafts/${publicationDraft.id}`, `GET /api/v1/reviews/${publicationReceipt.id}`, `POST /api/v1/drafts/${publicationDraft.id}/publish`, `GET /api/v1/objects/${publicationRef.id}/current`])
++  expect(JSON.parse(String(requests[4].init.body))).toEqual(body)
++  expect(new Headers(requests[4].init.headers).get('Idempotency-Key')).toBe('original_publication_key')
++  expect(new Headers(requests[4].init.headers).get('X-CSRF-Token')).toBe(session.csrf_token)
++  expect(requests.every(value => value.init.credentials === 'same-origin')).toBe(true)
++})
++
++test('unrecognized response fields and extra publish fields are rejected at the generated HTTP boundary', async () => {
++  const fetch = vi.fn(async () => new Response(JSON.stringify({ ...publicationRef, private_payload: 'synthetic' }))); vi.stubGlobal('fetch', fetch)
++  await expect(publicationClient.current(publicationRef.id)).rejects.toThrow()
++  await expect(publicationClient.publish(publicationDraft.id, { expected_revision: 1, expected_content_sha256: publicationDraft.candidate_sha256, review_receipt_id: publicationReceipt.id, acknowledged_warning_codes: [], mathematical: 'NOT_APPLICABLE' } as never, 'synthetic_key')).rejects.toThrow()
++  expect(fetch).toHaveBeenCalledTimes(1)
++})
+diff --git a/apps/web/src/features/draftPublication/publicationClient.ts b/apps/web/src/features/draftPublication/publicationClient.ts
+new file mode 100644
+index 0000000..7ece4c3
+--- /dev/null
++++ b/apps/web/src/features/draftPublication/publicationClient.ts
+@@ -0,0 +1,19 @@
++import type { ContentRef, DraftPublishWrite, ImportDraftSnapshot, SessionResponse, StoredReviewReceipt } from '../../../../../packages/contracts/generated/api-types'
++import { request } from '../../api/client'
++import { reviewReceipt } from '../draftReview/reviewSchema'
++import { checkedPublication, publicationRef } from './publicationSchema'
++
++export type PublicationPort = {
++  session(): Promise<SessionResponse>
++  draft(id: string): Promise<ImportDraftSnapshot>
++  review(id: string): Promise<StoredReviewReceipt>
++  publish(id: string, body: DraftPublishWrite, key: string): Promise<ContentRef>
++  current(id: string): Promise<ContentRef>
++}
++export const publicationClient: PublicationPort = {
++  session: async () => checkedPublication('SessionResponse', await request('GET /api/v1/session', undefined)),
++  draft: async id => checkedPublication('ImportDraftSnapshot', await request('GET /api/v1/drafts/{id}', undefined, undefined, { path: { id } })),
++  review: async id => reviewReceipt(await request('GET /api/v1/reviews/{id}', undefined, undefined, { path: { id } }), id),
++  publish: async (id, body, key) => publicationRef(await request('POST /api/v1/drafts/{id}/publish', checkedPublication('DraftPublishWrite', body), { 'Idempotency-Key': key }, { path: { id } })),
++  current: async id => publicationRef(await request('GET /api/v1/objects/{id}/current', undefined, undefined, { path: { id } })),
++}
+diff --git a/apps/web/src/features/draftPublication/publicationCommands.test.ts b/apps/web/src/features/draftPublication/publicationCommands.test.ts
+new file mode 100644
+index 0000000..05b44f6
+--- /dev/null
++++ b/apps/web/src/features/draftPublication/publicationCommands.test.ts
+@@ -0,0 +1,53 @@
++import 'fake-indexeddb/auto'
++import { afterEach, expect, test } from 'vitest'
++import { DraftStore } from '../../workbench/DraftStore'
++import { publicationDraft, publicationReceipt, publicationRef } from './publicationFixtures'
++import { preparePublicationBasis } from './publicationSchema'
++import { decodePublicationCommand, makePublicationCommand, persistPublicationCommand, readPublicationCommand, samePublicationActorPage } from './publicationCommands'
++
++const stores: DraftStore[] = []
++afterEach(async () => { await Promise.all(stores.splice(0).map(value => value.close())) })
++test('original four-field publication command survives IndexedDB reopening and cannot acquire a different request or ACK', async () => {
++  const workspace = `workspace_${crypto.randomUUID()}`, name = `publication_${crypto.randomUUID()}`
++  const store = new DraftStore({ name }); stores.push(store)
++  const basis = preparePublicationBasis(publicationDraft, publicationReceipt)
++  const command = makePublicationCommand(workspace, 3, basis, [0, 1])
++  expect(command.body).toEqual({ expected_revision: 1, expected_content_sha256: publicationRef.sha256, review_receipt_id: publicationReceipt.id, acknowledged_warning_codes: ['SOURCE_CONFIRM'] })
++  await persistPublicationCommand(command, store)
++  await store.close()
++  const reopened = new DraftStore({ name }); stores.push(reopened)
++  expect(readPublicationCommand((await reopened.load(workspace))[command.command_id], workspace)).toEqual(command)
++  const acknowledged = { ...command, ack: publicationRef }
++  await persistPublicationCommand(acknowledged, reopened)
++  expect(await persistPublicationCommand(command, reopened)).toEqual(acknowledged)
++  await expect(persistPublicationCommand({ ...command, body: { ...command.body, review_receipt_id: 'review_other' } }, reopened)).rejects.toThrow()
++  await expect(persistPublicationCommand({ ...acknowledged, ack: { ...publicationRef, revision: 2 } }, reopened)).rejects.toThrow()
++  expect(samePublicationActorPage(command, 3)).toBe(true)
++  expect(samePublicationActorPage(command, 4)).toBe(false)
++  expect(samePublicationActorPage({ ...command, origin: { ...command.origin, page_id: 'page_previous' } }, 3)).toBe(false)
++})
++
++test('conflicting immutable body stays in real IndexedDB and prevents command admission', async () => {
++  const workspace = `workspace_${crypto.randomUUID()}`, store = new DraftStore({ name: `publication_${crypto.randomUUID()}` }); stores.push(store)
++  const command = makePublicationCommand(workspace, 1, preparePublicationBasis(publicationDraft, publicationReceipt), [0, 1])
++  await persistPublicationCommand(command, store)
++  const changed = { ...command, basis: { ...command.basis, review: { ...command.basis.review, decision_reason: 'Synthetic conflicting basis' } } }
++  await store.save(workspace, command.command_id, JSON.stringify(changed), 0)
++  const before = (await store.load(workspace))[command.command_id]
++  expect(before.conflicts).toHaveLength(1)
++  await expect(persistPublicationCommand(command, store)).rejects.toThrow()
++  expect((await store.load(workspace))[command.command_id]).toEqual(before)
++})
++
++test('warning instances, explicit human decisions, metadata identity and strict original body cannot be bypassed', () => {
++  const basis = preparePublicationBasis(publicationDraft, publicationReceipt)
++  for (const selected of [[], [0], [1], [0, 1, 1], [0, 1, 2]]) expect(() => makePublicationCommand('workspace_synthetic', 0, basis, selected)).toThrow()
++  for (const receipt of [{ ...publicationReceipt, mathematical: 'NOT_RUN' }, { ...publicationReceipt, sources: 'NOT_APPLICABLE' }, { ...publicationReceipt, decision_reason: '' }, { ...publicationReceipt, candidate: { ...publicationReceipt.candidate, draft_id: 'draft_other' } }]) expect(() => preparePublicationBasis(publicationDraft, receipt as typeof publicationReceipt)).toThrow()
++  const invalidHash = { ...publicationDraft, candidate_sha256: 'b'.repeat(64) }
++  expect(() => preparePublicationBasis(invalidHash, publicationReceipt)).toThrow()
++  expect(() => preparePublicationBasis({ ...publicationDraft, warnings: [{ code: 'BAD_SOURCE', message: 'Synthetic error', locator: null, severity: 'error' }] }, publicationReceipt)).not.toThrow()
++  const blocked = preparePublicationBasis({ ...publicationDraft, warnings: [{ code: 'BAD_SOURCE', message: 'Synthetic error', locator: null, severity: 'error' }] }, publicationReceipt)
++  expect(() => makePublicationCommand('workspace_synthetic', 0, blocked, [])).toThrow()
++  const command = makePublicationCommand('workspace_synthetic', 0, basis, [0, 1])
++  for (const bad of [{ ...command, extra: true }, { ...command, body: { ...command.body, expected_review_revision: 2 } }, { ...command, body: { ...command.body, acknowledged_warning_codes: ['SOURCE_CONFIRM', 'SOURCE_CONFIRM'] } }]) expect(() => decodePublicationCommand(JSON.stringify(bad), 'workspace_synthetic')).toThrow()
++})
+diff --git a/apps/web/src/features/draftPublication/publicationCommands.ts b/apps/web/src/features/draftPublication/publicationCommands.ts
+new file mode 100644
+index 0000000..0898f17
+--- /dev/null
++++ b/apps/web/src/features/draftPublication/publicationCommands.ts
+@@ -0,0 +1,58 @@
++import type { ContentRef, DraftPublishWrite } from '../../../../../packages/contracts/generated/api-types'
++import { assertDraftWriteAllowed, DraftStore, type DraftRecord, type DraftWriteGuard } from '../../workbench/DraftStore'
++import { exactObject, sameValue, validIdentity } from '../providers/providerSchema'
++import { acknowledgedCodes, checkedBasis, checkedPublication, publicationRef, type PublicationBasis } from './publicationSchema'
++
++export type PublicationCommand = { version: 1; workspace_id: string; command_id: string; origin: { page_id: string; access_generation: number }; basis: PublicationBasis;
++  body: DraftPublishWrite; ack: ContentRef | null; rejection: { status: number; code: string | null } | null }
++// This marker permits conservative same-page recovery; it is not actor identity.
++export const publicationPageId = `page_${crypto.randomUUID()}`
++export const publicationCommandStore = new DraftStore({ name: 'learning-workbench.publication-commands.v1' })
++export function decodePublicationCommand(raw: string, workspace: string): PublicationCommand {
++  const value = JSON.parse(raw) as PublicationCommand
++  if (!exactObject(value, ['version', 'workspace_id', 'command_id', 'origin', 'basis', 'body', 'ack', 'rejection']) || value.version !== 1
++      || value.workspace_id !== workspace || !validIdentity(value.command_id) || !exactObject(value.origin, ['page_id', 'access_generation'])
++      || !validIdentity(value.origin.page_id) || !Number.isSafeInteger(value.origin.access_generation) || value.origin.access_generation < 0) throw new Error('原发布命令身份无效。')
++  const basis = checkedBasis(value.basis), body = checkedPublication<DraftPublishWrite>('DraftPublishWrite', value.body)
++  const codes = acknowledgedCodes(basis, basis.warnings.flatMap((warning, index) => warning.severity === 'warning' ? [index] : []))
++  if (body.expected_revision !== basis.candidate.draft_revision || body.expected_content_sha256 !== basis.candidate.candidate_sha256
++      || body.review_receipt_id !== basis.review.id || !sameValue(body.acknowledged_warning_codes, codes)) throw new Error('原发布命令没有绑定准确候选、审核和全部警告。')
++  if (value.ack !== null) publicationRef(value.ack, basis.target)
++  if (value.rejection !== null && (!exactObject(value.rejection, ['status', 'code']) || ![400, 409, 412, 422].includes(value.rejection.status)
++      || value.rejection.code !== null && (typeof value.rejection.code !== 'string' || !/^[A-Z][A-Z0-9_]{0,79}$/.test(value.rejection.code)) || value.ack)) throw new Error('原发布拒绝记录无效。')
++  return value
++}
++export function makePublicationCommand(workspace: string, access: number, basis: PublicationBasis, selected: number[]): PublicationCommand {
++  const codes = acknowledgedCodes(checkedBasis(basis), selected)
++  return decodePublicationCommand(JSON.stringify({ version: 1, workspace_id: workspace, command_id: `publishcmd_${crypto.randomUUID()}`,
++    origin: { page_id: publicationPageId, access_generation: access }, basis,
++    body: { expected_revision: basis.candidate.draft_revision, expected_content_sha256: basis.candidate.candidate_sha256, review_receipt_id: basis.review.id, acknowledged_warning_codes: codes }, ack: null, rejection: null }), workspace)
++}
++export const samePublicationActorPage = (value: PublicationCommand, access: number) => value.origin.page_id === publicationPageId && value.origin.access_generation === access
++const immutable = (value: PublicationCommand) => ({ ...value, ack: null, rejection: null })
++export function readPublicationCommand(record: DraftRecord, workspace: string): PublicationCommand {
++  const values = [record.text, ...record.conflicts.map(value => value.text)].map(raw => decodePublicationCommand(raw, workspace)), first = values[0]
++  if (record.objectId !== first.command_id || values.some(value => !sameValue(immutable(value), immutable(first)))) throw new Error('原发布命令存在不同内容，全部本机候选保留。')
++  const acknowledged = values.filter(value => value.ack)
++  if (acknowledged.some(value => !sameValue(value.ack, acknowledged[0].ack))) throw new Error('原发布命令存在不同回执。')
++  return acknowledged[0] ?? values.find(value => value.rejection) ?? first
++}
++export async function persistPublicationCommand(value: PublicationCommand, store = publicationCommandStore, guard?: DraftWriteGuard): Promise<PublicationCommand> {
++  assertDraftWriteAllowed(guard)
++  let desired = decodePublicationCommand(JSON.stringify(value), value.workspace_id)
++  for (let attempt = 0; attempt < 4; attempt++) {
++    assertDraftWriteAllowed(guard)
++    const old = (await store.load(value.workspace_id))[value.command_id]
++    assertDraftWriteAllowed(guard)
++    if (old) {
++      const current = readPublicationCommand(old, value.workspace_id)
++      if (!sameValue(immutable(current), immutable(desired)) || current.ack && desired.ack && !sameValue(current.ack, desired.ack)) throw new Error('不能替换原发布命令或原回执。')
++      if (current.ack || !desired.ack && current.rejection) desired = current
++      if (!old.conflicts.length && sameValue(current, desired)) return current
++    }
++    const saved = await store.save(value.workspace_id, value.command_id, JSON.stringify(desired), old?.revision ?? 0, old?.conflicts.map(item => item.id) ?? [], guard)
++    const actual = readPublicationCommand(saved.record, value.workspace_id)
++    if (!saved.record.conflicts.length && sameValue(actual, desired)) return actual
++  }
++  throw new Error('本机发布命令仍有并发保存，原内容已保留。')
++}
+diff --git a/apps/web/src/features/draftPublication/publicationFixtures.ts b/apps/web/src/features/draftPublication/publicationFixtures.ts
+new file mode 100644
+index 0000000..d492071
+--- /dev/null
++++ b/apps/web/src/features/draftPublication/publicationFixtures.ts
+@@ -0,0 +1,17 @@
++// Explicit synthetic decisions, not approval of real learning material.
++import type { ImportDraftSnapshot, StoredReviewReceipt, ContentRef } from '../../../../../packages/contracts/generated/api-types'
++import { machineReceipt } from '../draftReview/reviewFixtures'
++// Golden metadata digest from the Python ContentBlock canonical owner.
++export const publicationHash = '025a7ea4a4b9aa985376fe3e7b215891369cd40e3a527d54c79ca3ef8f840555'
++export const publicationDraft: ImportDraftSnapshot = {
++  id: 'draft_synthetic_publication', kind: 'block', revision: 1, base_ref: null, state: 'draft', candidate_sha256: publicationHash,
++  payload: { metadata: { schema_version: '3.0.0', id: 'block_synthetic_publication', revision: 1, entity: 'block', kind: 'text', title: '原创合成纯文本', body_path: 'bodies/synthetic.md', body_sha256: 'bb38e9b1deee77b850bcad76fb2169614a61608392f75ced7cb85f299857a955', concepts: [], citations: [], depends_on: [] }, body_markdown: 'Synthetic original plain text.\n', source_id: 'source_synthetic_publication', citations: [] },
++  warnings: [
++    { code: 'SOURCE_CONFIRM', message: 'Synthetic first source warning', locator: 'line:1', severity: 'warning' },
++    { code: 'SOURCE_CONFIRM', message: 'Synthetic second source warning', locator: 'line:2', severity: 'warning' },
++  ],
++}
++export const publicationReceipt: StoredReviewReceipt = { ...machineReceipt, revision: 2,
++  candidate: { draft_id: publicationDraft.id, draft_revision: 1, entity: 'block', candidate_sha256: publicationHash },
++  mathematical: 'NOT_APPLICABLE', sources: 'APPROVED', reviewer: 'author:synthetic', decision_reason: 'Synthetic original plain text; no mathematical claim; original source inspected.' }
++export const publicationRef: ContentRef = { entity: 'block', id: 'block_synthetic_publication', revision: 1, sha256: publicationHash }
+diff --git a/apps/web/src/features/draftPublication/publicationSchema.ts b/apps/web/src/features/draftPublication/publicationSchema.ts
+new file mode 100644
+index 0000000..760bc06
+--- /dev/null
++++ b/apps/web/src/features/draftPublication/publicationSchema.ts
+@@ -0,0 +1,50 @@
++import { sha256 } from '@noble/hashes/sha2.js'
++import { bytesToHex } from '@noble/hashes/utils.js'
++import type { ContentRef, DraftCandidate, ImportDraftSnapshot, StoredReviewReceipt, Warning } from '../../../../../packages/contracts/generated/api-types'
++import { checkedProvider, exactObject, sameValue } from '../providers/providerSchema'
++import { reviewReceipt } from '../draftReview/reviewSchema'
++
++export type PublicationTarget = { object_id: string; object_revision: number; metadata_sha256: string }
++export type PublicationBasis = { candidate: DraftCandidate; target: PublicationTarget; review: StoredReviewReceipt; warnings: Warning[] }
++const invalid = (): never => { throw new Error('发布基准与准确 Import 文本块、原审核或引用不一致。') }
++export function checkedPublication<T>(name: string, value: unknown): T {
++  try { return checkedProvider<T>(name, value) } catch { return invalid() }
++}
++export function publicationRef(value: unknown, target?: PublicationTarget): ContentRef {
++  const ref = checkedPublication<ContentRef>('ContentRef', value)
++  if (ref.entity !== 'block' || target && (ref.id !== target.object_id || ref.revision !== target.object_revision || ref.sha256 !== target.metadata_sha256)) invalid()
++  return ref
++}
++export function checkedBasis(value: PublicationBasis): PublicationBasis {
++  if (!exactObject(value, ['candidate', 'target', 'review', 'warnings']) || !exactObject(value.target, ['object_id', 'object_revision', 'metadata_sha256'])) invalid()
++  const candidate = checkedPublication<DraftCandidate>('DraftCandidate', value.candidate)
++  const review = reviewReceipt(value.review, value.review?.id, candidate)
++  publicationRef({ entity: 'block', id: value.target.object_id, revision: value.target.object_revision, sha256: value.target.metadata_sha256 })
++  if (candidate.entity !== 'block' || candidate.draft_revision !== 1 || value.target.object_revision !== 1
++      || value.target.metadata_sha256 !== candidate.candidate_sha256 || review.structural !== 'PASS'
++      || review.mathematical !== 'NOT_APPLICABLE' || review.sources !== 'APPROVED' || !review.decision_reason.trim()
++      || review.revision! < 2 || !Array.isArray(value.warnings)) invalid()
++  value.warnings.forEach(warning => checkedPublication('Warning', warning))
++  return structuredClone(value)
++}
++export function preparePublicationBasis(raw: ImportDraftSnapshot, receipt: StoredReviewReceipt): PublicationBasis {
++  const draft = checkedPublication<ImportDraftSnapshot>('ImportDraftSnapshot', raw)
++  if (draft.kind !== 'block' || draft.base_ref !== null || draft.state !== 'draft' || draft.revision !== 1 || !('metadata' in draft.payload)) return invalid()
++  const metadata = draft.payload.metadata
++  if (metadata.kind !== 'text' || metadata.revision !== 1 || metadata.concepts?.length || metadata.depends_on?.length) invalid()
++  // This narrow ContentBlock has only strings, one integer and string arrays;
++  // default fields are normalized by its generated contract. No float hashing.
++  const normalized = { ...metadata, schema_version: metadata.schema_version ?? '3.0.0', entity: metadata.entity ?? 'block', concepts: metadata.concepts ?? [], citations: metadata.citations ?? [], depends_on: metadata.depends_on ?? [] }
++  const canonical = JSON.stringify(Object.fromEntries(Object.entries(normalized).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)))
++  const digest = bytesToHex(sha256(new TextEncoder().encode(canonical)))
++  if (digest !== draft.candidate_sha256) invalid()
++  return checkedBasis({ candidate: { draft_id: draft.id, draft_revision: draft.revision, entity: draft.kind, candidate_sha256: draft.candidate_sha256 },
++    target: { object_id: metadata.id, object_revision: metadata.revision, metadata_sha256: digest }, review: receipt, warnings: draft.warnings })
++}
++export function acknowledgedCodes(basis: PublicationBasis, selected: number[]): string[] {
++  if (new Set(selected).size !== selected.length || selected.some(index => !Number.isSafeInteger(index) || basis.warnings[index]?.severity !== 'warning')
++      || basis.warnings.some((warning, index) => warning.severity === 'error' || warning.severity === 'warning' && !selected.includes(index))) invalid()
++  return [...new Set(basis.warnings.filter(warning => warning.severity === 'warning').map(warning => warning.code))]
++}
++export const matchesPublicationCandidate = (draft: ImportDraftSnapshot, candidate: DraftCandidate) => sameValue(candidate,
++  { draft_id: draft.id, draft_revision: draft.revision, entity: draft.kind, candidate_sha256: draft.candidate_sha256 })
+diff --git a/apps/web/src/features/draftPublication/usePublication.test.tsx b/apps/web/src/features/draftPublication/usePublication.test.tsx
+new file mode 100644
+index 0000000..c6a4f5d
+--- /dev/null
++++ b/apps/web/src/features/draftPublication/usePublication.test.tsx
+@@ -0,0 +1,148 @@
++import 'fake-indexeddb/auto'
++import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
++import { afterEach, expect, test, vi } from 'vitest'
++import { reviewSession } from '../draftReview/reviewFixtures'
++import { publicationDraft, publicationReceipt, publicationRef } from './publicationFixtures'
++import { publicationCommandStore, readPublicationCommand } from './publicationCommands'
++import { makePublicationCommand, persistPublicationCommand } from './publicationCommands'
++import { preparePublicationBasis } from './publicationSchema'
++import { ApiError, getSessionGeneration, request } from '../../api/client'
++import type { ContentRef } from '../../../../../packages/contracts/generated/api-types'
++import type { PublicationPort } from './publicationClient'
++import { usePublication } from './usePublication'
++
++afterEach(async () => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); await publicationCommandStore.close() })
++function fixture() {
++  const workspace = `workspace_${crypto.randomUUID()}`
++  const port: PublicationPort = { session: vi.fn(async () => reviewSession(workspace)), draft: vi.fn(async () => structuredClone(publicationDraft)), review: vi.fn(async () => structuredClone(publicationReceipt)), publish: vi.fn(async () => publicationRef), current: vi.fn(async () => ({ ...publicationRef, revision: 2, sha256: 'b'.repeat(64) })) }
++  return { workspace, port }
++}
++function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done }); return { promise, resolve } }
++test('lost publication ACK retains the committed original body/key; explicit replay and fresh current remain distinct', async () => {
++  const { workspace, port } = fixture()
++  vi.mocked(port.publish).mockImplementationOnce(async (_id, body, key) => {
++    const durable = readPublicationCommand((await publicationCommandStore.load(workspace))[key], workspace)
++    expect(durable.body).toEqual(body); expect(durable.ack).toBeNull()
++    throw new Error('Synthetic lost response after server commit')
++  })
++  const hook = renderHook(() => usePublication(workspace, false, 'selection', port))
++  await waitFor(() => expect(hook.result.current.ready).toBe(true))
++  await act(() => hook.result.current.prepare(publicationDraft, publicationReceipt))
++  expect(port.draft).toHaveBeenCalledTimes(1); expect(port.review).toHaveBeenCalledTimes(1)
++  await act(() => hook.result.current.publish([0, 1]))
++  const original = hook.result.current.commands[0]
++  expect(original.ack).toBeNull(); expect(port.current).not.toHaveBeenCalled()
++  await act(() => hook.result.current.prepare(publicationDraft, publicationReceipt))
++  await act(() => hook.result.current.publish([0, 1]))
++  expect(port.publish).toHaveBeenCalledTimes(1)
++  await act(() => hook.result.current.execute(original))
++  expect(vi.mocked(port.publish).mock.calls[1]).toEqual(vi.mocked(port.publish).mock.calls[0])
++  const confirmed = hook.result.current.commands[0]
++  expect(confirmed.ack).toEqual(publicationRef); expect(hook.result.current.currentRead).toBeNull()
++  await act(() => hook.result.current.readCurrent(confirmed))
++  expect(hook.result.current.currentRead?.ref.revision).toBe(2)
++  expect(hook.result.current.commands[0].ack?.revision).toBe(1)
++})
++
++test('a delayed ledger read cannot send an earlier basis after the user explicitly reads a new review', async () => {
++  const { workspace, port } = fixture(), delayed = deferred<Record<string, never>>()
++  const hook = renderHook(() => usePublication(workspace, false, 'selection', port))
++  await waitFor(() => expect(hook.result.current.ready).toBe(true))
++  await act(() => hook.result.current.prepare(publicationDraft, publicationReceipt))
++  vi.spyOn(publicationCommandStore, 'load').mockReturnValueOnce(delayed.promise)
++  let sending!: Promise<void>; act(() => { sending = hook.result.current.publish([0, 1]) })
++  vi.mocked(port.review).mockResolvedValueOnce({ ...publicationReceipt, revision: 3, decision_reason: 'Synthetic later explicit decision' })
++  await act(() => hook.result.current.prepare(publicationDraft, publicationReceipt))
++  expect(hook.result.current.basis?.review.revision).toBe(3)
++  await act(async () => { delayed.resolve({}); await sending })
++  expect(port.publish).not.toHaveBeenCalled()
++  expect(hook.result.current.basis?.review.revision).toBe(3)
++})
++
++test('failed durable storage causes zero HTTP writes and preserves the selected basis', async () => {
++  const { workspace, port } = fixture()
++  const hook = renderHook(() => usePublication(workspace, false, 'selection', port))
++  await waitFor(() => expect(hook.result.current.ready).toBe(true))
++  await act(() => hook.result.current.prepare(publicationDraft, publicationReceipt))
++  vi.spyOn(publicationCommandStore, 'save').mockRejectedValueOnce(new Error('Synthetic IDB quota exceeded'))
++  await act(() => hook.result.current.publish([0, 1]))
++  expect(port.publish).not.toHaveBeenCalled(); expect(await publicationCommandStore.load(workspace)).toEqual({})
++  expect(hook.result.current.basis?.candidate).toEqual(publicationReceipt.candidate)
++})
++
++test('access generation change discards a late ACK without rewriting the durable original', async () => {
++  const { workspace, port } = fixture(), delayed = deferred<ContentRef>()
++  vi.mocked(port.publish).mockReturnValueOnce(delayed.promise)
++  const hook = renderHook(() => usePublication(workspace, false, 'selection', port))
++  await waitFor(() => expect(hook.result.current.ready).toBe(true))
++  await act(() => hook.result.current.prepare(publicationDraft, publicationReceipt))
++  let sending!: Promise<void>; act(() => { sending = hook.result.current.publish([0, 1]) })
++  await waitFor(() => expect(port.publish).toHaveBeenCalledTimes(1))
++  const original = hook.result.current.commands[0]
++  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(reviewSession(workspace)))))
++  await act(() => request('POST /api/v1/session/role', { role: 'author' }, { 'Idempotency-Key': 'synthetic_generation_change' }))
++  await act(async () => { delayed.resolve(publicationRef); await sending })
++  await waitFor(() => expect(hook.result.current.ready).toBe(true))
++  const retained = readPublicationCommand((await publicationCommandStore.load(workspace))[original.command_id], workspace)
++  expect(retained).toEqual(original); expect(retained.ack).toBeNull(); expect(hook.result.current.canReplay(retained)).toBe(false)
++  await act(() => hook.result.current.execute(retained)); expect(port.publish).toHaveBeenCalledTimes(1)
++})
++
++test('previous page originals remain read-only and block a replacement key for unknown result', async () => {
++  const { workspace, port } = fixture()
++  const command = makePublicationCommand(workspace, getSessionGeneration(), preparePublicationBasis(publicationDraft, publicationReceipt), [0, 1])
++  command.origin.page_id = 'page_previous'
++  await persistPublicationCommand(command)
++  const hook = renderHook(() => usePublication(workspace, false, 'selection', port))
++  await waitFor(() => expect(hook.result.current.ready).toBe(true))
++  await act(() => hook.result.current.execute(hook.result.current.commands[0]))
++  await act(() => hook.result.current.prepare(publicationDraft, publicationReceipt))
++  await act(() => hook.result.current.publish([0, 1]))
++  expect(port.publish).not.toHaveBeenCalled(); expect(hook.result.current.commands).toEqual([command])
++})
++
++test('permission rejection hides protected receipts and leaves the persisted original unknown', async () => {
++  const { workspace, port } = fixture()
++  vi.mocked(port.publish).mockRejectedValueOnce(new ApiError(403, 'Denied', 'POLICY_DENIED'))
++  const hook = renderHook(() => usePublication(workspace, false, 'selection', port))
++  await waitFor(() => expect(hook.result.current.ready).toBe(true))
++  await act(() => hook.result.current.prepare(publicationDraft, publicationReceipt))
++  await act(() => hook.result.current.publish([0, 1]))
++  expect(hook.result.current.ready).toBe(false); expect(hook.result.current.commands).toEqual([]); expect(hook.result.current.basis).toBeNull()
++  const raw = Object.values(await publicationCommandStore.load(workspace)); expect(raw).toHaveLength(1)
++  expect(readPublicationCommand(raw[0], workspace).ack).toBeNull()
++})
++
++test.each([{ ...publicationRef, id: 'block_other' }, { ...publicationRef, sha256: 'b'.repeat(64) }, { ...publicationRef, revision: 2 }, { ...publicationRef, extra: true }])('wrong publication reference remains unknown without fabricating success', async ack => {
++  const { workspace, port } = fixture(); vi.mocked(port.publish).mockResolvedValueOnce(ack)
++  const hook = renderHook(() => usePublication(workspace, false, 'selection', port))
++  await waitFor(() => expect(hook.result.current.ready).toBe(true))
++  await act(() => hook.result.current.prepare(publicationDraft, publicationReceipt)); await act(() => hook.result.current.publish([0, 1]))
++  expect(hook.result.current.commands[0].ack).toBeNull(); expect(hook.result.current.currentRead).toBeNull()
++})
++
++test('412 preserves the old request and requires an explicit new basis; current read cannot relabel another object', async () => {
++  const { workspace, port } = fixture(); vi.mocked(port.publish).mockRejectedValueOnce(new ApiError(412, 'Synthetic stale basis', 'PUBLISH_CANDIDATE_MISMATCH'))
++  const hook = renderHook(() => usePublication(workspace, false, 'selection', port))
++  await waitFor(() => expect(hook.result.current.ready).toBe(true))
++  await act(() => hook.result.current.prepare(publicationDraft, publicationReceipt)); await act(() => hook.result.current.publish([0, 1]))
++  const old = hook.result.current.commands[0]; expect(old.rejection?.status).toBe(412); expect(hook.result.current.basis).toBeNull()
++  await act(() => hook.result.current.publish([0, 1])); expect(port.publish).toHaveBeenCalledTimes(1)
++  await act(() => hook.result.current.prepare(publicationDraft, publicationReceipt)); await act(() => hook.result.current.publish([0, 1]))
++  expect(hook.result.current.commands).toHaveLength(2); expect(hook.result.current.commands.find(value => value.command_id === old.command_id)).toEqual(old)
++  const acknowledged = hook.result.current.commands.find(value => value.ack)!
++  vi.mocked(port.current).mockResolvedValueOnce({ ...publicationRef, id: 'block_other' })
++  await act(() => hook.result.current.readCurrent(acknowledged))
++  expect(hook.result.current.currentRead).toBeNull(); expect(acknowledged.ack).toEqual(publicationRef)
++})
++
++test('candidate selection changes discard a delayed preparation and never carry warning confirmation across candidates', async () => {
++  const { workspace, port } = fixture(), delayed = deferred<typeof publicationDraft>(); vi.mocked(port.draft).mockReturnValueOnce(delayed.promise)
++  const hook = renderHook(({ selection }) => usePublication(workspace, false, selection, port), { initialProps: { selection: 'first' } })
++  await waitFor(() => expect(hook.result.current.ready).toBe(true))
++  let preparing!: Promise<void>; act(() => { preparing = hook.result.current.prepare(publicationDraft, publicationReceipt) })
++  hook.rerender({ selection: 'second' })
++  await act(async () => { delayed.resolve(publicationDraft); await preparing })
++  await waitFor(() => expect(hook.result.current.ready).toBe(true))
++  expect(hook.result.current.basis).toBeNull(); expect(port.publish).not.toHaveBeenCalled()
++})
+diff --git a/apps/web/src/features/draftPublication/usePublication.ts b/apps/web/src/features/draftPublication/usePublication.ts
+new file mode 100644
+index 0000000..eacbd23
+--- /dev/null
++++ b/apps/web/src/features/draftPublication/usePublication.ts
+@@ -0,0 +1,128 @@
++import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
++import type { ContentRef, ImportDraftSnapshot, SessionResponse, StoredReviewReceipt } from '../../../../../packages/contracts/generated/api-types'
++import { ApiError, getSessionGeneration, subscribeSessionAccess } from '../../api/client'
++import { sameValue } from '../providers/providerSchema'
++import { reviewReceipt } from '../draftReview/reviewSchema'
++import { publicationClient, type PublicationPort } from './publicationClient'
++import { makePublicationCommand, persistPublicationCommand, publicationCommandStore, readPublicationCommand, samePublicationActorPage, type PublicationCommand } from './publicationCommands'
++import { checkedPublication, matchesPublicationCandidate, preparePublicationBasis, publicationRef, type PublicationBasis } from './publicationSchema'
++
++const denied = (error: unknown) => error instanceof ApiError && ([401, 403].includes(error.status) || ['POLICY_DENIED', 'ASSESSMENT_ACTIVE', 'ASSESSMENT_ANSWER_PROTECTED'].includes(error.code ?? ''))
++export function usePublication(workspace: string, paused: boolean, selection: string, port: PublicationPort = publicationClient) {
++  const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
++  const owner = JSON.stringify([workspace, access, selection]), scope = useRef({ owner, paused }); scope.current = { owner, paused }
++  const live = useRef(false), admitted = useRef(false), sequence = useRef(0), working = useRef(false), writers = useRef(new Set<AbortController>())
++  const [renderOwner, setRenderOwner] = useState(owner), [allowed, setAllowed] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('')
++  const [commands, setCommands] = useState<PublicationCommand[]>([]), [basis, setBasis] = useState<PublicationBasis | null>(null), [preparedAt, setPreparedAt] = useState(0)
++  const [currentRead, setCurrentRead] = useState<{ command_id: string; ref: ContentRef } | null>(null)
++  const ready = renderOwner === owner && allowed && !paused
++  admitted.current = ready
++  const current = (subject = true) => live.current && scope.current.owner === owner && getSessionGeneration() === access
++    && (!subject || admitted.current && !scope.current.paused)
++  const clearProtected = () => {
++    admitted.current = false; setAllowed(false); setCommands([]); setBasis(null); setCurrentRead(null)
++    for (const controller of writers.current) controller.abort()
++  }
++  const fail = (reason: unknown) => {
++    if (denied(reason)) clearProtected()
++    const code = reason instanceof ApiError && /^[A-Z][A-Z0-9_]{0,79}$/.test(reason.code ?? '') ? `${reason.code}：` : ''
++    setError(code + (denied(reason) ? '当前权限或测试策略不允许发布资料，保护内容已收起，原命令仍保留。'
++      : reason instanceof ApiError && reason.status === 412 ? '候选或审核基准已变化。原命令保留；请重新选择并读取基准，再明确准备新发布。'
++        : '本次发布操作未确认或记录无法核验。原 body 与 key 保留，不自动重发或创建新命令。'))
++  }
++  const load = async () => Object.values(await publicationCommandStore.load(workspace)).map(value => readPublicationCommand(value, workspace))
++  const begin = (subject = true) => { if (!current(subject) || working.current) return null; working.current = true; setBusy(true); setError(''); return ++sequence.current }
++  const valid = (token: number, subject = true) => current(subject) && token === sequence.current
++  const finish = (token: number) => { if (valid(token, false)) { working.current = false; setBusy(false) } }
++  const refresh = async () => {
++    const token = begin(false); if (token === null) return
++    clearProtected()
++    try {
++      const session = checkedPublication<SessionResponse>('SessionResponse', await port.session())
++      if (!valid(token, false)) return
++      if (session.workspace_id !== workspace) throw new Error('发布工作区已变化。')
++      const canRead = session.role === 'author' && !session.active_independent_attempt_id && !session.active_open_book_attempt_id && !scope.current.paused
++      const values = canRead ? await load() : []
++      if (valid(token, false)) { setAllowed(canRead); setCommands(values) }
++    } catch (reason) { if (valid(token, false)) fail(reason) } finally { finish(token) }
++  }
++  useEffect(() => {
++    live.current = true; ++sequence.current; working.current = false
++    setRenderOwner(owner); clearProtected(); setBusy(false); setError('')
++    if (workspace && !paused) void refresh()
++    return () => { live.current = false; ++sequence.current; working.current = false; for (const controller of writers.current) controller.abort() }
++  }, [owner, paused, port])
++  const prepare = async (draft: ImportDraftSnapshot, selectedReview: StoredReviewReceipt) => {
++    const token = begin(); if (token === null) return
++    setBasis(null)
++    try {
++      if (!matchesPublicationCandidate(draft, selectedReview.candidate)) throw new Error('先选择匹配的审核。')
++      const [freshDraft, rawReview] = await Promise.all([port.draft(draft.id), port.review(selectedReview.id)])
++      const freshReview = reviewReceipt(rawReview, selectedReview.id, selectedReview.candidate)
++      if (!matchesPublicationCandidate(freshDraft, selectedReview.candidate)) throw new Error('候选已改变。')
++      const prepared = preparePublicationBasis(freshDraft, freshReview)
++      if (valid(token)) { setBasis(prepared); setPreparedAt(token) }
++    } catch (reason) { if (valid(token, false)) fail(reason) } finally { finish(token) }
++  }
++  const execute = async (command: PublicationCommand) => {
++    if (!current() || command.workspace_id !== workspace) return
++    if (!samePublicationActorPage(command, access)) { setError('无法核对原操作者。旧页面或旧访问代次的原发布命令只读保留，不用当前会话冒充原 key 回放。'); return }
++    const token = begin(); if (token === null) return
++    const controller = new AbortController(); writers.current.add(controller)
++    const guard = { allowed: () => valid(token), signal: controller.signal }, unsubscribe = subscribeSessionAccess(() => controller.abort())
++    setCurrentRead(null)
++    try {
++      const original = await persistPublicationCommand(command, undefined, guard)
++      const values = await load()
++      if (!valid(token)) return
++      setCommands(values); setBasis(null)
++      // Only an explicit user action reaches this write, including known-ACK
++      // verification. It uses the permanently retained original four fields/key.
++      const ack = publicationRef(await port.publish(original.basis.candidate.draft_id, original.body, original.command_id), original.basis.target)
++      if (!valid(token)) return
++      await persistPublicationCommand({ ...original, ack, rejection: null }, undefined, guard)
++      const confirmed = await load()
++      if (valid(token)) { setCommands(confirmed); setError('原发布 ACK 已保存。这是历史不可变引用；当前指针需要另行读取。') }
++    } catch (reason) {
++      if (valid(token, false)) {
++        if (!command.ack && !denied(reason) && reason instanceof ApiError && [400, 409, 412, 422].includes(reason.status)) {
++          try {
++            const code = /^[A-Z][A-Z0-9_]{0,79}$/.test(reason.code ?? '') ? reason.code! : null
++            await persistPublicationCommand({ ...command, rejection: { status: reason.status, code } }, undefined, guard)
++            const values = await load(); if (valid(token)) setCommands(values)
++          } catch { /* Already committed originals are preserved. */ }
++        }
++        if (valid(token, false)) fail(reason)
++      }
++    } finally { unsubscribe(); writers.current.delete(controller); finish(token) }
++  }
++  const publish = async (selectedWarnings: number[]) => {
++    if (!current() || working.current || !basis) return
++    const selectedAt = sequence.current
++    try {
++      // Re-read the ledger: another panel must not be silently replaced by a
++      // second key. Server owns cross-page transactions and candidate uniqueness.
++      const values = await load()
++      if (!current() || working.current || sequence.current !== selectedAt) return
++      setCommands(values)
++      if (values.some(value => sameValue(value.basis.candidate, basis.candidate) && !value.rejection)) {
++        setError('已有同候选原发布命令。保留原 key、结果和基准；请使用原命令恢复，不创建第二次发布。'); return
++      }
++      await execute(makePublicationCommand(workspace, access, basis, selectedWarnings))
++    } catch (reason) { if (current()) fail(reason) }
++  }
++  const readCurrent = async (command: PublicationCommand) => {
++    if (!command.ack || command.workspace_id !== workspace) return
++    const token = begin(); if (token === null) return
++    setCurrentRead(null)
++    try {
++      const ref = publicationRef(await port.current(command.ack.id))
++      if (ref.id !== command.ack.id) throw new Error('当前指针对象不符。')
++      if (valid(token)) setCurrentRead({ command_id: command.command_id, ref })
++    } catch (reason) { if (valid(token, false)) fail(reason) } finally { finish(token) }
++  }
++  return { ready, busy: renderOwner === owner && busy, error: renderOwner === owner ? error : '',
++    commands: ready ? commands : [], basis: ready ? basis : null, preparedAt,
++    currentRead: ready ? currentRead : null, refresh, prepare, publish, execute, readCurrent,
++    canReplay: (value: PublicationCommand) => ready && samePublicationActorPage(value, access) }
++}
+diff --git a/apps/web/src/features/draftReview/ReviewForms.tsx b/apps/web/src/features/draftReview/ReviewForms.tsx
+index 306a794..9809c19 100644
+--- a/apps/web/src/features/draftReview/ReviewForms.tsx
++++ b/apps/web/src/features/draftReview/ReviewForms.tsx
+@@ -15,7 +15,7 @@ export function ReviewCreateForm({ candidate, candidateState, busy, submit, valu
+   const { checks, note, confirmed } = value
+   return <section aria-label="准备准确候选审核"><h4>准备这份准确候选的审核</h4>
+     <p>{candidate.entity} · {candidate.draft_id} · 候选 r{candidate.draft_revision}</p><code>{candidate.candidate_sha256}</code>
+-    <p>候选入口最近读到的状态：{candidateState}。审核任务与审核回执是独立事实；本阶段尚未联动草稿状态投影和发布。</p>
++    <p>候选入口最近读到的状态：{candidateState}。审核任务与审核回执是独立事实，不自动推进草稿状态或发布；符合当前范围的 Import 文本块须在独立发布面板明确确认。</p>
+     <fieldset disabled={busy}><legend>本次请求的检查</legend>{([
+       ['structure', '结构与声明关系'], ['numerical_examples', '已存在的数值执行记录'], ['mathematics', '数学审核状态'], ['sources', '来源审核状态'],
+     ] as const).map(([key, label]) => <label key={key}><input type="checkbox" checked={checks.includes(key)} onChange={event => change({ ...value, checks: event.target.checked ? [...checks, key] : checks.filter(item => item !== key) })} />{label}</label>)}</fieldset>
+diff --git a/apps/web/src/features/draftReview/ReviewImportShell.test.tsx b/apps/web/src/features/draftReview/ReviewImportShell.test.tsx
+index 38eac2c..d744243 100644
+--- a/apps/web/src/features/draftReview/ReviewImportShell.test.tsx
++++ b/apps/web/src/features/draftReview/ReviewImportShell.test.tsx
+@@ -1,7 +1,7 @@
+ import 'fake-indexeddb/auto'
+ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+ import { afterEach, expect, test, vi } from 'vitest'
+-const state = vi.hoisted(() => ({ workspace: 'workspace_review_shell', importConfirmed: false, commit: vi.fn() }))
++const state = vi.hoisted(() => ({ workspace: 'workspace_review_shell', importConfirmed: false, publication: false, commit: vi.fn() }))
+ vi.mock('../../workbench/useWorkbench', async () => {
+   const { emptySession } = await import('../../workbench/model')
+   return { useWorkbench: () => ({ session: emptySession(), set: vi.fn(), status: 'saved', uiReady: true, error: '', drafts: {}, updateDraft: vi.fn(), reconnect: vi.fn(), draftConflicts: {}, draftSaving: {}, draftErrors: {}, chooseDraft: vi.fn(), draftResolving: {}, workspaceId: state.workspace, recoverable: [], restorePending: false, comparison: null, retainLocal: vi.fn(), draftBases: {}, draftStored: {} }) }
+@@ -12,16 +12,19 @@ vi.mock('../learning/useConceptStates', () => ({ useConceptStates: () => ({ valu
+ vi.mock('../../workbench/Tutor', () => ({ Tutor: () => null }))
+ vi.mock('../imports/useImportWorkflow', async () => {
+   const { reviewCandidate, reviewSession } = await import('./reviewFixtures')
++  const { publicationDraft } = await import('../draftPublication/publicationFixtures')
+   return { useImportWorkflow: () => ({ snapshot: null, active: null, auth: reviewSession(state.workspace), accessReady: true,
+     accepted: [], mapping: [], courses: [], recovery: [], courseCursor: null, busy: false, confirmed: state.importConfirmed,
+-    draft: { id: reviewCandidate.draft_id, revision: 1, kind: 'block', candidate_sha256: reviewCandidate.candidate_sha256, state: 'draft' }, commit: state.commit }) }
++    draft: state.publication ? publicationDraft : { id: reviewCandidate.draft_id, revision: 1, kind: 'block', candidate_sha256: reviewCandidate.candidate_sha256, state: 'draft' }, commit: state.commit }) }
+ })
+ HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
+ HTMLDialogElement.prototype.close = function () { this.removeAttribute('open') }
+ import { Shell } from '../../workbench/Shell'
++import { publicationDraft, publicationReceipt } from '../draftPublication/publicationFixtures'
++import { publicationCommandStore } from '../draftPublication/publicationCommands'
+ import { machineReceipt, reviewSession, safeReviewJob } from './reviewFixtures'
+ import { rememberReviewJob, reviewCommandStore, reviewControlStore, reviewJobStore } from './reviewCommands'
+-afterEach(async () => { cleanup(); vi.unstubAllGlobals(); await Promise.all([reviewCommandStore.close(), reviewControlStore.close(), reviewJobStore.close()]) })
++afterEach(async () => { state.publication = false; cleanup(); vi.unstubAllGlobals(); await Promise.all([reviewCommandStore.close(), reviewControlStore.close(), reviewJobStore.close(), publicationCommandStore.close()]) })
+ 
+ test('actual Import and Shell preserve review reason until explicit close without submitting import or review', async () => {
+   state.workspace = `workspace_${crypto.randomUUID()}`
+@@ -56,3 +59,36 @@ test('actual Import and Shell preserve review reason until explicit close withou
+   expect(state.commit).not.toHaveBeenCalled(); expect(state.importConfirmed).toBe(false)
+   expect(calls.every(value => value.startsWith('GET '))).toBe(true)
+ })
++
++
++test('actual Import and Shell merge publication confirmations into the existing close guard without issuing a write', async () => {
++  state.workspace = `workspace_${crypto.randomUUID()}`; state.publication = true
++  const writes: string[] = []
++  vi.stubGlobal('fetch', vi.fn(async (path: string, init: RequestInit) => {
++    if (init.method !== 'GET') { writes.push(path); throw new Error('No implicit publish') }
++    const value = path === '/api/v1/session' ? reviewSession(state.workspace)
++      : path === `/api/v1/jobs/${publicationReceipt.id}` ? safeReviewJob(state.workspace)
++        : path === `/api/v1/reviews/${publicationReceipt.id}` ? publicationReceipt
++          : path === `/api/v1/drafts/${publicationDraft.id}` ? publicationDraft : undefined
++    if (!value) throw new Error('Unexpected endpoint')
++    return new Response(JSON.stringify(value))
++  }))
++  await rememberReviewJob(state.workspace, publicationReceipt.id)
++  render(<Shell />); fireEvent.click(screen.getByRole('button', { name: '导入' }))
++  const dialog = screen.getByRole('dialog', { name: '导入' })
++  fireEvent.click(within(dialog).getByRole('button', { name: '打开候选审核与恢复' }))
++  const job = await screen.findByRole('button', { name: `读取审核任务 ${publicationReceipt.id}` })
++  await waitFor(() => expect((job as HTMLButtonElement).disabled).toBe(false)); fireEvent.click(job)
++  const read = await screen.findByRole('button', { name: '另行读取当前审核回执' })
++  await waitFor(() => expect((read as HTMLButtonElement).disabled).toBe(false)); fireEvent.click(read)
++  await waitFor(() => expect((screen.getByRole('button', { name: '选择此审核并重新读取发布基准' }) as HTMLButtonElement).disabled).toBe(false))
++  fireEvent.click(screen.getByRole('button', { name: '选择此审核并重新读取发布基准' }))
++  const warning = await screen.findByRole('checkbox', { name: /Synthetic first source warning/ })
++  fireEvent.click(warning)
++  fireEvent.click(within(dialog).getByRole('button', { name: '关闭导入' }))
++  const confirm = await screen.findByRole('dialog', { name: '保留审核原命令' })
++  expect(confirm.textContent).toContain('发布确认')
++  fireEvent.click(within(confirm).getByRole('button', { name: '返回导入与审核' }))
++  expect((screen.getByRole('checkbox', { name: /Synthetic first source warning/ }) as HTMLInputElement).checked).toBe(true)
++  expect(writes).toEqual([])
++})
+diff --git a/apps/web/src/features/draftReview/ReviewPanel.tsx b/apps/web/src/features/draftReview/ReviewPanel.tsx
+index a739409..563eeb5 100644
+--- a/apps/web/src/features/draftReview/ReviewPanel.tsx
++++ b/apps/web/src/features/draftReview/ReviewPanel.tsx
+@@ -1,24 +1,27 @@
+ import { useEffect, useRef, useState } from 'react'
+-import type { DraftCandidate } from '../../../../../packages/contracts/generated/api-types'
++import type { DraftCandidate, ImportDraftSnapshot } from '../../../../../packages/contracts/generated/api-types'
+ import { Dialog } from '../../workbench/Controls'
+ import { sameValue, validIdentity } from '../providers/providerSchema'
+ import type { ReviewPort } from './reviewClient'
+ import { ReviewCreateForm, ReviewDecisionForm, emptyCreateForm, emptyDecisionForm, createFormDirty, decisionFormDirty, type CreateFormValue, type DecisionFormValue } from './ReviewForms'
+ import { useReview } from './useReview'
++import { PublicationPanel } from '../draftPublication/PublicationPanel'
+ import './review.css'
+ const candidateKey = (candidate: DraftCandidate) => `${candidate.entity}:${candidate.draft_id}:${candidate.draft_revision}:${candidate.candidate_sha256}`
+ 
+-export function ReviewPanel({ workspace, paused, candidate, candidateState = '未重新读取', port, onState }: {
++export function ReviewPanel({ workspace, paused, candidate, candidateState = '未重新读取', importDraft, port, onState }: {
+   workspace: string; paused: boolean; candidate: DraftCandidate | null; candidateState?: string; port?: ReviewPort
++  importDraft?: ImportDraftSnapshot | null
+   onState?: (value: { dirty: boolean; safe: boolean }) => void
+ }) {
+   const state = useReview(workspace, paused, port), [manualId, setManualId] = useState('')
+   const [creates, setCreates] = useState<Record<string, CreateFormValue>>({}), [decisions, setDecisions] = useState<Record<string, DecisionFormValue>>({})
+   const [confirmRefresh, setConfirmRefresh] = useState(false)
++  const [publicationState, setPublicationState] = useState({ dirty: false, safe: true })
+   const callback = useRef(onState); callback.current = onState
+   const formCount = Object.values(creates).filter(createFormDirty).length + Object.values(decisions).filter(decisionFormDirty).length
+-  const dirty = state.academic && (formCount > 0 || state.commands.some(value => !value.ack && !value.rejection))
+-  const safe = state.controlsReady && !state.busy
++  const dirty = publicationState.dirty || state.academic && (formCount > 0 || state.commands.some(value => !value.ack && !value.rejection))
++  const safe = publicationState.safe && state.controlsReady && !state.busy
+   useEffect(() => { if (!state.academic) { setCreates({}); setDecisions({}); setConfirmRefresh(false) } }, [state.academic])
+   useEffect(() => {
+     if (!dirty && safe) return
+@@ -34,40 +37,42 @@ export function ReviewPanel({ workspace, paused, candidate, candidateState = '
+   const decisionKey = receipt ? `${receipt.id}:${receipt.revision}:${candidateKey(receipt.candidate)}` : ''
+   return <section className="review-panel" aria-label="候选审核与原命令恢复"><h3>候选审核与恢复</h3>
+     <p>机器检查、人工决定与内容发布分别记录。审核回执已保存不代表草稿状态已推进或教材已发布。</p>
+-    <button disabled={state.busy} onClick={() => { if (formCount && state.academic) setConfirmRefresh(true); else void state.refresh() }}>刷新审核权限与本机恢复记录</button>
+-    {state.academic && confirmRefresh && <Dialog title="刷新前保留审核表单" close={() => setConfirmRefresh(false)}><p>重新核验权限会清空当前页面的临时审核表单。已经安全保存的原命令仍保留；返回可以继续编辑。</p><button onClick={() => setConfirmRefresh(false)}>返回保留审核表单</button><button onClick={() => { setConfirmRefresh(false); setCreates({}); setDecisions({}); void state.refresh() }}>明确丢弃临时审核表单并刷新权限</button></Dialog>}
++    <button disabled={state.busy || !publicationState.safe} onClick={() => { if ((formCount || publicationState.dirty) && state.academic) setConfirmRefresh(true); else void state.refresh() }}>刷新审核权限与本机恢复记录</button>
++    {state.academic && confirmRefresh && <Dialog title="刷新前保留审核表单" close={() => setConfirmRefresh(false)}><p>重新核验权限会清空当前页面的临时审核及发布确认。已经安全保存的原命令仍保留；返回可以继续编辑。</p><button onClick={() => setConfirmRefresh(false)}>返回保留审核表单</button><button onClick={() => { setConfirmRefresh(false); setCreates({}); setDecisions({}); void state.refresh() }}>明确丢弃临时审核表单并刷新权限</button></Dialog>}
+     {state.error && <p role="status">{state.error}</p>}
+     <section aria-label="安全审核任务"><h4>已知审核任务</h4>
+       <p>这里只保存实际审核 ID。当前状态另从服务端读取；刷新不会重新创建任务。</p>
+       <p>无法核对旧取消命令的操作者时，旧命令只读保留。另行读取当前任务后，可明确发起新的取消命令；这不是原 key 回放。</p>
+-      {state.ids.map(id => <button key={id} disabled={state.busy || !state.controlsReady} onClick={() => void state.selectJob(id)}>读取审核任务 {id}</button>)}
++      {state.ids.map(id => <button key={id} disabled={state.busy || !publicationState.safe || !state.controlsReady} onClick={() => void state.selectJob(id)}>读取审核任务 {id}</button>)}
+       <label>已有服务端审核 ID<input value={manualId} onChange={event => setManualId(event.target.value)} /></label>
+-      <button disabled={state.busy || !state.controlsReady || !validIdentity(manualId)} onClick={() => void state.selectJob(manualId)}>读取这个审核任务</button>
++      <button disabled={state.busy || !publicationState.safe || !state.controlsReady || !validIdentity(manualId)} onClick={() => void state.selectJob(manualId)}>读取这个审核任务</button>
+       {job && <article><p>任务 {job.id} · {job.status} · 任务 r{job.revision}</p><p>{job.progress.label}</p>
+-        <button disabled={state.busy} onClick={() => void state.selectJob(job.id)}>另行刷新审核任务当前状态</button>
+-        <button disabled={state.busy || !state.controlsReady || ['completed', 'failed', 'cancelled'].includes(job.status)} onClick={() => void state.cancel()}>明确取消这个审核任务</button>
+-        <button disabled={state.busy || !state.ready || job.status !== 'completed'} onClick={() => void state.read(job.id)}>另行读取当前审核回执</button></article>}
++        <button disabled={state.busy || !publicationState.safe} onClick={() => void state.selectJob(job.id)}>另行刷新审核任务当前状态</button>
++        <button disabled={state.busy || !publicationState.safe || !state.controlsReady || ['completed', 'failed', 'cancelled'].includes(job.status)} onClick={() => void state.cancel()}>明确取消这个审核任务</button>
++        <button disabled={state.busy || !publicationState.safe || !state.ready || job.status !== 'completed'} onClick={() => void state.read(job.id)}>另行读取当前审核回执</button></article>}
+     </section>
+     <section aria-label="原审核命令"><h4>本机保留的原审核命令</h4>{state.commands.map(command => <article key={command.command_id}>
+       <p>{command.kind === 'create' ? '创建审核' : command.kind === 'decision' ? '人工决定' : '取消审核任务'} · {command.ack ? '原 ACK 已保存' : command.rejection ? '服务端拒绝，原基准保留' : '结果未知，原 key 与完整命令保留'}</p>
+       <details><summary>核对原审核命令</summary><p>{command.command_id}</p><pre>{JSON.stringify(command.body, null, 2)}</pre>{command.kind !== 'cancel' && <pre>{JSON.stringify(command.candidate, null, 2)}</pre>}{command.ack && <p>原 ACK 不是当前状态。请另外读取实际任务与审核回执。</p>}</details>
+       {!state.canReplay(command) && !command.ack && <p>无法核对原操作者；刷新或访问代次变化后的原命令仅保留只读，不用新会话同 key 冒充原回放。</p>}
+-      <button disabled={state.busy || !!command.ack || !state.canReplay(command) || !(command.kind === 'cancel' ? state.controlsReady : state.ready)} onClick={() => void state.execute(command)}>显式回放原审核命令 {command.command_id}</button>
++      <button disabled={state.busy || !publicationState.safe || !!command.ack || !state.canReplay(command) || !(command.kind === 'cancel' ? state.controlsReady : state.ready)} onClick={() => void state.execute(command)}>显式回放原审核命令 {command.command_id}</button>
+     </article>)}</section>
+     {!state.academic ? <p role="status">当前只开放安全审核任务控制。候选、备注、审核回执与报告已收起；权限恢复后请明确重新读取。</p> : <>
+       {formCount > 0 && <p>当前页面保留 {formCount} 份临时审核表单，各自绑定原候选或原回执版本。重新读取相同基准可以继续编辑；新基准不会套用旧理由。</p>}
+-      {candidate ? <ReviewCreateForm key={createKey} candidate={candidate} candidateState={candidateState} busy={state.busy || !state.ready} value={creates[createKey] ?? emptyCreateForm()} change={value => setCreates(old => ({ ...old, [createKey]: value }))} submit={body => void state.create(candidate, body)} />
++      {candidate ? <ReviewCreateForm key={createKey} candidate={candidate} candidateState={candidateState} busy={state.busy || !publicationState.safe || !state.ready} value={creates[createKey] ?? emptyCreateForm()} change={value => setCreates(old => ({ ...old, [createKey]: value }))} submit={body => void state.create(candidate, body)} />
+         : <p>请从已有导入或创作入口明确读取准确候选，再准备审核。已有审核任务仍可只读恢复。</p>}
+       {receipt && <section aria-label="当前审核回执"><h4>实际审核回执 r{receipt.revision}</h4><p>{receipt.id} · {receipt.candidate.draft_id} · 候选 r{receipt.candidate.draft_revision}</p><code>{receipt.candidate.candidate_sha256}</code>
+         <dl><dt>结构检查</dt><dd>{receipt.structural}</dd><dt>数学人工决定</dt><dd>{receipt.mathematical}</dd><dt>来源人工决定</dt><dd>{receipt.sources}</dd><dt>独立教学验收</dt><dd>NOT_RUN</dd></dl>
+         <p>记录操作者：{receipt.reviewer}；原回执创建时间：{receipt.created_at}</p><p>已保存理由：{receipt.decision_reason || '尚无人工作出决定。'}</p>
+-        <button disabled={state.busy} onClick={() => void state.read(receipt.id)}>重新读取审核回执</button>
+-        {receipt.evidence_paths.map((path, index) => <div key={path}><p>{index === 0 ? '实际机器审核报告' : `已绑定证据附件 ${index}`}</p>{index === 0 && <button disabled={state.busy} onClick={() => void state.artifact(path, false)}>读取受控审核报告</button>}<button disabled={state.busy} onClick={() => void state.artifact(path, true)}>下载审核附件 {index + 1}</button></div>)}
++        <button disabled={state.busy || !publicationState.safe} onClick={() => void state.read(receipt.id)}>重新读取审核回执</button>
++        {receipt.evidence_paths.map((path, index) => <div key={path}><p>{index === 0 ? '实际机器审核报告' : `已绑定证据附件 ${index}`}</p>{index === 0 && <button disabled={state.busy || !publicationState.safe} onClick={() => void state.artifact(path, false)}>读取受控审核报告</button>}<button disabled={state.busy || !publicationState.safe} onClick={() => void state.artifact(path, true)}>下载审核附件 {index + 1}</button></div>)}
+         {state.report && <details open><summary>已取得的原报告文本</summary><p>本次字节 SHA256：<code>{state.report.sha256}</code></p><pre>{state.report.text}</pre></details>}
+-        {matches ? <ReviewDecisionForm key={decisionKey} receipt={receipt} busy={state.busy || !state.ready} value={decisions[decisionKey] ?? emptyDecisionForm()} change={value => setDecisions(old => ({ ...old, [decisionKey]: value }))} submit={body => void state.decide(body)} />
++        {matches ? <ReviewDecisionForm key={decisionKey} receipt={receipt} busy={state.busy || !publicationState.safe || !state.ready} value={decisions[decisionKey] ?? emptyDecisionForm()} change={value => setDecisions(old => ({ ...old, [decisionKey]: value }))} submit={body => void state.decide(body)} />
+           : <p>当前候选入口尚未读到与本回执完全相同的候选；这里只读展示回执，请先核对准确候选后再记录决定。</p>}
+       </section>}
+     </>}
++    {importDraft !== undefined && <PublicationPanel workspace={workspace} paused={paused || !state.academic} blocked={state.busy}
++      draft={state.academic ? importDraft : null} receipt={receipt} onState={setPublicationState} />}
+     <p>未提交的表单仅保留在当前面板；明确提交时先保存完整原命令。关闭不会自动批准或发布。</p>
+   </section>
+ }
+diff --git a/apps/web/src/features/imports/ImportWorkflow.tsx b/apps/web/src/features/imports/ImportWorkflow.tsx
+index 48635c2..478348d 100644
+--- a/apps/web/src/features/imports/ImportWorkflow.tsx
++++ b/apps/web/src/features/imports/ImportWorkflow.tsx
+@@ -73,6 +73,7 @@ export function ImportWorkflow({ workspaceId, paused = false, close, openCourse,
+     <button onClick={() => setReviewOpen(true)}>打开候选审核与恢复</button>
+     {reviewOpen && <ReviewPanel workspace={workspaceId} paused={suspended || !!state.auth?.active_open_book_attempt_id}
+       candidate={!suspended && state.auth?.role === 'author' && state.draft ? { draft_id: state.draft.id, draft_revision: state.draft.revision, entity: state.draft.kind, candidate_sha256: state.draft.candidate_sha256 } : null}
++      importDraft={!suspended && state.auth?.role === 'author' ? state.draft : null}
+       candidateState={state.draft?.state ?? '未重新读取'} onState={setReviewState} />}
+   </div>
+ }
+diff --git a/apps/web/src/workbench/Shell.tsx b/apps/web/src/workbench/Shell.tsx
+index 05fd5f7..cceb077 100644
+--- a/apps/web/src/workbench/Shell.tsx
++++ b/apps/web/src/workbench/Shell.tsx
+@@ -233,7 +233,7 @@ export function Shell() {
+     <footer className="statusbar" role="status"><span className={status === 'saved' ? 'saved' : ''}>{status === 'saved' ? '✓ UI 会话已保存' : status === 'saving' ? '会话保存中…' : status === 'connecting' ? '连接本机服务…' : status === 'conflict' ? '会话版本冲突' : '离线 · UI 待同步'}</span><span>{active ? `内容修订 ${active.context.active_ref.revision}` : '尚未选择对象'}</span><span>{policy.independentId ? '独立测试进行中 · 工作区材料受限' : activeAssessment ? assessmentStates[active?.id ?? '']?.summary ?? '测试预览 · 尚未开始' : activePractice ? practiceStates[active?.id ?? '']?.summary ?? '练习预览 · 未作答' : loaded ? '合成示例 · 无学习证据' : '正常学习'} · 本机</span></footer>
+     {drawer && <Dialog title={drawer === 'nav' ? '课程目录' : 'Agent 助教'} className={`drawer drawer-${drawer}`} close={() => setDrawer(null)}>{drawer === 'nav' ? nav : tutor}</Dialog>}
+     {dialog && <Dialog title={dialog} className={dialog === '导入' ? 'import-dialog' : dialog === '笔记' ? 'notes-dialog' : ['设置', '检索材料', '学习目标与基础', '知识画像', '创建路线', '编辑路线', '学习建议'].includes(dialog) ? 'learning-dialog' : ''} close={closeDialog}>{subjectLocked && !['设置', '快捷键', '命令面板', '导入', '创作', '学习目标与基础', '知识画像', '创建路线', '编辑路线', '学习建议'].includes(dialog) ? <p>当前测试策略限制此材料与操作。已有草稿保留；请先返回测试并明确提交或放弃。</p> : dialog === '导入' ? workspaceId ? <ImportWorkflow key={workspaceId} workspaceId={workspaceId} paused={subjectLocked} close={closeDialog} openCourse={ref => { if (!protectLearningDialog()) chooseCourse(ref) }} onState={setImportReviewState} /> : <p>工作区会话尚未连接。连接成功后可上传文件或恢复已有导入。</p> : dialog === '学习目标与基础' ? workspaceId ? <ProfilePanel key={workspaceId} workspace={workspaceId} paused={subjectLocked} port={profileClient} concepts={profileConcepts.value ? conceptChoices(profileConcepts.value) : []} conceptsError={profileConcepts.error} onState={setProfileState} saved={() => setLearningVersion(value => value + 1)} /> : <p>请先连接本机会话。</p> : dialog === '检索材料' ? workspaceId ? <RetrievalPanel key={`${workspaceId}:${active?.id ?? 'none'}`} workspace={workspaceId} paused={subjectLocked} choices={retrievalChoices} initial={retrievalInitial} onState={setRetrievalState} open={target => { if (subjectLocked || protectLearningDialog()) return; if (openReal(target, true)) setDialog(null) }} /> : <p>请先连接本机会话。</p> : dialog === '学习建议' ? workspaceId ? <RecommendationsPanel key={workspaceId} workspace={workspaceId} paused={subjectLocked} course={session.course_ref} port={recommendationClient} onState={setRecommendationState} open={openRecommendation} /> : <p>请先连接本机会话。</p> : dialog === '知识画像' ? workspaceId ? <ConceptStates workspace={workspaceId} paused={subjectLocked} course={session.course_ref} version={learningVersion} /> : <p>请先连接本机会话。</p> : dialog === '创建路线' || dialog === '编辑路线' ? workspaceId ? <RouteEditor key={`${workspaceId}:${dialog}:${dialog === '编辑路线' ? active?.id ?? '' : 'new'}`} workspace={workspaceId} initial={dialog === '编辑路线' ? routeRecord ?? null : null} paused={subjectLocked} onState={setRouteEditState} saved={ref => { setLearningVersion(value => value + 1); openLearningRoute(ref, true); setDialog(null) }} /> : <p>请先连接本机会话。</p> : dialog === '创作' ? workspaceId ? <AuthoringPanel key={workspaceId} workspace={workspaceId} paused={subjectLocked || !!policy.openBookId} currentBlock={!subjectLocked && !policy.openBookId && active?.context.active_ref.entity === 'block' && !activeAssessment && !activePractice && !!realTitles[active.id]?.resolved ? active.context.active_ref : null} onState={setAuthoringState} /> : <p>请先连接本机会话。</p> : dialog === '设置' ? <><button disabled={subjectLocked || !providerState.safe} onClick={() => openAux('学习目标与基础')}>学习目标与基础</button><button disabled={subjectLocked || !providerState.safe} onClick={() => openAux('知识画像')}>概念与技能证据</button>{workspaceId ? <ProviderSettings key={workspaceId} workspace={workspaceId} paused={subjectLocked} port={providerClient} onState={setProviderState} /> : <p>请先连接本机会话。</p>}{subjectLocked && <p>画像和授权摘要暂不可操作；配置、秘密控制和已有授权的撤销仍可使用。</p>}</> : dialog === '命令面板' ? <><label className="sr-only" htmlFor="command-search">筛选命令</label><input id="command-search" className="command-search" value={commandSearch} onChange={event => setCommandSearch(event.target.value)} placeholder="输入命令名称…" /><div className="command-list">{commands.filter(command => command.title.includes(commandSearch)).map(command => <button key={command.title} onClick={command.action}>{command.title}<span>↵</span></button>)}</div></> : dialog === '快捷键' ? <ul className="shortcut-list"><li>Ctrl / ⌘ + Shift + P：命令面板</li><li>分隔条：← / → 每次调整 16px</li><li>Home / End：到达宽度边界</li><li>Enter：折叠或恢复侧栏</li><li>Esc：关闭抽屉、对话框或退出专注</li><li>Tab / Shift + Tab：移动焦点</li></ul> : dialog === '笔记' ? workspaceId ? <NotesPanel workspace={workspaceId} selection={noteSelection} initialRefId={noteSelection?.ref.id ?? (active?.context.active_ref.entity === 'block' ? active.context.active_ref.id : undefined)} openAnchor={selection => void openNoteAnchor(selection)} onState={setNoteState} onSaved={() => setProgressVersion(value => value + 1)} /> : <p>请先连接本机会话。</p> : dialog === '本节习题' ? practiceLesson ? <LessonPracticeLinks target={practiceLesson} open={openExercise} /> : <p>请先打开真实教材小节。</p> : dialog === '教材修订' ? session.course_ref ? <CourseRevisions course={session.course_ref} choose={chooseCourse} /> : <p>请先选择教材。</p> : dialog === '课程切换' ? <CoursePicker choose={chooseCourse} loadSynthetic={loadFixture} /> : dialog === '打开对象' ? loaded ? <div className="command-list">{fixture.lessons.map(lesson => <button key={lesson.id} onClick={() => { openLesson(lesson, true); setDialog(null) }}>{lesson.title}</button>)}</div> : <CoursePicker choose={chooseCourse} loadSynthetic={loadFixture} /> : <><p>{auxiliaryText[dialog] ?? '此辅助能力尚未实现。'}</p><p className="muted">能力状态：未实现 · 没有执行业务写入。</p></>}</Dialog>}
+-    {closingImportReview && <Dialog title="保留审核原命令" close={() => setClosingImportReview(false)}><p>尚有未提交的审核表单或保留的原命令。明确关闭会丢弃临时表单；已经安全保存的原命令仍保留，关闭不会提交审核、批准或发布。</p><button disabled={!importReviewState.safe} onClick={() => { setClosingImportReview(false); setDialog(null) }}>保留审核原命令，明确丢弃临时表单并关闭</button><button onClick={() => setClosingImportReview(false)}>返回导入与审核</button>{!importReviewState.safe && <p role="alert">审核命令仍在处理中或本机记录未安全读取，请保持页面打开。</p>}</Dialog>}
++    {closingImportReview && <Dialog title="保留审核原命令" close={() => setClosingImportReview(false)}><p>尚有未提交的审核表单、发布确认或保留的原命令。明确关闭会丢弃临时表单；已经安全保存的原命令仍保留，关闭不会提交审核、批准或发布。</p><button disabled={!importReviewState.safe} onClick={() => { setClosingImportReview(false); setDialog(null) }}>保留审核原命令，明确丢弃临时表单并关闭</button><button onClick={() => setClosingImportReview(false)}>返回导入与审核</button>{!importReviewState.safe && <p role="alert">审核或发布命令仍在处理中或本机记录未安全读取，请保持页面打开。</p>}</Dialog>}
+     {closingAuthoring && <Dialog title="保留创作原命令" close={() => setClosingAuthoring(false)}><p>尚有临时教学要求或保留的原命令。返回可继续编辑；明确关闭会丢弃临时表单，已安全存入本机的原命令仍保留，关闭不会批准调用或执行数值检查。</p><button disabled={!authoringState.safe} onClick={() => { setClosingAuthoring(false); setDialog(null) }}>保留原命令，明确丢弃临时表单并关闭</button><button onClick={() => setClosingAuthoring(false)}>返回创作</button>{!authoringState.safe && <p role="alert">命令仍在处理中或本机记录未安全读取，请保持页面打开。</p>}</Dialog>}
+     {closingProviders && <Dialog title="保留配置与授权候选" close={() => setClosingProviders(false)}><p>尚有未确认命令或临时输入。已持久化的无秘密命令可留待恢复；临时配置、预算和秘密输入将在关闭时丢弃，秘密不能在刷新后恢复。关闭不会发起模型调用。</p><button disabled={!providerState.safe} onClick={() => { setClosingProviders(false); setDialog(null) }}>明确丢弃临时输入，保留本机命令并关闭</button><button onClick={() => setClosingProviders(false)}>返回设置</button>{!providerState.safe && <p role="alert">命令仍在处理中或本机候选尚未安全保存，请保持页面打开。</p>}</Dialog>}
+     {closingLearning && <Dialog title={closingLearning === 'profile' ? '保留未同步画像' : closingLearning === 'route' ? '保留未同步路线' : '保留未同步推荐决定'} close={() => setClosingLearning(null)}><p>尚有本机未同步候选。可以返回编辑保存到服务端，或在本机持久化完成后明确保留候选并关闭。</p><button disabled={!(closingLearning === 'profile' ? profileState.safe : closingLearning === 'route' ? routeEditState.safe : recommendationState.safe)} onClick={() => { setClosingLearning(null); setDialog(null) }}>{closingLearning === 'profile' ? '保留本机画像草稿并关闭' : closingLearning === 'route' ? '保留本机路线草稿并关闭' : '保留本机推荐候选并关闭'}</button><button onClick={() => setClosingLearning(null)}>返回编辑</button></Dialog>}
+diff --git a/docs/adr/0029-import-publication-ui-recovery.md b/docs/adr/0029-import-publication-ui-recovery.md
+new file mode 100644
+index 0000000..6abdbcf
+--- /dev/null
++++ b/docs/adr/0029-import-publication-ui-recovery.md
+@@ -0,0 +1,15 @@
++# 0029: Explicit Import text-block publication and original-command recovery
++
++PRODUCT_DESIGN.md §§14, 15.1–15.3, 20.1, 20.3, 20.8 and Appendix A require exact candidate-bound approval, immutable publication, explicit human decisions, current access and a four-field publish command. This UI consumes the generated route and DraftPublishWrite provided by the real publication service. It adds no HTTP/producer state or contract fields.
++
++The Import entry passes its actual ImportDraftSnapshot into the existing Review panel. Authoring receives no publication entry. Publication has a separate client, command ledger, Hook and panel; Review v1 command bytes and recovery remain unchanged. Existing Review/Shell close protection combines publication confirmation and unresolved-command state. No mathematics/source decision is prefilled, generated or inferred from text kind.
++
++New intent explicitly selects a real currently read Review and then GETs that selected Review and Import draft again. It displays the exact candidate, original metadata target, current human decisions/reason, and every warning instance. Duplicate warning codes do not share checkboxes. Only after every warning instance is explicitly acknowledged are their codes deduplicated into the original four request fields. Error warnings block creation. The selected receipt revision is a displayed reading basis, not a fifth CAS field: the server revalidates the selected Review's current human history in its transaction. No global latest-Review policy is invented.
++
++Metadata hashing is limited to the supported no-dependency text ContentBlock at revision 1. Its fixed ASCII field names, strings, one integer and string arrays have the same canonical ordering/UTF-8 representation as the Python owner; generated defaults are normalized. The Python golden includes Unicode title text, and the actual native flow independently verifies the real metadata/candidate/result hashes. This narrow equality is not assumed for Authoring, arbitrary DraftCandidate/ContentRef or the separate body hash.
++
++Before any POST, IndexedDB must finish committing the complete original key/body and exact read basis. Conflicting originals remain stored and prevent admission. Network ambiguity retains the original; no automatic network retry or new-key replacement occurs. Explicit same-page recovery uses the original four fields/key, including deliberate server verification of a known historical ACK. A random page marker is not identity: old-page/access-generation commands are conservatively read-only because the session DTO exposes no stable actor proof. Real server access and actor ownership remain authoritative. A delayed ledger read checks the operation sequence before it may send the previously selected basis.
++
++Access/workspace/selection changes hide protected data and discard late results; guarded storage writes abort before admission. Already dispatched server writes cannot be undone by browser unmount or permission notification. A valid saved ACK remains a historical exact ContentRef; only the separate explicit GET current supplies a separately labelled current read. The original ACK is never rewritten as current. The Import GET still reports its producer state, not a new inferred published status. The panel explains the existing whole-Import ID collision and explicit mapping path after publishing its original block.
++
++Validation covers real IndexedDB persistence/conflict and failure, generated transport, strict DTO/ACK binding, per-warning confirmation, late results/current access, original-key recovery, explicit review selection and existing Shell close protection. One actual synthetic browser flow uses real Import/Review workers, explicit synthetic author decisions, a real server commit followed by lost response, same-key replay, actual Content bytes and GET current; no real Provider or real learning-content approval. Native screenshots/receipts can contain synthetic session reviewer identifiers and remain private until a separately verified safe evidence transformation. This slice does not implement general editing/lifecycle GET, Authoring/group/question/private-solution publication, existing-object updates or complete M6.2 acceptance.
+diff --git a/tests/e2e/draft-publication.spec.ts b/tests/e2e/draft-publication.spec.ts
+new file mode 100644
+index 0000000..2082db4
+--- /dev/null
++++ b/tests/e2e/draft-publication.spec.ts
+@@ -0,0 +1,110 @@
++import { createHash } from 'node:crypto'
++import { writeFileSync } from 'node:fs'
++import { expect, test } from '../../apps/web/node_modules/@playwright/test/index.mjs'
++import type { ContentRef, DraftPublishWrite, ImportDraftSnapshot, ReviewJobAck, StoredReviewReceipt } from '../../packages/contracts/generated/api-types'
++import { RestartRuntime } from './restartRuntime'
++
++test('real synthetic Import text block receives explicit human decisions, survives lost publish ACK and reads actual current independently', async ({ playwright }, info) => {
++  test.setTimeout(120_000)
++  const runtime = await RestartRuntime.start(), errors: string[] = []
++  try {
++    const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]
++    page.on('pageerror', error => errors.push(error.message))
++    await runtime.authenticateOnly(page)
++    await page.getByRole('button', { name: '导入', exact: true }).click()
++    const dialog = page.getByRole('dialog', { name: '导入', exact: true })
++    await dialog.getByRole('button', { name: '切换为作者角色', exact: true }).click()
++    await expect(dialog.getByText('操作角色：作者', { exact: true })).toBeVisible()
++    await dialog.getByLabel('解析格式').selectOption('markdown')
++    await dialog.getByLabel('选择导入文件', { exact: true }).setInputFiles({ name: 'synthetic-publication.md', mimeType: 'text/markdown', buffer: Buffer.from('# 原创合成发布验收\n\n这是无数学断言的原创合成段落，仅验证软件发布链，不代表真实教学验收。\n') })
++    const uploading = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith('/api/v1/imports'))
++    await dialog.getByRole('button', { name: '上传并生成预览', exact: true }).click()
++    expect((await uploading).status()).toBe(202)
++    await expect(dialog.getByText('预览已就绪，等待确认', { exact: true })).toBeVisible()
++    await expect(dialog.getByLabel('当前候选正文', { exact: true })).toBeVisible()
++    const id = await dialog.getByLabel('选择预览候选').inputValue()
++    const draftResponse = await page.request.get(`/api/v1/drafts/${id}`); expect(draftResponse.status()).toBe(200)
++    const draft: ImportDraftSnapshot = await draftResponse.json()
++    expect(draft.kind).toBe('block'); expect(draft.state).toBe('draft')
++    if (!('metadata' in draft.payload)) throw new Error('Actual imported block payload required')
++    const metadata = draft.payload.metadata
++    expect(metadata.kind).toBe('text')
++    const metadataHash = createHash('sha256').update(JSON.stringify(Object.fromEntries(Object.entries(metadata).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)))).digest('hex')
++    expect(metadataHash).toBe(draft.candidate_sha256)
++    await dialog.getByRole('button', { name: '打开候选审核与恢复', exact: true }).click()
++    const reviewPanel = dialog.getByRole('region', { name: '候选审核与原命令恢复', exact: true })
++    await reviewPanel.getByLabel('本次审核备注', { exact: true }).fill('仅合成浏览器软件验收；不作真实内容质量或教学批准。')
++    await reviewPanel.getByLabel('我已核对候选 ID、修订、哈希与本次检查范围，明确创建审核任务。', { exact: true }).check()
++    const reviewing = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith(`/api/v1/drafts/${id}/review`))
++    await reviewPanel.getByRole('button', { name: '明确创建本次审核任务', exact: true }).click()
++    const reviewResponse = await reviewing; expect(reviewResponse.status()).toBe(202)
++    const review: ReviewJobAck = await reviewResponse.json()
++    const read = reviewPanel.getByRole('button', { name: '另行读取当前审核回执', exact: true })
++    await expect(read).toBeEnabled(); await read.click()
++    const machine: StoredReviewReceipt = await page.request.get(`/api/v1/reviews/${review.id}`).then(value => value.json())
++    expect(machine.structural).toBe('PASS'); expect(machine.mathematical).toBe('NOT_RUN'); expect(machine.sources).toBe('NOT_RUN'); expect(machine.independent_pedagogy).toBe('NOT_RUN')
++    const decision = reviewPanel.getByRole('region', { name: '明确人工审核决定', exact: true })
++    await expect(decision.getByLabel('数学审核决定')).toHaveValue(''); await expect(decision.getByLabel('来源审核决定')).toHaveValue('')
++    await decision.getByLabel('数学审核决定').selectOption('NOT_APPLICABLE')
++    await decision.getByLabel('来源审核决定').selectOption('APPROVED')
++    const reason = '明确合成验收判断：原创纯文本无数学断言，已核对上传原件；不代表真实学习材料或教学审核。'
++    await decision.getByLabel('审核理由').fill(reason)
++    await decision.getByLabel('我已核对准确候选与本回执，明确记录上述数学和来源决定及理由。', { exact: true }).check()
++    const deciding = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith(`/api/v1/reviews/${review.id}/decision`))
++    await decision.getByRole('button', { name: '明确保存这次人工审核决定', exact: true }).click()
++    const decided = await deciding; expect(decided.status()).toBe(200)
++    const human: StoredReviewReceipt = await decided.json()
++    expect(human.mathematical).toBe('NOT_APPLICABLE'); expect(human.sources).toBe('APPROVED'); expect(human.independent_pedagogy).toBe('NOT_RUN'); expect(human.decision_reason).toBe(reason)
++    await expect(read).toBeEnabled(); await read.click()
++    const publication = reviewPanel.getByRole('region', { name: 'Import 文本块发布与恢复', exact: true })
++    const prepare = publication.getByRole('button', { name: '选择此审核并重新读取发布基准', exact: true })
++    await expect(prepare).toBeEnabled(); await prepare.click()
++    const basis = publication.getByRole('region', { name: '本次发布基准', exact: true })
++    await expect(basis).toContainText(draft.candidate_sha256)
++    const warningInputs = basis.getByRole('group', { name: '逐条确认此块警告' }).getByRole('checkbox')
++    for (const checkbox of await warningInputs.all()) { await expect(checkbox).not.toBeChecked(); await checkbox.check() }
++    await basis.getByLabel('我已核对这份发布候选、所选人工审核与逐条警告，明确发布这一文本块。', { exact: true }).check()
++    await dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
++    await page.getByRole('dialog', { name: '保留审核原命令', exact: true }).getByRole('button', { name: '返回导入与审核', exact: true }).click()
++    await expect(basis.getByLabel('我已核对这份发布候选、所选人工审核与逐条警告，明确发布这一文本块。', { exact: true })).toBeChecked()
++    for (const width of [1440, 390]) {
++      await page.setViewportSize({ width, height: 900 }); await basis.scrollIntoViewIfNeeded()
++      await page.screenshot({ path: info.outputPath(`publication-basis-${width}.png`) })
++      const geometry = await dialog.evaluate(element => ({ width: element.clientWidth, scroll: element.scrollWidth, document: document.documentElement.scrollWidth, viewport: innerWidth }))
++      expect(geometry.scroll).toBeLessThanOrEqual(geometry.width + 1); expect(geometry.document).toBeLessThanOrEqual(geometry.viewport)
++    }
++    await page.setViewportSize({ width: 1440, height: 900 })
++    const commands: { key: string; body: DraftPublishWrite }[] = [], currentRequests: string[] = []
++    let original!: ContentRef, dropped = false
++    page.on('request', value => { if (new URL(value.url()).pathname === `/api/v1/objects/${metadata.id}/current`) currentRequests.push(value.method()) })
++    const pattern = `**/api/v1/drafts/${id}/publish`
++    await page.route(pattern, async route => {
++      const request = route.request(); commands.push({ key: request.headers()['idempotency-key'], body: request.postDataJSON() })
++      if (commands.length === 1) { const actual = await route.fetch(); expect(actual.status()).toBe(201); original = await actual.json(); await route.abort('failed'); dropped = true }
++      else await route.continue()
++    })
++    await basis.getByRole('button', { name: '明确发布这一文本块', exact: true }).click()
++    await expect.poll(() => dropped).toBe(true)
++    await expect(publication.getByText('发布结果未知，原 key 与完整命令保留', { exact: true })).toBeVisible()
++    expect(commands).toHaveLength(1); expect(currentRequests).toEqual([])
++    expect(original).toEqual({ entity: 'block', id: metadata.id, revision: 1, sha256: draft.candidate_sha256 })
++    const replaying = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith(`/api/v1/drafts/${id}/publish`))
++    await publication.getByRole('button', { name: `显式回放原发布命令 ${commands[0].key}`, exact: true }).click()
++    const replay = await replaying; expect(replay.status()).toBe(201); expect(await replay.json()).toEqual(original)
++    await expect(publication.getByText('原发布 ACK 已保存', { exact: true })).toBeVisible()
++    expect(commands).toHaveLength(2); expect(commands[1]).toEqual(commands[0]); expect(currentRequests).toEqual([])
++    expect(commands[0].body).toEqual({ expected_revision: draft.revision, expected_content_sha256: draft.candidate_sha256, review_receipt_id: review.id, acknowledged_warning_codes: [...new Set(draft.warnings.filter(warning => warning.severity === 'warning').map(warning => warning.code))] })
++    const reading = page.waitForResponse(value => value.request().method() === 'GET' && value.url().endsWith(`/api/v1/objects/${metadata.id}/current`))
++    await publication.getByRole('button', { name: `另行读取当前引用 ${metadata.id}`, exact: true }).click()
++    const currentResponse = await reading; expect(currentResponse.status()).toBe(200)
++    const current: ContentRef = await currentResponse.json(); expect(current).toEqual(original); expect(currentRequests).toEqual(['GET'])
++    await expect(publication.getByRole('region', { name: '另行读取的当前引用', exact: true })).toContainText(original.sha256)
++    const block = await page.request.get(`/api/v1/blocks/${original.id}?revision=1`); expect(block.status()).toBe(200); expect(await block.json()).toEqual(metadata)
++    const body = await page.request.get(`/api/v1/blocks/${original.id}/body?revision=1`); expect(body.status()).toBe(200)
++    expect(await body.text()).toBe(draft.payload.body_markdown); expect(createHash('sha256').update(await body.body()).digest('hex')).toBe(metadata.body_sha256)
++    expect((await page.request.get(`/api/v1/drafts/${id}`).then(value => value.json())).state).toBe('draft')
++    await page.screenshot({ path: info.outputPath('publication-history-and-current.png') })
++    expect(errors).toEqual([])
++    writeFileSync(info.outputPath('publication-flow.json'), JSON.stringify({ scope: 'Actual synthetic Import/Review workers and explicit synthetic author decisions/publication/original-key replay/Content bytes/current; no real provider or content-quality approval', candidate: machine.candidate, machine, human, commands, original, current, body_sha256: metadata.body_sha256, errors }, null, 2))
++  } finally { await runtime.close() }
++})

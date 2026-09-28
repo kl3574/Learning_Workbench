@@ -1,0 +1,110 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/authoring/useAuthoringObservation.test.tsx
+
+
+ RUN  v5.0.0 <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-authoring-observation-active/apps/web
+
+ ❯ src/features/authoring/useAuthoringObservation.test.tsx (3 tests | 3 failed) 3231ms
+   × observes a held list after the real original ACK persistence without inventing current controls or extra calls 1122ms
+   × observes the existing late-list discard while keeping the current result authoritative 1054ms
+   × observes list failure and finally without retaining its arbitrary exception or changing busy recovery 1055ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/authoring/useAuthoringObservation.test.tsx > observes a held list after the real original ACK persistence without inventing current controls or extra calls
+AssertionError: expected false to be true // Object.is equality
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div />[39m
+  [36m</body>[39m
+[36m</html>[39m
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/features/authoring/useAuthoringObservation.test.tsx:44:114
+     42|     await waitFor(() => expect(hook.result.current.commands[0].ack).to…
+     43|     expect(hook.result.current.jobs).toEqual([]); expect(hook.result.c…
+     44|     await waitFor(() => expect(f.records.some(r => r.stage === 'list_r…
+       |                                                                                                                  ^
+     45|     expect(f.records.some(r => r.stage === 'ack_persisted')).toBe(true)
+     46|     expect(f.records.some(r => r.stage === 'list_accepted' && r.basis_…
+ ❯ runWithExpensiveErrorDiagnosticsDisabled ../../../../../Desktop/learning/Learning_Workbench/apps/web/node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback ../../../../../Desktop/learning/Learning_Workbench/apps/web/node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback ../../../../../Desktop/learning/Learning_Workbench/apps/web/node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  src/features/authoring/useAuthoringObservation.test.tsx > observes the existing late-list discard while keeping the current result authoritative
+AssertionError: expected false to be true // Object.is equality
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div />[39m
+  [36m</body>[39m
+[36m</html>[39m
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/features/authoring/useAuthoringObservation.test.tsx:65:112
+     63|   await act(async () => { initial.resolve({ items: [], next_cursor: nu…
+     64|   expect(hook.result.current.jobs).toEqual([f.job]); expect(hook.resul…
+     65|   await waitFor(() => expect(f.records.some(r => r.stage === 'list_dis…
+       |                                                                                                                ^
+     66|   expect(f.port.list).toHaveBeenCalledTimes(2); expect(f.prepare).not.…
+     67| })
+ ❯ runWithExpensiveErrorDiagnosticsDisabled ../../../../../Desktop/learning/Learning_Workbench/apps/web/node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback ../../../../../Desktop/learning/Learning_Workbench/apps/web/node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback ../../../../../Desktop/learning/Learning_Workbench/apps/web/node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  src/features/authoring/useAuthoringObservation.test.tsx > observes list failure and finally without retaining its arbitrary exception or changing busy recovery
+AssertionError: expected false to be true // Object.is equality
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div />[39m
+  [36m</body>[39m
+[36m</html>[39m
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/features/authoring/useAuthoringObservation.test.tsx:76:77
+     74|   await act(() => hook.result.current.refresh())
+     75|   expect(hook.result.current.jobs).toEqual([f.job]); expect(hook.resul…
+     76|   await waitFor(() => expect(f.records.some(r => r.stage === 'list_err…
+       |                                                                             ^
+     77|   expect(f.records.some(r => r.stage === 'list_finally')).toBe(true)
+     78|   expect(JSON.stringify(f.records)).not.toContain('SYNTHETIC_PRIVATE_')
+ ❯ runWithExpensiveErrorDiagnosticsDisabled ../../../../../Desktop/learning/Learning_Workbench/apps/web/node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback ../../../../../Desktop/learning/Learning_Workbench/apps/web/node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback ../../../../../Desktop/learning/Learning_Workbench/apps/web/node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed (3)
+   Start at  10:49:11
+   Duration  3.72s (tests 89%, environment 5%, transform 4%, import 2%)
+

@@ -1,0 +1,7 @@
+# Exact captured-evidence whitespace handling
+
+The original staged whitespace check failed with exit 2: 25 findings in six immutable captured evidence paths. Twenty-four are the mandatory single-space unchanged-empty-line context in five unified patches; one is the captured command stdout's final blank line. All raw/public mappings were independently verified. Source/progress prose passed separately. The complete original failure is retained.
+
+Exactly six literal dated artifact paths were added to .gitattributes, extending the existing verbatim log handling only to these exact immutable files. No wildcard rule, application change, raw-byte trimming or credential-scanner change occurred. The independent review preceded the change; the actual post-change staged whitespace check exited 0. Product tests were not rerun or relabelled: the product gate anchor remains4a5c6de.
+
+Both full original caches are mapped here. Files originally named .stdout are stored under the same path with an added .log suffix so the pre-existing captured-log formatting rule applies; their content remains byte-identical except the explicitly mapped home-path aliases. Both original and derivative names are recorded in the manifest. This naming choice does not delete lines or alter the original negative verdict. Complete source/review proofs and hashes are included; historical reviewer scripts are evidence, not a portable product runner.

@@ -1,0 +1,232 @@
+{
+  "head": "966b6c6cf616df816d6c114675c920621ba84573",
+  "base": "dec1d937523f4596da4c39bcc27750d9132c752c",
+  "added_paths": [
+    "/api/v1/drafts/{id}/publish"
+  ],
+  "changed_or_removed_existing_paths": [],
+  "added_schemas": [
+    "DraftPublishWrite"
+  ],
+  "changed_or_removed_existing_schemas": [],
+  "operation": {
+    "post": {
+      "operationId": "publish_api_v1_drafts__id__publish_post",
+      "parameters": [
+        {
+          "in": "path",
+          "name": "id",
+          "required": true,
+          "schema": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Origin",
+          "required": true,
+          "schema": {
+            "title": "Origin",
+            "type": "string"
+          }
+        },
+        {
+          "in": "header",
+          "name": "X-CSRF-Token",
+          "required": true,
+          "schema": {
+            "title": "X-Csrf-Token",
+            "type": "string"
+          }
+        },
+        {
+          "in": "header",
+          "name": "Idempotency-Key",
+          "required": true,
+          "schema": {
+            "pattern": "^[A-Za-z0-9_-]{1,128}$",
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/DraftPublishWrite"
+            }
+          }
+        },
+        "required": true
+      },
+      "responses": {
+        "201": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContentRef"
+              }
+            }
+          },
+          "description": "Successful Response"
+        },
+        "400": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErrorEnvelope"
+              }
+            }
+          },
+          "description": "Bad Request"
+        },
+        "401": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErrorEnvelope"
+              }
+            }
+          },
+          "description": "Unauthorized"
+        },
+        "403": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErrorEnvelope"
+              }
+            }
+          },
+          "description": "Forbidden"
+        },
+        "404": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErrorEnvelope"
+              }
+            }
+          },
+          "description": "Not Found"
+        },
+        "405": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErrorEnvelope"
+              }
+            }
+          },
+          "description": "Method Not Allowed"
+        },
+        "409": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErrorEnvelope"
+              }
+            }
+          },
+          "description": "Conflict"
+        },
+        "412": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErrorEnvelope"
+              }
+            }
+          },
+          "description": "Precondition Failed"
+        },
+        "413": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErrorEnvelope"
+              }
+            }
+          },
+          "description": "Request Entity Too Large"
+        },
+        "422": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErrorEnvelope"
+              }
+            }
+          },
+          "description": "Unprocessable Entity"
+        },
+        "500": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErrorEnvelope"
+              }
+            }
+          },
+          "description": "Internal Server Error"
+        },
+        "503": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ErrorEnvelope"
+              }
+            }
+          },
+          "description": "Service Unavailable"
+        }
+      },
+      "security": [
+        {
+          "LocalSession": []
+        }
+      ],
+      "summary": "Publish",
+      "tags": [
+        "quality"
+      ]
+    }
+  },
+  "schema": {
+    "additionalProperties": false,
+    "properties": {
+      "acknowledged_warning_codes": {
+        "items": {
+          "type": "string"
+        },
+        "title": "Acknowledged Warning Codes",
+        "type": "array"
+      },
+      "expected_content_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Expected Content Sha256",
+        "type": "string"
+      },
+      "expected_revision": {
+        "minimum": 1.0,
+        "title": "Expected Revision",
+        "type": "integer"
+      },
+      "review_receipt_id": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+        "title": "Review Receipt Id",
+        "type": "string"
+      }
+    },
+    "required": [
+      "expected_revision",
+      "expected_content_sha256",
+      "review_receipt_id",
+      "acknowledged_warning_codes"
+    ],
+    "title": "DraftPublishWrite",
+    "type": "object"
+  }
+}

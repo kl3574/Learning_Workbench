@@ -1,0 +1,51 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/draftPublication/usePublication.test.tsx
+
+
+ RUN  v5.0.0 <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-import-publication-ui-active/apps/web
+
+ ❯ src/features/draftPublication/usePublication.test.tsx (10 tests | 1 failed) 617ms
+   × a delayed ledger read cannot send an earlier basis after the user explicitly reads a new review 59ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/draftPublication/usePublication.test.tsx > a delayed ledger read cannot send an earlier basis after the user explicitly reads a new review
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array [
+      "draft_synthetic_publication",
+      Object {
+        "acknowledged_warning_codes": Array [
+          "SOURCE_CONFIRM",
+        ],
+        "expected_content_sha256": "025a7ea4a4b9aa985376fe3e7b215891369cd40e3a527d54c79ca3ef8f840555",
+        "expected_revision": 1,
+        "review_receipt_id": "review_synthetic",
+      },
+      "publishcmd_195fa3e2-de3e-4758-aad5-33b8dba4f735",
+    ]
+
+
+Number of calls: 1
+
+ ❯ src/features/draftPublication/usePublication.test.tsx:58:28
+     56|   expect(hook.result.current.basis?.review.revision).toBe(3)
+     57|   await act(async () => { delayed.resolve({}); await sending })
+     58|   expect(port.publish).not.toHaveBeenCalled()
+       |                            ^
+     59|   expect(hook.result.current.basis?.review.revision).toBe(3)
+     60| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 passed (10)
+   Start at  11:54:15
+   Duration  1.09s (tests 60%, environment 20%, transform 12%, import 7%)
+

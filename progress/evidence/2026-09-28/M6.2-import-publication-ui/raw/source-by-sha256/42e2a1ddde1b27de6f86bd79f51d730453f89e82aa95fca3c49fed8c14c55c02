@@ -1,0 +1,28 @@
+import 'fake-indexeddb/auto'
+import { afterEach, expect, test } from 'vitest'
+import { DraftStore } from '../../workbench/DraftStore'
+import { publicationDraft, publicationReceipt, publicationRef } from './publicationFixtures'
+import { preparePublicationBasis } from './publicationSchema'
+import { makePublicationCommand, persistPublicationCommand, readPublicationCommand, samePublicationActorPage } from './publicationCommands'
+
+const stores: DraftStore[] = []
+afterEach(async () => { await Promise.all(stores.splice(0).map(value => value.close())) })
+test('original four-field publication command survives IndexedDB reopening and cannot acquire a different request or ACK', async () => {
+  const workspace = `workspace_${crypto.randomUUID()}`, name = `publication_${crypto.randomUUID()}`
+  const store = new DraftStore({ name }); stores.push(store)
+  const basis = preparePublicationBasis(publicationDraft, publicationReceipt)
+  const command = makePublicationCommand(workspace, 3, basis, [0, 1])
+  expect(command.body).toEqual({ expected_revision: 1, expected_content_sha256: publicationRef.sha256, review_receipt_id: publicationReceipt.id, acknowledged_warning_codes: ['SOURCE_CONFIRM'] })
+  await persistPublicationCommand(command, store)
+  await store.close()
+  const reopened = new DraftStore({ name }); stores.push(reopened)
+  expect(readPublicationCommand((await reopened.load(workspace))[command.command_id], workspace)).toEqual(command)
+  const acknowledged = { ...command, ack: publicationRef }
+  await persistPublicationCommand(acknowledged, reopened)
+  expect(await persistPublicationCommand(command, reopened)).toEqual(acknowledged)
+  await expect(persistPublicationCommand({ ...command, body: { ...command.body, review_receipt_id: 'review_other' } }, reopened)).rejects.toThrow()
+  await expect(persistPublicationCommand({ ...acknowledged, ack: { ...publicationRef, revision: 2 } }, reopened)).rejects.toThrow()
+  expect(samePublicationActorPage(command, 3)).toBe(true)
+  expect(samePublicationActorPage(command, 4)).toBe(false)
+  expect(samePublicationActorPage({ ...command, origin: { ...command.origin, page_id: 'page_previous' } }, 3)).toBe(false)
+})

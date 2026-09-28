@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-28T02:54:43Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
+更新：2026-09-28T04:41:01Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
 
-仓库发布：VERIFIED；Issues 同步：REMOTE_FB16_PR55_ISSUE31_VERIFIED
+仓库发布：VERIFIED；Issues 同步：LOCAL_4A5C6DE_PUBLIC_EVIDENCE_VERIFIED_READY_FOR_STAGED_CHECKS
 实施：IN_PROGRESS；当前任务：M6.2；下一任务：M6.2
 
-观察fb16新push/PR各自CI真实终态；独立树实现pending非数学text Import的真实原子发布、永久ACK与独立lifecycle CAS，保持原Import producer/commit；并行补Authoring原失败的有界被动观察。首个服务切片未接HTTP/UI，未修改规范、未调用模型。
+完成发布UI的第二轴独审，整合后检查组合前端并保留621完整Python的精确受测源；同步本轮代码、完整原件映射、PR55/Issue31并独立GET回读。继续只读单block两准确版本比较，不把只读历史/outbox基础当完整影响复核或旧内容恢复。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -163,7 +163,12 @@
 - M6.2_readonly_admission_public_evidence: Root replayed83raw mappings/59publicfiles/707explicitduplicate-source exclusions and32exact spans (2synthetic identity displays); all public files pass actual inspector without exceptions. IndependentSpec androotStandards reports included. Whole-platform success not asserted.
 - M6.2_507_ci: 终态507：push36368224612 SUCCESS六job，PR36368226913 FAILURE（实际merge f74cd7、同tree），仅browser99PASS2FAIL；push browser101PASS。两边backend731、integration1472PASS1真实数值环境SKIP、spec603、Web453及static/securityPASS，分别记录不合计独立test总数。六次exactAPT安装及两document探针通过；数值calculator仍未实际运行。原Authoring ACK后list与Tutor5s完成断言原因UNKNOWN，原日志/附件/冻结观察完整保留。
 - M6.2_review_ui: 当前ce42bf8组合1010工程输入逐Git一致：真实Review HTTP、只读发布准入及审核UI均已整合并独审。组合Web482PASS/82files、strictTS/lint/build748/spec与单条真实Review native1PASS（7.5s）完成；不将前阶段918全Python2789PASS1环境SKIP或9e准入66PASS冒充ce42全套。真实发布/生命周期/对比/影响/恢复仍未实现。
-- M6.2_fb16_ci: IN_PROGRESS：新push36371453103（02:52:02Z）及PR36371456878（02:52:05Z）真实run head均fb16；尚未取得完整终态，实际checkout/各job结果由独立只读采集继续核验。不从旧507成功继承。
+- M6.2_fb16_ci: TERMINAL_FB16：push36371453103与PR36371456878各六jobSUCCESS；实际checkout分别fb16及74f76a（同tree2be7fb7），不以当前PR merge字段替换真实checkout。各backend731/spec603/Web482；各integration1504PASS1真实数值ENVSKIP2warnings（1702.35/1713.72s）；各browser102PASS（13.2/14.6m）；六APT精确四包和两document probePASS。314原件含12完整日志已逐hash核验，无新失败附件；旧507两项失败不删除/不反推修复。
+- M6.2_authoring_observation: 本地e947b1b在ce42上整合9文件Authoring被动观察，1015工程输入逐Git核验；全Web493PASS/84files、strictTS/build749PASS（原chunk warning保留）。owner74Authoring/3受控native及两轴独审分开归源；原507故障原因UNKNOWN。目标click一次/10s/同error保留，诊断保存可使后续断言最多延后250ms；不声称整个case零时序扰动。
+- M6.2_publication_service: {'source_commit': 'dec1d937523f4596da4c39bcc27750d9132c752c', 'integrated_commit': '6878b1fe6c045033b6cae544e0c7eb855b05ca8c', 'tests': '238 related PASS; 55 migration PASS; Ruff/mypy PASS', 'reviews': 'Standards and Spec independent no blocking findings', 'public_manifest': 'progress/evidence/2026-09-28/M6.2-publication-service/manifest.json', 'scope': 'pending public markdown/text Import block only; synthetic human decisions; SQL rollback does not assert physical orphan blob deletion', 'http_ui': 'HTTP isolated/independent review pending; UI implementation pending acceptance'}
+- M6.2_publication_http: {'source_commit': '833f0a84168638ba5ce421c70cd2f20a71e45e48', 'integrated_commit': '62118f823b03da6bc4c34ba335f736e20ea31df6', 'tests': '14 publish HTTP PASS; 30 Review HTTP PASS; Ruff/spec/strictTS PASS', 'prior_966': '100 projection PASS and mypy204 PASS; only final selected-body test assertion changed afterwards', 'independent_reviews': 'Spec and Standards source/evidence verified, no blocking findings; reviewers did not rerun tests', 'registered_operations': 97, 'declared_operations': 119, 'browser_publication': 'NOT_RUN', 'public_manifest': 'progress/evidence/2026-09-28/M6.2-publication-http/manifest.json', 'public_package': '167 complete raw mappings /89 public files; root strict raw replay PASS; no exclusions'}
+- M6.2_publication_combined: {'code_commit': '62118f823b03da6bc4c34ba335f736e20ea31df6', 'source_inputs': 1028, 'composition': '9 observer +16 service +8 HTTP files, all remaining inputs equal ce42; initial audit guard included progress counts and failed before tests, preserved separately', 'web': '493 PASS /84 files', 'build': 'strictTS and749 modules PASS; existing chunk warning retained', 'static': 'Ruff/mypy204/spec PASS', 'python': '2892 PASS /1 actual numeric ENVIRONMENT SKIP /2 dependency warnings /956.09s', 'runner_start_utc': '2026-09-28T03:50:29.560809+00:00', 'runner_pid': 265900, 'runner_start_ticks': '1196481', 'cache_label': 'm62-publication-combined-gates-v1', 'python_finish_utc': '2026-09-28T04:06:26.427932+00:00', 'python_log_sha256': 'be15dc60a35a3c075b3c4db5584ad45f059120c4c40482b8d79e19a65ee00809', 'public_manifest': 'progress/evidence/2026-09-28/M6.2-publication-combined-gates/manifest.json', 'status': 'LOCAL_PASS_WITH_REAL_ENVIRONMENT_SKIP_NOT_PUBLISHED'}
+- M6.2_remaining_scope_inventory: {'source_commit': '833f0a84168638ba5ce421c70cd2f20a71e45e48', 'manifest_sha256': '9a3ece1ac8dcba4fa1aa3c60fa1d5b1976b34b0458ef2b64d75ac4129ef0e37b', 'raw_members': 73, 'status': 'READ_ONLY_INVENTORY_VERIFIED_NO_TESTS', 'findings': 'Existing exact history, outbox and direct Note stale are distinct from complete impact reconciliation/restoration; Content review_state still literal unreviewed.', 'next_implementation': 'Independent Reader block comparison using two exact existing history refs, no new public API; implementation has no acceptance yet.'}
 
 ## 阻塞与待决项
 

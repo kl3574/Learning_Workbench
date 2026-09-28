@@ -1,0 +1,1452 @@
+diff --git a/docs/adr/0028-import-block-publication.md b/docs/adr/0028-import-block-publication.md
+new file mode 100644
+index 0000000..ecb85e6
+--- /dev/null
++++ b/docs/adr/0028-import-block-publication.md
+@@ -0,0 +1,15 @@
++# 0028: Explicit reviewed Import block publication
++
++PRODUCT_DESIGN.md §§7, 9.3, 15.1, 20.1, 20.3, 20.8 and Appendix A define owner ports, immutable publication, exact candidate approval and a four-field publish request. This slice implements the application service; HTTP/UI registration is separate.
++
++Only a real pending, learner-visible, explicitly markdown/text Import may supply one original text block, metadata revision 1, with an absent original Content ID and no base/concept/dependency/private solution/symbol/asset scope. The actual original source and parsed body have separate hashes; text parsing may wrap the body. The current author must explicitly have supplied mathematical N/A with reason and source APPROVED. Current complete Quality history, structural PASS, actual warnings and owner material are revalidated. Machine math/source/teaching NOT_RUN is retained; no Provider or numeric execution occurs here.
++
++An independent publication lifecycle adopts the exact candidate now, then records draft→in_review→approved→published in one writer transaction. These describe the present selection/revalidation/Content operation, not fabricated past Review jobs or new human approvals. Its internal revision is separate from immutable candidate revision and Review receipt revision. The publish request selects one Review; no global latest-Review reduction exists. Producer DTOs/rows and the original Import.commit algorithm are unchanged.
++
++Content owns new-object absence CAS, blob durability, immutable revisions/body references, current pointers and outbox/invalidation. Import owns current pending eligibility and original material; Jobs supplies actual job identity/input/status/cancellation facts through its application port. Provenance freezes precisely the original block/source relation. Publication owns the lifecycle, immutable events, permanent actor/route/key request/result and candidate→Content mapping. The entire operation rolls back on any failure; no record JSON grants authority.
++
++Same-key replay authenticates current access, all current Quality history and recursive physical evidence, the exact original approved receipt revision, every original admission condition, original Import Job/input/source/body and published Content/provenance. It returns an already committed historical ContentRef even after a later legitimate human rejection, a new Content current revision, or real Import cancellation/mapped commit. New commands still require pending Import and cannot publish the same candidate twice. The ledger does not expire with the generic 24-hour idempotency cache. Different actors cannot inherit an old actor's ACK.
++
++Publishing the original block intentionally occupies that Content ID. Later unchanged Import.commit returns its existing ID-collision error. Explicitly mapping just the conflicting object ID to a fresh ID lets the existing importer rehash its whole parent graph and finish. The copied block may share body bytes but has a distinct exact ContentRef and receives no publication/Review approval by shared hash, citation or Import ID. The original import receipt remains NOT_RUN. Canceling the original Import only changes its own producer/job state, not immutable published Content.
++
++Tests use real local Import/Review workers, SQLite, BlobStore, source/Content reads, current assessment Policy, concurrent connections and injected storage failures. Human decisions and content fixtures are explicitly synthetic. Tests preserve implementation defects separately from fixture/setup and static-check failures. This slice does not implement a global Draft state GET, editing/needs_changes workflow, mathematical/generated/question/private-solution/group publication, existing-object updates, publication UI or overall M6.2 acceptance.
+diff --git a/migrations/0018_draft_publications.sql b/migrations/0018_draft_publications.sql
+new file mode 100644
+index 0000000..1f6b6ea
+--- /dev/null
++++ b/migrations/0018_draft_publications.sql
+@@ -0,0 +1,61 @@
++-- Separate publication lifecycle; original producer snapshots and Review chains are unchanged.
++CREATE TABLE draft_publications(
++ id TEXT PRIMARY KEY NOT NULL,
++ workspace_id TEXT NOT NULL,
++ draft_id TEXT NOT NULL,
++ draft_revision INTEGER NOT NULL CHECK(typeof(draft_revision)='integer' AND draft_revision>=1),
++ owner TEXT NOT NULL CHECK(owner='import'),
++ entity TEXT NOT NULL CHECK(entity='block'),
++ candidate_sha256 TEXT NOT NULL,
++ state TEXT NOT NULL CHECK(state IN ('draft','in_review','approved','published')),
++ revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision BETWEEN 1 AND 4),
++ adopted_at TEXT NOT NULL,
++ FOREIGN KEY(workspace_id,draft_id,draft_revision,owner,entity,candidate_sha256)
++  REFERENCES draft_candidate_revisions(workspace_id,draft_id,draft_revision,owner,entity,candidate_sha256),
++ UNIQUE(workspace_id,draft_id,draft_revision)
++);
++CREATE TABLE draft_publication_events(
++ publication_id TEXT NOT NULL REFERENCES draft_publications(id),
++ revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision BETWEEN 1 AND 4),
++ event_json TEXT NOT NULL CHECK(json_valid(event_json)),
++ sha256 TEXT NOT NULL CHECK(length(sha256)=64),
++ PRIMARY KEY(publication_id,revision)
++);
++CREATE TABLE draft_publication_results(
++ publication_id TEXT PRIMARY KEY NOT NULL REFERENCES draft_publications(id),
++ record_json TEXT NOT NULL CHECK(json_valid(record_json)),
++ sha256 TEXT NOT NULL CHECK(length(sha256)=64)
++);
++CREATE TABLE draft_publication_commands(
++ workspace_id TEXT NOT NULL REFERENCES workspace(id),
++ actor_id TEXT NOT NULL REFERENCES local_sessions(id),
++ route TEXT NOT NULL,
++ command_key TEXT NOT NULL,
++ publication_id TEXT NOT NULL UNIQUE REFERENCES draft_publication_results(publication_id),
++ PRIMARY KEY(workspace_id,actor_id,route,command_key)
++);
++CREATE TRIGGER draft_publication_initial BEFORE INSERT ON draft_publications
++ WHEN NEW.state<>'draft' OR NEW.revision<>1
++ BEGIN SELECT RAISE(ABORT,'publication must start at current adoption'); END;
++CREATE TRIGGER draft_publication_transition BEFORE UPDATE ON draft_publications
++ WHEN OLD.id<>NEW.id OR OLD.workspace_id<>NEW.workspace_id OR OLD.draft_id<>NEW.draft_id
++ OR OLD.draft_revision<>NEW.draft_revision OR OLD.owner<>NEW.owner OR OLD.entity<>NEW.entity
++ OR OLD.candidate_sha256<>NEW.candidate_sha256 OR OLD.adopted_at<>NEW.adopted_at
++ OR NEW.revision<>OLD.revision+1
++ OR NOT ((OLD.state='draft' AND NEW.state='in_review') OR (OLD.state='in_review' AND NEW.state='approved')
++ OR (OLD.state='approved' AND NEW.state='published'))
++ BEGIN SELECT RAISE(ABORT,'immutable identity or invalid publication transition'); END;
++CREATE TRIGGER draft_publications_no_delete BEFORE DELETE ON draft_publications
++ BEGIN SELECT RAISE(ABORT,'publication history immutable'); END;
++CREATE TRIGGER draft_publication_events_no_update BEFORE UPDATE ON draft_publication_events
++ BEGIN SELECT RAISE(ABORT,'publication events immutable'); END;
++CREATE TRIGGER draft_publication_events_no_delete BEFORE DELETE ON draft_publication_events
++ BEGIN SELECT RAISE(ABORT,'publication events immutable'); END;
++CREATE TRIGGER draft_publication_results_no_update BEFORE UPDATE ON draft_publication_results
++ BEGIN SELECT RAISE(ABORT,'publication result immutable'); END;
++CREATE TRIGGER draft_publication_results_no_delete BEFORE DELETE ON draft_publication_results
++ BEGIN SELECT RAISE(ABORT,'publication result immutable'); END;
++CREATE TRIGGER draft_publication_commands_no_update BEFORE UPDATE ON draft_publication_commands
++ BEGIN SELECT RAISE(ABORT,'publication command immutable'); END;
++CREATE TRIGGER draft_publication_commands_no_delete BEFORE DELETE ON draft_publication_commands
++ BEGIN SELECT RAISE(ABORT,'publication command immutable'); END;
+diff --git a/services/api/app/application/content.py b/services/api/app/application/content.py
+index 1015c3c..0f75584 100644
+--- a/services/api/app/application/content.py
++++ b/services/api/app/application/content.py
+@@ -349,6 +349,47 @@ class ContentService:
+             dependencies[key(course)].extend((reference(value), "concept") for value in concepts.values())
+         return registry, dependencies, course_concepts
+ 
++    def verify_publication_in_transaction(self, connection: sqlite3.Connection, workspace_id: str,
++                                          expected: dm.ContentRef) -> tuple[dm.ContentBlock, bytes]:
++        """Read exact historical metadata/body; a later current pointer is not a new ACK."""
++        if not connection.in_transaction:
++            raise ApiError(409, 'TRANSACTION_REQUIRED', '发布回读需要当前事务。')
++        guard_subject_access(connection, workspace_id)
++        repository = ContentRepository(connection, workspace_id)
++        repository.require_workspace()
++        try:
++            expected = dm.ContentRef.model_validate(expected.model_dump(mode='python', warnings='error'))
++        except (ValueError, TypeError, AttributeError):
++            raise invalid() from None
++        value = repository.load(expected.entity, expected.id, expected.revision).value
++        if not isinstance(value, dm.ContentBlock) or reference(value) != expected:
++            raise damaged()
++        info = repository.body_info(value)
++        raw = BlobStore(self.database.settings.data_dir, max_bytes=max(self.blobs.max_bytes, info.size)).read(
++            info.sha256, expected_size=info.size)
++        self._body_bytes(value, raw)
++        return value, raw
++
++    def publish_new_block_in_transaction(self, connection: sqlite3.Connection, workspace_id: str,
++                                         block: dm.ContentBlock, body: bytes, budgets: ImportBudgets) -> dm.ContentRef:
++        """Only creates an absent object's first revision, in the caller's transaction."""
++        if not connection.in_transaction:
++            raise ApiError(409, 'TRANSACTION_REQUIRED', '发布需要当前事务。')
++        guard_subject_access(connection, workspace_id)
++        repository = ContentRepository(connection, workspace_id)
++        repository.require_workspace()
++        try:
++            block = dm.ContentBlock.model_validate(block.model_dump(mode='python', warnings='error'))
++        except (ValueError, TypeError, AttributeError):
++            raise invalid() from None
++        if block.revision != 1:
++            raise invalid()
++        repository.require_absent(block.id)
++        refs = self.publish_in_transaction(connection, workspace_id, [block], {block.body_path: body}, budgets=budgets)
++        if refs != [reference(block)] or reference(repository.current(block.id).value) != refs[0]:
++            raise damaged()
++        return refs[0]
++
+     def publish(self, workspace_id: str, objects: Iterable[PublishedModel], bodies: Mapping[str, bytes]) -> list[dm.ContentRef]:
+         """Internal trusted port; callers still own import/review approval workflows.
+ 
+diff --git a/services/api/app/application/draft_publication.py b/services/api/app/application/draft_publication.py
+new file mode 100644
+index 0000000..dd7ef0d
+--- /dev/null
++++ b/services/api/app/application/draft_publication.py
+@@ -0,0 +1,105 @@
++"""Explicit single-block publication, with real owners in one writer transaction."""
++import sqlite3
++from uuid import uuid4
++
++from pydantic import TypeAdapter
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import metadata_sha256
++from ..infrastructure.database import Database, utc_now
++from ..infrastructure.publication_repository import PublicationRepository
++from ..infrastructure.security import SessionIdentity, current_session_identity
++from .authoring_context import AuthoringContext
++from .content import ContentService
++from .errors import ApiError
++from .import_publication import ImportBlockPublication, unsupported
++from .imports import ImportService
++from .providers import validate_key
++from .publication_admission import PublicationAdmissionService
++from .publication_admission_models import DraftPublishWrite
++from .publication_models import PublicationHistory, PublicationRecord, integrity, validated
++from .review_history_models import ReviewDecisionRecord, ReviewMachineRecord
++from .review_material_models import ImportReviewMaterial
++from .review_service import ReviewService
++
++
++class DraftPublicationService:
++    def __init__(self, database: Database, reviews: ReviewService, imports: ImportService):
++        self.database, self.reviews = database, reviews
++        self.owner, self.content = ImportBlockPublication(imports), ContentService(database)
++        self.admission = PublicationAdmissionService(reviews)
++
++    @staticmethod
++    def _access(conn: sqlite3.Connection, identity: SessionIdentity) -> SessionIdentity:
++        current = current_session_identity(conn, identity)
++        AuthoringContext.check_access(conn, current)
++        return current
++
++    def _verify(self, conn: sqlite3.Connection, identity: SessionIdentity,
++                publication: PublicationHistory) -> dm.ContentRef:
++        record = publication.record
++        self.admission.verify_recorded(conn, identity, record.candidate.draft_id, record.request, record.admission)
++        history, material = self.reviews.read_publication_basis(conn, identity, record.request.review_receipt_id)
++        if (record.workspace_id != identity.workspace_id or material.candidate != record.candidate
++                or material.descriptor_sha256 != record.admission.material_descriptor_sha256
++                or not history.records or not isinstance(history.records[0], ReviewMachineRecord)):
++            raise integrity()
++        machine = history.records[0]
++        humans = [item for item in history.records if isinstance(item, ReviewDecisionRecord)
++                  and item.receipt.revision == record.admission.review_revision]
++        if (len(humans) != 1 or metadata_sha256(humans[0]) != record.human_record_sha256
++                or metadata_sha256(humans[0].receipt) != record.admission.receipt_sha256
++                or humans[0].receipt.mathematical != 'NOT_APPLICABLE' or humans[0].receipt.sources != 'APPROVED'
++                or machine.structural_report.structural != 'PASS'
++                or machine.numeric.descriptor_sha256 != record.admission.numeric_observation_sha256):
++            raise integrity()
++        prepared = self.owner.verify(conn, identity, record)
++        block, raw = self.content.verify_publication_in_transaction(conn, identity.workspace_id, record.result)
++        if block != prepared.block or raw != prepared.body:
++            raise integrity()
++        return record.result
++
++    def publish(self, identity: SessionIdentity, draft_id: str, body: DraftPublishWrite, key: str) -> dm.ContentRef:
++        key, body = validate_key(key), validated(DraftPublishWrite, body)
++        try:
++            draft_id = TypeAdapter(dm.Id).validate_python(draft_id, strict=True)
++        except (ValueError, TypeError):
++            raise ApiError(422, 'SCHEMA_INVALID', '发布草稿标识无效。') from None
++        route = f'POST /drafts/{draft_id}/publish'
++        try:
++            with self.database.transaction() as conn:
++                current = self._access(conn, identity)
++                repo = PublicationRepository(conn, current.workspace_id)
++                replay = repo.replay(current.id, route, key, body)
++                if replay is not None:
++                    return self._verify(conn, current, replay)
++                history, material = self.reviews.read_publication_basis(conn, current, body.review_receipt_id)
++                if (material.candidate.draft_id != draft_id or material.candidate.draft_revision != body.expected_revision
++                        or material.candidate.candidate_sha256 != body.expected_content_sha256):
++                    raise ApiError(412, 'PUBLISH_CANDIDATE_MISMATCH', '发布请求与精确审核候选不符。')
++                if not isinstance(material.payload, ImportReviewMaterial):
++                    raise unsupported()
++                prepared = self.owner.prepare(conn, current, material.candidate)
++                if prepared.material != material:
++                    raise integrity()
++                identifier, adopted = 'publication_' + uuid4().hex, utc_now()
++                repo.adopt(identifier, material.candidate, adopted)
++                repo.advance(identifier, 1, 'draft', 'in_review', utc_now())
++                admission = self.admission.check(conn, current, draft_id, body)
++                human = history.records[-1]
++                if (not isinstance(human, ReviewDecisionRecord) or human.receipt.mathematical != 'NOT_APPLICABLE'
++                        or human.receipt.sources != 'APPROVED'):
++                    raise unsupported()
++                repo.advance(identifier, 2, 'in_review', 'approved', utc_now())
++                result = self.content.publish_new_block_in_transaction(conn, current.workspace_id,
++                    prepared.block, prepared.body, prepared.budgets)
++                source = self.owner.freeze(conn, current, prepared, result)
++                record = PublicationRecord(version='draft-publication-v1', id=identifier,
++                    workspace_id=current.workspace_id, owner='import', candidate=material.candidate,
++                    actor_id=current.id, route=route, command_key=key, request=body, admission=admission,
++                    human_record_sha256=metadata_sha256(human), import_id=material.payload.import_id,
++                    original_input_sha256=material.payload.original_input_sha256, block=prepared.block,
++                    source=source, result=result, adopted_at=adopted, published_at=utc_now())
++                published = repo.finish(record)
++                return self._verify(conn, current, published)
++        except sqlite3.Error:
++            raise ApiError(503, 'PUBLICATION_STORAGE_UNAVAILABLE', '发布存储暂不可用，未确认新的发布。', True) from None
+diff --git a/services/api/app/application/import_publication.py b/services/api/app/application/import_publication.py
+new file mode 100644
+index 0000000..d6a18f6
+--- /dev/null
++++ b/services/api/app/application/import_publication.py
+@@ -0,0 +1,119 @@
++"""Import-owned prepare/finish/history ports; never completes the whole Import."""
++import sqlite3
++
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import canonical_bytes
++from ..import_dto import BlockDraftPayload
++from ..infrastructure.import_repository import ImportRepository, json_object
++from ..infrastructure.provenance_repository import FrozenProvenance
++from ..infrastructure.security import SessionIdentity, current_session_identity
++from .authoring_context import AuthoringContext
++from .errors import ApiError
++from .imports import ImportService, visibility, preview_visibility
++from .jobs import import_confirmation_state, require_pending_import_confirmation
++from .publication_models import PreparedImportBlock, PublicationRecord, integrity, validated
++from .publication_provenance import PublicationProvenance
++from .review_material_models import CheckedReviewMaterial, ImportReviewMaterial
++
++
++def unsupported() -> ApiError:
++    return ApiError(409, 'PUBLICATION_OWNER_SCOPE_UNSUPPORTED', '当前发布仅支持待确认导入中无依赖的公开纯文本块。')
++
++
++class ImportBlockPublication:
++    def __init__(self, imports: ImportService):
++        self.imports = imports
++
++    def _read(self, conn: sqlite3.Connection, identity: SessionIdentity,
++              candidate: dm.DraftCandidate) -> tuple[PreparedImportBlock, sqlite3.Row, sqlite3.Row]:
++        if not conn.in_transaction:
++            raise ApiError(409, 'TRANSACTION_REQUIRED', '导入发布核验需要当前事务。')
++        current = current_session_identity(conn, identity)
++        AuthoringContext.check_access(conn, current)
++        candidate = validated(dm.DraftCandidate, candidate)
++        material = validated(CheckedReviewMaterial, self.imports.read_review_material(conn, current, candidate))
++        payload = material.payload
++        if not isinstance(payload, ImportReviewMaterial) or not isinstance(payload.payload, BlockDraftPayload):
++            raise unsupported()
++        block = validated(dm.ContentBlock, payload.payload.metadata)
++        repository = ImportRepository(conn, current.workspace_id)
++        row = repository.load(payload.import_id)
++        job = import_confirmation_state(conn, current.workspace_id, row['job_id'], row['input_sha256'])
++        expected_job = {'preview_ready': 'awaiting_approval', 'cancelled': 'cancelled', 'committed': 'completed'}
++        if row['status'] not in expected_job or job.status != expected_job[row['status']]:
++            raise integrity()
++        draft = conn.execute('SELECT * FROM drafts WHERE id=? AND workspace_id=?',
++                             (candidate.draft_id, current.workspace_id)).fetchone()
++        if draft is None:
++            raise integrity()
++        options, metadata = json_object(row['input_json']), json_object(row['source_metadata'])
++        try:
++            routing, artifact = self.imports._artifact(repository, current, metadata['artifact_id'])
++            original, downloaded = self.imports.read_artifact(conn, current, artifact.artifact_id)
++            if (routing['profile'] != 'import_original' or routing['job_id'] != row['job_id']
++                    or downloaded != artifact or artifact.sha256 != payload.original_input_sha256
++                    or artifact.size != len(original) or options['source_id'] != payload.source_id
++                    or row['source_id'] != payload.source_id):
++                raise integrity()
++        except (ValueError, TypeError, KeyError):
++            raise integrity() from None
++        preview = self.imports._preview_data(row)
++        if (options.get('kind') not in {'markdown', 'text'} or options.get('archive_detected') is not False
++                or options.get('target_ref') is not None or metadata.get('visibility_verified') is not True
++                or visibility(row) != 'learner' or preview_visibility(row) != 'learner'
++                or preview.get('solutions') != [] or metadata.get('symbols') != []
++                or metadata.get('assets', {}) or metadata.get('untrusted_quality_receipt')
++                or draft['base_ref_json'] is not None or candidate.draft_revision != 1
++                or block.revision != 1 or block.kind != 'text' or block.concepts or block.depends_on):
++            raise unsupported()
++        return PreparedImportBlock(material, block, payload.payload.body_markdown.encode('utf-8'),
++                                    self.imports.frozen_budgets(row)), row, draft
++
++    def prepare(self, conn: sqlite3.Connection, identity: SessionIdentity,
++                candidate: dm.DraftCandidate) -> PreparedImportBlock:
++        prepared, row, draft = self._read(conn, identity, candidate)
++        if (row['status'] != 'preview_ready' or row['job_status'] != 'awaiting_approval'
++                or draft['status'] != 'draft'):
++            raise ApiError(409, 'PUBLICATION_IMPORT_NOT_PENDING', '导入已终止或提交，不能新发布其候选。')
++        require_pending_import_confirmation(conn, identity.workspace_id, row['job_id'], row['input_sha256'])
++        return prepared
++
++    def freeze(self, conn: sqlite3.Connection, identity: SessionIdentity,
++               prepared: PreparedImportBlock, result: dm.ContentRef) -> FrozenProvenance:
++        actual = self.prepare(conn, identity, prepared.material.candidate)
++        if (canonical_bytes(actual.material) != canonical_bytes(prepared.material)
++                or actual.body != prepared.body or actual.block != prepared.block):
++            raise integrity()
++        payload = actual.material.payload
++        if not isinstance(payload, ImportReviewMaterial) or result.sha256 != payload.candidate.candidate_sha256:
++            raise integrity()
++        source = PublicationProvenance.freeze(conn, identity, payload.import_id, actual.block)
++        self._source_matches(source, actual)
++        if source.block_ref != result:
++            raise integrity()
++        return source
++
++    @staticmethod
++    def _source_matches(source: FrozenProvenance, prepared: PreparedImportBlock) -> None:
++        payload = prepared.material.payload
++        if (not isinstance(payload, ImportReviewMaterial) or not isinstance(payload.payload, BlockDraftPayload)
++                or source.source.id != payload.source_id or source.source.sha256 != payload.original_input_sha256
++                or source.citations != payload.payload.citations or source.warnings != payload.warnings):
++            raise integrity()
++
++    def verify(self, conn: sqlite3.Connection, identity: SessionIdentity,
++               record: PublicationRecord) -> PreparedImportBlock:
++        record = validated(PublicationRecord, record)
++        prepared, row, _ = self._read(conn, identity, record.candidate)
++        payload = prepared.material.payload
++        if (row['status'] not in {'preview_ready', 'cancelled', 'committed'}
++                or not isinstance(payload, ImportReviewMaterial) or payload.import_id != record.import_id
++                or payload.original_input_sha256 != record.original_input_sha256
++                or prepared.material.descriptor_sha256 != record.admission.material_descriptor_sha256
++                or prepared.block != record.block):
++            raise integrity()
++        source = PublicationProvenance.read(conn, identity, record.import_id, prepared.block)
++        self._source_matches(source, prepared)
++        if source != record.source:
++            raise integrity()
++        return prepared
+diff --git a/services/api/app/application/jobs.py b/services/api/app/application/jobs.py
+index 92380d7..632eb12 100644
+--- a/services/api/app/application/jobs.py
++++ b/services/api/app/application/jobs.py
+@@ -77,6 +77,36 @@ def outbound_lease_active(connection: sqlite3.Connection, workspace_id: str, job
+         raise ApiError(503, 'JOB_LEASE_INVALID', '任务租约完整性无法确认。') from None
+ 
+ 
++@dataclass(frozen=True)
++class ImportConfirmationState:
++    status: str
++    cancel_requested: bool
++
++
++def import_confirmation_state(connection: sqlite3.Connection, workspace_id: str,
++                              job_id: str, input_sha256: str) -> ImportConfirmationState:
++    """Jobs-owned origin facts, including after a legitimate cancellation/commit."""
++    from .errors import ApiError
++    if not connection.in_transaction:
++        raise ApiError(409, 'TRANSACTION_REQUIRED', '导入任务核验需要当前事务。')
++    row = connection.execute('SELECT kind,status,cancel_requested,input_sha256 FROM jobs '
++                             'WHERE id=? AND workspace_id=?', (job_id, workspace_id)).fetchone()
++    if (row is None or row['kind'] != 'import' or row['input_sha256'] != input_sha256
++            or row['status'] not in {'queued', 'running', 'awaiting_approval', 'completed', 'failed', 'cancelled'}
++            or row['cancel_requested'] not in (0, 1)):
++        raise ApiError(409, 'PUBLICATION_IMPORT_JOB_INVALID', '导入任务的原始身份和输入无法核验。')
++    return ImportConfirmationState(row['status'], bool(row['cancel_requested']))
++
++
++def require_pending_import_confirmation(connection: sqlite3.Connection, workspace_id: str,
++                                        job_id: str, input_sha256: str) -> None:
++    """Current eligibility for a new command; not the historical ACK read gate."""
++    from .errors import ApiError
++    state = import_confirmation_state(connection, workspace_id, job_id, input_sha256)
++    if state.status != 'awaiting_approval' or state.cancel_requested:
++        raise ApiError(409, 'PUBLICATION_IMPORT_NOT_PENDING', '导入任务当前不能新发布候选。')
++
++
+ class JobService:
+     """Dispatch only implemented job kinds to their owning application service."""
+     def __init__(self, database, review: 'ReviewService | None' = None):
+diff --git a/services/api/app/application/publication_admission.py b/services/api/app/application/publication_admission.py
+index a263470..fc0136a 100644
+--- a/services/api/app/application/publication_admission.py
++++ b/services/api/app/application/publication_admission.py
+@@ -72,14 +72,36 @@ class PublicationAdmissionService:
+               draft_id: str, body: DraftPublishWrite) -> PublicationAdmission:
+         body = validated(DraftPublishWrite, body)
+         history, material = self.reviews.read_publication_basis(connection, identity, body.review_receipt_id)
++        if (not history.records or not isinstance(history.records[0], ReviewMachineRecord)
++                or not isinstance(history.records[-1], ReviewDecisionRecord)):
++            raise blocked('PUBLISH_HUMAN_REVIEW_REQUIRED', '发布准入需要绑定此候选的明确人工审核决定。')
++        return self._evaluate(material, history.records[0], history.records[-1], draft_id, body)
++
++    def verify_recorded(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                        draft_id: str, body: DraftPublishWrite, expected: PublicationAdmission) -> None:
++        """Verify a committed historical observation, never authorize a new publish.
++
++        Read the complete current chain and all bytes first; later decisions stay
++        authenticated even though this comparison names one original revision.
++        The caller separately proves an actual immutable publication/command.
++        """
++        body, expected = validated(DraftPublishWrite, body), validated(PublicationAdmission, expected)
++        history, material = self.reviews.read_publication_basis(connection, identity, body.review_receipt_id)
++        matches = [r for r in history.records if isinstance(r, ReviewDecisionRecord)
++                   and r.receipt.revision == expected.review_revision
++                   and metadata_sha256(r.receipt) == expected.receipt_sha256]
++        if not history.records or not isinstance(history.records[0], ReviewMachineRecord) or len(matches) != 1:
++            raise blocked('PUBLISH_RECORDED_ADMISSION_INVALID', '原发布的审核观察无法完整核验。')
++        actual = self._evaluate(material, history.records[0], matches[0], draft_id, body)
++        if canonical_bytes(actual) != canonical_bytes(expected):
++            raise blocked('PUBLISH_RECORDED_ADMISSION_INVALID', '原发布的准入观察与真实所属事实不符。')
++
++    def _evaluate(self, material: CheckedReviewMaterial, machine: ReviewMachineRecord,
++                  human: ReviewDecisionRecord, draft_id: str, body: DraftPublishWrite) -> PublicationAdmission:
+         candidate = material.candidate
+         if (candidate.draft_id != draft_id or candidate.draft_revision != body.expected_revision
+                 or candidate.candidate_sha256 != body.expected_content_sha256):
+             raise ApiError(412, 'PUBLISH_CANDIDATE_MISMATCH', '发布请求与审核的精确候选版本不一致。')
+-        if (not history.records or not isinstance(history.records[0], ReviewMachineRecord)
+-                or not isinstance(history.records[-1], ReviewDecisionRecord)):
+-            raise blocked('PUBLISH_HUMAN_REVIEW_REQUIRED', '发布准入需要绑定此候选的明确人工审核决定。')
+-        machine, human = history.records[0], history.records[-1]
+         if machine.structural_report.structural != 'PASS':
+             raise blocked('PUBLISH_STRUCTURE_REQUIRED', '结构检查尚未通过，不能准入发布。')
+         if human.receipt.mathematical not in {'APPROVED', 'NOT_APPLICABLE'} or human.receipt.sources not in {'APPROVED', 'NOT_APPLICABLE'}:
+diff --git a/services/api/app/application/publication_models.py b/services/api/app/application/publication_models.py
+new file mode 100644
+index 0000000..d27feea
+--- /dev/null
++++ b/services/api/app/application/publication_models.py
+@@ -0,0 +1,103 @@
++"""Strict publication facts; neither construction nor stored JSON grants access."""
++from dataclasses import dataclass
++from typing import Literal, Self, TypeVar
++
++from pydantic import BaseModel, model_validator
++from packages.contracts import domain_models as dm
++from packages.contracts.budgets import ImportBudgets
++from packages.contracts.canonical import metadata_sha256
++from ..authoring_dto import AuthoringModel
++from ..infrastructure.provenance_repository import FrozenProvenance
++from .errors import ApiError
++from .publication_admission_models import DraftPublishWrite, PublicationAdmission
++from .review_material_models import CheckedReviewMaterial
++
++M = TypeVar('M', bound=BaseModel)
++
++
++def integrity() -> ApiError:
++    return ApiError(409, 'PUBLICATION_INTEGRITY_ERROR', '发布的原始持久事实未通过完整性核验。')
++
++
++def validated(model: type[M], value: object) -> M:
++    try:
++        return model.model_validate(value.model_dump(mode='python', warnings='error')
++                                    if isinstance(value, BaseModel) else value)
++    except (ValueError, TypeError, AttributeError):
++        raise integrity() from None
++
++
++@dataclass(frozen=True, repr=False)
++class PreparedImportBlock:
++    material: CheckedReviewMaterial
++    block: dm.ContentBlock
++    body: bytes
++    budgets: ImportBudgets
++
++
++class PublicationRecord(AuthoringModel):
++    version: Literal['draft-publication-v1']
++    id: dm.Id
++    workspace_id: dm.Id
++    owner: Literal['import']
++    candidate: dm.DraftCandidate
++    actor_id: dm.Id
++    route: str
++    command_key: str
++    request: DraftPublishWrite
++    admission: PublicationAdmission
++    human_record_sha256: dm.Sha256
++    import_id: dm.Id
++    original_input_sha256: dm.Sha256
++    block: dm.ContentBlock
++    source: FrozenProvenance
++    result: dm.ContentRef
++    adopted_at: dm.UTC
++    published_at: dm.UTC
++
++    @model_validator(mode='after')
++    def exact_bindings(self) -> Self:
++        c, a, r = self.candidate, self.admission, self.request
++        if (self.route != f'POST /drafts/{c.draft_id}/publish' or not self.command_key
++                or c.entity != 'block' or c.draft_revision != r.expected_revision
++                or c.candidate_sha256 != r.expected_content_sha256
++                or a.workspace_id != self.workspace_id or a.candidate != c
++                or a.review_receipt_id != r.review_receipt_id
++                or a.acknowledged_warning_codes != r.acknowledged_warning_codes
++                or a.numeric_coverage != 'not_required_by_material' or a.numeric_check_ids
++                or self.block.revision != 1 or self.block.kind != 'text'
++                or self.block.concepts or self.block.depends_on
++                or metadata_sha256(self.block) != c.candidate_sha256
++                or self.result != dm.ContentRef(entity='block', id=self.block.id, revision=1,
++                                                sha256=c.candidate_sha256)
++                or self.source.block_ref != self.result
++                or self.source.source.sha256 != self.original_input_sha256):
++            raise ValueError('Publication requires one original block and an exact committed decision')
++        return self
++
++
++PublicationState = Literal['draft', 'in_review', 'approved', 'published']
++
++
++class PublicationEvent(AuthoringModel):
++    version: Literal['draft-publication-event-v1']
++    publication_id: dm.Id
++    revision: dm.Revision
++    state: PublicationState
++    recorded_at: dm.UTC
++
++
++class PublicationHistory(AuthoringModel):
++    record: PublicationRecord
++    events: list[PublicationEvent]
++
++    @model_validator(mode='after')
++    def complete_transition_chain(self) -> Self:
++        if (len(self.events) != 4
++                or [(e.revision, e.state) for e in self.events]
++                != [(1, 'draft'), (2, 'in_review'), (3, 'approved'), (4, 'published')]
++                or any(e.publication_id != self.record.id for e in self.events)
++                or self.events[0].recorded_at != self.record.adopted_at
++                or self.events[-1].recorded_at != self.record.published_at):
++            raise ValueError('Publication requires its entire actual transaction transition chain')
++        return self
+diff --git a/services/api/app/application/publication_provenance.py b/services/api/app/application/publication_provenance.py
+new file mode 100644
+index 0000000..88c9be0
+--- /dev/null
++++ b/services/api/app/application/publication_provenance.py
+@@ -0,0 +1,27 @@
++"""Provenance application port for guarded, exact publication source snapshots."""
++import sqlite3
++
++from packages.contracts import domain_models as dm
++from ..infrastructure.provenance_repository import FrozenProvenance, ProvenanceRepository
++from ..infrastructure.security import SessionIdentity, current_session_identity
++from .authoring_context import AuthoringContext
++from .publication_models import validated
++
++
++class PublicationProvenance:
++    @staticmethod
++    def read(conn: sqlite3.Connection, identity: SessionIdentity, import_id: str,
++             block: dm.ContentBlock) -> FrozenProvenance:
++        current = current_session_identity(conn, identity)
++        AuthoringContext.check_access(conn, current)
++        block = validated(dm.ContentBlock, block)
++        return ProvenanceRepository(conn, current.workspace_id).frozen_for_import(import_id, block)
++
++    @staticmethod
++    def freeze(conn: sqlite3.Connection, identity: SessionIdentity, import_id: str,
++               block: dm.ContentBlock) -> FrozenProvenance:
++        current = current_session_identity(conn, identity)
++        AuthoringContext.check_access(conn, current)
++        block = validated(dm.ContentBlock, block)
++        ProvenanceRepository(conn, current.workspace_id).freeze_import(import_id, [block])
++        return PublicationProvenance.read(conn, current, import_id, block)
+diff --git a/services/api/app/infrastructure/content_repository.py b/services/api/app/infrastructure/content_repository.py
+index 18ffc92..ad002bc 100644
+--- a/services/api/app/infrastructure/content_repository.py
++++ b/services/api/app/infrastructure/content_repository.py
+@@ -126,6 +126,13 @@ class ContentRepository:
+             raise damaged()
+         return value
+ 
++    def require_absent(self, object_id: str) -> None:
++        """New-object publication CAS, including shells and other workspaces."""
++        if not self.connection.in_transaction:
++            raise ApiError(409, 'TRANSACTION_REQUIRED', '新对象发布需要当前事务。')
++        if self.connection.execute('SELECT 1 FROM objects WHERE id=?', (object_id,)).fetchone() is not None:
++            raise ApiError(409, 'PUBLICATION_ID_UNAVAILABLE', '候选对象 ID 已被使用，不能作为新对象发布。')
++
+     def ensure_new(self, values: list[PublishedModel]) -> None:
+         for value in values:
+             row = self.connection.execute("SELECT * FROM objects WHERE id=?", (value.id,)).fetchone()
+diff --git a/services/api/app/infrastructure/provenance_repository.py b/services/api/app/infrastructure/provenance_repository.py
+index b5c8793..8c594ec 100644
+--- a/services/api/app/infrastructure/provenance_repository.py
++++ b/services/api/app/infrastructure/provenance_repository.py
+@@ -113,6 +113,18 @@ class ProvenanceRepository:
+             raise ApiError(413, 'SCOPE_BUDGET_EXCEEDED', '所选范围超过本地检索资源预算。')
+         return self.frozen(block)
+ 
++    def frozen_for_import(self, import_id: str, block: dm.ContentBlock) -> FrozenProvenance:
++        """Exact persisted origin membership, including its original Import owner."""
++        if not self.connection.in_transaction:
++            raise ApiError(409, 'TRANSACTION_REQUIRED', '来源回读需要当前事务。')
++        row = self.connection.execute('SELECT import_id FROM block_provenance WHERE workspace_id=? '
++            'AND block_id=? AND block_revision=? AND block_sha256=?',
++            (self.workspace_id, block.id, block.revision, metadata_sha256(block))).fetchone()
++        snapshot = self.frozen(block)
++        if row is None or row['import_id'] != import_id or snapshot is None:
++            raise damaged()
++        return snapshot
++
+     def frozen(self, block: dm.ContentBlock) -> FrozenProvenance | None:
+         row = self.connection.execute(
+             'SELECT * FROM block_provenance WHERE workspace_id=? AND block_id=? AND block_revision=? AND block_sha256=?',
+diff --git a/services/api/app/infrastructure/publication_repository.py b/services/api/app/infrastructure/publication_repository.py
+new file mode 100644
+index 0000000..dc57d20
+--- /dev/null
++++ b/services/api/app/infrastructure/publication_repository.py
+@@ -0,0 +1,113 @@
++"""Publication-owned permanent commands, full history and server-private CAS."""
++import sqlite3
++
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import canonical_bytes, sha256_bytes, strict_json
++from ..application.errors import ApiError
++from ..application.publication_admission_models import DraftPublishWrite
++from ..application.publication_models import (
++    PublicationEvent, PublicationHistory, PublicationRecord, PublicationState, integrity, validated,
++)
++
++
++class PublicationRepository:
++    def __init__(self, conn: sqlite3.Connection, workspace_id: str):
++        if not conn.in_transaction:
++            raise ApiError(409, 'TRANSACTION_REQUIRED', '发布持久操作需要当前事务。')
++        self.conn, self.workspace_id = conn, workspace_id
++
++    @staticmethod
++    def _decode(model, raw, digest):
++        try:
++            value = validated(model, strict_json(raw))
++            if canonical_bytes(value).decode() != raw or sha256_bytes(raw.encode()) != digest:
++                raise integrity()
++            return value
++        except (ValueError, TypeError, AttributeError):
++            raise integrity() from None
++
++    def load(self, identifier: str) -> PublicationHistory:
++        row = self.conn.execute('SELECT * FROM draft_publications WHERE id=? AND workspace_id=?',
++                                (identifier, self.workspace_id)).fetchone()
++        result = self.conn.execute('SELECT * FROM draft_publication_results WHERE publication_id=?',
++                                   (identifier,)).fetchone()
++        if row is None or result is None or row['state'] != 'published' or row['revision'] != 4:
++            raise integrity()
++        record = self._decode(PublicationRecord, result['record_json'], result['sha256'])
++        candidate = record.candidate
++        if (record.id != row['id'] or record.workspace_id != row['workspace_id']
++                or record.owner != row['owner'] or candidate.draft_id != row['draft_id']
++                or candidate.draft_revision != row['draft_revision'] or candidate.entity != row['entity']
++                or candidate.candidate_sha256 != row['candidate_sha256'] or record.adopted_at != row['adopted_at']):
++            raise integrity()
++        events = []
++        for event in self.conn.execute('SELECT * FROM draft_publication_events WHERE publication_id=? ORDER BY revision',
++                                       (identifier,)):
++            decoded = self._decode(PublicationEvent, event['event_json'], event['sha256'])
++            if decoded.publication_id != identifier or decoded.revision != event['revision']:
++                raise integrity()
++            events.append(decoded)
++        commands = self.conn.execute('SELECT * FROM draft_publication_commands WHERE publication_id=?',
++                                     (identifier,)).fetchall()
++        if (len(commands) != 1 or tuple(commands[0]) != (record.workspace_id, record.actor_id, record.route,
++                                                       record.command_key, record.id)):
++            raise integrity()
++        return validated(PublicationHistory, dict(record=record, events=events))
++
++    def replay(self, actor_id: str, route: str, key: str, body: DraftPublishWrite) -> PublicationHistory | None:
++        row = self.conn.execute('SELECT publication_id FROM draft_publication_commands WHERE workspace_id=? '
++            'AND actor_id=? AND route=? AND command_key=?', (self.workspace_id, actor_id, route, key)).fetchone()
++        if row is None:
++            return None
++        history = self.load(row[0])
++        if canonical_bytes(validated(DraftPublishWrite, body)) != canonical_bytes(history.record.request):
++            raise ApiError(409, 'IDEMPOTENCY_CONFLICT', '原发布命令键已用于不同的完整命令。')
++        return history
++
++    def for_candidate(self, candidate: dm.DraftCandidate) -> PublicationHistory | None:
++        row = self.conn.execute('SELECT id FROM draft_publications WHERE workspace_id=? AND draft_id=? '
++            'AND draft_revision=?', (self.workspace_id, candidate.draft_id, candidate.draft_revision)).fetchone()
++        if row is None:
++            return None
++        history = self.load(row[0])
++        if history.record.candidate != candidate:
++            raise integrity()
++        return history
++
++    def _event(self, identifier: str, revision: int, state: PublicationState, now: str) -> None:
++        value = validated(PublicationEvent, dict(version='draft-publication-event-v1', publication_id=identifier,
++                                                 revision=revision, state=state, recorded_at=now))
++        raw = canonical_bytes(value)
++        self.conn.execute('INSERT INTO draft_publication_events VALUES(?,?,?,?)',
++                          (identifier, revision, raw.decode(), sha256_bytes(raw)))
++
++    def adopt(self, identifier: str, candidate: dm.DraftCandidate, now: str) -> None:
++        candidate = validated(dm.DraftCandidate, candidate)
++        if self.for_candidate(candidate) is not None:
++            raise ApiError(409, 'DRAFT_ALREADY_PUBLISHED', '此精确候选已经发布。')
++        self.conn.execute('INSERT INTO draft_publications(id,workspace_id,draft_id,draft_revision,owner,entity,'
++            'candidate_sha256,state,revision,adopted_at) VALUES(?,?,?,?,?,?,?,\'draft\',1,?)',
++            (identifier, self.workspace_id, candidate.draft_id, candidate.draft_revision, 'import', candidate.entity,
++             candidate.candidate_sha256, now))
++        self._event(identifier, 1, 'draft', now)
++
++    def advance(self, identifier: str, expected_revision: int, expected_state: PublicationState,
++                state: PublicationState, now: str) -> None:
++        changed = self.conn.execute('UPDATE draft_publications SET state=?,revision=revision+1 WHERE id=? '
++            'AND workspace_id=? AND revision=? AND state=?',
++            (state, identifier, self.workspace_id, expected_revision, expected_state))
++        if changed.rowcount != 1:
++            raise ApiError(409, 'PUBLICATION_STATE_CONFLICT', '发布内部状态已经改变。')
++        self._event(identifier, expected_revision + 1, state, now)
++
++    def finish(self, record: PublicationRecord) -> PublicationHistory:
++        record = validated(PublicationRecord, record)
++        if record.workspace_id != self.workspace_id:
++            raise integrity()
++        raw = canonical_bytes(record)
++        self.conn.execute('INSERT INTO draft_publication_results VALUES(?,?,?)',
++                          (record.id, raw.decode(), sha256_bytes(raw)))
++        self.conn.execute('INSERT INTO draft_publication_commands VALUES(?,?,?,?,?)',
++                          (self.workspace_id, record.actor_id, record.route, record.command_key, record.id))
++        self.advance(record.id, 3, 'approved', 'published', record.published_at)
++        return self.load(record.id)
+diff --git a/tests/integration/test_draft_publication.py b/tests/integration/test_draft_publication.py
+new file mode 100644
+index 0000000..f64c577
+--- /dev/null
++++ b/tests/integration/test_draft_publication.py
+@@ -0,0 +1,156 @@
++"""Real Import/Review/SQLite publication; every human decision here is synthetic."""
++import pytest
++
++from services.api.app.application.content import ContentService
++from services.api.app.application.imports import ImportService
++from services.api.app.application.errors import ApiError
++from services.api.app.application.draft_publication import DraftPublicationService
++from services.api.app.infrastructure.publication_repository import PublicationRepository
++from services.api.app.import_dto import ImportCancelRequest, ImportCommitRequest, ImportIdMapping
++from tests.integration.test_review_workflow import workflow as workflow_fixture
++from tests.integration.test_review_workflow import decision
++from tests.integration.test_publication_admission import reviewed, publish_request
++from tests.integration.test_authoring_numeric_provider_history import table_hashes
++
++
++@pytest.fixture
++def workflow(tmp_path):
++    yield from workflow_fixture.__wrapped__(tmp_path)
++
++
++def ready(workflow, *, review_key='review'):
++    database, identity, candidate, reviews, _ = workflow
++    receipt = reviewed(database, identity, candidate, reviews, math='NOT_APPLICABLE', key=review_key)
++    body = publish_request(database, identity, candidate, reviews, receipt)
++    return DraftPublicationService(database, reviews, ImportService(database)), body, receipt
++
++
++def import_id(workflow, receipt):
++    database, identity, _, reviews, _ = workflow
++    with database.transaction(immediate=False) as conn:
++        _, material = reviews.read_publication_basis(conn, identity, receipt.id)
++        return material.payload.import_id
++
++
++def commit_body(imports, identity, identifier, mapping=()):
++    preview = imports.preview(identity, identifier)
++    return ImportCommitRequest(expected_input_sha256=preview.input_sha256,
++        accepted_warning_codes=sorted({w.code for w in preview.warnings}), id_mapping=list(mapping))
++
++
++def test_real_pending_import_block_publication_reads_content_without_publishing_parent(workflow):
++    database, identity, candidate, reviews, _ = workflow
++    imports = ImportService(database)
++    original = imports.draft(identity, candidate.draft_id)
++    receipt = reviewed(database, identity, candidate, reviews, math='NOT_APPLICABLE')
++    body = publish_request(database, identity, candidate, reviews, receipt)
++    result = DraftPublicationService(database, reviews, imports).publish(identity, candidate.draft_id, body, 'publish')
++    content = ContentService(database)
++    assert result.entity == 'block' and result.id == original.payload.metadata.id and result.revision == 1
++    assert result.sha256 == candidate.candidate_sha256
++    assert content.read(identity.workspace_id, 'block', result.id, 1) == original.payload.metadata
++    assert content.body(identity.workspace_id, result.id, 1)[0] == original.payload.body_markdown.encode()
++    assert imports.draft(identity, candidate.draft_id) == original
++    with database.connect() as conn:
++        assert conn.execute('SELECT COUNT(*) FROM objects').fetchone()[0] == 1
++        assert conn.execute('SELECT COUNT(*) FROM solutions').fetchone()[0] == 0
++        assert conn.execute("SELECT COUNT(*) FROM outbox WHERE event_type='content.published'").fetchone()[0] == 1
++    with database.transaction(immediate=False) as conn:
++        history = PublicationRepository(conn, identity.workspace_id).for_candidate(candidate)
++        assert [e.state for e in history.events] == ['draft', 'in_review', 'approved', 'published']
++        assert history.record.result == result and history.record.actor_id == identity.id
++        assert history.record.source.source.sha256 == history.record.original_input_sha256
++        assert history.record.admission.publication == 'NOT_RUN'
++        assert history.record.admission.numeric_check_ids == []
++
++
++@pytest.mark.parametrize('terminal', ['cancel', 'commit'])
++def test_original_publication_ack_survives_real_import_terminal_without_new_publication(workflow, terminal):
++    database, identity, candidate, reviews, _ = workflow
++    service, body, receipt = ready(workflow)
++    imports = ImportService(database)
++    identifier = import_id(workflow, receipt)
++    result = service.publish(identity, candidate.draft_id, body, 'published')
++    if terminal == 'cancel':
++        preview = imports.preview(identity, identifier)
++        imports.cancel(identity, identifier, ImportCancelRequest(expected_input_sha256=preview.input_sha256), 'cancel')
++        assert imports.draft(identity, candidate.draft_id).state == 'cancelled'
++    else:
++        before = table_hashes(database)
++        with pytest.raises(ApiError) as caught:
++            imports.commit(identity, identifier, commit_body(imports, identity, identifier), 'unmapped')
++        assert caught.value.code == 'IMPORT_ID_COLLISION' and table_hashes(database) == before
++        copied_id = 'copy_synthetic_publication_block'
++        response = imports.commit(identity, identifier, commit_body(imports, identity, identifier,
++            [ImportIdMapping(old_id=result.id, new_id=copied_id)]), 'mapped')
++        content = ContentService(database)
++        course = content.read(identity.workspace_id, 'course', response.course_refs[0].id, 1)
++        lesson = content.read(identity.workspace_id, 'lesson', course.lesson_refs[0].id, 1)
++        assert lesson.block_refs[0].id == copied_id and lesson.block_refs[0].sha256 != result.sha256
++        assert content.body(identity.workspace_id, copied_id, 1) == content.body(identity.workspace_id, result.id, 1)
++        raw, _ = imports.download(identity, response.migration_receipt_id)
++        import json
++        assert json.loads(raw)['mathematical'] == json.loads(raw)['sources'] == 'NOT_RUN'
++        with database.transaction(immediate=False) as conn:
++            record = PublicationRepository(conn, identity.workspace_id).for_candidate(candidate).record
++            assert record.result == result and record.result != lesson.block_refs[0]
++            assert conn.execute('SELECT COUNT(*) FROM draft_publications').fetchone()[0] == 1
++    before = table_hashes(database)
++    restored = DraftPublicationService(database, reviews, imports)
++    assert restored.publish(identity, candidate.draft_id, body, 'published') == result
++    with pytest.raises(ApiError):
++        restored.publish(identity, candidate.draft_id, body, 'new-key')
++    assert table_hashes(database) == before
++
++
++@pytest.mark.parametrize('terminal', ['cancel', 'commit'])
++def test_terminal_import_never_grants_a_new_publication(workflow, terminal):
++    database, identity, candidate, _, _ = workflow
++    service, body, receipt = ready(workflow)
++    imports, identifier = ImportService(database), import_id(workflow, receipt)
++    if terminal == 'cancel':
++        imports.cancel(identity, identifier,
++            ImportCancelRequest(expected_input_sha256=imports.preview(identity, identifier).input_sha256), 'cancel')
++    else:
++        imports.commit(identity, identifier, commit_body(imports, identity, identifier), 'commit')
++    before = table_hashes(database)
++    with pytest.raises(ApiError) as caught:
++        service.publish(identity, candidate.draft_id, body, 'new')
++    assert caught.value.code == 'PUBLICATION_IMPORT_NOT_PENDING' and table_hashes(database) == before
++
++
++def test_explicit_review_selection_and_later_rejection_do_not_rewrite_original_publication(workflow):
++    database, identity, candidate, reviews, _ = workflow
++    service, body, accepted = ready(workflow)
++    other = reviewed(database, identity, candidate, reviews, key='other', math='NOT_APPLICABLE', sources='REJECTED')
++    refused_body = publish_request(database, identity, candidate, reviews, other)
++    before = table_hashes(database)
++    with pytest.raises(ApiError):
++        service.publish(identity, candidate.draft_id, refused_body, 'rejected-review')
++    assert table_hashes(database) == before
++    result = service.publish(identity, candidate.draft_id, body, 'accepted-review')
++    current = reviews.decide(identity, accepted.id, decision(accepted, mathematical='REJECTED'), 'later-rejection')
++    assert current.revision == 3
++    before = table_hashes(database)
++    assert service.publish(identity, candidate.draft_id, body, 'accepted-review') == result
++    with pytest.raises(ApiError):
++        service.publish(identity, candidate.draft_id, body, 'another-new-key')
++    assert table_hashes(database) == before
++
++
++def test_permanent_commands_survive_generic_idempotency_expiry_and_restart(workflow, monkeypatch):
++    from services.api.app.infrastructure import idempotency
++    database, identity, candidate, reviews, _ = workflow
++    service, body, _ = ready(workflow)
++    result = service.publish(identity, candidate.draft_id, body, 'original')
++    monkeypatch.setattr(idempotency, 'utc_now', lambda: '2200-01-01T00:00:00Z')
++    restored = DraftPublicationService(database, reviews, ImportService(database))
++    before = table_hashes(database)
++    assert restored.publish(identity, candidate.draft_id, body, 'original') == result
++    with pytest.raises(ApiError) as caught:
++        restored.publish(identity, candidate.draft_id,
++            body.model_copy(update={'acknowledged_warning_codes': []}), 'original')
++    assert caught.value.code == 'IDEMPOTENCY_CONFLICT'
++    with pytest.raises(ApiError):
++        restored.publish(identity, candidate.draft_id, body, 'another')
++    assert table_hashes(database) == before
+diff --git a/tests/integration/test_draft_publication_atomic.py b/tests/integration/test_draft_publication_atomic.py
+new file mode 100644
+index 0000000..fecd4ec
+--- /dev/null
++++ b/tests/integration/test_draft_publication_atomic.py
+@@ -0,0 +1,206 @@
++"""Real writer serialization and injected SQLite failures, no provider execution."""
++from concurrent.futures import ThreadPoolExecutor
++from threading import Barrier
++
++import pytest
++
++from services.api.app.application.errors import ApiError
++from services.api.app.application.imports import ImportService
++from services.api.app.infrastructure.publication_repository import PublicationRepository
++from services.api.app.infrastructure.database import utc_now
++from tests.integration.test_draft_publication import workflow as workflow, ready, import_id, commit_body
++from tests.integration.test_authoring_numeric_provider_history import table_hashes
++
++
++@pytest.mark.parametrize('table,condition', [
++    ('revisions', '1'), ('block_provenance', '1'), ('draft_publication_results', '1'),
++    ('draft_publication_commands', '1'), ('draft_publication_events', 'NEW.revision=4'),
++])
++def test_sqlite_failure_rolls_back_content_source_lifecycle_commands_and_outbox(workflow, table, condition):
++    database, identity, candidate, _, _ = workflow
++    service, body, _ = ready(workflow)
++    with database.transaction() as conn:
++        conn.execute(f"CREATE TRIGGER synthetic_publication_failure AFTER INSERT ON {table} WHEN {condition} "
++                     "BEGIN SELECT RAISE(ABORT,'synthetic publication failure'); END")
++    before = table_hashes(database)
++    with pytest.raises(ApiError) as caught:
++        service.publish(identity, candidate.draft_id, body, 'published')
++    assert caught.value.code == 'PUBLICATION_STORAGE_UNAVAILABLE'
++    assert table_hashes(database) == before
++    with database.transaction() as conn:
++        conn.execute('DROP TRIGGER synthetic_publication_failure')
++    assert service.publish(identity, candidate.draft_id, body, 'published').entity == 'block'
++
++
++@pytest.mark.parametrize('same_key', [False, True])
++def test_actual_connections_serialize_competing_publications(workflow, same_key):
++    database, identity, candidate, _, _ = workflow
++    service, body, _ = ready(workflow)
++    barrier = Barrier(2)
++
++    def execute(key):
++        barrier.wait(timeout=10)
++        try:
++            return service.publish(identity, candidate.draft_id, body, key)
++        except ApiError as error:
++            return error.code
++
++    with ThreadPoolExecutor(max_workers=2) as pool:
++        results = list(pool.map(execute, ['first', 'first' if same_key else 'second']))
++    refs = [r for r in results if not isinstance(r, str)]
++    assert len(refs) == (2 if same_key else 1)
++    assert all(r == refs[0] for r in refs)
++    if not same_key:
++        assert 'DRAFT_ALREADY_PUBLISHED' in results
++    with database.connect() as conn:
++        assert conn.execute('SELECT COUNT(*) FROM objects').fetchone()[0] == 1
++        assert conn.execute('SELECT COUNT(*) FROM draft_publication_results').fetchone()[0] == 1
++        assert conn.execute('SELECT COUNT(*) FROM draft_publication_commands').fetchone()[0] == 1
++        assert conn.execute("SELECT COUNT(*) FROM outbox WHERE event_type='content.published'").fetchone()[0] == 1
++
++
++def test_actual_import_commit_race_has_only_two_valid_serial_results(workflow):
++    database, identity, candidate, _, _ = workflow
++    service, body, receipt = ready(workflow)
++    imports, identifier = ImportService(database), import_id(workflow, receipt)
++    original = commit_body(imports, identity, identifier)
++    barrier = Barrier(2)
++
++    def publish():
++        barrier.wait(timeout=10)
++        try:
++            return service.publish(identity, candidate.draft_id, body, 'publish')
++        except ApiError as error:
++            return error.code
++
++    def commit():
++        barrier.wait(timeout=10)
++        try:
++            return imports.commit(identity, identifier, original, 'commit')
++        except ApiError as error:
++            return error.code
++
++    with ThreadPoolExecutor(max_workers=2) as pool:
++        first, second = pool.submit(publish), pool.submit(commit)
++        published, committed = first.result(), second.result()
++    if isinstance(published, str):
++        assert published == 'PUBLICATION_IMPORT_NOT_PENDING' and not isinstance(committed, str)
++        expected, publication_count = 'committed', 0
++    else:
++        assert committed == 'IMPORT_ID_COLLISION'
++        expected, publication_count = 'preview_ready', 1
++    assert imports.preview(identity, identifier).status == expected
++    with database.connect() as conn:
++        assert conn.execute('SELECT COUNT(*) FROM draft_publications').fetchone()[0] == publication_count
++
++
++def test_current_review_rejection_and_publication_serialize_without_rewriting_old_ack(workflow):
++    from tests.integration.test_review_workflow import decision
++    database, identity, candidate, reviews, _ = workflow
++    service, body, accepted = ready(workflow)
++    barrier = Barrier(2)
++
++    def publish():
++        barrier.wait(timeout=10)
++        try:
++            return service.publish(identity, candidate.draft_id, body, 'publish')
++        except ApiError as error:
++            return error.code
++
++    def reject():
++        barrier.wait(timeout=10)
++        return reviews.decide(identity, accepted.id,
++            decision(accepted, mathematical='REJECTED'), 'synthetic-rejection')
++
++    with ThreadPoolExecutor(max_workers=2) as pool:
++        first, second = pool.submit(publish), pool.submit(reject)
++        published, rejected = first.result(), second.result()
++    assert rejected.mathematical == 'REJECTED' and rejected.revision == 3
++    if isinstance(published, str):
++        assert published == 'PUBLISH_HUMAN_REVIEW_REQUIRED'
++        expected = 0
++    else:
++        assert service.publish(identity, candidate.draft_id, body, 'publish') == published
++        expected = 1
++    before = table_hashes(database)
++    with pytest.raises(ApiError):
++        service.publish(identity, candidate.draft_id, body, 'new-after-rejection')
++    assert table_hashes(database) == before
++    with database.connect() as conn:
++        assert conn.execute('SELECT COUNT(*) FROM draft_publications').fetchone()[0] == expected
++        assert conn.execute('SELECT COUNT(*) FROM draft_publication_results').fetchone()[0] == expected
++
++
++def test_lifecycle_cas_is_separate_from_candidate_revision_and_failed_outer_operation_rolls_back(workflow):
++    database, identity, candidate, _, _ = workflow
++    before = table_hashes(database)
++
++    class SyntheticOuterRollback(Exception):
++        pass
++
++    with pytest.raises(SyntheticOuterRollback):
++        with database.transaction() as conn:
++            repo = PublicationRepository(conn, identity.workspace_id)
++            repo.adopt('publication_synthetic_cas', candidate, utc_now())
++            repo.advance('publication_synthetic_cas', 1, 'draft', 'in_review', utc_now())
++            with pytest.raises(ApiError) as caught:
++                repo.advance('publication_synthetic_cas', candidate.draft_revision, 'in_review', 'approved', utc_now())
++            assert caught.value.code == 'PUBLICATION_STATE_CONFLICT'
++            assert candidate.draft_revision == 1
++            repo.advance('publication_synthetic_cas', 2, 'in_review', 'approved', utc_now())
++            raise SyntheticOuterRollback
++    assert table_hashes(database) == before
++
++
++def test_forward_migration_preserves_actual_pending_import_and_review_before_publication(tmp_path):
++    from dataclasses import replace
++    import shutil
++    from packages.contracts import domain_models as dm
++    from services.api.app.application.draft_candidates import DraftCandidates
++    from services.api.app.application.draft_publication import DraftPublicationService
++    from services.api.app.application.imports import IMPORT_ARTIFACT_PROFILES
++    from services.api.app.application.review_numeric import ReviewNumeric
++    from services.api.app.application.review_service import ReviewService
++    from services.api.app.application.sessions import SessionService
++    from services.api.app.dto import RoleRequest
++    from services.api.app.infrastructure.config import Settings
++    from services.api.app.infrastructure.database import Database
++    from services.api.app.infrastructure.import_worker import ImportWorker
++    from services.api.app.infrastructure.security import consume_bootstrap, issue_bootstrap_code
++    from tests.integration.test_publication_admission import reviewed, publish_request
++    settings = Settings(data_dir=tmp_path / 'data')
++    previous = tmp_path / 'previous-migrations'
++    previous.mkdir()
++    for path in settings.migrations_dir.glob('*.sql'):
++        if path.name < '0018':
++            shutil.copyfile(path, previous / path.name)
++    old = Database(replace(settings, migrations_dir=previous))
++    old.initialize()
++    _, learner = consume_bootstrap(old, issue_bootstrap_code(old))
++    SessionService(old).switch_role(learner, RoleRequest(role='author'), 'author')
++    identity = replace(learner, role='author')
++    imports, worker = ImportService(old), ImportWorker(old)
++    try:
++        staged = imports.stage(identity, data=b'Synthetic existing content.\n', filename='existing.md', kind='markdown', key='import')
++        assert worker.run_once()
++    finally:
++        worker.stop()
++    draft = next(d for d in (imports.draft(identity, identifier) for identifier in
++                            imports.preview(identity, staged.import_id).preview_refs) if d.kind == 'block')
++    candidate = dm.DraftCandidate(draft_id=draft.id, draft_revision=1, entity='block', candidate_sha256=draft.candidate_sha256)
++    owners = DraftCandidates({'import': imports})
++    reviews = ReviewService(old, owners, ReviewNumeric(owners, {}), {(p, 'import'): imports for p in IMPORT_ARTIFACT_PROFILES})
++    receipt = reviewed(old, identity, candidate, reviews, math='NOT_APPLICABLE')
++    body = publish_request(old, identity, candidate, reviews, receipt)
++    before = table_hashes(old)
++    upgraded = Database(settings)
++    upgraded.initialize()
++    after = table_hashes(upgraded)
++    assert {k: after[k] for k in before if k != 'schema_migrations'} == {k: v for k, v in before.items() if k != 'schema_migrations'}
++    assert list((settings.data_dir / 'backups').glob('*.sqlite3'))
++    current_imports = ImportService(upgraded)
++    current_owners = DraftCandidates({'import': current_imports})
++    current_reviews = ReviewService(upgraded, current_owners, ReviewNumeric(current_owners, {}),
++        {(p, 'import'): current_imports for p in IMPORT_ARTIFACT_PROFILES})
++    assert current_reviews.read(identity, receipt.id) == receipt
++    assert DraftPublicationService(upgraded, current_reviews, current_imports).publish(identity, draft.id, body, 'publish').sha256 == candidate.candidate_sha256
+diff --git a/tests/integration/test_draft_publication_integrity.py b/tests/integration/test_draft_publication_integrity.py
+new file mode 100644
+index 0000000..e03d76a
+--- /dev/null
++++ b/tests/integration/test_draft_publication_integrity.py
+@@ -0,0 +1,172 @@
++"""Synthetic damage and current-access changes against real persisted publication."""
++import json
++from dataclasses import replace
++
++import pytest
++from packages.contracts.canonical import canonical_bytes, sha256_bytes
++from services.api.app.application.errors import ApiError
++from tests.integration.test_draft_publication import workflow as workflow, ready
++from tests.integration.test_authoring_numeric_provider_history import table_hashes
++from tests.integration.test_review_workflow import request, decision
++from tests.integration.test_publication_admission import publish_request
++from services.api.app.application.imports import ImportService
++from services.api.app.application.content import ContentService
++
++
++def test_rehashed_result_cannot_invent_a_success_without_original_required_warning_ack(workflow):
++    database, identity, candidate, _, _ = workflow
++    service, body, _ = ready(workflow)
++    service.publish(identity, candidate.draft_id, body, 'published')
++    with database.transaction() as conn:
++        row = conn.execute('SELECT publication_id,record_json FROM draft_publication_results').fetchone()
++        raw = json.loads(row['record_json'])
++        raw['request']['acknowledged_warning_codes'] = []
++        raw['admission']['acknowledged_warning_codes'] = []
++        corrupted = canonical_bytes(raw)
++        conn.execute('DROP TRIGGER draft_publication_results_no_update')
++        conn.execute('UPDATE draft_publication_results SET record_json=?,sha256=? WHERE publication_id=?',
++                     (corrupted.decode(), sha256_bytes(corrupted), row['publication_id']))
++    before = table_hashes(database)
++    with pytest.raises(ApiError):
++        service.publish(identity, candidate.draft_id, body.model_copy(update={'acknowledged_warning_codes': []}), 'published')
++    assert table_hashes(database) == before
++
++
++@pytest.mark.parametrize('change', ['role', 'revoked', 'expired', 'workspace'])
++@pytest.mark.parametrize('replay', [False, True])
++def test_current_session_is_revalidated_before_new_or_original_publication(workflow, change, replay):
++    database, identity, candidate, _, _ = workflow
++    service, body, _ = ready(workflow)
++    if replay:
++        service.publish(identity, candidate.draft_id, body, 'published')
++    with database.transaction() as conn:
++        if change == 'workspace':
++            identity = replace(identity, workspace_id='other_synthetic_workspace')
++        elif change == 'role':
++            conn.execute("UPDATE local_sessions SET role='learner'")
++        elif change == 'revoked':
++            conn.execute("UPDATE local_sessions SET revoked_at='2000-01-01T00:00:00Z'")
++        else:
++            conn.execute("UPDATE local_sessions SET expires_at='2000-01-01T00:00:00Z'")
++    before = table_hashes(database)
++    with pytest.raises(ApiError):
++        service.publish(identity, candidate.draft_id, body, 'published')
++    assert table_hashes(database) == before
++
++
++@pytest.mark.parametrize('mode', ['independent', 'open_book', 'assisted'])
++def test_real_current_assessment_policy_blocks_original_ack_but_not_safe_review_job_control(workflow, mode):
++    from services.api.app.application.assessment import AssessmentService
++    from services.api.app.assessment_dto import AssessmentAttemptCreate
++    from services.api.app.infrastructure.content_repository import reference
++    from tests.assessment_fixtures import assessment_fixture
++    from tests.integration.test_assessment_attempts import import_fixture
++    database, identity, candidate, reviews, _ = workflow
++    service, body, receipt = ready(workflow)
++    service.publish(identity, candidate.draft_id, body, 'published')
++    fixture = assessment_fixture('publicationpolicy')
++    import_fixture(database, identity, fixture, 'policy-material')
++    AssessmentService(database).create_attempt(identity, fixture.assessment.id,
++        AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode=mode), 'attempt')
++    before = table_hashes(database)
++    with pytest.raises(ApiError):
++        service.publish(identity, candidate.draft_id, body, 'published')
++    assert reviews.read_job(identity, receipt.id).status == 'completed'
++    assert table_hashes(database) == before
++
++
++@pytest.mark.parametrize('damage', ['source_bytes', 'body_bytes', 'report_bytes', 'review_command',
++                                  'source_import_membership', 'publication_event', 'publication_actor'])
++def test_original_ack_requires_all_physical_and_persistent_evidence(workflow, damage):
++    database, identity, candidate, _, _ = workflow
++    service, body, _ = ready(workflow)
++    service.publish(identity, candidate.draft_id, body, 'published')
++    if damage == 'source_import_membership':
++        alternate = ImportService(database).stage(identity, data=b'Synthetic other source.\n',
++            filename='other.txt', kind='text', key='other-original').import_id
++    with database.transaction() as conn:
++        if damage.endswith('_bytes'):
++            if damage == 'source_bytes':
++                row = conn.execute('SELECT b.relative_path FROM sources s JOIN content_blobs b ON b.sha256=s.blob_sha256').fetchone()
++            elif damage == 'body_bytes':
++                row = conn.execute('SELECT b.relative_path FROM block_bodies r JOIN content_blobs b ON b.sha256=r.body_sha256').fetchone()
++            else:
++                row = conn.execute("SELECT b.relative_path FROM artifacts a JOIN content_blobs b ON b.sha256=a.blob_sha256 WHERE a.profile='quality_review_report'").fetchone()
++            (database.settings.data_dir / row[0]).write_bytes(b'SYNTHETIC_DAMAGED_PHYSICAL_BYTES')
++        elif damage == 'review_command':
++            conn.execute('DROP TRIGGER review_commands_no_delete')
++            conn.execute('DELETE FROM review_commands')
++        elif damage == 'source_import_membership':
++            # Break the provenance-owned relation without touching its matching public snapshot/hash.
++            conn.execute('DROP TRIGGER block_provenance_no_update')
++            conn.execute('UPDATE block_provenance SET import_id=?', (alternate,))
++        elif damage == 'publication_event':
++            conn.execute('DROP TRIGGER draft_publication_events_no_delete')
++            conn.execute('DELETE FROM draft_publication_events WHERE revision=2')
++        else:
++            conn.execute('DROP TRIGGER draft_publication_commands_no_update')
++            conn.execute("UPDATE draft_publication_commands SET route='POST /drafts/another/publish'")
++    before = table_hashes(database)
++    with pytest.raises(ApiError):
++        service.publish(identity, candidate.draft_id, body, 'published')
++    assert table_hashes(database) == before
++
++
++@pytest.mark.parametrize('attach_late', [False, True])
++def test_recursive_review_attachment_is_reverified_after_publication(workflow, attach_late):
++    database, identity, candidate, reviews, worker = workflow
++    source = reviews.create(identity, candidate.draft_id, request(candidate), 'evidence-review')
++    assert worker.run_once()
++    evidence = reviews.read(identity, source.id).evidence_paths[0].split('/')[-2]
++    selected = reviews.create(identity, candidate.draft_id, request(candidate), 'selected-review')
++    assert worker.run_once()
++    original = reviews.read(identity, selected.id)
++    receipt = reviews.decide(identity, selected.id,
++        decision(original, [] if attach_late else [evidence], mathematical='NOT_APPLICABLE', sources='APPROVED'), 'selected-human')
++    from services.api.app.application.draft_publication import DraftPublicationService
++    service = DraftPublicationService(database, reviews, ImportService(database))
++    body = publish_request(database, identity, candidate, reviews, receipt)
++    service.publish(identity, candidate.draft_id, body, 'published')
++    if attach_late:
++        reviews.decide(identity, selected.id,
++            decision(receipt, [evidence], mathematical='NOT_APPLICABLE', sources='REJECTED'), 'later-with-evidence')
++    with database.connect() as conn:
++        row = conn.execute('SELECT b.relative_path FROM artifacts a JOIN content_blobs b ON b.sha256=a.blob_sha256 WHERE a.id=?',
++                           (evidence,)).fetchone()
++    (database.settings.data_dir / row[0]).write_bytes(b'SYNTHETIC_DAMAGED_RECURSIVE_REPORT')
++    before = table_hashes(database)
++    with pytest.raises(ApiError):
++        service.publish(identity, candidate.draft_id, body, 'published')
++    assert table_hashes(database) == before
++
++
++def test_later_real_content_revision_does_not_rebind_original_publication_ack(workflow):
++    database, identity, candidate, _, _ = workflow
++    service, body, _ = ready(workflow)
++    result = service.publish(identity, candidate.draft_id, body, 'published')
++    content = ContentService(database)
++    old = content.read(identity.workspace_id, 'block', result.id, 1)
++    raw = b'Synthetic later immutable content fixture.\n'
++    later = old.model_copy(update={'revision': 2, 'body_path': f'content/{result.id}.r2.md',
++                                   'body_sha256': sha256_bytes(raw)})
++    later_ref = content.publish(identity.workspace_id, [later], {later.body_path: raw})[0]
++    assert later_ref.revision == 2 and later_ref.sha256 != result.sha256
++    before = table_hashes(database)
++    assert service.publish(identity, candidate.draft_id, body, 'published') == result
++    assert content.read(identity.workspace_id, 'block', result.id, 1) == old
++    assert table_hashes(database) == before
++
++
++def test_original_ack_still_checks_the_actual_import_job_input_binding(workflow):
++    from tests.integration.test_draft_publication import import_id
++    database, identity, candidate, _, _ = workflow
++    service, body, receipt = ready(workflow)
++    identifier = import_id(workflow, receipt)
++    service.publish(identity, candidate.draft_id, body, 'published')
++    with database.transaction() as conn:
++        conn.execute('UPDATE jobs SET input_sha256=? WHERE id=(SELECT job_id FROM ingestion_imports WHERE id=?)',
++                     ('0'*64, identifier))
++    before = table_hashes(database)
++    with pytest.raises(ApiError):
++        service.publish(identity, candidate.draft_id, body, 'published')
++    assert table_hashes(database) == before
+diff --git a/tests/integration/test_draft_publication_scope.py b/tests/integration/test_draft_publication_scope.py
+new file mode 100644
+index 0000000..8b0c66d
+--- /dev/null
++++ b/tests/integration/test_draft_publication_scope.py
+@@ -0,0 +1,130 @@
++"""Narrow actual owner eligibility and input privacy; no generated/provider fixtures."""
++from dataclasses import replace
++import warnings
++
++import pytest
++from packages.contracts import domain_models as dm
++from services.api.app.application.content import ContentService
++from services.api.app.application.draft_publication import DraftPublicationService
++from services.api.app.application.errors import ApiError
++from services.api.app.application.imports import ImportService
++from services.api.app.application.sessions import SessionService
++from services.api.app.dto import RoleRequest
++from services.api.app.infrastructure.import_worker import ImportWorker
++from services.api.app.infrastructure.security import consume_bootstrap, issue_bootstrap_code
++from tests.integration.test_draft_publication import workflow as workflow, ready, import_id
++from tests.integration.test_publication_admission import reviewed, publish_request
++from tests.integration.test_authoring_numeric_provider_history import table_hashes
++
++
++def staged_candidate(workflow, data, kind, filename):
++    database, identity, _, _, _ = workflow
++    imports, worker = ImportService(database), ImportWorker(database)
++    try:
++        staged = imports.stage(identity, data=data, kind=kind, filename=filename, key='another-source')
++        assert worker.run_once()
++        preview = imports.preview(identity, staged.import_id)
++        draft = next(d for d in (imports.draft(identity, i) for i in preview.preview_refs) if d.kind == 'block')
++        candidate = dm.DraftCandidate(draft_id=draft.id, draft_revision=draft.revision,
++                                     entity='block', candidate_sha256=draft.candidate_sha256)
++        return imports, draft, candidate
++    finally:
++        worker.stop()
++
++
++@pytest.mark.parametrize('kind,filename', [('text', 'synthetic.txt'), ('markdown', 'synthetic.md')])
++def test_real_plain_parser_outputs_are_published_exactly_not_raw_upload_normalized(workflow, kind, filename):
++    database, identity, _, reviews, _ = workflow
++    raw = b'Synthetic plain prose.\n'
++    imports, draft, candidate = staged_candidate(workflow, raw, kind, filename)
++    receipt = reviewed(database, identity, candidate, reviews, key='plain-review', math='NOT_APPLICABLE')
++    body = publish_request(database, identity, candidate, reviews, receipt)
++    result = DraftPublicationService(database, reviews, imports).publish(identity, draft.id, body, 'publish')
++    actual = ContentService(database).body(identity.workspace_id, result.id, 1)[0]
++    assert actual == draft.payload.body_markdown.encode()
++    if kind == 'text':
++        assert actual != raw and b'```text' in actual
++
++
++@pytest.mark.parametrize('variant', ['html', 'private_package'])
++def test_unsupported_real_parser_owners_cannot_become_published_via_human_enums(workflow, variant):
++    database, identity, _, reviews, _ = workflow
++    if variant == 'private_package':
++        from tests.assessment_fixtures import assessment_fixture
++        data, kind, filename = assessment_fixture('publicationprivate').archive, 'learnpack', 'synthetic.learnpack.zip'
++    else:
++        data, kind, filename = b'<p>Synthetic plain HTML.</p>', 'html', 'synthetic.html'
++    imports, draft, candidate = staged_candidate(workflow, data, kind, filename)
++    receipt = reviewed(database, identity, candidate, reviews, key='unsupported-review', math='APPROVED')
++    body = publish_request(database, identity, candidate, reviews, receipt)
++    before = table_hashes(database)
++    with pytest.raises(ApiError) as caught:
++        DraftPublicationService(database, reviews, imports).publish(identity, draft.id, body, 'publish')
++    assert caught.value.code == 'PUBLICATION_OWNER_SCOPE_UNSUPPORTED'
++    assert table_hashes(database) == before
++
++
++@pytest.mark.parametrize('change', ['cancel_requested', 'job_hash', 'job_kind', 'job_workspace'])
++def test_jobs_owned_pending_gate_rejects_damaged_or_cancelling_original_job(workflow, change):
++    database, identity, candidate, _, _ = workflow
++    service, body, receipt = ready(workflow)
++    identifier = import_id(workflow, receipt)
++    with database.transaction() as conn:
++        job = conn.execute('SELECT job_id FROM ingestion_imports WHERE id=?', (identifier,)).fetchone()[0]
++        if change == 'cancel_requested':
++            conn.execute('UPDATE jobs SET cancel_requested=1 WHERE id=?', (job,))
++        elif change == 'job_hash':
++            conn.execute('UPDATE jobs SET input_sha256=? WHERE id=?', ('0'*64, job))
++        elif change == 'job_kind':
++            conn.execute("UPDATE jobs SET kind='draft_review' WHERE id=?", (job,))
++        else:
++            conn.execute("INSERT INTO workspace(id,title,created_at) SELECT 'other_workspace','Synthetic other',"
++                         "created_at FROM workspace LIMIT 1")
++            conn.execute("UPDATE jobs SET workspace_id='other_workspace' WHERE id=?", (job,))
++    before = table_hashes(database)
++    with pytest.raises(ApiError):
++        service.publish(identity, candidate.draft_id, body, 'publish')
++    assert table_hashes(database) == before
++
++
++def test_an_already_occupied_original_content_id_is_not_silently_revised(workflow):
++    database, identity, candidate, _, _ = workflow
++    service, body, _ = ready(workflow)
++    draft = ImportService(database).draft(identity, candidate.draft_id)
++    content = ContentService(database)
++    content.publish(identity.workspace_id, [draft.payload.metadata],
++                    {draft.payload.metadata.body_path: draft.payload.body_markdown.encode()})
++    before = table_hashes(database)
++    with pytest.raises(ApiError) as caught:
++        service.publish(identity, candidate.draft_id, body, 'publish')
++    assert caught.value.code == 'PUBLICATION_ID_UNAVAILABLE'
++    assert table_hashes(database) == before
++
++
++def test_same_key_from_a_different_actual_session_is_not_original_actor_replay(workflow):
++    database, identity, candidate, _, _ = workflow
++    service, body, _ = ready(workflow)
++    result = service.publish(identity, candidate.draft_id, body, 'publish')
++    _, learner = consume_bootstrap(database, issue_bootstrap_code(database))
++    SessionService(database).switch_role(learner, RoleRequest(role='author'), 'second-author')
++    other = replace(learner, role='author')
++    assert other.id != identity.id
++    before = table_hashes(database)
++    with pytest.raises(ApiError) as caught:
++        service.publish(other, candidate.draft_id, body, 'publish')
++    assert caught.value.code == 'DRAFT_ALREADY_PUBLISHED'
++    assert service.publish(identity, candidate.draft_id, body, 'publish') == result
++    assert table_hashes(database) == before
++
++
++def test_invalid_model_construct_input_emits_no_private_serializer_warning(workflow):
++    database, identity, candidate, _, _ = workflow
++    service, body, _ = ready(workflow)
++    forged = body.model_copy(update={'acknowledged_warning_codes': [{'private': 'synthetic-secret-marker'}]})
++    before = table_hashes(database)
++    with warnings.catch_warnings(record=True) as observed:
++        warnings.simplefilter('always')
++        with pytest.raises(ApiError) as caught:
++            service.publish(identity, candidate.draft_id, forged, 'publish')
++    assert observed == [] and 'synthetic-secret-marker' not in str(caught.value)
++    assert table_hashes(database) == before
