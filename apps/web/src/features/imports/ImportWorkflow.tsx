@@ -73,6 +73,7 @@ export function ImportWorkflow({ workspaceId, paused = false, close, openCourse,
     <button onClick={() => setReviewOpen(true)}>打开候选审核与恢复</button>
     {reviewOpen && <ReviewPanel workspace={workspaceId} paused={suspended || !!state.auth?.active_open_book_attempt_id}
       candidate={!suspended && state.auth?.role === 'author' && state.draft ? { draft_id: state.draft.id, draft_revision: state.draft.revision, entity: state.draft.kind, candidate_sha256: state.draft.candidate_sha256 } : null}
+      importDraft={!suspended && state.auth?.role === 'author' ? state.draft : null}
       candidateState={state.draft?.state ?? '未重新读取'} onState={setReviewState} />}
   </div>
 }

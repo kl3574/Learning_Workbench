@@ -15,7 +15,7 @@ export function ReviewCreateForm({ candidate, candidateState, busy, submit, valu
   const { checks, note, confirmed } = value
   return <section aria-label="准备准确候选审核"><h4>准备这份准确候选的审核</h4>
     <p>{candidate.entity} · {candidate.draft_id} · 候选 r{candidate.draft_revision}</p><code>{candidate.candidate_sha256}</code>
-    <p>候选入口最近读到的状态：{candidateState}。审核任务与审核回执是独立事实；本阶段尚未联动草稿状态投影和发布。</p>
+    <p>候选入口最近读到的状态：{candidateState}。审核任务与审核回执是独立事实，不自动推进草稿状态或发布；符合当前范围的 Import 文本块须在独立发布面板明确确认。</p>
     <fieldset disabled={busy}><legend>本次请求的检查</legend>{([
       ['structure', '结构与声明关系'], ['numerical_examples', '已存在的数值执行记录'], ['mathematics', '数学审核状态'], ['sources', '来源审核状态'],
     ] as const).map(([key, label]) => <label key={key}><input type="checkbox" checked={checks.includes(key)} onChange={event => change({ ...value, checks: event.target.checked ? [...checks, key] : checks.filter(item => item !== key) })} />{label}</label>)}</fieldset>
