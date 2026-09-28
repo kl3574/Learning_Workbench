@@ -7,6 +7,7 @@ that history, validate mathematical prose, execute a plan or approve a source.
 from typing import Literal, Self
 
 from pydantic import model_validator, ValidationError
+from pydantic_core import PydanticSerializationError
 
 from packages.contracts import domain_models as dm
 from packages.contracts.canonical import canonical_bytes
@@ -100,8 +101,8 @@ def review_structure(material: CheckedReviewMaterial, *, requested: bool) -> Str
     can yield FAIL. Successful declarations never authenticate their meaning.
     """
     try:
-        material = CheckedReviewMaterial.model_validate(material.model_dump(mode='python'))
-    except (ValidationError, ValueError, TypeError, AttributeError):
+        material = CheckedReviewMaterial.model_validate(material.model_dump(mode='python', warnings='error'))
+    except (ValidationError, ValueError, TypeError, AttributeError, PydanticSerializationError):
         raise ApiError(503, 'REVIEW_MATERIAL_INTEGRITY', '审核材料未通过完整性校验。') from None
     if not isinstance(requested, bool):
         raise ApiError(422, 'SCHEMA_INVALID', '结构检查选择无效。')

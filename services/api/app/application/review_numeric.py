@@ -8,6 +8,7 @@ import sqlite3
 from typing import Literal, Protocol
 
 from pydantic import ValidationError
+from pydantic_core import PydanticSerializationError
 from packages.contracts import domain_models as dm
 from packages.contracts.canonical import canonical_bytes, metadata_sha256, sha256_bytes
 from ..authoring_dto import NumericCheckView
@@ -95,8 +96,8 @@ the prefix. Explicit frozen revision/prefix facts are rechecked instead.
 
 def _checked_observation(value: ReviewNumericObservation) -> ReviewNumericObservation:
     try:
-        return ReviewNumericObservation.model_validate(value.model_dump(mode='python'))
-    except (ValidationError, ValueError, TypeError, AttributeError):
+        return ReviewNumericObservation.model_validate(value.model_dump(mode='python', warnings='error'))
+    except (ValidationError, ValueError, TypeError, AttributeError, PydanticSerializationError):
         raise integrity() from None
 
 
