@@ -1,0 +1,286 @@
+"""Real local edit-to-publication protocol; all human approval is synthetic."""
+
+import pytest
+
+from packages.contracts import domain_models as dm
+from packages.contracts.canonical import metadata_sha256
+from services.api.app.application.content import ContentService
+from services.api.app.application.draft_candidates import DraftCandidates
+from services.api.app.application.draft_edits import DraftEditService
+from services.api.app.application.draft_publication import DraftPublicationService
+from services.api.app.application.imports import ImportService
+from services.api.app.application.publication_admission_models import DraftPublishWrite
+from services.api.app.application.review_numeric import ReviewNumeric
+from services.api.app.application.review_service import ReviewService
+from services.api.app.application.review_worker import ReviewWorker
+from services.api.app.draft_dto import DraftCreateWrite, DraftPatchWrite, DraftPatch
+from services.api.app.infrastructure.database import Database
+from tests.integration.test_draft_edit_migration import previous as previous
+from tests.integration.test_review_workflow import request, decision
+
+
+@pytest.fixture
+def editing(tmp_path):
+    _, settings, identity, _, _, _, base = previous.__wrapped__(tmp_path)
+    database = Database(settings)
+    database.initialize()
+    edits = DraftEditService(database)
+    created = edits.create(
+        identity, DraftCreateWrite(kind="block", base_ref=base, title="Synthetic revised title"), "edit-create"
+    )
+    edits.patch(
+        identity,
+        created.draft_id,
+        DraftPatchWrite(
+            expected_revision=1, patches=[DraftPatch(field="body_markdown", value="Synthetic edited prose.\n")]
+        ),
+        "edit-patch",
+    )
+    registry = DraftCandidates({"authoring_edit": edits})
+    reviews = ReviewService(database, registry, ReviewNumeric(registry, {}), {})
+    return database, identity, base, edits, created, reviews
+
+
+def approved(editing, revision=2, key="review"):
+    database, identity, _, edits, created, reviews = editing
+    record = edits.read(identity, created.draft_id, revision)
+    job = reviews.create(identity, created.draft_id, request(record.candidate), key)
+    assert ReviewWorker(reviews).run_once()
+    machine = reviews.read(identity, job.id)
+    assert machine.mathematical == machine.sources == machine.independent_pedagogy == "NOT_RUN"
+    receipt = reviews.decide(
+        identity, job.id, decision(machine, mathematical="NOT_APPLICABLE", sources="APPROVED"), key + "-synthetic-human"
+    )
+    body = DraftPublishWrite(
+        expected_revision=revision,
+        expected_content_sha256=record.candidate.candidate_sha256,
+        review_receipt_id=receipt.id,
+        acknowledged_warning_codes=sorted({w.code for w in record.warnings if w.severity == "warning"}),
+    )
+    return record, receipt, body
+
+
+def publisher(editing):
+    database, _, _, _, _, reviews = editing
+    return DraftPublicationService(database, reviews, ImportService(database))
+
+
+def test_reviewed_edit_publishes_next_exact_content_revision_without_rewriting_base(editing):
+    database, identity, base, edits, created, reviews = editing
+    record, receipt, body = approved(editing)
+    content = ContentService(database)
+    original = content.body(identity.workspace_id, base.id, base.revision)
+    result = publisher(editing).publish(identity, created.draft_id, body, "publish-edit")
+    expected = record.base.metadata.model_copy(
+        update={
+            "revision": base.revision + 1,
+            "title": "Synthetic revised title",
+            "body_sha256": record.payload.body_sha256,
+        }
+    )
+    assert result == dm.ContentRef(
+        entity="block", id=base.id, revision=base.revision + 1, sha256=metadata_sha256(expected)
+    )
+    assert result.sha256 != record.candidate.candidate_sha256
+    assert content.current(identity.workspace_id, base.id) == result
+    assert content.body(identity.workspace_id, base.id, result.revision)[0] == b"Synthetic edited prose.\n"
+    assert content.body(identity.workspace_id, base.id, base.revision) == original
+    assert edits.read(identity, created.draft_id, 2) == record
+    assert reviews.read(identity, receipt.id) == receipt
+    assert publisher(editing).publish(identity, created.draft_id, body, "publish-edit") == result
+
+
+def test_new_publication_requires_current_edit_and_exact_current_content_base(editing):
+    from services.api.app.application.errors import ApiError
+    from tests.integration.test_authoring_numeric_provider_history import table_hashes
+
+    database, identity, base, edits, created, _ = editing
+    _, _, body = approved(editing)
+    edits.patch(
+        identity,
+        created.draft_id,
+        DraftPatchWrite(expected_revision=2, patches=[DraftPatch(field="title", value="A later unreviewed title")]),
+        "later",
+    )
+    before = table_hashes(database)
+    with pytest.raises(ApiError) as error:
+        publisher(editing).publish(identity, created.draft_id, body, "old-approved")
+    assert error.value.status == 412
+    assert table_hashes(database) == before
+    current, _, newer = approved(editing, revision=3, key="new-review")
+    content = ContentService(database)
+    content.publish(
+        identity.workspace_id,
+        [
+            current.base.metadata.model_copy(
+                update={"revision": base.revision + 1, "title": "Concurrent official revision"}
+            )
+        ],
+        {current.base.metadata.body_path: current.base.body_markdown.encode()},
+    )
+    before = table_hashes(database)
+    with pytest.raises(ApiError) as error:
+        publisher(editing).publish(identity, created.draft_id, newer, "stale-base")
+    assert error.value.code == "PUBLICATION_BASE_CHANGED"
+    assert table_hashes(database) == before
+
+
+def test_reader_does_not_relabel_edited_content_as_original_import_provenance(editing):
+    from services.api.app.application.reader import ReaderService
+
+    database, identity, base, _, created, _ = editing
+    record, receipt, body = approved(editing)
+    reader = ReaderService(database)
+    original = reader.block(identity, base.id, base.revision)
+    result = publisher(editing).publish(identity, created.draft_id, body, "derived")
+    actual = reader.block(identity, result.id, result.revision)
+    assert actual.block_ref == result and actual.block.title == record.payload.title
+    assert actual.original_source is None
+    assert actual.unresolved_citation_ids == record.payload.citations
+    assert {w.code for w in actual.warnings} == {"PROVENANCE_UNRESOLVED"}
+    assert reader.block(identity, base.id, base.revision) == original
+    assert receipt.sources == "APPROVED"  # This is a synthetic exact Draft decision, not Reader source attribution.
+
+
+def test_original_ack_survives_later_edit_content_and_rejection_without_authorizing_new_publish(editing):
+    from services.api.app.application.errors import ApiError
+    from tests.integration.test_authoring_numeric_provider_history import table_hashes
+
+    database, identity, base, edits, created, reviews = editing
+    record, receipt, body = approved(editing)
+    first = publisher(editing).publish(identity, created.draft_id, body, "permanent")
+    edits.patch(
+        identity,
+        created.draft_id,
+        DraftPatchWrite(expected_revision=2, patches=[DraftPatch(field="title", value="Another draft title")]),
+        "later",
+    )
+    content = ContentService(database)
+    block = content.read(identity.workspace_id, "block", first.id, first.revision)
+    content.publish(
+        identity.workspace_id,
+        [block.model_copy(update={"revision": first.revision + 1, "title": "Later official title"})],
+        {block.body_path: record.payload.body_markdown.encode()},
+    )
+    rejected = reviews.decide(
+        identity, receipt.id, decision(receipt, mathematical="REJECTED", sources="REJECTED"), "reject"
+    )
+    before = table_hashes(database)
+    assert publisher(editing).publish(identity, created.draft_id, body, "permanent") == first
+    assert reviews.read(identity, receipt.id) == rejected
+    assert content.current(identity.workspace_id, base.id).revision == first.revision + 1
+    assert table_hashes(database) == before
+    with pytest.raises(ApiError) as error:
+        publisher(editing).publish(identity, created.draft_id, body, "new-after-publication")
+    assert error.value.code == "DRAFT_ALREADY_PUBLISHED"
+    altered = body.model_copy(update={"expected_content_sha256": "0" * 64})
+    with pytest.raises(ApiError) as error:
+        publisher(editing).publish(identity, created.draft_id, altered, "permanent")
+    assert error.value.code == "IDEMPOTENCY_CONFLICT"
+    assert table_hashes(database) == before
+
+
+@pytest.mark.parametrize("fault", ["base_body", "published_body", "edit_history", "publication_record"])
+def test_original_ack_revalidates_real_bytes_and_immutable_history(editing, fault):
+    from packages.contracts.canonical import canonical_bytes, sha256_bytes, strict_json
+    from services.api.app.application.errors import ApiError
+    from tests.integration.test_authoring_numeric_provider_history import table_hashes
+
+    database, identity, _, _, created, _ = editing
+    record, _, body = approved(editing)
+    result = publisher(editing).publish(identity, created.draft_id, body, "verified")
+    with database.transaction() as conn:
+        if fault in {"base_body", "published_body"}:
+            digest = record.base.metadata.body_sha256 if fault == "base_body" else record.payload.body_sha256
+            (database.settings.data_dir / "blobs" / digest[:2] / digest).write_bytes(b"Synthetic damaged bytes")
+        elif fault == "edit_history":
+            conn.execute("DROP TRIGGER draft_edit_version_no_update")
+            conn.execute(
+                "UPDATE draft_edit_versions SET record_json='{}' WHERE draft_id=? AND revision=1", (created.draft_id,)
+            )
+        else:
+            conn.execute("DROP TRIGGER draft_publication_results_no_update")
+            row = conn.execute(
+                "SELECT p.id,r.record_json FROM draft_publications p JOIN draft_publication_results r ON r.publication_id=p.id WHERE p.draft_id=?",
+                (created.draft_id,),
+            ).fetchone()
+            raw = strict_json(row["record_json"])
+            raw["edit_record_sha256"] = "0" * 64
+            encoded = canonical_bytes(raw)
+            conn.execute(
+                "UPDATE draft_publication_results SET record_json=?,sha256=? WHERE publication_id=?",
+                (encoded.decode(), sha256_bytes(encoded), row["id"]),
+            )
+    before = table_hashes(database)
+    with pytest.raises(ApiError):
+        publisher(editing).publish(identity, created.draft_id, body, "verified")
+    assert table_hashes(database) == before
+    assert result.revision == 2
+
+
+@pytest.mark.parametrize("change", ["role", "revoked", "expired", "workspace"])
+def test_current_identity_guards_committed_ack_and_new_commands(editing, change):
+    from dataclasses import replace
+    from services.api.app.application.errors import ApiError
+    from tests.integration.test_authoring_numeric_provider_history import table_hashes
+
+    database, identity, _, _, created, _ = editing
+    _, _, body = approved(editing)
+    publisher(editing).publish(identity, created.draft_id, body, "guarded")
+    with database.transaction() as conn:
+        if change == "role":
+            conn.execute("UPDATE local_sessions SET role='learner' WHERE id=?", (identity.id,))
+        elif change == "revoked":
+            conn.execute("UPDATE local_sessions SET revoked_at='2000-01-01T00:00:00Z' WHERE id=?", (identity.id,))
+        elif change == "expired":
+            conn.execute("UPDATE local_sessions SET expires_at='2000-01-01T00:00:00Z' WHERE id=?", (identity.id,))
+        else:
+            identity = replace(identity, workspace_id="workspace_other")
+    before = table_hashes(database)
+    for key in ["guarded", "new-key"]:
+        with pytest.raises(ApiError):
+            publisher(editing).publish(identity, created.draft_id, body, key)
+    assert table_hashes(database) == before
+
+
+@pytest.mark.parametrize("mode", ["independent", "open_book", "assisted"])
+def test_actual_current_assessment_policy_rejects_old_ack_and_new_publication(editing, mode):
+    from services.api.app.application.assessment import AssessmentService
+    from services.api.app.assessment_dto import AssessmentAttemptCreate
+    from services.api.app.application.errors import ApiError
+    from services.api.app.infrastructure.content_repository import reference
+    from tests.assessment_fixtures import assessment_fixture
+    from tests.integration.test_assessment_attempts import import_fixture
+    from tests.integration.test_authoring_numeric_provider_history import table_hashes
+
+    database, identity, _, _, created, _ = editing
+    _, _, body = approved(editing)
+    publisher(editing).publish(identity, created.draft_id, body, "policy")
+    fixture = assessment_fixture("editpublicationpolicy")
+    import_fixture(database, identity, fixture, "assessment-material")
+    AssessmentService(database).create_attempt(
+        identity,
+        fixture.assessment.id,
+        AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode=mode),
+        "attempt",
+    )
+    before = table_hashes(database)
+    for key in ["policy", "new-key"]:
+        with pytest.raises(ApiError):
+            publisher(editing).publish(identity, created.draft_id, body, key)
+    assert table_hashes(database) == before
+
+
+def test_archived_current_base_cannot_be_published_as_an_edit(editing):
+    from services.api.app.application.errors import ApiError
+    from tests.integration.test_authoring_numeric_provider_history import table_hashes
+
+    database, identity, base, _, created, _ = editing
+    _, _, body = approved(editing)
+    with database.transaction() as conn:
+        conn.execute("UPDATE objects SET lifecycle='archived' WHERE id=?", (base.id,))
+    before = table_hashes(database)
+    with pytest.raises(ApiError) as caught:
+        publisher(editing).publish(identity, created.draft_id, body, "archived")
+    assert caught.value.code == "PUBLICATION_BASE_CHANGED"
+    assert table_hashes(database) == before

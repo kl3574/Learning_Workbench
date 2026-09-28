@@ -1,0 +1,1425 @@
+diff --git a/docs/adr/0034-edit-block-publication.md b/docs/adr/0034-edit-block-publication.md
+new file mode 100644
+index 0000000..a40ddfc
+--- /dev/null
++++ b/docs/adr/0034-edit-block-publication.md
+@@ -0,0 +1,15 @@
++# 0034: Explicit publication of an exact edited text block
++
++PRODUCT_DESIGN.md §§7,9.3,15.1–15.3,20.1–20.3 and Appendix A define immutable Content revisions, four-field Draft publishing, exact human approval and atomic invalidation. This slice extends the existing POST `/drafts/{id}/publish` to the already implemented text-block edit owner. It does not add an editing GET, change the request/response DTO, substitute a ContentRef for a DraftCandidate or rewrite Import publication records.
++
++A new command requires the current immutable edit head, the selected Review's complete current history and artifacts, structural PASS, all applicable human mathematics/source decisions and explicit real-warning acknowledgements. An edit has no declared numeric plan: absence is not a numeric PASS. Review continues to reject mathematical N/A for formulas in the current title/body. The inherited base is a real source and requires source approval. Decisions in automated tests remain synthetic protocol fixtures.
++
++The Content owner separately compares the exact frozen base against its active current pointer under the same writer transaction. A mismatched/archived base yields412; no implicit rebase or last-writer-wins update occurs. Publication uses the same Content ID at base.revision+1 and changes only the reviewed title/body fields. Candidate SHA covers the edit payload; result SHA covers actual published ContentBlock metadata. These hashes serve different roles and are never conflated. Current pointer, immutable revision/body references, dependency outbox, existing retrieval/recommendation invalidation and exact note stale revisions share the publication transaction. This is durable impact intent, not completed impact analysis/reindexing.
++
++A new internal edit-publication-v1 record binds the entire immutable edit record hash, exact base material, reviewed payload, admission observation, selected human receipt hash, actual result and permanent actor/workspace/route/key command. Existing Import draft-publication-v1 bytes and semantics remain unchanged. The publication lifecycle records current adoption/selection/verification and actual publication; it does not manufacture past approval times or mutate producer snapshots. Forward migration0020 preserves all four publication tables, rowids, FKs and immutable triggers, extending only the owner constraint to the existing authoring owner. It executes with FKs enabled and verifies copies bidirectionally before discarding temporary snapshots.
++
++Original-key replay first authenticates current identity/Policy and the complete current owner/Review history, then verifies the original admitted decision and exact historical Content bytes. It returns the original ContentRef after later Content advancement or Review rejection. Previously committed PATCH commands likewise replay their original ACK before terminal-state checks; new PATCH commands cannot restart this published Draft. It does not use current-head/base CAS to erase a prior committed result. New keys still require current admission; different actors cannot inherit the old actor's command. Corrupt original edit/base/history/report/published bytes fail closed without repair writes.
++
++The new revision deliberately has no invented Import provenance row. Its base provenance remains fully retained in the immutable Edit and publication records; the existing Reader returns original_source=null, unresolved citation IDs and PROVENANCE_UNRESOLVED for the edited revision. Explicit Draft sources approval is not relabelled as original Import parser attribution or a public Content review_state. Old Import provenance/membership and its commit/recovery rules remain intact. A future truthful derived-provenance projection needs an independent ownership design; this slice does not claim it exists.
++
++A committed publication is terminal for new PATCH commands on the same Draft. The Edit owner consults the authenticated publication owner record under the same writer transaction after original-command replay. Concurrent PATCH/publication has only two serial outcomes: PATCH wins and the old reviewed publication candidate is rejected; or publication wins and the new PATCH is rejected without a new Draft revision. Creating a new Draft from an explicitly chosen current ContentRef remains the available safe operation. Editing UI/conflict recovery, derived Reader attribution, global Draft/Content review-state projection, generated/question/group publication, completed impact analysis and full M6.2 acceptance are not completed here. No Provider or numeric executor is required or invoked by this slice.
+diff --git a/migrations/0020_edit_publications.sql b/migrations/0020_edit_publications.sql
+new file mode 100644
+index 0000000..06db834
+--- /dev/null
++++ b/migrations/0020_edit_publications.sql
+@@ -0,0 +1,125 @@
++-- Edit publications share the existing real lifecycle; preserve all original Import rows.
++
++CREATE TEMP TABLE edit_publication_saved_draft_publications AS SELECT rowid AS saved_rowid,* FROM draft_publications;
++
++CREATE TEMP TABLE edit_publication_saved_draft_publication_events AS SELECT rowid AS saved_rowid,* FROM draft_publication_events;
++
++CREATE TEMP TABLE edit_publication_saved_draft_publication_results AS SELECT rowid AS saved_rowid,* FROM draft_publication_results;
++
++CREATE TEMP TABLE edit_publication_saved_draft_publication_commands AS SELECT rowid AS saved_rowid,* FROM draft_publication_commands;
++
++DROP TRIGGER draft_publication_initial;
++
++DROP TRIGGER draft_publication_transition;
++
++DROP TRIGGER draft_publications_no_delete;
++
++DROP TRIGGER draft_publication_events_no_update;
++
++DROP TRIGGER draft_publication_events_no_delete;
++
++DROP TRIGGER draft_publication_results_no_update;
++
++DROP TRIGGER draft_publication_results_no_delete;
++
++DROP TRIGGER draft_publication_commands_no_update;
++
++DROP TRIGGER draft_publication_commands_no_delete;
++
++DROP TABLE draft_publication_commands;
++
++DROP TABLE draft_publication_events;
++
++DROP TABLE draft_publication_results;
++
++DROP TABLE draft_publications;
++
++-- Separate publication lifecycle; original producer snapshots and Review chains are unchanged.
++CREATE TABLE draft_publications(
++ id TEXT PRIMARY KEY NOT NULL,
++ workspace_id TEXT NOT NULL,
++ draft_id TEXT NOT NULL,
++ draft_revision INTEGER NOT NULL CHECK(typeof(draft_revision)='integer' AND draft_revision>=1),
++ owner TEXT NOT NULL CHECK(owner IN ('import','authoring')),
++ entity TEXT NOT NULL CHECK(entity='block'),
++ candidate_sha256 TEXT NOT NULL,
++ state TEXT NOT NULL CHECK(state IN ('draft','in_review','approved','published')),
++ revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision BETWEEN 1 AND 4),
++ adopted_at TEXT NOT NULL,
++ FOREIGN KEY(workspace_id,draft_id,draft_revision,owner,entity,candidate_sha256)
++  REFERENCES draft_candidate_revisions(workspace_id,draft_id,draft_revision,owner,entity,candidate_sha256),
++ UNIQUE(workspace_id,draft_id,draft_revision)
++);
++CREATE TABLE draft_publication_events(
++ publication_id TEXT NOT NULL REFERENCES draft_publications(id),
++ revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision BETWEEN 1 AND 4),
++ event_json TEXT NOT NULL CHECK(json_valid(event_json)),
++ sha256 TEXT NOT NULL CHECK(length(sha256)=64),
++ PRIMARY KEY(publication_id,revision)
++);
++CREATE TABLE draft_publication_results(
++ publication_id TEXT PRIMARY KEY NOT NULL REFERENCES draft_publications(id),
++ record_json TEXT NOT NULL CHECK(json_valid(record_json)),
++ sha256 TEXT NOT NULL CHECK(length(sha256)=64)
++);
++CREATE TABLE draft_publication_commands(
++ workspace_id TEXT NOT NULL REFERENCES workspace(id),
++ actor_id TEXT NOT NULL REFERENCES local_sessions(id),
++ route TEXT NOT NULL,
++ command_key TEXT NOT NULL,
++ publication_id TEXT NOT NULL UNIQUE REFERENCES draft_publication_results(publication_id),
++ PRIMARY KEY(workspace_id,actor_id,route,command_key)
++);
++
++INSERT INTO draft_publications(rowid,id,workspace_id,draft_id,draft_revision,owner,entity,candidate_sha256,state,revision,adopted_at) SELECT * FROM edit_publication_saved_draft_publications;
++
++INSERT INTO draft_publication_events(rowid,publication_id,revision,event_json,sha256) SELECT * FROM edit_publication_saved_draft_publication_events;
++
++INSERT INTO draft_publication_results(rowid,publication_id,record_json,sha256) SELECT * FROM edit_publication_saved_draft_publication_results;
++
++INSERT INTO draft_publication_commands(rowid,workspace_id,actor_id,route,command_key,publication_id) SELECT * FROM edit_publication_saved_draft_publication_commands;
++
++CREATE TEMP TABLE edit_publication_copy_check(ok INTEGER NOT NULL CHECK(ok=1));
++
++INSERT INTO edit_publication_copy_check SELECT NOT EXISTS(SELECT rowid,* FROM draft_publications EXCEPT SELECT * FROM edit_publication_saved_draft_publications) AND NOT EXISTS(SELECT * FROM edit_publication_saved_draft_publications EXCEPT SELECT rowid,* FROM draft_publications);
++
++DROP TABLE edit_publication_saved_draft_publications;
++
++INSERT INTO edit_publication_copy_check SELECT NOT EXISTS(SELECT rowid,* FROM draft_publication_events EXCEPT SELECT * FROM edit_publication_saved_draft_publication_events) AND NOT EXISTS(SELECT * FROM edit_publication_saved_draft_publication_events EXCEPT SELECT rowid,* FROM draft_publication_events);
++
++DROP TABLE edit_publication_saved_draft_publication_events;
++
++INSERT INTO edit_publication_copy_check SELECT NOT EXISTS(SELECT rowid,* FROM draft_publication_results EXCEPT SELECT * FROM edit_publication_saved_draft_publication_results) AND NOT EXISTS(SELECT * FROM edit_publication_saved_draft_publication_results EXCEPT SELECT rowid,* FROM draft_publication_results);
++
++DROP TABLE edit_publication_saved_draft_publication_results;
++
++INSERT INTO edit_publication_copy_check SELECT NOT EXISTS(SELECT rowid,* FROM draft_publication_commands EXCEPT SELECT * FROM edit_publication_saved_draft_publication_commands) AND NOT EXISTS(SELECT * FROM edit_publication_saved_draft_publication_commands EXCEPT SELECT rowid,* FROM draft_publication_commands);
++
++DROP TABLE edit_publication_saved_draft_publication_commands;
++
++DROP TABLE edit_publication_copy_check;
++CREATE TRIGGER draft_publication_initial BEFORE INSERT ON draft_publications
++ WHEN NEW.state<>'draft' OR NEW.revision<>1
++ BEGIN SELECT RAISE(ABORT,'publication must start at current adoption'); END;
++CREATE TRIGGER draft_publication_transition BEFORE UPDATE ON draft_publications
++ WHEN OLD.id<>NEW.id OR OLD.workspace_id<>NEW.workspace_id OR OLD.draft_id<>NEW.draft_id
++ OR OLD.draft_revision<>NEW.draft_revision OR OLD.owner<>NEW.owner OR OLD.entity<>NEW.entity
++ OR OLD.candidate_sha256<>NEW.candidate_sha256 OR OLD.adopted_at<>NEW.adopted_at
++ OR NEW.revision<>OLD.revision+1
++ OR NOT ((OLD.state='draft' AND NEW.state='in_review') OR (OLD.state='in_review' AND NEW.state='approved')
++ OR (OLD.state='approved' AND NEW.state='published'))
++ BEGIN SELECT RAISE(ABORT,'immutable identity or invalid publication transition'); END;
++CREATE TRIGGER draft_publications_no_delete BEFORE DELETE ON draft_publications
++ BEGIN SELECT RAISE(ABORT,'publication history immutable'); END;
++CREATE TRIGGER draft_publication_events_no_update BEFORE UPDATE ON draft_publication_events
++ BEGIN SELECT RAISE(ABORT,'publication events immutable'); END;
++CREATE TRIGGER draft_publication_events_no_delete BEFORE DELETE ON draft_publication_events
++ BEGIN SELECT RAISE(ABORT,'publication events immutable'); END;
++CREATE TRIGGER draft_publication_results_no_update BEFORE UPDATE ON draft_publication_results
++ BEGIN SELECT RAISE(ABORT,'publication result immutable'); END;
++CREATE TRIGGER draft_publication_results_no_delete BEFORE DELETE ON draft_publication_results
++ BEGIN SELECT RAISE(ABORT,'publication result immutable'); END;
++CREATE TRIGGER draft_publication_commands_no_update BEFORE UPDATE ON draft_publication_commands
++ BEGIN SELECT RAISE(ABORT,'publication command immutable'); END;
++CREATE TRIGGER draft_publication_commands_no_delete BEFORE DELETE ON draft_publication_commands
++ BEGIN SELECT RAISE(ABORT,'publication command immutable'); END;
+diff --git a/services/api/app/application/content.py b/services/api/app/application/content.py
+index 0f75584..a49389c 100644
+--- a/services/api/app/application/content.py
++++ b/services/api/app/application/content.py
+@@ -390,6 +390,29 @@ class ContentService:
+             raise damaged()
+         return refs[0]
+ 
++    def publish_edited_block_in_transaction(self, connection: sqlite3.Connection, workspace_id: str,
++                                            base: dm.ContentRef, block: dm.ContentBlock, body: bytes) -> dm.ContentRef:
++        """Exact active current-base CAS; old body/history and invalidation remain Content-owned."""
++        if not connection.in_transaction:
++            raise ApiError(409, 'TRANSACTION_REQUIRED', '发布需要当前事务。')
++        original, _ = self.verify_publication_in_transaction(connection, workspace_id, base)
++        repository = ContentRepository(connection, workspace_id)
++        current = repository.current(base.id)
++        if current.lifecycle != 'active' or reference(current.value) != base:
++            raise ApiError(412, 'PUBLICATION_BASE_CHANGED', '正式内容基准已变化或归档，需要重新确认修改。')
++        try:
++            block = dm.ContentBlock.model_validate(block.model_dump(mode='python', warnings='error'))
++        except (ValueError, TypeError, AttributeError):
++            raise invalid() from None
++        expected = original.model_copy(update={'revision': base.revision + 1,
++                                               'title': block.title, 'body_sha256': block.body_sha256})
++        if block != expected or block.kind != 'text' or block.concepts or block.depends_on:
++            raise invalid()
++        refs = self.publish_in_transaction(connection, workspace_id, [block], {block.body_path: body})
++        if refs != [reference(block)] or reference(repository.current(block.id).value) != refs[0]:
++            raise damaged()
++        return refs[0]
++
+     def publish(self, workspace_id: str, objects: Iterable[PublishedModel], bodies: Mapping[str, bytes]) -> list[dm.ContentRef]:
+         """Internal trusted port; callers still own import/review approval workflows.
+ 
+diff --git a/services/api/app/application/draft_edits.py b/services/api/app/application/draft_edits.py
+index d08341d..97d3ca3 100644
+--- a/services/api/app/application/draft_edits.py
++++ b/services/api/app/application/draft_edits.py
+@@ -10,6 +10,7 @@ from ..draft_dto import DraftCreateWrite, DraftPatchWrite, DraftCreated, DraftPa
+ from ..infrastructure.database import Database, utc_now
+ from ..infrastructure.draft_candidate_repository import DraftCandidateRepository
+ from ..infrastructure.draft_edit_repository import DraftEditRepository
++from ..infrastructure.publication_repository import PublicationRepository
+ from ..infrastructure.security import SessionIdentity, current_session_identity
+ from .authoring_context import AuthoringContext
+ from .content_draft_source import ContentDraftSource
+@@ -116,6 +117,7 @@ class DraftEditService:
+                     self._registered_history(conn, current, draft_id)
+                     return checked(DraftPatched, ack(replay))
+             history = self._registered_history(conn, current, draft_id)
++            PublicationRepository(conn, current.workspace_id).require_unpublished_draft(draft_id)
+             prior = history[-1]
+             if body.expected_revision != prior.candidate.draft_revision:
+                 raise ApiError(412, 'DRAFT_REVISION_MISMATCH', '草稿已变化，请重新读取当前修订。')
+@@ -147,6 +149,19 @@ class DraftEditService:
+         records = self._history(connection, identity, candidate.draft_id)
+         match_candidate(candidate, records[-1].candidate)
+ 
++    def publication_record(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                           candidate: dm.DraftCandidate, *, require_current: bool = False) -> DraftEditRecord:
++        """Exact owner history in the publication transaction; replay does not select the latest head."""
++        candidate = checked(dm.DraftCandidate, candidate)
++        records = self._registered_history(connection, identity, candidate.draft_id)
++        if candidate.draft_revision > len(records):
++            raise ApiError(412, 'DRAFT_REVISION_MISMATCH', '草稿修订不存在。')
++        record = records[candidate.draft_revision - 1]
++        match_candidate(candidate, record.candidate)
++        if require_current:
++            match_candidate(candidate, records[-1].candidate)
++        return record
++
+     def read_review_material(self, connection: sqlite3.Connection, identity: SessionIdentity, candidate: dm.DraftCandidate):
+         from .review_material_models import EditReviewMaterial, checked_material
+         resolved = self.resolve_candidate(connection, identity, candidate)
+diff --git a/services/api/app/application/draft_publication.py b/services/api/app/application/draft_publication.py
+index dd7ef0d..24a13d2 100644
+--- a/services/api/app/application/draft_publication.py
++++ b/services/api/app/application/draft_publication.py
+@@ -10,15 +10,17 @@ from ..infrastructure.publication_repository import PublicationRepository
+ from ..infrastructure.security import SessionIdentity, current_session_identity
+ from .authoring_context import AuthoringContext
+ from .content import ContentService
++from .draft_edits import DraftEditService
++from .edit_publication import EditBlockPublication
+ from .errors import ApiError
+ from .import_publication import ImportBlockPublication, unsupported
+ from .imports import ImportService
+ from .providers import validate_key
+ from .publication_admission import PublicationAdmissionService
+ from .publication_admission_models import DraftPublishWrite
+-from .publication_models import PublicationHistory, PublicationRecord, integrity, validated
++from .publication_models import PublicationHistory, PublicationRecord, EditPublicationRecord, integrity, validated
+ from .review_history_models import ReviewDecisionRecord, ReviewMachineRecord
+-from .review_material_models import ImportReviewMaterial
++from .review_material_models import ImportReviewMaterial, EditReviewMaterial, CheckedReviewMaterial
+ from .review_service import ReviewService
+ 
+ 
+@@ -27,6 +29,7 @@ class DraftPublicationService:
+         self.database, self.reviews = database, reviews
+         self.owner, self.content = ImportBlockPublication(imports), ContentService(database)
+         self.admission = PublicationAdmissionService(reviews)
++        self.edit_owner = EditBlockPublication(DraftEditService(database))
+ 
+     @staticmethod
+     def _access(conn: sqlite3.Connection, identity: SessionIdentity) -> SessionIdentity:
+@@ -48,16 +51,49 @@ class DraftPublicationService:
+                   and item.receipt.revision == record.admission.review_revision]
+         if (len(humans) != 1 or metadata_sha256(humans[0]) != record.human_record_sha256
+                 or metadata_sha256(humans[0].receipt) != record.admission.receipt_sha256
+-                or humans[0].receipt.mathematical != 'NOT_APPLICABLE' or humans[0].receipt.sources != 'APPROVED'
++                or (isinstance(record, PublicationRecord) and humans[0].receipt.mathematical != 'NOT_APPLICABLE')
++                or humans[0].receipt.sources != 'APPROVED'
+                 or machine.structural_report.structural != 'PASS'
+                 or machine.numeric.descriptor_sha256 != record.admission.numeric_observation_sha256):
+             raise integrity()
+-        prepared = self.owner.verify(conn, identity, record)
++        if isinstance(record, EditPublicationRecord):
++            edited = self.edit_owner.verify(conn, identity, record)
++            expected_block, expected_body = edited.block, edited.body
++        else:
++            imported = self.owner.verify(conn, identity, record)
++            expected_block, expected_body = imported.block, imported.body
+         block, raw = self.content.verify_publication_in_transaction(conn, identity.workspace_id, record.result)
+-        if block != prepared.block or raw != prepared.body:
++        if block != expected_block or raw != expected_body:
+             raise integrity()
+         return record.result
+ 
++    def _publish_edit(self, conn: sqlite3.Connection, current: SessionIdentity, repo: PublicationRepository,
++                      material: CheckedReviewMaterial, body: DraftPublishWrite, key: str) -> dm.ContentRef:
++        if repo.for_candidate(material.candidate) is not None:
++            raise ApiError(409, 'DRAFT_ALREADY_PUBLISHED', '此精确候选已经发布。')
++        prepared = self.edit_owner.prepare(conn, current, material.candidate)
++        if prepared.material != material:
++            raise integrity()
++        identifier, adopted = 'publication_' + uuid4().hex, utc_now()
++        repo.adopt(identifier, material.candidate, adopted, owner='authoring')
++        repo.advance(identifier, 1, 'draft', 'in_review', utc_now())
++        admission = self.admission.check(conn, current, material.candidate.draft_id, body)
++        history, checked_material = self.reviews.read_publication_basis(conn, current, body.review_receipt_id)
++        human = history.records[-1]
++        if checked_material != material or not isinstance(human, ReviewDecisionRecord):
++            raise integrity()
++        repo.advance(identifier, 2, 'in_review', 'approved', utc_now())
++        result = self.content.publish_edited_block_in_transaction(conn, current.workspace_id,
++            prepared.record.base.ref, prepared.block, prepared.body)
++        record = EditPublicationRecord(version='edit-publication-v1', id=identifier,
++            workspace_id=current.workspace_id, owner='authoring', candidate=material.candidate,
++            actor_id=current.id, route=f'POST /drafts/{material.candidate.draft_id}/publish', command_key=key,
++            request=body, admission=admission, human_record_sha256=metadata_sha256(human),
++            edit_record_sha256=metadata_sha256(prepared.record), base=prepared.record.base,
++            payload=prepared.record.payload, block=prepared.block, result=result,
++            adopted_at=adopted, published_at=utc_now())
++        return self._verify(conn, current, repo.finish(record))
++
+     def publish(self, identity: SessionIdentity, draft_id: str, body: DraftPublishWrite, key: str) -> dm.ContentRef:
+         key, body = validate_key(key), validated(DraftPublishWrite, body)
+         try:
+@@ -76,6 +112,8 @@ class DraftPublicationService:
+                 if (material.candidate.draft_id != draft_id or material.candidate.draft_revision != body.expected_revision
+                         or material.candidate.candidate_sha256 != body.expected_content_sha256):
+                     raise ApiError(412, 'PUBLISH_CANDIDATE_MISMATCH', '发布请求与精确审核候选不符。')
++                if isinstance(material.payload, EditReviewMaterial):
++                    return self._publish_edit(conn, current, repo, material, body, key)
+                 if not isinstance(material.payload, ImportReviewMaterial):
+                     raise unsupported()
+                 prepared = self.owner.prepare(conn, current, material.candidate)
+diff --git a/services/api/app/application/edit_publication.py b/services/api/app/application/edit_publication.py
+new file mode 100644
+index 0000000..8cca90c
+--- /dev/null
++++ b/services/api/app/application/edit_publication.py
+@@ -0,0 +1,50 @@
++"""Edit-owned publication material: exact immutable history and current-head admission."""
++from dataclasses import dataclass
++import sqlite3
++
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import metadata_sha256
++from ..infrastructure.security import SessionIdentity
++from .draft_candidate_models import ResolvedDraftCandidate
++from .draft_edit_models import DraftEditRecord
++from .draft_edits import DraftEditService
++from .publication_models import EditPublicationRecord, integrity, validated
++from .review_material_models import CheckedReviewMaterial, EditReviewMaterial, checked_material
++
++
++@dataclass(frozen=True, repr=False)
++class PreparedEditBlock:
++    material: CheckedReviewMaterial
++    record: DraftEditRecord
++    block: dm.ContentBlock
++    body: bytes
++
++
++class EditBlockPublication:
++    def __init__(self, edits: DraftEditService):
++        self.edits = edits
++
++    def _read(self, conn: sqlite3.Connection, identity: SessionIdentity, candidate: dm.DraftCandidate,
++              *, require_current: bool) -> PreparedEditBlock:
++        record = self.edits.publication_record(conn, identity, candidate, require_current=require_current)
++        material = checked_material(ResolvedDraftCandidate(record.workspace_id, 'authoring', 'authoring_edit', candidate),
++                                    EditReviewMaterial(record=record))
++        block = validated(dm.ContentBlock, record.base.metadata.model_copy(update={
++            'revision': record.base.ref.revision + 1, 'title': record.payload.title,
++            'body_sha256': record.payload.body_sha256}))
++        return PreparedEditBlock(material, record, block, record.payload.body_markdown.encode('utf-8'))
++
++    def prepare(self, conn: sqlite3.Connection, identity: SessionIdentity,
++                candidate: dm.DraftCandidate) -> PreparedEditBlock:
++        return self._read(conn, identity, candidate, require_current=True)
++
++    def verify(self, conn: sqlite3.Connection, identity: SessionIdentity,
++               record: EditPublicationRecord) -> PreparedEditBlock:
++        record = validated(EditPublicationRecord, record)
++        prepared = self._read(conn, identity, record.candidate, require_current=False)
++        if (prepared.record.base != record.base or prepared.record.payload != record.payload
++                or metadata_sha256(prepared.record) != record.edit_record_sha256
++                or prepared.material.descriptor_sha256 != record.admission.material_descriptor_sha256
++                or prepared.block != record.block):
++            raise integrity()
++        return prepared
+diff --git a/services/api/app/application/publication_admission.py b/services/api/app/application/publication_admission.py
+index 5d14065..af0aae1 100644
+--- a/services/api/app/application/publication_admission.py
++++ b/services/api/app/application/publication_admission.py
+@@ -28,7 +28,9 @@ class PublicationAdmissionService:
+     def _plans(material: CheckedReviewMaterial) -> list[tuple[AuthoringDraftMemberRef | None, NumericPlan]]:
+         payload = material.payload
+         if isinstance(payload, EditReviewMaterial):
+-            raise blocked('PUBLISH_EDIT_OWNER_UNSUPPORTED', '当前编辑候选尚未接入真实发布所属端口。')
++            # This exact text-edit model contains no declared numeric plan.
++            # Human applicability remains verified by Quality, never machine approval.
++            return []
+         if isinstance(payload, ImportReviewMaterial):
+             if material.candidate.entity == 'question':
+                 raise blocked('PUBLISH_PRIVATE_COVERAGE_UNAVAILABLE', '当前导入审核不包含私有解答，不能据此准入题目发布。')
+diff --git a/services/api/app/application/publication_models.py b/services/api/app/application/publication_models.py
+index d27feea..bf2cbff 100644
+--- a/services/api/app/application/publication_models.py
++++ b/services/api/app/application/publication_models.py
+@@ -1,14 +1,15 @@
+ """Strict publication facts; neither construction nor stored JSON grants access."""
+ from dataclasses import dataclass
+-from typing import Literal, Self, TypeVar
++from typing import Annotated, Literal, Self, TypeVar
+ 
+-from pydantic import BaseModel, model_validator
++from pydantic import BaseModel, Field, model_validator
+ from packages.contracts import domain_models as dm
+ from packages.contracts.budgets import ImportBudgets
+ from packages.contracts.canonical import metadata_sha256
+ from ..authoring_dto import AuthoringModel
+ from ..infrastructure.provenance_repository import FrozenProvenance
+ from .errors import ApiError
++from .draft_edit_models import DraftBaseMaterial, DraftEditPayload
+ from .publication_admission_models import DraftPublishWrite, PublicationAdmission
+ from .review_material_models import CheckedReviewMaterial
+ 
+@@ -76,6 +77,60 @@ class PublicationRecord(AuthoringModel):
+         return self
+ 
+ 
++class EditPublicationRecord(AuthoringModel):
++    version: Literal['edit-publication-v1']
++    id: dm.Id
++    workspace_id: dm.Id
++    owner: Literal['authoring']
++    candidate: dm.DraftCandidate
++    actor_id: dm.Id
++    route: str
++    command_key: str
++    request: DraftPublishWrite
++    admission: PublicationAdmission
++    human_record_sha256: dm.Sha256
++    edit_record_sha256: dm.Sha256
++    base: DraftBaseMaterial
++    payload: DraftEditPayload
++    block: dm.ContentBlock
++    result: dm.ContentRef
++    adopted_at: dm.UTC
++    published_at: dm.UTC
++
++    @model_validator(mode='after')
++    def exact_bindings(self) -> Self:
++        c, a, r, p, b = self.candidate, self.admission, self.request, self.payload, self.base
++        expected = b.metadata.model_copy(update={'revision': b.ref.revision + 1,
++            'title': p.title, 'body_sha256': p.body_sha256})
++        if (self.route != f'POST /drafts/{c.draft_id}/publish' or not self.command_key
++                or c.entity != 'block' or c.draft_revision != r.expected_revision
++                or c.candidate_sha256 != r.expected_content_sha256 or c.candidate_sha256 != metadata_sha256(p)
++                or a.workspace_id != self.workspace_id or a.candidate != c
++                or a.review_receipt_id != r.review_receipt_id
++                or a.acknowledged_warning_codes != r.acknowledged_warning_codes
++                or a.numeric_coverage != 'not_required_by_material' or a.numeric_check_ids
++                or p.base_ref != b.ref or p.base_material_sha256 != metadata_sha256(b)
++                or p.body_path != b.metadata.body_path or p.citations != b.metadata.citations
++                or self.block != expected
++                or self.result != dm.ContentRef(entity='block', id=expected.id, revision=expected.revision,
++                                                sha256=metadata_sha256(expected))):
++            raise ValueError('Edit publication must bind the exact edit and next base Content revision')
++        return self
++
++
++def publication_record(value: object) -> PublicationRecord | EditPublicationRecord:
++    if isinstance(value, PublicationRecord):
++        return validated(PublicationRecord, value)
++    if isinstance(value, EditPublicationRecord):
++        return validated(EditPublicationRecord, value)
++    if isinstance(value, dict):
++        if value.get('version') == 'draft-publication-v1':
++            return validated(PublicationRecord, value)
++        if value.get('version') == 'edit-publication-v1':
++            return validated(EditPublicationRecord, value)
++    raise integrity()
++
++
+ PublicationState = Literal['draft', 'in_review', 'approved', 'published']
+ 
+ 
+@@ -88,7 +143,7 @@ class PublicationEvent(AuthoringModel):
+ 
+ 
+ class PublicationHistory(AuthoringModel):
+-    record: PublicationRecord
++    record: Annotated[PublicationRecord | EditPublicationRecord, Field(discriminator='version')]
+     events: list[PublicationEvent]
+ 
+     @model_validator(mode='after')
+diff --git a/services/api/app/infrastructure/publication_repository.py b/services/api/app/infrastructure/publication_repository.py
+index dc57d20..8321fd2 100644
+--- a/services/api/app/infrastructure/publication_repository.py
++++ b/services/api/app/infrastructure/publication_repository.py
+@@ -6,7 +6,7 @@ from packages.contracts.canonical import canonical_bytes, sha256_bytes, strict_j
+ from ..application.errors import ApiError
+ from ..application.publication_admission_models import DraftPublishWrite
+ from ..application.publication_models import (
+-    PublicationEvent, PublicationHistory, PublicationRecord, PublicationState, integrity, validated,
++    PublicationEvent, PublicationHistory, PublicationRecord, EditPublicationRecord, PublicationState, integrity, validated, publication_record,
+ )
+ 
+ 
+@@ -19,7 +19,7 @@ class PublicationRepository:
+     @staticmethod
+     def _decode(model, raw, digest):
+         try:
+-            value = validated(model, strict_json(raw))
++            value = publication_record(strict_json(raw)) if model is None else validated(model, strict_json(raw))
+             if canonical_bytes(value).decode() != raw or sha256_bytes(raw.encode()) != digest:
+                 raise integrity()
+             return value
+@@ -33,7 +33,7 @@ class PublicationRepository:
+                                    (identifier,)).fetchone()
+         if row is None or result is None or row['state'] != 'published' or row['revision'] != 4:
+             raise integrity()
+-        record = self._decode(PublicationRecord, result['record_json'], result['sha256'])
++        record = self._decode(None, result['record_json'], result['sha256'])
+         candidate = record.candidate
+         if (record.id != row['id'] or record.workspace_id != row['workspace_id']
+                 or record.owner != row['owner'] or candidate.draft_id != row['draft_id']
+@@ -74,6 +74,14 @@ class PublicationRepository:
+             raise integrity()
+         return history
+ 
++    def require_unpublished_draft(self, draft_id: str) -> None:
++        """A committed publication is terminal for new commands on this producer Draft."""
++        row = self.conn.execute('SELECT id FROM draft_publications WHERE workspace_id=? AND draft_id=? LIMIT 1',
++                                (self.workspace_id, draft_id)).fetchone()
++        if row is not None:
++            self.load(row['id'])
++            raise ApiError(409, 'DRAFT_ALREADY_PUBLISHED', '此草稿已经发布；请从明确选择的正式修订创建新草稿。')
++
+     def _event(self, identifier: str, revision: int, state: PublicationState, now: str) -> None:
+         value = validated(PublicationEvent, dict(version='draft-publication-event-v1', publication_id=identifier,
+                                                  revision=revision, state=state, recorded_at=now))
+@@ -81,13 +89,13 @@ class PublicationRepository:
+         self.conn.execute('INSERT INTO draft_publication_events VALUES(?,?,?,?)',
+                           (identifier, revision, raw.decode(), sha256_bytes(raw)))
+ 
+-    def adopt(self, identifier: str, candidate: dm.DraftCandidate, now: str) -> None:
++    def adopt(self, identifier: str, candidate: dm.DraftCandidate, now: str, *, owner: str = 'import') -> None:
+         candidate = validated(dm.DraftCandidate, candidate)
+         if self.for_candidate(candidate) is not None:
+             raise ApiError(409, 'DRAFT_ALREADY_PUBLISHED', '此精确候选已经发布。')
+         self.conn.execute('INSERT INTO draft_publications(id,workspace_id,draft_id,draft_revision,owner,entity,'
+             'candidate_sha256,state,revision,adopted_at) VALUES(?,?,?,?,?,?,?,\'draft\',1,?)',
+-            (identifier, self.workspace_id, candidate.draft_id, candidate.draft_revision, 'import', candidate.entity,
++            (identifier, self.workspace_id, candidate.draft_id, candidate.draft_revision, owner, candidate.entity,
+              candidate.candidate_sha256, now))
+         self._event(identifier, 1, 'draft', now)
+ 
+@@ -100,8 +108,8 @@ class PublicationRepository:
+             raise ApiError(409, 'PUBLICATION_STATE_CONFLICT', '发布内部状态已经改变。')
+         self._event(identifier, expected_revision + 1, state, now)
+ 
+-    def finish(self, record: PublicationRecord) -> PublicationHistory:
+-        record = validated(PublicationRecord, record)
++    def finish(self, record: PublicationRecord | EditPublicationRecord) -> PublicationHistory:
++        record = publication_record(record)
+         if record.workspace_id != self.workspace_id:
+             raise integrity()
+         raw = canonical_bytes(record)
+diff --git a/tests/integration/test_draft_edit_integrity.py b/tests/integration/test_draft_edit_integrity.py
+index 171e82a..02b7e4d 100644
+--- a/tests/integration/test_draft_edit_integrity.py
++++ b/tests/integration/test_draft_edit_integrity.py
+@@ -73,22 +73,18 @@ def review(case):
+     return reviews, approved
+ 
+ 
+-def test_edited_candidate_never_inherits_old_approval_or_publishes_through_import_owner(case):
++def test_edited_candidate_never_inherits_old_approval(case):
+     database, identity, _, service, _, created = case
+     reviews, approved = review(case)
+     old = approved.candidate
++    original = service.read(identity, created.draft_id, 1)
+     body = DraftPublishWrite(expected_revision=1, expected_content_sha256=old.candidate_sha256,
+-        review_receipt_id=approved.id, acknowledged_warning_codes=['DRAFT_EDIT_UNREVIEWED'])
++        review_receipt_id=approved.id,
++        acknowledged_warning_codes=sorted({w.code for w in original.warnings if w.severity == 'warning'}))
+     before = table_hashes(database)
+     with database.transaction() as conn:
+-        with pytest.raises(ApiError) as error:
+-            PublicationAdmissionService(reviews).check(conn, identity, created.draft_id, body)
+-        assert error.value.code == 'PUBLISH_EDIT_OWNER_UNSUPPORTED'
+-    from services.api.app.application.draft_publication import DraftPublicationService
+-    publication = DraftPublicationService(database, reviews, owners(database)[0])
+-    with pytest.raises(ApiError) as error:
+-        publication.publish(identity, created.draft_id, body, 'publish')
+-    assert error.value.code == 'PUBLICATION_OWNER_SCOPE_UNSUPPORTED'
++        admitted = PublicationAdmissionService(reviews).check(conn, identity, created.draft_id, body)
++        assert admitted.publication == 'NOT_RUN' and admitted.candidate == old
+     assert table_hashes(database) == before
+     service.patch(identity, created.draft_id, patch(), 'patch')
+     current = service.read(identity, created.draft_id, 2)
+diff --git a/tests/integration/test_edit_publication.py b/tests/integration/test_edit_publication.py
+new file mode 100644
+index 0000000..c233979
+--- /dev/null
++++ b/tests/integration/test_edit_publication.py
+@@ -0,0 +1,344 @@
++"""Real local edit-to-publication protocol; all human approval is synthetic."""
++
++import pytest
++
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import metadata_sha256
++from services.api.app.application.content import ContentService
++from services.api.app.application.draft_candidates import DraftCandidates
++from services.api.app.application.draft_edits import DraftEditService
++from services.api.app.application.draft_publication import DraftPublicationService
++from services.api.app.application.imports import ImportService
++from services.api.app.application.publication_admission_models import DraftPublishWrite
++from services.api.app.application.review_numeric import ReviewNumeric
++from services.api.app.application.review_service import ReviewService
++from services.api.app.application.review_worker import ReviewWorker
++from services.api.app.draft_dto import DraftCreateWrite, DraftPatchWrite, DraftPatch
++from services.api.app.infrastructure.database import Database
++from tests.integration.test_draft_edit_migration import previous as previous
++from tests.integration.test_review_workflow import request, decision
++
++
++@pytest.fixture
++def editing(tmp_path):
++    _, settings, identity, _, _, _, base = previous.__wrapped__(tmp_path)
++    database = Database(settings)
++    database.initialize()
++    edits = DraftEditService(database)
++    created = edits.create(
++        identity, DraftCreateWrite(kind="block", base_ref=base, title="Synthetic revised title"), "edit-create"
++    )
++    edits.patch(
++        identity,
++        created.draft_id,
++        DraftPatchWrite(
++            expected_revision=1, patches=[DraftPatch(field="body_markdown", value="Synthetic edited prose.\n")]
++        ),
++        "edit-patch",
++    )
++    registry = DraftCandidates({"authoring_edit": edits})
++    reviews = ReviewService(database, registry, ReviewNumeric(registry, {}), {})
++    return database, identity, base, edits, created, reviews
++
++
++def approved(editing, revision=2, key="review"):
++    database, identity, _, edits, created, reviews = editing
++    record = edits.read(identity, created.draft_id, revision)
++    job = reviews.create(identity, created.draft_id, request(record.candidate), key)
++    assert ReviewWorker(reviews).run_once()
++    machine = reviews.read(identity, job.id)
++    assert machine.mathematical == machine.sources == machine.independent_pedagogy == "NOT_RUN"
++    receipt = reviews.decide(
++        identity, job.id, decision(machine, mathematical="NOT_APPLICABLE", sources="APPROVED"), key + "-synthetic-human"
++    )
++    body = DraftPublishWrite(
++        expected_revision=revision,
++        expected_content_sha256=record.candidate.candidate_sha256,
++        review_receipt_id=receipt.id,
++        acknowledged_warning_codes=sorted({w.code for w in record.warnings if w.severity == "warning"}),
++    )
++    return record, receipt, body
++
++
++def publisher(editing):
++    database, _, _, _, _, reviews = editing
++    return DraftPublicationService(database, reviews, ImportService(database))
++
++
++def test_reviewed_edit_publishes_next_exact_content_revision_without_rewriting_base(editing):
++    database, identity, base, edits, created, reviews = editing
++    record, receipt, body = approved(editing)
++    content = ContentService(database)
++    original = content.body(identity.workspace_id, base.id, base.revision)
++    result = publisher(editing).publish(identity, created.draft_id, body, "publish-edit")
++    expected = record.base.metadata.model_copy(
++        update={
++            "revision": base.revision + 1,
++            "title": "Synthetic revised title",
++            "body_sha256": record.payload.body_sha256,
++        }
++    )
++    assert result == dm.ContentRef(
++        entity="block", id=base.id, revision=base.revision + 1, sha256=metadata_sha256(expected)
++    )
++    assert result.sha256 != record.candidate.candidate_sha256
++    assert content.current(identity.workspace_id, base.id) == result
++    assert content.body(identity.workspace_id, base.id, result.revision)[0] == b"Synthetic edited prose.\n"
++    assert content.body(identity.workspace_id, base.id, base.revision) == original
++    assert edits.read(identity, created.draft_id, 2) == record
++    assert reviews.read(identity, receipt.id) == receipt
++    assert publisher(editing).publish(identity, created.draft_id, body, "publish-edit") == result
++
++
++def test_new_publication_requires_current_edit_and_exact_current_content_base(editing):
++    from services.api.app.application.errors import ApiError
++    from tests.integration.test_authoring_numeric_provider_history import table_hashes
++
++    database, identity, base, edits, created, _ = editing
++    _, _, body = approved(editing)
++    edits.patch(
++        identity,
++        created.draft_id,
++        DraftPatchWrite(expected_revision=2, patches=[DraftPatch(field="title", value="A later unreviewed title")]),
++        "later",
++    )
++    before = table_hashes(database)
++    with pytest.raises(ApiError) as error:
++        publisher(editing).publish(identity, created.draft_id, body, "old-approved")
++    assert error.value.status == 412
++    assert table_hashes(database) == before
++    current, _, newer = approved(editing, revision=3, key="new-review")
++    content = ContentService(database)
++    content.publish(
++        identity.workspace_id,
++        [
++            current.base.metadata.model_copy(
++                update={"revision": base.revision + 1, "title": "Concurrent official revision"}
++            )
++        ],
++        {current.base.metadata.body_path: current.base.body_markdown.encode()},
++    )
++    before = table_hashes(database)
++    with pytest.raises(ApiError) as error:
++        publisher(editing).publish(identity, created.draft_id, newer, "stale-base")
++    assert error.value.code == "PUBLICATION_BASE_CHANGED"
++    assert table_hashes(database) == before
++
++
++def test_reader_does_not_relabel_edited_content_as_original_import_provenance(editing):
++    from services.api.app.application.reader import ReaderService
++
++    database, identity, base, _, created, _ = editing
++    record, receipt, body = approved(editing)
++    reader = ReaderService(database)
++    original = reader.block(identity, base.id, base.revision)
++    result = publisher(editing).publish(identity, created.draft_id, body, "derived")
++    actual = reader.block(identity, result.id, result.revision)
++    assert actual.block_ref == result and actual.block.title == record.payload.title
++    assert actual.original_source is None
++    assert actual.unresolved_citation_ids == record.payload.citations
++    assert {w.code for w in actual.warnings} == {"PROVENANCE_UNRESOLVED"}
++    assert reader.block(identity, base.id, base.revision) == original
++    assert receipt.sources == "APPROVED"  # This is a synthetic exact Draft decision, not Reader source attribution.
++
++
++def test_original_ack_survives_content_advancement_and_rejection_without_authorizing_new_publish(editing):
++    from services.api.app.application.errors import ApiError
++    from tests.integration.test_authoring_numeric_provider_history import table_hashes
++
++    database, identity, base, edits, created, reviews = editing
++    record, receipt, body = approved(editing)
++    first = publisher(editing).publish(identity, created.draft_id, body, "permanent")
++    with pytest.raises(ApiError) as error:
++        edits.patch(
++            identity,
++            created.draft_id,
++            DraftPatchWrite(expected_revision=2, patches=[DraftPatch(field="title", value="Another draft title")]),
++            "later",
++        )
++    assert error.value.code == "DRAFT_ALREADY_PUBLISHED"
++    content = ContentService(database)
++    block = content.read(identity.workspace_id, "block", first.id, first.revision)
++    content.publish(
++        identity.workspace_id,
++        [block.model_copy(update={"revision": first.revision + 1, "title": "Later official title"})],
++        {block.body_path: record.payload.body_markdown.encode()},
++    )
++    rejected = reviews.decide(
++        identity, receipt.id, decision(receipt, mathematical="REJECTED", sources="REJECTED"), "reject"
++    )
++    before = table_hashes(database)
++    assert publisher(editing).publish(identity, created.draft_id, body, "permanent") == first
++    assert reviews.read(identity, receipt.id) == rejected
++    assert content.current(identity.workspace_id, base.id).revision == first.revision + 1
++    assert table_hashes(database) == before
++    with pytest.raises(ApiError) as error:
++        publisher(editing).publish(identity, created.draft_id, body, "new-after-publication")
++    assert error.value.code == "DRAFT_ALREADY_PUBLISHED"
++    altered = body.model_copy(update={"expected_content_sha256": "0" * 64})
++    with pytest.raises(ApiError) as error:
++        publisher(editing).publish(identity, created.draft_id, altered, "permanent")
++    assert error.value.code == "IDEMPOTENCY_CONFLICT"
++    assert table_hashes(database) == before
++
++
++@pytest.mark.parametrize("fault", ["base_body", "published_body", "edit_history", "publication_record"])
++def test_original_ack_revalidates_real_bytes_and_immutable_history(editing, fault):
++    from packages.contracts.canonical import canonical_bytes, sha256_bytes, strict_json
++    from services.api.app.application.errors import ApiError
++    from tests.integration.test_authoring_numeric_provider_history import table_hashes
++
++    database, identity, _, _, created, _ = editing
++    record, _, body = approved(editing)
++    result = publisher(editing).publish(identity, created.draft_id, body, "verified")
++    with database.transaction() as conn:
++        if fault in {"base_body", "published_body"}:
++            digest = record.base.metadata.body_sha256 if fault == "base_body" else record.payload.body_sha256
++            (database.settings.data_dir / "blobs" / digest[:2] / digest).write_bytes(b"Synthetic damaged bytes")
++        elif fault == "edit_history":
++            conn.execute("DROP TRIGGER draft_edit_version_no_update")
++            conn.execute(
++                "UPDATE draft_edit_versions SET record_json='{}' WHERE draft_id=? AND revision=1", (created.draft_id,)
++            )
++        else:
++            conn.execute("DROP TRIGGER draft_publication_results_no_update")
++            row = conn.execute(
++                "SELECT p.id,r.record_json FROM draft_publications p JOIN draft_publication_results r ON r.publication_id=p.id WHERE p.draft_id=?",
++                (created.draft_id,),
++            ).fetchone()
++            raw = strict_json(row["record_json"])
++            raw["edit_record_sha256"] = "0" * 64
++            encoded = canonical_bytes(raw)
++            conn.execute(
++                "UPDATE draft_publication_results SET record_json=?,sha256=? WHERE publication_id=?",
++                (encoded.decode(), sha256_bytes(encoded), row["id"]),
++            )
++    before = table_hashes(database)
++    with pytest.raises(ApiError):
++        publisher(editing).publish(identity, created.draft_id, body, "verified")
++    assert table_hashes(database) == before
++    assert result.revision == 2
++
++
++@pytest.mark.parametrize("change", ["role", "revoked", "expired", "workspace"])
++def test_current_identity_guards_committed_ack_and_new_commands(editing, change):
++    from dataclasses import replace
++    from services.api.app.application.errors import ApiError
++    from tests.integration.test_authoring_numeric_provider_history import table_hashes
++
++    database, identity, _, _, created, _ = editing
++    _, _, body = approved(editing)
++    publisher(editing).publish(identity, created.draft_id, body, "guarded")
++    with database.transaction() as conn:
++        if change == "role":
++            conn.execute("UPDATE local_sessions SET role='learner' WHERE id=?", (identity.id,))
++        elif change == "revoked":
++            conn.execute("UPDATE local_sessions SET revoked_at='2000-01-01T00:00:00Z' WHERE id=?", (identity.id,))
++        elif change == "expired":
++            conn.execute("UPDATE local_sessions SET expires_at='2000-01-01T00:00:00Z' WHERE id=?", (identity.id,))
++        else:
++            identity = replace(identity, workspace_id="workspace_other")
++    before = table_hashes(database)
++    for key in ["guarded", "new-key"]:
++        with pytest.raises(ApiError):
++            publisher(editing).publish(identity, created.draft_id, body, key)
++    assert table_hashes(database) == before
++
++
++@pytest.mark.parametrize("mode", ["independent", "open_book", "assisted"])
++def test_actual_current_assessment_policy_rejects_old_ack_and_new_publication(editing, mode):
++    from services.api.app.application.assessment import AssessmentService
++    from services.api.app.assessment_dto import AssessmentAttemptCreate
++    from services.api.app.application.errors import ApiError
++    from services.api.app.infrastructure.content_repository import reference
++    from tests.assessment_fixtures import assessment_fixture
++    from tests.integration.test_assessment_attempts import import_fixture
++    from tests.integration.test_authoring_numeric_provider_history import table_hashes
++
++    database, identity, _, _, created, _ = editing
++    _, _, body = approved(editing)
++    publisher(editing).publish(identity, created.draft_id, body, "policy")
++    fixture = assessment_fixture("editpublicationpolicy")
++    import_fixture(database, identity, fixture, "assessment-material")
++    AssessmentService(database).create_attempt(
++        identity,
++        fixture.assessment.id,
++        AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode=mode),
++        "attempt",
++    )
++    before = table_hashes(database)
++    for key in ["policy", "new-key"]:
++        with pytest.raises(ApiError):
++            publisher(editing).publish(identity, created.draft_id, body, key)
++    assert table_hashes(database) == before
++
++
++def test_archived_current_base_cannot_be_published_as_an_edit(editing):
++    from services.api.app.application.errors import ApiError
++    from tests.integration.test_authoring_numeric_provider_history import table_hashes
++
++    database, identity, base, _, created, _ = editing
++    _, _, body = approved(editing)
++    with database.transaction() as conn:
++        conn.execute("UPDATE objects SET lifecycle='archived' WHERE id=?", (base.id,))
++    before = table_hashes(database)
++    with pytest.raises(ApiError) as caught:
++        publisher(editing).publish(identity, created.draft_id, body, "archived")
++    assert caught.value.code == "PUBLICATION_BASE_CHANGED"
++    assert table_hashes(database) == before
++
++
++def test_edit_without_citations_still_requires_review_of_its_actual_base_before_content_write(editing, monkeypatch):
++    from packages.contracts.canonical import sha256_bytes
++    from services.api.app.application.errors import ApiError
++    from services.api.app.application.publication_admission import PublicationAdmissionService
++    from tests.integration.test_authoring_numeric_provider_history import table_hashes
++
++    database, identity, _, edits, _, reviews = editing
++    raw = b"Synthetic uncited original prose.\n"
++    block = dm.ContentBlock(
++        id="synthetic_uncited_edit_base",
++        revision=1,
++        kind="text",
++        title="Uncited prose",
++        body_path="content/synthetic-uncited-base.md",
++        body_sha256=sha256_bytes(raw),
++    )
++    base = ContentService(database).publish(identity.workspace_id, [block], {block.body_path: raw})[0]
++    created = edits.create(
++        identity, DraftCreateWrite(kind="block", base_ref=base, title="Edited uncited prose"), "uncited-edit"
++    )
++    record = edits.read(identity, created.draft_id, 1)
++    assert record.base.metadata.citations == record.payload.citations == []
++    assert record.base.provenance is None
++    job = reviews.create(identity, created.draft_id, request(record.candidate), "uncited-review")
++    assert ReviewWorker(reviews).run_once()
++    machine = reviews.read(identity, job.id)
++    human = reviews.decide(
++        identity,
++        job.id,
++        decision(machine, mathematical="NOT_APPLICABLE", sources="NOT_APPLICABLE"),
++        "synthetic-source-na",
++    )
++    body = DraftPublishWrite(
++        expected_revision=1,
++        expected_content_sha256=record.candidate.candidate_sha256,
++        review_receipt_id=human.id,
++        acknowledged_warning_codes=sorted({w.code for w in record.warnings if w.severity == "warning"}),
++    )
++    before = table_hashes(database)
++    with database.transaction() as conn:
++        _, material = reviews.read_publication_basis(conn, identity, human.id)
++        assert material.source_refs == [base]
++        with pytest.raises(ApiError) as caught:
++            PublicationAdmissionService(reviews).check(conn, identity, created.draft_id, body)
++        assert caught.value.code == "PUBLISH_SOURCE_REVIEW_REQUIRED"
++
++    def forbidden_content_write(*args, **kwargs):
++        pytest.fail("Source admission must reject before invoking Content publication")
++
++    monkeypatch.setattr(ContentService, "publish_edited_block_in_transaction", forbidden_content_write)
++    with pytest.raises(ApiError) as caught:
++        publisher(editing).publish(identity, created.draft_id, body, "uncited-publish")
++    assert caught.value.code == "PUBLISH_SOURCE_REVIEW_REQUIRED"
++    assert table_hashes(database) == before
+diff --git a/tests/integration/test_edit_publication_atomic.py b/tests/integration/test_edit_publication_atomic.py
+new file mode 100644
+index 0000000..f724a6f
+--- /dev/null
++++ b/tests/integration/test_edit_publication_atomic.py
+@@ -0,0 +1,224 @@
++"""Real Content/notes/outbox transaction and concurrent SQLite writers; no provider."""
++
++from concurrent.futures import ThreadPoolExecutor
++from threading import Barrier
++
++import pytest
++
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import strict_json
++from services.api.app.application.content import ContentService
++from services.api.app.application.errors import ApiError
++from services.api.app.application.notes import NotesService
++from services.api.app.draft_dto import DraftPatch, DraftPatchWrite
++from tests.integration.test_edit_publication import editing as editing, approved, publisher
++from tests.integration.test_authoring_numeric_provider_history import table_hashes
++
++
++def note_on_base(editing):
++    database, identity, base, _, _, _ = editing
++    note = dm.Note(
++        id="synthetic_edit_note",
++        revision=1,
++        workspace_id=identity.workspace_id,
++        anchor=dm.Selection(ref=base, exact_quote="Synthetic", start_codepoint=0, end_codepoint=9),
++        markdown="Synthetic note must retain its old anchor.",
++    )
++    NotesService(database).create(identity, note, "note")
++    return note
++
++
++def test_content_pointer_stale_note_and_durable_impact_intent_commit_together(editing):
++    database, identity, base, _, created, _ = editing
++    note = note_on_base(editing)
++    _, _, body = approved(editing)
++    result = publisher(editing).publish(identity, created.draft_id, body, "publish")
++    current = NotesService(database).list(identity.workspace_id).items[0]
++    assert current.revision == 2 and current.anchor_state == "stale" and current.anchor == note.anchor
++    assert current.markdown == note.markdown
++    with database.connect() as conn:
++        events = [
++            strict_json(r[0])
++            for r in conn.execute("SELECT payload_json FROM outbox WHERE event_type='content.dependencies_invalidated'")
++        ]
++        matching = [e for e in events if e["new_ref"] == result.model_dump(mode="json")]
++        assert len(matching) == 1
++        assert matching[0]["old_ref"] == base.model_dump(mode="json")
++        assert matching[0]["reason"] == "content_revision_published"
++        assert set(matching[0]["affected_ids"]) == {base.id, note.id}
++        historic = strict_json(
++            conn.execute("SELECT metadata_json FROM revisions WHERE object_id=? AND revision=1", (note.id,)).fetchone()[
++                0
++            ]
++        )
++        assert historic == note.model_dump(mode="json")
++    before = table_hashes(database)
++    assert publisher(editing).publish(identity, created.draft_id, body, "publish") == result
++    assert table_hashes(database) == before
++
++
++@pytest.mark.parametrize(
++    "table,condition",
++    [
++        ("revisions", "NEW.revision=2"),
++        ("notes_index", "NEW.note_revision=2"),
++        ("outbox", "NEW.event_type='content.dependencies_invalidated'"),
++        ("draft_publication_results", "1"),
++        ("draft_publication_commands", "1"),
++        ("draft_publication_events", "NEW.revision=4"),
++    ],
++)
++def test_failure_rolls_back_content_notes_events_and_publication_ack(editing, table, condition):
++    database, identity, base, _, created, _ = editing
++    note = note_on_base(editing)
++    _, _, body = approved(editing)
++    with database.transaction() as conn:
++        conn.execute(
++            f"CREATE TRIGGER synthetic_edit_publish_failure AFTER INSERT ON {table} WHEN {condition} "
++            "BEGIN SELECT RAISE(ABORT,'synthetic failure'); END"
++        )
++    before = table_hashes(database)
++    with pytest.raises(ApiError) as caught:
++        publisher(editing).publish(identity, created.draft_id, body, "rollback")
++    assert caught.value.code == "PUBLICATION_STORAGE_UNAVAILABLE"
++    assert table_hashes(database) == before
++    assert ContentService(database).current(identity.workspace_id, base.id) == base
++    assert NotesService(database).list(identity.workspace_id).items == [note]
++    with database.transaction() as conn:
++        conn.execute("DROP TRIGGER synthetic_edit_publish_failure")
++    assert publisher(editing).publish(identity, created.draft_id, body, "rollback").revision == 2
++
++
++@pytest.mark.parametrize("same_key", [False, True])
++def test_same_candidate_concurrent_publish_uses_one_content_revision(editing, same_key):
++    database, identity, base, _, created, _ = editing
++    _, _, body = approved(editing)
++    barrier = Barrier(2)
++
++    def execute(key):
++        barrier.wait(timeout=10)
++        try:
++            return publisher(editing).publish(identity, created.draft_id, body, key)
++        except ApiError as error:
++            return error.code
++
++    with ThreadPoolExecutor(max_workers=2) as pool:
++        results = list(pool.map(execute, ["first", "first" if same_key else "second"]))
++    refs = [r for r in results if not isinstance(r, str)]
++    assert len(refs) == (2 if same_key else 1) and all(r == refs[0] for r in refs)
++    if not same_key:
++        assert "DRAFT_ALREADY_PUBLISHED" in results
++    assert ContentService(database).current(identity.workspace_id, base.id) == refs[0]
++    with database.connect() as conn:
++        assert conn.execute("SELECT count(*) FROM revisions WHERE object_id=?", (base.id,)).fetchone()[0] == 2
++        assert conn.execute("SELECT count(*) FROM draft_publications WHERE owner='authoring'").fetchone()[0] == 1
++
++
++def test_patch_and_publish_serialize_without_publishing_unreviewed_new_head(editing):
++    database, identity, base, edits, created, _ = editing
++    _, _, body = approved(editing)
++    barrier = Barrier(2)
++
++    def publish():
++        barrier.wait(timeout=10)
++        try:
++            return publisher(editing).publish(identity, created.draft_id, body, "publish")
++        except ApiError as error:
++            return error.status
++
++    def patch():
++        barrier.wait(timeout=10)
++        try:
++            return edits.patch(
++                identity,
++                created.draft_id,
++                DraftPatchWrite(
++                    expected_revision=2, patches=[DraftPatch(field="title", value="Unreviewed concurrent title")]
++                ),
++                "concurrent-patch",
++            )
++        except ApiError as error:
++            return error.status, error.code
++
++    with ThreadPoolExecutor(max_workers=2) as pool:
++        first, second = pool.submit(publish), pool.submit(patch)
++        published, changed = first.result(), second.result()
++    if isinstance(published, int):
++        assert changed.revision == 3
++        assert published == 412 and ContentService(database).current(identity.workspace_id, base.id) == base
++    else:
++        assert changed == (409, "DRAFT_ALREADY_PUBLISHED")
++        assert published.revision == 2
++        with pytest.raises(ApiError) as caught:
++            edits.read(identity, created.draft_id, 3)
++        assert caught.value.code == "DRAFT_REVISION_MISMATCH"
++        assert publisher(editing).publish(identity, created.draft_id, body, "publish") == published
++        assert (
++            ContentService(database).read(identity.workspace_id, "block", base.id, 2).title == "Synthetic revised title"
++        )
++
++
++def test_two_reviewed_drafts_from_one_base_cannot_both_advance_content(editing):
++    from services.api.app.draft_dto import DraftCreateWrite
++
++    database, identity, base, edits, _, reviews = editing
++    first_record, _, first_body = approved(editing)
++    created = edits.create(
++        identity, DraftCreateWrite(kind="block", base_ref=base, title="Competing draft"), "other-create"
++    )
++    edits.patch(
++        identity,
++        created.draft_id,
++        DraftPatchWrite(
++            expected_revision=1, patches=[DraftPatch(field="body_markdown", value="Other synthetic prose.\n")]
++        ),
++        "other-patch",
++    )
++    other = (database, identity, base, edits, created, reviews)
++    _, _, second_body = approved(other, key="other-review")
++    barrier = Barrier(2)
++
++    def execute(pair):
++        draft_id, body = pair
++        barrier.wait(timeout=10)
++        try:
++            return publisher(editing).publish(identity, draft_id, body, "competing-publish")
++        except ApiError as error:
++            return error.code
++
++    with ThreadPoolExecutor(max_workers=2) as pool:
++        results = list(
++            pool.map(execute, [(first_record.candidate.draft_id, first_body), (created.draft_id, second_body)])
++        )
++    assert results.count("PUBLICATION_BASE_CHANGED") == 1
++    result = next(x for x in results if not isinstance(x, str))
++    assert result.revision == 2 and ContentService(database).current(identity.workspace_id, base.id) == result
++
++
++def test_review_rejection_and_edit_publication_have_only_serial_outcomes(editing):
++    from tests.integration.test_review_workflow import decision
++
++    database, identity, base, _, created, reviews = editing
++    _, receipt, body = approved(editing)
++    barrier = Barrier(2)
++
++    def publish():
++        barrier.wait(timeout=10)
++        try:
++            return publisher(editing).publish(identity, created.draft_id, body, "race-review")
++        except ApiError as error:
++            return error.code
++
++    def reject():
++        barrier.wait(timeout=10)
++        return reviews.decide(identity, receipt.id, decision(receipt, mathematical="REJECTED"), "later-rejection")
++
++    with ThreadPoolExecutor(max_workers=2) as pool:
++        first, second = pool.submit(publish), pool.submit(reject)
++        published, rejected = first.result(), second.result()
++    assert rejected.mathematical == "REJECTED"
++    if isinstance(published, str):
++        assert published == "PUBLISH_HUMAN_REVIEW_REQUIRED"
++        assert ContentService(database).current(identity.workspace_id, base.id) == base
++    else:
++        assert publisher(editing).publish(identity, created.draft_id, body, "race-review") == published
+diff --git a/tests/integration/test_edit_publication_http.py b/tests/integration/test_edit_publication_http.py
+new file mode 100644
+index 0000000..5dcc55c
+--- /dev/null
++++ b/tests/integration/test_edit_publication_http.py
+@@ -0,0 +1,123 @@
++"""Existing real HTTP edit/review/publish routes and exact Reader readback; no browser claim."""
++
++import pytest
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import sha256_bytes
++from tests.integration.test_review_http import prepared_review_http as prepared_review_http
++from tests.integration.test_draft_edit_http import published_base
++from tests.integration.test_authoring_http import command
++from tests.integration.test_authoring_numeric_provider_history import table_hashes
++
++
++def ready(case):
++    base = published_base(case)
++    created = case.client.post(
++        "/api/v1/drafts",
++        json={"kind": "block", "base_ref": base.model_dump(mode="json"), "title": "Synthetic revised publication"},
++        headers=command(case.headers, "create"),
++    )
++    assert created.status_code == 201, created.text
++    identifier = created.json()["draft_id"]
++    text = "精确修订文本 🌏\nSynthetic revised prose.\n"
++    patched = case.client.patch(
++        f"/api/v1/drafts/{identifier}",
++        json={"expected_revision": 1, "patches": [{"field": "body_markdown", "value": text}]},
++        headers=command(case.headers, "patch"),
++    )
++    assert patched.status_code == 200, patched.text
++    review = case.client.post(
++        f"/api/v1/drafts/{identifier}/review",
++        json={
++            "expected_revision": 2,
++            "checks": ["structure", "mathematics", "sources"],
++            "reviewer_note": "Synthetic publication protocol only.",
++        },
++        headers=command(case.headers, "review-edit"),
++    )
++    assert review.status_code == 202, review.text
++    assert case.app.state.review_worker.run_once()
++    path = "/api/v1/reviews/" + review.json()["id"]
++    machine = case.client.get(path).json()
++    assert machine["mathematical"] == machine["sources"] == machine["independent_pedagogy"] == "NOT_RUN"
++    human = case.client.post(
++        path + "/decision",
++        json={
++            "expected_revision": machine["revision"],
++            "candidate_sha256": machine["candidate"]["candidate_sha256"],
++            "mathematical": "NOT_APPLICABLE",
++            "sources": "APPROVED",
++            "reason": "Synthetic protocol fixture, not real academic approval.",
++            "evidence_artifact_ids": [],
++        },
++        headers=command(case.headers, "human-edit"),
++    )
++    assert human.status_code == 200, human.text
++    body = {
++        "expected_revision": 2,
++        "expected_content_sha256": machine["candidate"]["candidate_sha256"],
++        "review_receipt_id": review.json()["id"],
++        "acknowledged_warning_codes": sorted(
++            {w["code"] for w in patched.json()["validation_warnings"] if w["severity"] == "warning"}
++        ),
++    }
++    return base, identifier, text, body
++
++
++def test_real_http_edit_publish_exact_body_etags_and_original_ack(prepared_review_http):
++    case = prepared_review_http
++    base, identifier, text, body = ready(case)
++    original = case.client.get(f"/api/v1/blocks/{base.id}/body?revision=1")
++    path = f"/api/v1/drafts/{identifier}/publish"
++    result = case.client.post(path, json=body, headers=command(case.headers, "publish-edit"))
++    assert result.status_code == 201, result.text
++    ref = dm.ContentRef.model_validate_json(result.content)
++    assert ref.id == base.id and ref.revision == 2 and result.headers["cache-control"] == "no-store"
++    metadata = case.client.get(f"/api/v1/blocks/{ref.id}?revision=2&include_provenance=true")
++    assert metadata.status_code == 200, metadata.text
++    assert metadata.headers["etag"] == '"' + ref.sha256 + '"'
++    assert metadata.json()["block_ref"] == ref.model_dump(mode="json")
++    assert metadata.json()["original_source"] is None
++    assert {w["code"] for w in metadata.json()["warnings"]} == {"PROVENANCE_UNRESOLVED"}
++    actual = case.client.get(f"/api/v1/blocks/{ref.id}/body?revision=2")
++    assert actual.status_code == 200 and actual.content == text.encode("utf-8")
++    assert actual.headers["etag"] == '"' + sha256_bytes(text.encode("utf-8")) + '"'
++    assert case.client.get(f"/api/v1/blocks/{base.id}/body?revision=1").content == original.content
++    assert case.client.get(f"/api/v1/drafts/{identifier}").status_code == 404  # No invented public editing GET.
++    before = table_hashes(case.database)
++    replay = case.client.post(path, json=body, headers=command(case.headers, "publish-edit"))
++    assert replay.status_code == 201 and replay.content == result.content
++    assert table_hashes(case.database) == before
++
++
++@pytest.mark.parametrize(
++    "fault,expected",
++    [
++        ("missing_key", 400),
++        ("duplicate_key", 400),
++        ("csrf", 403),
++        ("extra", 422),
++        ("wrong_hash", 412),
++        ("warnings", 409),
++    ],
++)
++def test_existing_publish_transport_and_admission_fail_without_mutation(prepared_review_http, fault, expected):
++    case = prepared_review_http
++    _, identifier, _, body = ready(case)
++    headers = command(case.headers, "publish-guard")
++    if fault == "missing_key":
++        headers.pop("Idempotency-Key")
++    elif fault == "csrf":
++        headers["X-CSRF-Token"] = "invalid-synthetic"
++    elif fault == "extra":
++        body["claimed_approval"] = True
++    elif fault == "wrong_hash":
++        body["expected_content_sha256"] = "0" * 64
++    elif fault == "warnings":
++        body["acknowledged_warning_codes"] = []
++    values = list(headers.items())
++    if fault == "duplicate_key":
++        values.append(("Idempotency-Key", "another"))
++    before = table_hashes(case.database)
++    response = case.client.post(f"/api/v1/drafts/{identifier}/publish", json=body, headers=values)
++    assert response.status_code == expected, response.text
++    assert table_hashes(case.database) == before
+diff --git a/tests/integration/test_edit_publication_migration.py b/tests/integration/test_edit_publication_migration.py
+new file mode 100644
+index 0000000..a83265d
+--- /dev/null
++++ b/tests/integration/test_edit_publication_migration.py
+@@ -0,0 +1,81 @@
++"""Forward upgrade preserves real prior publication bytes and rollback under enabled FKs."""
++
++from dataclasses import replace
++import shutil
++import sqlite3
++
++import pytest
++
++from services.api.app.infrastructure.database import Database
++from tests.integration.test_draft_edit_migration import previous as previous, owners
++from tests.integration.test_authoring_numeric_provider_history import table_hashes
++
++TABLES = ["draft_publications", "draft_publication_events", "draft_publication_results", "draft_publication_commands"]
++
++
++def prior_schema(previous, tmp_path):
++    _, settings, identity, candidate, receipt, body, ref = previous
++    folder = tmp_path / "through-edit-owner"
++    folder.mkdir()
++    for path in settings.migrations_dir.glob("*.sql"):
++        if path.name < "0020":
++            shutil.copyfile(path, folder / path.name)
++    database = Database(replace(settings, migrations_dir=folder))
++    database.initialize()
++    return database, settings, identity, candidate, receipt, body, ref
++
++
++def test_nonempty_publication_rows_rowids_triggers_and_old_ack_survive_forward_upgrade(previous, tmp_path):
++    old, settings, identity, candidate, receipt, body, ref = prior_schema(previous, tmp_path)
++    with old.connect() as conn:
++        rows = {t: [tuple(x) for x in conn.execute(f"SELECT rowid,* FROM {t} ORDER BY rowid")] for t in TABLES}
++        triggers = {
++            r["name"]: r["sql"]
++            for r in conn.execute(
++                "SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name IN (?,?,?,?)", TABLES
++            )
++        }
++    before = table_hashes(old)
++    upgraded = Database(settings)
++    upgraded.initialize()
++    with upgraded.connect() as conn:
++        assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
++        assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
++        assert rows == {t: [tuple(x) for x in conn.execute(f"SELECT rowid,* FROM {t} ORDER BY rowid")] for t in TABLES}
++        assert triggers == {
++            r["name"]: r["sql"]
++            for r in conn.execute(
++                "SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name IN (?,?,?,?)", TABLES
++            )
++        }
++        with pytest.raises(sqlite3.IntegrityError):
++            conn.execute("UPDATE draft_publication_results SET record_json='{}'")
++    after = table_hashes(upgraded)
++    assert {k: v for k, v in before.items() if k != "schema_migrations"} == {
++        k: v for k, v in after.items() if k != "schema_migrations"
++    }
++    _, reviews, publication = owners(upgraded)
++    assert reviews.read(identity, receipt.id) == receipt
++    assert publication.publish(identity, candidate.draft_id, body, "publication") == ref
++
++
++@pytest.mark.parametrize("location", ["after_drop", "after_copy"])
++def test_migration_failure_keeps_exact_prior_rows_and_schema(previous, tmp_path, location):
++    old, settings, *_ = prior_schema(previous, tmp_path)
++    before = table_hashes(old)
++    with old.connect() as conn:
++        schema = [tuple(r) for r in conn.execute("SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name")]
++    path = settings.migrations_dir / "0020_edit_publications.sql"
++    text = path.read_text()
++    marker = "DROP TABLE draft_publications;" if location == "after_drop" else "DROP TABLE edit_publication_copy_check;"
++    text = text.replace(marker, marker + "\nSELECT synthetic_unavailable_function();", 1)
++    target = old.settings.migrations_dir / path.name
++    target.write_text(text)
++    with pytest.raises(sqlite3.OperationalError):
++        old.initialize()
++    assert table_hashes(old) == before
++    with old.connect() as conn:
++        assert schema == [
++            tuple(r) for r in conn.execute("SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name")
++        ]
++        assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+diff --git a/tests/integration/test_edit_publication_terminal.py b/tests/integration/test_edit_publication_terminal.py
+new file mode 100644
+index 0000000..ba5958c
+--- /dev/null
++++ b/tests/integration/test_edit_publication_terminal.py
+@@ -0,0 +1,34 @@
++"""A published Draft cannot restart editing; permanent old commands still replay."""
++
++import pytest
++
++from services.api.app.application.errors import ApiError
++from services.api.app.draft_dto import DraftPatch, DraftPatchWrite
++from tests.integration.test_authoring_numeric_provider_history import table_hashes
++from tests.integration.test_edit_publication import editing as editing, approved, publisher
++
++
++@pytest.mark.parametrize("key", ["new-after-publish", None])
++def test_published_edit_rejects_new_patch_but_replays_original_patch_and_publish(editing, key):
++    database, identity, _, edits, created, _ = editing
++    original_patch = DraftPatchWrite(
++        expected_revision=1, patches=[DraftPatch(field="body_markdown", value="Synthetic edited prose.\n")]
++    )
++    old_ack = edits.patch(identity, created.draft_id, original_patch, "edit-patch")
++    original_record, _, body = approved(editing)
++    published = publisher(editing).publish(identity, created.draft_id, body, "publish")
++    before = table_hashes(database)
++    with pytest.raises(ApiError) as caught:
++        edits.patch(
++            identity,
++            created.draft_id,
++            DraftPatchWrite(
++                expected_revision=2, patches=[DraftPatch(field="title", value="Attempted return to draft")]
++            ),
++            key,
++        )
++    assert caught.value.status == 409 and caught.value.code == "DRAFT_ALREADY_PUBLISHED"
++    assert edits.read(identity, created.draft_id, 2) == original_record
++    assert edits.patch(identity, created.draft_id, original_patch, "edit-patch") == old_ack
++    assert publisher(editing).publish(identity, created.draft_id, body, "publish") == published
++    assert table_hashes(database) == before
