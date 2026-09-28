@@ -1,0 +1,37 @@
+
+Running 1 test using 1 worker
+
+  ✘  1 tests/e2e/draft-review.spec.ts:17:1 › real imported candidate review keeps original ACK, authenticated report bytes and explicit rejected decision across reload (9.8s)
+
+
+  1) tests/e2e/draft-review.spec.ts:17:1 › real imported candidate review keeps original ACK, authenticated report bytes and explicit rejected decision across reload 
+
+    Error: expect(locator).toHaveValue(expected) failed
+
+    Locator: getByRole('dialog', { name: '导入', exact: true }).getByRole('region', { name: '候选审核与原命令恢复', exact: true }).getByRole('region', { name: '明确人工审核决定', exact: true }).getByLabel('审核理由', { exact: true })
+    Expected: "原创合成拒绝：尚未进行真实数学、来源或独立教学验收。"
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toHaveValue" getByRole('dialog', { name: '导入', exact: true }).getByRole('region', { name: '候选审核与原命令恢复', exact: true }).getByRole('region', { name: '明确人工审核决定', exact: true }).getByLabel('审核理由', { exact: true }) with timeout 5000ms
+      - waiting for getByRole('dialog', { name: '导入', exact: true }).getByRole('region', { name: '候选审核与原命令恢复', exact: true }).getByRole('region', { name: '明确人工审核决定', exact: true }).getByLabel('审核理由', { exact: true })
+
+
+      89 |     writeFileSync(info.outputPath('after-return-text.txt'), await page.locator('body').innerText())
+      90 |     writeFileSync(info.outputPath('after-return-dom.json'), JSON.stringify(await page.evaluate(() => ({ dialogs: [...document.querySelectorAll('dialog')].map(element => ({ title: element.getAttribute('aria-label'), open: element.open })), reasons: [...document.querySelectorAll('textarea')].map(element => ({ label: element.labels?.[0]?.textContent, value: element.value })), hidden: document.hidden })), null, 2))
+    > 91 |     await expect(decision.getByLabel('审核理由', { exact: true })).toHaveValue(reason)
+         |                                                                ^
+      92 |     await expect(decision.getByRole('button', { name: '明确保存这次人工审核决定', exact: true })).toBeDisabled()
+      93 |     const decisions: { key: string; body: unknown }[] = []
+      94 |     let decided!: StoredReviewReceipt, droppedDecision = false
+        at [REVIEW_UI_WORKTREE]/tests/e2e/draft-review.spec.ts:91:64
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-review-ui-development-v1/native-output-v3/draft-review-real-imported-5a31a-cted-decision-across-reload/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m62-review-ui-development-v1/native-output-v3/draft-review-real-imported-5a31a-cted-decision-across-reload/error-context.md
+
+  1 failed
+    tests/e2e/draft-review.spec.ts:17:1 › real imported candidate review keeps original ACK, authenticated report bytes and explicit rejected decision across reload 

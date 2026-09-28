@@ -1,0 +1,60 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/draftReview/useReview.test.tsx -t earlier poll completion
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m[REVIEW_UI_WORKTREE]/apps/web[39m
+
+ [31m❯[39m src/features/draftReview/useReview.test.tsx [2m([22m[2m13 tests[22m[2m | [22m[31m1 failed[39m[2m | [22m[33m12 skipped[39m[2m)[22m[32m 70[2mms[22m[39m
+   [2m[90m↓[39m[22m lost ACK retains one original key/body and permits only explicit same-page replay
+   [2m[90m↓[39m[22m storage failure stops before any HTTP write
+   [2m[90m↓[39m[22m real session access notification discards a late ACK and makes the durable original command read-only
+   [2m[90m↓[39m[22m a prior page command is read-only after reload while known job and receipt remain readable
+   [2m[90m↓[39m[22m Policy pause discards a late create ACK without persisting private acknowledgement
+   [2m[90m↓[39m[22m late protected receipt cannot enter a different workspace or paused view
+   [2m[90m↓[39m[22m foreign or non-review safe job cannot be remembered as review recovery
+[31m   [31m×[31m an earlier poll completion cannot overwrite a newer explicit current Job read[39m[32m 70[2mms[22m[39m
+   [2m[90m↓[39m[22m report bytes require actual ETag and a second unchanged currently authorized receipt
+   [2m[90m↓[39m[22m artifact Policy rejection clears already displayed private receipt and stored command projection
+   [2m[90m↓[39m[22m stale decision preserves the original CAS and requires a fresh receipt before another command
+   [2m[90m↓[39m[22m learner can recover and cancel safe known review work without reading academic commands
+   [2m[90m↓[39m[22m an unknown old-page cancel never prevents a new explicit current-Job cancellation
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m src/features/draftReview/useReview.test.tsx[2m > [22man earlier poll completion cannot overwrite a newer explicit current Job read
+[31m[1mAssertionError[22m: expected { id: 'review_synthetic', …(10) } to deeply equal { id: 'review_synthetic', …(10) }[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[33m@@ -7,11 +7,11 @@[39m
+[2m      "completed": 1,[22m
+[2m      "label": "完成",[22m
+[2m      "total": 1,[22m
+[2m    },[22m
+[2m    "result_refs": [],[22m
+[32m-   "revision": 3,[39m
+[31m+   "revision": 1,[39m
+[2m    "status": "running",[22m
+[2m    "updated_at": "2026-01-01T00:00:00Z",[22m
+[2m    "warnings": [],[22m
+[2m    "workspace_id": "workspace_bf7d0d3a-86ae-45f7-93eb-c810dbd542f4",[22m
+[2m  }[22m
+
+[36m [2m❯[22m src/features/draftReview/useReview.test.tsx:[2m144:35[22m[39m
+    [90m142|[39m     await Promise.resolve()
+    [90m143|[39m   })
+    [90m144|[39m   expect(hook.result.current.job).toEqual(current)
+    [90m   |[39m                                   [31m^[39m
+    [90m145|[39m })
+    [90m146|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[33m12 skipped[39m[90m (13)[39m
+[2m   Start at [22m 10:14:36
+[2m   Duration [22m 549ms[2m (environment 41%, transform 28%, import 16%, tests 15%)[22m
+

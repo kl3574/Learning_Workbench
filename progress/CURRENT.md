@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-28T02:10:09Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
+更新：2026-09-28T02:41:15Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
 
-仓库发布：VERIFIED；Issues 同步：REMOTE507ac58_VERIFIED_NEW_LOCAL_CHECKPOINT_PENDING
+仓库发布：VERIFIED；Issues 同步：REMOTE507_VERIFIED_CE42_SOURCE_AND_EVIDENCE_PUBLICATION_PENDING
 实施：IN_PROGRESS；当前任务：M6.2；下一任务：M6.2
 
-回读507双CI实际终态；同步只读准入原证据与整合66PASS。审核UI继续真实浏览器闭环和未提交reason刷新/切候选丢失风险验证；之后实现Draft生命周期和实际发布，不改原Authoring state:draft。
+发布ce42组合及source-specific证据，独立GET回读PR55/Issue31并观察新CI；下一切片按明确选定review_receipt_id设计真实原子发布和永久原命令回执，分别处理candidate/Review/lifecycle CAS。继续原两项浏览器失败的有界诊断，不延长等待或重跑消除原FAIL。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -151,16 +151,18 @@
 - M6.2_sep28_combined_static_web: FIXED1fff981INPUTS: Ruff,mypy191,spec54core/76generated/119declared PASS; web453PASS77files5.14s; strict web TS and build741modules PASS(existing chunk warning). All original receipts retained. This source has no Review HTTP yet.
 - M6.2_sep28_combined_native: ACTUAL_FAIL: exact1fff one make test-e2e,101cases92PASS9FAIL10.3m(618.642s wrapper), exit2. Known5trackedoutputs changed during run and were precisely restored; no unexpected engineering changes. All3original Tutor cases and2controlled diagnostic cases PASS; new102API/33browser/10DOM/9request+4event joins complete. This does not rewrite historical Tutor failures/rejected snapshot. All9original failure contexts/logs retained; cause not collectively established.
 - M6.2_sep28_combined_python: FINAL_FRESH_ATTEMPT_PASS: unchanged1fff981actual Git inputs,2688PASS1sealed-numericENVSKIP2dependency warnings791.13s; logSHAd582fb97fd63a78684acc1f8ecf994668e375c253c730c0e66123ee74b9064c2,exit0. Initial attempt exit143/no final receipt remains INCOMPLETE_TERMINATED, actor/cause UNKNOWN, not overwritten. Native remains92PASS9FAIL.
-- M6.2_sep28_publication: VERIFIED715a144 ref/PR55/Issue31 independent readback; its push and PR CI each3success/3APT installfailures. Next8b source and evidence publication pending; old raw failures retained.
+- M6.2_sep28_publication: Remote507 PR55/Issue31/ref独立回读已确认；其双CI全部终态见M6.2_507_ci。ce42审核UI与9e准入尚待本次协调发布，不提前声称新head远端通过。
 - M6.2_715_ci_install_failure: ACTUAL_ENVIRONMENT_FAILURE: push36365995687/PR36365997123 each backend/integration/browser failed apt exit100 because fixed bubblewrap0.11.1-1ubuntu0.1 unavailable. All6actuallogs saved; these failures occurred before product tests. Initial snapshot01:29:35 had frontend/security successful and spec-contracts running for both. Checkout/officialAPT provenance under independent readback; no final all-CI claim.
 - M6.2_review_http_development: ISOLATED:15cb actual29HTTPPASS and172relatedPASS2depwarn, Ruff/mypy195/spec;96actual routes/23unregistered. c2 integratesf5workflow and264relatedPASS3warnings; third was actualbackground worker AssertionError caused by shared database test interception.06c54ed deterministic1RED→82ca205 checked-owner factory isolation1GREEN2depwarn, fullcombined gate stillpending. No product exception suppressed; originalwarning retained.
 - M6.2_learning_route_cleanup: ISOLATED e618 true actual-finally3RED→3GREEN, one original case passed before+after; root independentlyverifiedall481raw members andone-callsite diff. Integrated440eb87 test-only. Secondaryroute alreadyhandled fixed; original other-page5s visibility andremainingnative failures UNKNOWN, no fullnative rerun.
 - M6.2_review_http_integration: 当前8b9ec87由991实际Git/工作区字节核验：Review create/read/decision、worker、受保护报告与共享Job控制已接入。完整后端固定918为2789PASS/1真实数值环境SKIP/2依赖warning、853.96s；同918的Web453、Ruff/mypy196/spec/strictTS/build通过。后续共享头修复bb相关76PASS，最终8b四例和生成契约复验通过；不把918全套归到8b。原生仍保留1fff92PASS9FAIL。CI精确bubblewrap pin已审查更新，原715六APT失败保留，新远端待验。
 - M6.2_review_http_headers: Actual4RED→4GREEN, bb76relatedPASS/2warnings,991Git bindings; independent Spec and Standards reviews no remaining blocker. Integrated8b final4PASS/2warnings and generated spec checkPASS. No full8b rerun.
-- M6.2_ci_pin_recovery: Integrated55ebb as42262d7: only3exact bubblewrap pins .1→.3 and ADR. Signed archive chain+old APT exit100/new simulationexit0. Existing runtime probe and70PASS/1numericENVSKIP on715. Known CVE-2026-87766 remains; bounded fixed-target applicability assessment, no isolation reduction. FreshCIpending.
-- M6.2_readonly_admission_candidate: INTEGRATED9e024ca:995actualGit source composition; isolatedb1 141relatedPASS/2warnings and independentSpec+rootStandards no blocker; finalrealReviewHTTP+headers+admission66PASS/2warnings66.76s,Ruff/mypy198/specPASS. No newHTTP/state/publication; publication=NOT_RUN. Newsource notyetpublished.
+- M6.2_ci_pin_recovery: REMOTE_INSTALLATION_VERIFIED：507实际六sandbox jobs均安装bubblewrap0.11.1-1ubuntu0.3及其余三个原exactpins，两backend文档runtimeprobe PASS。715原六APT exit100保留；ADR0007仍明确CVE-2026-87766未修复及当前固定输入适用边界。非数值运行成功、非PR全绿。
+- M6.2_readonly_admission_candidate: INTEGRATED9e：独立b1相关141PASS/2warnings、两轴审查无阻断；main9e组合66PASS/2warnings、Ruff/mypy198/specPASS，995source绑定。只读admission无发布写入、HTTP、ContentRef或state推进；UIce42不会改变此边界。
 - M6.2_review_http_publication: VERIFIED507ac58:actual ref/PR55 head/title/body and Issue31 managed body independentlyGET exact at02:02:27Z;draft/open/unmerged and originalissue identity/status/labels/milestone/outside block preserved. NewheadCIreadbackongoing; no merge/release.
 - M6.2_readonly_admission_public_evidence: Root replayed83raw mappings/59publicfiles/707explicitduplicate-source exclusions and32exact spans (2synthetic identity displays); all public files pass actual inspector without exceptions. IndependentSpec androotStandards reports included. Whole-platform success not asserted.
+- M6.2_507_ci: 终态507：push36368224612 SUCCESS六job，PR36368226913 FAILURE（实际merge f74cd7、同tree），仅browser99PASS2FAIL；push browser101PASS。两边backend731、integration1472PASS1真实数值环境SKIP、spec603、Web453及static/securityPASS，分别记录不合计独立test总数。六次exactAPT安装及两document探针通过；数值calculator仍未实际运行。原Authoring ACK后list与Tutor5s完成断言原因UNKNOWN，原日志/附件/冻结观察完整保留。
+- M6.2_review_ui: 当前ce42bf8组合1010工程输入逐Git一致：真实Review HTTP、只读发布准入及审核UI均已整合并独审。组合Web482PASS/82files、strictTS/lint/build748/spec与单条真实Review native1PASS（7.5s）完成；不将前阶段918全Python2789PASS1环境SKIP或9e准入66PASS冒充ce42全套。真实发布/生命周期/对比/影响/恢复仍未实现。
 
 ## 阻塞与待决项
 
@@ -172,7 +174,8 @@
 - M62_9EB_BROWSER_CI_FAILED: 9eb和b70的双browser均99PASS1Tutor原5秒FAIL，失败job实际checkout/日志/附件已核。9eb两次本地原/被动观察运行均PASS，未复现。queued仅UI投影，HTTP200不是帧消费；旧现场缺关联时序，具体原因仍未知。
 - M62_ACB_TUTOR_CANCEL_LEASE_GATE_FAILED: 原acb完整及b70push取消lease断言失败保留。416本地组合通过后，21fc两个真实integration均1105PASS1ENVSKIP，原case在该后续环境通过；不据此关闭独立Tutor browser5s失败或反推旧现场唯一原因。
 - M62_STORAGE_FD_GATE_FAILED: 原72e4全Python2519PASS1FAIL1ENVSKIP保留。独立FD观察隔离修复70PASS及独审后整合；本次1fff完整后端2688PASS1ENVSKIP，原文件测试通过。原现场具体fd未记录，不断言唯一历史原因；9项native失败另行记录。
-- M62_SEP28_NATIVE_GATE_FAILED: 1fff唯一全套native101例92PASS9FAIL；assessment/import/grading/Authoring/learning-state分别保留实际失败与截图，不统一归因、不重跑冲掉FAIL。正在独立诊断group决定POST等待与learning-state重复route处理。
-- M62_715_CI_FIXED_APT_UNAVAILABLE: 715双CI各3个Ubuntu26.04 job安装旧bubblewrap pin exit100，产品测试未启动。已签名源核验/独审/精确改3pin并整合8b；本地旧模拟exit100、新模拟exit0及70PASS1环境SKIP不代替新远端CI。已知CVE边界记录于ADR0007，隔离参数未放宽；待新head实际CI回读。
+- M62_SEP28_NATIVE_GATE_FAILED: 1fff全native92PASS9FAIL原件保留。learning重复route已有受控3RED→3GREEN，不解释另一page timeout；group decline原case一次未复现，不冒fix。后续507push实际101PASS，但同treePR仍99PASS2FAIL（Authoring/Tutor），不统一归因或抹掉历史失败。ce42只另跑新增Review单casePASS。
+- M62_715_CI_FIXED_APT_UNAVAILABLE: 715原双CI六旧APT pin安装exit100保留。507实际六sandbox安装均成功，exact四包dpkg与原workflow/source已核，两document probe PASS；安装可用性已恢复。PR仍有独立两browser失败、数值仍环境SKIP；已知CVE边界未变化。
+- M62_507_PR_BROWSER_FAILED: 507push全六job成功/browser101PASS；同tree实际PRmerge f74cd7只有browser99PASS2FAIL。Authoring在原prepareACK成功回放后read-details10s失败，Tutor原5s完成显示失败；冻结观察未显示completed字节被UI丢弃。两integration各1472PASS1数值环境SKIP。372原件含12日志/7附件已核，不把pushPASS反推PR原因。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。

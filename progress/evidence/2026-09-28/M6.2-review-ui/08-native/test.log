@@ -1,0 +1,30 @@
+
+Running 1 test using 1 worker
+
+  ✘  1 tests/e2e/draft-review.spec.ts:17:1 › real imported candidate review keeps original ACK, authenticated report bytes and explicit rejected decision across reload (12.6s)
+
+
+  1) tests/e2e/draft-review.spec.ts:17:1 › real imported candidate review keeps original ACK, authenticated report bytes and explicit rejected decision across reload 
+
+    TimeoutError: locator.selectOption: Timeout 10000ms exceeded.
+    Call log:
+      - waiting for getByRole('dialog', { name: '导入', exact: true }).getByLabel('解析格式', { exact: true })
+
+
+      26 |     await dialog.getByRole('button', { name: '切换为作者角色', exact: true }).click()
+      27 |     await expect(dialog.getByText('操作角色：作者', { exact: true })).toBeVisible()
+    > 28 |     await dialog.getByLabel('解析格式', { exact: true }).selectOption('markdown')
+         |                                                      ^
+      29 |     await dialog.getByLabel('选择导入文件', { exact: true }).setInputFiles({ name: 'synthetic-review.md', mimeType: 'text/markdown', buffer: Buffer.from('# 原创合成审核材料\n\n未经过真实人工审核的纯文本。\n') })
+      30 |     const uploading = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith('/api/v1/imports'))
+      31 |     await dialog.getByRole('button', { name: '上传并生成预览', exact: true }).click()
+        at [REVIEW_UI_WORKTREE]/tests/e2e/draft-review.spec.ts:28:54
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-review-ui-development-v1/native-output-v1/draft-review-real-imported-5a31a-cted-decision-across-reload/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m62-review-ui-development-v1/native-output-v1/draft-review-real-imported-5a31a-cted-decision-across-reload/error-context.md
+
+  1 failed
+    tests/e2e/draft-review.spec.ts:17:1 › real imported candidate review keeps original ACK, authenticated report bytes and explicit rejected decision across reload 
