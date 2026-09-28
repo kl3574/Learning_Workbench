@@ -12,7 +12,7 @@ export function useDraftEditor(workspace: string, baseRef: ContentRef, paused: b
   const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
   const owner = JSON.stringify([workspace, baseRef, access]), scope = useRef({ owner, paused }); scope.current = { owner, paused }
   const live = useRef(false), admitted = useRef(false), working = useRef(false), sequence = useRef(0), abort = useRef(new AbortController())
-  const queue = useRef<Promise<void>>(Promise.resolve()), revisions = useRef(new Map<string, number>()), work = useRef<EditBuffer | null>(null), saveSerial = useRef(0)
+  const queue = useRef<Promise<void>>(Promise.resolve()), revisions = useRef(new Map<string, number>()), work = useRef<EditBuffer | null>(null), saveSerial = useRef(0), localDurable = useRef(true)
   const [renderOwner, setRenderOwner] = useState(owner), [allowed, setAllowed] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('')
   const [commands, setCommands] = useState<EditCommand[]>([]), [buffers, setBuffers] = useState<EditBuffer[]>([]), [buffer, setBuffer] = useState<EditBuffer | null>(null)
   const [saving, setSaving] = useState(false), [storageFailed, setStorageFailed] = useState(false), [conflict, setConflict] = useState<Conflict | null>(null)
@@ -25,7 +25,7 @@ export function useDraftEditor(workspace: string, baseRef: ContentRef, paused: b
     setError(denied(e) ? '当前权限或测试策略不允许编辑，正文已收起，本机原记录保留。'
       : '本次操作未确认或数据无法核验；原命令、本机文字与基准保留，未自动重发或覆盖。')
   }
-  const begin = (subject = true) => { if (!current(subject) || working.current) return null; working.current = true; setBusy(true); setError(''); return ++sequence.current }
+  const begin = (subject = true) => { if (!current(subject) || working.current) return null; if (work.current && !localDurable.current) { setError('本机文字尚未安全保存，请先重试本机保存；未替换文字或精确基准。'); return null }; working.current = true; setBusy(true); setError(''); return ++sequence.current }
   const valid = (token: number, subject = true) => token === sequence.current && current(subject)
   const finish = (token: number) => { if (valid(token, false)) { working.current = false; setBusy(false) } }
   const guard = () => ({ allowed: () => current(), signal: abort.current.signal })
@@ -44,20 +44,20 @@ export function useDraftEditor(workspace: string, baseRef: ContentRef, paused: b
     } catch (e) { if (valid(token, false)) fail(e) } finally { finish(token) }
   }
   useEffect(() => {
-    live.current = true; ++sequence.current; working.current = false; setRenderOwner(owner); clear(); setBusy(false); setSaving(false); setStorageFailed(false); setError('')
+    live.current = true; ++sequence.current; working.current = false; setRenderOwner(owner); clear(); localDurable.current = true; setBusy(false); setSaving(false); setStorageFailed(false); setError('')
     if (!paused) void refresh()
     const stop = subscribeSessionAccess(() => abort.current.abort())
     return () => { live.current = false; ++sequence.current; working.current = false; abort.current.abort(); stop() }
   }, [owner, paused, port])
   const saveBuffer = (next: EditBuffer) => {
     if (!current()) return Promise.resolve()
-    work.current = next; setBuffer(next); setSaving(true); setStorageFailed(false)
+    localDurable.current = false; work.current = next; setBuffer(next); setSaving(true); setStorageFailed(false)
     const serial = ++saveSerial.current, writeGuard = guard()
     const pending = queue.current.catch(() => {}).then(async () => {
       const result = await editBuffers.save(workspace, next.id, JSON.stringify(decodeBuffer(JSON.stringify(next), workspace)), revisions.current.get(next.id) ?? 0, [], writeGuard)
       if (result.kind !== 'saved' || result.record.conflicts.length) throw new Error('Local concurrent edit retained')
       revisions.current.set(next.id, result.record.revision)
-      if (current() && serial === saveSerial.current) { setSaving(false); setStorageFailed(false); const saved = await loadBuffers(); if (current() && serial === saveSerial.current) setBuffers(saved) }
+      if (current() && serial === saveSerial.current) { localDurable.current = true; setSaving(false); setStorageFailed(false); const saved = await loadBuffers(); if (current() && serial === saveSerial.current) setBuffers(saved) }
     })
     queue.current = pending
     void pending.catch(e => { if (current() && serial === saveSerial.current) { setSaving(false); setStorageFailed(true); fail(e) } })
