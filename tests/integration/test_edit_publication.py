@@ -284,3 +284,59 @@ def test_archived_current_base_cannot_be_published_as_an_edit(editing):
         publisher(editing).publish(identity, created.draft_id, body, "archived")
     assert caught.value.code == "PUBLICATION_BASE_CHANGED"
     assert table_hashes(database) == before
+
+
+def test_edit_without_citations_still_requires_review_of_its_actual_base_before_content_write(editing, monkeypatch):
+    from packages.contracts.canonical import sha256_bytes
+    from services.api.app.application.errors import ApiError
+    from services.api.app.application.publication_admission import PublicationAdmissionService
+    from tests.integration.test_authoring_numeric_provider_history import table_hashes
+
+    database, identity, _, edits, _, reviews = editing
+    raw = b"Synthetic uncited original prose.\n"
+    block = dm.ContentBlock(
+        id="synthetic_uncited_edit_base",
+        revision=1,
+        kind="text",
+        title="Uncited prose",
+        body_path="content/synthetic-uncited-base.md",
+        body_sha256=sha256_bytes(raw),
+    )
+    base = ContentService(database).publish(identity.workspace_id, [block], {block.body_path: raw})[0]
+    created = edits.create(
+        identity, DraftCreateWrite(kind="block", base_ref=base, title="Edited uncited prose"), "uncited-edit"
+    )
+    record = edits.read(identity, created.draft_id, 1)
+    assert record.base.metadata.citations == record.payload.citations == []
+    assert record.base.provenance is None
+    job = reviews.create(identity, created.draft_id, request(record.candidate), "uncited-review")
+    assert ReviewWorker(reviews).run_once()
+    machine = reviews.read(identity, job.id)
+    human = reviews.decide(
+        identity,
+        job.id,
+        decision(machine, mathematical="NOT_APPLICABLE", sources="NOT_APPLICABLE"),
+        "synthetic-source-na",
+    )
+    body = DraftPublishWrite(
+        expected_revision=1,
+        expected_content_sha256=record.candidate.candidate_sha256,
+        review_receipt_id=human.id,
+        acknowledged_warning_codes=sorted({w.code for w in record.warnings if w.severity == "warning"}),
+    )
+    before = table_hashes(database)
+    with database.transaction() as conn:
+        _, material = reviews.read_publication_basis(conn, identity, human.id)
+        assert material.source_refs == [base]
+        with pytest.raises(ApiError) as caught:
+            PublicationAdmissionService(reviews).check(conn, identity, created.draft_id, body)
+        assert caught.value.code == "PUBLISH_SOURCE_REVIEW_REQUIRED"
+
+    def forbidden_content_write(*args, **kwargs):
+        pytest.fail("Source admission must reject before invoking Content publication")
+
+    monkeypatch.setattr(ContentService, "publish_edited_block_in_transaction", forbidden_content_write)
+    with pytest.raises(ApiError) as caught:
+        publisher(editing).publish(identity, created.draft_id, body, "uncited-publish")
+    assert caught.value.code == "PUBLISH_SOURCE_REVIEW_REQUIRED"
+    assert table_hashes(database) == before
