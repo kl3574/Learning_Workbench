@@ -42,6 +42,17 @@ class ReviewService:
     def readers(self) -> dict[tuple[str, str], ArtifactReader]:
         return {**self.external_artifact_readers, (PROFILE, 'draft_review'): self}
 
+    def read_publication_basis(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                               identifier: str) -> tuple[ReviewHistory, CheckedReviewMaterial]:
+        """Current checked Quality facts; never a cached or reusable permission.
+
+        The caller must own the transaction and still perform publication's
+        remaining prerequisites. No state/history repair occurs on this read.
+        """
+        if not connection.in_transaction:
+            raise ApiError(409, 'TRANSACTION_REQUIRED', '发布准入核验需要当前事务。')
+        return self._history(connection, identity, identifier)
+
     @staticmethod
     def _identity(conn: sqlite3.Connection, identity: SessionIdentity, *, subject: bool = True) -> SessionIdentity:
         current = current_session_identity(conn, identity)
