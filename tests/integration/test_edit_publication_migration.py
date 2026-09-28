@@ -51,8 +51,9 @@ def test_nonempty_publication_rows_rowids_triggers_and_old_ack_survive_forward_u
         with pytest.raises(sqlite3.IntegrityError):
             conn.execute("UPDATE draft_publication_results SET record_json='{}'")
     after = table_hashes(upgraded)
+    assert set(after) - set(before) == {'content_impact_legacy_events', 'content_impact_snapshots'}
     assert {k: v for k, v in before.items() if k != "schema_migrations"} == {
-        k: v for k, v in after.items() if k != "schema_migrations"
+        k: after[k] for k in before if k != "schema_migrations"
     }
     _, reviews, publication = owners(upgraded)
     assert reviews.read(identity, receipt.id) == receipt
