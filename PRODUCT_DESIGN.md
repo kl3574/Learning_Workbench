@@ -1,6 +1,6 @@
 # 知径 Learning Workbench：完整产品设计与工程实施规范
 
-**版本：3.0.7｜日期：2026-09-22｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
+**版本：3.0.8｜日期：2026-09-28｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
 
 **本文件（含文末附录）是唯一产品与工程规范。** 将它放入空目录即可开始；不需要旧版设计包、旧 Demo、之前聊天、私有 GitHub 仓库或另一份提示词说明需求。正文定义产品，附录内嵌数据模型、HTTP 字段、数据库设计、模块接口、样例和验收用例。构建 Agent 根据本文生成实现文件、OpenAPI、测试和进度记录；这些是派生产物，不是第二套产品需求。
 
@@ -30,6 +30,7 @@
 | 3.0.5 | M5.4 完整输入证明的精确目的地、模型/格式/有效性绑定及显式无思考 Responses 请求 | 不代表托管完整计量证明、真实模型/搜索或教学验收已通过；54 core、基线 DDL、学习包 3.0.0 不变 |
 | 3.0.6 | M6.1 首个 worked_example 的授权前准备、生成候选身份及单独批准的隔离算术复算 | 仅首个纵向切片，不代表全部 M6.1、M6.2 发布、M6.3 Codex、托管 InputProof 或数学/来源审核完成；54 core、基线 DDL、学习包 3.0.0 不变 |
 | 3.0.7 | M6.1 小节与题目组的一次许可计划/草稿、原子候选组、私解绑定及成员数值检查 | 待对应真实实施验收；不改54 core/0001/学习包3.0.0，不代表M6.2/M6.3或托管模型及内容质量已完成 |
+| 3.0.8 | M6.2 编辑稿专属精确只读合同和刷新/412三方冲突恢复 | 仅补读取合同；不授予编辑稿发布、影响决定或完整恢复验收，不改54 core/0001/学习包3.0.0 |
 
 ## 0. 执行摘要与不可变决策
 
@@ -1161,6 +1162,14 @@ content_plan保留原教学约束、目标顺序及proof_policy；计划条目�
 
 **有界验收。** 新组最多32个block或question成员，顺序计划同上限；新请求Concept targets最多32个，question至少引用1个已选Concept。完整受检生成响应UTF-8≤4MiB，各body/题干/私解正文沿Text≤400000 codepoints，其余数组/字符串按附录A明确上限，解析前与累计构造中检查总预算。超限整次失败，不截断后冒充完整组。必须完成两条真实纵向路径：一条lesson含普通教学块及worked_example、另一条题目组分别覆盖practice_set和assessment根；每条贯通真实prepare/SQLite/同Job许可/受控Provider完整响应/计划-组持久化/重启回读/作者UI与权限锁/取消。题目组另核私解不入公开题面/控制/索引及各题型评分兼容，至少一个声明NumericPlan的成员走单独拒绝与批准回执。浏览器可用性、真正隔离算术、托管InputProof/费用调用与数学/来源/教学审校分开记录；禁止用合成响应、已定义DTO或单元检查替代整条路径。
 
+### 20.10 M6.2 编辑草稿精确读取与冲突恢复
+
+M6.2 已发布公开`text`块的编辑稿属于`authoring_edit`，与Import和Authoring生成各自真实候选身份分开。只有当前author会话在当前workspace及学科Policy允许时可用GET `/draft-edits/{id}`读取其真实不可变历史；URL id不赋权，也不按前缀或跨owner SQL猜归属。可选`revision`是单个正整数；省略时返回服务端当前不可变草稿头，给定时仅返回该精确历史修订。未知、跨workspace及其他owner id统一404；不存在的历史revision返回412，错误、重复或未知query返回422。GET禁止body、无网络/数据库写、响应`Cache-Control: no-store`，每次重核原所属历史、候选SHA、精确基准Content元数据与正文及当前读取权限，损坏即安全拒绝，不借用旧命令ACK构造当前状态。
+
+具名严格`EditDraftSnapshot`为`{owner:"authoring_edit",candidate:DraftCandidate,base_ref:ContentRef,base_material_sha256:Sha256,payload:DraftEditPayload,warnings:Warning[],state:"draft"|"published"}`。`DraftEditPayload`严格为`{version:"text-block-edit-v1",entity:"block",kind:"text",base_ref,body_path,citations,title,body_markdown,body_sha256,base_material_sha256}`，与真实不可变候选SHA和基准材料SHA逐字节核验；state须从该精确候选的真实发布记录只读派生，已发布稿不允许新增PATCH修订；不投影actor、命令key、原始Review证据或私有答案。现有Import GET `/drafts/{id}`保持ImportDraftSnapshot，Authoring生成GET `/authoring/drafts/{id}`保持原形状；不把三者改为宽union。
+
+PATCH返回412后，浏览器保留原待同步命令及本地基准，分别读取当前服务端草稿头与原精确草稿修订，展示`基准/本地待同步/服务端当前`三方标题与正文；用户显式解决后以新基准提交新命令。GET绝不自动rebase、发布或重复执行旧命令；原命令回执与当前读取明确分离。真实SQLite/HTTP/IndexedDB、刷新/重启、双标签竞态、Policy切换、坏hash及GET零写均须验收；此读口本身不完成编辑发布、影响决定或恢复旧内容。
+
 ## 21. 旧格式兼容与确定的范围边界
 
 旧 Demo 不是依赖。仅保证以下可识别的迁移轮廓：
@@ -1261,6 +1270,7 @@ content_plan保留原教学约束、目标顺序及proof_policy；计划条目�
 | GET `/blocks/{id}` | `revision` 必需 | ContentBlock；Markdown body 由 GET `/blocks/{id}/body?revision=` 返回 `text/markdown`，ETag=body_sha256，并有同样权限检查 |
 | POST `/drafts` | `{kind:course|lesson|block|question|practice_set|assessment,base_ref:ContentRef|null,title:string}` | 201 `{draft_id,revision,base_ref,state:draft}`；不是发布对象 |
 | PATCH `/drafts/{id}` | `{expected_revision,patches:{field:string,value:JSON}[]}` | `{draft_id,revision,validation_warnings}`。field 必须属于对应kind白名单；拒绝改对象id/基准hash/审核结论 |
+| GET `/draft-edits/{id}` | 可选单个`revision:Revision`；省略返回当前草稿头 | `EditDraftSnapshot`；仅author读取真实`authoring_edit`所属不可变修订；不替代Import读口 |
 | POST `/drafts/{id}/review` | `{expected_revision,checks:[structure|sources|mathematics|numerical_examples],reviewer_note:string}` | 202 JobRef；结构可自动，数学/来源未独立执行则 NOT_RUN，不自行批准 |
 | POST `/drafts/{id}/publish` | `{expected_revision,expected_content_sha256,review_receipt_id,acknowledged_warning_codes:string[]}` | 201 ContentRef；角色author；禁止活跃独立测试用此路获取答案；审核与hash绑定 |
 | GET `/routes` | `cursor?`,`limit?` | Page<Route>；路线内容与用户完成记录分开 |
@@ -1966,6 +1976,7 @@ accepted_answers保留完整原数组、顺序及字符串，不trim、去重或
 | POST `/deletions/preview` | `{target:workspace|course|personal_data,target_id,scope:archive|purge}` | `{proposal_id,operation_sha256,affected_counts,unresolved_dependencies,warnings}` |
 | POST `/deletions/commit` | `{proposal_id,operation_sha256,expected_workspace_revision,confirm_purge:boolean}` | 202 JobRef；执行前可恢复备份；purge需要额外明确确认 |
 | GET `/drafts/{id}` | 无 | 既有 ImportDraftSnapshot：`{id,kind,revision,base_ref,state,candidate_sha256,payload,warnings}`；Import owner、按kind专用DTO，测试期受限；M6.1 Authoring 只用专属 `/authoring/drafts/{id}`，通用审核整合见§20.8 |
+| GET `/draft-edits/{id}` | 可选单个`revision:Revision`，省略为当前头；无body，拒绝未知/重复query | `EditDraftSnapshot`；严格字段与归属见§20.10；author/Policy、只读、no-store；未知/错owner/跨workspace404，历史revision不存在412 |
 | GET `/reviews/{id}` | 无 | ReviewReceipt；candidate绑定确切草稿版本，不返回未授权答案 |
 | POST `/reviews/{id}/decision` | `{expected_revision,candidate_sha256,mathematical:APPROVED|REJECTED|NOT_APPLICABLE,sources:APPROVED|REJECTED|NOT_APPLICABLE,reason,evidence_artifact_ids:Id[]}` | ReviewReceipt；author会话显式人工确认，操作者从会话得出；不允许模型自报人工reviewer |
 | POST `/attempts/{id}/regrade` | `{expected_grading_revision,reason,item_reviews:[{question_id,score:finite>=0,feedback_markdown}]}` | 202 JobRef；人工复核已提交项，新grading_revision不改旧结果；score≤max |
