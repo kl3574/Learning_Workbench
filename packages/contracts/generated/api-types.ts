@@ -741,6 +741,13 @@ export type DraftCandidate = {
   "candidate_sha256": string;
 };
 
+export type DraftPublishWrite = {
+  "expected_revision": number;
+  "expected_content_sha256": string;
+  "review_receipt_id": string;
+  "acknowledged_warning_codes": Array<string>;
+};
+
 export type DraftReviewWrite = {
   "expected_revision": number;
   "checks": Array<"structure" | "sources" | "mathematics" | "numerical_examples">;
