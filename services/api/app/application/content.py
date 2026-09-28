@@ -26,6 +26,7 @@ from ..infrastructure.content_repository import ContentRepository, damaged, refe
 from ..infrastructure.database import Database
 from ..infrastructure.notes_repository import mark_stale_notes
 from ..infrastructure.security import guard_subject_access
+from .content_impact import ContentImpactSnapshot, impact_snapshot
 from .errors import ApiError
 
 
@@ -91,6 +92,23 @@ class ContentService:
         self._identity(id)
         with self._access(workspace_id, allow_notes=True) as repository:
             return reference(repository.current(id).value)
+
+    def impact_snapshot(self, workspace_id: str, event_id: str) -> ContentImpactSnapshot:
+        """Inspect one durable Content change without mutating any owner state."""
+        self._identity(event_id)
+        try:
+            with self.database.connect() as connection:
+                connection.execute("PRAGMA query_only=ON")
+                connection.execute("BEGIN")
+                try:
+                    repository = ContentRepository(connection, workspace_id, allow_notes=True)
+                    repository.require_workspace()
+                    guard_subject_access(connection, workspace_id)
+                    return impact_snapshot(connection, workspace_id, event_id)
+                finally:
+                    connection.rollback()
+        except sqlite3.Error:
+            raise ApiError(503, "CONTENT_STORAGE_UNAVAILABLE", "内容存储暂不可用。", True) from None
 
     def _context(self, workspace_id: str, scope: str, query: str, limit: int) -> str:
         if type(limit) is not int or not 1 <= limit <= 100:
