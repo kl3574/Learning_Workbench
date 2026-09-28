@@ -734,6 +734,19 @@ export type DownloadArtifact = {
   "download_path": string;
 };
 
+export type DraftCandidate = {
+  "draft_id": string;
+  "draft_revision": number;
+  "entity": "course" | "lesson" | "block" | "concept" | "route" | "question" | "practice_set" | "assessment" | "note";
+  "candidate_sha256": string;
+};
+
+export type DraftReviewWrite = {
+  "expected_revision": number;
+  "checks": Array<"structure" | "sources" | "mathematics" | "numerical_examples">;
+  "reviewer_note": string;
+};
+
 export type EmptyRequest = Record<string, never>;
 
 export type ErrorDetail = {
@@ -1817,6 +1830,20 @@ export type RetrievalWholeBlockLocation = {
   "end_cp": number;
 };
 
+export type ReviewDecisionWrite = {
+  "expected_revision": number;
+  "candidate_sha256": string;
+  "mathematical": "APPROVED" | "REJECTED" | "NOT_APPLICABLE";
+  "sources": "APPROVED" | "REJECTED" | "NOT_APPLICABLE";
+  "reason": string;
+  "evidence_artifact_ids": Array<string>;
+};
+
+export type ReviewJobAck = {
+  "id": string;
+  "status": "queued" | "running" | "awaiting_approval" | "completed" | "failed" | "cancelled";
+};
+
 export type ReviewMaterial = {
   "course_ref": ContentRef;
   "lesson_ref": ContentRef;
@@ -1969,6 +1996,20 @@ export type SourceResponse = {
   "parser_version": (string | null);
   "warnings": Array<Warning>;
   "artifact": DownloadArtifact;
+};
+
+export type StoredReviewReceipt = {
+  "id": string;
+  "revision"?: number;
+  "candidate": DraftCandidate;
+  "structural": "PASS" | "FAIL" | "NOT_RUN" | "BLOCKED";
+  "mathematical": "APPROVED" | "REJECTED" | "NOT_RUN" | "NOT_APPLICABLE";
+  "sources": "APPROVED" | "REJECTED" | "NOT_RUN" | "NOT_APPLICABLE";
+  "independent_pedagogy": "PASS" | "FAIL" | "NOT_RUN" | "BLOCKED";
+  "reviewer": string;
+  "created_at": string;
+  "evidence_paths": Array<string>;
+  "decision_reason": string;
 };
 
 export type SubmissionActivity = {

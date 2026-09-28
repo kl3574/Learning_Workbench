@@ -4439,6 +4439,85 @@
         "title": "DownloadArtifact",
         "type": "object"
       },
+      "DraftCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Candidate Sha256",
+            "type": "string"
+          },
+          "draft_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Draft Id",
+            "type": "string"
+          },
+          "draft_revision": {
+            "minimum": 1.0,
+            "title": "Draft Revision",
+            "type": "integer"
+          },
+          "entity": {
+            "enum": [
+              "course",
+              "lesson",
+              "block",
+              "concept",
+              "route",
+              "question",
+              "practice_set",
+              "assessment",
+              "note"
+            ],
+            "title": "Entity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft_id",
+          "draft_revision",
+          "entity",
+          "candidate_sha256"
+        ],
+        "title": "DraftCandidate",
+        "type": "object"
+      },
+      "DraftReviewWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "checks": {
+            "items": {
+              "enum": [
+                "structure",
+                "sources",
+                "mathematics",
+                "numerical_examples"
+              ],
+              "type": "string"
+            },
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Checks",
+            "type": "array"
+          },
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "reviewer_note": {
+            "title": "Reviewer Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "checks",
+          "reviewer_note"
+        ],
+        "title": "DraftReviewWrite",
+        "type": "object"
+      },
       "EmptyRequest": {
         "additionalProperties": false,
         "properties": {},
@@ -10720,6 +10799,90 @@
         "title": "RetrievalWholeBlockLocation",
         "type": "object"
       },
+      "ReviewDecisionWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "candidate_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Candidate Sha256",
+            "type": "string"
+          },
+          "evidence_artifact_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "title": "Evidence Artifact Ids",
+            "type": "array"
+          },
+          "expected_revision": {
+            "minimum": 1.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "mathematical": {
+            "enum": [
+              "APPROVED",
+              "REJECTED",
+              "NOT_APPLICABLE"
+            ],
+            "title": "Mathematical",
+            "type": "string"
+          },
+          "reason": {
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "sources": {
+            "enum": [
+              "APPROVED",
+              "REJECTED",
+              "NOT_APPLICABLE"
+            ],
+            "title": "Sources",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_revision",
+          "candidate_sha256",
+          "mathematical",
+          "sources",
+          "reason",
+          "evidence_artifact_ids"
+        ],
+        "title": "ReviewDecisionWrite",
+        "type": "object"
+      },
+      "ReviewJobAck": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "awaiting_approval",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status"
+        ],
+        "title": "ReviewJobAck",
+        "type": "object"
+      },
       "ReviewMaterial": {
         "additionalProperties": false,
         "properties": {
@@ -11551,6 +11714,100 @@
           "artifact"
         ],
         "title": "SourceResponse",
+        "type": "object"
+      },
+      "StoredReviewReceipt": {
+        "additionalProperties": false,
+        "description": "The unchanged core receipt shape with private diagnostic behavior.",
+        "properties": {
+          "candidate": {
+            "$ref": "#/components/schemas/DraftCandidate"
+          },
+          "created_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision_reason": {
+            "title": "Decision Reason",
+            "type": "string"
+          },
+          "evidence_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Paths",
+            "type": "array"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "independent_pedagogy": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "NOT_RUN",
+              "BLOCKED"
+            ],
+            "title": "Independent Pedagogy",
+            "type": "string"
+          },
+          "mathematical": {
+            "enum": [
+              "APPROVED",
+              "REJECTED",
+              "NOT_RUN",
+              "NOT_APPLICABLE"
+            ],
+            "title": "Mathematical",
+            "type": "string"
+          },
+          "reviewer": {
+            "title": "Reviewer",
+            "type": "string"
+          },
+          "revision": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "sources": {
+            "enum": [
+              "APPROVED",
+              "REJECTED",
+              "NOT_RUN",
+              "NOT_APPLICABLE"
+            ],
+            "title": "Sources",
+            "type": "string"
+          },
+          "structural": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "NOT_RUN",
+              "BLOCKED"
+            ],
+            "title": "Structural",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "candidate",
+          "structural",
+          "mathematical",
+          "sources",
+          "independent_pedagogy",
+          "reviewer",
+          "created_at",
+          "evidence_paths",
+          "decision_reason"
+        ],
+        "title": "StoredReviewReceipt",
         "type": "object"
       },
       "SubmissionActivity": {
@@ -19260,6 +19517,191 @@
         ]
       }
     },
+    "/api/v1/drafts/{id}/review": {
+      "post": {
+        "operationId": "create_api_v1_drafts__id__review_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "title": "Origin",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftReviewWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewJobAck"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Create",
+        "tags": [
+          "quality"
+        ]
+      }
+    },
     "/api/v1/imports": {
       "post": {
         "operationId": "stage_api_v1_imports_post",
@@ -25763,6 +26205,339 @@
         "summary": "Query",
         "tags": [
           "retrieval"
+        ]
+      }
+    },
+    "/api/v1/reviews/{id}": {
+      "get": {
+        "operationId": "read_api_v1_reviews__id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoredReviewReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Read",
+        "tags": [
+          "quality"
+        ]
+      }
+    },
+    "/api/v1/reviews/{id}/decision": {
+      "post": {
+        "operationId": "decide_api_v1_reviews__id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "title": "Origin",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewDecisionWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoredReviewReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Decide",
+        "tags": [
+          "quality"
         ]
       }
     },

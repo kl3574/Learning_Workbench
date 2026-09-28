@@ -206,6 +206,27 @@ def test_real_active_assessment_policy_blocks_review_subject_http(prepared_revie
     results = [case.client.get(read_path), case.client.get(receipt['evidence_paths'][0]),
                case.client.post(path, json=body, headers=command(case.headers, 'create')),
                case.client.post(read_path + '/decision', json=rejected_decision(case), headers=command(case.headers, 'decision'))]
-    assert [item.status_code for item in results] == [403] * 4
+    assert [item.status_code for item in results] == [409] * 4
+    expected_code = 'ASSESSMENT_ACTIVE' if mode == 'independent' else 'ASSESSMENT_ANSWER_PROTECTED'
+    assert all(item.json()['error']['code'] == expected_code for item in results)
     assert case.client.get('/api/v1/jobs/' + read_path.rsplit('/', 1)[1]).status_code == 200
     assert table_hashes(case.database) == before
+
+
+def test_app_lifespan_runs_and_stops_real_review_worker(prepared_review_http):
+    import time
+    case = prepared_review_http
+    _, _, read_path = review_create(case)
+    worker = case.app.state.review_worker
+    assert not worker.is_alive()
+    with case.client:
+        assert worker.is_alive()
+        deadline = time.monotonic() + 5
+        while True:
+            response = case.client.get(read_path)
+            if response.status_code != 409 or time.monotonic() >= deadline:
+                break
+            time.sleep(0.02)
+        assert response.status_code == 200, response.text
+        assert response.json()['mathematical'] == response.json()['sources'] == 'NOT_RUN'
+    assert not worker.is_alive()

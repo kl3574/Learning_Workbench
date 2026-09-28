@@ -1,6 +1,6 @@
 // Generated from PRODUCT_DESIGN.md v3.0.7 and actual runtime OpenAPI; do not edit.
 // spec_sha256: 2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d
-import type { ApprovalDecision, AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, AuthoringDraftView, AuthoringGroupDraftView, AuthoringGroupNumericCheckView, AuthoringGroupNumericPreviewWrite, AuthoringGroupPrepareWrite, AuthoringJobPage, AuthoringJobReadView, AuthoringPrepareWrite, AuthoringPrivateSolutionView, BlockReadResponse, BootstrapRequest, BootstrapResponse, ConceptStateResponse, ConsentCreate, ConsentCreateAck, ConsentPage, ConsentPreviewWrite, ConsentProposalView, ConsentRevoke, ContentRef, Course, DirectorySearchResponse, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearnerProfile, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, NumericCheckDecisionAck, NumericCheckPreviewWrite, NumericCheckView, OutlineResponse, PageAssessment, PageCourse, PageEvidence, PageNote, PagePracticeSet, PageRevision, PageRoute, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ProfileWrite, ProviderCapabilitiesResponse, ProviderConfigAck, ProviderConfigView, ProviderConfigWrite, ProviderSecretAck, ProviderSecretWrite, ReadinessResponse, RecommendationDecisionWrite, RecommendationPage, RegradeRequest, ResponsesWrite, RetrievalIndexOverview, RetrievalIndexRebuildWrite, RetrievalIndexScopeStatus, RetrievalQueryView, RetrievalQueryWrite, RoleRequest, Route, RouteCompletionRequest, SessionResponse, SourceResponse, TutorAnswerDeltaEvent, TutorApprovalRequiredEvent, TutorCancelledEvent, TutorCitationEvent, TutorCompletedEvent, TutorContextReadyEvent, TutorFailedEvent, TutorMessagePage, TutorQueuedEvent, TutorRetrievalCompletedEvent, TutorRunCancel, TutorRunControlView, TutorRunCreate, TutorRunView, TutorThreadCreate, TutorThreadPage, TutorThreadView, TutorUsageEvent, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
+import type { ApprovalDecision, AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, AuthoringDraftView, AuthoringGroupDraftView, AuthoringGroupNumericCheckView, AuthoringGroupNumericPreviewWrite, AuthoringGroupPrepareWrite, AuthoringJobPage, AuthoringJobReadView, AuthoringPrepareWrite, AuthoringPrivateSolutionView, BlockReadResponse, BootstrapRequest, BootstrapResponse, ConceptStateResponse, ConsentCreate, ConsentCreateAck, ConsentPage, ConsentPreviewWrite, ConsentProposalView, ConsentRevoke, ContentRef, Course, DirectorySearchResponse, DraftReviewWrite, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearnerProfile, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, NumericCheckDecisionAck, NumericCheckPreviewWrite, NumericCheckView, OutlineResponse, PageAssessment, PageCourse, PageEvidence, PageNote, PagePracticeSet, PageRevision, PageRoute, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ProfileWrite, ProviderCapabilitiesResponse, ProviderConfigAck, ProviderConfigView, ProviderConfigWrite, ProviderSecretAck, ProviderSecretWrite, ReadinessResponse, RecommendationDecisionWrite, RecommendationPage, RegradeRequest, ResponsesWrite, RetrievalIndexOverview, RetrievalIndexRebuildWrite, RetrievalIndexScopeStatus, RetrievalQueryView, RetrievalQueryWrite, ReviewDecisionWrite, ReviewJobAck, RoleRequest, Route, RouteCompletionRequest, SessionResponse, SourceResponse, StoredReviewReceipt, TutorAnswerDeltaEvent, TutorApprovalRequiredEvent, TutorCancelledEvent, TutorCitationEvent, TutorCompletedEvent, TutorContextReadyEvent, TutorFailedEvent, TutorMessagePage, TutorQueuedEvent, TutorRetrievalCompletedEvent, TutorRunCancel, TutorRunControlView, TutorRunCreate, TutorRunView, TutorThreadCreate, TutorThreadPage, TutorThreadView, TutorUsageEvent, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
 
 import type { RetrievalIndexStatusQuery } from "./retrieval-ports-binding";
 export interface ApiEndpointMap {
@@ -39,6 +39,7 @@ export interface ApiEndpointMap {
   "GET /api/v1/courses/{id}/directory-search": { request: undefined; response: DirectorySearchResponse; headers: null; parameters: { path: { "id": string }; query: { "limit"?: number; "q": string; "revision": number } }; parametersRequired: true };
   "GET /api/v1/courses/{id}/outline": { request: undefined; response: OutlineResponse; headers: null; parameters: { path: { "id": string }; query: { "revision": number } }; parametersRequired: true };
   "GET /api/v1/drafts/{id}": { request: undefined; response: ImportDraftSnapshot; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
+  "POST /api/v1/drafts/{id}/review": { request: DraftReviewWrite; response: ReviewJobAck; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
   "POST /api/v1/imports": { request: ImportUpload; response: ImportStaged; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
   "GET /api/v1/imports/{id}": { request: undefined; response: ImportPreview; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
   "POST /api/v1/imports/{id}/cancel": { request: ImportCancelRequest; response: ImportCancelResponse; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
@@ -76,6 +77,8 @@ export interface ApiEndpointMap {
   "GET /api/v1/recommendations": { request: undefined; response: RecommendationPage; headers: null; parameters: { query?: { "course_id"?: (string | null); "cursor"?: (string | null); "limit"?: number; "recommendation_id"?: (string | null) } }; parametersRequired: false };
   "POST /api/v1/recommendations/{id}/decision": { request: RecommendationDecisionWrite; response: MutationAck; headers: { "Idempotency-Key": string; "If-Match": string }; parameters: { path: { "id": string } }; parametersRequired: true };
   "POST /api/v1/retrieval/query": { request: RetrievalQueryWrite; response: RetrievalQueryView; headers: null; parameters: Record<string, never>; parametersRequired: false };
+  "GET /api/v1/reviews/{id}": { request: undefined; response: StoredReviewReceipt; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
+  "POST /api/v1/reviews/{id}/decision": { request: ReviewDecisionWrite; response: StoredReviewReceipt; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/routes": { request: undefined; response: PageRoute; headers: null; parameters: { query?: { "cursor"?: (string | null); "limit"?: number } }; parametersRequired: false };
   "POST /api/v1/routes": { request: Route; response: ContentRef; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
   "PUT /api/v1/routes/{id}": { request: Route; response: ContentRef; headers: { "Idempotency-Key": string; "If-Match"?: (string | null) }; parameters: { path: { "id": string } }; parametersRequired: true };
@@ -706,6 +709,21 @@ export const API_ENDPOINTS = {
     ],
     "queryParameters": []
   },
+  "POST /api/v1/drafts/{id}/review": {
+    "method": "POST",
+    "path": "/api/v1/drafts/{id}/review",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
   "POST /api/v1/imports": {
     "method": "POST",
     "path": "/api/v1/imports",
@@ -1311,6 +1329,36 @@ export const API_ENDPOINTS = {
     "requestKind": "json",
     "multipartFields": [],
     "pathParameters": [],
+    "queryParameters": []
+  },
+  "GET /api/v1/reviews/{id}": {
+    "method": "GET",
+    "path": "/api/v1/reviews/{id}",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
+  "POST /api/v1/reviews/{id}/decision": {
+    "method": "POST",
+    "path": "/api/v1/reviews/{id}/decision",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
     "queryParameters": []
   },
   "GET /api/v1/routes": {
