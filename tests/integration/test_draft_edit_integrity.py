@@ -14,7 +14,7 @@ from services.api.app.application.publication_admission_models import DraftPubli
 from services.api.app.application.review_numeric import ReviewNumeric
 from services.api.app.application.review_service import ReviewService
 from services.api.app.application.review_worker import ReviewWorker
-from services.api.app.draft_dto import DraftCreateWrite
+from services.api.app.draft_dto import DraftCreateWrite, DraftPatch, DraftPatchWrite
 from services.api.app.infrastructure.draft_edit_repository import DraftEditRepository
 from tests.integration.test_draft_edit_boundaries import case as case, patch
 from tests.integration.test_draft_edit_migration import previous as previous, owners
@@ -116,11 +116,31 @@ def test_actual_edit_mathematics_cannot_be_approved_as_na(case, formula):
     assert reviews.read(identity, job.id).mathematical == 'NOT_RUN'
 
 
+@pytest.mark.parametrize('formula', ['$x^2$', r'\(x=1\)'])
+def test_actual_edit_title_mathematics_with_plain_body_cannot_claim_na(case, formula):
+    database, identity, _, service, _, created = case
+    service.patch(identity, created.draft_id, DraftPatchWrite(expected_revision=1,
+        patches=[DraftPatch(field='title', value=f'Synthetic title {formula}')]), 'math-title')
+    current = service.read(identity, created.draft_id, 2)
+    assert current.payload.body_markdown == 'Synthetic source for local editing.\n'
+    registry = DraftCandidates({'authoring_edit': service})
+    reviews = ReviewService(database, registry, ReviewNumeric(registry, {}), {})
+    job = reviews.create(identity, created.draft_id, request(current.candidate), 'review-title')
+    assert ReviewWorker(reviews).run_once()
+    receipt = reviews.read(identity, job.id)
+    before = table_hashes(database)
+    with pytest.raises(ApiError) as error:
+        reviews.decide(identity, job.id, decision(receipt, mathematical='NOT_APPLICABLE'), 'synthetic-human')
+    assert error.value.code == 'MATHEMATICAL_REVIEW_REQUIRED'
+    assert reviews.read(identity, job.id).mathematical == 'NOT_RUN'
+    assert table_hashes(database) == before
+
+
 def test_edit_na_uses_current_body_while_retaining_exact_historical_formula_base(case):
     database, identity, _, service, _, _ = case
     content = ContentService(database)
     raw = b'Synthetic old formula: \\begin{equation*}x=1\\end{equation*}\n'
-    block = dm.ContentBlock(id='synthetic_formula_base', revision=1, kind='text', title='Old synthetic text',
+    block = dm.ContentBlock(id='synthetic_formula_base', revision=1, kind='text', title='Old $z^2$ formula title',
         body_path='content/synthetic-formula-base.md', body_sha256=sha256_bytes(raw))
     base = content.publish(identity.workspace_id, [block], {block.body_path: raw})[0]
     later = b'Different later published synthetic text.\n'
@@ -132,6 +152,8 @@ def test_edit_na_uses_current_body_while_retaining_exact_historical_formula_base
     service.patch(identity, created.draft_id, patch(text=prose), 'remove-formula')
     current = service.read(identity, created.draft_id, 2)
     assert current.base.ref == base and current.base.body_markdown.encode() == raw
+    assert current.base.metadata.title == 'Old $z^2$ formula title'
+    assert current.payload.title == 'Synthetic edited prose'
     assert current.payload.body_markdown == prose
     registry = DraftCandidates({'authoring_edit': service})
     reviews = ReviewService(database, registry, ReviewNumeric(registry, {}), {})

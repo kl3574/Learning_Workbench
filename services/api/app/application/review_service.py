@@ -130,21 +130,23 @@ class ReviewService:
     @staticmethod
     def _decision_applicability(material: CheckedReviewMaterial, request: ReviewDecisionWrite) -> None:
         if request.mathematical == 'NOT_APPLICABLE':
-            def declares_math(value: object) -> bool:
+            def declares_math(value: object, *, include_title: bool = False) -> bool:
                 if isinstance(value, dict):
                     if (value.get('kind') in {'worked_example', 'theorem', 'proof', 'formula', 'numeric', 'expression', 'calculation'}
                             or value.get('numeric_plan') is not None or bool(value.get('symbols'))):
                         return True
                     for key, item in value.items():
-                        if isinstance(item, str) and ('markdown' in key or key in {'formula', 'proof'}):
+                        if isinstance(item, str) and ('markdown' in key or key in {'formula', 'proof'}
+                                or (include_title and key == 'title')):
                             if re.search(r'\\(?:\(|\[|begin\{(?:equation|align|math|gather)\*?\})|\$[^$]+\$', item):
                                 return True
-                    return any(declares_math(item) for item in value.values())
-                return isinstance(value, list) and any(declares_math(item) for item in value)
+                    return any(declares_math(item, include_title=include_title) for item in value.values())
+                return isinstance(value, list) and any(declares_math(item, include_title=include_title) for item in value)
             # An edit's frozen base is provenance, not its current candidate.
             # Owner/history reads still authenticate that complete original base.
             payload = material.payload.record.payload if isinstance(material.payload, EditReviewMaterial) else material.payload
-            if declares_math(payload.model_dump(mode='python', warnings='error')):
+            if declares_math(payload.model_dump(mode='python', warnings='error'),
+                    include_title=isinstance(material.payload, EditReviewMaterial)):
                 raise ApiError(409, 'MATHEMATICAL_REVIEW_REQUIRED', '原材料包含数学结构或数值计划，不能标为数学审校不适用。')
             # Absence of these explicit signals is not automatic classification.
             # The current author's explicit N/A and original nonblank reason are
