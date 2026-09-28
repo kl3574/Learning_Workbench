@@ -29,7 +29,11 @@ def typescript_type(schema: dict[str, Any]) -> str:
     if kind == "array":
         return f"Array<{typescript_type(schema['items'])}>"
     if kind == "object":
-        if schema.get("additionalProperties") is not False:
+        additional = schema.get("additionalProperties")
+        if schema == {"type": "object", "additionalProperties":
+                      {"$ref": "#/components/schemas/DraftJsonValue"}}:
+            return "{ [key: string]: DraftJsonValue }"
+        if additional is not False:
             raise ValueError("unbounded object schema not supported")
         required = set(schema.get("required", []))
         if not schema.get("properties"):

@@ -741,6 +741,37 @@ export type DraftCandidate = {
   "candidate_sha256": string;
 };
 
+export type DraftCreateWrite = {
+  "kind": "course" | "lesson" | "block" | "question" | "practice_set" | "assessment";
+  "base_ref": (ContentRef | null);
+  "title": string;
+};
+
+export type DraftCreated = {
+  "draft_id": string;
+  "revision": number;
+  "base_ref": (ContentRef | null);
+  "state"?: "draft";
+};
+
+export type DraftJsonValue = (boolean | number | number | string | Array<DraftJsonValue> | { [key: string]: DraftJsonValue } | null);
+
+export type DraftPatch = {
+  "field": string;
+  "value": DraftJsonValue;
+};
+
+export type DraftPatchWrite = {
+  "expected_revision": number;
+  "patches": Array<DraftPatch>;
+};
+
+export type DraftPatched = {
+  "draft_id": string;
+  "revision": number;
+  "validation_warnings": Array<Warning>;
+};
+
 export type DraftPublishWrite = {
   "expected_revision": number;
   "expected_content_sha256": string;

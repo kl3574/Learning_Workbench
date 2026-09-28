@@ -1,7 +1,8 @@
-"""Appendix A 1262/1263 application DTOs; no new HTTP route or core model."""
-from typing import Literal
+"""Strict DTOs for the declared general Draft create and edit routes."""
+from typing import Annotated, Literal
 
-from pydantic import Field, JsonValue, model_validator, field_validator, ConfigDict
+from pydantic import Field, StrictBool, StrictInt, StrictStr, FiniteFloat, model_validator, field_validator, ConfigDict
+from typing_extensions import TypeAliasType
 from packages.contracts import domain_models as dm
 
 
@@ -34,9 +35,14 @@ class DraftCreated(DraftModel):
     state: Literal['draft'] = 'draft'
 
 
+DraftJsonValue = TypeAliasType('DraftJsonValue',
+    Annotated['None | StrictBool | StrictInt | FiniteFloat | StrictStr | list[DraftJsonValue] | dict[str, DraftJsonValue]',
+              Field(title='DraftJsonValue')])
+
+
 class DraftPatch(DraftModel):
     field: str = Field(min_length=1, max_length=80)
-    value: JsonValue
+    value: DraftJsonValue
 
     @field_validator('value', mode='before')
     @classmethod

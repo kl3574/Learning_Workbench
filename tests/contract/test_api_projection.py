@@ -60,8 +60,9 @@ def test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec():
     assert {('POST', '/api/v1/drafts/{id}/review'), ('GET', '/api/v1/reviews/{id}'),
             ('POST', '/api/v1/reviews/{id}/decision')} <= projection
     assert ('POST', '/api/v1/drafts/{id}/publish') in projection
-    assert len(projection) == 97
-    assert len(SPEC_ROUTES - projection) == 22
+    assert {('POST', '/api/v1/drafts'), ('PATCH', '/api/v1/drafts/{id}')} <= projection
+    assert len(projection) == 99
+    assert len(SPEC_ROUTES - projection) == 20
 
 
 OPERATIONS = [(path, method, operation) for path, methods in create_app().openapi()["paths"].items()
@@ -77,6 +78,14 @@ def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, meth
         if schema.get("type") == "object":
             assert schema["additionalProperties"] is False
         else:
+            if schema.get("title") == "DraftJsonValue":
+                ref = {"$ref": "#/components/schemas/DraftJsonValue"}
+                assert schema == {"title": "DraftJsonValue", "anyOf": [
+                    {"type": "boolean"}, {"type": "integer"}, {"type": "number"},
+                    {"type": "string"}, {"type": "array", "items": ref},
+                    {"type": "object", "additionalProperties": ref}, {"type": "null"},
+                ]}
+                continue
             # Only these specified named unions may replace a concrete object.
             unions = {
                 "BlockReadResponse": ("anyOf", ["ContentBlock", "BlockProvenanceResponse"]),

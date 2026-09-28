@@ -12,6 +12,7 @@ from .application.imports import ImportService, IMPORT_ARTIFACT_PROFILES
 from .application.artifacts import ArtifactsService
 from .application.jobs import JobService
 from .application.draft_candidates import DraftCandidates
+from .application.draft_edits import DraftEditService
 from .application.review_numeric import ReviewNumeric
 from .application.review_service import ReviewService
 from .application.review_worker import ReviewWorker
@@ -59,6 +60,7 @@ from .interfaces.authoring_http import create_authoring_router
 from .interfaces.authoring_group_http import create_authoring_group_router
 from .interfaces.review_http import create_review_router
 from .interfaces.publication_http import create_publication_router
+from .interfaces.draft_http import create_draft_router
 from .infrastructure.import_worker import ImportWorker
 from .infrastructure.provider_secret_store import preferred_secret_store
 from .infrastructure.authoring_numeric_runtime import NumericRuntime
@@ -97,8 +99,9 @@ def create_app(settings: Settings | None = None, *,
     group_numeric_runtime = NumericRuntime()
     group_numeric_service = GroupNumericService(database, authoring_group_context, group_numeric_runtime, authoring=authoring_group_service)
     group_numeric_worker = GroupNumericWorker(database, authoring_group_context, group_numeric_runtime, authoring=authoring_group_service)
+    draft_edits = DraftEditService(database)
     candidates = DraftCandidates({'import': import_service, 'authoring_single': authoring_service,
-                                  'authoring_group': authoring_group_service})
+                                  'authoring_group': authoring_group_service, 'authoring_edit': draft_edits})
     review_service = ReviewService(database, candidates,
         ReviewNumeric(candidates, {'authoring_single': numeric_service, 'authoring_group': group_numeric_service}),
         {(profile, 'import'): import_service for profile in IMPORT_ARTIFACT_PROFILES})
@@ -163,6 +166,7 @@ def create_app(settings: Settings | None = None, *,
     application.state.review_service = review_service
     application.state.review_worker = review_worker
     application.state.publication_service = publication_service
+    application.state.draft_edit_service = draft_edits
     application.state.artifacts_service = artifacts
     application.state.outbound_sources = provider_sources
     application.state.request_preparer = provider_preparer
@@ -184,6 +188,7 @@ def create_app(settings: Settings | None = None, *,
     application.include_router(create_authoring_group_router(authoring_group_service, group_numeric_service))
     application.include_router(create_review_router(review_service))
     application.include_router(create_publication_router(publication_service))
+    application.include_router(create_draft_router(draft_edits))
     if settings.static_dir.is_dir():
         application.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="workbench")
     return application
