@@ -39,7 +39,7 @@ test('actual unreviewed submission stays excluded and its precise sources disapp
   let release!: () => void, captured!: () => void; const gate = new Promise<void>(resolve => { release = resolve }), ready = new Promise<void>(resolve => { captured = resolve })
   await page.route('**/api/v1/learning/concept-states*', async route => { const response = await route.fetch(); captured(); await gate; await route.fulfill({ response }) }); await dialog.getByRole('button', { name: '刷新概念状态', exact: true }).click(); await ready
   const other = await page.context().newPage()
-  try { await other.goto(href); await other.getByRole('checkbox', { name: '我已核对内容状态与模式，确认开始未评分测试', exact: true }).check(); await other.getByRole('button', { name: '明确开始本次测试', exact: true }).click(); await expect(other.getByText('独立测试进行中', { exact: true }).first()).toBeVisible(); release(); await expect(dialog.locator('.concept-state')).toHaveCount(0); expect((await page.request.get('/api/v1/learning/concept-states')).status()).toBe(409) } finally { release(); await page.unroute('**/api/v1/learning/concept-states*'); await other.close() }
+  try { await other.goto(href); await other.getByRole('checkbox', { name: '我已核对内容状态与模式，确认开始未评分测试', exact: true }).check(); await other.getByRole('button', { name: '明确开始本次测试', exact: true }).click(); await expect(other.getByText('独立测试进行中', { exact: true }).first()).toBeVisible(); release(); await expect(dialog.locator('.concept-state')).toHaveCount(0); expect((await page.request.get('/api/v1/learning/concept-states')).status()).toBe(409) } finally { release(); await page.unrouteAll({ behavior: 'wait' }); await other.close() }
 })
 
 test('a quota-failed profile remains mounted when a global command tries to leave it', async ({ page }, info) => {
