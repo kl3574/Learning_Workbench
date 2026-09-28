@@ -77,6 +77,7 @@ def test_malformed_nested_material_does_not_emit_private_serialization_warning(a
             review_structure(malformed, requested=True)
     assert (caught.value.status, caught.value.code) == (503, 'REVIEW_MATERIAL_INTEGRITY')
     assert marker not in str(caught.value)
+    assert marker not in ''.join(str(item.message) for item in observed)
     assert observed == []
     assert table_hashes(case.database) == before
 

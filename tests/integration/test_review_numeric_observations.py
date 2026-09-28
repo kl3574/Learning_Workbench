@@ -50,8 +50,9 @@ def test_malformed_nested_observation_does_not_emit_private_serialization_warnin
         warnings.simplefilter('always')
         with pytest.raises(ApiError) as caught:
             verify(case, malformed)
-    assert caught.value.status == 503
+    assert (caught.value.status, caught.value.code) == (409, 'AUTHORING_INTEGRITY_ERROR')
     assert marker not in str(caught.value)
+    assert marker not in ''.join(str(item.message) for item in observed)
     assert observed == []
     assert table_hashes(case.database) == before
 
