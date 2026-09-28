@@ -1,5 +1,6 @@
 """Actual owner material enters deterministic checks; no review/human receipt."""
 import copy
+import warnings
 
 import pytest
 from pydantic import ValidationError
@@ -62,6 +63,21 @@ def test_bypassed_material_validation_is_integrity_error_without_receipt(actual_
     with pytest.raises(ApiError) as caught:
         review_structure(malformed, requested=True)
     assert caught.value.code == 'REVIEW_MATERIAL_INTEGRITY'
+    assert table_hashes(case.database) == before
+
+
+def test_malformed_nested_material_does_not_emit_private_serialization_warning(actual_material):
+    case, material = actual_material
+    marker = 'synthetic-private-structure-marker'
+    malformed = material.model_copy(update={'payload': {'unexpected': marker}})
+    before = table_hashes(case.database)
+    with warnings.catch_warnings(record=True) as observed:
+        warnings.simplefilter('always')
+        with pytest.raises(ApiError) as caught:
+            review_structure(malformed, requested=True)
+    assert (caught.value.status, caught.value.code) == (503, 'REVIEW_MATERIAL_INTEGRITY')
+    assert marker not in str(caught.value)
+    assert observed == []
     assert table_hashes(case.database) == before
 
 

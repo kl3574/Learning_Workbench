@@ -2,6 +2,7 @@
 from dataclasses import replace
 import base64
 import json
+import warnings
 
 import pytest
 
@@ -38,6 +39,21 @@ def verify(case, observation, identity=None):
     with case.database.transaction(immediate=False) as conn:
         conn.execute('PRAGMA query_only=ON')
         case.numeric.verify_review_numeric(conn, identity or case.identity, observation)
+
+
+def test_malformed_nested_observation_does_not_emit_private_serialization_warning(generated):
+    case = generated
+    marker = 'synthetic-private-numeric-marker'
+    malformed = read(case).model_copy(update={'checks': [{'unexpected': marker}]})
+    before = table_hashes(case.database)
+    with warnings.catch_warnings(record=True) as observed:
+        warnings.simplefilter('always')
+        with pytest.raises(ApiError) as caught:
+            verify(case, malformed)
+    assert caught.value.status == 503
+    assert marker not in str(caught.value)
+    assert observed == []
+    assert table_hashes(case.database) == before
 
 
 def test_real_numeric_owner_reads_all_checks_without_writes_or_runtime(generated, monkeypatch):
