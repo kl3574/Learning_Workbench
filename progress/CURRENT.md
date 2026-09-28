@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-28T01:59:59Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
+更新：2026-09-28T02:10:09Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
 
-仓库发布：VERIFIED；Issues 同步：REMOTE715a144_VERIFIED_REVIEW_HTTP_PUBLICATION_PENDING
+仓库发布：VERIFIED；Issues 同步：REMOTE507ac58_VERIFIED_NEW_LOCAL_CHECKPOINT_PENDING
 实施：IN_PROGRESS；当前任务：M6.2；下一任务：M6.2
 
-发布并独立回读8b组合/证据的实际PR head与新push、PR merge CI；继续独审只读发布准入b1c88（相关141PASS）和隔离审核UI。内容发布、Draft状态选择/对比/影响/恢复尚未实现；生产模型完整计量证明和真实封存数值运行仍阻塞。
+回读507双CI实际终态；同步只读准入原证据与整合66PASS。审核UI继续真实浏览器闭环和未提交reason刷新/切候选丢失风险验证；之后实现Draft生命周期和实际发布，不改原Authoring state:draft。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -158,7 +158,9 @@
 - M6.2_review_http_integration: 当前8b9ec87由991实际Git/工作区字节核验：Review create/read/decision、worker、受保护报告与共享Job控制已接入。完整后端固定918为2789PASS/1真实数值环境SKIP/2依赖warning、853.96s；同918的Web453、Ruff/mypy196/spec/strictTS/build通过。后续共享头修复bb相关76PASS，最终8b四例和生成契约复验通过；不把918全套归到8b。原生仍保留1fff92PASS9FAIL。CI精确bubblewrap pin已审查更新，原715六APT失败保留，新远端待验。
 - M6.2_review_http_headers: Actual4RED→4GREEN, bb76relatedPASS/2warnings,991Git bindings; independent Spec and Standards reviews no remaining blocker. Integrated8b final4PASS/2warnings and generated spec checkPASS. No full8b rerun.
 - M6.2_ci_pin_recovery: Integrated55ebb as42262d7: only3exact bubblewrap pins .1→.3 and ADR. Signed archive chain+old APT exit100/new simulationexit0. Existing runtime probe and70PASS/1numericENVSKIP on715. Known CVE-2026-87766 remains; bounded fixed-target applicability assessment, no isolation reduction. FreshCIpending.
-- M6.2_readonly_admission_candidate: ISOLATEDb1c88:141relatedPASS/2dependencywarnings, independent review pending; not integrated, no publication/HTTP/UI change.
+- M6.2_readonly_admission_candidate: INTEGRATED9e024ca:995actualGit source composition; isolatedb1 141relatedPASS/2warnings and independentSpec+rootStandards no blocker; finalrealReviewHTTP+headers+admission66PASS/2warnings66.76s,Ruff/mypy198/specPASS. No newHTTP/state/publication; publication=NOT_RUN. Newsource notyetpublished.
+- M6.2_review_http_publication: VERIFIED507ac58:actual ref/PR55 head/title/body and Issue31 managed body independentlyGET exact at02:02:27Z;draft/open/unmerged and originalissue identity/status/labels/milestone/outside block preserved. NewheadCIreadbackongoing; no merge/release.
+- M6.2_readonly_admission_public_evidence: Root replayed83raw mappings/59publicfiles/707explicitduplicate-source exclusions and32exact spans (2synthetic identity displays); all public files pass actual inspector without exceptions. IndependentSpec androotStandards reports included. Whole-platform success not asserted.
 
 ## 阻塞与待决项
 
