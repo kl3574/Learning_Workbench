@@ -51,7 +51,8 @@ def test_actual_http_publish_returns_persisted_ref_and_original_201_on_replay(pr
     assert metadata.status_code == 200, metadata.text
     assert metadata_sha256(dm.ContentBlock.model_validate_json(metadata.content)) == ref.sha256
     text = case.client.get(f'/api/v1/blocks/{ref.id}/body?revision={ref.revision}')
-    assert text.status_code == 200 and b'Unreviewed body.' in text.content
+    assert text.status_code == 200
+    assert text.content == original_draft['payload']['body_markdown'].encode('utf-8')
     replay = case.client.post(path, json=body, headers=command(case.headers, 'publish-once'))
     assert replay.status_code == 201 and replay.json() == response.json()
     assert case.client.get('/api/v1/drafts/' + case.candidate['draft_id']).json() == original_draft
