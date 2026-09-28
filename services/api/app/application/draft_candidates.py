@@ -57,7 +57,7 @@ class DraftCandidates:
         current, registered, owner = self._registered_owner(connection, identity, draft_id, expected_revision)
         result = owner.read_review_material(connection, current, registered.candidate)
         try:
-            result = CheckedReviewMaterial.model_validate(result.model_dump(mode='python'))
+            result = CheckedReviewMaterial.model_validate(result.model_dump(mode='python', warnings='error'))
         except (ValidationError, ValueError, TypeError, AttributeError):
             raise ApiError(503, 'DRAFT_OWNER_INTEGRITY', '审核材料当前无法完整核验。') from None
         if (result.workspace_id != registered.workspace_id or result.owner != registered.owner
@@ -81,7 +81,7 @@ class DraftCandidates:
             raise ApiError(503, 'DRAFT_OWNER_UNAVAILABLE', '草稿所属服务当前无法核验。')
         try:
             # Revalidate model_copy/model_construct input, including unexpected subclasses.
-            candidate = dm.DraftCandidate.model_validate(candidate.model_dump(mode='python'))
+            candidate = dm.DraftCandidate.model_validate(candidate.model_dump(mode='python', warnings='error'))
         except (ValidationError, ValueError, TypeError, AttributeError):
             raise ApiError(422, 'SCHEMA_INVALID', '草稿候选身份无效。') from None
         resolved = owner.resolve_candidate(connection, current, candidate)

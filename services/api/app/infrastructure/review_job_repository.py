@@ -27,7 +27,7 @@ class ReviewJobRepository(AuthoringJobRepository):
 
     def _input(self, identifier: str, value: object) -> ReviewJobInput:
         try:
-            raw = value.model_dump(mode='python') if isinstance(value, ReviewJobInput) else value
+            raw = value.model_dump(mode='python', warnings='error') if isinstance(value, ReviewJobInput) else value
             result = ReviewJobInput.model_validate(raw)
         except (ValidationError, ValueError, TypeError):
             raise integrity() from None
