@@ -1,6 +1,6 @@
 # 知径 Learning Workbench：完整产品设计与工程实施规范
 
-**版本：3.0.8｜日期：2026-09-28｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
+**版本：3.0.9｜日期：2026-09-28｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
 
 **本文件（含文末附录）是唯一产品与工程规范。** 将它放入空目录即可开始；不需要旧版设计包、旧 Demo、之前聊天、私有 GitHub 仓库或另一份提示词说明需求。正文定义产品，附录内嵌数据模型、HTTP 字段、数据库设计、模块接口、样例和验收用例。构建 Agent 根据本文生成实现文件、OpenAPI、测试和进度记录；这些是派生产物，不是第二套产品需求。
 
@@ -31,6 +31,7 @@
 | 3.0.6 | M6.1 首个 worked_example 的授权前准备、生成候选身份及单独批准的隔离算术复算 | 仅首个纵向切片，不代表全部 M6.1、M6.2 发布、M6.3 Codex、托管 InputProof 或数学/来源审核完成；54 core、基线 DDL、学习包 3.0.0 不变 |
 | 3.0.7 | M6.1 小节与题目组的一次许可计划/草稿、原子候选组、私解绑定及成员数值检查 | 待对应真实实施验收；不改54 core/0001/学习包3.0.0，不代表M6.2/M6.3或托管模型及内容质量已完成 |
 | 3.0.8 | M6.2 编辑稿专属精确只读合同和刷新/412三方冲突恢复 | 仅补读取合同；不授予编辑稿发布、影响决定或完整恢复验收，不改54 core/0001/学习包3.0.0 |
+| 3.0.9 | M6.2 内容影响逐对象人工决定、学习证据适用性复核及历史公开内容块恢复草稿的提议合同 | 提案待所有者确认与实施；不表示影响已复核、旧内容已恢复或M6.2已验收；不改54 core/0001/学习包3.0.0 |
 
 ## 0. 执行摘要与不可变决策
 
@@ -540,6 +541,7 @@ visibility 取 `learner` 或 `author_private`。导出学习者包不是 CSS 隐
 | Workspace | GET `/workspace`；PUT `/workspace/preferences` | UI/学习偏好与 revision，不返回密钥 |
 | Import | POST `/imports`；GET `/imports/{id}`；POST `/imports/{id}/commit`；POST `/imports/{id}/cancel` | 原件上传、预览任务、确认与幂等 |
 | Content | GET `/courses`；GET `/courses/{id}`；GET `/lessons/{id}?revision=`；GET `/blocks/{id}?revision=` | 列表轻量；精确修订正文 |
+| Impact / restore | GET/POST `/content/impacts/{event_id}` 的具名子操作；POST `/content/restore-drafts`；GET `/content/restore-drafts/{id}`；GET/POST 证据适用性决定 | 只读报告、人类决定与旧块新修订；严格合同见§20.11/附录A |
 | Draft | POST `/drafts`；PATCH `/drafts/{id}`；POST `/drafts/{id}/review`；POST `/drafts/{id}/publish` | 基准修订、变更、审核回执、发布 |
 | Route | GET/POST `/routes`；PUT `/routes/{id}`；POST `/routes/{id}/steps/{step_id}/complete` | typed refs、依赖、版本与人工标记 |
 | Practice | POST `/practice/sessions`；PUT `/practice/sessions/{id}/responses`；POST `/practice/sessions/{id}/submit` | 题集、草稿版本、反馈 |
@@ -756,6 +758,7 @@ completed/failed/cancelled 三个 job 终态互斥，完成事件和最终产物
 - 网络断开后草稿仍存在；重连不重复交卷、不重复启动付费请求。
 - 导入恶意 HTML、损坏 ZIP、含重复 ID 的课程包时，失败原因明确且不污染正式工作区。
 - 修改题目后旧 attempt 仍可回放原题；数学条件变更后相关对象显示待复核。
+- 内容变更的影响事件可按精确修订与保守候选分别回读；逐对象决定、证据适用性复核和恢复旧公开块均核真实权限、原事件/基准及强 CAS，重启回读同一历史。未决对象不能因查看、索引重建或另一模块的决定被标为已复核；旧题面、私解、作答和成绩逐字节保留。
 - 选择题、数值题、单位、无效表达式、符号域、待人工题按规则处理。
 - 没有证据时不显示百分比；已读和已看答案不自动成为独立掌握证据。
 - 学习者导出包内确实不存在私有答案；完整个人备份能校验、预览、恢复与回滚。
@@ -1170,6 +1173,39 @@ M6.2 已发布公开`text`块的编辑稿属于`authoring_edit`，与Import和Au
 
 PATCH返回412后，浏览器保留原待同步命令及本地基准，分别读取当前服务端草稿头与原精确草稿修订，展示`基准/本地待同步/服务端当前`三方标题与正文；用户显式解决后以新基准提交新命令。GET绝不自动rebase、发布或重复执行旧命令；原命令回执与当前读取明确分离。真实SQLite/HTTP/IndexedDB、刷新/重启、双标签竞态、Policy切换、坏hash及GET零写均须验收；此读口本身不完成编辑发布、影响决定或恢复旧内容。
 
+### 20.11 M6.2 影响决定与历史内容块恢复（v3.0.9 提案，待所有者确认）
+
+**边界与身份。** 一次已发布修订的 `content.dependencies_invalidated` event_id 是影响审查的稳定身份；新事件与 Content 当前指针、配对 outbox、`old_ref/new_ref/affected_ids` 和 owner 事务冻结的显式引用快照同批提交。`affected_ids` 只是保守对象 ID 集，`exact_dependency_refs` 仅表示冻结的显式 ContentRef 链，不证明语义过期；纯概念 ID、同概念的其他块、后建修订均不得升级为精确命中。迁移前事件标 `legacy_unverified`，可读原保守范围但不能补造精确边或提交本节决定；缺失新事件的冻结证据是完整性错误，不退化为 legacy。事件与逐对象决定的追加式账本构成可追踪的影响复核任务；不把一个 GET、outbox 已投递、索引重建或推荐刷新记作人类复核完成，也不伪造通用 Jobs 终态。
+
+**内容对象决定。** GET `/content/impacts/{event_id}` 返回严格 `ContentImpactView`，字段见下表。`decisions` 按 `(target_id,decision_revision)` 稳定分页；`target_id?` 精确筛选，`limit` 默认20、1..100，cursor绑定事件/筛选/limit，拒未知、重复或混用无效参数。原变更对象 `old_ref.id` 已由新修订发布处理，保留在 `affected_ids` 原事实中但不属于本节的决定目标；`target_id?` 只能选择其余受影响的已发布公开 Content 对象。`pending_target_ids` 仅为尚无当前有效决定的这类对象 ID；已有 `new_revision_required` 决定另列 `action_required_target_ids`，不能误称工作完成。筛选目标时 `target_decision_head` 为该目标最新决定修订（首次为0），未筛选时为null，写命令以此作CAS。Note 等其他 owner 的项仍列于 `affected_ids`，不凭 Content 决定视作已处理。每次 GET 重新核 event、冻结快照与已列决定，不创建 case、任务、outbox 或投影；`Cache-Control:no-store`，Policy 丢失即拒绝并清除浏览器学科缓存。
+
+POST `/content/impacts/{event_id}/decisions` 的严格 `ImpactObjectDecisionWrite` 为 `{target_id:Id,observed_ref:ContentRef,expected_event_snapshot_sha256:Sha256,expected_decision_revision:integer>=0,decision:"no_revision_needed"|"new_revision_required",reason:nonblank string,evidence_artifact_ids:Id[]}`。服务端确认 target_id 属于原 `affected_ids`、不等于 `old_ref.id`，且是本工作区当下可读的公开 Content 对象，observed_ref 为其当下活动 current 完整引用；从冻结快照计算 `exact_ref` 或 `id_only_candidate` 分类并存入不可变 `ImpactObjectDecisionReceipt`，不接受调用者自称精确。首次 decision_revision=1，写入条件0；更正只追加下一版，不覆盖旧决定。决定绑定 event 快照 SHA、old/new refs、target 当前 ref、分类、当前 Content 元数据/正文 hash、actor、reason、实际授权的证据 artifact ID及其 hash、UTC和完整原命令。旧决定仅当这些基准仍当前时可用于目标状态；目标后续修订/归档使其失效则重新待复核，其他无关事件不改写本事件的决定历史。`no_revision_needed` 是作者对该目标的人工判断，不自动批准 Draft、认证旧成绩、清除 Note 锚点或提升 id-only 关系为精确；`new_revision_required` 是可追踪待办，不自动发布。Content 决定只写自有账本，不能直接写 Learning、Notes、Retrieval、Recommendation 表。
+
+**学习证据决定。** GET `/learning/evidence/{id}/applicability` 返回严格 `EvidenceApplicabilityDecisionView`，字段见下表；`event_id?` 只能选择 `relevant_event_ids` 中一个事件，为写操作给出其 `event_decision_head`（首次0），不筛选时为null，决定历史分页规则同上。POST `/learning/evidence/{id}/applicability-decisions` 接严格 `EvidenceImpactDecisionWrite`。Learning owner 从真实 attempt、题目与私解 pin、原 grade/evidence 记录核 evidence 身份及精确 question/concept 语义闭包，并核 event 的 old_ref 是否在闭包或原保守 affected_ids 是否含该 question/concept ID；后者仍明示 `id_only_candidate`。当前依据哈希覆盖原证据及其冻结 pin、相关事件和当前语义依赖 refs/lifecycle；调用方 hash 不能代替重算。作者可对一个真实相关事件和一条原证据作明确适用性判断；`usable` 只表示在该依据下内容仍适用，不授予独立性、正确性或新分数。所有当前相关事件均有匹配且仍有效的 `usable` 决定才清除该原因的 pending；任一有效 `confirmed_stale` 使当前适用性为 confirmed_stale；其他情况为 pending_review，源 pin 缺失/损坏或仍归档不可由决定清除。新修订/新事件/依据变化使原决定不再用于当前投影，但保留其原历史；更正也只追加新决定。原 attempt、题面、私解、作答、grade、evidence、learning_event 字节及原资格事实永不改写；推荐/画像仅消费这个 Learning-owned 适用性投影，并在同一成功事务登记自己的 dirty 意图，不把已见/辅助/自报升级为独立证据。
+
+**恢复旧公开内容块。** 本切片仅支持同一工作区、同一稳定 ID 的已发布公开 `ContentBlock` 历史修订，涵盖其原 `kind`，不包含 Question、私解、Course/Lesson/Route、工作区备份、归档对象或物理文件回滚。POST `/content/restore-drafts` 接严格 `ContentRestoreDraftCreateWrite`；两 ref 同为 block/同 ID，source.revision 严格小于 current.revision，current 为活动当前指针。Content owner 从原真实 metadata、UTF-8 正文 bytes/body SHA、精确依赖和保留来源记录冻结 `RestoreSourceMaterial`；source 缺失、hash/bytes 坏、跨工作区、私有/受保护或不兼容引用即拒绝，不从 title/latest/同名推测。建立专属 `authoring_restore` DraftCandidate（非 Import 或普通 Edit），候选预览为原块字段的完整副本，稳定 id 不变、revision 预期为 current+1；原 kind、概念、引用或依赖即使与当前版本不同也必须显式比较与复核，不自动沿用当前字段。`candidate_sha256` 覆盖 source_ref、expected_current_ref、原 metadata/body SHA、冻结来源描述、拟发布完整块、reason 和所有 warning。GET `/content/restore-drafts/{id}` 只读返回严格 `ContentRestoreDraftSnapshot`，每次核真实所属、原件字节与当前权限；状态从真实发布记录派生，不以旧 ACK 伪装现在仍是草稿。读写均 author/当前 Policy，GET 无 body、无写且 no-store。
+
+**封闭应用 DTO。** 下列 DTO 不扩 54 core；全部字段 required、未知字段拒绝、nullable 必须显式 null、整数拒 bool；各 `reason` 为非空且上限 2000 codepoints，`body_markdown` 仍按 Content 既有 400000 字符预算，证据 artifact ID 0..32 且不得重复。证据列表可为空；非空 ID 必须属于本工作区的不可变受权 artifact，并按真实字节核 hash，不以任意外部 URL 充当证据。`event_snapshot_sha256` 对冻结快照规范 JSON 计算，legacy 才为 null；`original_evidence_sha256` 对真实原证据规范 JSON 计算；`current_basis_sha256` 的版本化描述不含读取时间或请求者输入，包含实际相关事件及全部核验过的精确 refs/current/lifecycle。恢复来源描述单独冻结，`source_descriptor_sha256` 只引用同工作区真实保留记录，其原件在创建和发布时核验。哈希和内部账本能发现非协同篡改，不能证明拥有数据库与 blob 写权限者的行为真实性；不得把它宣传成签名审计。
+
+```text
+ImpactObjectDecisionWrite = {target_id:Id,observed_ref:ContentRef,expected_event_snapshot_sha256:Sha256,expected_decision_revision:integer>=0,decision:no_revision_needed|new_revision_required,reason:nonblank string,evidence_artifact_ids:Id[]}
+ImpactObjectDecisionReceipt = {event_id:Id,target_id:Id,decision_revision:Revision,classification:exact_ref|id_only_candidate,observed_ref:ContentRef,target_metadata_sha256:Sha256,target_body_sha256:Sha256|null,event_snapshot_sha256:Sha256,decision:no_revision_needed|new_revision_required,reason:nonblank string,evidence_artifacts:{id:Id,sha256:Sha256}[],actor_session_id:Id,decided_at:UTC,request_sha256:Sha256,receipt_sha256:Sha256}
+ContentImpactView = {event_id:Id,old_ref:ContentRef,new_ref:ContentRef,reason:content_revision_published,evidence_version:owner_frozen_v1|legacy_unverified,event_snapshot_sha256:Sha256|null,affected_ids:Id[],exact_dependency_refs:ContentRef[],conservative_only_ids:Id[],pending_target_ids:Id[],action_required_target_ids:Id[],target_decision_head:integer>=0|null,decisions:ImpactObjectDecisionReceipt[],next_cursor:string|null}
+EvidenceImpactDecisionWrite = {event_id:Id,expected_decision_revision:integer>=0,expected_current_basis_sha256:Sha256,decision:usable|confirmed_stale,reason:nonblank string,evidence_artifact_ids:Id[]}
+EvidenceImpactDecisionReceipt = {evidence_id:Id,event_id:Id,decision_revision:Revision,relevance:exact_ref|id_only_candidate,question_ref:ContentRef,concept_ref:ContentRef,attempt_id:Id,grading_revision:Revision,original_evidence_sha256:Sha256,current_basis_sha256:Sha256,decision:usable|confirmed_stale,reason:nonblank string,evidence_artifacts:{id:Id,sha256:Sha256}[],actor_session_id:Id,decided_at:UTC,request_sha256:Sha256,receipt_sha256:Sha256}
+EvidenceApplicabilityDecisionView = {evidence_id:Id,original_evidence:Evidence,question_ref:ContentRef,concept_ref:ContentRef,attempt_id:Id,grading_revision:Revision,original_evidence_sha256:Sha256,current_basis_sha256:Sha256,applicability:usable|pending_review|confirmed_stale,reason_codes:string[],relevant_event_ids:Id[],event_decision_head:integer>=0|null,decisions:EvidenceImpactDecisionReceipt[],next_cursor:string|null}
+ContentRestoreDraftCreateWrite = {source_ref:ContentRef,expected_current_ref:ContentRef,reason:nonblank string}
+RestoreSourceMaterial = {version:restore-source-v1,source_ref:ContentRef,metadata:ContentBlock,body_sha256:Sha256,source_descriptor_sha256:Sha256|null,warnings:Warning[]}
+ContentRestoreDraftCreateAck = {candidate:DraftCandidate,source_ref:ContentRef,base_ref:ContentRef,state:draft}
+ContentRestoreDraftSnapshot = {owner:authoring_restore,candidate:DraftCandidate,source_ref:ContentRef,base_ref:ContentRef,reason:nonblank string,proposed_block:ContentBlock,body_markdown:string,source_material_sha256:Sha256,warnings:Warning[],state:draft|published,published_ref:ContentRef|null}
+```
+
+恢复稿沿已有 POST `/drafts/{id}/review` → POST `/reviews/{id}/decision` → POST `/drafts/{id}/publish` 使用同一确切候选与人类决定；旧批准不自动转授，结构/数学/来源/数值检查各报真实状态，未满足发布准入则阻断。发布在一个 Content/Review/Restore owner 事务中再次核 source 和当前 base 的完整 ref/hash、活动生命周期、依赖可访问与无环，强 CAS 使新 revision 恰为当时 current+1；若当前已变化返回412并保留原稿，须明确重新创建，不暗改 source 或 base。发布记录不可变地绑定 source→draft→人审→新 ContentRef、原 body bytes/hash 与新的实际来源描述；旧来源为 frozen 也只保留原核验事实，不宣称重新外部核验，来源 unresolved 则保留 warning，不能以旧数学批准或旧数值结果声称新修订已审。失败回滚新当前指针、发布/影响事件、快照与 ACK；可能留下未引用 blob 仅按原安全 GC 处理。新修订触发正常 Note stale、Retrieval 失效与 Recommendation dirty；旧笔记/阅读定位不静默迁移、检索仍须显式 rebuild、学习适用性决定不因“内容恢复”自动清除。Lesson/Course 中原有完整 ContentRef 仍指向原修订，须另经显式审校/发布更新父引用才能让其教学路径呈现新块；不得将块 current 指针变化冒充课程已经切换。旧题面、私解、attempt、作答、grade、evidence 和历史引用始终不覆盖；`state=published` 当且仅当 `published_ref` 非null且真实发布记录匹配。
+
+**统一写保护与验收。** 上述所有 POST 要求当前 author 会话、真实 workspace、当前学科 Policy 允许（独立测验及私有材料限制仍有效）、同源 Origin/CSRF、Idempotency-Key 和原 actor/workspace/route/key/完整 body/CAS 实例绑定；先核当前权限再回放。相同 key/同命令返回原不可变 ACK，异命令409；版本或依据不符412，未知/跨 owner 归属404、存储损坏409安全拒绝，未知/重复 query 和多余 body 字段422。GET 与错误路径零数据库写/零联网；决定账本与恢复发布使用向前迁移，不改0001、54 core 或包 schema_version。附录 A 六个新增端点实施归属均为 M6.2，采纳后由本文重建 route ownership、OpenAPI 和前端类型并逐项回读实际路由。验收至少覆盖：新/legacy/损坏事件；精确与纯 ID 候选；双标签决定竞态、回放/更正/重启、Policy 切换；一个证据多事件且旧分数和私解字节不动；Note 人工重锚、旧 scope 明示 stale 和显式重建；文本与非文本公开块恢复、source/body/provenance 篡改、当前指针竞争、审批拒绝及事务注入回滚、父 Lesson 仍 pin 原修订。每项写实际命令、退出码和原始证据，不把测试通过当作数学或教学质量证明。
+
+**待所有者决定的范围选择。** 本提案选择「逐 event/受影响公开 Content 对象」与「逐 event/原 Evidence」分离的人类决定；选择只恢复同 ID 公开 ContentBlock，不原子改写父 Lesson/Course 或旧题/成绩；选择专属 `authoring_restore` 候选复用现有人审/发布端点；选择 event/决定追加账本作可追踪任务、legacy 只读而不伪造 Job。批准前这些是明确的产品语义提议，不是当前 v3.0.8 已实现能力；若要批量自动清理、跨对象原子恢复、归档对象恢复、重评旧成绩或 legacy 可决定，需另定合同与验收。
+
 ## 21. 旧格式兼容与确定的范围边界
 
 旧 Demo 不是依赖。仅保证以下可识别的迁移轮廓：
@@ -1268,6 +1304,10 @@ PATCH返回412后，浏览器保留原待同步命令及本地基准，分别读
 | GET `/courses/{id}` | `revision` 必需 | Course；文件里不含自己的hash，响应头ETag为该对象hash；正式服务可另设 resolve-current 查询，不把latest写入证据 |
 | GET `/lessons/{id}` | `revision` 必需 | Lesson；按引用读取各块，不默认整库下发 |
 | GET `/blocks/{id}` | `revision` 必需 | ContentBlock；Markdown body 由 GET `/blocks/{id}/body?revision=` 返回 `text/markdown`，ETag=body_sha256，并有同样权限检查 |
+| GET `/content/impacts/{event_id}` | `target_id?`,`cursor?`,`limit?`；无body、拒未知/重复query | ContentImpactView；§20.11 的事件原事实、保守/精确边界与决定历史；author/Policy、no-store、零写，legacy不能作决定 |
+| POST `/content/impacts/{event_id}/decisions` | ImpactObjectDecisionWrite；Idempotency-Key、Origin/CSRF | ImpactObjectDecisionReceipt；目标属真实受影响集合，作者逐对象决定、当前ref及事件SHA强CAS；只写Content自有不可变决定 |
+| POST `/content/restore-drafts` | ContentRestoreDraftCreateWrite；Idempotency-Key、Origin/CSRF | 201 ContentRestoreDraftCreateAck；冻结精确旧公开block与活动当前base，建立待审专属草稿，不发布 |
+| GET `/content/restore-drafts/{id}` | 无query/body | ContentRestoreDraftSnapshot；当前author/Policy、真实来源与不可变历史、no-store/零写；未知或错owner404 |
 | POST `/drafts` | `{kind:course|lesson|block|question|practice_set|assessment,base_ref:ContentRef|null,title:string}` | 201 `{draft_id,revision,base_ref,state:draft}`；不是发布对象 |
 | PATCH `/drafts/{id}` | `{expected_revision,patches:{field:string,value:JSON}[]}` | `{draft_id,revision,validation_warnings}`。field 必须属于对应kind白名单；拒绝改对象id/基准hash/审核结论 |
 | POST `/drafts/{id}/review` | `{expected_revision,checks:[structure|sources|mathematics|numerical_examples],reviewer_note:string}` | 202 JobRef；结构可自动，数学/来源未独立执行则 NOT_RUN，不自行批准 |
@@ -1316,6 +1356,8 @@ PracticeAssistanceView = {question_id:Id, highest_hint_level:0|1|2|3, solution_r
 | GET `/learning/progress` | `course_id?` | `{revision,readings:{ref,read,read_at}[],route_steps:{route_ref,step_id,completed}[]}`；无掌握概率 |
 | POST `/learning/actions` | `{kind:read_marked|bookmark_set,ref,expected_revision,value:boolean}` | `{event_id,progress_revision}`；客户端不能上传native grade_finalized事件 |
 | GET `/learning/evidence` | `concept_id?`,`skill?`,`cursor?`,`limit?` | Page<Evidence>；区分有效、过期、辅助、重复和未知 |
+| GET `/learning/evidence/{id}/applicability` | `event_id?`,`cursor?`,`limit?`；无body，拒未知/重复query | EvidenceApplicabilityDecisionView；真实原证据/相关事件/决定历史，author/Policy、no-store/零写，不下发私解 |
+| POST `/learning/evidence/{id}/applicability-decisions` | EvidenceImpactDecisionWrite；Idempotency-Key、Origin/CSRF | EvidenceImpactDecisionReceipt；逐原证据、逐相关事件、强CAS且只追加Learning自有决定，旧grade/attempt不改 |
 | GET `/recommendations` | `course_id?`,`recommendation_id?`,`cursor?`,`limit?`，默认全工作区，limit 默认20、最大100 | RecommendationPage；仅回读已持久化推荐投影并校验当前依据，不生成/写入/排队刷新；每条有真实原因与来源，空态/缺材料/更新状态显式返回 |
 | POST `/recommendations/{id}/decision` | RecommendationDecisionWrite，即 `{decision:accepted|dismissed,reason:string|null}`；Idempotency-Key；If-Match 为所读 RecommendationView.decision_sha256 的带引号强标签 | MutationAck；revision 是该推荐决定版本，applied 表示原命令是否真正改变决定；接受/拒绝不改变路线、成绩、学习事件或能力状态 |
 | GET `/notes` | `ref_id?`,`cursor?`,`limit?` | Page<Note>；anchor状态可为stale，不静默迁移到最新版本 |
