@@ -10,15 +10,17 @@ from ..infrastructure.publication_repository import PublicationRepository
 from ..infrastructure.security import SessionIdentity, current_session_identity
 from .authoring_context import AuthoringContext
 from .content import ContentService
+from .draft_edits import DraftEditService
+from .edit_publication import EditBlockPublication
 from .errors import ApiError
 from .import_publication import ImportBlockPublication, unsupported
 from .imports import ImportService
 from .providers import validate_key
 from .publication_admission import PublicationAdmissionService
 from .publication_admission_models import DraftPublishWrite
-from .publication_models import PublicationHistory, PublicationRecord, integrity, validated
+from .publication_models import PublicationHistory, PublicationRecord, EditPublicationRecord, integrity, validated
 from .review_history_models import ReviewDecisionRecord, ReviewMachineRecord
-from .review_material_models import ImportReviewMaterial
+from .review_material_models import ImportReviewMaterial, EditReviewMaterial, CheckedReviewMaterial
 from .review_service import ReviewService
 
 
@@ -27,6 +29,7 @@ class DraftPublicationService:
         self.database, self.reviews = database, reviews
         self.owner, self.content = ImportBlockPublication(imports), ContentService(database)
         self.admission = PublicationAdmissionService(reviews)
+        self.edit_owner = EditBlockPublication(DraftEditService(database))
 
     @staticmethod
     def _access(conn: sqlite3.Connection, identity: SessionIdentity) -> SessionIdentity:
@@ -48,15 +51,48 @@ class DraftPublicationService:
                   and item.receipt.revision == record.admission.review_revision]
         if (len(humans) != 1 or metadata_sha256(humans[0]) != record.human_record_sha256
                 or metadata_sha256(humans[0].receipt) != record.admission.receipt_sha256
-                or humans[0].receipt.mathematical != 'NOT_APPLICABLE' or humans[0].receipt.sources != 'APPROVED'
+                or (isinstance(record, PublicationRecord) and humans[0].receipt.mathematical != 'NOT_APPLICABLE')
+                or humans[0].receipt.sources != 'APPROVED'
                 or machine.structural_report.structural != 'PASS'
                 or machine.numeric.descriptor_sha256 != record.admission.numeric_observation_sha256):
             raise integrity()
-        prepared = self.owner.verify(conn, identity, record)
+        if isinstance(record, EditPublicationRecord):
+            edited = self.edit_owner.verify(conn, identity, record)
+            expected_block, expected_body = edited.block, edited.body
+        else:
+            imported = self.owner.verify(conn, identity, record)
+            expected_block, expected_body = imported.block, imported.body
         block, raw = self.content.verify_publication_in_transaction(conn, identity.workspace_id, record.result)
-        if block != prepared.block or raw != prepared.body:
+        if block != expected_block or raw != expected_body:
             raise integrity()
         return record.result
+
+    def _publish_edit(self, conn: sqlite3.Connection, current: SessionIdentity, repo: PublicationRepository,
+                      material: CheckedReviewMaterial, body: DraftPublishWrite, key: str) -> dm.ContentRef:
+        if repo.for_candidate(material.candidate) is not None:
+            raise ApiError(409, 'DRAFT_ALREADY_PUBLISHED', '此精确候选已经发布。')
+        prepared = self.edit_owner.prepare(conn, current, material.candidate)
+        if prepared.material != material:
+            raise integrity()
+        identifier, adopted = 'publication_' + uuid4().hex, utc_now()
+        repo.adopt(identifier, material.candidate, adopted, owner='authoring')
+        repo.advance(identifier, 1, 'draft', 'in_review', utc_now())
+        admission = self.admission.check(conn, current, material.candidate.draft_id, body)
+        history, checked_material = self.reviews.read_publication_basis(conn, current, body.review_receipt_id)
+        human = history.records[-1]
+        if checked_material != material or not isinstance(human, ReviewDecisionRecord):
+            raise integrity()
+        repo.advance(identifier, 2, 'in_review', 'approved', utc_now())
+        result = self.content.publish_edited_block_in_transaction(conn, current.workspace_id,
+            prepared.record.base.ref, prepared.block, prepared.body)
+        record = EditPublicationRecord(version='edit-publication-v1', id=identifier,
+            workspace_id=current.workspace_id, owner='authoring', candidate=material.candidate,
+            actor_id=current.id, route=f'POST /drafts/{material.candidate.draft_id}/publish', command_key=key,
+            request=body, admission=admission, human_record_sha256=metadata_sha256(human),
+            edit_record_sha256=metadata_sha256(prepared.record), base=prepared.record.base,
+            payload=prepared.record.payload, block=prepared.block, result=result,
+            adopted_at=adopted, published_at=utc_now())
+        return self._verify(conn, current, repo.finish(record))
 
     def publish(self, identity: SessionIdentity, draft_id: str, body: DraftPublishWrite, key: str) -> dm.ContentRef:
         key, body = validate_key(key), validated(DraftPublishWrite, body)
@@ -76,6 +112,8 @@ class DraftPublicationService:
                 if (material.candidate.draft_id != draft_id or material.candidate.draft_revision != body.expected_revision
                         or material.candidate.candidate_sha256 != body.expected_content_sha256):
                     raise ApiError(412, 'PUBLISH_CANDIDATE_MISMATCH', '发布请求与精确审核候选不符。')
+                if isinstance(material.payload, EditReviewMaterial):
+                    return self._publish_edit(conn, current, repo, material, body, key)
                 if not isinstance(material.payload, ImportReviewMaterial):
                     raise unsupported()
                 prepared = self.owner.prepare(conn, current, material.candidate)

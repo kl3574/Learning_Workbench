@@ -1,14 +1,15 @@
 """Strict publication facts; neither construction nor stored JSON grants access."""
 from dataclasses import dataclass
-from typing import Literal, Self, TypeVar
+from typing import Annotated, Literal, Self, TypeVar
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 from packages.contracts import domain_models as dm
 from packages.contracts.budgets import ImportBudgets
 from packages.contracts.canonical import metadata_sha256
 from ..authoring_dto import AuthoringModel
 from ..infrastructure.provenance_repository import FrozenProvenance
 from .errors import ApiError
+from .draft_edit_models import DraftBaseMaterial, DraftEditPayload
 from .publication_admission_models import DraftPublishWrite, PublicationAdmission
 from .review_material_models import CheckedReviewMaterial
 
@@ -76,6 +77,60 @@ class PublicationRecord(AuthoringModel):
         return self
 
 
+class EditPublicationRecord(AuthoringModel):
+    version: Literal['edit-publication-v1']
+    id: dm.Id
+    workspace_id: dm.Id
+    owner: Literal['authoring']
+    candidate: dm.DraftCandidate
+    actor_id: dm.Id
+    route: str
+    command_key: str
+    request: DraftPublishWrite
+    admission: PublicationAdmission
+    human_record_sha256: dm.Sha256
+    edit_record_sha256: dm.Sha256
+    base: DraftBaseMaterial
+    payload: DraftEditPayload
+    block: dm.ContentBlock
+    result: dm.ContentRef
+    adopted_at: dm.UTC
+    published_at: dm.UTC
+
+    @model_validator(mode='after')
+    def exact_bindings(self) -> Self:
+        c, a, r, p, b = self.candidate, self.admission, self.request, self.payload, self.base
+        expected = b.metadata.model_copy(update={'revision': b.ref.revision + 1,
+            'title': p.title, 'body_sha256': p.body_sha256})
+        if (self.route != f'POST /drafts/{c.draft_id}/publish' or not self.command_key
+                or c.entity != 'block' or c.draft_revision != r.expected_revision
+                or c.candidate_sha256 != r.expected_content_sha256 or c.candidate_sha256 != metadata_sha256(p)
+                or a.workspace_id != self.workspace_id or a.candidate != c
+                or a.review_receipt_id != r.review_receipt_id
+                or a.acknowledged_warning_codes != r.acknowledged_warning_codes
+                or a.numeric_coverage != 'not_required_by_material' or a.numeric_check_ids
+                or p.base_ref != b.ref or p.base_material_sha256 != metadata_sha256(b)
+                or p.body_path != b.metadata.body_path or p.citations != b.metadata.citations
+                or self.block != expected
+                or self.result != dm.ContentRef(entity='block', id=expected.id, revision=expected.revision,
+                                                sha256=metadata_sha256(expected))):
+            raise ValueError('Edit publication must bind the exact edit and next base Content revision')
+        return self
+
+
+def publication_record(value: object) -> PublicationRecord | EditPublicationRecord:
+    if isinstance(value, PublicationRecord):
+        return validated(PublicationRecord, value)
+    if isinstance(value, EditPublicationRecord):
+        return validated(EditPublicationRecord, value)
+    if isinstance(value, dict):
+        if value.get('version') == 'draft-publication-v1':
+            return validated(PublicationRecord, value)
+        if value.get('version') == 'edit-publication-v1':
+            return validated(EditPublicationRecord, value)
+    raise integrity()
+
+
 PublicationState = Literal['draft', 'in_review', 'approved', 'published']
 
 
@@ -88,7 +143,7 @@ class PublicationEvent(AuthoringModel):
 
 
 class PublicationHistory(AuthoringModel):
-    record: PublicationRecord
+    record: Annotated[PublicationRecord | EditPublicationRecord, Field(discriminator='version')]
     events: list[PublicationEvent]
 
     @model_validator(mode='after')

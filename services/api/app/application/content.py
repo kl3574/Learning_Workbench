@@ -390,6 +390,29 @@ class ContentService:
             raise damaged()
         return refs[0]
 
+    def publish_edited_block_in_transaction(self, connection: sqlite3.Connection, workspace_id: str,
+                                            base: dm.ContentRef, block: dm.ContentBlock, body: bytes) -> dm.ContentRef:
+        """Exact active current-base CAS; old body/history and invalidation remain Content-owned."""
+        if not connection.in_transaction:
+            raise ApiError(409, 'TRANSACTION_REQUIRED', '发布需要当前事务。')
+        original, _ = self.verify_publication_in_transaction(connection, workspace_id, base)
+        repository = ContentRepository(connection, workspace_id)
+        current = repository.current(base.id)
+        if current.lifecycle != 'active' or reference(current.value) != base:
+            raise ApiError(412, 'PUBLICATION_BASE_CHANGED', '正式内容基准已变化或归档，需要重新确认修改。')
+        try:
+            block = dm.ContentBlock.model_validate(block.model_dump(mode='python', warnings='error'))
+        except (ValueError, TypeError, AttributeError):
+            raise invalid() from None
+        expected = original.model_copy(update={'revision': base.revision + 1,
+                                               'title': block.title, 'body_sha256': block.body_sha256})
+        if block != expected or block.kind != 'text' or block.concepts or block.depends_on:
+            raise invalid()
+        refs = self.publish_in_transaction(connection, workspace_id, [block], {block.body_path: body})
+        if refs != [reference(block)] or reference(repository.current(block.id).value) != refs[0]:
+            raise damaged()
+        return refs[0]
+
     def publish(self, workspace_id: str, objects: Iterable[PublishedModel], bodies: Mapping[str, bytes]) -> list[dm.ContentRef]:
         """Internal trusted port; callers still own import/review approval workflows.
 

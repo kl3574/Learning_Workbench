@@ -73,22 +73,18 @@ def review(case):
     return reviews, approved
 
 
-def test_edited_candidate_never_inherits_old_approval_or_publishes_through_import_owner(case):
+def test_edited_candidate_never_inherits_old_approval(case):
     database, identity, _, service, _, created = case
     reviews, approved = review(case)
     old = approved.candidate
+    original = service.read(identity, created.draft_id, 1)
     body = DraftPublishWrite(expected_revision=1, expected_content_sha256=old.candidate_sha256,
-        review_receipt_id=approved.id, acknowledged_warning_codes=['DRAFT_EDIT_UNREVIEWED'])
+        review_receipt_id=approved.id,
+        acknowledged_warning_codes=sorted({w.code for w in original.warnings if w.severity == 'warning'}))
     before = table_hashes(database)
     with database.transaction() as conn:
-        with pytest.raises(ApiError) as error:
-            PublicationAdmissionService(reviews).check(conn, identity, created.draft_id, body)
-        assert error.value.code == 'PUBLISH_EDIT_OWNER_UNSUPPORTED'
-    from services.api.app.application.draft_publication import DraftPublicationService
-    publication = DraftPublicationService(database, reviews, owners(database)[0])
-    with pytest.raises(ApiError) as error:
-        publication.publish(identity, created.draft_id, body, 'publish')
-    assert error.value.code == 'PUBLICATION_OWNER_SCOPE_UNSUPPORTED'
+        admitted = PublicationAdmissionService(reviews).check(conn, identity, created.draft_id, body)
+        assert admitted.publication == 'NOT_RUN' and admitted.candidate == old
     assert table_hashes(database) == before
     service.patch(identity, created.draft_id, patch(), 'patch')
     current = service.read(identity, created.draft_id, 2)

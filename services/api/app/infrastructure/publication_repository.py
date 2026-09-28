@@ -6,7 +6,7 @@ from packages.contracts.canonical import canonical_bytes, sha256_bytes, strict_j
 from ..application.errors import ApiError
 from ..application.publication_admission_models import DraftPublishWrite
 from ..application.publication_models import (
-    PublicationEvent, PublicationHistory, PublicationRecord, PublicationState, integrity, validated,
+    PublicationEvent, PublicationHistory, PublicationRecord, EditPublicationRecord, PublicationState, integrity, validated, publication_record,
 )
 
 
@@ -19,7 +19,7 @@ class PublicationRepository:
     @staticmethod
     def _decode(model, raw, digest):
         try:
-            value = validated(model, strict_json(raw))
+            value = publication_record(strict_json(raw)) if model is None else validated(model, strict_json(raw))
             if canonical_bytes(value).decode() != raw or sha256_bytes(raw.encode()) != digest:
                 raise integrity()
             return value
@@ -33,7 +33,7 @@ class PublicationRepository:
                                    (identifier,)).fetchone()
         if row is None or result is None or row['state'] != 'published' or row['revision'] != 4:
             raise integrity()
-        record = self._decode(PublicationRecord, result['record_json'], result['sha256'])
+        record = self._decode(None, result['record_json'], result['sha256'])
         candidate = record.candidate
         if (record.id != row['id'] or record.workspace_id != row['workspace_id']
                 or record.owner != row['owner'] or candidate.draft_id != row['draft_id']
@@ -81,13 +81,13 @@ class PublicationRepository:
         self.conn.execute('INSERT INTO draft_publication_events VALUES(?,?,?,?)',
                           (identifier, revision, raw.decode(), sha256_bytes(raw)))
 
-    def adopt(self, identifier: str, candidate: dm.DraftCandidate, now: str) -> None:
+    def adopt(self, identifier: str, candidate: dm.DraftCandidate, now: str, *, owner: str = 'import') -> None:
         candidate = validated(dm.DraftCandidate, candidate)
         if self.for_candidate(candidate) is not None:
             raise ApiError(409, 'DRAFT_ALREADY_PUBLISHED', '此精确候选已经发布。')
         self.conn.execute('INSERT INTO draft_publications(id,workspace_id,draft_id,draft_revision,owner,entity,'
             'candidate_sha256,state,revision,adopted_at) VALUES(?,?,?,?,?,?,?,\'draft\',1,?)',
-            (identifier, self.workspace_id, candidate.draft_id, candidate.draft_revision, 'import', candidate.entity,
+            (identifier, self.workspace_id, candidate.draft_id, candidate.draft_revision, owner, candidate.entity,
              candidate.candidate_sha256, now))
         self._event(identifier, 1, 'draft', now)
 
@@ -100,8 +100,8 @@ class PublicationRepository:
             raise ApiError(409, 'PUBLICATION_STATE_CONFLICT', '发布内部状态已经改变。')
         self._event(identifier, expected_revision + 1, state, now)
 
-    def finish(self, record: PublicationRecord) -> PublicationHistory:
-        record = validated(PublicationRecord, record)
+    def finish(self, record: PublicationRecord | EditPublicationRecord) -> PublicationHistory:
+        record = publication_record(record)
         if record.workspace_id != self.workspace_id:
             raise integrity()
         raw = canonical_bytes(record)

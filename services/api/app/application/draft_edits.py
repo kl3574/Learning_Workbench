@@ -147,6 +147,19 @@ class DraftEditService:
         records = self._history(connection, identity, candidate.draft_id)
         match_candidate(candidate, records[-1].candidate)
 
+    def publication_record(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                           candidate: dm.DraftCandidate, *, require_current: bool = False) -> DraftEditRecord:
+        """Exact owner history in the publication transaction; replay does not select the latest head."""
+        candidate = checked(dm.DraftCandidate, candidate)
+        records = self._registered_history(connection, identity, candidate.draft_id)
+        if candidate.draft_revision > len(records):
+            raise ApiError(412, 'DRAFT_REVISION_MISMATCH', '草稿修订不存在。')
+        record = records[candidate.draft_revision - 1]
+        match_candidate(candidate, record.candidate)
+        if require_current:
+            match_candidate(candidate, records[-1].candidate)
+        return record
+
     def read_review_material(self, connection: sqlite3.Connection, identity: SessionIdentity, candidate: dm.DraftCandidate):
         from .review_material_models import EditReviewMaterial, checked_material
         resolved = self.resolve_candidate(connection, identity, candidate)

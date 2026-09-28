@@ -28,7 +28,9 @@ class PublicationAdmissionService:
     def _plans(material: CheckedReviewMaterial) -> list[tuple[AuthoringDraftMemberRef | None, NumericPlan]]:
         payload = material.payload
         if isinstance(payload, EditReviewMaterial):
-            raise blocked('PUBLISH_EDIT_OWNER_UNSUPPORTED', '当前编辑候选尚未接入真实发布所属端口。')
+            # This exact text-edit model contains no declared numeric plan.
+            # Human applicability remains verified by Quality, never machine approval.
+            return []
         if isinstance(payload, ImportReviewMaterial):
             if material.candidate.entity == 'question':
                 raise blocked('PUBLISH_PRIVATE_COVERAGE_UNAVAILABLE', '当前导入审核不包含私有解答，不能据此准入题目发布。')
