@@ -116,6 +116,7 @@ def test_owner_reloads_real_session_inside_the_callers_transaction(importing, ch
 
 
 def test_owner_read_uses_same_readonly_transaction_and_never_writes(importing, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
     app, _, _, _, _, artifact, raw = imported_original(importing)
     database = app.state.database
     identity = current_test_identity(app)
@@ -126,6 +127,10 @@ def test_owner_read_uses_same_readonly_transaction_and_never_writes(importing, m
         def another_connection(*args, **kwargs):
             raise AssertionError('Artifact owner must retain the caller transaction')
         monkeypatch.setattr(database, 'connect', another_connection)
+        # The transaction guard is about this synchronous owner call. Actual
+        # background consumers of the same app Database must remain readable.
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            assert pool.submit(database.workspace_id).result() == identity.workspace_id
         data, descriptor = owner.read_artifact(connection, identity, artifact['artifact_id'])
         assert data == raw and descriptor.model_dump(mode='json') == artifact
         assert list(connection.iterdump()) == before
