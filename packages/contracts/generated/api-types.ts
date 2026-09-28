@@ -1,5 +1,5 @@
-// Generated from PRODUCT_DESIGN.md v3.0.7. DO NOT EDIT.
-// spec_sha256: 2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d
+// Generated from PRODUCT_DESIGN.md v3.0.8. DO NOT EDIT.
+// spec_sha256: 608b4421757dce60677353336519383307df22bf99eb4d6598bf89def6f6fcfa
 // JSON Schema is the type source; runtime semantic checks remain required.
 
 export type ActualUsageCost = {
@@ -754,6 +754,19 @@ export type DraftCreated = {
   "state"?: "draft";
 };
 
+export type DraftEditPayload = {
+  "version": "text-block-edit-v1";
+  "entity": "block";
+  "kind": "text";
+  "base_ref": ContentRef;
+  "body_path": string;
+  "citations": Array<string>;
+  "title": string;
+  "body_markdown": string;
+  "body_sha256": string;
+  "base_material_sha256": string;
+};
+
 export type DraftJsonValue = (boolean | number | number | string | Array<DraftJsonValue> | { [key: string]: DraftJsonValue } | null);
 
 export type DraftPatch = {
@@ -783,6 +796,16 @@ export type DraftReviewWrite = {
   "expected_revision": number;
   "checks": Array<"structure" | "sources" | "mathematics" | "numerical_examples">;
   "reviewer_note": string;
+};
+
+export type EditDraftSnapshot = {
+  "owner": "authoring_edit";
+  "candidate": DraftCandidate;
+  "base_ref": ContentRef;
+  "base_material_sha256": string;
+  "payload": DraftEditPayload;
+  "warnings": Array<Warning>;
+  "state": "draft" | "published";
 };
 
 export type EmptyRequest = Record<string, never>;

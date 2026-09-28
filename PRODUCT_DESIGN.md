@@ -1270,7 +1270,6 @@ PATCH返回412后，浏览器保留原待同步命令及本地基准，分别读
 | GET `/blocks/{id}` | `revision` 必需 | ContentBlock；Markdown body 由 GET `/blocks/{id}/body?revision=` 返回 `text/markdown`，ETag=body_sha256，并有同样权限检查 |
 | POST `/drafts` | `{kind:course|lesson|block|question|practice_set|assessment,base_ref:ContentRef|null,title:string}` | 201 `{draft_id,revision,base_ref,state:draft}`；不是发布对象 |
 | PATCH `/drafts/{id}` | `{expected_revision,patches:{field:string,value:JSON}[]}` | `{draft_id,revision,validation_warnings}`。field 必须属于对应kind白名单；拒绝改对象id/基准hash/审核结论 |
-| GET `/draft-edits/{id}` | 可选单个`revision:Revision`；省略返回当前草稿头 | `EditDraftSnapshot`；仅author读取真实`authoring_edit`所属不可变修订；不替代Import读口 |
 | POST `/drafts/{id}/review` | `{expected_revision,checks:[structure|sources|mathematics|numerical_examples],reviewer_note:string}` | 202 JobRef；结构可自动，数学/来源未独立执行则 NOT_RUN，不自行批准 |
 | POST `/drafts/{id}/publish` | `{expected_revision,expected_content_sha256,review_receipt_id,acknowledged_warning_codes:string[]}` | 201 ContentRef；角色author；禁止活跃独立测试用此路获取答案；审核与hash绑定 |
 | GET `/routes` | `cursor?`,`limit?` | Page<Route>；路线内容与用户完成记录分开 |

@@ -4560,6 +4560,76 @@
         "title": "DraftCreated",
         "type": "object"
       },
+      "DraftEditPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "base_material_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Base Material Sha256",
+            "type": "string"
+          },
+          "base_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "body_markdown": {
+            "maxLength": 400000,
+            "title": "Body Markdown",
+            "type": "string"
+          },
+          "body_path": {
+            "title": "Body Path",
+            "type": "string"
+          },
+          "body_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Body Sha256",
+            "type": "string"
+          },
+          "citations": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "title": "Citations",
+            "type": "array"
+          },
+          "entity": {
+            "const": "block",
+            "title": "Entity",
+            "type": "string"
+          },
+          "kind": {
+            "const": "text",
+            "title": "Kind",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 400000,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "version": {
+            "const": "text-block-edit-v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "entity",
+          "kind",
+          "base_ref",
+          "body_path",
+          "citations",
+          "title",
+          "body_markdown",
+          "body_sha256",
+          "base_material_sha256"
+        ],
+        "title": "DraftEditPayload",
+        "type": "object"
+      },
       "DraftJsonValue": {
         "anyOf": [
           {
@@ -4735,6 +4805,57 @@
           "reviewer_note"
         ],
         "title": "DraftReviewWrite",
+        "type": "object"
+      },
+      "EditDraftSnapshot": {
+        "additionalProperties": false,
+        "description": "Authoring-edit only projection of one verified immutable candidate.",
+        "properties": {
+          "base_material_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Base Material Sha256",
+            "type": "string"
+          },
+          "base_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/DraftCandidate"
+          },
+          "owner": {
+            "const": "authoring_edit",
+            "title": "Owner",
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/DraftEditPayload"
+          },
+          "state": {
+            "enum": [
+              "draft",
+              "published"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/Warning"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "owner",
+          "candidate",
+          "base_ref",
+          "base_material_sha256",
+          "payload",
+          "warnings",
+          "state"
+        ],
+        "title": "EditDraftSnapshot",
         "type": "object"
       },
       "EmptyRequest": {
@@ -19588,6 +19709,163 @@
         ]
       }
     },
+    "/api/v1/draft-edits/{id}": {
+      "get": {
+        "operationId": "read_edit_api_v1_draft_edits__id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "revision",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EditDraftSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Read Edit",
+        "tags": [
+          "quality"
+        ]
+      }
+    },
     "/api/v1/drafts": {
       "post": {
         "operationId": "create_api_v1_drafts_post",
@@ -30858,7 +31136,7 @@
   },
   "x-source-spec": {
     "source": "PRODUCT_DESIGN.md",
-    "spec_sha256": "2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d",
-    "spec_version": "3.0.7"
+    "spec_sha256": "608b4421757dce60677353336519383307df22bf99eb4d6598bf89def6f6fcfa",
+    "spec_version": "3.0.8"
   }
 }

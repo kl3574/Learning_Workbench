@@ -1,6 +1,7 @@
 """Local text-block draft create/edit, with immutable history and exact owner reads."""
 from contextlib import contextmanager
 import sqlite3
+from typing import Literal
 from uuid import uuid4
 
 from pydantic import TypeAdapter
@@ -17,9 +18,11 @@ from .content_draft_source import ContentDraftSource
 from .draft_candidate_models import ResolvedDraftCandidate, match_candidate
 from .draft_candidates import DraftCandidates
 from .draft_edit_models import (
-    DraftEditRecord, MAX_VERSIONS, ack, apply_patch, checked, initial_payload, invalid, edit_warnings, unsupported, integrity,
+    DraftEditRecord, EditDraftSnapshot, MAX_VERSIONS, ack, apply_patch, checked, initial_payload, invalid, edit_warnings,
+    unsupported, integrity,
 )
 from .errors import ApiError
+from .publication_models import EditPublicationRecord
 from .providers import validate_key
 
 
@@ -80,6 +83,46 @@ class DraftEditService:
             match_candidate(record.candidate, DraftCandidateRepository(conn).lookup(
                 record.workspace_id, draft_id, revision).candidate)
             return record
+
+    def read_snapshot(self, identity: SessionIdentity, draft_id: str,
+                      revision: int | None = None) -> EditDraftSnapshot:
+        """Read a guarded owner snapshot with a serialized, zero-DML publication state."""
+        if revision is not None:
+            try:
+                revision = TypeAdapter(dm.Revision).validate_python(revision, strict=True)
+            except (ValueError, TypeError):
+                raise invalid() from None
+        draft_id = self._id(draft_id)
+        try:
+            with self.database.connect() as conn:
+                conn.execute('BEGIN IMMEDIATE')
+                try:
+                    conn.execute('PRAGMA query_only=ON')
+                    records = self._registered_history(conn, identity, draft_id)
+                    if revision is not None and revision > len(records):
+                        raise ApiError(412, 'DRAFT_REVISION_MISMATCH', '草稿修订不存在，请重新读取。')
+                    record = records[-1] if revision is None else records[revision - 1]
+                    publication = PublicationRepository(conn, record.workspace_id).for_candidate(record.candidate)
+                    state: Literal['draft', 'published'] = 'draft'
+                    if publication is not None:
+                        published = publication.record
+                        if (not isinstance(published, EditPublicationRecord) or published.base != record.base
+                                or published.payload != record.payload
+                                or published.edit_record_sha256 != metadata_sha256(record)):
+                            raise integrity()
+                        block, body = self.source.content.verify_publication_in_transaction(
+                            conn, record.workspace_id, published.result)
+                        if block != published.block or body != record.payload.body_markdown.encode('utf-8'):
+                            raise integrity()
+                        state = 'published'
+                    return checked(EditDraftSnapshot, EditDraftSnapshot(
+                        owner='authoring_edit', candidate=record.candidate, base_ref=record.base.ref,
+                        base_material_sha256=metadata_sha256(record.base), payload=record.payload,
+                        warnings=record.warnings, state=state))
+                finally:
+                    conn.rollback()
+        except sqlite3.Error:
+            raise ApiError(503, 'DRAFT_EDIT_STORAGE_UNAVAILABLE', '草稿存储暂不可用，未确认新的修改。', True) from None
 
     def create(self, identity: SessionIdentity, body: DraftCreateWrite, key: str) -> DraftCreated:
         body, key = checked(DraftCreateWrite, body, request=True), validate_key(key)

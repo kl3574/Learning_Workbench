@@ -111,7 +111,7 @@ def route_task(path: str) -> str:
         return "M5.1"
     if path.startswith("/authoring"):
         return "M6.1"
-    if path.startswith(("/drafts", "/reviews")):
+    if path.startswith(("/drafts", "/draft-edits", "/reviews")):
         return "M6.2"
     if path.startswith("/codex"):
         return "M6.3"

@@ -69,9 +69,9 @@ def unresolved_warning() -> dm.Warning:
 
 
 class DraftEditPayload(DraftModel):
-    version: Literal['text-block-edit-v1'] = 'text-block-edit-v1'
-    entity: Literal['block'] = 'block'
-    kind: Literal['text'] = 'text'
+    version: Literal['text-block-edit-v1']
+    entity: Literal['block']
+    kind: Literal['text']
     base_ref: dm.ContentRef
     body_path: str
     citations: list[dm.Id]
@@ -87,8 +87,28 @@ class DraftEditPayload(DraftModel):
         return self
 
 
+class EditDraftSnapshot(DraftModel):
+    """Authoring-edit only projection of one verified immutable candidate."""
+    owner: Literal['authoring_edit']
+    candidate: dm.DraftCandidate
+    base_ref: dm.ContentRef
+    base_material_sha256: dm.Sha256
+    payload: DraftEditPayload
+    warnings: list[dm.Warning]
+    state: Literal['draft', 'published']
+
+    @model_validator(mode='after')
+    def exact(self) -> Self:
+        if (self.candidate.entity != 'block' or self.candidate.candidate_sha256 != metadata_sha256(self.payload)
+                or self.base_ref != self.payload.base_ref
+                or self.base_material_sha256 != self.payload.base_material_sha256):
+            raise ValueError('edit draft snapshot must bind its exact candidate and base')
+        return self
+
+
 def initial_payload(base: DraftBaseMaterial, title: str) -> DraftEditPayload:
-    return DraftEditPayload(base_ref=base.ref, body_path=base.metadata.body_path, citations=base.metadata.citations,
+    return DraftEditPayload(version='text-block-edit-v1', entity='block', kind='text',
+        base_ref=base.ref, body_path=base.metadata.body_path, citations=base.metadata.citations,
         title=title, body_markdown=base.body_markdown, body_sha256=base.metadata.body_sha256,
         base_material_sha256=metadata_sha256(base))
 

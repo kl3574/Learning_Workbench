@@ -60,8 +60,9 @@ def test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec():
     assert {('POST', '/api/v1/drafts/{id}/review'), ('GET', '/api/v1/reviews/{id}'),
             ('POST', '/api/v1/reviews/{id}/decision')} <= projection
     assert ('POST', '/api/v1/drafts/{id}/publish') in projection
-    assert {('POST', '/api/v1/drafts'), ('PATCH', '/api/v1/drafts/{id}')} <= projection
-    assert len(projection) == 99
+    assert {('POST', '/api/v1/drafts'), ('PATCH', '/api/v1/drafts/{id}'),
+            ('GET', '/api/v1/draft-edits/{id}')} <= projection
+    assert len(projection) == 100
     assert len(SPEC_ROUTES - projection) == 20
 
 
