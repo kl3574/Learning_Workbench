@@ -13,6 +13,7 @@ from ..infrastructure.blobs import BlobStore
 from ..infrastructure.content_repository import ContentRepository
 from ..infrastructure.database import Database, utc_now
 from ..infrastructure.review_repository import ReviewRepository, integrity, validated
+from ..infrastructure.review_artifact_repository import ReviewArtifactRepository
 from ..infrastructure.security import SessionIdentity, current_session_identity
 from .artifacts import ArtifactReader, unavailable_owner
 from .authoring_context import AuthoringContext
@@ -20,7 +21,7 @@ from .draft_candidates import DraftCandidates
 from .errors import ApiError
 from .jobs import artifact_job_kind
 from .providers import validate_key
-from .review_artifacts import PROFILE, ReviewArtifacts
+from .review_artifacts import PROFILE
 from .review_history_models import (
     ReviewHistory, ReviewMachineRecord, ReviewDecisionRecord, ReviewArtifactBinding, StoredReviewReceipt,
     ReviewCreateCommand, ReviewDecisionCommand, ReviewCancelCommand, ReviewJobAck, ReviewCancelAck,
@@ -36,7 +37,7 @@ class ReviewService:
                  artifact_readers: Mapping[tuple[str, str], ArtifactReader]):
         self.database, self.candidates, self.numeric = database, candidates, numeric
         self.external_artifact_readers = dict(artifact_readers)
-        self.artifacts = ReviewArtifacts(BlobStore(database.settings.data_dir))
+        self.artifacts = ReviewArtifactRepository(BlobStore(database.settings.data_dir))
 
     def readers(self) -> dict[tuple[str, str], ArtifactReader]:
         return {**self.external_artifact_readers, (PROFILE, 'draft_review'): self}
@@ -109,11 +110,10 @@ class ReviewService:
             owner = 'import'
         if artifact.artifact_id != identifier or artifact.sha256 != sha256_bytes(raw) or artifact.size != len(raw):
             raise integrity()
-        row = conn.execute('SELECT manifest_json FROM artifacts WHERE id=? AND workspace_id=?',
-                            (identifier, identity.workspace_id)).fetchone()
+        manifest_sha = ArtifactRepository(conn, identity.workspace_id).manifest_sha256(identifier, artifact)
         return ReviewArtifactBinding(version='review-artifact-binding-v1', workspace_id=identity.workspace_id,
             candidate=material.candidate, artifact=artifact, artifact_owner=owner, source_job_id=routing.job_id,
-            profile=routing.profile, manifest_sha256=sha256_bytes(row['manifest_json'].encode()),
+            profile=routing.profile, manifest_sha256=manifest_sha,
             purpose='human_decision_evidence', bound_at=bound_at)
 
     @staticmethod
@@ -126,7 +126,7 @@ class ReviewService:
                         return True
                     for key, item in value.items():
                         if isinstance(item, str) and ('markdown' in key or key in {'formula', 'proof'}):
-                            if re.search(r'\\(?:\(|\[|begin\{(?:equation|align|math|gather)\})|\$[^$]+\$', item):
+                            if re.search(r'\\(?:\(|\[|begin\{(?:equation|align|math|gather)\*?\})|\$[^$]+\$', item):
                                 return True
                     return any(declares_math(item) for item in value.values())
                 return isinstance(value, list) and any(declares_math(item) for item in value)

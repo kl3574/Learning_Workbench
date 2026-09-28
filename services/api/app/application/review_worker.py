@@ -3,7 +3,7 @@ import sqlite3
 import threading
 
 from packages.contracts.canonical import metadata_sha256
-from ..infrastructure.authoring_job_repository import AuthoringLease, TERMINAL
+from ..infrastructure.authoring_job_repository import AuthoringLease, TERMINAL, integrity as job_integrity
 from ..infrastructure.database import utc_now
 from ..infrastructure.review_repository import ReviewRepository, integrity
 from ..infrastructure.security import author_execution_identity
@@ -21,6 +21,7 @@ class ReviewWorker:
         self._thread: threading.Thread | None = None
         self._cursor: tuple[str, str] | None = None
         self.last_error_code: str | None = None
+        self.last_queue_error_code: str | None = None
 
     def start(self) -> None:
         if self.is_alive():
@@ -51,21 +52,22 @@ class ReviewWorker:
     def claim(self) -> AuthoringLease | None:
         workspace = self.database.workspace_id()
         with self.database.transaction() as conn:
-            rows = conn.execute("SELECT created_at,id FROM jobs WHERE workspace_id=? AND kind='draft_review' "
-                "AND (status='queued' OR (status='running' AND lease_until<=?)) ORDER BY created_at,id",
-                (workspace, utc_now())).fetchall()
+            repo = ReviewRepository(conn, workspace)
+            scan = repo.jobs.claimable_candidates(utc_now())
+            rows = list(scan.candidates)
+            first_error = job_integrity() if scan.invalid_rows else None
+            self.last_queue_error_code = first_error.code if first_error else None
             if self._cursor is not None:
-                rows = [r for r in rows if tuple(r) > self._cursor] + [r for r in rows if tuple(r) <= self._cursor]
-            repo, first_error = ReviewRepository(conn, workspace), None
+                rows = [r for r in rows if (r.created_at, r.job_id) > self._cursor] + [r for r in rows if (r.created_at, r.job_id) <= self._cursor]
             for row in rows[:32]:
-                self._cursor = tuple(row)
+                self._cursor = (row.created_at, row.job_id)
                 try:
-                    repo.load(row['id'])
+                    repo.load(row.job_id)
                 except ApiError as error:
                     first_error = first_error or error
                     continue
-                lease = repo.jobs.claim(row['id'])
-                repo.load(row['id'])
+                lease = repo.jobs.claim(row.job_id)
+                repo.load(row.job_id)
                 return lease
             if first_error is not None:
                 raise first_error

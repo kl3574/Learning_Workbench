@@ -242,7 +242,7 @@ def test_expired_lease_recovery_rejects_previous_owner_and_creates_only_one_repo
         assert conn.execute("SELECT count(*) FROM artifacts WHERE profile='quality_review_report'").fetchone()[0] == 1
 
 
-@pytest.mark.parametrize('fault', ['file', 'bytes', 'visibility', 'manifest', 'profile', 'job', 'history'])
+@pytest.mark.parametrize('fault', ['file', 'bytes', 'visibility', 'manifest', 'profile', 'job', 'history', 'created_at'])
 def test_report_reads_reject_damaged_ownership_history_and_physical_bytes(workflow, fault):
     database, identity, _, service, _ = workflow
     ack, receipt = completed(workflow)
@@ -260,7 +260,8 @@ def test_report_reads_reject_damaged_ownership_history_and_physical_bytes(workfl
             conn.execute('DELETE FROM review_commands WHERE review_id=?', (ack.id,))
         else:
             field, value = {'visibility':('visibility','learner'), 'manifest':('manifest_json','{}'),
-                            'profile':('profile','unregistered'), 'job':('job_id',None)}[fault]
+                            'profile':('profile','unregistered'), 'job':('job_id',None),
+                            'created_at':('created_at','2000-01-01T00:00:00Z')}[fault]
             conn.execute(f'UPDATE artifacts SET {field}=? WHERE id=?', (value, artifact_id))
     before = table_hashes(database)
     for call in [lambda: service.read(identity, ack.id),
@@ -396,7 +397,8 @@ def test_unrequested_structure_stays_not_run_and_read_never_advances_numeric_led
     assert table_hashes(database) == before
 
 
-@pytest.mark.parametrize('formula', ['$x^2+1$', r'\(x+1\)', r'\[x=2\]'])
+@pytest.mark.parametrize('formula', ['$x^2+1$', r'\(x+1\)', r'\[x=2\]',
+    r'\begin{equation*}x=2\end{equation*}', r'\begin{align*}x&=2\end{align*}'])
 def test_explicit_formula_in_real_import_body_cannot_claim_na(tmp_path, formula):
     from services.api.app.infrastructure.config import Settings
     from services.api.app.infrastructure.database import Database
@@ -429,3 +431,111 @@ def test_explicit_formula_in_real_import_body_cannot_claim_na(tmp_path, formula)
     with pytest.raises(ApiError) as caught:
         service.decide(identity, ack.id, decision(receipt, mathematical='NOT_APPLICABLE'), 'human')
     assert caught.value.code == 'MATHEMATICAL_REVIEW_REQUIRED'
+
+
+@pytest.mark.parametrize('owner_kind', ['import', 'quality'])
+@pytest.mark.parametrize('damage', ['bytes', 'membership'])
+def test_accepted_external_evidence_corruption_rejects_receipt_original_ack_and_download(workflow, owner_kind, damage):
+    from services.api.app.infrastructure.import_worker import ImportWorker
+    database, identity, candidate, service, _ = workflow
+    first, receipt = completed(workflow, 'first')
+    if owner_kind == 'quality':
+        _, other = completed(workflow, 'other-quality')
+        artifact_id = other.evidence_paths[0].split('/')[-2]
+    else:
+        imports = ImportService(database)
+        staged = imports.stage(identity, data=b'# Independent synthetic evidence\n', filename='evidence.md',
+                               kind='markdown', key='independent-evidence')
+        worker = ImportWorker(database)
+        try:
+            assert worker.run_once()
+        finally:
+            worker.stop()
+        with database.connect() as conn:
+            artifact_id = conn.execute("SELECT id FROM artifacts WHERE job_id=? AND profile='import_original'",
+                                       (staged.job.id,)).fetchone()[0]
+    body = decision(receipt, [artifact_id])
+    accepted = service.decide(identity, first.id, body, 'human')
+    assert service.read(identity, first.id) == accepted
+    with database.transaction() as conn:
+        if damage == 'membership':
+            conn.execute("UPDATE artifacts SET profile='unregistered' WHERE id=?", (artifact_id,))
+        else:
+            path = conn.execute('SELECT b.relative_path FROM artifacts a JOIN content_blobs b '
+                                'ON a.blob_sha256=b.sha256 WHERE a.id=?', (artifact_id,)).fetchone()[0]
+            (database.settings.data_dir / path).write_bytes(b'SYNTHETIC_CORRUPT_EXTERNAL_EVIDENCE')
+    before = table_hashes(database)
+    for call in [lambda: service.read(identity, first.id),
+                 lambda: service.decide(identity, first.id, body, 'human'),
+                 lambda: service.create(identity, candidate.draft_id, request(candidate), 'first'),
+                 lambda: ArtifactsService(database, service.readers()).download(identity, receipt.evidence_paths[0].split('/')[-2])]:
+        with pytest.raises(ApiError):
+            call()
+    assert table_hashes(database) == before
+
+
+def test_jobs_owned_candidates_are_readonly_and_a_damaged_first_job_does_not_hide_valid_work(workflow):
+    from services.api.app.infrastructure.review_job_repository import ReviewJobRepository
+    from services.api.app.infrastructure.database import utc_now
+    database, identity, candidate, service, worker = workflow
+    first = service.create(identity, candidate.draft_id, request(candidate), 'first')
+    second = service.create(identity, candidate.draft_id, request(candidate), 'second')
+    before = table_hashes(database)
+    with database.transaction(immediate=False) as conn:
+        conn.execute('PRAGMA query_only=ON')
+        scan = ReviewJobRepository(conn, identity.workspace_id).claimable_candidates(utc_now())
+        assert [item.job_id for item in scan.candidates] == [first.id, second.id]
+        assert scan.invalid_rows == 0
+    assert table_hashes(database) == before
+    with database.transaction() as conn:
+        conn.execute("UPDATE jobs SET input_json='{}' WHERE id=?", (first.id,))
+    lease = worker.claim()
+    assert lease.job_id == second.id
+    worker.finish(lease)
+    assert service.read(identity, second.id).revision == 1
+    with pytest.raises(ApiError):
+        service.read_job(identity, first.id)
+
+
+def test_artifacts_owned_manifest_rejects_a_forged_reader_descriptor_without_writes(workflow):
+    from services.api.app.infrastructure.artifact_repository import ArtifactRepository
+    from packages.contracts.canonical import sha256_bytes
+    database, identity, _, service, _ = workflow
+    _, receipt = completed(workflow)
+    artifact_id = receipt.evidence_paths[0].split('/')[-2]
+    _, artifact = ArtifactsService(database, service.readers()).download(identity, artifact_id)
+    before = table_hashes(database)
+    with database.transaction(immediate=False) as conn:
+        conn.execute('PRAGMA query_only=ON')
+        repo = ArtifactRepository(conn, identity.workspace_id)
+        manifest = conn.execute('SELECT manifest_json FROM artifacts WHERE id=?', (artifact_id,)).fetchone()[0]
+        assert repo.manifest_sha256(artifact_id, artifact) == sha256_bytes(manifest.encode())
+        with pytest.raises(ApiError):
+            repo.manifest_sha256(artifact_id, artifact.model_copy(update={'filename':'forged.json'}))
+    assert table_hashes(database) == before
+
+
+@pytest.mark.parametrize('field', ['created_at', 'id'])
+def test_bad_queue_scheduling_row_does_not_starve_a_healthy_review(workflow, field):
+    database, identity, candidate, service, worker = workflow
+    first = service.create(identity, candidate.draft_id, request(candidate), 'damaged')
+    second = service.create(identity, candidate.draft_id, request(candidate), 'healthy')
+    # Simulate offline database damage, including broken FK membership. These
+    # values must never become a claimed lease or be repaired into valid input.
+    with database.connect() as conn:
+        conn.execute('PRAGMA foreign_keys=OFF')
+        if field == 'created_at':
+            conn.execute("UPDATE jobs SET created_at='invalid-time' WHERE id=?", (first.id,))
+        else:
+            conn.execute("UPDATE jobs SET id='!invalid-id' WHERE id=?", (first.id,))
+    lease = worker.claim()
+    assert lease is not None and lease.job_id == second.id
+    worker.finish(lease)
+    assert service.read(identity, second.id).revision == 1
+    assert worker.last_queue_error_code == 'AUTHORING_INTEGRITY_ERROR'
+    before = table_hashes(database)
+    with pytest.raises(ApiError):
+        worker.claim()
+    with pytest.raises(ApiError):
+        service.read_job(identity, first.id)
+    assert table_hashes(database) == before

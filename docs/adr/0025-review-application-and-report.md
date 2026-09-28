@@ -6,6 +6,10 @@ ReviewService 接受既有 DraftReviewWrite / ReviewDecisionWrite，入口重新
 
 创建从显式候选目录选择实际 owner，在同一事务核候选、完整材料和数值历史，然后创建真实 draft_review Job、Quality 输入与原 queued ACK。机器检查只执行结构检查并保存已存在的数值观察，绝不批准或运行数值计划，不调用 Provider。数学、来源、独立教学字段保持 NOT_RUN。worker 使用 Jobs 自有 claim、过期租约恢复、取消与唯一终态；坏历史拒绝处理，权限丢失可形成真实失败 Job，不补造审核回执。
 
+待领取身份由 ReviewJobRepository 的只读候选端口返回，应用不能自行查询 Jobs 队列；完整 Quality 历史仍须在 claim 前另核。附件 manifest 摘要由 ArtifactRepository 对已验证 descriptor 与真实完整 manifest 核对后取得。Quality 专属报告 SQL 与 blob 持久代码在 ReviewArtifactRepository，应用只组合所属端口和纯报告 DTO，不直接读取其他 owner 表。
+
+Jobs 候选扫描逐行验证时间和 ID；损坏行不返回为候选，只记录损坏计数。worker 保留安全的队列错误码，仍可领取同队列健康任务；没有可处理的健康任务时返回完整性错误，不修补损坏历史。
+
 报告先生成自有规范 JSON，包含原输入/候选/材料摘要、结构细项、完整旧数值观察及范围声明。报告不包含自身附件绑定、回执哈希或机器记录哈希，依赖顺序为报告字节 → 附件 → 回执 → 机器记录 → Jobs 终态引用。实际 BlobStore 写入成功后才登记 content_blobs 和固定 quality_review_report、author_private 附件。附件登记、Jobs 完成、机器历史与回执在同一外层事务提交；失败允许留下受限目录中的无引用不可变 blob，但数据库不能保留孤立成功指针。物理写后再次核租约；过期整次回滚。
 
 所有审核正文回读都重新核当前 Policy、精确 owner 材料、旧 numeric 历史前缀、完整 Quality/Jobs 账本和物理报告。报告 reader 可注册到 ArtifactsService，不能根据 ID 前缀或现有 blob 推定所有者。外部附件只走明确注册的真实 Import reader；其他审核报告递归核其完整当前访问和历史，同一事务已完成验证的节点可复用，循环拒绝。递归深度初始上限 32，仅保护资源，不授予超界读取。

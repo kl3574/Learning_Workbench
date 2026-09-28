@@ -5,12 +5,26 @@ existing Authoring consumers. Quality must authenticate its own candidate and
 review history and current actor before using this internal persistence port.
 """
 import sqlite3
+from dataclasses import dataclass
 from uuid import uuid4
 
-from pydantic import ValidationError
+from pydantic import ValidationError, TypeAdapter
+from packages.contracts import domain_models as dm
 from ..application.errors import ApiError
 from ..application.review_models import ReviewJobInput
 from .authoring_job_repository import AuthoringJobRepository, TERMINAL, checked, integrity
+
+
+@dataclass(frozen=True)
+class ReviewQueueCandidate:
+    created_at: str
+    job_id: str
+
+
+@dataclass(frozen=True)
+class ReviewQueueScan:
+    candidates: tuple[ReviewQueueCandidate, ...]
+    invalid_rows: int
 
 
 class ReviewJobRepository(AuthoringJobRepository):
@@ -24,6 +38,31 @@ class ReviewJobRepository(AuthoringJobRepository):
     def _transaction(self) -> None:
         if not self.conn.in_transaction:
             raise ApiError(409, 'TRANSACTION_REQUIRED', '审核任务需要当前事务。')
+
+    def claimable_candidates(self, now: str) -> ReviewQueueScan:
+        """Jobs-owned scheduling facts, never a lease or authority from input JSON.
+
+        The consumer must load its full Quality history before Jobs.claim; a
+        damaged consumer record can then be skipped without hiding valid work.
+        """
+        self._transaction()
+        try:
+            TypeAdapter(dm.UTC).validate_python(now)
+            rows = self.conn.execute("SELECT created_at,id FROM jobs WHERE workspace_id=? AND kind='draft_review' "
+                "AND (status='queued' OR (status='running' AND lease_until<=?)) ORDER BY created_at,id",
+                (self.workspace_id, now)).fetchall()
+        except (ValueError, TypeError):
+            raise integrity() from None
+        candidates, invalid_rows = [], 0
+        for row in rows:
+            try:
+                candidates.append(ReviewQueueCandidate(TypeAdapter(dm.UTC).validate_python(row['created_at']),
+                    TypeAdapter(dm.Id).validate_python(row['id'])))
+            except (ValueError, TypeError):
+                # A corrupt scheduling field grants no lease, and must not
+                # prevent the consumer from inspecting other checked rows.
+                invalid_rows += 1
+        return ReviewQueueScan(tuple(candidates), invalid_rows)
 
     def _input(self, identifier: str, value: object) -> ReviewJobInput:
         try:
