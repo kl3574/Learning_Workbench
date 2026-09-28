@@ -1,0 +1,163 @@
+import 'fake-indexeddb/auto'
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
+import { afterEach, expect, test, vi } from 'vitest'
+import { ApiError, getSessionGeneration, request } from '../../api/client'
+import { reviewSession } from '../draftReview/reviewFixtures'
+import { editBase, editFixture } from './editFixtures'
+import { decodeBuffer, editBuffers, editCommands, readCommand, persistCommand } from './editJournal'
+import type { EditPort } from './editClient'
+import { useDraftEditor } from './useDraftEditor'
+afterEach(async () => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); await Promise.all([editBuffers.close(), editCommands.close()]) })
+function fixture() {
+  const workspace = `workspace_${crypto.randomUUID()}`
+  const port: EditPort = { session: vi.fn(async () => reviewSession(workspace)), read: vi.fn(async () => editFixture()),
+    create: vi.fn(async () => ({ draft_id: 'draft_edit_synthetic', revision: 1, base_ref: editBase, state: 'draft' as const })),
+    patch: vi.fn(async () => ({ draft_id: 'draft_edit_synthetic', revision: 2, validation_warnings: [] })) }
+  return { workspace, port }
+}
+test('patch is sent only after exact original command and local baseline are durable', async () => {
+  const { workspace, port } = fixture()
+  vi.mocked(port.patch).mockImplementation(async (id, body, key) => {
+    const saved = readCommand((await editCommands.load(workspace))[key], workspace)
+    expect(saved.operation.kind).toBe('patch')
+    if (saved.operation.kind !== 'patch') throw new Error('Expected patch')
+    expect(saved.operation.body).toEqual(body); expect(saved.operation.baseline).toEqual(editFixture()); expect(saved.ack).toBeNull()
+    return { draft_id: id, revision: 2, validation_warnings: [] }
+  })
+  const h = renderHook(() => useDraftEditor(workspace, editBase, false, port))
+  await waitFor(() => expect(h.result.current.ready).toBe(true))
+  await act(() => h.result.current.read('draft_edit_synthetic'))
+  act(() => h.result.current.update({ title: '本机标题', body_markdown: '本机正文\n' }))
+  await waitFor(() => expect(h.result.current.saving).toBe(false))
+  await act(() => h.result.current.submit())
+  expect(port.patch).toHaveBeenCalledTimes(1); expect(h.result.current.commands[0].ack?.revision).toBe(2)
+  expect(h.result.current.buffer?.baseline.candidate.draft_revision).toBe(1)
+})
+test('412 preserves baseline and local command, reads exact historical and current snapshots, then requires explicit resolution and new submit', async () => {
+  const { workspace, port } = fixture(), old = editFixture(), server = editFixture(2, '另一个标签标题', '服务端当前正文\n')
+  vi.mocked(port.patch).mockRejectedValueOnce(new ApiError(412, 'Changed', 'REVISION_CONFLICT'))
+  const h = renderHook(() => useDraftEditor(workspace, editBase, false, port))
+  await waitFor(() => expect(h.result.current.ready).toBe(true))
+  await act(() => h.result.current.read(old.candidate.draft_id))
+  const local = { title: '本机未同步标题', body_markdown: '本机未同步正文\n' }
+  act(() => h.result.current.update(local)); await waitFor(() => expect(h.result.current.saving).toBe(false))
+  vi.mocked(port.read).mockImplementation(async (_id, revision) => revision === 1 ? old : server)
+  await act(() => h.result.current.submit())
+  expect(h.result.current.commands[0].rejection).toBe(412)
+  expect(h.result.current.conflict).toMatchObject({ base: old, local, server })
+  expect(vi.mocked(port.read).mock.calls.slice(1)).toEqual([[old.candidate.draft_id, 1], [old.candidate.draft_id]])
+  expect(h.result.current.buffer?.baseline).toEqual(old)
+  const original = structuredClone(h.result.current.commands[0])
+  await act(() => h.result.current.resolve(local))
+  expect(port.patch).toHaveBeenCalledTimes(1)
+  expect(h.result.current.buffer?.baseline).toEqual(server)
+  vi.mocked(port.patch).mockResolvedValueOnce({ draft_id: old.candidate.draft_id, revision: 3, validation_warnings: [] })
+  await act(() => h.result.current.submit())
+  const calls = vi.mocked(port.patch).mock.calls
+  expect(calls).toHaveLength(2); expect(calls[1][1].expected_revision).toBe(2); expect(calls[1][2]).not.toBe(calls[0][2])
+  expect(readCommand((await editCommands.load(workspace))[original.key], workspace)).toEqual(original)
+})
+
+function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(yes => { resolve = yes }); return { promise, resolve } }
+test('refresh retains local blank input and original baseline; resume clones a verified history without changing the saved copy', async () => {
+  const { workspace, port } = fixture()
+  const first = renderHook(() => useDraftEditor(workspace, editBase, false, port))
+  await waitFor(() => expect(first.result.current.ready).toBe(true))
+  await act(() => first.result.current.read('draft_edit_synthetic'))
+  act(() => first.result.current.update({ title: '', body_markdown: '尚未完成的本机正文' }))
+  await waitFor(() => expect(first.result.current.saving).toBe(false))
+  const saved = structuredClone(first.result.current.buffer!)
+  expect(decodeBuffer((await editBuffers.load(workspace))[saved.id].text, workspace)).toEqual(saved)
+  first.unmount()
+  const second = renderHook(() => useDraftEditor(workspace, editBase, false, port))
+  await waitFor(() => expect(second.result.current.buffers).toHaveLength(1))
+  await act(() => second.result.current.restore(saved))
+  expect(second.result.current.buffer?.local).toEqual(saved.local)
+  expect(second.result.current.buffer?.id).not.toBe(saved.id)
+  expect(second.result.current.buffer?.baseline).toEqual(editFixture())
+  expect(vi.mocked(port.read).mock.calls.at(-1)).toEqual(['draft_edit_synthetic', 1])
+  await act(() => second.result.current.submit()); expect(port.patch).not.toHaveBeenCalled()
+  expect(decodeBuffer((await editBuffers.load(workspace))[saved.id].text, workspace)).toEqual(saved)
+})
+test('two mounted tabs keep separate local work and observe actual competing server revision without automatic rebase', async () => {
+  const { workspace, port } = fixture(); let head = editFixture()
+  vi.mocked(port.read).mockImplementation(async (_id, revision) => revision === 1 ? editFixture() : head)
+  vi.mocked(port.patch).mockImplementation(async (_id, body) => {
+    if (body.expected_revision !== head.candidate.draft_revision) throw new ApiError(412, 'Changed')
+    head = editFixture(head.candidate.draft_revision + 1, String(body.patches[0].value), String(body.patches[1].value))
+    return { draft_id: head.candidate.draft_id, revision: head.candidate.draft_revision, validation_warnings: [] }
+  })
+  const a = renderHook(() => useDraftEditor(workspace, editBase, false, port)), b = renderHook(() => useDraftEditor(workspace, editBase, false, port))
+  await waitFor(() => { expect(a.result.current.ready).toBe(true); expect(b.result.current.ready).toBe(true) })
+  await act(async () => { await a.result.current.read('draft_edit_synthetic'); await b.result.current.read('draft_edit_synthetic') })
+  act(() => { a.result.current.update({ title: '标签甲', body_markdown: '甲' }); b.result.current.update({ title: '标签乙', body_markdown: '乙' }) })
+  await waitFor(() => { expect(a.result.current.saving).toBe(false); expect(b.result.current.saving).toBe(false) })
+  expect(a.result.current.buffer?.id).not.toBe(b.result.current.buffer?.id)
+  await act(() => a.result.current.submit()); await act(() => b.result.current.submit())
+  expect(head.payload.title).toBe('标签甲'); expect(b.result.current.conflict?.local.title).toBe('标签乙')
+  expect(Object.values(await editBuffers.load(workspace)).map(r => decodeBuffer(r.text, workspace).local.title).sort()).toEqual(['标签乙', '标签甲'].sort())
+})
+test('lost ACK keeps original key and body; same page explicit replay works while previous-page unknown commands remain read-only', async () => {
+  const { workspace, port } = fixture()
+  vi.mocked(port.patch).mockRejectedValueOnce(new Error('Synthetic response lost'))
+  const h = renderHook(() => useDraftEditor(workspace, editBase, false, port))
+  await waitFor(() => expect(h.result.current.ready).toBe(true)); await act(() => h.result.current.read('draft_edit_synthetic'))
+  act(() => h.result.current.update({ title: '待同步', body_markdown: '正文' })); await waitFor(() => expect(h.result.current.saving).toBe(false))
+  await act(() => h.result.current.submit()); const original = h.result.current.commands[0]
+  await act(() => h.result.current.submit()); expect(port.patch).toHaveBeenCalledTimes(1)
+  await act(() => h.result.current.execute(original)); expect(vi.mocked(port.patch).mock.calls[1]).toEqual(vi.mocked(port.patch).mock.calls[0])
+  const older = { ...original, key: 'editcmd_previous', page: 'page_previous' }
+  await persistCommand(older)
+  await act(() => h.result.current.refresh()); await act(() => h.result.current.execute(older))
+  expect(port.patch).toHaveBeenCalledTimes(2); expect(h.result.current.canReplay(older)).toBe(false)
+  expect(h.result.current.error).toContain('只读保留')
+})
+test('failed durable storage prevents an HTTP write and keeps current local text', async () => {
+  const { workspace, port } = fixture(), h = renderHook(() => useDraftEditor(workspace, editBase, false, port))
+  await waitFor(() => expect(h.result.current.ready).toBe(true)); await act(() => h.result.current.read('draft_edit_synthetic'))
+  act(() => h.result.current.update({ title: '未确认保存', body_markdown: '保留文字' })); await waitFor(() => expect(h.result.current.saving).toBe(false))
+  vi.spyOn(editCommands, 'save').mockRejectedValueOnce(new Error('Synthetic IDB failure'))
+  await act(() => h.result.current.submit())
+  expect(port.patch).not.toHaveBeenCalled(); expect(h.result.current.buffer?.local.body_markdown).toBe('保留文字')
+  expect(await editCommands.load(workspace)).toEqual({})
+})
+test.each(['body', 'candidate', 'history', 'owner', 'base'] as const)('bad %s in snapshot is rejected before it becomes an editable baseline', async kind => {
+  const { workspace, port } = fixture(), bad = editFixture()
+  if (kind === 'body') bad.payload.body_markdown += 'tampered'
+  if (kind === 'candidate') bad.candidate.candidate_sha256 = '0'.repeat(64)
+  if (kind === 'history') bad.candidate.draft_revision = 2
+  if (kind === 'owner') Object.assign(bad, { owner: 'import' })
+  if (kind === 'base') bad.base_ref = { ...editBase, revision: 2 }
+  vi.mocked(port.read).mockResolvedValueOnce(bad)
+  const h = renderHook(() => useDraftEditor(workspace, editBase, false, port))
+  await waitFor(() => expect(h.result.current.ready).toBe(true)); await act(() => h.result.current.read('draft_edit_synthetic', 1))
+  expect(h.result.current.buffer).toBeNull(); expect(h.result.current.error).toContain('无法核验'); expect(await editBuffers.load(workspace)).toEqual({})
+})
+test('current Policy hides protected buffers and late ACK after access generation changes cannot rewrite the original', async () => {
+  const { workspace, port } = fixture(), pending = deferred<Awaited<ReturnType<EditPort['patch']>>>()
+  vi.mocked(port.patch).mockReturnValueOnce(pending.promise)
+  const h = renderHook(() => useDraftEditor(workspace, editBase, false, port))
+  await waitFor(() => expect(h.result.current.ready).toBe(true)); await act(() => h.result.current.read('draft_edit_synthetic'))
+  act(() => h.result.current.update({ title: '待保存', body_markdown: '正文' })); await waitFor(() => expect(h.result.current.saving).toBe(false))
+  let sending!: Promise<void>; act(() => { sending = h.result.current.submit() })
+  await waitFor(() => expect(port.patch).toHaveBeenCalledTimes(1)); const original = h.result.current.commands[0], generation = getSessionGeneration()
+  vi.mocked(port.session).mockResolvedValue({ ...reviewSession(workspace), active_independent_attempt_id: 'attempt_synthetic' })
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(reviewSession(workspace)))))
+  await act(() => request('POST /api/v1/session/role', { role: 'learner' }, { 'Idempotency-Key': 'synthetic_role' }))
+  expect(getSessionGeneration()).toBeGreaterThan(generation)
+  await act(async () => { pending.resolve({ draft_id: 'draft_edit_synthetic', revision: 2, validation_warnings: [] }); await sending })
+  expect(h.result.current.ready).toBe(false); expect(h.result.current.buffer).toBeNull(); expect(h.result.current.commands).toEqual([])
+  expect(readCommand((await editCommands.load(workspace))[original.key], workspace)).toEqual(original)
+})
+test('published exact drafts are read-only and a denied 412 history read leaves the original command intact', async () => {
+  const { workspace, port } = fixture(), h = renderHook(() => useDraftEditor(workspace, editBase, false, port))
+  vi.mocked(port.read).mockResolvedValueOnce({ ...editFixture(), state: 'published' })
+  await waitFor(() => expect(h.result.current.ready).toBe(true)); await act(() => h.result.current.read('draft_edit_synthetic'))
+  act(() => h.result.current.update({ title: '不能写入', body_markdown: 'x' })); await act(() => h.result.current.submit())
+  expect(port.patch).not.toHaveBeenCalled(); expect(h.result.current.buffer?.local.title).toBe(editFixture().payload.title)
+  await act(() => h.result.current.read('draft_edit_synthetic'))
+  act(() => h.result.current.update({ title: '冲突候选', body_markdown: '待保留' })); await waitFor(() => expect(h.result.current.saving).toBe(false))
+  vi.mocked(port.patch).mockRejectedValueOnce(new ApiError(412, 'Changed')); vi.mocked(port.read).mockRejectedValue(new ApiError(403, 'Denied', 'POLICY_DENIED'))
+  await act(() => h.result.current.submit()); expect(h.result.current.conflict).toBeNull(); expect(h.result.current.ready).toBe(false)
+  const commands = Object.values(await editCommands.load(workspace)).map(r => readCommand(r, workspace)); expect(commands[0].rejection).toBe(412)
+})
