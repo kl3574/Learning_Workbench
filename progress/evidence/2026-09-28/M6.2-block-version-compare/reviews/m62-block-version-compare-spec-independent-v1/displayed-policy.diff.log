@@ -1,0 +1,50 @@
+--- 13-current-policy-red/apps/web/src/features/reader/versionCompare/useVersionCompare.ts
++++ 14-current-policy-green/apps/web/src/features/reader/versionCompare/useVersionCompare.ts
+@@ -4,8 +4,8 @@
+ import type { LoadedBlock } from '../contentClient'
+ import type { ComparePort } from './compareClient'
+ 
+-type State = { key: string; access: number; open: boolean; items: RevisionSummary[]; cursor: string | null; left: ContentRef | null; right: ContentRef | null; result: [LoadedBlock, LoadedBlock] | null; busy: boolean; error: string }
+-const empty = (key: string, access: number): State => ({ key, access, open: false, items: [], cursor: null, left: null, right: null, result: null, busy: false, error: '' })
++type State = { key: string; access: number; open: boolean; items: RevisionSummary[]; cursor: string | null; left: ContentRef | null; right: ContentRef | null; result: [LoadedBlock, LoadedBlock] | null; permission: string | null; busy: boolean; error: string }
++const empty = (key: string, access: number): State => ({ key, access, open: false, items: [], cursor: null, left: null, right: null, result: null, permission: null, busy: false, error: '' })
+ export function useVersionCompare(workspace: string | null, id: string, port: ComparePort) {
+   const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
+   const key = JSON.stringify([workspace, id])
+@@ -32,6 +32,27 @@
+     if (!workspace || session.workspace_id !== workspace || session.active_independent_attempt_id !== null) throw new Error('当前工作区或测试策略不允许读取比较内容。')
+     return JSON.stringify([session.workspace_id, session.role, session.active_independent_attempt_id, session.active_open_book_attempt_id])
+   }
++  useEffect(() => {
++    if (!state.open || !state.result || !state.permission) return
++    let live = true, timer = 0, deadline = 0
++    const sequence = owner.current.sequence
++    const valid = () => live && owner.current.key === key && owner.current.access === access && owner.current.sequence === sequence && getSessionGeneration() === access
++    const revoke = (message: string) => {
++      if (!valid()) return
++      owner.current.sequence++
++      patch({ result: null, permission: null, busy: false, error: message })
++    }
++    const poll = async () => {
++      if (!valid()) return
++      deadline = window.setTimeout(() => revoke('当前权限未能及时确认，比较正文已清除，请重新读取。'), 2000)
++      try {
++        if (await permitted() !== state.permission) revoke('读取期间权限发生变化，请重新读取准确修订。')
++      } catch { revoke('当前权限不可确认，比较正文已清除，请重新读取。') }
++      finally { window.clearTimeout(deadline); if (valid()) timer = window.setTimeout(() => void poll(), 2000) }
++    }
++    timer = window.setTimeout(() => void poll(), 2000)
++    return () => { live = false; window.clearTimeout(timer); window.clearTimeout(deadline) }
++  }, [state.open, state.result, state.permission, key, access, port])
+   const history = async (more = false) => {
+     if (!workspace || more && (!state.cursor || state.items.length >= 200)) return
+     const valid = begin(), cursor = more ? state.cursor : null
+@@ -61,7 +82,7 @@
+       if (!valid()) return
+       if (await permitted() !== permission) throw new Error('读取期间权限发生变化，请重新读取准确修订。')
+       if (!valid()) return
+-      patch({ result: pair })
++      patch({ result: pair, permission })
+     } catch (error) { if (valid()) patch({ error: (error as Error).message, result: null }) }
+     finally { if (valid()) patch({ busy: false }) }
+   }

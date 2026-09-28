@@ -1,0 +1,44 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/reader/versionCompare/BlockVersionCompare.test.tsx
+
+
+ RUN  v5.0.0 <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-block-version-compare-active/apps/web
+
+ ❯ src/features/reader/versionCompare/BlockVersionCompare.test.tsx (10 tests | 1 failed) 693ms
+   × a role change outside this page cannot retain the old role-dependent provenance projection 74ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/reader/versionCompare/BlockVersionCompare.test.tsx > a role change outside this page cannot retain the old role-dependent provenance projection
+AssertionError: expected <pre tabindex="0" …(1)></pre> to be null
+
+- Expected:
+null
+
++ Received:
+<pre
+  aria-label="左侧完整原文"
+  tabindex="0"
+>
+  old α
+shared
+
+</pre>
+
+ ❯ src/features/reader/versionCompare/BlockVersionCompare.test.tsx:106:45
+    104|   vi.mocked(port.session).mockResolvedValue({ workspace_id: workspace,…
+    105|   await act(async () => pending.resolve({ ...versions[0].data, body: v…
+    106|   expect(screen.queryByLabelText('左侧完整原文')).toBeNull()
+       |                                             ^
+    107|   expect(screen.getByRole('alert').textContent).toContain('读取期间权限发生变化')
+    108| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 9 passed (10)
+   Start at  12:09:01
+   Duration  1.19s (tests 62%, environment 17%, transform 14%, import 6%)
+

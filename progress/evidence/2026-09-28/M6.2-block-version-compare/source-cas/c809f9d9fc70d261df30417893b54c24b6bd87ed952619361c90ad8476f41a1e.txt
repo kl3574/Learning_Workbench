@@ -1,0 +1,30 @@
+import { afterEach, expect, test, vi } from 'vitest'
+import { compareClient } from './compareClient'
+import { versions } from './fixtures'
+
+afterEach(() => vi.unstubAllGlobals())
+test('reads the selected exact revision with real generated GET paths and verifies body bytes', async () => {
+  const selected = versions[0], calls: { path: string; init: RequestInit }[] = []
+  vi.stubGlobal('fetch', vi.fn(async (path: string, init: RequestInit) => {
+    calls.push({ path, init })
+    return path.includes('/body?')
+      ? new Response(selected.body, { headers: { ETag: `"${selected.data.block.body_sha256}"` } })
+      : new Response(JSON.stringify(selected.data), { headers: { ETag: `"${selected.ref.sha256}"` } })
+  }))
+  const result = await compareClient.block(selected.ref)
+  expect(result.body).toBe('old α\nshared\n')
+  expect(result.block_ref).toEqual(selected.ref)
+  expect(calls.map(call => call.path)).toEqual(['/api/v1/blocks/block_compare?include_provenance=true&revision=1', '/api/v1/blocks/block_compare/body?revision=1'])
+  expect(calls.every(call => call.init.method === 'GET' && call.init.credentials === 'same-origin')).toBe(true)
+})
+
+test.each(['changed-title', 'extra-field'])('rejects %s even with a matching ETag and body', async fault => {
+  const selected = versions[0]
+  const data = structuredClone(selected.data)
+  if (fault === 'changed-title') data.block.title = 'Changed metadata without changed reference'
+  else Object.assign(data, { unregistered_payload: 'synthetic unexpected field' })
+  vi.stubGlobal('fetch', vi.fn(async (path: string) => path.includes('/body?')
+    ? new Response(selected.body, { headers: { ETag: `"${selected.data.block.body_sha256}"` } })
+    : new Response(JSON.stringify(data), { headers: { ETag: `"${selected.ref.sha256}"` } })))
+  await expect(compareClient.block(selected.ref)).rejects.toThrow()
+})

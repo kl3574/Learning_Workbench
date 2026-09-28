@@ -1,0 +1,37 @@
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, expect, test, vi } from 'vitest'
+import { BlockVersionCompare } from './BlockVersionCompare'
+import type { ComparePort } from './compareClient'
+import { versions } from './fixtures'
+
+const workspace = 'workspace_compare'
+function api(): ComparePort {
+  return {
+    session: vi.fn(async () => ({ workspace_id: workspace, role: 'learner', csrf_token: 'synthetic-comparison-csrf', active_independent_attempt_id: null, active_open_book_attempt_id: null })),
+    history: vi.fn(async () => ({ items: [...versions].reverse().map(value => ({ ref: value.ref, created_at: '2026-09-28T00:00:00Z', review_state: 'unreviewed', lifecycle: 'active' })), next_cursor: null })),
+    block: vi.fn(async ref => { const value = versions.find(item => item.ref.sha256 === ref.sha256); if (!value) throw new Error('Unknown synthetic ref'); return { ...value.data, body: value.body } }),
+  }
+}
+afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+async function selectBoth() {
+  fireEvent.click(screen.getByRole('button', { name: '比较此块的两个修订' }))
+  await screen.findAllByRole('option', { name: /修订 1/ })
+  fireEvent.change(screen.getByLabelText('左侧修订'), { target: { value: versions[0].ref.sha256 } })
+  fireEvent.change(screen.getByLabelText('右侧修订'), { target: { value: versions[1].ref.sha256 } })
+}
+test('two explicit historical selections read exact bodies and survive panel closure and a changed current ref', async () => {
+  const port = api(), view = render(<BlockVersionCompare workspace={workspace} blockRef={versions[0].ref} port={port} />)
+  expect(port.history).not.toHaveBeenCalled()
+  await selectBoth()
+  expect(port.block).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: '读取所选两个修订' }))
+  await waitFor(() => expect(screen.getByLabelText('左侧完整原文').textContent).toBe('old α\nshared\n'))
+  expect(screen.getByLabelText('右侧完整原文').textContent).toBe('new α\nshared\n')
+  expect(screen.getByText(/文字差异不证明数学或语义等价/)).toBeTruthy()
+  view.rerender(<BlockVersionCompare workspace={workspace} blockRef={{ ...versions[1].ref, revision: 3, sha256: 'c'.repeat(64) }} port={port} />)
+  expect((screen.getByLabelText('左侧修订') as HTMLSelectElement).value).toBe(versions[0].ref.sha256)
+  fireEvent.click(screen.getByRole('button', { name: '收起修订比较' }))
+  fireEvent.click(screen.getByRole('button', { name: '比较此块的两个修订' }))
+  expect((screen.getByLabelText('右侧修订') as HTMLSelectElement).value).toBe(versions[1].ref.sha256)
+  expect(port.block).toHaveBeenCalledTimes(2)
+})

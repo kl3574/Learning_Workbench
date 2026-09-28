@@ -1,0 +1,2 @@
+Read-only reviewer lookup error: attempted root playwright.config.ts, which does not exist at this commit. No product commands were run and no source/evidence changed. Context pins were rebuilt from actual existing paths; owner isolated execution configuration is assessed later as evidence.
+Second read-only lookup correction: inputs-before.json is a head/files object, not the earlier package's top-level list. The initial index-0 KeyError was corrected before evidence verification; no product execution or original mutation occurred.

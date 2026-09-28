@@ -1,0 +1,11 @@
+# Independent Spec source review before execution evidence
+
+Candidate 05aa1af2fd000654b0d7b62e5eae32998c81d43f relative to 833f0a84168638ba5ce421c70cd2f20a71e45e48. Reviewer root did not author the comparison feature. All 12 changed files and relevant unchanged transport, closed decoder, hashing, Content read and native fixture context read before owner execution evidence. The only product/engineering specification is PRODUCT_DESIGN.md v3.0.7.
+
+No blocking discrepancy found in this bounded read-only slice from source inspection. Two historical references are explicitly selected; every actual GET remains exact-revision, full closed ContentBlock metadata and decoded-text body digests are checked separately, and old choices are not retargeted by a current pointer change. Source/provenance projection remains current authorized server information, not independent approval. No Content, review, grading, or learning mutation is introduced; UI session layout persistence is outside that claim.
+
+Owner/selection/access generations discard late results; actual session/Policy reads before and after material and periodic reads only while displaying results address remote-role/attempt changes. This is bounded detection, not instantaneous server push. A comparison session permission response that exceeds its own two-second deadline clears the displayed result. The implementation does not make the rest of the Reader a new security mechanism.
+
+The prefix/suffix complete-line diff is linear and honestly marks the whole changed middle, preserves exact text/newlines and does not claim semantic or mathematical equivalence. Its 100,000 UTF-16 unit / 2,000 line budget switches to full side-by-side originals. History is explicitly paginated, capped at 200 currently listed items with a visible remainder notice. No full M6.2, draft-vs-published editing, impact reconciliation, review-state projection or restoration acceptance is inferred.
+
+Evidence inspection remains pending. Source review alone does not claim native, transport, permission timing or viewport checks passed. Owner reports and output files will be checked independently in a later report without rewriting this source-first checkpoint.
