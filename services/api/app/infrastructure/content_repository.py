@@ -210,11 +210,17 @@ class ContentRepository:
             "new_ref": reference(value).model_dump(mode="json"),
             "affected_ids": [row["id"] for row in affected], "reason": "content_revision_published",
         }
+        event_raw = canonical_bytes(payload)
         # Durable invalidation intent; no worker/index rebuild or downstream completion is claimed.
         self.connection.execute("INSERT INTO outbox(id,event_type,payload_json) VALUES(?,?,?)",
-                                (f"outbox_{uuid4().hex}", "content.published", canonical_bytes(payload).decode()))
+                                (f"outbox_{uuid4().hex}", "content.published", event_raw.decode()))
         if old is not None:
+            event_id = f"outbox_{uuid4().hex}"
             self.connection.execute("INSERT INTO outbox(id,event_type,payload_json) VALUES(?,?,?)",
-                                    (f"outbox_{uuid4().hex}", "content.dependencies_invalidated", canonical_bytes(payload).decode()))
+                                    (event_id, "content.dependencies_invalidated", event_raw.decode()))
+            from ..application.content_impact import freeze_impact_event
+            freeze_impact_event(ContentRepository(self.connection, self.workspace_id, allow_notes=True),
+                                event_id, event_raw, reference(old), reference(value),
+                                tuple(row["id"] for row in affected))
         from .retrieval_repository import RetrievalInvalidation
         RetrievalInvalidation(self.connection, self.workspace_id).changed('content.published')

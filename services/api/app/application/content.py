@@ -98,8 +98,8 @@ class ContentService:
         self._identity(event_id)
         try:
             with self.database.connect() as connection:
+                connection.execute("BEGIN IMMEDIATE")
                 connection.execute("PRAGMA query_only=ON")
-                connection.execute("BEGIN")
                 try:
                     repository = ContentRepository(connection, workspace_id, allow_notes=True)
                     repository.require_workspace()

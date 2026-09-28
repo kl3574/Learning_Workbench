@@ -1,0 +1,38 @@
+FFF                                                                      [100%]
+=================================== FAILURES ===================================
+____ test_pure_concept_id_edge_stays_conservative_after_revision_row_tamper ____
+tests/integration/test_content_impact_snapshot.py:73: in test_pure_concept_id_edge_stays_conservative_after_revision_row_tamper
+    assert fixture.questions[0].id in before.conservative_only_ids
+E   AssertionError: assert 'question_impactconcept_0' in ()
+E    +  where 'question_impactconcept_0' = QuestionPublic(schema_version='3.0.0', id='question_impactconcept_0', revision=1, entity='question', kind='single_choi...ncept'], skill='recall', exposure_group='exposure_impactconcept_0', max_score=1.0, input_instructions='选择一个选项；练习尚未评分。').id
+E    +  and   () = ContentImpactSnapshot(event_id='outbox_2979dd888bba4ab58708a4b98556bd1b', old_ref=ContentRef(entity='concept', id='con...a9c957ca7aaf6ff410cef7327842e0485680a5af3ecf11ffc480d2553')), conservative_only_ids=(), applicability='pending_review').conservative_only_ids
+_____ test_wall_clock_collision_does_not_rewrite_frozen_historical_impact ______
+tests/integration/test_content_impact_snapshot.py:93: in test_wall_clock_collision_does_not_rewrite_frozen_historical_impact
+    before = service.impact_snapshot(workspace, event_id)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+services/api/app/application/content.py:107: in impact_snapshot
+    return impact_snapshot(connection, workspace_id, event_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+services/api/app/application/content_impact.py:171: in impact_snapshot
+    raise damaged()
+E   services.api.app.application.errors.ApiError: (409, 'CONTENT_HASH_MISMATCH', '存储的内容完整性校验失败。')
+_____ test_impact_read_holds_attempt_writer_gate_and_is_sqlite_query_only ______
+tests/integration/test_content_impact_snapshot.py:130: in test_impact_read_holds_attempt_writer_gate_and_is_sqlite_query_only
+    with pytest.raises(sqlite3.OperationalError, match="locked"):
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: DID NOT RAISE OperationalError
+=============================== warnings summary ===============================
+tests/integration/test_content_impact_snapshot.py::test_impact_read_holds_attempt_writer_gate_and_is_sqlite_query_only
+  WORKTREE/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/integration/test_content_impact_snapshot.py::test_impact_read_holds_attempt_writer_gate_and_is_sqlite_query_only
+  WORKTREE/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_content_impact_snapshot.py::test_pure_concept_id_edge_stays_conservative_after_revision_row_tamper
+FAILED tests/integration/test_content_impact_snapshot.py::test_wall_clock_collision_does_not_rewrite_frozen_historical_impact
+FAILED tests/integration/test_content_impact_snapshot.py::test_impact_read_holds_attempt_writer_gate_and_is_sqlite_query_only
+3 failed, 22 deselected, 2 warnings in 0.91s
