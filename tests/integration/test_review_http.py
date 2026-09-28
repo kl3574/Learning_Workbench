@@ -80,4 +80,4 @@ def test_real_http_review_worker_receipt_and_explicit_rejected_decision(prepared
     assert stale.status_code == 412
     with case.database.connect() as connection:
         assert connection.execute('SELECT count(*) FROM review_revisions').fetchone()[0] == 2
-        assert connection.execute('SELECT state FROM drafts WHERE id=?', (case.candidate['draft_id'],)).fetchone()[0] == 'draft'
+        assert connection.execute('SELECT status FROM drafts WHERE id=?', (case.candidate['draft_id'],)).fetchone()[0] == 'draft'
