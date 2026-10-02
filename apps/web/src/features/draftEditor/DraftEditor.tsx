@@ -30,7 +30,7 @@ export function DraftEditor({ workspace, block, onState, port, paused = false }:
     const guard = (event: BeforeUnloadEvent) => { if (!safe) { event.preventDefault(); event.returnValue = '' } }
     window.addEventListener('beforeunload', guard); return () => window.removeEventListener('beforeunload', guard)
   }, [safe])
-  const supported = block.block.kind === 'text' && !(block.block.concepts?.length || block.block.depends_on?.length) && !block.block.body_path.startsWith('private/')
+  const supported = block.block.kind === 'text' && !block.block.concepts?.length && !block.block.body_path.startsWith('private/')
   if (!supported) return null
   const close = () => { if (dirty || !safe) setClosing(true); else setOpen(false) }
   const conflict = state.conflict
@@ -41,6 +41,7 @@ export function DraftEditor({ workspace, block, onState, port, paused = false }:
       {state.busy && <p role="status">正在核对原记录…</p>}{state.error && <p role="alert">{state.error}</p>}
       {state.pendingMemory && <><p role="alert">有尚未落盘的文字隔离保留在本页内存中，刷新或关闭浏览器仍可能丢失。恢复原会话的作者权限后，需重新核验准确基准并明确保存。</p><button disabled={state.busy || state.saving} onClick={() => setDiscarding(true)}>放弃此块未落盘的隔离内存</button></>}
       {!state.ready ? <p>需要当前作者角色，且当前测试策略允许读取学科材料。</p> : <>
+        {!!block.block.depends_on?.length && <section aria-label="保留的原精确依赖"><p>以下原依赖及顺序会完整保留；本次只能修改标题和正文。</p><pre aria-label="原精确依赖只读记录">{JSON.stringify(block.block.depends_on, null, 2)}</pre></section>}
         {state.pendingMemory && <button disabled={!state.canRecoverMemory || state.busy || state.saving} onClick={() => void state.recoverMemory()}>核验原会话与精确基准，恢复内存副本</button>}
         <button disabled={!safe || activeReview} onClick={() => void state.create(block.block.title)}>从此准确修订明确创建编辑稿</button>
         <label>读取已有编辑稿 ID<input value={draftId} onChange={e => setDraftId(e.target.value)} /></label><button disabled={!safe || activeReview || !draftId.trim()} onClick={() => void state.read(draftId)}>另行读取服务端草稿头</button>

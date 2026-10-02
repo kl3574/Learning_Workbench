@@ -408,6 +408,73 @@ class ContentService:
             raise damaged()
         return refs[0]
 
+    def verify_retained_dependencies_in_transaction(self, connection: sqlite3.Connection,
+                                                    workspace_id: str, expected: dm.ContentRef) -> None:
+        """Verify existing public edges and original pins, never resolve them to current.
+
+        The caller owns its transaction and admission. Historical reads/ACKs may
+        retain archived revisions; publishing still separately requires an active
+        exact base. Nothing here repairs missing edges or writes a new projection.
+        """
+        block, _ = self.verify_publication_in_transaction(connection, workspace_id, expected)
+        repository = ContentRepository(connection, workspace_id)
+        pending: list[PublishedModel] = [block]
+        graph: dict[str, list[str]] = {}
+        edge_count = 0
+        try:
+            while pending:
+                value = pending.pop()
+                owner = reference(value)
+                if key(owner) in graph:
+                    continue
+                if len(graph) >= 10000:
+                    raise damaged()
+                if isinstance(value, dm.ContentBlock):
+                    if value.body_path.startswith('private/'):
+                        raise ApiError(403, 'CONTENT_DEPENDENCY_PROTECTED', '精确依赖包含受保护正文。')
+                    self.verify_publication_in_transaction(connection, workspace_id, owner)
+                targets = [(ref, 'reference') for ref in refs_in(value)]
+                targets.extend((reference(repository.concept_dependency(value, identifier)), 'concept')
+                               for identifier in concept_ids(value))
+                # Course dependencies also retain their full original concept
+                # prerequisite closure, as recorded by Content publication.
+                if isinstance(value, dm.Course):
+                    concepts, seen_concepts = list(value.concept_refs), set()
+                    while concepts:
+                        ref = concepts.pop()
+                        if ref.id in seen_concepts:
+                            continue
+                        seen_concepts.add(ref.id)
+                        if len(seen_concepts) > 10000:
+                            raise damaged()
+                        concept = repository.load('concept', ref.id, ref.revision).value
+                        if not isinstance(concept, dm.Concept) or reference(concept) != ref:
+                            raise damaged()
+                        targets.append((ref, 'concept'))
+                        concepts.extend(reference(repository.concept_dependency(concept, identifier))
+                                        for identifier in concept.prerequisite_ids)
+                edge_count += len(targets)
+                if edge_count > 100000:
+                    raise damaged()
+                actual = {(row['target_id'], row['target_revision'], row['relation']) for row in connection.execute(
+                    'SELECT target_id,target_revision,relation FROM object_dependencies WHERE owner_id=? AND owner_revision=?',
+                    (owner.id, owner.revision))}
+                if actual != {(ref.id, ref.revision, relation) for ref, relation in targets}:
+                    raise damaged()
+                graph[key(owner)] = [key(ref) for ref, _ in targets]
+                for ref, _ in targets:
+                    stored = repository.load(ref.entity, ref.id, ref.revision)
+                    if reference(stored.value) != ref:
+                        raise damaged()
+                    pending.append(stored.value)
+            validate_dag(graph)
+        except ApiError as error:
+            if error.status == 404:
+                raise damaged() from None
+            raise
+        except ValueError:
+            raise damaged() from None
+
     def publish_edited_block_in_transaction(self, connection: sqlite3.Connection, workspace_id: str,
                                             base: dm.ContentRef, block: dm.ContentBlock, body: bytes) -> dm.ContentRef:
         """Exact active current-base CAS; old body/history and invalidation remain Content-owned."""
@@ -424,8 +491,10 @@ class ContentService:
             raise invalid() from None
         expected = original.model_copy(update={'revision': base.revision + 1,
                                                'title': block.title, 'body_sha256': block.body_sha256})
-        if block != expected or block.kind != 'text' or block.concepts or block.depends_on:
+        if block != expected or block.kind != 'text' or block.concepts:
             raise invalid()
+        if original.depends_on:
+            self.verify_retained_dependencies_in_transaction(connection, workspace_id, base)
         refs = self.publish_in_transaction(connection, workspace_id, [block], {block.body_path: body})
         if refs != [reference(block)] or reference(repository.current(block.id).value) != refs[0]:
             raise damaged()

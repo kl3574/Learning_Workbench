@@ -51,7 +51,7 @@ class DraftBaseMaterial(DraftModel):
     def exact(self) -> Self:
         value = self.metadata
         if (self.ref.entity != 'block' or self.ref.id != value.id or self.ref.revision != value.revision
-                or self.ref.sha256 != metadata_sha256(value) or value.kind != 'text' or value.concepts or value.depends_on
+                or self.ref.sha256 != metadata_sha256(value) or value.kind != 'text' or value.concepts
                 or value.body_path.startswith('private/') or value.body_sha256 != body_hash(self.body_markdown)):
             raise ValueError('base must be the exact supported historical text block')
         if self.provenance is not None:

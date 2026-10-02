@@ -252,7 +252,7 @@ def test_repository_append_fault_is_atomic_even_if_outer_caller_commits(case):
     assert service.read(identity, created.draft_id, 1) == original
 
 
-@pytest.mark.parametrize('scope', ['kind', 'concept', 'dependency', 'foreign_workspace'])
+@pytest.mark.parametrize('scope', ['kind', 'concept', 'foreign_workspace'])
 def test_real_published_bases_outside_first_scope_create_no_edit(case, scope):
     database, identity, base, service, _, _ = case
     content = ContentService(database)
@@ -267,8 +267,6 @@ def test_real_published_bases_outside_first_scope_create_no_edit(case, scope):
         concept = dm.Concept(id='synthetic_concept', revision=1, title='Synthetic concept')
         values.append(concept)
         changes['concepts'] = [concept.id]
-    elif scope == 'dependency':
-        changes['depends_on'] = [base]
     else:
         workspace = 'synthetic_other_workspace'
         with database.transaction() as conn:

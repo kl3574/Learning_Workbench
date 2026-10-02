@@ -21,8 +21,10 @@ class ContentDraftSource:
         if ref.entity != 'block':
             raise unsupported()
         block, raw = self.content.verify_publication_in_transaction(conn, current.workspace_id, ref)
-        if block.kind != 'text' or block.concepts or block.depends_on or block.body_path.startswith('private/'):
+        if block.kind != 'text' or block.concepts or block.body_path.startswith('private/'):
             raise unsupported()
+        if block.depends_on:
+            self.content.verify_retained_dependencies_in_transaction(conn, current.workspace_id, ref)
         provenance = ProvenanceRepository(conn, current.workspace_id).bounded_frozen(block, max_bytes=2_000_000)
         try:
             return DraftBaseMaterial(ref=ref, metadata=block, body_markdown=raw.decode('utf-8'), provenance=provenance,

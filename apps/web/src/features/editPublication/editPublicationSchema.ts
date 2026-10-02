@@ -12,7 +12,7 @@ export function checkedEditBasis(value: EditPublicationBasis): EditPublicationBa
   if (!exactObject(value, ['owner', 'snapshot', 'base', 'candidate', 'target', 'review', 'warnings']) || value.owner !== 'authoring_edit'
       || !exactObject(value.base, ['metadata', 'body_markdown']) || !exactObject(value.target, ['object_id', 'object_revision', 'metadata_sha256'])) invalid()
   const snapshot = editSnapshot(value.snapshot), base = checkedPublication<ContentBlock>('ContentBlock', value.base.metadata), p = snapshot.payload
-  if (snapshot.state !== 'draft' || base.kind !== 'text' || base.concepts?.length || base.depends_on?.length
+  if (snapshot.state !== 'draft' || base.kind !== 'text' || base.concepts?.length
       || base.id !== snapshot.base_ref.id || base.revision !== snapshot.base_ref.revision
       || digest(canonical(base)) !== snapshot.base_ref.sha256 || typeof value.base.body_markdown !== 'string'
       || digest(value.base.body_markdown) !== base.body_sha256 || value.base.body_markdown.includes('\r')

@@ -42,6 +42,7 @@ export function EditPublicationPanel({ workspace, paused, blocked, draft, receip
       {basis && <section aria-label="本次编辑发布基准"><h5>本次实际重新读取的基准</h5>
         <p>候选 {basis.candidate.draft_id} · r{basis.candidate.draft_revision}</p><code>{basis.candidate.candidate_sha256}</code>
         <p>原块 {basis.snapshot.base_ref.id} · r{basis.snapshot.base_ref.revision} · <code>{basis.snapshot.base_ref.sha256}</code></p>
+        {!!basis.base.metadata.depends_on?.length && <details><summary>核对完整保留的原精确依赖及顺序</summary><pre aria-label="发布保留的原精确依赖">{JSON.stringify(basis.base.metadata.depends_on, null, 2)}</pre></details>}
         <p>目标对象 {basis.target.object_id} · r{basis.target.object_revision}（尚不作为发布回执）</p>
         <p>所选审核 {basis.review.id} · 本页读取 r{basis.review.revision}；结构 {basis.review.structural}；数学 {basis.review.mathematical}；来源 {basis.review.sources}；独立教学 NOT_RUN。</p>
         <p>记录操作者：{basis.review.reviewer}；已保存理由：{basis.review.decision_reason}</p>

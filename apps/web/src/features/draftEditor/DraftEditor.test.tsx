@@ -13,9 +13,24 @@ import { editBase, editFixture } from './editFixtures'
 import { editBuffers, editCommands } from './editJournal'
 import { DraftEditor } from './DraftEditor'
 import { codeMirrorTestGeometry, replaceSource, sourceView } from './sourceEditorTestSupport'
+import { canonical, digest } from '../retrieval/retrievalModel'
 codeMirrorTestGeometry()
 afterEach(async () => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); await Promise.all([editBuffers.close(), editCommands.close()]) })
 const block: LoadedBlock = { block_ref: editBase, block: { schema_version: '3.0.0', entity: 'block', id: editBase.id, revision: 1, kind: 'text', title: '合成原块', body_path: 'content/edit-synthetic.md', body_sha256: editFixture().payload.body_sha256, citations: [], concepts: [], depends_on: [] }, body: editFixture().payload.body_markdown, citations: [], unresolved_citation_ids: [], warnings: [], original_source: null }
+test('text editing exposes preserved exact dependencies as read-only while concepts and other kinds stay unsupported', async () => {
+  const workspace = `workspace_${crypto.randomUUID()}`, refs = ['second', 'first'].map(id => ({ entity: 'block' as const, id: `synthetic_${id}`, revision: 1, sha256: 'a'.repeat(64) }))
+  const metadata = { ...block.block, depends_on: refs }, source = { ...block, block: metadata, block_ref: { ...block.block_ref, sha256: digest(canonical(metadata)) } }
+  const port: EditPort = { verifyBase: vi.fn(async () => {}), session: async () => reviewSession(workspace), read: vi.fn(), create: vi.fn(), patch: vi.fn() }
+  const view = render(<DraftEditor workspace={workspace} block={source} port={port} />)
+  fireEvent.click(screen.getByRole('button', { name: '编辑此精确文本块' }))
+  const shown = await screen.findByLabelText('原精确依赖只读记录')
+  expect(JSON.parse(shown.textContent!)).toEqual(refs)
+  expect(shown.tagName).toBe('PRE'); expect(port.create).not.toHaveBeenCalled(); expect(port.patch).not.toHaveBeenCalled()
+  view.rerender(<DraftEditor workspace={workspace} block={{ ...source, block: { ...metadata, concepts: ['synthetic_concept'] } }} port={port} />)
+  expect(screen.queryByRole('button', { name: '编辑此精确文本块' })).toBeNull()
+  view.rerender(<DraftEditor workspace={workspace} block={{ ...source, block: { ...metadata, kind: 'worked_example' } }} port={port} />)
+  expect(screen.queryByRole('button', { name: '编辑此精确文本块' })).toBeNull()
+})
 test('three-way title/body stay visible and each resolution choice plus confirmation is required before a new local baseline', async () => {
   const workspace = `workspace_${crypto.randomUUID()}`, old = editFixture(), server = editFixture(2, '服务端标题', '服务端正文')
   let reading = 0

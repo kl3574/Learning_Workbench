@@ -4,9 +4,27 @@ import { DraftStore } from '../../workbench/DraftStore'
 import { publicationDraft, publicationReceipt, publicationRef, base } from './editPublicationFixtures'
 import { prepareEditBasis } from './editPublicationSchema'
 import { decodeEditPublicationCommand, makeEditPublicationCommand, persistEditPublicationCommand, readEditPublicationCommand, sameEditPublicationActorPage } from './editPublicationCommands'
+import { canonical, digest } from '../retrieval/retrievalModel'
 
 const stores: DraftStore[] = []
 afterEach(async () => { await Promise.all(stores.splice(0).map(value => value.close())) })
+test('existing exact dependency refs and order stay bound to the original base and publication journal', async () => {
+  const refs = ['second', 'first'].map(id => ({ entity: 'block' as const, id: `synthetic_${id}`, revision: 1, sha256: 'a'.repeat(64) }))
+  const source = { ...base, metadata: { ...base.metadata, depends_on: refs } }, snapshot = structuredClone(publicationDraft)
+  snapshot.base_ref.sha256 = digest(canonical(source.metadata)); snapshot.payload.base_ref = snapshot.base_ref
+  snapshot.candidate.candidate_sha256 = digest(canonical(snapshot.payload))
+  const review = { ...publicationReceipt, candidate: snapshot.candidate }
+  const basis = prepareEditBasis(snapshot, source, review), workspace = `workspace_${crypto.randomUUID()}`
+  const command = makeEditPublicationCommand(workspace, 0, basis, [0, 1])
+  const store = new DraftStore({ name: `publication_${crypto.randomUUID()}` }); stores.push(store)
+  await persistEditPublicationCommand(command, store)
+  expect(readEditPublicationCommand((await store.load(workspace))[command.command_id], workspace)).toEqual(command)
+  expect(command.basis.base.metadata.depends_on).toEqual(refs)
+  expect(Object.keys(command.body).sort()).toEqual(['acknowledged_warning_codes', 'expected_content_sha256', 'expected_revision', 'review_receipt_id'])
+  const reordered = { ...source, metadata: { ...source.metadata, depends_on: [...refs].reverse() } }
+  expect(() => prepareEditBasis(snapshot, reordered, review)).toThrow()
+  expect(() => prepareEditBasis(snapshot, { ...source, metadata: { ...source.metadata, concepts: ['synthetic_concept'] } }, review)).toThrow()
+})
 test('original four-field publication command survives IndexedDB reopening and cannot acquire a different request or ACK', async () => {
   const workspace = `workspace_${crypto.randomUUID()}`, name = `publication_${crypto.randomUUID()}`
   const store = new DraftStore({ name }); stores.push(store)
