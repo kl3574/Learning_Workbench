@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import type { DraftCandidate, ContentRestoreDraftSnapshot, EditDraftSnapshot, ImportDraftSnapshot } from '../../../../../packages/contracts/generated/api-types'
+import type { AuthoringDraftView, DraftCandidate, ContentRestoreDraftSnapshot, EditDraftSnapshot, ImportDraftSnapshot } from '../../../../../packages/contracts/generated/api-types'
 import { Dialog } from '../../workbench/Controls'
 import { sameValue, validIdentity } from '../providers/providerSchema'
 import type { ReviewPort } from './reviewClient'
 import { ReviewCreateForm, ReviewDecisionForm, emptyCreateForm, emptyDecisionForm, createFormDirty, decisionFormDirty, type CreateFormValue, type DecisionFormValue } from './ReviewForms'
 import { useReview } from './useReview'
+import { SinglePublicationPanel } from '../singlePublication/SinglePublicationPanel'
+import { pendingSinglePublicationForms, pendingSinglePublicationMemory } from '../singlePublication/singlePublicationMemory'
 import { PublicationPanel } from '../draftPublication/PublicationPanel'
 import { RestorePublicationPanel } from '../contentRestore/RestorePublicationPanel'
 import { EditPublicationPanel } from '../editPublication/EditPublicationPanel'
@@ -12,10 +14,10 @@ import { discardReviewMemory, pendingReviewMemory } from './reviewMemory'
 import './review.css'
 import { discardReviewForms, pendingReviewForms, retainReviewForm, reviewCandidateKey as candidateKey, reviewDecisionKey, reviewFormMemoryVersion, subscribeReviewForms, type ReviewFormOwner, type ReviewPanelState, type VerifiedReviewForm } from './reviewFormMemory'
 
-export function ReviewPanel({ workspace, paused, candidate, candidateState = '未重新读取', importDraft, editDraft, restoreDraft, restoreBlockId, port, onState, formScope, formOwner }: {
+export function ReviewPanel({ workspace, paused, candidate, candidateState = '未重新读取', importDraft, editDraft, restoreDraft, restoreBlockId, singleDraft, onSingleDraftRead, port, onState, formScope, formOwner }: {
   workspace: string; paused: boolean; candidate: DraftCandidate | null; candidateState?: string; port?: ReviewPort
-  formScope?: string; formOwner?: ReviewFormOwner; onState?: (value: ReviewPanelState) => void
-} & ({ importDraft?: ImportDraftSnapshot | null; editDraft?: never; restoreDraft?: never; restoreBlockId?: never } | { editDraft: EditDraftSnapshot | null; importDraft?: never; restoreDraft?: never; restoreBlockId?: never } | { restoreDraft: ContentRestoreDraftSnapshot | null; restoreBlockId: string; editDraft?: never; importDraft?: never })) {
+  onSingleDraftRead?: () => void; formScope?: string; formOwner?: ReviewFormOwner; onState?: (value: ReviewPanelState) => void
+} & ({ singleDraft?: never; importDraft?: ImportDraftSnapshot | null; editDraft?: never; restoreDraft?: never; restoreBlockId?: never } | { singleDraft?: never; editDraft: EditDraftSnapshot | null; importDraft?: never; restoreDraft?: never; restoreBlockId?: never } | { singleDraft?: never; restoreDraft: ContentRestoreDraftSnapshot | null; restoreBlockId: string; editDraft?: never; importDraft?: never } | { singleDraft: AuthoringDraftView | null; importDraft?: never; editDraft?: never; restoreDraft?: never; restoreBlockId?: never })) {
   const owner: ReviewFormOwner = formOwner ?? (importDraft !== undefined ? 'import' : editDraft !== undefined ? 'edit' : restoreDraft !== undefined ? 'restore' : 'authoring_single')
   const scope = formScope ?? owner
   useSyncExternalStore(subscribeReviewForms, reviewFormMemoryVersion, reviewFormMemoryVersion)
@@ -24,12 +26,13 @@ export function ReviewPanel({ workspace, paused, candidate, candidateState = '�
   const state = useReview(workspace, paused, port), [manualId, setManualId] = useState('')
   const [creates, setCreates] = useState<Record<string, CreateFormValue>>({}), [decisions, setDecisions] = useState<Record<string, DecisionFormValue>>({})
   const [confirmRefresh, setConfirmRefresh] = useState(false), [discardMemory, setDiscardMemory] = useState(false)
-  const [publicationState, setPublicationState] = useState({ dirty: false, safe: true })
+  const [publicationState, setPublicationState] = useState<{ dirty: boolean; safe: boolean; discardForms?: () => void }>({ dirty: false, safe: true })
   const callback = useRef(onState); callback.current = onState
+  const publicationDiscard = useRef(publicationState.discardForms); publicationDiscard.current = publicationState.discardForms
   const formCount = Object.values(creates).filter(createFormDirty).length + Object.values(decisions).filter(decisionFormDirty).length
   const dirty = pendingForms || state.pendingMemory || publicationState.dirty || state.academic && (formCount > 0 || state.commands.some(value => !value.ack && !value.rejection))
   const safe = !state.pendingMemory && publicationState.safe && state.controlsReady && !state.busy
-  const discardForms = useCallback(() => { discardReviewForms(workspace, scope); setCreates({}); setDecisions({}); setRecovered([]); setConfirmRefresh(false) }, [workspace, scope])
+  const discardForms = useCallback(() => { publicationDiscard.current?.(); discardReviewForms(workspace, scope); setCreates({}); setDecisions({}); setRecovered([]); setConfirmRefresh(false) }, [workspace, scope])
   useEffect(() => { if (!state.academic) { setCreates({}); setDecisions({}); setRecovered([]); setConfirmRefresh(false) } }, [state.academic])
   useEffect(() => { setCreates({}); setDecisions({}); setRecovered([]); setConfirmRefresh(false) }, [workspace, scope])
   const isolated = pendingForms && !publicationState.dirty && !state.commands.some(value => !value.ack && !value.rejection) && formCount === 0 && recovered.every(row => !sameValue(row.form.candidate, row.currentCandidate) || row.form.kind === 'decision' && !sameValue(row.form.receipt, row.currentReceipt)) && safe
@@ -41,7 +44,12 @@ export function ReviewPanel({ workspace, paused, candidate, candidateState = '�
     return () => window.removeEventListener('beforeunload', protect)
   }, [dirty, safe])
   useEffect(() => { callback.current?.({ dirty, safe, isolated, discardForms }) }, [dirty, safe, isolated, discardForms])
-  useEffect(() => () => callback.current?.({ dirty: pendingReviewForms(workspace, scope) || pendingReviewMemory(workspace) || !latestSafe.current, safe: latestSafe.current && !pendingReviewMemory(workspace), isolated: pendingReviewForms(workspace, scope) && latestSafe.current && !pendingReviewMemory(workspace), discardForms }), [workspace, scope, discardForms])
+  useEffect(() => () => {
+    const publicationHeld = singleDraft !== undefined && (pendingSinglePublicationForms(workspace) || pendingSinglePublicationMemory(workspace))
+    callback.current?.({ dirty: pendingReviewForms(workspace, scope) || pendingReviewMemory(workspace) || publicationHeld || !latestSafe.current,
+      safe: latestSafe.current && !pendingReviewMemory(workspace) && !(singleDraft !== undefined && pendingSinglePublicationMemory(workspace)),
+      isolated: !publicationHeld && pendingReviewForms(workspace, scope) && latestSafe.current && !pendingReviewMemory(workspace), discardForms })
+  }, [workspace, scope, discardForms, singleDraft !== undefined])
   const receipt = state.receipt, job = state.job
   const matches = receipt && candidate && sameValue(receipt.candidate, candidate)
   const createKey = candidate ? candidateKey(candidate) : ''
@@ -107,6 +115,8 @@ export function ReviewPanel({ workspace, paused, candidate, candidateState = '�
       draft={state.academic ? editDraft : null} receipt={receipt} onState={setPublicationState} />}
     {restoreDraft !== undefined && <RestorePublicationPanel blockId={restoreBlockId} workspace={workspace} paused={paused || !state.academic} blocked={state.busy}
       draft={state.academic ? restoreDraft : null} receipt={receipt} onState={setPublicationState} />}
+    {singleDraft !== undefined && <SinglePublicationPanel workspace={workspace} paused={paused || !state.academic} blocked={state.busy}
+      draft={state.academic ? singleDraft : null} receipt={receipt} onState={setPublicationState} onDraftRead={onSingleDraftRead} />}
     <p>未提交的表单保留在当前页面的原会话内存；明确提交时先保存完整原命令。关闭不会自动批准或发布。</p>
   </section>
 }

@@ -200,6 +200,7 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
   }
   const create = async (input: AuthoringCommandInput) => {
     if (!current(input.kind !== 'cancel') || !ready || input.kind !== 'cancel' && !subjectReady || working.current) return
+    if (draft && !('root' in draft) && draft.state === 'published' && (input.kind === 'numeric_preview' || input.kind === 'numeric_decision' && input.body.decision === 'approve_once')) { setError('当前候选已经发布，不能新建数值预览或批准执行。原命令与历史记录仍保留。'); return }
     const pending = commands.find(v => !v.ack && !v.rejection && v.kind === input.kind && (input.kind !== 'cancel' || v.kind === 'cancel' && v.job_id === input.job_id))
     if (pending) { setError('已有未知结果的原命令，请先回放；未创建新 key。'); return }
     try { await execute(makeAuthoringCommand(workspace, input)) } catch (reason) { if (current()) fail(reason) }
