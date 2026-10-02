@@ -4,13 +4,13 @@ import { afterEach, expect, test, vi } from 'vitest'
 import { ApiError, getSessionGeneration, request } from '../../api/client'
 import { reviewSession } from '../draftReview/reviewFixtures'
 import { editBase, editFixture } from './editFixtures'
-import { decodeBuffer, editBuffers, editCommands, readCommand, persistCommand } from './editJournal'
+import { decodeBuffer, editBuffers, editCommands, readCommand, persistCommand, type EditCommand } from './editJournal'
 import type { EditPort } from './editClient'
 import { useDraftEditor } from './useDraftEditor'
 afterEach(async () => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); await Promise.all([editBuffers.close(), editCommands.close()]) })
 function fixture() {
   const workspace = `workspace_${crypto.randomUUID()}`
-  const port: EditPort = { session: vi.fn(async () => reviewSession(workspace)), read: vi.fn(async () => editFixture()),
+  const port: EditPort = { verifyBase: vi.fn(async () => {}), session: vi.fn(async () => reviewSession(workspace)), read: vi.fn(async () => editFixture()),
     create: vi.fn(async () => ({ draft_id: 'draft_edit_synthetic', revision: 1, base_ref: editBase, state: 'draft' as const })),
     patch: vi.fn(async () => ({ draft_id: 'draft_edit_synthetic', revision: 2, validation_warnings: [] })) }
   return { workspace, port }
@@ -106,7 +106,7 @@ test('lost ACK keeps original key and body; same page explicit replay works whil
   await act(() => h.result.current.submit()); const original = h.result.current.commands[0]
   await act(() => h.result.current.submit()); expect(port.patch).toHaveBeenCalledTimes(1)
   await act(() => h.result.current.execute(original)); expect(vi.mocked(port.patch).mock.calls[1]).toEqual(vi.mocked(port.patch).mock.calls[0])
-  const older = { ...original, key: 'editcmd_previous', page: 'page_previous' }
+  const older: EditCommand = { version: 1, workspace, key: 'editcmd_previous', page: 'page_previous', access: original.access, base_ref: original.base_ref, operation: original.operation, ack: null, rejection: null }
   await persistCommand(older)
   await act(() => h.result.current.refresh()); await act(() => h.result.current.execute(older))
   expect(port.patch).toHaveBeenCalledTimes(2); expect(h.result.current.canReplay(older)).toBe(false)
@@ -151,10 +151,13 @@ test('current Policy hides protected buffers and late ACK after access generatio
   vi.mocked(port.session).mockResolvedValue(reviewSession(workspace))
   await act(() => request('POST /api/v1/session/role', { role: 'author' }, { 'Idempotency-Key': 'synthetic_author' }))
   await waitFor(() => expect(h.result.current.ready).toBe(true))
-  expect(h.result.current.canReplay(original)).toBe(false)
+  expect(h.result.current.canReplay(original)).toBe(true)
+  expect(port.patch).toHaveBeenCalledTimes(1) // Restoration never posts automatically.
   await act(() => h.result.current.execute(original))
-  expect(port.patch).toHaveBeenCalledTimes(1)
-  expect(readCommand((await editCommands.load(workspace))[original.key], workspace)).toEqual(original)
+  expect(port.patch).toHaveBeenCalledTimes(2)
+  expect(vi.mocked(port.patch).mock.calls[1]).toEqual(vi.mocked(port.patch).mock.calls[0])
+  expect(vi.mocked(port.read).mock.calls.at(-1)).toEqual(['draft_edit_synthetic', 1])
+  expect(readCommand((await editCommands.load(workspace))[original.key], workspace)).toEqual({ ...original, ack: { draft_id: 'draft_edit_synthetic', revision: 2, validation_warnings: [] } })
 })
 test('published exact drafts are read-only and a denied 412 history read leaves the original command intact', async () => {
   const { workspace, port } = fixture(), h = renderHook(() => useDraftEditor(workspace, editBase, false, port))
@@ -219,7 +222,7 @@ test('pending local save survives component removal but a different session cann
   expect(first.result.current.saving).toBe(true)
   first.unmount()
   await act(async () => { pending.resolve(); await pending.promise })
-  vi.mocked(port.session).mockResolvedValue({ ...reviewSession(workspace), csrf_token: 'synthetic_distinct_session_csrf' })
+  vi.mocked(port.session).mockResolvedValue({ ...reviewSession(workspace), actor_session_id: 'session_distinct', csrf_token: 'synthetic_distinct_session_csrf' })
   const second = renderHook(() => useDraftEditor(workspace, editBase, false, port))
   await waitFor(() => expect(second.result.current.ready).toBe(true))
   expect(second.result.current.pendingMemory).toBe(true); expect(second.result.current.canRecoverMemory).toBe(false)
@@ -252,4 +255,57 @@ test('review entry requires separately read exact saved head and never admits a 
   await waitFor(() => expect(h.result.current.saving).toBe(false)); await act(() => h.result.current.read('draft_edit_synthetic'))
   vi.mocked(port.read).mockResolvedValueOnce(editFixture()).mockResolvedValueOnce(editFixture(2))
   await act(() => h.result.current.selectReview()); expect(h.result.current.reviewSnapshot).toBeNull(); expect(port.patch).not.toHaveBeenCalled()
+})
+
+test.each(['create', 'patch'] as const)('same-actor previous-page %s command waits for current permission and exact material then explicitly replays original', async kind => {
+  const { workspace, port } = fixture(), baseline = editFixture()
+  const operation: EditCommand['operation'] = kind === 'create'
+    ? { kind, body: { kind: 'block', base_ref: editBase, title: '原创建标题' } }
+    : { kind, baseline, local: { title: '原标题', body_markdown: '原正文' }, body: { expected_revision: 1, patches: [{ field: 'title', value: '原标题' }, { field: 'body_markdown', value: '原正文' }] } }
+  const original: EditCommand = { version: 2, workspace_id: workspace, actor_session_id: reviewSession(workspace).actor_session_id,
+    key: `editcmd_${kind}_previous`, route: kind === 'create' ? 'POST /api/v1/drafts' : 'PATCH /api/v1/drafts/draft_edit_synthetic',
+    page: 'page_previous', access: 0, base_ref: editBase, operation, ack: null, rejection: null }
+  await persistCommand(original)
+  const h = renderHook(() => useDraftEditor(workspace, editBase, false, port))
+  await waitFor(() => expect(h.result.current.ready).toBe(true))
+  expect(h.result.current.canReplay(original)).toBe(true)
+  expect(port.create).not.toHaveBeenCalled(); expect(port.patch).not.toHaveBeenCalled()
+  const gate = deferred<ReturnType<typeof reviewSession>>()
+  vi.mocked(port.session).mockReturnValueOnce(gate.promise)
+  let sending!: Promise<void>; act(() => { sending = h.result.current.execute(original) })
+  expect(port.create).not.toHaveBeenCalled(); expect(port.patch).not.toHaveBeenCalled()
+  await act(async () => { gate.resolve(reviewSession(workspace)); await sending })
+  if (kind === 'create') { expect(port.verifyBase).toHaveBeenCalledWith(editBase); expect(port.create).toHaveBeenCalledExactlyOnceWith(operation.body, original.key) }
+  else { expect(port.read).toHaveBeenCalledExactlyOnceWith(baseline.candidate.draft_id, 1); expect(port.patch).toHaveBeenCalledExactlyOnceWith(baseline.candidate.draft_id, operation.body, original.key) }
+  const saved = readCommand((await editCommands.load(workspace))[original.key], workspace)
+  expect({ ...saved, ack: null }).toEqual(original)
+  expect(JSON.stringify(saved)).not.toContain(reviewSession(workspace).csrf_token)
+})
+
+test.each(['different_actor', 'learner', 'independent', 'open_book', 'unknown', 'material_conflict'] as const)('replay admission rejects %s without rewriting original or dispatching mutation', async condition => {
+  const { workspace, port } = fixture(), baseline = editFixture()
+  const original: EditCommand = { version: 2, workspace_id: workspace, actor_session_id: reviewSession(workspace).actor_session_id,
+    key: 'editcmd_admission', route: 'PATCH /api/v1/drafts/draft_edit_synthetic', page: 'page_previous', access: 0,
+    base_ref: editBase, operation: { kind: 'patch', baseline, local: { title: '原标题', body_markdown: '原正文' },
+      body: { expected_revision: 1, patches: [{ field: 'title', value: '原标题' }, { field: 'body_markdown', value: '原正文' }] } }, ack: null, rejection: null }
+  await persistCommand(original)
+  const h = renderHook(() => useDraftEditor(workspace, editBase, false, port))
+  await waitFor(() => expect(h.result.current.ready).toBe(true))
+  const session = reviewSession(workspace)
+  if (condition === 'different_actor') session.actor_session_id = 'session_another_actor'
+  if (condition === 'learner') session.role = 'learner'
+  if (condition === 'independent') session.active_independent_attempt_id = 'attempt_active'
+  if (condition === 'open_book') session.active_open_book_attempt_id = 'attempt_open'
+  if (condition === 'unknown') vi.mocked(port.session).mockRejectedValueOnce(new Error('Session unavailable'))
+  else vi.mocked(port.session).mockResolvedValue(session)
+  if (condition === 'material_conflict') vi.mocked(port.read).mockRejectedValueOnce(new ApiError(409, 'Stored baseline invalid', 'INTEGRITY_CONFLICT'))
+  await act(() => h.result.current.execute(original))
+  expect(port.patch).not.toHaveBeenCalled(); expect(port.create).not.toHaveBeenCalled()
+  expect(readCommand((await editCommands.load(workspace))[original.key], workspace)).toEqual(original)
+  if (condition !== 'material_conflict') { expect(h.result.current.ready).toBe(false); expect(h.result.current.commands).toEqual([]) }
+  if (condition === 'different_actor') {
+    await act(() => h.result.current.refresh())
+    expect(h.result.current.ready).toBe(true); expect(h.result.current.canReplay(original)).toBe(false)
+    await act(() => h.result.current.execute(original)); expect(port.patch).not.toHaveBeenCalled()
+  }
 })

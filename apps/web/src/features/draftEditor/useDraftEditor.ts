@@ -4,7 +4,7 @@ import { ApiError, getSessionGeneration, subscribeSessionAccess } from '../../ap
 import { sameValue, validIdentity } from '../providers/providerSchema'
 import { editClient, type EditPort } from './editClient'
 import { checkedEdit, editSnapshot, editText, snapshotText, type EditText } from './editSchema'
-import { decodeBuffer, decodeCommand, editBuffers, editCommands, editPage, patchBody, persistCommand, readCommand, type EditBuffer, type EditCommand } from './editJournal'
+import { decodeBuffer, decodeCommand, editBuffers, editCommands, editPage, editRoute, patchBody, persistCommand, readCommand, type EditBuffer, type EditCommand } from './editJournal'
 import { discardEditMemory, editMemoryVersion, pendingEditMemory, recoverableEditMemory, releaseEditMemory, retainEditMemory, subscribeEditMemory } from './editMemory'
 
 type Conflict = { command: EditCommand; base: EditDraftSnapshot; server: EditDraftSnapshot; local: EditText }
@@ -19,13 +19,13 @@ export function useDraftEditor(workspace: string, baseRef: ContentRef, paused: b
   const [commands, setCommands] = useState<EditCommand[]>([]), [buffers, setBuffers] = useState<EditBuffer[]>([]), [buffer, setBuffer] = useState<EditBuffer | null>(null)
   const [saving, setSaving] = useState(false), [storageFailed, setStorageFailed] = useState(false), [conflict, setConflict] = useState<Conflict | null>(null)
   const [reviewSnapshot, setReviewSnapshot] = useState<EditDraftSnapshot | null>(null)
-  const memorySession = useRef('')
+  const memorySession = useRef(''), actorSession = useRef('')
   const pendingMemory = pendingEditMemory(workspace, baseRef)
   const ready = renderOwner === owner && allowed && !paused
   admitted.current = ready
   const current = (subject = true) => live.current && scope.current.owner === owner && getSessionGeneration() === access && (!subject || admitted.current && !scope.current.paused)
   const retain = () => { if (work.current && !localDurable.current && memorySession.current) retainEditMemory(work.current, memorySession.current) }
-  const clear = () => { retain(); admitted.current = false; setAllowed(false); setBuffer(null); work.current = null; memorySession.current = ''; setBuffers([]); setCommands([]); setConflict(null); setReviewSnapshot(null); abort.current.abort() }
+  const clear = () => { retain(); admitted.current = false; setAllowed(false); setBuffer(null); work.current = null; memorySession.current = ''; actorSession.current = ''; setBuffers([]); setCommands([]); setConflict(null); setReviewSnapshot(null); abort.current.abort() }
   const fail = (e: unknown) => {
     if (denied(e)) clear()
     setError(denied(e) ? '当前权限或测试策略不允许编辑，正文已收起，本机原记录保留。'
@@ -46,7 +46,7 @@ export function useDraftEditor(workspace: string, baseRef: ContentRef, paused: b
       if (session.workspace_id !== workspace) throw new Error('Workspace changed')
       const can = session.role === 'author' && !session.active_independent_attempt_id && !session.active_open_book_attempt_id && !scope.current.paused
       const [cs, bs] = can ? await Promise.all([loadCommands(), loadBuffers()]) : [[], []]
-      if (valid(token, false)) { memorySession.current = can ? session.csrf_token : ''; setAllowed(can); setCommands(cs); setBuffers(bs) }
+      if (valid(token, false)) { memorySession.current = can ? session.csrf_token : ''; actorSession.current = can ? session.actor_session_id : ''; setAllowed(can); setCommands(cs); setBuffers(bs) }
     } catch (e) { if (valid(token, false)) fail(e) } finally { finish(token) }
   }
   useEffect(() => {
@@ -126,15 +126,37 @@ export function useDraftEditor(workspace: string, baseRef: ContentRef, paused: b
     setConflict(null)
     try { await loadConflict(command, token) } catch (e) { if (valid(token, false)) fail(e) } finally { finish(token) }
   }
+  const belongs = (command: EditCommand) => sameValue(command.base_ref, baseRef) && (command.version === 2
+    ? command.workspace_id === workspace && command.actor_session_id === actorSession.current
+    : command.workspace === workspace && command.page === editPage && command.access === access)
   const execute = async (command: EditCommand) => {
-    if (!current() || command.page !== editPage || command.access !== access) { if (current()) setError('旧页面或旧权限代次的原命令只读保留，不能冒充原操作者回放。'); return }
+    if (!current() || !belongs(command)) { if (current()) setError('原操作者或旧格式的页面绑定无法确认，此命令只读保留。'); return }
     const token = begin(); if (token === null) return
+    let sent = false
     try {
+      let session: SessionResponse
+      try { session = checkedEdit('SessionResponse', await port.session()) }
+      catch (e) { if (valid(token, false)) clear(); throw e }
+      if (!valid(token)) return
+      if (session.workspace_id !== workspace || session.actor_session_id !== actorSession.current || session.role !== 'author'
+          || session.active_independent_attempt_id || session.active_open_book_attempt_id) throw new ApiError(403, 'Current actor or Policy changed', 'POLICY_DENIED')
+      if (command.version === 2 && (command.page !== editPage || command.access !== access) && command.operation.kind === 'patch') {
+        const baseline = command.operation.baseline
+        const exact = editSnapshot(await port.read(baseline.candidate.draft_id, baseline.candidate.draft_revision), baseRef,
+          baseline.candidate.draft_id, baseline.candidate.draft_revision)
+        if (!sameValue(exact.candidate, baseline.candidate) || !sameValue(exact.payload, baseline.payload)) throw new Error('Original baseline changed')
+        if (!valid(token)) return
+      }
+      if (command.version === 2 && (command.page !== editPage || command.access !== access) && command.operation.kind === 'create') {
+        await port.verifyBase(command.base_ref)
+        if (!valid(token)) return
+      }
       const original = await persistCommand(command, guard())
       if (!valid(token)) return
       const loadedCommands = await loadCommands(); if (valid(token)) setCommands(loadedCommands)
       if (!valid(token)) return
       const o = original.operation
+      sent = true
       const ack = o.kind === 'create' ? await port.create(o.body, original.key) : await port.patch(o.baseline.candidate.draft_id, o.body, original.key)
       if (!valid(token)) return
       const confirmed = decodeCommand(JSON.stringify({ ...original, ack, rejection: null }), workspace)
@@ -142,17 +164,17 @@ export function useDraftEditor(workspace: string, baseRef: ContentRef, paused: b
       if (valid(token)) { const loadedCommands = await loadCommands(); if (valid(token)) { setCommands(loadedCommands); setError('原命令 ACK 已保存；另行读取草稿头后再编辑，不把原 ACK 当作当前状态。') } }
     } catch (e) {
       if (valid(token, false)) {
-        if (!command.ack && !denied(e) && e instanceof ApiError && [400, 409, 412, 422].includes(e.status)) {
+        if (sent && !command.ack && !denied(e) && e instanceof ApiError && [400, 409, 412, 422].includes(e.status)) {
           try { await persistCommand({ ...command, rejection: e.status }, guard()); if (valid(token)) { const loadedCommands = await loadCommands(); if (valid(token)) setCommands(loadedCommands) } } catch { /* Originals remain. */ }
         }
         if (valid(token, false)) fail(e)
-        if (valid(token) && e instanceof ApiError && e.status === 412 && command.operation.kind === 'patch') {
+        if (sent && valid(token) && e instanceof ApiError && e.status === 412 && command.operation.kind === 'patch') {
           try { await loadConflict(command, token) } catch (readError) { if (valid(token, false)) fail(readError) }
         }
       }
     } finally { finish(token) }
   }
-  const make = (operation: EditCommand['operation']): EditCommand => decodeCommand(JSON.stringify({ version: 1, workspace, key: `editcmd_${crypto.randomUUID()}`, page: editPage, access, base_ref: baseRef, operation, ack: null, rejection: null }), workspace)
+  const make = (operation: EditCommand['operation']): EditCommand => decodeCommand(JSON.stringify({ version: 2, workspace_id: workspace, actor_session_id: actorSession.current, key: `editcmd_${crypto.randomUUID()}`, route: editRoute(operation), page: editPage, access, base_ref: baseRef, operation, ack: null, rejection: null }), workspace)
   const create = async (title: string) => {
     if (!current() || working.current) return
     const captured = sequence.current
@@ -208,5 +230,5 @@ export function useDraftEditor(workspace: string, baseRef: ContentRef, paused: b
     error: renderOwner === owner ? error : '', buffer: ready ? buffer : null, buffers: ready ? buffers : [], commands: ready ? commands : [], conflict: ready ? conflict : null, dirty: ready && dirty,
     refresh, read, restore, update, create, submit, execute, readConflict, resolve, selectReview, reviewSnapshot: ready ? reviewSnapshot : null,
     retrySave: () => work.current && saveBuffer(work.current).catch(() => {}),
-    canReplay: (c: EditCommand) => ready && c.page === editPage && c.access === access }
+    canReplay: (c: EditCommand) => ready && belongs(c) }
 }

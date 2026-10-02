@@ -19,7 +19,7 @@ const block: LoadedBlock = { block_ref: editBase, block: { schema_version: '3.0.
 test('three-way title/body stay visible and each resolution choice plus confirmation is required before a new local baseline', async () => {
   const workspace = `workspace_${crypto.randomUUID()}`, old = editFixture(), server = editFixture(2, '服务端标题', '服务端正文')
   let reading = 0
-  const port: EditPort = { session: async () => reviewSession(workspace), read: vi.fn(async (_id, revision) => ++reading === 1 || revision === 1 ? old : server), create: vi.fn(), patch: vi.fn(async () => { throw new ApiError(412, 'Changed') }) }
+  const port: EditPort = { verifyBase: vi.fn(async () => {}), session: async () => reviewSession(workspace), read: vi.fn(async (_id, revision) => ++reading === 1 || revision === 1 ? old : server), create: vi.fn(), patch: vi.fn(async () => { throw new ApiError(412, 'Changed') }) }
   render(<DraftEditor workspace={workspace} block={block} port={port} />)
   fireEvent.click(screen.getByRole('button', { name: '编辑此精确文本块' }))
   await waitFor(() => expect((screen.getByRole('button', { name: '从此准确修订明确创建编辑稿' }) as HTMLButtonElement).disabled).toBe(false))
@@ -55,7 +55,7 @@ test('an external open-book policy poll hides an already open editor without an 
   const workspace = `workspace_${crypto.randomUUID()}`
   let session = reviewSession(workspace)
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(session))))
-  const port: EditPort = { session: async () => reviewSession(workspace), read: vi.fn(async () => editFixture()), create: vi.fn(), patch: vi.fn() }
+  const port: EditPort = { verifyBase: vi.fn(async () => {}), session: async () => reviewSession(workspace), read: vi.fn(async () => editFixture()), create: vi.fn(), patch: vi.fn() }
   const Controlled: ComponentType<ComponentProps<typeof DraftEditor> & { paused: boolean }> = DraftEditor
   function Harness() {
     const policy = useWorkspacePolicy(workspace)
@@ -74,7 +74,7 @@ test('an external open-book policy poll hides an already open editor without an 
 
 test('memory retention permits control navigation but keeps the exact tab close-unsafe after panel removal', async () => {
   const workspace = `workspace_${crypto.randomUUID()}`, onState = vi.fn()
-  const port: EditPort = { session: async () => reviewSession(workspace), read: vi.fn(async () => editFixture()), create: vi.fn(), patch: vi.fn() }
+  const port: EditPort = { verifyBase: vi.fn(async () => {}), session: async () => reviewSession(workspace), read: vi.fn(async () => editFixture()), create: vi.fn(), patch: vi.fn() }
   const view = render(<DraftEditor workspace={workspace} block={block} port={port} onState={onState} />)
   fireEvent.click(screen.getByRole('button', { name: '编辑此精确文本块' }))
   await screen.findByRole('button', { name: '从此准确修订明确创建编辑稿' })
@@ -99,7 +99,7 @@ test('memory retention permits control navigation but keeps the exact tab close-
 test('a different session may explicitly discard isolated memory without seeing it or deleting saved records', async () => {
   const workspace = `workspace_${crypto.randomUUID()}`
   let session = reviewSession(workspace)
-  const port: EditPort = { session: async () => session, read: vi.fn(async () => editFixture()), create: vi.fn(), patch: vi.fn() }
+  const port: EditPort = { verifyBase: vi.fn(async () => {}), session: async () => session, read: vi.fn(async () => editFixture()), create: vi.fn(), patch: vi.fn() }
   const view = render(<DraftEditor workspace={workspace} block={block} port={port} />)
   fireEvent.click(screen.getByRole('button', { name: '编辑此精确文本块' })); await screen.findByLabelText('读取已有编辑稿 ID')
   fireEvent.change(screen.getByLabelText('读取已有编辑稿 ID'), { target: { value: 'draft_edit_synthetic' } })
@@ -128,7 +128,7 @@ test('real Review dirty and unsafe states fence CM input and existing undo histo
   const workspace = `workspace_${crypto.randomUUID()}`, saved = editFixture(), session = reviewSession(workspace)
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(session))))
   const reviewSessionRead = vi.spyOn(reviewClient, 'session').mockResolvedValue(session)
-  const port: EditPort = { session: async () => session, read: vi.fn(async () => saved), create: vi.fn(), patch: vi.fn() }
+  const port: EditPort = { verifyBase: vi.fn(async () => {}), session: async () => session, read: vi.fn(async () => saved), create: vi.fn(), patch: vi.fn() }
   render(<DraftEditor workspace={workspace} block={block} port={port} />)
   fireEvent.click(screen.getByRole('button', { name: '编辑此精确文本块' }))
   await screen.findByLabelText('读取已有编辑稿 ID')

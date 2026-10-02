@@ -9,7 +9,7 @@ import type { LoadedBlock } from '../contentClient'
 const workspace = 'workspace_compare'
 function api(): ComparePort {
   return {
-    session: vi.fn(async () => ({ workspace_id: workspace, role: 'learner' as const, csrf_token: 'synthetic-comparison-csrf', active_independent_attempt_id: null, active_open_book_attempt_id: null })),
+    session: vi.fn(async () => ({ workspace_id: workspace, actor_session_id: 'session_fixture_BlockVersionCompare_test', role: 'learner' as const, csrf_token: 'synthetic-comparison-csrf', active_independent_attempt_id: null, active_open_book_attempt_id: null })),
     history: vi.fn(async () => ({ items: [...versions].reverse().map(value => ({ ref: value.ref, created_at: '2026-09-28T00:00:00Z', review_state: 'unreviewed' as const, lifecycle: 'active' as const })), next_cursor: null })),
     block: vi.fn(async ref => { const value = versions.find(item => item.ref.sha256 === ref.sha256); if (!value) throw new Error('Unknown synthetic ref'); return { ...value.data, body: value.body } }),
   }
@@ -77,7 +77,7 @@ test('current Policy is checked after body completion even without a local acces
   render(<BlockVersionCompare workspace={workspace} blockRef={versions[0].ref} port={port} />)
   await selectBoth(); fireEvent.click(screen.getByRole('button', { name: '读取所选两个修订' }))
   await waitFor(() => expect(port.block).toHaveBeenCalledTimes(2))
-  vi.mocked(port.session).mockResolvedValue({ workspace_id: workspace, role: 'learner', csrf_token: 'synthetic-csrf', active_independent_attempt_id: 'attempt_active', active_open_book_attempt_id: null })
+  vi.mocked(port.session).mockResolvedValue({ workspace_id: workspace, actor_session_id: 'session_fixture_BlockVersionCompare_test', role: 'learner', csrf_token: 'synthetic-csrf', active_independent_attempt_id: 'attempt_active', active_open_book_attempt_id: null })
   await act(async () => pending.resolve({ ...versions[0].data, body: versions[0].body }))
   expect(await screen.findByRole('alert')).toHaveProperty('textContent', '当前工作区或测试策略不允许读取比较内容。')
   expect(screen.queryByLabelText('左侧完整原文')).toBeNull()
@@ -96,12 +96,12 @@ test('failed reads retain exact choices for an explicit retry, without selecting
 
 test('a role change outside this page cannot retain the old role-dependent provenance projection', async () => {
   const port = api(), pending = deferred<LoadedBlock>(), read = port.block
-  vi.mocked(port.session).mockResolvedValue({ workspace_id: workspace, role: 'author', csrf_token: 'synthetic-csrf', active_independent_attempt_id: null, active_open_book_attempt_id: null })
+  vi.mocked(port.session).mockResolvedValue({ workspace_id: workspace, actor_session_id: 'session_fixture_BlockVersionCompare_test', role: 'author', csrf_token: 'synthetic-csrf', active_independent_attempt_id: null, active_open_book_attempt_id: null })
   port.block = vi.fn(ref => ref.revision === 1 ? pending.promise : read(ref))
   render(<BlockVersionCompare workspace={workspace} blockRef={versions[0].ref} port={port} />)
   await selectBoth(); fireEvent.click(screen.getByRole('button', { name: '读取所选两个修订' }))
   await waitFor(() => expect(port.block).toHaveBeenCalledTimes(2))
-  vi.mocked(port.session).mockResolvedValue({ workspace_id: workspace, role: 'learner', csrf_token: 'synthetic-csrf', active_independent_attempt_id: null, active_open_book_attempt_id: null })
+  vi.mocked(port.session).mockResolvedValue({ workspace_id: workspace, actor_session_id: 'session_fixture_BlockVersionCompare_test', role: 'learner', csrf_token: 'synthetic-csrf', active_independent_attempt_id: null, active_open_book_attempt_id: null })
   await act(async () => pending.resolve({ ...versions[0].data, body: versions[0].body }))
   expect(screen.queryByLabelText('左侧完整原文')).toBeNull()
   expect(screen.getByRole('alert').textContent).toContain('读取期间权限发生变化')
@@ -111,6 +111,6 @@ test('already displayed bodies are cleared when a later current Policy read dete
   const port = api(); render(<BlockVersionCompare workspace={workspace} blockRef={versions[0].ref} port={port} />)
   await selectBoth(); fireEvent.click(screen.getByRole('button', { name: '读取所选两个修订' }))
   await screen.findByLabelText('左侧完整原文')
-  vi.mocked(port.session).mockResolvedValue({ workspace_id: workspace, role: 'learner', csrf_token: 'synthetic-csrf', active_independent_attempt_id: 'attempt_other_profile', active_open_book_attempt_id: null })
+  vi.mocked(port.session).mockResolvedValue({ workspace_id: workspace, actor_session_id: 'session_fixture_BlockVersionCompare_test', role: 'learner', csrf_token: 'synthetic-csrf', active_independent_attempt_id: 'attempt_other_profile', active_open_book_attempt_id: null })
   await waitFor(() => expect(screen.queryByLabelText('左侧完整原文')).toBeNull(), { timeout: 2500 })
 })

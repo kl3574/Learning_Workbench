@@ -8,7 +8,7 @@ afterEach(cleanup)
 const job = (workspace: string): JobSnapshot => ({ id: 'job_safe_authoring', workspace_id: workspace, kind: 'authoring_numeric_check', status: 'running', revision: 4, created_at: '2026-09-16T00:00:00Z', updated_at: '2026-09-16T00:00:01Z', progress: { completed: 0, total: null, label: '本机任务执行中' }, result_refs: [], warnings: [], error: null })
 function fixture() {
   const workspace = `workspace_${crypto.randomUUID()}`, value = job(workspace)
-  const session: SessionResponse = { workspace_id: workspace, role: 'learner', csrf_token: 'synthetic-no-network-token', active_independent_attempt_id: null, active_open_book_attempt_id: null }
+  const session: SessionResponse = { workspace_id: workspace, actor_session_id: 'session_fixture_useAuthoring_test', role: 'learner', csrf_token: 'synthetic-no-network-token', active_independent_attempt_id: null, active_open_book_attempt_id: null }
   const unavailable = vi.fn(async (): Promise<never> => { throw new Error('Unexpected academic request') })
   const port: AuthoringPort = { session: vi.fn(async () => session), list: vi.fn(async () => ({ items: [value], next_cursor: null })), job: vi.fn(async () => value), cancel: vi.fn(async (): Promise<JobSnapshot> => ({ ...value, status: 'cancelled', revision: 5 })), prepare: unavailable, read: unavailable, draft: unavailable, preview: unavailable, numeric: unavailable, decide: unavailable }
   return { workspace, value, session, port }

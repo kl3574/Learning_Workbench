@@ -1,5 +1,5 @@
-// Generated from PRODUCT_DESIGN.md v3.0.9 and real registered contracts; do not edit.
-// spec_sha256: a6832a01966e72e5b9f63ee283ae300119446c38bcccd91beee508331ba57a98
+// Generated from PRODUCT_DESIGN.md v3.0.11 and real registered contracts; do not edit.
+// spec_sha256: 35018183fbd6d7253001e71b2c932eb10410813ed81625936a667a6be71d0c29
 import type { RetrievalApplicationDTOMap, ContentRetrievalDTOMap } from "../module-ports";
 import type * as Api from "./api-types";
 import type * as Content from "./retrieval-content-types";

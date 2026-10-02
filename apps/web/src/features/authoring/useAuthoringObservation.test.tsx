@@ -19,7 +19,7 @@ function fixture() {
   vi.stubGlobal('__authoringObservationEnabled', true)
   vi.stubGlobal('__authoringDiagnosticMechanism', (batch: Observation[]) => { records.push(...batch) })
   const job: JobSnapshot = { id: 'authoring_observed', workspace_id: workspace, kind: 'authoring', status: 'awaiting_approval', revision: 1, created_at: '2026-09-28T00:00:00Z', updated_at: '2026-09-28T00:00:00Z', progress: { completed: 0, total: null, label: '等待明确授权' }, result_refs: [], warnings: [], error: null }
-  const session: SessionResponse = { workspace_id: workspace, role: 'author', csrf_token: 'SYNTHETIC_PRIVATE_CSRF_NOT_OBSERVED', active_independent_attempt_id: null, active_open_book_attempt_id: null }
+  const session: SessionResponse = { workspace_id: workspace, actor_session_id: 'session_fixture_useAuthoringObservation_test', role: 'author', csrf_token: 'SYNTHETIC_PRIVATE_CSRF_NOT_OBSERVED', active_independent_attempt_id: null, active_open_book_attempt_id: null }
   const body: AuthoringGroupPrepareWrite = { output_kind: 'practice_set', topic: 'SYNTHETIC_PRIVATE_TOPIC_NOT_OBSERVED', prerequisites: [], objectives: ['合成观察'], proof_policy: 'full', provider_id: 'provider_synthetic', source_refs: [], target_concept_refs: [{ entity: 'concept', id: 'concept_synthetic', revision: 1, sha256: 'a'.repeat(64) }], lesson_ref: { entity: 'lesson', id: 'lesson_synthetic', revision: 1, sha256: 'b'.repeat(64) } }
   const unavailable = vi.fn(async (): Promise<never> => { throw new Error('Unexpected operation') })
   const prepare = vi.fn<NonNullable<AuthoringPort['groups']>['prepare']>().mockRejectedValueOnce(new Error('SYNTHETIC_PRIVATE_LOST_ACK')).mockResolvedValue({ id: job.id, status: job.status })

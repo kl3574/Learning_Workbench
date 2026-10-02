@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { expect, test, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
-import type { DraftCreated, DraftPatched, DraftPatchWrite, EditDraftSnapshot } from '../../packages/contracts/generated/api-types'
+import type { DraftCreated, DraftPatched, DraftPatchWrite, EditDraftSnapshot, SessionResponse } from '../../packages/contracts/generated/api-types'
 import { RestartRuntime } from './restartRuntime'
 import { importReaderPackage, type ReaderPackage } from './readerTestData'
 
@@ -63,10 +63,26 @@ test('real editor retains IndexedDB originals through competing tabs, 412 resolu
     await imported.dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
     const href = `${runtime.origin}/?reader=${encodeURIComponent(JSON.stringify({ course: fixture.course, lesson: fixture.lessons[0], block: fixture.blocks[0], view: 'lesson' }))}`
     await open(a, href)
-    const creating = a.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/api/v1/drafts'))
+    const originalSession = await a.request.get('/api/v1/session').then(r => r.json()) as SessionResponse
+    let createOriginal: { key: string; body: unknown; ack: DraftCreated } | undefined
+    await a.route('**/api/v1/drafts', async route => {
+      if (route.request().method() !== 'POST') return route.continue()
+      const actual = await route.fetch(); expect(actual.status()).toBe(201)
+      createOriginal = { key: route.request().headers()['idempotency-key'], body: route.request().postDataJSON(), ack: await actual.json() }
+      await route.abort('failed')
+    })
     await panel(a).getByRole('button', { name: '从此准确修订明确创建编辑稿', exact: true }).click()
+    await expect.poll(() => !!createOriginal).toBe(true)
+    await expect(panel(a).getByText(/结果未知，完整原命令保留/)).toBeVisible()
+    await a.unroute('**/api/v1/drafts'); await open(a, href)
+    await expect(panel(a).getByText(/结果未知，完整原命令保留/)).toBeVisible()
+    const creating = a.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/api/v1/drafts'))
+    await panel(a).getByRole('button', { name: `显式回放原编辑命令 ${createOriginal!.key}`, exact: true }).click()
     const createdResponse = await creating; expect(createdResponse.status()).toBe(201)
+    expect(createdResponse.request().headers()['idempotency-key']).toBe(createOriginal!.key)
+    expect(createdResponse.request().postDataJSON()).toEqual(createOriginal!.body)
     const created: DraftCreated = await createdResponse.json(), id = created.draft_id
+    expect(created).toEqual(createOriginal!.ack)
     await read(a, id)
     const b = await context.newPage(); await open(b, href); await read(b, id)
     for (const p of [a, b]) { p.on('pageerror', e => errors.push(e.message)); p.on('request', r => { const path = new URL(r.url()).pathname; if (r.method() === 'PATCH' && path === `/api/v1/drafts/${id}`) writes.push({ method: r.method(), path, body: r.postDataJSON() }) }) }
@@ -86,10 +102,25 @@ test('real editor retains IndexedDB originals through competing tabs, 412 resolu
       await b.screenshot({ path: info.outputPath(`codemirror-source-${width}.png`) })
     }
     await b.setViewportSize({ width: 1440, height: 900 })
-    const savingA = a.waitForResponse(r => r.request().method() === 'PATCH' && r.url().endsWith(`/api/v1/drafts/${id}`))
-    await submit(a).click(); expect((await savingA).status()).toBe(200)
+    // Persist B's original command but prevent it from reaching the API.
+    let unexecutedKey = ''
+    await b.route(`**/api/v1/drafts/${id}`, async route => {
+      unexecutedKey = route.request().headers()['idempotency-key']; await route.abort('failed')
+    })
+    await submit(b).click(); await expect.poll(() => !!unexecutedKey).toBe(true)
+    await expect(panel(b).getByText(/结果未知，完整原命令保留/)).toBeVisible()
+    await b.unroute(`**/api/v1/drafts/${id}`)
+    // A distinct HTTP client can advance the shared server head while the UI
+    // correctly refuses a new command in the presence of an unknown journal.
+    const competingBody: DraftPatchWrite = { expected_revision: 1, patches: [{ field: 'title', value: '甲标签服务器新标题' }, { field: 'body_markdown', value: '甲标签服务器新正文\n' }] }
+    const savingA = await a.request.patch(`/api/v1/drafts/${id}`, { data: competingBody, headers: { Origin: runtime.origin, 'X-CSRF-Token': originalSession.csrf_token, 'Idempotency-Key': 'native_competing_client' } })
+    expect(savingA.status()).toBe(200)
+    writes.push({ method: 'PATCH', path: `/api/v1/drafts/${id}`, body: competingBody })
+    await open(b, href)
     const savingB = b.waitForResponse(r => r.request().method() === 'PATCH' && r.url().endsWith(`/api/v1/drafts/${id}`))
-    await submit(b).click(); expect((await savingB).status()).toBe(412)
+    await panel(b).getByRole('button', { name: `显式回放原编辑命令 ${unexecutedKey}`, exact: true }).click()
+    const stale = await savingB; expect(stale.status()).toBe(412)
+    expect(stale.request().postDataJSON().expected_revision).toBe(1)
     let conflict = panel(b).getByRole('region', { name: '三方冲突恢复', exact: true })
     await expect(conflict.getByLabel('基准标题', { exact: true })).toHaveValue('原创合成编辑标题')
     await expect(conflict.getByLabel('本地待同步正文', { exact: true })).toHaveValue(localBody)
@@ -116,35 +147,44 @@ test('real editor retains IndexedDB originals through competing tabs, 412 resolu
     const resolveButton = conflict.getByRole('button', { name: '保存解决结果到本机，暂不提交', exact: true })
     await expect(resolveButton).toBeDisabled()
     await conflict.getByRole('checkbox').check(); await resolveButton.click()
-    await expect(conflict).toHaveCount(0); expect(writes).toHaveLength(2)
+    await expect(conflict).toHaveCount(0); expect(writes).toHaveLength(3)
     const resolving = b.waitForResponse(r => r.request().method() === 'PATCH' && r.url().endsWith(`/api/v1/drafts/${id}`))
     await submit(b).click(); const resolved = await resolving; expect(resolved.status()).toBe(200); expect((await resolved.json() as DraftPatched).revision).toBe(3)
     const current = await b.request.get(`/api/v1/draft-edits/${id}`).then(r => r.json()) as EditDraftSnapshot
     expect(current.candidate.draft_revision).toBe(3); expect(current.payload.title).toBe('甲标签服务器新标题'); expect(current.payload.body_markdown).toBe(localBody)
-    expect((writes[2].body as DraftPatchWrite).expected_revision).toBe(2)
+    expect((writes[3].body as DraftPatchWrite).expected_revision).toBe(2)
     await read(b, id)
     await panel(b).getByLabel('本机正文', { exact: true }).press('ControlOrMeta+z')
     await expect.poll(() => visibleSource(b)).toBe(localBody)
     await expect(submit(b)).toBeDisabled()
     await change(b, '丢失 ACK 的原命令标题', '保留原 key 的正文\n')
-    const lostCommands: { key: string; body: DraftPatchWrite }[] = []; let dropped = false
+    const lostCommands: { key: string; body: DraftPatchWrite }[] = []; let dropped = false, lostAck: DraftPatched | undefined
     await b.route(`**/api/v1/drafts/${id}`, async route => {
       if (route.request().method() !== 'PATCH') return route.continue()
       lostCommands.push({ key: route.request().headers()['idempotency-key'], body: route.request().postDataJSON() })
-      if (lostCommands.length === 1) { const actual = await route.fetch(); expect(actual.status()).toBe(200); expect((await actual.json()).revision).toBe(4); await route.abort('failed'); dropped = true }
+      if (lostCommands.length === 1) { const actual = await route.fetch(); expect(actual.status()).toBe(200); lostAck = await actual.json(); expect(lostAck!.revision).toBe(4); await route.abort('failed'); dropped = true }
       else await route.continue()
     })
     await submit(b).click(); await expect.poll(() => dropped).toBe(true)
     await expect(panel(b).getByText(/结果未知，完整原命令保留/)).toBeVisible()
-    const replay = b.waitForResponse(r => r.request().method() === 'PATCH' && r.url().endsWith(`/api/v1/drafts/${id}`))
-    await panel(b).getByRole('button', { name: `显式回放原编辑命令 ${lostCommands[0].key}`, exact: true }).click()
-    expect((await replay).status()).toBe(200); expect(lostCommands).toHaveLength(2); expect(lostCommands[1]).toEqual(lostCommands[0])
-    await expect(panel(b).getByText(new RegExp(`历史 ACK：草稿 ${id} r4`))).toBeVisible()
+    await b.unroute(`**/api/v1/drafts/${id}`)
+    await open(b, href)
+    await expect(panel(b).getByRole('button', { name: `显式回放原编辑命令 ${lostCommands[0].key}`, exact: true })).toBeEnabled()
+    expect(lostCommands).toHaveLength(1) // Reload performed no POST/PATCH.
     const database = runtime.databaseIdentity()
     await runtime.closeBrowser(); await runtime.restartApiAfterBrowserClosed()
     const restored = await runtime.openBrowser(playwright.chromium), page = restored.pages()[0]
     await open(page, href)
-    await expect(panel(page).getByRole('button', { name: `显式回放原编辑命令 ${lostCommands[0].key}`, exact: true })).toBeDisabled()
+    expect((await page.request.get('/api/v1/session').then(r => r.json())).actor_session_id).toBe(originalSession.actor_session_id)
+    const replayButton = panel(page).getByRole('button', { name: `显式回放原编辑命令 ${lostCommands[0].key}`, exact: true })
+    await expect(replayButton).toBeEnabled()
+    await expect(panel(page).getByText(/结果未知，完整原命令保留/)).toBeVisible()
+    const replay = page.waitForResponse(r => r.request().method() === 'PATCH' && r.url().endsWith(`/api/v1/drafts/${id}`))
+    await replayButton.click(); const replayResponse = await replay
+    expect(replayResponse.status()).toBe(200); expect(await replayResponse.json()).toEqual(lostAck)
+    lostCommands.push({ key: replayResponse.request().headers()['idempotency-key'], body: replayResponse.request().postDataJSON() })
+    expect(lostCommands).toHaveLength(2); expect(lostCommands[1]).toEqual(lostCommands[0])
+    await expect(panel(page).getByText(new RegExp(`历史 ACK：草稿 ${id} r4`))).toBeVisible()
     await read(page, id); await expect(panel(page).getByLabel('本机标题', { exact: true })).toHaveValue('丢失 ACK 的原命令标题')
     expect(runtime.databaseIdentity()).toEqual(database)
     const history = await page.request.get(`/api/v1/draft-edits/${id}?revision=1`); expect(history.status()).toBe(200); expect((await history.json()).payload.title).toBe('原创合成编辑标题')
@@ -185,12 +225,46 @@ test('real editor retains IndexedDB originals through competing tabs, 412 resolu
     await expect.poll(() => visibleSource(page)).toBe(memoryBody)
     await expect(panel(page).getByText('本机工作副本已保存；不代表已同步到服务端。', { exact: true })).toBeVisible()
     expect((await page.request.get(`/api/v1/draft-edits/${id}`).then(r => r.json())).candidate.draft_revision).toBe(4)
+    const journal = await page.evaluate(async () => {
+      const db = await new Promise<IDBDatabase>((yes, no) => { const r = indexedDB.open('learning-workbench.edit-commands.v1', 1); r.onsuccess = () => yes(r.result); r.onerror = () => no(r.error) })
+      try { return await new Promise<string[]>((yes, no) => { const r = db.transaction('drafts', 'readonly').objectStore('drafts').getAll(); r.onsuccess = () => yes(r.result.map((x: { text: string }) => x.text)); r.onerror = () => no(r.error) }) } finally { db.close() }
+    })
+    expect(journal.every(raw => { const c = JSON.parse(raw); return c.version === 2 && c.actor_session_id === originalSession.actor_session_id && c.workspace_id === originalSession.workspace_id && typeof c.route === 'string' })).toBe(true)
+    for (const raw of journal) { expect(raw).not.toContain(originalSession.csrf_token); expect(raw).not.toMatch(/csrf|cookie|token_hash/) }
+    const originalLost = JSON.parse(journal.find(raw => JSON.parse(raw).key === lostCommands[0].key)!)
+    const legacy = { version: 1, workspace: originalSession.workspace_id, key: 'editcmd_legacy_fixture', page: 'page_previous_legacy', access: 0,
+      base_ref: originalLost.base_ref, operation: originalLost.operation, ack: null, rejection: null }
+    const legacyRaw = JSON.stringify(legacy)
+    await page.evaluate(async ({ workspace, key, raw }) => {
+      const db = await new Promise<IDBDatabase>((yes, no) => { const r = indexedDB.open('learning-workbench.edit-commands.v1', 1); r.onsuccess = () => yes(r.result); r.onerror = () => no(r.error) })
+      try { await new Promise<void>((yes, no) => { const t = db.transaction('drafts', 'readwrite'); t.objectStore('drafts').add({ workspaceId: workspace, objectId: key, revision: 1, text: raw, updatedAt: new Date().toISOString(), conflicts: [] }); t.oncomplete = () => yes(); t.onabort = () => no(t.error) }) } finally { db.close() }
+    }, { workspace: originalSession.workspace_id, key: legacy.key, raw: legacyRaw })
+    await open(page, href)
+    await expect(panel(page).getByRole('button', { name: `显式回放原编辑命令 ${legacy.key}`, exact: true })).toBeDisabled()
+    await runtime.authenticateOnly(page)
+    const foreignSession = await page.request.get('/api/v1/session').then(r => r.json()) as SessionResponse
+    expect(foreignSession.workspace_id).toBe(originalSession.workspace_id); expect(foreignSession.actor_session_id).not.toBe(originalSession.actor_session_id)
+    expect((await page.request.post('/api/v1/session/role', { data: { role: 'author' }, headers: { Origin: runtime.origin, 'X-CSRF-Token': foreignSession.csrf_token, 'Idempotency-Key': 'new_actor_author' } })).status()).toBe(200)
+    await open(page, href)
+    await expect(panel(page).getByRole('button', { name: `显式回放原编辑命令 ${lostCommands[0].key}`, exact: true })).toBeDisabled()
+    await expect(panel(page).getByRole('button', { name: `显式回放原编辑命令 ${createOriginal!.key}`, exact: true })).toBeDisabled()
+    const retainedLegacy = await page.evaluate(async ({ workspace, key }) => {
+      const db = await new Promise<IDBDatabase>(yes => { const r = indexedDB.open('learning-workbench.edit-commands.v1', 1); r.onsuccess = () => yes(r.result) })
+      try { return await new Promise<string>(yes => { const r = db.transaction('drafts', 'readonly').objectStore('drafts').get([workspace, key]); r.onsuccess = () => yes(r.result.text) }) } finally { db.close() }
+    }, { workspace: originalSession.workspace_id, key: legacy.key })
+    expect(retainedLegacy).toBe(legacyRaw)
+    const root = resolve(import.meta.dirname, '../..')
+    const sqlite = JSON.parse(execFileSync(`${root}/.venv/bin/python`, ['-B', '-c', `import json,sqlite3,sys
+c=sqlite3.connect('file:'+sys.argv[1]+'?mode=ro',uri=True)
+print(json.dumps({'heads':c.execute('SELECT draft_id,revision FROM draft_edits').fetchall(),'versions':c.execute('SELECT revision FROM draft_edit_versions WHERE draft_id=? ORDER BY revision',(sys.argv[2],)).fetchall(),'commands':c.execute('SELECT actor_id,command_key,revision FROM draft_edit_commands WHERE draft_id=? ORDER BY revision',(sys.argv[2],)).fetchall()}))`, resolve(runtime.data, 'workspace.sqlite3'), id], { cwd: root, encoding: 'utf8' }))
+    expect(sqlite.heads).toEqual([[id, 4]]); expect(sqlite.versions).toEqual([[1], [2], [3], [4]])
+    expect(sqlite.commands).toHaveLength(4); expect(sqlite.commands.every((row: string[]) => row[0] === originalSession.actor_session_id)).toBe(true)
     expect(errors).toEqual([])
     const localCopies = await page.evaluate(async () => {
       const db = await new Promise<IDBDatabase>((yes, no) => { const r = indexedDB.open('learning-workbench.edit-buffers.v1', 1); r.onsuccess = () => yes(r.result); r.onerror = () => no(r.error) })
       try { return await new Promise<string[]>((yes, no) => { const t = db.transaction('drafts', 'readonly'); const r = t.objectStore('drafts').getAll(); r.onsuccess = () => yes(r.result.map((x: { text: string }) => x.text)); r.onerror = () => no(r.error) }) } finally { db.close() }
     })
     expect(localCopies.map(raw => JSON.parse(raw).local.body_markdown)).toContain(memoryBody)
-    writeFileSync(info.outputPath('editor-flow.json'), JSON.stringify({ scope: 'Real synthetic Import/SQLite/HTTP/IndexedDB, native CodeMirror contenteditable.fill, Unicode/TeX/blank lines, undo/redo, identity reset, two pages, exact 412 recovery, same-page original ACK replay, browser/API restart, actual IDB abort and role-denied memory recovery; no provider or content approval', created, current, rejected, writes, lostCommands, localBody, memoryBody, generations: runtime.generations.length, originalContentUnchanged: true, unsavedMemoryRecoveredAfterRoleDenial: true, errors }, null, 2))
+    writeFileSync(info.outputPath('editor-flow.json'), JSON.stringify({ scope: 'Real synthetic Import/SQLite/HTTP/IndexedDB, native CodeMirror contenteditable.fill, Unicode/TeX/blank lines, undo/redo, identity reset, two pages, exact 412 recovery, same-actor create ACK replay after reload and patch ACK replay after browser/API restart, actual IDB abort and role-denied memory recovery; no provider or content approval', created, current, rejected, writes, lostCommands, localBody, memoryBody, actorSessionId: originalSession.actor_session_id, generations: runtime.generations.length, originalContentUnchanged: true, unsavedMemoryRecoveredAfterRoleDenial: true, sqlite, journal, legacyRaw, foreignActorDenied: true, errors }, null, 2))
   } finally { await runtime.close() }
 })

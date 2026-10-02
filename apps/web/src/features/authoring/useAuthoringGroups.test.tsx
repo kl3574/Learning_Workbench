@@ -551,7 +551,7 @@ function fixture() {
   const solution = checkedAuthoring<AuthoringPrivateSolutionView>('AuthoringPrivateSolutionView', structuredClone(original.solution))
   const numeric = checkedAuthoring<AuthoringGroupNumericCheckView>('AuthoringGroupNumericCheckView', structuredClone(original.numeric))
   const job = checkedAuthoring<JobSnapshot>('JobSnapshot', { ...structuredClone(original.job), workspace_id: workspace, status: 'running', result_refs: [], warnings: [] })
-  const session: SessionResponse = { workspace_id: workspace, role: 'author', csrf_token: 'synthetic-no-network-token', active_independent_attempt_id: null, active_open_book_attempt_id: null }
+  const session: SessionResponse = { workspace_id: workspace, actor_session_id: 'session_fixture_useAuthoringGroups_test', role: 'author', csrf_token: 'synthetic-no-network-token', active_independent_attempt_id: null, active_open_book_attempt_id: null }
   const unavailable = vi.fn(async (): Promise<never> => { throw new Error('Unexpected single-member request') })
   const groups: NonNullable<AuthoringPort['groups']> = {
     prepare: unavailable, draft: vi.fn(async () => draft), solution: vi.fn(async () => solution),

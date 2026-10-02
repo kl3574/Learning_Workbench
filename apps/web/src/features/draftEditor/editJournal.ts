@@ -3,9 +3,12 @@ import { DraftStore, assertDraftWriteAllowed, type DraftRecord, type DraftWriteG
 import { exactObject, sameValue, validIdentity } from '../providers/providerSchema'
 import { checkedEdit, editSnapshot, editText, type EditText } from './editSchema'
 
-export type EditCommand = { version: 1; workspace: string; key: string; page: string; access: number; base_ref: ContentRef;
+type CommandFields = { key: string; page: string; access: number; base_ref: ContentRef;
   operation: { kind: 'create'; body: DraftCreateWrite } | { kind: 'patch'; baseline: EditDraftSnapshot; local: EditText; body: DraftPatchWrite };
   ack: DraftCreated | DraftPatched | null; rejection: number | null }
+export type EditCommand = CommandFields & ({ version: 1; workspace: string } | { version: 2; workspace_id: string; actor_session_id: string; route: string })
+export const commandWorkspace = (command: EditCommand) => command.version === 2 ? command.workspace_id : command.workspace
+export const editRoute = (operation: EditCommand['operation']) => operation.kind === 'create' ? 'POST /api/v1/drafts' : `PATCH /api/v1/drafts/${operation.baseline.candidate.draft_id}`
 export type EditBuffer = { version: 1; workspace: string; id: string; base_ref: ContentRef; baseline: EditDraftSnapshot; local: EditText }
 export const editPage = `page_${crypto.randomUUID()}`
 export const editCommands = new DraftStore({ name: 'learning-workbench.edit-commands.v1' })
@@ -23,8 +26,14 @@ export function patchBody(baseline: EditDraftSnapshot, local: EditText): DraftPa
 }
 export function decodeCommand(raw: string, workspace: string): EditCommand {
   const c = JSON.parse(raw) as EditCommand
-  if (!exactObject(c, ['version', 'workspace', 'key', 'page', 'access', 'base_ref', 'operation', 'ack', 'rejection']) || c.version !== 1 || c.workspace !== workspace
-      || !validIdentity(c.key) || !validIdentity(c.page) || !Number.isSafeInteger(c.access) || c.access < 0) bad()
+  const fields = ['version', 'key', 'page', 'access', 'base_ref', 'operation', 'ack', 'rejection']
+  if (c.version === 1) {
+    if (!exactObject(c, [...fields, 'workspace'])) bad()
+  } else if (c.version === 2) {
+    if (!exactObject(c, [...fields, 'workspace_id', 'actor_session_id', 'route']) || !validIdentity(c.actor_session_id)) bad()
+  } else bad()
+  if (commandWorkspace(c) !== workspace || !validIdentity(c.key) || !validIdentity(c.page)
+      || !Number.isSafeInteger(c.access) || c.access < 0) bad()
   checkedEdit('ContentRef', c.base_ref)
   if (c.operation.kind === 'create') {
     if (!exactObject(c.operation, ['kind', 'body'])) bad()
@@ -37,6 +46,7 @@ export function decodeCommand(raw: string, workspace: string): EditCommand {
     if (o.baseline.state !== 'draft' || !sameValue(patchBody(o.baseline, o.local), checkedEdit('DraftPatchWrite', o.body))) bad()
     if (c.ack) { const a = checkedEdit<DraftPatched>('DraftPatched', c.ack); if (a.draft_id !== o.baseline.candidate.draft_id || a.revision !== o.body.expected_revision + 1) bad() }
   } else bad()
+  if (c.version === 2 && c.route !== editRoute(c.operation)) bad()
   if (c.rejection !== null && (c.ack || ![400, 409, 412, 422].includes(c.rejection))) bad()
   return c
 }
@@ -49,18 +59,19 @@ export function readCommand(record: DraftRecord, workspace: string): EditCommand
   return acks[0] ?? all.find(x => x.rejection !== null) ?? first
 }
 export async function persistCommand(command: EditCommand, guard?: DraftWriteGuard): Promise<EditCommand> {
-  let desired = decodeCommand(JSON.stringify(command), command.workspace)
+  const workspace = commandWorkspace(command)
+  let desired = decodeCommand(JSON.stringify(command), workspace)
   for (let i = 0; i < 4; i++) {
     assertDraftWriteAllowed(guard)
-    const old = (await editCommands.load(command.workspace))[command.key]
+    const old = (await editCommands.load(workspace))[command.key]
     if (old) {
-      const current = readCommand(old, command.workspace)
+      const current = readCommand(old, workspace)
       if (!sameValue(immutable(current), immutable(desired)) || current.ack && desired.ack && !sameValue(current.ack, desired.ack)) bad()
       if (current.ack || !desired.ack && current.rejection !== null) desired = current
       if (!old.conflicts.length && sameValue(current, desired)) return current
     }
-    const next = await editCommands.save(command.workspace, command.key, JSON.stringify(desired), old?.revision ?? 0, old?.conflicts.map(x => x.id) ?? [], guard)
-    const value = readCommand(next.record, command.workspace)
+    const next = await editCommands.save(workspace, command.key, JSON.stringify(desired), old?.revision ?? 0, old?.conflicts.map(x => x.id) ?? [], guard)
+    const value = readCommand(next.record, workspace)
     if (!next.record.conflicts.length && sameValue(value, desired)) return value
   }
   return bad()

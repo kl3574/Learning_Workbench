@@ -71,7 +71,8 @@ def test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec():
         ('GET', '/api/v1/content/restore-drafts/{id}'),
     } <= projection
     assert len(projection) == 106
-    assert len(SPEC_ROUTES - projection) == 20
+    assert len(SPEC_ROUTES) == 127
+    assert len(SPEC_ROUTES - projection) == 21
 
 
 OPERATIONS = [(path, method, operation) for path, methods in create_app().openapi()["paths"].items()

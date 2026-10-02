@@ -16,7 +16,7 @@ function deferred<T>() {
 function fixture() {
   const workspace = `workspace_${crypto.randomUUID()}`
   const value: JobSnapshot = { id: 'authoring_list_order', workspace_id: workspace, kind: 'authoring', status: 'awaiting_approval', revision: 1, created_at: '2026-09-22T00:00:00Z', updated_at: '2026-09-22T00:00:00Z', progress: { completed: 0, total: null, label: '等待明确授权' }, result_refs: [], warnings: [], error: null }
-  const session: SessionResponse = { workspace_id: workspace, role: 'author', csrf_token: 'synthetic-list-test-only', active_independent_attempt_id: null, active_open_book_attempt_id: null }
+  const session: SessionResponse = { workspace_id: workspace, actor_session_id: 'session_fixture_useAuthoringListOrder_test', role: 'author', csrf_token: 'synthetic-list-test-only', active_independent_attempt_id: null, active_open_book_attempt_id: null }
   const body: AuthoringGroupPrepareWrite = { output_kind: 'practice_set', topic: '合成列表顺序检查', prerequisites: [], objectives: ['保留准确原命令与当前列表'], proof_policy: 'full', provider_id: 'provider_synthetic', source_refs: [], target_concept_refs: [{ entity: 'concept', id: 'concept_synthetic', revision: 1, sha256: 'a'.repeat(64) }], lesson_ref: { entity: 'lesson', id: 'lesson_synthetic', revision: 1, sha256: 'b'.repeat(64) } }
   const unavailable = vi.fn(async (): Promise<never> => { throw new Error('Unexpected subject operation') })
   const prepare = vi.fn<NonNullable<AuthoringPort['groups']>['prepare']>().mockRejectedValueOnce(new Error('Controlled lost original ACK')).mockResolvedValue({ id: value.id, status: value.status })

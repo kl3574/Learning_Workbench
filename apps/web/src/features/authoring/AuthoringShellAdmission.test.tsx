@@ -22,7 +22,7 @@ test.each(['unknown','independent'])('Shell %s Policy still exposes actual safe 
   calls.push(`${init?.method??'GET'} ${path}`)
   let value:unknown
   if(path.startsWith('/api/v1/authoring/jobs'))value={items:[job],next_cursor:null}
-  else if(path==='/api/v1/session')value={workspace_id:job.workspace_id,role:'learner',csrf_token:'synthetic-component-only',active_independent_attempt_id:state.policy.independentId,active_open_book_attempt_id:null}
+  else if(path==='/api/v1/session')value={workspace_id:job.workspace_id,actor_session_id: 'session_fixture_AuthoringShellAdmission_test',role:'learner',csrf_token:'synthetic-component-only',active_independent_attempt_id:state.policy.independentId,active_open_book_attempt_id:null}
   else if(path===`/api/v1/jobs/${job.id}/cancel`)value={...job,status:'running',revision:3}
   else throw new Error('Unexpected request in bounded Shell control test')
   return new Response(JSON.stringify(value),{status:200,headers:{'Content-Type':'application/json'}})

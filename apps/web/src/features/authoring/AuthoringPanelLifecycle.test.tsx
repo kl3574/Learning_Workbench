@@ -8,7 +8,7 @@ afterEach(cleanup)
 test('reporting close protection to a parent state does not cause a render feedback loop', async () => {
   const workspace = `workspace_${crypto.randomUUID()}`
   const unexpected = vi.fn(async (): Promise<never> => { throw new Error('Unexpected protected operation') })
-  const port: AuthoringPort = { session: vi.fn<AuthoringPort['session']>(async () => ({ workspace_id: workspace, role: 'learner', csrf_token: 'synthetic-only', active_independent_attempt_id: null, active_open_book_attempt_id: null })), list: vi.fn(async () => ({ items: [], next_cursor: null })), prepare: unexpected, read: unexpected, draft: unexpected, preview: unexpected, numeric: unexpected, decide: unexpected, job: unexpected, cancel: unexpected }
+  const port: AuthoringPort = { session: vi.fn<AuthoringPort['session']>(async () => ({ workspace_id: workspace, actor_session_id: 'session_fixture_AuthoringPanelLifecycle_test', role: 'learner', csrf_token: 'synthetic-only', active_independent_attempt_id: null, active_open_book_attempt_id: null })), list: vi.fn(async () => ({ items: [], next_cursor: null })), prepare: unexpected, read: unexpected, draft: unexpected, preview: unexpected, numeric: unexpected, decide: unexpected, job: unexpected, cancel: unexpected }
   const reported = vi.fn()
   function Host() {
     const [value, setValue] = useState({ dirty: false, safe: false })
