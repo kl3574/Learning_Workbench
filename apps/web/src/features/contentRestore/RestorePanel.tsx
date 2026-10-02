@@ -8,11 +8,14 @@ import { useRestoreDrafts } from './useRestoreDrafts'
 import { pendingRestoreCreateMemory, discardRestoreCreateMemory } from './restoreCreateMemory'
 import { pendingRestorePublicationMemory } from './restorePublicationMemory'
 import { pendingRestoreForms, discardRestoreForms } from './restoreFormMemory'
+import { pendingRestoreNumericMemory } from './restoreNumericMemory'
+import { pendingRestoreNumericForms } from './restoreNumericFormMemory'
+import { RestoreNumericPanel } from './RestoreNumericPanel'
 import './restore.css'
 
 export type RestoreStatus = { dirty: boolean; safe: boolean; closeSafe: boolean }
-const pendingRestoreCommands = (workspace: string) => pendingRestoreCreateMemory(workspace) || pendingRestorePublicationMemory(workspace) || pendingReviewMemory(workspace)
-export const pendingRestoreMemory = (workspace: string) => pendingRestoreCommands(workspace) || pendingRestoreForms(workspace) || pendingReviewForms(workspace)
+const pendingRestoreCommands = (workspace: string) => pendingRestoreCreateMemory(workspace) || pendingRestorePublicationMemory(workspace) || pendingReviewMemory(workspace) || pendingRestoreNumericMemory(workspace)
+export const pendingRestoreMemory = (workspace: string) => pendingRestoreCommands(workspace) || pendingRestoreForms(workspace) || pendingRestoreNumericForms(workspace) || pendingReviewForms(workspace)
 export function RestorePanel({ workspace, blockId, selectedSource, paused, onState, port }: {
   workspace: string; blockId: string; selectedSource: ContentRef | null; paused: boolean; onState?: (value: RestoreStatus) => void; port?: RestorePort
 }) {
@@ -21,18 +24,20 @@ export function RestorePanel({ workspace, blockId, selectedSource, paused, onSta
   const [reviewOpen, setReviewOpen] = useState(false), [discarding, setDiscarding] = useState(false), [discardingForm, setDiscardingForm] = useState(false)
   const [reviewState, setReviewState] = useState<ReviewPanelState>(emptyReviewPanelState), [discardingReview, setDiscardingReview] = useState(false)
   const reviewScope = `restore:${blockId}`, heldReviewForms = pendingReviewForms(workspace, reviewScope)
+  const [numericOpen, setNumericOpen] = useState(false)
+  const [numericState, setNumericState] = useState({ dirty: false, safe: true, closeSafe: true })
   const callback = useRef(onState); callback.current = onState
-  const pending = pendingRestoreMemory(workspace), safe = !state.busy && !pendingRestoreCommands(workspace) && reviewState.safe
+  const pending = pendingRestoreMemory(workspace), safe = !state.busy && !pendingRestoreCommands(workspace) && reviewState.safe && numericState.safe
   const { reason, confirmed } = state.form ?? { reason: '', confirmed: false }, formDirty = state.pendingForm
-  const dirty = formDirty || pending || reviewState.dirty || state.commands.some(command => !command.ack && !command.rejection)
-  useEffect(() => { callback.current?.({ dirty, safe: pending || safe, closeSafe: safe && !formDirty && !heldReviewForms }) }, [dirty, safe, pending, formDirty, heldReviewForms])
+  const dirty = formDirty || pending || reviewState.dirty || numericState.dirty || state.commands.some(command => !command.ack && !command.rejection)
+  useEffect(() => { callback.current?.({ dirty, safe: pending || safe, closeSafe: safe && !formDirty && !heldReviewForms && numericState.closeSafe }) }, [dirty, safe, pending, formDirty, heldReviewForms, numericState.closeSafe])
   useEffect(() => () => { const held = pendingRestoreMemory(workspace); callback.current?.({ dirty: held, safe: true, closeSafe: !held }) }, [workspace, blockId])
   useEffect(() => {
     if (!dirty && safe) return
     const guard = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
     window.addEventListener('beforeunload', guard); return () => window.removeEventListener('beforeunload', guard)
   }, [dirty, safe])
-  const blocked = !safe || reviewState.dirty && !reviewState.isolated
+  const blocked = !safe || reviewState.dirty && !reviewState.isolated || numericState.dirty
   return <section className="restore-panel" aria-label="历史内容块恢复与审核"><h3>将历史公开块恢复为新修订</h3>
     <p>仅恢复同一块的完整历史字段和正文，建立独立待审恢复稿。旧审核和数值结果不转授；不会回滚旧题、私解、作答或成绩，也不更新 Lesson/Course 的原精确引用。</p>
     {state.busy && <p role="status">正在核对恢复原件与准确基准…</p>}{state.error && <p role="alert">{state.error}</p>}
@@ -65,6 +70,8 @@ export function RestorePanel({ workspace, blockId, selectedSource, paused, onSta
         {state.draft.published_ref && <p>实际发布引用：{state.draft.published_ref.id} · r{state.draft.published_ref.revision} · {state.draft.published_ref.sha256}；不是父章节已更新。</p>}
       </section>}
     </>}
+    <button disabled={state.busy || formDirty} onClick={() => setNumericOpen(true)}>打开恢复例题数值复算与安全任务</button>
+    {numericOpen && <RestoreNumericPanel workspace={workspace} blockId={blockId} draft={state.draft} paused={paused || !state.ready || state.busy || formDirty} onState={setNumericState} />}
     <button disabled={state.busy || formDirty} onClick={() => setReviewOpen(true)}>打开恢复审核与发布恢复</button>
     {heldReviewForms && <button disabled={state.busy || !reviewState.safe} onClick={() => setDiscardingReview(true)}>明确放弃本块未提交审核表单</button>}
     {discardingReview && <div role="dialog" aria-label="放弃本块未提交审核表单"><p>仅丢弃本工作区、此恢复块的未提交审核备注和理由；原审核命令、回执与服务端事实保留。</p><button disabled={state.busy || !reviewState.safe} onClick={() => { reviewState.discardForms(); discardReviewForms(workspace, reviewScope); setDiscardingReview(false) }}>确认放弃本块未提交审核表单</button><button onClick={() => setDiscardingReview(false)}>继续保留本块审核表单</button></div>}

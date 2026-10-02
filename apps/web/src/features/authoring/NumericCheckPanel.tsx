@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import type { ApprovalDecision, AuthoringGroupNumericCheckView, NumericCheckView, NumericPlan } from '../../../../../packages/contracts/generated/api-types'
+import type { RestoreNumericCheckView } from '../../../../../packages/contracts/generated/restore-numeric-types'
 export function NumericPlanDisplay({ plan }: { plan: NumericPlan }) {
   return <section aria-label="完整算术计划"><h4>完整算术计划</h4><p>使用有限 binary64 运算；单位只是标签，不检查维度相容或换算，随机种子为 null。</p>
     <table><caption>全部变量</caption><thead><tr><th>变量</th><th>值</th><th>单位</th></tr></thead><tbody>{plan.variables.map(v => <tr key={v.name}><td>{v.name}</td><td>{v.value}</td><td>{v.unit}</td></tr>)}</tbody></table>
     {plan.assertions.map(v => <article key={v.id}><h5>{v.id}</h5><p>表达式：<code>{v.expression}</code></p><p>期望 {v.expected}；actual 与 expected 单位标签：{v.unit}</p><p>绝对容差 {v.atol}；相对容差 {v.rtol}</p></article>)}
   </section>
 }
-export function NumericCheckPanel({ value, busy, commandExists = false, decide, refresh }: { value: NumericCheckView | AuthoringGroupNumericCheckView; busy: boolean; commandExists?: boolean; decide: (body: ApprovalDecision) => void; refresh: () => void }) {
+export function NumericCheckPanel({ value, busy, commandExists = false, decide, refresh }: { value: NumericCheckView | AuthoringGroupNumericCheckView | RestoreNumericCheckView; busy: boolean; commandExists?: boolean; decide: (body: ApprovalDecision) => void; refresh: () => void }) {
   const identity = `${value.id}:${value.revision}:${value.operation_sha256}`
   const [confirmation, setConfirmation] = useState<string | null>(null), confirmed = confirmation === identity
   const runtime = value.runtime
@@ -19,7 +20,7 @@ export function NumericCheckPanel({ value, busy, commandExists = false, decide, 
     {commandExists && <p>本次检查已有保留的原决定命令，请回放原命令或另行读取当前状态，不创建第二份决定。</p>}
     <button disabled={busy} onClick={refresh}>另行读取数值检查当前状态</button>
     {value.job && <p>实际检查任务：{value.job.id} · {value.job.status} · r{value.job_revision}。可在安全列表取消；取消不抹掉已经执行的事实。</p>}
-    {value.result ? <section aria-label="实际数值结果"><h4>实际数值结果：{value.result.verdict}</h4><p>{value.result.outcome} · 开始 {value.result.started_at ?? '未知／未取得'} · 结束 {value.result.finished_at} · 退出码 {value.result.exit_code ?? '未知／未取得'}</p>{value.result.assertions.map(v => <p key={v.id}>{v.id}：实际 {v.actual ?? '未取得有限结果'} · {v.passed ? '通过' : '未通过'} {v.error_code}</p>)}<p>数学审校 NOT_RUN；来源审校 NOT_RUN；独立教学审校 NOT_RUN。草稿尚未发布。</p><details><summary>执行记录哈希</summary><p>input {value.result.input_sha256}</p><p>output {value.result.output_sha256 ?? '没有取得完整输出'}</p><p>result {value.result.result_sha256}</p></details></section> : <p>尚未读到该实际任务的最终检查结果，未推断执行成功。</p>}
+    {value.result ? <section aria-label="实际数值结果"><h4>实际数值结果：{value.result.verdict}</h4><p>{value.result.outcome} · 开始 {value.result.started_at ?? '未知／未取得'} · 结束 {value.result.finished_at} · 退出码 {value.result.exit_code ?? '未知／未取得'}</p>{value.result.assertions.map(v => <p key={v.id}>{v.id}：实际 {v.actual ?? '未取得有限结果'} · {v.passed ? '通过' : '未通过'} {v.error_code}</p>)}<p>本次数值任务不执行数学、来源或独立教学审校；这些审校与发布状态须另行读取，不能据数值结果推断。</p><details><summary>执行记录哈希</summary><p>input {value.result.input_sha256}</p><p>output {value.result.output_sha256 ?? '没有取得完整输出'}</p><p>result {value.result.result_sha256}</p></details></section> : <p>尚未读到该实际任务的最终检查结果，未推断执行成功。</p>}
     {value.warnings.map((v, i) => <p key={i}>{v.code}：{v.message}</p>)}
   </section>
 }
