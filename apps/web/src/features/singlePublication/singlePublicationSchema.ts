@@ -17,6 +17,7 @@ export function singleSnapshot(raw: unknown, candidate?: DraftCandidate): Author
   if (value.owner !== 'authoring' || value.candidate.entity !== 'block' || value.candidate.draft_revision !== 1
       || value.body_sha256 !== digest(value.payload.body_markdown) || candidate && !sameValue(value.candidate, candidate)
       || new Set(value.numeric_check_ids).size !== value.numeric_check_ids.length) invalid()
+  if (value.published_ref !== null) singlePublishedRef(value.published_ref)
   return value
 }
 export function singlePublishedRef(raw: unknown): ContentRef {
