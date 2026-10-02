@@ -4039,6 +4039,134 @@
         "title": "ContentBlock",
         "type": "object"
       },
+      "ContentImpactView": {
+        "additionalProperties": false,
+        "properties": {
+          "action_required_target_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "title": "Action Required Target Ids",
+            "type": "array"
+          },
+          "affected_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "title": "Affected Ids",
+            "type": "array"
+          },
+          "conservative_only_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "title": "Conservative Only Ids",
+            "type": "array"
+          },
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/ImpactObjectDecisionReceipt"
+            },
+            "title": "Decisions",
+            "type": "array"
+          },
+          "event_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_snapshot_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Snapshot Sha256"
+          },
+          "evidence_version": {
+            "enum": [
+              "owner_frozen_v1",
+              "legacy_unverified"
+            ],
+            "title": "Evidence Version",
+            "type": "string"
+          },
+          "exact_dependency_refs": {
+            "items": {
+              "$ref": "#/components/schemas/ContentRef"
+            },
+            "title": "Exact Dependency Refs",
+            "type": "array"
+          },
+          "new_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "old_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "pending_target_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "title": "Pending Target Ids",
+            "type": "array"
+          },
+          "reason": {
+            "const": "content_revision_published",
+            "title": "Reason",
+            "type": "string"
+          },
+          "target_decision_head": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Decision Head"
+          }
+        },
+        "required": [
+          "event_id",
+          "old_ref",
+          "new_ref",
+          "reason",
+          "evidence_version",
+          "event_snapshot_sha256",
+          "affected_ids",
+          "exact_dependency_refs",
+          "conservative_only_ids",
+          "pending_target_ids",
+          "action_required_target_ids",
+          "target_decision_head",
+          "decisions",
+          "next_cursor"
+        ],
+        "title": "ContentImpactView",
+        "type": "object"
+      },
       "ContentRef": {
         "additionalProperties": false,
         "properties": {
@@ -5232,6 +5360,308 @@
         "title": "EvidenceApplicability",
         "type": "object"
       },
+      "EvidenceApplicabilityDecisionView": {
+        "additionalProperties": false,
+        "properties": {
+          "applicability": {
+            "enum": [
+              "usable",
+              "pending_review",
+              "confirmed_stale"
+            ],
+            "title": "Applicability",
+            "type": "string"
+          },
+          "attempt_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Attempt Id",
+            "type": "string"
+          },
+          "concept_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "current_basis_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Current Basis Sha256",
+            "type": "string"
+          },
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceImpactDecisionReceipt"
+            },
+            "title": "Decisions",
+            "type": "array"
+          },
+          "event_decision_head": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Decision Head"
+          },
+          "evidence_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "grading_revision": {
+            "minimum": 1.0,
+            "title": "Grading Revision",
+            "type": "integer"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "original_evidence": {
+            "$ref": "#/components/schemas/Evidence"
+          },
+          "original_evidence_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Original Evidence Sha256",
+            "type": "string"
+          },
+          "question_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "reason_codes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reason Codes",
+            "type": "array"
+          },
+          "relevant_event_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "title": "Relevant Event Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "original_evidence",
+          "question_ref",
+          "concept_ref",
+          "attempt_id",
+          "grading_revision",
+          "original_evidence_sha256",
+          "current_basis_sha256",
+          "applicability",
+          "reason_codes",
+          "relevant_event_ids",
+          "event_decision_head",
+          "decisions",
+          "next_cursor"
+        ],
+        "title": "EvidenceApplicabilityDecisionView",
+        "type": "object"
+      },
+      "EvidenceImpactArtifact": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sha256"
+        ],
+        "title": "EvidenceImpactArtifact",
+        "type": "object"
+      },
+      "EvidenceImpactDecisionReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_session_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Actor Session Id",
+            "type": "string"
+          },
+          "attempt_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Attempt Id",
+            "type": "string"
+          },
+          "concept_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "current_basis_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Current Basis Sha256",
+            "type": "string"
+          },
+          "decided_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Decided At",
+            "type": "string"
+          },
+          "decision": {
+            "enum": [
+              "usable",
+              "confirmed_stale"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "decision_revision": {
+            "minimum": 1.0,
+            "title": "Decision Revision",
+            "type": "integer"
+          },
+          "event_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "evidence_artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceImpactArtifact"
+            },
+            "maxItems": 32,
+            "title": "Evidence Artifacts",
+            "type": "array"
+          },
+          "evidence_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "grading_revision": {
+            "minimum": 1.0,
+            "title": "Grading Revision",
+            "type": "integer"
+          },
+          "original_evidence_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Original Evidence Sha256",
+            "type": "string"
+          },
+          "question_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "reason": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "receipt_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Receipt Sha256",
+            "type": "string"
+          },
+          "relevance": {
+            "enum": [
+              "exact_ref",
+              "id_only_candidate"
+            ],
+            "title": "Relevance",
+            "type": "string"
+          },
+          "request_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Request Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "event_id",
+          "decision_revision",
+          "relevance",
+          "question_ref",
+          "concept_ref",
+          "attempt_id",
+          "grading_revision",
+          "original_evidence_sha256",
+          "current_basis_sha256",
+          "decision",
+          "reason",
+          "evidence_artifacts",
+          "actor_session_id",
+          "decided_at",
+          "request_sha256",
+          "receipt_sha256"
+        ],
+        "title": "EvidenceImpactDecisionReceipt",
+        "type": "object"
+      },
+      "EvidenceImpactDecisionWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "usable",
+              "confirmed_stale"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "event_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "evidence_artifact_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Evidence Artifact Ids",
+            "type": "array"
+          },
+          "expected_current_basis_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Expected Current Basis Sha256",
+            "type": "string"
+          },
+          "expected_decision_revision": {
+            "minimum": 0.0,
+            "title": "Expected Decision Revision",
+            "type": "integer"
+          },
+          "reason": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "expected_decision_revision",
+          "expected_current_basis_sha256",
+          "decision",
+          "reason",
+          "evidence_artifact_ids"
+        ],
+        "title": "EvidenceImpactDecisionWrite",
+        "type": "object"
+      },
       "FrozenOutboundBudget": {
         "additionalProperties": false,
         "properties": {
@@ -5831,6 +6261,198 @@
           }
         },
         "title": "HealthResponse",
+        "type": "object"
+      },
+      "ImpactArtifact": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sha256"
+        ],
+        "title": "ImpactArtifact",
+        "type": "object"
+      },
+      "ImpactObjectDecisionReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_session_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Actor Session Id",
+            "type": "string"
+          },
+          "classification": {
+            "enum": [
+              "exact_ref",
+              "id_only_candidate"
+            ],
+            "title": "Classification",
+            "type": "string"
+          },
+          "decided_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Decided At",
+            "type": "string"
+          },
+          "decision": {
+            "enum": [
+              "no_revision_needed",
+              "new_revision_required"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "decision_revision": {
+            "minimum": 1.0,
+            "title": "Decision Revision",
+            "type": "integer"
+          },
+          "event_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_snapshot_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Event Snapshot Sha256",
+            "type": "string"
+          },
+          "evidence_artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/ImpactArtifact"
+            },
+            "maxItems": 32,
+            "title": "Evidence Artifacts",
+            "type": "array"
+          },
+          "observed_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "reason": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "receipt_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Receipt Sha256",
+            "type": "string"
+          },
+          "request_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Request Sha256",
+            "type": "string"
+          },
+          "target_body_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Body Sha256"
+          },
+          "target_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Target Id",
+            "type": "string"
+          },
+          "target_metadata_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Target Metadata Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "target_id",
+          "decision_revision",
+          "classification",
+          "observed_ref",
+          "target_metadata_sha256",
+          "target_body_sha256",
+          "event_snapshot_sha256",
+          "decision",
+          "reason",
+          "evidence_artifacts",
+          "actor_session_id",
+          "decided_at",
+          "request_sha256",
+          "receipt_sha256"
+        ],
+        "title": "ImpactObjectDecisionReceipt",
+        "type": "object"
+      },
+      "ImpactObjectDecisionWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "no_revision_needed",
+              "new_revision_required"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "evidence_artifact_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Evidence Artifact Ids",
+            "type": "array"
+          },
+          "expected_decision_revision": {
+            "minimum": 0.0,
+            "title": "Expected Decision Revision",
+            "type": "integer"
+          },
+          "expected_event_snapshot_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Expected Event Snapshot Sha256",
+            "type": "string"
+          },
+          "observed_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "reason": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "target_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Target Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_id",
+          "observed_ref",
+          "expected_event_snapshot_sha256",
+          "expected_decision_revision",
+          "decision",
+          "reason",
+          "evidence_artifact_ids"
+        ],
+        "title": "ImpactObjectDecisionWrite",
         "type": "object"
       },
       "ImportCancelRequest": {
@@ -19149,6 +19771,386 @@
         ]
       }
     },
+    "/api/v1/content/impacts/{event_id}": {
+      "get": {
+        "operationId": "read_api_v1_content_impacts__event_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "target_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Target Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 1024,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentImpactView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Read",
+        "tags": [
+          "content"
+        ]
+      }
+    },
+    "/api/v1/content/impacts/{event_id}/decisions": {
+      "post": {
+        "operationId": "decide_api_v1_content_impacts__event_id__decisions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "title": "Origin",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImpactObjectDecisionWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImpactObjectDecisionReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Decide",
+        "tags": [
+          "content"
+        ]
+      }
+    },
     "/api/v1/content/restore-drafts": {
       "post": {
         "operationId": "create_api_v1_content_restore_drafts_post",
@@ -23456,6 +24458,368 @@
           }
         ],
         "summary": "Evidence Page",
+        "tags": [
+          "learning"
+        ]
+      }
+    },
+    "/api/v1/learning/evidence/{id}/applicability": {
+      "get": {
+        "operationId": "read_api_v1_learning_evidence__id__applicability_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "event_id",
+            "required": false,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceApplicabilityDecisionView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Read",
+        "tags": [
+          "learning"
+        ]
+      }
+    },
+    "/api/v1/learning/evidence/{id}/applicability-decisions": {
+      "post": {
+        "operationId": "decide_api_v1_learning_evidence__id__applicability_decisions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "title": "Origin",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvidenceImpactDecisionWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidenceImpactDecisionReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Decide",
         "tags": [
           "learning"
         ]

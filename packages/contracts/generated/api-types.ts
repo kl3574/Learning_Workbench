@@ -658,6 +658,23 @@ export type ContentBlock = {
   "depends_on"?: Array<ContentRef>;
 };
 
+export type ContentImpactView = {
+  "event_id": string;
+  "old_ref": ContentRef;
+  "new_ref": ContentRef;
+  "reason": "content_revision_published";
+  "evidence_version": "owner_frozen_v1" | "legacy_unverified";
+  "event_snapshot_sha256": (string | null);
+  "affected_ids": Array<string>;
+  "exact_dependency_refs": Array<ContentRef>;
+  "conservative_only_ids": Array<string>;
+  "pending_target_ids": Array<string>;
+  "action_required_target_ids": Array<string>;
+  "target_decision_head": (number | null);
+  "decisions": Array<ImpactObjectDecisionReceipt>;
+  "next_cursor": (string | null);
+};
+
 export type ContentRef = {
   "entity": "course" | "lesson" | "block" | "concept" | "route" | "question" | "practice_set" | "assessment" | "note";
   "id": string;
@@ -882,6 +899,57 @@ export type EvidenceApplicability = {
   "check_scope"?: "exact_semantic_dependencies";
 };
 
+export type EvidenceApplicabilityDecisionView = {
+  "evidence_id": string;
+  "original_evidence": Evidence;
+  "question_ref": ContentRef;
+  "concept_ref": ContentRef;
+  "attempt_id": string;
+  "grading_revision": number;
+  "original_evidence_sha256": string;
+  "current_basis_sha256": string;
+  "applicability": "usable" | "pending_review" | "confirmed_stale";
+  "reason_codes": Array<string>;
+  "relevant_event_ids": Array<string>;
+  "event_decision_head": (number | null);
+  "decisions": Array<EvidenceImpactDecisionReceipt>;
+  "next_cursor": (string | null);
+};
+
+export type EvidenceImpactArtifact = {
+  "id": string;
+  "sha256": string;
+};
+
+export type EvidenceImpactDecisionReceipt = {
+  "evidence_id": string;
+  "event_id": string;
+  "decision_revision": number;
+  "relevance": "exact_ref" | "id_only_candidate";
+  "question_ref": ContentRef;
+  "concept_ref": ContentRef;
+  "attempt_id": string;
+  "grading_revision": number;
+  "original_evidence_sha256": string;
+  "current_basis_sha256": string;
+  "decision": "usable" | "confirmed_stale";
+  "reason": string;
+  "evidence_artifacts": Array<EvidenceImpactArtifact>;
+  "actor_session_id": string;
+  "decided_at": string;
+  "request_sha256": string;
+  "receipt_sha256": string;
+};
+
+export type EvidenceImpactDecisionWrite = {
+  "event_id": string;
+  "expected_decision_revision": number;
+  "expected_current_basis_sha256": string;
+  "decision": "usable" | "confirmed_stale";
+  "reason": string;
+  "evidence_artifact_ids": Array<string>;
+};
+
 export type FrozenOutboundBudget = {
   "max_input_tokens": number;
   "max_output_tokens": number;
@@ -969,6 +1037,39 @@ export type GradingReadiness = {
 export type HealthResponse = {
   "status"?: "ok";
   "build_version"?: string;
+};
+
+export type ImpactArtifact = {
+  "id": string;
+  "sha256": string;
+};
+
+export type ImpactObjectDecisionReceipt = {
+  "event_id": string;
+  "target_id": string;
+  "decision_revision": number;
+  "classification": "exact_ref" | "id_only_candidate";
+  "observed_ref": ContentRef;
+  "target_metadata_sha256": string;
+  "target_body_sha256": (string | null);
+  "event_snapshot_sha256": string;
+  "decision": "no_revision_needed" | "new_revision_required";
+  "reason": string;
+  "evidence_artifacts": Array<ImpactArtifact>;
+  "actor_session_id": string;
+  "decided_at": string;
+  "request_sha256": string;
+  "receipt_sha256": string;
+};
+
+export type ImpactObjectDecisionWrite = {
+  "target_id": string;
+  "observed_ref": ContentRef;
+  "expected_event_snapshot_sha256": string;
+  "expected_decision_revision": number;
+  "decision": "no_revision_needed" | "new_revision_required";
+  "reason": string;
+  "evidence_artifact_ids": Array<string>;
 };
 
 export type ImportCancelRequest = {

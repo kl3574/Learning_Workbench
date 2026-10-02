@@ -1,6 +1,6 @@
 // Generated from PRODUCT_DESIGN.md v3.0.9 and actual runtime OpenAPI; do not edit.
 // spec_sha256: a6832a01966e72e5b9f63ee283ae300119446c38bcccd91beee508331ba57a98
-import type { ApprovalDecision, AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, AuthoringDraftView, AuthoringGroupDraftView, AuthoringGroupNumericCheckView, AuthoringGroupNumericPreviewWrite, AuthoringGroupPrepareWrite, AuthoringJobPage, AuthoringJobReadView, AuthoringPrepareWrite, AuthoringPrivateSolutionView, BlockReadResponse, BootstrapRequest, BootstrapResponse, ConceptStateResponse, ConsentCreate, ConsentCreateAck, ConsentPage, ConsentPreviewWrite, ConsentProposalView, ConsentRevoke, ContentRef, ContentRestoreDraftCreateAck, ContentRestoreDraftCreateWrite, ContentRestoreDraftSnapshot, Course, DirectorySearchResponse, DraftCreateWrite, DraftCreated, DraftPatchWrite, DraftPatched, DraftPublishWrite, DraftReviewWrite, EditDraftSnapshot, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearnerProfile, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, NumericCheckDecisionAck, NumericCheckPreviewWrite, NumericCheckView, OutlineResponse, PageAssessment, PageCourse, PageEvidence, PageNote, PagePracticeSet, PageRevision, PageRoute, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ProfileWrite, ProviderCapabilitiesResponse, ProviderConfigAck, ProviderConfigView, ProviderConfigWrite, ProviderSecretAck, ProviderSecretWrite, ReadinessResponse, RecommendationDecisionWrite, RecommendationPage, RegradeRequest, ResponsesWrite, RetrievalIndexOverview, RetrievalIndexRebuildWrite, RetrievalIndexScopeStatus, RetrievalQueryView, RetrievalQueryWrite, ReviewDecisionWrite, ReviewJobAck, RoleRequest, Route, RouteCompletionRequest, SessionResponse, SourceResponse, StoredReviewReceipt, TutorAnswerDeltaEvent, TutorApprovalRequiredEvent, TutorCancelledEvent, TutorCitationEvent, TutorCompletedEvent, TutorContextReadyEvent, TutorFailedEvent, TutorMessagePage, TutorQueuedEvent, TutorRetrievalCompletedEvent, TutorRunCancel, TutorRunControlView, TutorRunCreate, TutorRunView, TutorThreadCreate, TutorThreadPage, TutorThreadView, TutorUsageEvent, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
+import type { ApprovalDecision, AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, AuthoringDraftView, AuthoringGroupDraftView, AuthoringGroupNumericCheckView, AuthoringGroupNumericPreviewWrite, AuthoringGroupPrepareWrite, AuthoringJobPage, AuthoringJobReadView, AuthoringPrepareWrite, AuthoringPrivateSolutionView, BlockReadResponse, BootstrapRequest, BootstrapResponse, ConceptStateResponse, ConsentCreate, ConsentCreateAck, ConsentPage, ConsentPreviewWrite, ConsentProposalView, ConsentRevoke, ContentImpactView, ContentRef, ContentRestoreDraftCreateAck, ContentRestoreDraftCreateWrite, ContentRestoreDraftSnapshot, Course, DirectorySearchResponse, DraftCreateWrite, DraftCreated, DraftPatchWrite, DraftPatched, DraftPublishWrite, DraftReviewWrite, EditDraftSnapshot, EmptyRequest, EvidenceApplicabilityDecisionView, EvidenceImpactDecisionReceipt, EvidenceImpactDecisionWrite, HealthResponse, ImpactObjectDecisionReceipt, ImpactObjectDecisionWrite, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearnerProfile, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, NumericCheckDecisionAck, NumericCheckPreviewWrite, NumericCheckView, OutlineResponse, PageAssessment, PageCourse, PageEvidence, PageNote, PagePracticeSet, PageRevision, PageRoute, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ProfileWrite, ProviderCapabilitiesResponse, ProviderConfigAck, ProviderConfigView, ProviderConfigWrite, ProviderSecretAck, ProviderSecretWrite, ReadinessResponse, RecommendationDecisionWrite, RecommendationPage, RegradeRequest, ResponsesWrite, RetrievalIndexOverview, RetrievalIndexRebuildWrite, RetrievalIndexScopeStatus, RetrievalQueryView, RetrievalQueryWrite, ReviewDecisionWrite, ReviewJobAck, RoleRequest, Route, RouteCompletionRequest, SessionResponse, SourceResponse, StoredReviewReceipt, TutorAnswerDeltaEvent, TutorApprovalRequiredEvent, TutorCancelledEvent, TutorCitationEvent, TutorCompletedEvent, TutorContextReadyEvent, TutorFailedEvent, TutorMessagePage, TutorQueuedEvent, TutorRetrievalCompletedEvent, TutorRunCancel, TutorRunControlView, TutorRunCreate, TutorRunView, TutorThreadCreate, TutorThreadPage, TutorThreadView, TutorUsageEvent, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
 
 import type { RetrievalIndexStatusQuery } from "./retrieval-ports-binding";
 export interface ApiEndpointMap {
@@ -34,6 +34,8 @@ export interface ApiEndpointMap {
   "POST /api/v1/consents/preview": { request: ConsentPreviewWrite; response: ConsentProposalView; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
   "GET /api/v1/consents/preview/{id}": { request: undefined; response: ConsentProposalView; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
   "POST /api/v1/consents/{id}/revoke": { request: ConsentRevoke; response: MutationAck; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
+  "GET /api/v1/content/impacts/{event_id}": { request: undefined; response: ContentImpactView; headers: null; parameters: { path: { "event_id": string }; query?: { "cursor"?: (string | null); "limit"?: number; "target_id"?: (string | null) } }; parametersRequired: true };
+  "POST /api/v1/content/impacts/{event_id}/decisions": { request: ImpactObjectDecisionWrite; response: ImpactObjectDecisionReceipt; headers: { "Idempotency-Key": string }; parameters: { path: { "event_id": string } }; parametersRequired: true };
   "POST /api/v1/content/restore-drafts": { request: ContentRestoreDraftCreateWrite; response: ContentRestoreDraftCreateAck; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
   "GET /api/v1/content/restore-drafts/{id}": { request: undefined; response: ContentRestoreDraftSnapshot; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/courses": { request: undefined; response: PageCourse; headers: null; parameters: { query?: { "cursor"?: (string | null); "limit"?: number; "q"?: (string | null) } }; parametersRequired: false };
@@ -59,6 +61,8 @@ export interface ApiEndpointMap {
   "POST /api/v1/learning/actions": { request: LearningActionRequest; response: LearningActionResponse; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
   "GET /api/v1/learning/concept-states": { request: undefined; response: ConceptStateResponse; headers: null; parameters: { query?: { "course_id"?: (string | null) } }; parametersRequired: false };
   "GET /api/v1/learning/evidence": { request: undefined; response: PageEvidence; headers: null; parameters: { query?: { "concept_id"?: (string | null); "cursor"?: (string | null); "limit"?: number; "skill"?: ("recall" | "explain" | "compute" | "derive" | "transfer" | null) } }; parametersRequired: false };
+  "GET /api/v1/learning/evidence/{id}/applicability": { request: undefined; response: EvidenceApplicabilityDecisionView; headers: null; parameters: { path: { "id": string }; query?: { "cursor"?: string; "event_id"?: string; "limit"?: number } }; parametersRequired: true };
+  "POST /api/v1/learning/evidence/{id}/applicability-decisions": { request: EvidenceImpactDecisionWrite; response: EvidenceImpactDecisionReceipt; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/learning/progress": { request: undefined; response: LearningProgress; headers: null; parameters: { query?: { "course_id"?: (string | null) } }; parametersRequired: false };
   "GET /api/v1/lessons/{id}": { request: undefined; response: Lesson; headers: null; parameters: { path: { "id": string }; query: { "revision": number } }; parametersRequired: true };
   "GET /api/v1/notes": { request: undefined; response: PageNote; headers: null; parameters: { query?: { "cursor"?: (string | null); "limit"?: number; "ref_id"?: (string | null) } }; parametersRequired: false };
@@ -595,6 +599,54 @@ export const API_ENDPOINTS = {
     ],
     "queryParameters": []
   },
+  "GET /api/v1/content/impacts/{event_id}": {
+    "method": "GET",
+    "path": "/api/v1/content/impacts/{event_id}",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "event_id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": [
+      {
+        "name": "cursor",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      },
+      {
+        "name": "target_id",
+        "required": false,
+        "type": "string"
+      }
+    ]
+  },
+  "POST /api/v1/content/impacts/{event_id}/decisions": {
+    "method": "POST",
+    "path": "/api/v1/content/impacts/{event_id}/decisions",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "event_id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
   "POST /api/v1/content/restore-drafts": {
     "method": "POST",
     "path": "/api/v1/content/restore-drafts",
@@ -1025,6 +1077,54 @@ export const API_ENDPOINTS = {
         "type": "string"
       }
     ]
+  },
+  "GET /api/v1/learning/evidence/{id}/applicability": {
+    "method": "GET",
+    "path": "/api/v1/learning/evidence/{id}/applicability",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": [
+      {
+        "name": "cursor",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "name": "event_id",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      }
+    ]
+  },
+  "POST /api/v1/learning/evidence/{id}/applicability-decisions": {
+    "method": "POST",
+    "path": "/api/v1/learning/evidence/{id}/applicability-decisions",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
   },
   "GET /api/v1/learning/progress": {
     "method": "GET",

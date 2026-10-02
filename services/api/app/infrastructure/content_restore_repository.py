@@ -1,5 +1,6 @@
 """Restore-owned immutable requests and records; never infer a producer from an ID."""
 import sqlite3
+from .security import historical_session_belongs_to
 from packages.contracts.canonical import canonical_bytes, sha256_bytes, strict_json
 from ..application.content_restore_models import RestoreRecord, checked, integrity
 from ..application.errors import ApiError
@@ -25,11 +26,10 @@ class RestoreRepository:
             value = checked(RestoreRecord, strict_json(row['record_json']))
             command = self.conn.execute('SELECT workspace_id,actor_id,command_key,draft_id,record_sha256 FROM content_restore_commands WHERE draft_id=?',
                 (identifier,)).fetchone()
-            actor = self.conn.execute('SELECT 1 FROM local_sessions WHERE id=? AND workspace_id=?',
-                (value.actor_id, self.workspace)).fetchone()
+            actor_valid = historical_session_belongs_to(self.conn, self.workspace, value.actor_id)
             if (canonical_bytes(value).decode() != row['record_json'] or sha256_bytes(row['record_json'].encode()) != row['record_sha256']
                     or (value.candidate.draft_id, value.workspace_id, value.actor_id, value.command_key) != tuple(row[k] for k in ('id', 'workspace_id', 'actor_id', 'command_key'))
-                    or actor is None or command is None or tuple(command) != (self.workspace, value.actor_id, value.command_key, identifier, row['record_sha256'])):
+                    or not actor_valid or command is None or tuple(command) != (self.workspace, value.actor_id, value.command_key, identifier, row['record_sha256'])):
                 raise integrity()
             return value
         except (ValueError, TypeError, KeyError):

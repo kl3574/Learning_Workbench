@@ -42,22 +42,28 @@ def test_nonempty_publication_rows_rowids_triggers_and_old_ack_survive_forward_u
         assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
         assert rows == {t: [tuple(x) for x in conn.execute(f"SELECT rowid,* FROM {t} ORDER BY rowid")] for t in TABLES}
-        assert triggers == {
+        current_triggers = {
             r["name"]: r["sql"]
             for r in conn.execute(
                 "SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name IN (?,?,?,?)", TABLES
             )
         }
+        assert triggers == {name: current_triggers[name] for name in triggers}
+        assert set(current_triggers) - set(triggers) == {f'{table}_no_replace' for table in TABLES}
         with pytest.raises(sqlite3.IntegrityError):
             conn.execute("UPDATE draft_publication_results SET record_json='{}'")
     after = table_hashes(upgraded)
     assert {'content_impact_legacy_events', 'content_impact_snapshots',
             'content_impact_decisions', 'content_impact_decision_heads'} <= set(after) - set(before)
-    # Later owner migrations may add empty ledgers; existing row preservation
-    # remains exact below and every new table must have no invented records.
+    # Restore copies only existing provenance identities into an independent
+    # witness. All other added ledgers are empty; every prior row stays exact.
     with upgraded.connect() as conn:
+        columns = 'workspace_id,block_id,block_revision,block_sha256,source_id,import_id,snapshot_sha256'
+        provenance = [tuple(row) for row in conn.execute(f'SELECT {columns} FROM block_provenance ORDER BY 1,2,3,4')]
+        witnesses = [tuple(row) for row in conn.execute(f'SELECT {columns} FROM block_provenance_witnesses ORDER BY 1,2,3,4')]
+        assert provenance and witnesses == provenance
         assert all(conn.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0] == 0
-                   for table in set(after) - set(before))
+                   for table in set(after) - set(before) - {'block_provenance_witnesses'})
     assert {k: v for k, v in before.items() if k != "schema_migrations"} == {
         k: after[k] for k in before if k != "schema_migrations"
     }
