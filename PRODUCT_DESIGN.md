@@ -1,6 +1,6 @@
 # 知径 Learning Workbench：完整产品设计与工程实施规范
 
-**版本：3.0.12｜日期：2026-10-02｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
+**版本：3.0.13｜日期：2026-10-02｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
 
 **本文件（含文末附录）是唯一产品与工程规范。** 将它放入空目录即可开始；不需要旧版设计包、旧 Demo、之前聊天、私有 GitHub 仓库或另一份提示词说明需求。正文定义产品，附录内嵌数据模型、HTTP 字段、数据库设计、模块接口、样例和验收用例。构建 Agent 根据本文生成实现文件、OpenAPI、测试和进度记录；这些是派生产物，不是第二套产品需求。
 
@@ -35,6 +35,7 @@
 | 3.0.10 | M6.2 编辑命令的非秘密会话连续性标识与未知 ACK 跨页面显式重放 | 已获所有者批准；不授予新会话继承原命令，不持久化 CSRF/cookie，不代表 M6.2 验收完成；不改54 core/0001/学习包3.0.0 |
 | 3.0.11 | M6.2 真实 Content 影响事件的只读发现列表、严格摘要与固定高水位分页（§20.13） | 已获所有者批准，待实施验收；不表示任何影响已处理，不改54 core/0001/学习包3.0.0 |
 | 3.0.12 | M6.2 恢复例题的作者显式数值计划、原文定位、独立预览/单次执行与新Review绑定（§20.14） | 已获所有者批准，待实施验收；不继承旧批准、不放宽发布准入，不改54 core/0001/学习包3.0.0 |
+| 3.0.13 | M6.2 单块生成例题的新公开块映射、严格发布态读回与当前数值/启动许可事务边界（§20.15） | 已获所有者批准，待实施验收；不自动调整父级引用，不扩组/题目发布，不改54 core/0001/学习包3.0.0 |
 
 v3.0.10 会话连续性与 v3.0.11 内容影响事件发现均已获所有者明确批准；本文件保留两项合同。批准不代表实现或验收通过，实际状态见进度事实记录。
 
@@ -1174,7 +1175,7 @@ content_plan保留原教学约束、目标顺序及proof_policy；计划条目�
 
 M6.2 已发布公开`text`块的编辑稿属于`authoring_edit`，与Import和Authoring生成各自真实候选身份分开。只有当前author会话在当前workspace及学科Policy允许时可用GET `/draft-edits/{id}`读取其真实不可变历史；URL id不赋权，也不按前缀或跨owner SQL猜归属。可选`revision`是单个正整数；省略时返回服务端当前不可变草稿头，给定时仅返回该精确历史修订。未知、跨workspace及其他owner id统一404；不存在的历史revision返回412，错误、重复或未知query返回422。GET禁止body、无网络/数据库写、响应`Cache-Control: no-store`，每次重核原所属历史、候选SHA、精确基准Content元数据与正文及当前读取权限，损坏即安全拒绝，不借用旧命令ACK构造当前状态。
 
-具名严格`EditDraftSnapshot`为`{owner:"authoring_edit",candidate:DraftCandidate,base_ref:ContentRef,base_material_sha256:Sha256,payload:DraftEditPayload,warnings:Warning[],state:"draft"|"published"}`。`DraftEditPayload`严格为`{version:"text-block-edit-v1",entity:"block",kind:"text",base_ref,body_path,citations,title,body_markdown,body_sha256,base_material_sha256}`，与真实不可变候选SHA和基准材料SHA逐字节核验；state须从该精确候选的真实发布记录只读派生，已发布稿不允许新增PATCH修订；不投影actor、命令key、原始Review证据或私有答案。现有Import GET `/drafts/{id}`保持ImportDraftSnapshot，Authoring生成GET `/authoring/drafts/{id}`保持原形状；不把三者改为宽union。
+具名严格`EditDraftSnapshot`为`{owner:"authoring_edit",candidate:DraftCandidate,base_ref:ContentRef,base_material_sha256:Sha256,payload:DraftEditPayload,warnings:Warning[],state:"draft"|"published"}`。`DraftEditPayload`严格为`{version:"text-block-edit-v1",entity:"block",kind:"text",base_ref,body_path,citations,title,body_markdown,body_sha256,base_material_sha256}`，与真实不可变候选SHA和基准材料SHA逐字节核验；state须从该精确候选的真实发布记录只读派生，已发布稿不允许新增PATCH修订；不投影actor、命令key、原始Review证据或私有答案。现有Import GET `/drafts/{id}`保持ImportDraftSnapshot，Authoring生成GET `/authoring/drafts/{id}`保留具名单块owner，仅按§20.15窄扩展发布态与必填published_ref；不把三者改为宽union。
 
 PATCH返回412后，浏览器保留原待同步命令及本地基准，分别读取当前服务端草稿头与原精确草稿修订，展示`基准/本地待同步/服务端当前`三方标题与正文；用户显式解决后以新基准提交新命令。GET绝不自动rebase、发布或重复执行旧命令；原命令回执与当前读取明确分离。真实SQLite/HTTP/IndexedDB、刷新/重启、双标签竞态、Policy切换、坏hash及GET零写均须验收；此读口本身不完成编辑发布、影响决定或恢复旧内容。
 
@@ -1298,6 +1299,66 @@ worked_example 发布仍要求所选新 Review 中本候选唯一 material 的�
 | 合同与回归 | 仅新增下表3条真实路由及具名DTO、Restore snapshot发现字段、已列Jobs/Review适配；从本文重建OpenAPI/端口/前端并逐条actual HTTP核验；旧Import/Edit/Authoring single/group正常路径及所有坏owner路径保持，54 core/0001/包3.0.0不变 |
 
 本节选择“作者明确提供、原文数值定位、每个 Restore candidate 唯一不可变计划绑定、逐次单独执行许可”。任何自动抽取/模型代填、自定义运行语言、跨对象数值材料、候选内修改计划、任意artifact代替运行、其他kind扩展或跨页面数值命令继承均不在本节内，须另有明确合同。本节已获所有者批准纳入唯一规范；实现与各项验收必须另记真实结果。
+
+### 20.15 M6.2 单块生成例题的显式发布（v3.0.13）
+
+本节已获所有者明确批准。仅把一个真实 `authoring_single` 的 `WorkedExamplePayload` 发布为新的公开 `ContentBlock(kind=worked_example)`；沿现有审核、人类决定和 `POST /drafts/{id}/publish` 四字段请求及 `201 ContentRef`，不新增路由。Lesson 组、题目、既有对象修改、父 Lesson/Course 引用调整不在本节内。批准不代表实现、物理数值、真实模型或内容质量验收成功，各项实际结果另记进度。
+
+#### 20.15.1 完整 ContentBlock 映射及来源边界
+
+发布 owner 只能读取已登记 `authoring_single`，通过 Authoring 的具名事务读口核原 Job、Provider 受检原输出、完整 candidate/input/context、body bytes 与来源材料。不能构造 Import、Restore、组成员或假 Provider 身份。
+
+每个精确候选至多成功发布一次新对象 r1。发布事务再次核精确 candidate/revision/SHA 和批准，首次写 Content 时以新 ID 的 current 为 null 做强 CAS / require_absent；存在任何已有对象时拒绝，不能据 ID 冲突更新已有对象。并发两命令只有一个发布成功。当前权限与原历史核验后，同 key/同完整命令回原 ACK，同 key/异命令沿现有409 IDEMPOTENCY_CONFLICT；已发布后新 key 沿现有409 DRAFT_ALREADY_PUBLISHED，不产生第二块。候选到新 ID、body_path、完整 ContentBlock 和实际 ContentRef 的分配在首次成功事务内固定并写入不可变发布记录；重启或重放只能回读原分配，不重新分配。事务失败未发生发布，保留原稿且不留下可冒充成功的关联。
+
+| ContentBlock 字段 | 固定映射 |
+|---|---|
+| schema_version / entity / revision | `3.0.0` / `block` / `1` |
+| id | 服务端分配的新稳定 ASCII ID；分配归本次发布，不能取模型提供的 ID |
+| kind / title | 原 payload 的 `worked_example` / 原 title，逐字保留 |
+| body_path | 服务端为该新 ID 生成的安全逻辑相对路径；不是用户路径、Provider artifact 路径或任意文件入口 |
+| body_sha256 / 实际正文 | 原候选 `body_markdown` UTF-8 原始字节的 SHA / 同一原始字节；不加标题、来源脚注或换行，不在发布时改写正文 |
+| concepts | `[]`；单块请求没有已选择的 Concept 绑定，不能从先修文字或 source block 自动继承概念 |
+| citations | `[]`；此 payload 没有 Citation 记录，不能把 block ID、Provider 名称、文本 URL 或祖先来源的引用 ID 冒充本块 Citation |
+| depends_on | **采用原 payload.declared_source_refs 的完整引用与原顺序**；只表达作者在来源审核中确认的、用于版本影响追踪的显式来源依赖，不证明数学依赖、论断支持或来源正确性。不追加未声明来源、先修、同名对象或 current ref |
+
+最后一项是本节明确规定的产品语义；此前版本未定义这一映射。人类来源审核须查看全部原输入材料及模型声明的子集，不能仅核 ref 形状就声称完成审校。声明 refs 为空时 depends_on 为空；原实际输入 refs 与它们的完整冻结来源仍保存在原 Authoring 记录及本次发布关联，不能因声明子集而删除原输入事实。
+
+`symbols`、`numeric_plan`、原教学要求及所有源材料继续逐字节保留在原候选/上下文中，发布记录绑定其完整 SHA；不把它们丢弃，不增写 ContentBlock 的未声明字段。ContentRef.sha256 对上述完整 ContentBlock 的规范 JSON 计算，**不得借用**候选 payload SHA；body SHA 继续是另一域。
+
+生成记录不是导入原件。当前 FrozenProvenance 要求真实 retained original/import 关系，不能给生成内容伪造 source/import_id，也不能把某个输入来源的原件称为新生成正文的原件。首切片沿已有 Reader/Retrieval 的 `unresolved` 来源投影，保留 `PROVENANCE_UNRESOLVED` 等实际 warning；author 侧通过原 candidate 与冻结来源查看生成依据。已有来源的 verified/unverified/user_supplied 保留在原输入事实中，不因人审或发布升级。以后若需公开的生成来源专用投影，另定其窄合同，不能靠本次内置记录伪造现有 frozen 语义。
+
+#### 20.15.2 发布当前状态的独立 GET 读回
+
+本节只扩展现有 `GET /authoring/drafts/{id}` 的具名 AuthoringDraftView：`state` 允许 `draft|published`，增加必填 `published_ref:ContentRef(entity=block)|null`；`state=published` 当且仅当 published_ref 非null。其余字段及原 payload/validation/source_job_id/base_ref 的含义不变；未发布为 `draft/null`，仅有完整可核验的本候选发布记录时为 `published/实际精确ref`。新公开对象后来产生更高修订时仍返回原候选实际发布的原 ref，不用 current 冒充原发布结果。
+
+这是现有闭合响应的明确合同扩展，**不是旧严格客户端的 wire 向后兼容承诺**：实施时须从本规范同步更新具名模型、OpenAPI、前端生成类型和调用方。此前 v3.0.12 不能在不改闭合字段的情况下同时表达该事实；不另造宽 union、偷偷加字段或把原 GET 改到 Import owner。历史候选、Provider 终态、旧 Numeric/Review/命令 ACK 原字节不改；新增 `published_ref` 是当前 owner 投影，不回填原记录。
+
+GET 每次核当前 author/workspace/学科 Policy、完整候选与发布 owner 历史及实际公开正文，零写、零联网、no-store；存在损坏/丢失关联不得返回 `draft/null` 隐藏已发生发布。学科失权时不返回候选、计划、源标题或 published_ref。通用安全 Jobs 控制规则保持。
+
+首次发布后，不接受该候选新的数值预览或新的 approve_once；拒绝不执行。原预览/决定 ACK、历史数值读取及已有 Job 的安全取消/实际终态回读保留，不把已运行事实改成未运行。发布不重开已完成生成 Job，不改其 result_refs=[]。生成来源 GET /authoring/jobs/{id} 的历史结果字段保持原义。
+
+该 single 候选的**新数值启动许可与首次发布必须在真实 owner 写事务中串行**，不能只在 preview/approve 时查发布态。即使较早检查 A 已批准并排队、较新检查 B 已真实 PASS 且新 Review 允许发布，A 在持久取得新 start 许可前仍须经具名 owner 端口核该精确候选尚未发布；此核验与许可落盘使用同一事务，禁止事务外先读后启动。若发布先提交且 A 尚无持久 start 许可，拒绝授予新许可/新执行，按既有 owner 协议保留可证明的未运行事实及真实终态，不调用 runtime、不改原批准 ACK。若 A 的许可先提交，这就是当前数值账本的新事实，首次发布须按第3节重核端点，旧 Review 不得跨过它。两种顺序均不能修改其他 owner 的准入规则。
+
+已存在的持久 start 许可和 actual_started 事实沿原 §20.8 启动/崩溃恢复协议处理；**actual_started_at 仍为 null 不能单独证明未运行**，因为许可落盘、进程实际启动与实际开始事实回写之间可能崩溃。不能因候选已 published 抹掉许可、实际启动、结果或 Job 终态，也不能把旧许可当作重新执行授权。只有可证明尚未取得开始许可的准备才可按原规则重试；已有许可但无法核实实际执行/结果时保留 outcome_unknown，不自动重跑。原已实际开始的执行仍经原安全取消/终态收集，保存实际结果；后来终态推进不改变成功发布的原 ACK。
+
+#### 20.15.3 首次发布的 Review / 数值边界
+
+沿既有完整结构检查、适用数学与来源人工决定、精确候选、warning 确认及强 CAS。worked_example 必须有该候选独立明确批准的完整实际数值 PASS：实际开始、唯一完成 Job、完整输出/输出 SHA、已知0退出码及全部断言通过。数学 NOT_APPLICABLE、人工枚举、任意 artifact 或单元测试结果都不能替代它。
+
+首次发布还必须经真实 single 数值 owner 只读核验所选 Review 的观察端点与**当前完整有序数值账本端点相同**。新增 preview、决定、开始/完成/失败等持久事实均使原观察不足以首次发布，须显式新建 Review 和新的人类决定；不能跳过较新 pending/decline/FAIL/BLOCKED 选择旧 PASS。端点比较排除读取时间及只读派生 expired，使用真实 membership/head、原命令、Job/event/start/end/output 的完整绑定，不用时间戳或重算较小 head 替代历史。
+
+历史 Review 和已成功发布的原 ACK 仍按原冻结观察和完整历史回读。后来状态推进不改旧回执，也不据旧 ACK 授予一次新发布；当前身份失权、原 Provider/候选/来源/Review/发布/真实正文损坏仍 fail closed。原历史验证口不能被新准入口改成必须永远等于当前端点。
+
+#### 20.15.4 工程实现与验收边界
+
+Authoring/Quality/Content/Publication 各自具名受检端口在调用方真实 SQLite 事务协作：Authoring 持原候选及来源；single 数值 owner 持原批准、开始许可、开始/终态、输出及完整数值清单，Jobs owner 持生命周期和租约，Quality 持 Review 及冻结数值观察；Content 写不可变 r1/正文/current，Publication 经具名受检端口消费准入结果并持 candidate→完整 ContentBlock→新 ContentRef、所选人审/数值观察、命令和状态历史。采用前向所属迁移，不改0001、54 core、包3.0.0，不跨 owner SQL 猜归属。状态/current/发布记录/outbox/ACK 同事务提交；失败完整回滚，未引用 blob 沿现有 GC 边界。未知或坏 owner、不可核验 Provider/source、错误引用和受保护路径保持拒绝。
+
+不写父 Lesson/Course，也不造课程、导航位置或课程已经切换的承诺。该新块通过原精确 block/body 读口可读；需要加入教材路径时另经显式父对象审核发布。它是单块发布闭环，不是整课发布或完整 M6.2 验收。
+
+最小验收须覆盖：真实 SQLite 候选与原受检生成记录→单次批准的真实隔离数值结果→新 Review/显式人审→原 POST 发布→独立 GET current publication→精确 Content 元数据与原 bytes→重启同 ref；空来源及带精确声明来源；候选/正文/source/Provider/Review/numeric/output/发布账本单边损坏与尾删；所有旧 owner、未知ID、角色/Policy、原 ACK/异命令、两标签首次发布竞态；新数值事实阻断旧 Review，历史 ACK 不因后来事实失效；Content/current/record/ACK 注入失败原子回滚；父 pin/旧题/私解/attempt/grade/evidence 字节不动。状态发现和 GET 的完整行清单不变。
+
+数值 A/B 竞态验收须明确建立同一 single 候选的较早 A（approve_once/queued，尚无 start 许可）、较新 B（完整真实 PASS）及新 Review/人工决定，用真实事务屏障分别验证：发布先提交时 A 不取得新许可且 runtime 调用数为零，原批准 ACK 与真实未运行终态可回读；A 许可先提交时旧 Review 的发布被当前账本检查拒绝，须重新 Review/人审；在持久许可后、actual_started 回写前注入崩溃/重启时不能仅凭 null 声称未运行，无法证明结果则 outcome_unknown且无第二次执行；在已有许可或实际开始后发生发布时，原取消/完成/未知终态与输出事实不被覆盖，发布原 ACK 保持。每条分别记录许可、Job/start/end/输出、发布顺序与实际 runtime 调用数；合成账本/受控崩溃探针与真实隔离运行分开记证据，不能用合成 B 宣称物理 PASS。
+
 
 ## 21. 旧格式兼容与确定的范围边界
 
@@ -1874,7 +1935,7 @@ consumed_provider_calls 是本机保守消耗额度，不声称服务商实际�
 | POST `/authoring/jobs` | AuthoringPrepareWrite；Idempotency-Key | 202 JobRef，真实 authoring Job，初始 awaiting_approval；无外发 |
 | GET `/authoring/jobs` | `cursor?`,`limit?`；默认20、最大100，拒未知/重复/null参数 | AuthoringJobPage；工作区内 authoring/authoring_numeric_check 两种真实Job的安全控制分页，learner/author均可；冻结创建序列，不下发正文/原标题/候选/父级学科关联 |
 | GET `/authoring/jobs/{id}` | 无 | AuthoringJobReadView；按真实记录版本返回原单块或§20.9组详情，作者及当前学科读取许可 |
-| GET `/authoring/drafts/{id}` | 无 | AuthoringDraftView；精确 DraftCandidate 与 immutable payload，非 ContentRef；不与 Import `/drafts/{id}` 争用 |
+| GET `/authoring/drafts/{id}` | 无 | AuthoringDraftView；精确 DraftCandidate 与 immutable payload，候选不冒充 ContentRef；发布态及 published_ref 沿§20.15零写读回；不与 Import `/drafts/{id}` 争用 |
 | POST `/authoring/drafts/{id}/numeric-checks` | NumericCheckPreviewWrite；Idempotency-Key | 201 NumericCheckView，冻结完整操作、有效10分钟；不创建执行Job、不运行 |
 | GET `/authoring/numeric-checks/{id}` | 无 | NumericCheckView；原预览/决定/真实Job与结果，GET零写 |
 | POST `/authoring/numeric-checks/{id}/decision` | ApprovalDecision；Idempotency-Key | NumericCheckDecisionAck；approve_once后202真实检查Job，decline后200且job=null；expected_revision强CAS，操作SHA必须完全一致 |
@@ -1938,7 +1999,8 @@ AuthoringJobView = {
 }
 AuthoringDraftView = {
   owner: authoring, candidate: DraftCandidate(entity=block), source_job_id: Id,
-  state: draft, base_ref: null, body_sha256: Sha256,
+  state: draft|published, published_ref: ContentRef(entity=block)|null,
+  base_ref: null, body_sha256: Sha256,
   payload: WorkedExamplePayload, validation: AuthoringValidation,
   numeric_check_ids: Id[0..100], warnings: Warning[]
 }
