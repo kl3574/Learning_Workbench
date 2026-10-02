@@ -5,12 +5,12 @@ import re
 import sqlite3
 from typing import Literal, Self
 
-from pydantic import model_validator
+from pydantic import Field, TypeAdapter, model_validator
 from packages.contracts import domain_models as dm
 from packages.contracts.canonical import canonical_bytes, metadata_sha256, sha256_bytes, strict_json
 from ..authoring_dto import AuthoringModel, NonBlank
 from ..content_impact_dto import (
-    ContentImpactView, ImpactArtifact, ImpactClassification,
+    ContentImpactPage, ContentImpactSummary, ContentImpactView, ImpactArtifact, ImpactClassification,
     ImpactObjectDecisionReceipt, ImpactObjectDecisionWrite,
 )
 from ..infrastructure.blobs import BlobStore
@@ -57,6 +57,18 @@ class ImpactDecisionRecord(AuthoringModel):
                 or (r.decision_revision == 1) != (self.previous_receipt_sha256 is None)):
             raise ValueError('Decision must retain its complete original command and adjacent revision')
         validate_key(self.command_key)
+        return self
+
+
+class ImpactListPosition(AuthoringModel):
+    high_water: int = Field(ge=1)
+    after: int = Field(ge=1)
+    membership_sha256: dm.Sha256
+
+    @model_validator(mode='after')
+    def ordered(self) -> Self:
+        if self.after > self.high_water:
+            raise ValueError('Position exceeds event high water')
         return self
 
 
@@ -173,6 +185,104 @@ class ContentImpactDecisionService:
                 raise integrity()
         return records
 
+    def _current_states(self, repo: ContentRepository, snapshot: ContentImpactSnapshot,
+                        records: list[ImpactDecisionRecord]) -> tuple[list[str], list[str]]:
+        heads = {record.receipt.target_id: record.receipt for record in records}
+        pending, action = [], []
+        for identifier in self._target_ids(repo, snapshot):
+            stored = repo.current(identifier)
+            target = reference(stored.value)
+            body_sha = self._body(repo, stored.value)
+            decision = heads.get(identifier)
+            if (decision is None or stored.lifecycle != 'active' or decision.observed_ref != target
+                    or decision.target_body_sha256 != body_sha):
+                pending.append(identifier)
+            elif decision.decision == 'new_revision_required':
+                action.append(identifier)
+        return pending, action
+
+    def discover(self, identity: SessionIdentity, *, changed_object_id: str | None = None,
+                 limit: int = 20, cursor: str | None = None) -> ContentImpactPage:
+        """Fixed append-order membership, freshly validated current Content states.
+
+        Outbox rows persist after delivery. A signed digest of the immutable
+        high-water prefix detects deletion/replacement, including the last page
+        boundary, without GET creating a cursor or projection record.
+        """
+        if changed_object_id is not None:
+            self.content._identity(changed_object_id)
+        context = self.content._context(identity.workspace_id, 'content-impact-list-v1', changed_object_id or '', limit)
+        with self._access(identity, readonly=True) as (conn, current):
+            try:
+                position = self.content._position(cursor, context, str)
+            except ApiError as error:
+                if error.status == 422:
+                    raise ApiError(422, 'SCHEMA_INVALID', '事件列表游标无效，请从第一页重新读取。') from None
+                raise
+            # Owner witnesses also expose missing/retyped source rows; scanning
+            # only live outbox rows would quietly erase such corrupt events.
+            for table in ('content_impact_snapshots', 'content_impact_legacy_events'):
+                orphan = conn.execute(f'SELECT 1 FROM {table} s LEFT JOIN outbox o ON o.id=s.event_id '
+                    "WHERE o.id IS NULL OR o.event_type<>'content.dependencies_invalidated' LIMIT 1").fetchone()
+                if orphan is not None:
+                    raise integrity()
+            saved = None
+            if position is not None:
+                try:
+                    saved = ImpactListPosition.model_validate(strict_json(str(position)))
+                except (ValueError, TypeError, KeyError):
+                    raise ApiError(422, 'SCHEMA_INVALID', '事件列表游标无效，请从第一页重新读取。') from None
+            watermark = saved.high_water if saved else conn.execute(
+                "SELECT COALESCE(MAX(rowid),0) FROM outbox WHERE event_type='content.dependencies_invalidated'"
+            ).fetchone()[0]
+            rows = conn.execute("SELECT rowid AS sequence,id,payload_json FROM outbox "
+                "WHERE event_type='content.dependencies_invalidated' AND rowid<=? ORDER BY rowid", (watermark,)).fetchall()
+            membership = []
+            entries: list[tuple[int, ContentImpactSummary]] = []
+            repo = ContentRepository(conn, current.workspace_id)
+            for row in rows:
+                try:
+                    payload = strict_json(row['payload_json'])
+                    if not isinstance(payload, dict):
+                        raise integrity()
+                    owner = TypeAdapter(dm.Id).validate_python(payload['workspace_id'])
+                    TypeAdapter(dm.Id).validate_python(row['id'])
+                    # Validate ownership and complete publication facts before
+                    # excluding a foreign workspace or another owner entity.
+                    snapshot = impact_snapshot(conn, owner, row['id'])
+                except (ValueError, TypeError, KeyError):
+                    raise integrity() from None
+                except ApiError as error:
+                    if error.status == 404:
+                        raise integrity() from None
+                    raise
+                membership.append([row['sequence'], row['id'], sha256_bytes(row['payload_json'].encode()),
+                                   snapshot.evidence_version, snapshot.snapshot_sha256])
+                if owner != current.workspace_id or snapshot.old_ref.entity in {'note', 'route'}:
+                    continue
+                records = self._history(conn, current, snapshot)
+                pending, action = self._current_states(repo, snapshot, records)
+                # Even a nonmatching event must have intact facts and ledger;
+                # corrupt records cannot masquerade as an empty filtered list.
+                if changed_object_id is not None and snapshot.old_ref.id != changed_object_id:
+                    continue
+                summary = ContentImpactSummary(event_id=snapshot.event_id, old_ref=snapshot.old_ref,
+                    new_ref=snapshot.new_ref, reason=snapshot.reason, evidence_version=snapshot.evidence_version,
+                    event_snapshot_sha256=snapshot.snapshot_sha256, pending_target_ids=pending,
+                    action_required_target_ids=action)
+                entries.append((row['sequence'], summary))
+            digest = sha256_bytes(canonical_bytes(membership))
+            if saved is not None and (saved.membership_sha256 != digest
+                    or not any(sequence == saved.after for sequence, _ in entries)):
+                raise integrity()
+            remaining = [(sequence, item) for sequence, item in entries if saved is None or sequence > saved.after]
+            page = remaining[:limit]
+            next_cursor = None
+            if len(remaining) > limit:
+                next_position = ImpactListPosition(high_water=watermark, after=page[-1][0], membership_sha256=digest)
+                next_cursor = self.content._cursor(context, canonical_bytes(next_position).decode())
+            return ContentImpactPage(items=[item for _, item in page], next_cursor=next_cursor)
+
     def read(self, identity: SessionIdentity, event_id: str, *, target_id: str | None = None,
              limit: int = 20, cursor: str | None = None) -> ContentImpactView:
         self.content._identity(event_id)
@@ -209,17 +319,7 @@ class ContentImpactDecisionService:
                     and (target_id is None or record.receipt.target_id == target_id)
                     and (record.receipt.target_id, record.receipt.decision_revision) > (last_target, last_revision)]
             heads = {record.receipt.target_id: record.receipt for record in records}
-            pending, action = [], []
-            for identifier in targets:
-                stored = repo.current(identifier)
-                target = reference(stored.value)
-                body_sha = self._body(repo, stored.value)
-                decision = heads.get(identifier)
-                if (decision is None or stored.lifecycle != 'active' or decision.observed_ref != target
-                        or decision.target_body_sha256 != body_sha):
-                    pending.append(identifier)
-                elif decision.decision == 'new_revision_required':
-                    action.append(identifier)
+            pending, action = self._current_states(repo, snapshot, records)
             items = page[:limit]
             next_cursor = (self.content._cursor(context, f'{watermark}:{items[-1].target_id}:{items[-1].decision_revision}')
                            if len(page) > limit else None)

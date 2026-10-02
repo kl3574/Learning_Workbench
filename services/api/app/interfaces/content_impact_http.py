@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from packages.contracts import domain_models as dm
 from ..application.content_impact_decisions import ContentImpactDecisionService
 from ..application.errors import ApiError
-from ..content_impact_dto import ContentImpactView, ImpactObjectDecisionReceipt, ImpactObjectDecisionWrite
+from ..content_impact_dto import ContentImpactPage, ContentImpactView, ImpactObjectDecisionReceipt, ImpactObjectDecisionWrite
 from .content_http import query_fields
 from .http import current_identity, verify_write
 from .practice_http import private_response
@@ -22,6 +22,16 @@ async def no_body(request: Request) -> None:
 def create_content_impact_router(service: ContentImpactDecisionService) -> APIRouter:
     router = APIRouter(prefix='/api/v1', tags=['content'], dependencies=[
         Depends(current_identity), Depends(unique_headers), Depends(private_response)])
+
+    @router.get('/content/impacts', response_model=ContentImpactPage,
+                dependencies=[Depends(no_body), Depends(query_fields('changed_object_id', 'cursor', 'limit'))])
+    def discover(request: Request,
+                 changed_object_id: Annotated[dm.Id | None, Query()] = None,
+                 cursor: Annotated[str | None, Query(min_length=1, max_length=1024)] = None,
+                 limit: Annotated[int, Query(ge=1, le=100)] = 20) -> ContentImpactPage:
+        if 'limit' in request.query_params and re.fullmatch(r'[1-9][0-9]*', request.query_params['limit']) is None:
+            raise ApiError(422, 'SCHEMA_INVALID', '分页大小必须为单个正整数。')
+        return service.discover(request.state.identity, changed_object_id=changed_object_id, limit=limit, cursor=cursor)
 
     @router.get('/content/impacts/{event_id}', response_model=ContentImpactView,
                 dependencies=[Depends(no_body), Depends(query_fields('target_id', 'cursor', 'limit'))])

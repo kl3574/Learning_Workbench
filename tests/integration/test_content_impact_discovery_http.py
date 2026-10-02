@@ -1,0 +1,199 @@
+"""Approved v3.0.11 discovery over real Content events, never injected IDs in the client."""
+import pytest
+from fastapi.testclient import TestClient
+
+from services.api.app.main import create_app
+from services.api.app.infrastructure.content_repository import reference
+from tests.integration.test_authoring_http import command
+from tests.integration.test_authoring_numeric_provider_history import table_hashes
+from tests.integration.test_content_impact_decisions_http import case as case
+
+PATH = '/api/v1/content/impacts'
+
+
+def get(case, **params):
+    before = table_hashes(case.database)
+    response = case.client.get(PATH, params=params)
+    assert table_hashes(case.database) == before
+    assert response.status_code == 200, response.text
+    assert response.headers['cache-control'] == 'no-store'
+    return response.json()
+
+
+def publish(case, index, revision):
+    value = case.original[index].model_copy(update={'revision': revision, 'title': f'Synthetic revision {revision}'})
+    case.service.publish(case.identity.workspace_id, [value], {})
+
+
+def test_real_event_discovery_detail_filter_restart_and_exact_parent(case):
+    result = get(case)
+    assert result['next_cursor'] is None and len(result['items']) == 1
+    summary = result['items'][0]
+    # This ID is learned from the public response, not the fixture's database lookup.
+    detail = case.client.get(PATH + '/' + summary['event_id'])
+    assert detail.status_code == 200
+    assert summary == {name: detail.json()[name] for name in summary}
+    assert summary['old_ref']['id'] == 'block'
+    assert summary['pending_target_ids'] == ['course', 'lesson', 'lesson_candidate']
+    assert set(summary) == {'event_id', 'old_ref', 'new_ref', 'reason', 'evidence_version',
+        'event_snapshot_sha256', 'pending_target_ids', 'action_required_target_ids'}
+    assert get(case, changed_object_id='block') == result
+    assert get(case, changed_object_id='lesson') == {'items': [], 'next_cursor': None}
+    assert get(case, changed_object_id='unknown') == {'items': [], 'next_cursor': None}
+    parent = case.service.read(case.identity.workspace_id, 'lesson', 'lesson', 1)
+    assert parent.block_refs == [reference(case.original[1])]
+    restarted = TestClient(create_app(case.database.settings), base_url=case.database.settings.origin)
+    restarted.cookies.update(case.client.cookies)
+    try:
+        before = table_hashes(case.database)
+        assert restarted.get(PATH).json() == result
+        assert table_hashes(case.database) == before
+    finally:
+        restarted.close()
+
+
+def test_three_pages_keep_old_membership_but_recheck_current_decisions(case):
+    publish(case, 0, 2)  # concept event, conservative block target
+    publish(case, 1, 3)
+    original = get(case)['items']
+    assert [x['old_ref']['id'] for x in original] == ['block', 'concept', 'block']
+    first = get(case, limit=1)
+    cursor = first['next_cursor']
+    assert cursor and first['items'] == original[:1]
+    second_event = original[1]
+    decision = dict(target_id='block', observed_ref=case.service.current(case.identity.workspace_id, 'block').model_dump(mode='json'),
+        expected_event_snapshot_sha256=second_event['event_snapshot_sha256'], expected_decision_revision=0,
+        decision='new_revision_required', reason='Synthetic explicit conservative review.', evidence_artifact_ids=[])
+    receipt = case.client.post(PATH+'/'+second_event['event_id']+'/decisions', json=decision, headers=command(case.headers,'new-revision'))
+    assert receipt.status_code == 200, receipt.text
+    second = get(case, limit=1, cursor=cursor)
+    assert second['items'][0]['event_id'] == second_event['event_id']
+    assert second['items'][0]['action_required_target_ids'] == ['block']
+    publish(case, 1, 4)  # later event excluded; old event's decision becomes pending
+    again = get(case, limit=1, cursor=cursor)
+    assert again['items'][0]['pending_target_ids'] == ['block', 'course', 'lesson', 'lesson_candidate']
+    assert again['items'][0]['action_required_target_ids'] == []
+    third = get(case, limit=1, cursor=second['next_cursor'])
+    assert third['items'][0]['event_id'] == original[2]['event_id'] and third['next_cursor'] is None
+    assert len(get(case)['items']) == 4
+    assert len(get(case, changed_object_id='block')['items']) == 3
+    assert len(get(case, changed_object_id='concept')['items']) == 1
+
+
+@pytest.mark.parametrize('query', ['unused=1','limit=1&limit=1','limit=0','limit=101','limit=true',
+    'limit=1.0','limit=%2B1','limit=01','cursor=','cursor=a&cursor=b','changed_object_id=',
+    'changed_object_id=block&changed_object_id=block','changed_object_id=1invalid'])
+def test_transport_rejection_zero_write(case, query):
+    before = table_hashes(case.database)
+    response = case.client.get(PATH+'?'+query)
+    assert response.status_code == 422, response.text
+    assert table_hashes(case.database) == before
+
+
+def test_body_cursor_context_and_restart_rejected_without_writes(case):
+    publish(case, 1, 3)
+    cursor = get(case, changed_object_id='block', limit=1)['next_cursor']
+    before = table_hashes(case.database)
+    assert case.client.request('GET',PATH,content=b'{}').status_code == 422
+    for params in ({'cursor': cursor, 'limit':1}, {'cursor':cursor, 'limit':2, 'changed_object_id':'block'},
+                   {'cursor':cursor, 'limit':1, 'changed_object_id':'concept'},
+                   {'cursor':cursor+'x', 'limit':1, 'changed_object_id':'block'}):
+        assert case.client.get(PATH,params=params).status_code == 422
+    restarted = TestClient(create_app(case.database.settings),base_url=case.database.settings.origin)
+    restarted.cookies.update(case.client.cookies)
+    try:
+        assert restarted.get(PATH,params={'cursor':cursor,'limit':1,'changed_object_id':'block'}).status_code == 422
+    finally:
+        restarted.close()
+    assert table_hashes(case.database) == before
+
+
+@pytest.mark.parametrize('damage', ['delete_first','delete_last','retype','owner_missing','owner_forged',
+    'snapshot','new_without_snapshot','history','head'])
+def test_bad_event_or_ledger_not_silently_filtered_and_lost_cursor_material_409(case, damage):
+    assert case.decide(case.write()).status_code == 200
+    publish(case, 1, 3)
+    page = get(case, limit=1)
+    with case.database.connect() as conn:
+        # Controlled disk-corruption fixture: normal FK constraints forbid
+        # losing source material, so disable them before this one transaction.
+        conn.execute('PRAGMA foreign_keys=OFF')
+        conn.execute('BEGIN IMMEDIATE')
+        if damage in {'delete_first','delete_last'}:
+            order = 'ASC' if damage == 'delete_first' else 'DESC'
+            identifier = conn.execute("SELECT id FROM outbox WHERE event_type='content.dependencies_invalidated' ORDER BY rowid "+order+" LIMIT 1").fetchone()[0]
+            conn.execute('DELETE FROM outbox WHERE id=?',(identifier,))
+        elif damage == 'retype':
+            conn.execute("UPDATE outbox SET event_type='content.other' WHERE id=?",(case.event_id,))
+        elif damage == 'owner_missing':
+            conn.execute("UPDATE outbox SET payload_json=json_remove(payload_json,'$.workspace_id') WHERE id=?",(case.event_id,))
+        elif damage == 'owner_forged':
+            conn.execute("UPDATE outbox SET payload_json=json_set(payload_json,'$.workspace_id','workspace_foreign') WHERE id=?",(case.event_id,))
+        elif damage == 'snapshot':
+            conn.execute('DROP TRIGGER content_impact_snapshot_no_update')
+            conn.execute("UPDATE content_impact_snapshots SET snapshot_sha256=? WHERE event_id=?",('0'*64,case.event_id))
+        elif damage == 'new_without_snapshot':
+            conn.execute('DROP TRIGGER content_impact_snapshot_no_delete')
+            conn.execute('DELETE FROM content_impact_snapshots WHERE event_id=?',(case.event_id,))
+        elif damage == 'history':
+            conn.execute('DROP TRIGGER content_impact_decision_no_update')
+            conn.execute("UPDATE content_impact_decisions SET record_sha256=?",('0'*64,))
+        else:
+            conn.execute("UPDATE content_impact_decision_heads SET receipt_sha256=?",('0'*64,))
+        conn.commit()
+    before = table_hashes(case.database)
+    assert case.client.get(PATH,params={'limit':1,'cursor':page['next_cursor']}).status_code == 409
+    # No matching filter is not an excuse to suppress a damaged record.
+    assert case.client.get(PATH,params={'changed_object_id':'unknown'}).status_code == 409
+    assert table_hashes(case.database) == before
+
+
+@pytest.mark.parametrize('change,status', [('learner',403),('logout',401),('independent',409)])
+def test_current_permission_precedes_payload(case, change, status):
+    get(case)
+    if change == 'independent':
+        from tests.assessment_fixtures import assessment_fixture
+        from tests.integration.test_assessment_attempts import import_fixture
+        fixture = assessment_fixture('discoverypolicy')
+        import_fixture(case.database,case.identity,fixture,'discovery-assessment')
+        response = case.client.post(f'/api/v1/assessments/{fixture.assessment.id}/attempts',
+            json={'assessment_ref':reference(fixture.assessment).model_dump(mode='json'),'mode':'independent'},
+            headers=command(case.headers,'start-test'))
+        assert response.status_code == 201
+    else:
+        response = case.client.post('/api/v1/session/'+('role' if change == 'learner' else 'logout'),
+            json={'role':'learner'} if change == 'learner' else {},headers=command(case.headers,'access-change'))
+        assert response.status_code == 200
+    before = table_hashes(case.database)
+    denied = case.client.get(PATH)
+    assert denied.status_code == status and 'items' not in denied.json()
+    assert table_hashes(case.database) == before
+
+
+def test_foreign_workspace_filter_empty_and_cursor_bound(case):
+    publish(case,1,3)
+    cursor = get(case,limit=1)['next_cursor']
+    with case.database.transaction() as conn:
+        conn.execute("INSERT INTO workspace(id,title,created_at) VALUES('workspace_other','Synthetic','2026-10-02T00:00:00Z')")
+        conn.execute("UPDATE local_sessions SET workspace_id='workspace_other' WHERE id=?",(case.identity.id,))
+    before = table_hashes(case.database)
+    assert case.client.get(PATH,params={'changed_object_id':'block'}).json() == {'items':[],'next_cursor':None}
+    assert case.client.get(PATH,params={'limit':1,'cursor':cursor}).status_code == 422
+    assert table_hashes(case.database) == before
+
+
+def test_true_legacy_read_only_and_delivered_event_stays_discoverable(case):
+    with case.database.transaction() as conn:
+        conn.execute('DROP TRIGGER content_impact_snapshot_no_delete')
+        conn.execute('DELETE FROM content_impact_snapshots WHERE event_id=?',(case.event_id,))
+        conn.execute('DROP TRIGGER content_impact_legacy_no_insert')
+        conn.execute('INSERT INTO content_impact_legacy_events(event_id,payload_json) SELECT id,payload_json FROM outbox WHERE id=?',(case.event_id,))
+        conn.execute("UPDATE outbox SET delivered_at='2026-10-02T00:00:00Z',attempts=2 WHERE id=?",(case.event_id,))
+    summary = get(case)['items'][0]
+    assert summary['evidence_version'] == 'legacy_unverified' and summary['event_snapshot_sha256'] is None
+    assert summary['pending_target_ids'] == ['course','lesson','lesson_candidate']
+    body = case.write()
+    body['expected_event_snapshot_sha256'] = '0'*64
+    before = table_hashes(case.database)
+    assert case.decide(body).status_code == 409
+    assert table_hashes(case.database) == before

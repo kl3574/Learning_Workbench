@@ -75,3 +75,37 @@ class ContentImpactView(AuthoringModel):
     target_decision_head: Annotated[int, Field(ge=0)] | None
     decisions: list[ImpactObjectDecisionReceipt]
     next_cursor: str | None
+
+
+class ContentImpactSummary(AuthoringModel):
+    event_id: dm.Id
+    old_ref: dm.ContentRef
+    new_ref: dm.ContentRef
+    reason: Literal['content_revision_published']
+    evidence_version: Literal['owner_frozen_v1', 'legacy_unverified']
+    event_snapshot_sha256: dm.Sha256 | None
+    pending_target_ids: list[dm.Id]
+    action_required_target_ids: list[dm.Id]
+
+    @model_validator(mode='after')
+    def complete_summary(self) -> Self:
+        if (self.old_ref.entity not in {'course', 'lesson', 'block', 'concept', 'question', 'practice_set', 'assessment'}
+                or self.old_ref.entity != self.new_ref.entity or self.old_ref.id != self.new_ref.id
+                or self.old_ref.revision >= self.new_ref.revision
+                or (self.evidence_version == 'owner_frozen_v1') != (self.event_snapshot_sha256 is not None)
+                or self.pending_target_ids != sorted(set(self.pending_target_ids))
+                or self.action_required_target_ids != sorted(set(self.action_required_target_ids))
+                or set(self.pending_target_ids) & set(self.action_required_target_ids)):
+            raise ValueError('Impact summary identity or target states mismatch')
+        return self
+
+
+class ContentImpactPage(AuthoringModel):
+    items: Annotated[list[ContentImpactSummary], Field(max_length=100)]
+    next_cursor: NonBlank | None
+
+    @model_validator(mode='after')
+    def unique_events(self) -> Self:
+        if len({item.event_id for item in self.items}) != len(self.items):
+            raise ValueError('Impact event IDs must be unique')
+        return self

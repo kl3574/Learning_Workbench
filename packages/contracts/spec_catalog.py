@@ -104,6 +104,7 @@ def route_task(path: str) -> str:
     if path.startswith(("/retrieval", "/index")):
         return "M5.2"
     if path.startswith(("/content/impacts/", "/content/restore-drafts")) or path in {
+        "/content/impacts",
         "/learning/evidence/{id}/applicability", "/learning/evidence/{id}/applicability-decisions"
     }:
         return "M6.2"
