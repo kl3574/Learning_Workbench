@@ -31,6 +31,7 @@ class ContentImpactSnapshot:
     conservative_only_ids: tuple[str, ...]
     evidence_version: Literal["owner_frozen_v1", "legacy_unverified"]
     applicability: Literal["pending_review"] = "pending_review"
+    snapshot_sha256: str | None = None
 
 
 def _key(ref: dm.ContentRef) -> str:
@@ -208,4 +209,18 @@ def impact_snapshot(connection: sqlite3.Connection, workspace_id: str, event_id:
     exact_ids = {item.id for item in exact}
     return ContentImpactSnapshot(event_id, old_ref, new_ref, "content_revision_published", tuple(ids), exact,
                                  tuple(item for item in ids if item != old_ref.id and item not in exact_ids),
-                                 evidence_version)
+                                 evidence_version, snapshot_sha256=(connection.execute(
+                                     "SELECT snapshot_sha256 FROM content_impact_snapshots WHERE event_id=?",
+                                     (event_id,),
+                                 ).fetchone()[0] if evidence_version == "owner_frozen_v1" else None))
+
+
+def list_impact_snapshots(connection: sqlite3.Connection, workspace_id: str) -> tuple[ContentImpactSnapshot, ...]:
+    """Enumerate validated owner events, irrespective of delivery/consumer status."""
+    if not connection.in_transaction:
+        raise damaged()
+    rows = connection.execute(
+        "SELECT id FROM outbox WHERE event_type='content.dependencies_invalidated' "
+        "AND json_extract(payload_json,'$.workspace_id')=? ORDER BY id", (workspace_id,),
+    ).fetchall()
+    return tuple(impact_snapshot(connection, workspace_id, row['id']) for row in rows)
