@@ -117,6 +117,12 @@ class ContentImpactDecisionService:
             row = repo.connection.execute(
                 'SELECT kind,current_revision FROM objects WHERE id=? AND workspace_id=?',
                 (identifier, repo.workspace_id)).fetchone()
+            if row is None and repo.connection.execute(
+                    'SELECT 1 FROM revisions WHERE object_id=? LIMIT 1', (identifier,)).fetchone() is not None:
+                # Surviving owner revision records prove a broken/misowned
+                # object, even when the frozen edge is only ID-qualified.
+                # A bare unknown ID with no such witness stays unclassified.
+                raise integrity()
             # Other owner IDs stay in affected_ids, never become Content decisions.
             if row is not None and row['kind'] not in {'note', 'route'}:
                 if row['current_revision'] is None:
@@ -190,9 +196,17 @@ class ContentImpactDecisionService:
         heads = {record.receipt.target_id: record.receipt for record in records}
         pending, action = [], []
         for identifier in self._target_ids(repo, snapshot):
-            stored = repo.current(identifier)
-            target = reference(stored.value)
-            body_sha = self._body(repo, stored.value)
+            try:
+                stored = repo.current(identifier)
+                target = reference(stored.value)
+                body_sha = self._body(repo, stored.value)
+            except ApiError as error:
+                # The event already establishes this stored target. A missing
+                # current revision/body is damaged evidence, not a caller's
+                # unknown event or target identifier.
+                if error.status == 404:
+                    raise integrity() from None
+                raise
             decision = heads.get(identifier)
             if (decision is None or stored.lifecycle != 'active' or decision.observed_ref != target
                     or decision.target_body_sha256 != body_sha):

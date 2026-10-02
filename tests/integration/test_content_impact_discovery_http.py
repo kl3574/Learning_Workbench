@@ -197,3 +197,32 @@ def test_true_legacy_read_only_and_delivered_event_stays_discoverable(case):
     before = table_hashes(case.database)
     assert case.decide(body).status_code == 409
     assert table_hashes(case.database) == before
+
+
+@pytest.mark.parametrize('path', [PATH, PATH+'?changed_object_id=unknown', 'detail'])
+def test_damaged_current_target_is_integrity_error_not_unknown_input(case, path):
+    with case.database.transaction() as conn:
+        # Normal mutation is fenced by a real SQLite trigger. This deliberately
+        # damaged stored pointer must never be classified as an unknown ID.
+        conn.execute('DROP TRIGGER valid_current_revision')
+        conn.execute("UPDATE objects SET current_revision=999 WHERE id='lesson'")
+    before = table_hashes(case.database)
+    response = case.client.get(case.path if path == 'detail' else path)
+    assert response.status_code == 409
+    assert response.json()['error']['code'] == 'CONTENT_IMPACT_INTEGRITY_ERROR'
+    assert table_hashes(case.database) == before
+
+
+@pytest.mark.parametrize('query', ['', '?changed_object_id=unknown'])
+def test_orphaned_id_only_candidate_not_discarded_as_nonmatching(case, query):
+    with case.database.connect() as conn:
+        conn.execute('PRAGMA foreign_keys=OFF')
+        conn.execute('BEGIN IMMEDIATE')
+        conn.execute("DELETE FROM objects WHERE id='lesson_candidate'")
+        assert conn.execute("SELECT COUNT(*) FROM revisions WHERE object_id='lesson_candidate'").fetchone()[0] == 1
+        conn.commit()
+    before = table_hashes(case.database)
+    response = case.client.get(PATH+query)
+    assert response.status_code == 409
+    assert response.json()['error']['code'] == 'CONTENT_IMPACT_INTEGRITY_ERROR'
+    assert table_hashes(case.database) == before
