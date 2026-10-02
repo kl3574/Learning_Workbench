@@ -165,10 +165,11 @@ class ReviewNumeric:
     def read_review_numeric(self, connection: sqlite3.Connection, identity: SessionIdentity,
                             draft_id: str, expected_revision: int) -> ReviewNumericObservation:
         resolved = self.candidates.lookup(connection, identity, draft_id, expected_revision)
-        if resolved.source_kind == 'import' or resolved.source_kind == 'authoring_edit':
+        if resolved.source_kind in {'import', 'authoring_edit', 'authoring_restore'}:
             return _observation(dict(version='review-numeric-observation-v1', workspace_id=resolved.workspace_id,
                 source_kind=resolved.source_kind, candidate=resolved.candidate.model_dump(mode='json'), candidate_record_sha256=None,
                 source_job_id=None, provider_receipt_id=None, coverage='no_numeric_owner_pipeline', observed_at=utc_now(), checks=[]))
+        assert resolved.source_kind in {'authoring_single', 'authoring_group'}
         owner = self.owners.get(resolved.source_kind)
         if owner is None:
             raise ApiError(503, 'NUMERIC_OWNER_UNAVAILABLE', '数值观察所属服务当前不可用。')

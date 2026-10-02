@@ -246,7 +246,7 @@ class ContentService:
         except (ValueError, TypeError):
             raise invalid() from None
 
-    def _closure(self, repository: ContentRepository, values: list[PublishedModel], budgets: ImportBudgets) -> tuple[
+    def _closure(self, repository: ContentRepository, values: list[PublishedModel], budgets: ImportBudgets, frozen_concepts: dict[str, dict[str, dm.ContentRef]] | None = None) -> tuple[
         dict[str, PublishedModel], dict[str, list[tuple[dm.ContentRef, str]]], dict[str, dict[str, dm.Concept]],
     ]:
         registry = {key(value): value for value in values}
@@ -255,7 +255,7 @@ class ContentService:
             if isinstance(value, dm.Concept):
                 candidate_concepts.setdefault(value.id, []).append(value)
         # A course's exact concept_refs disambiguate historical pure-ID edges.
-        bindings: dict[str, dict[str, dm.ContentRef]] = {}
+        bindings: dict[str, dict[str, dm.ContentRef]] = dict(frozen_concepts or {})
         for course in (value for value in values if isinstance(value, dm.Course)):
             selections = {ref.id: ref for ref in course.concept_refs}
             ref_queue = list(refs_in(course))
@@ -431,6 +431,23 @@ class ContentService:
             raise damaged()
         return refs[0]
 
+    def publish_restored_block_in_transaction(self, connection: sqlite3.Connection, workspace_id: str,
+            base: dm.ContentRef, source: dm.ContentRef, block: dm.ContentBlock, body: bytes) -> dm.ContentRef:
+        """Restore full historical metadata with exact concept pins; use normal Content invalidation."""
+        old, original_body = self.verify_publication_in_transaction(connection, workspace_id, source)
+        self.verify_publication_in_transaction(connection, workspace_id, base)
+        repository = ContentRepository(connection, workspace_id)
+        current = repository.current(base.id)
+        if current.lifecycle != 'active' or reference(current.value) != base:
+            raise ApiError(412, 'RESTORE_BASE_CHANGED', '当前块已变化或归档，请重新创建恢复稿。')
+        if source.id != base.id or source.revision >= base.revision or block != old.model_copy(update={'revision': base.revision + 1}) or body != original_body:
+            raise invalid()
+        bindings = {key(block): {identifier: reference(repository.concept_dependency(old, identifier)) for identifier in old.concepts}}
+        refs = self.publish_in_transaction(connection, workspace_id, [block], {block.body_path: body}, frozen_concepts=bindings)
+        if refs != [reference(block)] or reference(repository.current(block.id).value) != refs[0]:
+            raise damaged()
+        return refs[0]
+
     def publish(self, workspace_id: str, objects: Iterable[PublishedModel], bodies: Mapping[str, bytes]) -> list[dm.ContentRef]:
         """Internal trusted port; callers still own import/review approval workflows.
 
@@ -443,7 +460,8 @@ class ContentService:
 
     def publish_in_transaction(self, connection: sqlite3.Connection, workspace_id: str,
                                objects: Iterable[PublishedModel], bodies: Mapping[str, bytes], *,
-                               import_history: bool = False, budgets: ImportBudgets | None = None) -> list[dm.ContentRef]:
+                               import_history: bool = False, budgets: ImportBudgets | None = None,
+                               frozen_concepts: dict[str, dict[str, dm.ContentRef]] | None = None) -> list[dm.ContentRef]:
         """Caller must own an active transaction, including import receipts and state."""
         if not connection.in_transaction:
             raise ApiError(409, "TRANSACTION_REQUIRED", "发布需要有效事务。")
@@ -466,7 +484,7 @@ class ContentService:
             if row is not None and row["current_revision"] is not None:
                 previous_refs.append(reference(repository.current(identifier).value))
         try:
-            _, dependencies, courses = self._closure(repository, values, budgets)
+            _, dependencies, courses = self._closure(repository, values, budgets, frozen_concepts)
             staged = self._stage(repository, values, bodies, budgets)
         except (ValueError, TypeError, ValidationError):
             raise invalid() from None

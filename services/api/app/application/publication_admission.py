@@ -11,7 +11,7 @@ from .authoring_group_validation import member_ref
 from .errors import ApiError
 from .publication_admission_models import DraftPublishWrite, PublicationAdmission
 from .review_history_models import ReviewDecisionRecord, ReviewMachineRecord
-from .review_material_models import CheckedReviewMaterial, ImportReviewMaterial, SingleReviewMaterial, GroupReviewMaterial, EditReviewMaterial
+from .review_material_models import CheckedReviewMaterial, ImportReviewMaterial, SingleReviewMaterial, GroupReviewMaterial, EditReviewMaterial, RestoreReviewMaterial
 from .review_numeric_models import NumericReviewCheck
 from .review_service import ReviewService
 
@@ -27,6 +27,10 @@ class PublicationAdmissionService:
     @staticmethod
     def _plans(material: CheckedReviewMaterial) -> list[tuple[AuthoringDraftMemberRef | None, NumericPlan]]:
         payload = material.payload
+        if isinstance(payload, RestoreReviewMaterial):
+            if payload.record.payload.proposed_block.kind == 'worked_example':
+                raise blocked('PUBLISH_NUMERIC_COVERAGE_UNAVAILABLE', '历史例题没有绑定新恢复候选的数值执行历史，不能借用旧结果。')
+            return []
         if isinstance(payload, EditReviewMaterial):
             # This exact text-edit model contains no declared numeric plan.
             # Human applicability remains verified by Quality, never machine approval.

@@ -6,7 +6,7 @@ from packages.contracts.canonical import canonical_bytes, sha256_bytes, strict_j
 from ..application.errors import ApiError
 from ..application.publication_admission_models import DraftPublishWrite
 from ..application.publication_models import (
-    PublicationEvent, PublicationHistory, PublicationRecord, EditPublicationRecord, PublicationState, integrity, validated, publication_record,
+    PublicationEvent, PublicationHistory, PublicationRecord, EditPublicationRecord, RestorePublicationRecord, PublicationState, integrity, validated, publication_record,
 )
 
 
@@ -74,6 +74,17 @@ class PublicationRepository:
             raise integrity()
         return history
 
+    def retained_source_claim(self, ref: dm.ContentRef) -> bool:
+        """An older publication can witness a frozen origin lost before a later migration."""
+        rows = self.conn.execute('SELECT r.* FROM draft_publication_results r JOIN draft_publications p ON p.id=r.publication_id '
+            "WHERE p.workspace_id=? AND json_extract(r.record_json,'$.result.id')=? AND json_extract(r.record_json,'$.result.revision')=?",
+            (self.workspace_id, ref.id, ref.revision)).fetchall()
+        for row in rows:
+            record = self._decode(None, row['record_json'], row['sha256'])
+            if record.result == ref and isinstance(record, (PublicationRecord, RestorePublicationRecord)) and record.source is not None:
+                return True
+        return False
+
     def require_unpublished_draft(self, draft_id: str) -> None:
         """A committed publication is terminal for new commands on this producer Draft."""
         row = self.conn.execute('SELECT id FROM draft_publications WHERE workspace_id=? AND draft_id=? LIMIT 1',
@@ -108,7 +119,7 @@ class PublicationRepository:
             raise ApiError(409, 'PUBLICATION_STATE_CONFLICT', '发布内部状态已经改变。')
         self._event(identifier, expected_revision + 1, state, now)
 
-    def finish(self, record: PublicationRecord | EditPublicationRecord) -> PublicationHistory:
+    def finish(self, record: PublicationRecord | EditPublicationRecord | RestorePublicationRecord) -> PublicationHistory:
         record = publication_record(record)
         if record.workspace_id != self.workspace_id:
             raise integrity()

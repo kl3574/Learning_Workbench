@@ -100,7 +100,7 @@ class ReviewNumericObservation(AuthoringModel):
 
     @model_validator(mode='after')
     def complete_observation(self) -> Self:
-        import_owner = self.source_kind in {'import', 'authoring_edit'}
+        import_owner = self.source_kind in {'import', 'authoring_edit', 'authoring_restore'}
         identities = [self.candidate_record_sha256, self.source_job_id, self.provider_receipt_id]
         if import_owner:
             if self.coverage != 'no_numeric_owner_pipeline' or self.checks or any(x is not None for x in identities):

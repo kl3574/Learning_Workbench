@@ -18,6 +18,7 @@ from .authoring_group_models import (
     PreparedAuthoringGroupContext, group_context_sha256, validate_group_context_binding,
 )
 from .draft_edit_models import DraftEditRecord
+from .content_restore_models import RestoreRecord
 from .draft_candidate_models import DraftOwner, DraftSourceKind, ResolvedDraftCandidate
 
 
@@ -85,7 +86,12 @@ class EditReviewMaterial(AuthoringModel):
     record: DraftEditRecord
 
 
-ReviewPayload = Annotated[ImportReviewMaterial | SingleReviewMaterial | GroupReviewMaterial | EditReviewMaterial,
+class RestoreReviewMaterial(AuthoringModel):
+    version: Literal['authoring-restore-review-material-v1']
+    record: RestoreRecord
+
+
+ReviewPayload = Annotated[ImportReviewMaterial | SingleReviewMaterial | GroupReviewMaterial | EditReviewMaterial | RestoreReviewMaterial,
                           Field(discriminator='version')]
 
 
@@ -108,6 +114,13 @@ class CheckedReviewMaterial(AuthoringModel):
             candidate = self.payload.candidate
             record_sha = metadata_sha256(self.payload)
             refs: list[dm.ContentRef] = []
+        elif isinstance(self.payload, RestoreReviewMaterial):
+            expected_owner, expected_kind = 'authoring', 'authoring_restore'
+            candidate = self.payload.record.candidate
+            record_sha = metadata_sha256(self.payload.record)
+            refs = [self.payload.record.payload.request.source_ref, self.payload.record.payload.request.expected_current_ref]
+            if self.workspace_id != self.payload.record.workspace_id or self.warnings != self.payload.record.payload.warnings:
+                raise ValueError('Restore material must preserve its complete workspace and warnings')
         elif isinstance(self.payload, EditReviewMaterial):
             expected_owner, expected_kind = 'authoring', 'authoring_edit'
             candidate = self.payload.record.candidate
@@ -139,6 +152,10 @@ def checked_material(identity: ResolvedDraftCandidate, payload: ReviewPayload) -
         record_sha = metadata_sha256(payload)
         refs: list[dm.ContentRef] = []
         warnings = payload.warnings
+    elif isinstance(payload, RestoreReviewMaterial):
+        record_sha = metadata_sha256(payload.record)
+        refs = [payload.record.payload.request.source_ref, payload.record.payload.request.expected_current_ref]
+        warnings = payload.record.payload.warnings
     elif isinstance(payload, EditReviewMaterial):
         record_sha = metadata_sha256(payload.record)
         refs = [payload.record.base.ref]

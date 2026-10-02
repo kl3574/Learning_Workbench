@@ -15,6 +15,8 @@ from .application.evidence_applicability import EvidenceApplicabilityService
 from .application.jobs import JobService
 from .application.draft_candidates import DraftCandidates
 from .application.draft_edits import DraftEditService
+from .application.content_restore import ContentRestoreService
+from .interfaces.content_restore_http import create_content_restore_router
 from .application.review_numeric import ReviewNumeric
 from .application.review_service import ReviewService
 from .application.review_worker import ReviewWorker
@@ -104,13 +106,15 @@ def create_app(settings: Settings | None = None, *,
     group_numeric_service = GroupNumericService(database, authoring_group_context, group_numeric_runtime, authoring=authoring_group_service)
     group_numeric_worker = GroupNumericWorker(database, authoring_group_context, group_numeric_runtime, authoring=authoring_group_service)
     draft_edits = DraftEditService(database)
+    content_restores = ContentRestoreService(database)
     candidates = DraftCandidates({'import': import_service, 'authoring_single': authoring_service,
-                                  'authoring_group': authoring_group_service, 'authoring_edit': draft_edits})
+                                  'authoring_group': authoring_group_service, 'authoring_edit': draft_edits, 'authoring_restore': content_restores})
     review_service = ReviewService(database, candidates,
         ReviewNumeric(candidates, {'authoring_single': numeric_service, 'authoring_group': group_numeric_service}),
         {(profile, 'import'): import_service for profile in IMPORT_ARTIFACT_PROFILES})
     review_worker = ReviewWorker(review_service)
     publication_service = DraftPublicationService(database, review_service, import_service)
+    content_restores.verify_publication = publication_service.verify_recorded
     artifacts = ArtifactsService(database, review_service.readers())
     content_impacts = ContentImpactDecisionService(database, artifacts)
     jobs = JobService(database, review=review_service)
@@ -172,6 +176,7 @@ def create_app(settings: Settings | None = None, *,
     application.state.review_worker = review_worker
     application.state.publication_service = publication_service
     application.state.draft_edit_service = draft_edits
+    application.state.content_restore_service = content_restores
     application.state.artifacts_service = artifacts
     application.state.outbound_sources = provider_sources
     application.state.request_preparer = provider_preparer
@@ -196,6 +201,7 @@ def create_app(settings: Settings | None = None, *,
     application.include_router(create_review_router(review_service))
     application.include_router(create_publication_router(publication_service))
     application.include_router(create_draft_router(draft_edits))
+    application.include_router(create_content_restore_router(content_restores))
     if settings.static_dir.is_dir():
         application.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="workbench")
     return application

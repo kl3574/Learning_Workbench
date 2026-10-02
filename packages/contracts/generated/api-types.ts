@@ -665,6 +665,33 @@ export type ContentRef = {
   "sha256": string;
 };
 
+export type ContentRestoreDraftCreateAck = {
+  "candidate": DraftCandidate;
+  "source_ref": ContentRef;
+  "base_ref": ContentRef;
+  "state": "draft";
+};
+
+export type ContentRestoreDraftCreateWrite = {
+  "source_ref": ContentRef;
+  "expected_current_ref": ContentRef;
+  "reason": string;
+};
+
+export type ContentRestoreDraftSnapshot = {
+  "owner": "authoring_restore";
+  "candidate": DraftCandidate;
+  "source_ref": ContentRef;
+  "base_ref": ContentRef;
+  "reason": string;
+  "proposed_block": ContentBlock;
+  "body_markdown": string;
+  "source_material_sha256": string;
+  "warnings": Array<Warning>;
+  "state": "draft" | "published";
+  "published_ref": (ContentRef | null);
+};
+
 export type ContextSnapshot = {
   "id": string;
   "created_at": string;

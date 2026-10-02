@@ -75,7 +75,7 @@ class DraftCandidates:
                                      draft_id: str, expected_revision: int) -> CheckedReviewMaterial:
         """New Review command gate only; original ACK/history/worker remain exact reads."""
         current, registered, owner = self._registered_owner(connection, identity, draft_id, expected_revision)
-        if registered.source_kind == 'authoring_edit':
+        if registered.source_kind in {'authoring_edit', 'authoring_restore'}:
             if not isinstance(owner, CurrentDraftCandidateOwner):
                 raise ApiError(503, 'DRAFT_OWNER_UNAVAILABLE', '当前编辑所属服务无法核验头版本。')
             owner.require_current_candidate(connection, current, registered.candidate)

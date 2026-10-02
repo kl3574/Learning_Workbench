@@ -27,7 +27,7 @@ from .review_history_models import (
     ReviewCreateCommand, ReviewDecisionCommand, ReviewCancelCommand, ReviewJobAck, ReviewCancelAck,
     ReviewCancelRequest,
 )
-from .review_material_models import CheckedReviewMaterial, EditReviewMaterial
+from .review_material_models import CheckedReviewMaterial, EditReviewMaterial, RestoreReviewMaterial
 from .review_models import ReviewJobInput
 from .review_numeric import ReviewNumeric
 
@@ -144,9 +144,9 @@ class ReviewService:
                 return isinstance(value, list) and any(declares_math(item, include_title=include_title) for item in value)
             # An edit's frozen base is provenance, not its current candidate.
             # Owner/history reads still authenticate that complete original base.
-            payload = material.payload.record.payload if isinstance(material.payload, EditReviewMaterial) else material.payload
+            payload = material.payload.record.payload if isinstance(material.payload, (EditReviewMaterial, RestoreReviewMaterial)) else material.payload
             if declares_math(payload.model_dump(mode='python', warnings='error'),
-                    include_title=isinstance(material.payload, EditReviewMaterial)):
+                    include_title=isinstance(material.payload, (EditReviewMaterial, RestoreReviewMaterial))):
                 raise ApiError(409, 'MATHEMATICAL_REVIEW_REQUIRED', '原材料包含数学结构或数值计划，不能标为数学审校不适用。')
             # Absence of these explicit signals is not automatic classification.
             # The current author's explicit N/A and original nonblank reason are

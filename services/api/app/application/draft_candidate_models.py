@@ -6,7 +6,7 @@ from typing import Literal
 from packages.contracts import domain_models as dm
 
 DraftOwner = Literal['import', 'authoring']
-DraftSourceKind = Literal['import', 'authoring_single', 'authoring_group', 'authoring_edit']
+DraftSourceKind = Literal['import', 'authoring_single', 'authoring_group', 'authoring_edit', 'authoring_restore']
 
 
 @dataclass(frozen=True)

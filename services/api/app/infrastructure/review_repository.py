@@ -18,7 +18,7 @@ from ..application.review_history_models import (
     ReviewRecord, ReviewHistory, StoredReviewReceipt, instant, machine_job_result,
 )
 from ..application.review_checks import review_structure
-from ..application.review_material_models import ImportReviewMaterial, EditReviewMaterial
+from ..application.review_material_models import ImportReviewMaterial, EditReviewMaterial, RestoreReviewMaterial
 from ..application.review_models import ReviewJobInput
 from ..import_dto import JobSnapshot
 from .draft_candidate_repository import DraftCandidateRepository
@@ -237,7 +237,7 @@ class ReviewRepository:
                 or instant(record.checked_at) > instant(row['updated_at'])):
             raise integrity()
         payload = record.material.payload
-        if not isinstance(payload, (ImportReviewMaterial, EditReviewMaterial)):
+        if not isinstance(payload, (ImportReviewMaterial, EditReviewMaterial, RestoreReviewMaterial)):
             if (record.numeric.candidate_record_sha256 != record.material.owner_record_sha256
                     or record.numeric.source_job_id != payload.record.source_job_id
                     or record.numeric.provider_receipt_id != payload.record.provider_receipt_id):

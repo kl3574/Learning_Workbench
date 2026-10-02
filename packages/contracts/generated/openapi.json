@@ -4082,6 +4082,135 @@
         "title": "ContentRef",
         "type": "object"
       },
+      "ContentRestoreDraftCreateAck": {
+        "additionalProperties": false,
+        "properties": {
+          "base_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/DraftCandidate"
+          },
+          "source_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "state": {
+            "const": "draft",
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidate",
+          "source_ref",
+          "base_ref",
+          "state"
+        ],
+        "title": "ContentRestoreDraftCreateAck",
+        "type": "object"
+      },
+      "ContentRestoreDraftCreateWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_current_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "reason": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "source_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          }
+        },
+        "required": [
+          "source_ref",
+          "expected_current_ref",
+          "reason"
+        ],
+        "title": "ContentRestoreDraftCreateWrite",
+        "type": "object"
+      },
+      "ContentRestoreDraftSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "base_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "body_markdown": {
+            "maxLength": 400000,
+            "title": "Body Markdown",
+            "type": "string"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/DraftCandidate"
+          },
+          "owner": {
+            "const": "authoring_restore",
+            "title": "Owner",
+            "type": "string"
+          },
+          "proposed_block": {
+            "$ref": "#/components/schemas/ContentBlock"
+          },
+          "published_ref": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContentRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "source_material_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Material Sha256",
+            "type": "string"
+          },
+          "source_ref": {
+            "$ref": "#/components/schemas/ContentRef"
+          },
+          "state": {
+            "enum": [
+              "draft",
+              "published"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/Warning"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "owner",
+          "candidate",
+          "source_ref",
+          "base_ref",
+          "reason",
+          "proposed_block",
+          "body_markdown",
+          "source_material_sha256",
+          "warnings",
+          "state",
+          "published_ref"
+        ],
+        "title": "ContentRestoreDraftSnapshot",
+        "type": "object"
+      },
       "ContextSnapshot": {
         "additionalProperties": false,
         "properties": {
@@ -19017,6 +19146,329 @@
         "summary": "Revoke",
         "tags": [
           "providers"
+        ]
+      }
+    },
+    "/api/v1/content/restore-drafts": {
+      "post": {
+        "operationId": "create_api_v1_content_restore_drafts_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "title": "Origin",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContentRestoreDraftCreateWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentRestoreDraftCreateAck"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Create",
+        "tags": [
+          "quality"
+        ]
+      }
+    },
+    "/api/v1/content/restore-drafts/{id}": {
+      "get": {
+        "operationId": "read_api_v1_content_restore_drafts__id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentRestoreDraftSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Read",
+        "tags": [
+          "quality"
         ]
       }
     },

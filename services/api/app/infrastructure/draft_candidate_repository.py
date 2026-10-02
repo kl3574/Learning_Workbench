@@ -52,7 +52,7 @@ class DraftCandidateRepository:
             if (tuple(row[key] for key in ('draft_id', 'workspace_id', 'owner', 'entity'))
                     != tuple(identity[key] for key in ('draft_id', 'workspace_id', 'owner', 'entity'))
                     or owner != ('import' if kind == 'import' else 'authoring')
-                    or kind in {'authoring_single', 'authoring_edit'} and candidate.entity != 'block'
+                    or kind in {'authoring_single', 'authoring_edit', 'authoring_restore'} and candidate.entity != 'block'
                     or kind == 'authoring_group' and candidate.entity not in {'lesson', 'practice_set', 'assessment'}):
                 raise ValueError('Candidate registry linkage is inconsistent')
         except (ValidationError, ValueError, TypeError, KeyError):
