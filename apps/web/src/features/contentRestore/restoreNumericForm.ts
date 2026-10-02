@@ -28,11 +28,19 @@ export function restoreNumericFormMaterial(value: RestoreNumericForm, snapshot: 
     assertion_bindings: value.assertions.map(item => ({ assertion_id: item.id, expression_source: enteredSpan(item.expressionSource), expected_source: enteredSpan(item.expectedSource) })), reason: value.reason }, snapshot)
 }
 
-// A textarea reports UTF-16 offsets. Only an explicit user selection is copied;
-// no values, formulas, plans or numerical permissions are inferred from it.
+// Textarea offsets are UTF-16 positions after the DOM normalizes CRLF/CR to LF.
+// Map those positions back to the untouched source before counting codepoints.
+// Only the explicit selection is copied; no plan or permission is inferred.
 export function selectedSourceSpan(body: string, start: number, end: number): SpanFields | null {
   if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end <= start || end > body.length) return null
-  const quote = body.slice(start, end)
+  let originalStart = -1, originalEnd = 0, displayed = 0
+  while (displayed < end && originalEnd < body.length) {
+    if (displayed === start) originalStart = originalEnd
+    originalEnd += body[originalEnd] === '\r' && body[originalEnd + 1] === '\n' ? 2 : 1
+    displayed += 1
+  }
+  if (displayed !== end || originalStart < 0) return null
+  const quote = body.slice(originalStart, originalEnd)
   if (new TextDecoder().decode(new TextEncoder().encode(quote)) !== quote || [...quote].length > 512) return null
-  return { start: String([...body.slice(0, start)].length), end: String([...body.slice(0, end)].length), quote }
+  return { start: String([...body.slice(0, originalStart)].length), end: String([...body.slice(0, originalEnd)].length), quote }
 }
