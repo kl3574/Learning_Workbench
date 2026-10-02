@@ -1911,6 +1911,30 @@ export type RestoreNumericAssertionBinding = {
   "expected_source": RestoreNumericSourceSpan;
 };
 
+export type RestoreNumericCheckPreviewWrite = {
+  "candidate": AuthoringCandidate;
+  "material": RestoreNumericMaterialWrite;
+};
+
+export type RestoreNumericCheckView = {
+  "id": string;
+  "revision": number;
+  "candidate": AuthoringCandidate;
+  "plan": NumericPlan;
+  "runtime": NumericRuntimeProfile;
+  "operation_sha256": string;
+  "decision": "pending" | "approve_once" | "decline";
+  "created_at": string;
+  "expires_at": string;
+  "expired": boolean;
+  "job": (JobRef | null);
+  "job_revision": (number | null);
+  "result": (NumericCheckResult | null);
+  "warnings": Array<Warning>;
+  "owner": "authoring_restore";
+  "numeric_material_sha256": string;
+};
+
 export type RestoreNumericMaterialView = {
   "owner": "authoring_restore";
   "candidate": AuthoringCandidate;
