@@ -2,6 +2,7 @@
 
 from collections.abc import Sequence
 import sqlite3
+from typing import Literal
 
 from packages.contracts import domain_models as dm
 from packages.contracts.canonical import strict_json
@@ -149,6 +150,68 @@ def _semantic_closure(content: AssessmentContent, question_ref: dm.ContentRef,
         refs[identity] = ref
         queue.extend(reference(content.public.concept_dependency(value, identifier)) for identifier in value.prerequisite_ids)
     return sorted(refs.values(), key=lambda ref: (ref.entity, ref.id, ref.revision, ref.sha256))
+
+
+class SemanticDependencyState(dm.StrictModel):
+    ref: dm.ContentRef
+    current_ref: dm.ContentRef
+    lifecycle: Literal['active', 'archived']
+
+
+class EvidenceSemanticBasis(dm.StrictModel):
+    original_refs: list[dm.ContentRef]
+    dependencies: list[SemanticDependencyState]
+
+
+def evidence_semantic_basis(connection: sqlite3.Connection, workspace_id: str,
+                            question_ref: dm.ContentRef, concept_ref: dm.ContentRef) -> EvidenceSemanticBasis:
+    """Content-owned exact original closure plus verified current semantic graph.
+
+    Current metadata is observed, never substituted for an original evidence pin.
+    New current prerequisites participate in the basis without becoming an exact
+    historical relationship to that evidence.
+    """
+    content = _access(connection, workspace_id)
+    original = _semantic_closure(content, question_ref, concept_ref)
+    queue = list(original)
+    states: dict[str, SemanticDependencyState] = {}
+    while queue:
+        ref = queue.pop()
+        if ref.model_dump_json() in states:
+            continue
+        value = content.exact(ref)
+        current = content.public.current(ref.id)
+        current_ref = reference(current.value)
+        states[ref.model_dump_json()] = SemanticDependencyState(
+            ref=ref, current_ref=current_ref, lifecycle=current.lifecycle)
+        queue.append(current_ref)
+        if isinstance(value, dm.Concept):
+            queue.extend(reference(content.public.concept_dependency(value, identifier))
+                         for identifier in value.prerequisite_ids)
+        elif isinstance(value, dm.QuestionPublic):
+            queue.extend(reference(content.public.concept_dependency(value, identifier))
+                         for identifier in value.concept_ids)
+        else:
+            raise damaged()
+    return EvidenceSemanticBasis(original_refs=original,
+        dependencies=sorted(states.values(), key=lambda item: (item.ref.entity, item.ref.id, item.ref.revision, item.ref.sha256)))
+
+
+def verify_evidence_semantic_history(connection: sqlite3.Connection, workspace_id: str,
+                                     expected: EvidenceSemanticBasis) -> None:
+    """Verify historical exact metadata without replacing its observed current state."""
+    content = _access(connection, workspace_id)
+    for state in expected.dependencies:
+        if (state.ref.entity != state.current_ref.entity or state.ref.id != state.current_ref.id
+                or state.ref.entity not in {'question', 'concept'}):
+            raise damaged()
+        try:
+            content.exact(state.ref)
+            content.exact(state.current_ref)
+        except ApiError as error:
+            if error.status == 404:
+                raise damaged() from None
+            raise
 
 
 def evidence_applicability(connection: sqlite3.Connection, workspace_id: str,

@@ -138,3 +138,13 @@ def guard_subject_access(connection: sqlite3.Connection, workspace_id: str) -> N
     """Shared policy port for later subject-data, download and provider adapters."""
     from ..application.policy import Policy
     Policy(connection, workspace_id).check("subject_read")
+
+
+def historical_session_belongs_to(connection: sqlite3.Connection, workspace_id: str, session_id: str) -> bool:
+    """Owner metadata check for frozen receipts; this grants no current authority.
+
+    A historical actor may be expired, revoked, or no longer an author. Every
+    live request must still use current_session_identity and its current role.
+    """
+    return connection.execute('SELECT 1 FROM local_sessions WHERE id=? AND workspace_id=?',
+                              (session_id, workspace_id)).fetchone() is not None

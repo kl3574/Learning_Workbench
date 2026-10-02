@@ -11,6 +11,7 @@ from packages.contracts.domain_models import ErrorEnvelope
 from .application.imports import ImportService, IMPORT_ARTIFACT_PROFILES
 from .application.artifacts import ArtifactsService
 from .application.content_impact_decisions import ContentImpactDecisionService
+from .application.evidence_applicability import EvidenceApplicabilityService
 from .application.jobs import JobService
 from .application.draft_candidates import DraftCandidates
 from .application.draft_edits import DraftEditService
@@ -51,6 +52,7 @@ from .interfaces.concept_state_http import create_concept_state_router
 from .interfaces.http import create_router
 from .interfaces.import_http import create_import_router
 from .interfaces.learning_http import create_learning_router
+from .interfaces.evidence_applicability_http import create_evidence_applicability_router
 from .interfaces.practice_http import create_practice_router
 from .interfaces.profile_http import create_profile_router
 from .interfaces.provider_http import create_provider_router
@@ -179,6 +181,7 @@ def create_app(settings: Settings | None = None, *,
     application.include_router(create_content_impact_router(content_impacts))
     application.include_router(create_import_router(settings, import_service, jobs=jobs, artifacts=artifacts))
     application.include_router(create_learning_router(database))
+    application.include_router(create_evidence_applicability_router(EvidenceApplicabilityService(database, artifacts)))
     application.include_router(create_practice_router(database))
     application.include_router(create_assessment_router(database))
     application.include_router(create_route_router(database))
