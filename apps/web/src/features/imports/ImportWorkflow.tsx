@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { ContentRef } from '../../../../../packages/contracts/generated/types'
 import { DraftPreview } from './DraftPreview'
 import { EncodingPreview } from './EncodingPreview'
@@ -7,19 +7,23 @@ import { ReviewWarnings } from './ReviewWarnings'
 import { UploadForm } from './UploadForm'
 import { useImportWorkflow } from './useImportWorkflow'
 import { validImportId } from './recovery'
+import { emptyReviewPanelState, pendingReviewForms, discardReviewForms, subscribeReviewForms, reviewFormMemoryVersion, type ReviewPanelState } from '../draftReview/reviewFormMemory'
 import { ReviewPanel } from '../draftReview/ReviewPanel'
 import './imports.css'
 
 const statusLabels = { staged: '原件已暂存', parsing: '正在解析', preview_ready: '预览已就绪，等待确认', committed: '已确认入库', cancelled: '已取消', failed: '导入失败' }
 const jobLabels = { queued: '排队中', running: '运行中', awaiting_approval: '等待确认', completed: '任务已完成', failed: '任务失败', cancelled: '任务已取消' }
 
-export function ImportWorkflow({ workspaceId, paused = false, close, openCourse, onState }: { workspaceId: string; paused?: boolean; close: () => void; openCourse?: (ref: ContentRef) => void; onState?: (value: { dirty: boolean; safe: boolean }) => void }) {
+export function ImportWorkflow({ workspaceId, paused = false, close, openCourse, onState }: { workspaceId: string; paused?: boolean; close: () => void; openCourse?: (ref: ContentRef) => void; onState?: (value: { dirty: boolean; safe: boolean; discardForms?: () => void }) => void }) {
   const state = useImportWorkflow(workspaceId, paused)
   const [manualId, setManualId] = useState('')
-  const [reviewOpen, setReviewOpen] = useState(false), [reviewState, setReviewState] = useState({ dirty: false, safe: true })
+  const [reviewOpen, setReviewOpen] = useState(false), [reviewState, setReviewState] = useState<ReviewPanelState>(emptyReviewPanelState)
   const callback = useRef(onState); callback.current = onState
-  useEffect(() => { callback.current?.(reviewState) }, [reviewState])
-  useEffect(() => () => callback.current?.({ dirty: false, safe: true }), [])
+  useSyncExternalStore(subscribeReviewForms, reviewFormMemoryVersion, reviewFormMemoryVersion)
+  const heldReviewForms = pendingReviewForms(workspaceId, 'import')
+  const discardForms = useCallback(() => { reviewState.discardForms(); discardReviewForms(workspaceId, 'import') }, [workspaceId, reviewState.discardForms])
+  useEffect(() => { callback.current?.({ ...reviewState, dirty: reviewState.dirty || heldReviewForms, discardForms }) }, [reviewState, heldReviewForms, discardForms])
+  useEffect(() => () => callback.current?.({ dirty: pendingReviewForms(workspaceId, 'import'), safe: true, discardForms }), [workspaceId, discardForms])
   const snapshot = state.snapshot
   const blockers = snapshot?.warnings.some(warning => warning.severity === 'error') ?? false
   const warningsAccepted = snapshot?.warnings.filter(warning => warning.severity === 'warning').every(warning => state.accepted.includes(warning.code)) ?? false
@@ -71,7 +75,7 @@ export function ImportWorkflow({ workspaceId, paused = false, close, openCourse,
     </>}
     </>}
     <button onClick={() => setReviewOpen(true)}>打开候选审核与恢复</button>
-    {reviewOpen && <ReviewPanel workspace={workspaceId} paused={suspended || !!state.auth?.active_open_book_attempt_id}
+    {reviewOpen && <ReviewPanel formScope="import" workspace={workspaceId} paused={suspended || !!state.auth?.active_open_book_attempt_id}
       candidate={!suspended && state.auth?.role === 'author' && state.draft ? { draft_id: state.draft.id, draft_revision: state.draft.revision, entity: state.draft.kind, candidate_sha256: state.draft.candidate_sha256 } : null}
       importDraft={!suspended && state.auth?.role === 'author' ? state.draft : null}
       candidateState={state.draft?.state ?? '未重新读取'} onState={setReviewState} />}

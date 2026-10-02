@@ -1,6 +1,10 @@
 import { afterEach, expect, test, vi } from 'vitest'
 import { connectSession } from '../../api/client'
 import { reviewClient } from './reviewClient'
+import { editFixture } from '../draftEditor/editFixtures'
+import { publicationDraft as restoreFixture } from '../contentRestore/restoreFixtures'
+import { publicationDraft as importFixture } from '../draftPublication/publicationFixtures'
+import { readReviewFormCandidate } from './reviewFormCandidate'
 import { reviewCandidate, reviewSession, machineReceipt, safeReviewJob } from './reviewFixtures'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -42,4 +46,30 @@ test('unknown fields and mismatched receipt identity fail before entering UI sta
   await expect(reviewClient.read(machineReceipt.id)).rejects.toThrow()
   await expect(reviewClient.create(reviewCandidate.draft_id, { expected_revision: 1, checks: ['structure'], reviewer_note: '', reviewer: 'forged' } as never, 'key')).rejects.toThrow()
   expect(fetch).toHaveBeenCalledTimes(2)
+})
+
+
+test('form recovery uses original owners and exact edit history; no fabricated Import snapshot or writes', async () => {
+  const original = editFixture(), current = editFixture(2, '服务端新标题'), requests: { path: string; method: string }[] = []
+  const responses = [original, current, restoreFixture, importFixture]
+  vi.stubGlobal('fetch', vi.fn(async (path: string, init: RequestInit) => { requests.push({ path, method: init.method! }); return new Response(JSON.stringify(responses.shift())) }))
+  expect(await readReviewFormCandidate('edit', original.candidate)).toEqual(current.candidate)
+  expect(await readReviewFormCandidate('restore', restoreFixture.candidate)).toEqual(restoreFixture.candidate)
+  const imported = { draft_id: importFixture.id, draft_revision: importFixture.revision, entity: importFixture.kind, candidate_sha256: importFixture.candidate_sha256 }
+  expect(await readReviewFormCandidate('import', imported)).toEqual(imported)
+  expect(requests).toEqual([
+    { path: `/api/v1/draft-edits/${original.candidate.draft_id}?revision=1`, method: 'GET' },
+    { path: `/api/v1/draft-edits/${original.candidate.draft_id}`, method: 'GET' },
+    { path: `/api/v1/content/restore-drafts/${restoreFixture.candidate.draft_id}`, method: 'GET' },
+    { path: `/api/v1/drafts/${importFixture.id}`, method: 'GET' },
+  ])
+})
+
+test('missing exact original edit revision and invalid owner DTO stop recovery before reading a replacement head', async () => {
+  const original = editFixture(), request = vi.fn(async () => new Response(JSON.stringify(editFixture(2))))
+  vi.stubGlobal('fetch', request)
+  await expect(readReviewFormCandidate('edit', original.candidate)).rejects.toThrow('原精确编辑候选无法核验')
+  expect(request).toHaveBeenCalledTimes(1)
+  request.mockResolvedValue(new Response(JSON.stringify({ ...restoreFixture, invented_field: true })))
+  await expect(readReviewFormCandidate('restore', restoreFixture.candidate)).rejects.toThrow()
 })

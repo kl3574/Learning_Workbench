@@ -1,8 +1,11 @@
-import type { DraftReviewWrite, JobCancelRequest, JobSnapshot, ReviewDecisionWrite, ReviewJobAck, SessionResponse, StoredReviewReceipt } from '../../../../../packages/contracts/generated/api-types'
+import type { DraftCandidate, DraftReviewWrite, JobCancelRequest, JobSnapshot, ReviewDecisionWrite, ReviewJobAck, SessionResponse, StoredReviewReceipt } from '../../../../../packages/contracts/generated/api-types'
 import { request, requestWithMetadata } from '../../api/client'
+import type { ReviewFormOwner } from './reviewFormMemory'
+import { readReviewFormCandidate } from './reviewFormCandidate'
 import { checkedReview, reviewReceipt } from './reviewSchema'
 
 export type ReviewPort = {
+  candidate?(owner: ReviewFormOwner, candidate: DraftCandidate): Promise<DraftCandidate>
   session(): Promise<SessionResponse>
   create(id: string, body: DraftReviewWrite, key: string): Promise<ReviewJobAck>
   read(id: string): Promise<StoredReviewReceipt>
@@ -12,6 +15,7 @@ export type ReviewPort = {
   artifact(id: string): Promise<{ data: Blob; etag: string | null }>
 }
 export const reviewClient: ReviewPort = {
+  candidate: readReviewFormCandidate,
   session: async () => checkedReview('SessionResponse', await request('GET /api/v1/session', undefined)),
   create: async (id, body, key) => checkedReview('ReviewJobAck', await request('POST /api/v1/drafts/{id}/review', checkedReview('DraftReviewWrite', body), { 'Idempotency-Key': key }, { path: { id } })),
   read: async id => reviewReceipt(await request('GET /api/v1/reviews/{id}', undefined, undefined, { path: { id } }), id),

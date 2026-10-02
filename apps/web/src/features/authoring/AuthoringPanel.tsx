@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { ContentRef } from '../../../../../packages/contracts/generated/api-types'
 import { getSessionGeneration, subscribeSessionAccess } from '../../api/client'
 import { useAuthoring } from './useAuthoring'
@@ -9,19 +9,23 @@ import { AuthoringForm } from './AuthoringForm'
 import { AuthoringConsent } from './AuthoringConsent'
 import { NumericCheckPanel, NumericPlanDisplay } from './NumericCheckPanel'
 import type { ProviderPort } from '../providers/providerClient'
+import { emptyReviewPanelState, pendingReviewForms, discardReviewForms, subscribeReviewForms, reviewFormMemoryVersion, type ReviewPanelState } from '../draftReview/reviewFormMemory'
 import { ReviewPanel } from '../draftReview/ReviewPanel'
 import { ContentImpactsPanel, type ImpactState } from '../contentImpacts/ContentImpactsPanel'
 import './authoring.css'
-export type AuthoringPanelState = { dirty: boolean; safe: boolean; isolated: boolean }
+export type AuthoringPanelState = { dirty: boolean; safe: boolean; isolated: boolean; discardForms?: () => void }
 export function AuthoringPanel({ workspace, paused, currentBlock, onState, port = authoringClient, provider }: { workspace: string; paused: boolean; currentBlock: ContentRef | null; onState: (value: AuthoringPanelState) => void; port?: AuthoringPort; provider?: ProviderPort }) {
   const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
   const state = useAuthoring(workspace, paused, port), [formDirty, setFormDirty] = useState(false), [consentState, setConsentState] = useState({ dirty: false, safe: true })
-  const [reviewOpen, setReviewOpen] = useState(false), [reviewState, setReviewState] = useState({ dirty: false, safe: true })
+  const [reviewOpen, setReviewOpen] = useState(false), [reviewState, setReviewState] = useState<ReviewPanelState>(emptyReviewPanelState)
   const [impactsOpen, setImpactsOpen] = useState(false), [impactState, setImpactState] = useState<ImpactState>({ dirty: false, safe: true, isolated: false })
   const callback = useRef(onState); callback.current = onState
+  useSyncExternalStore(subscribeReviewForms, reviewFormMemoryVersion, reviewFormMemoryVersion)
+  const heldReviewForms = pendingReviewForms(workspace, 'authoring')
+  const discardForms = useCallback(() => { reviewState.discardForms(); discardReviewForms(workspace, 'authoring') }, [workspace, reviewState.discardForms])
   useEffect(() => { if (!state.academic) { setFormDirty(false); setConsentState({ dirty: false, safe: true }) } }, [state.academic, workspace, access])
-  const dirty = state.academic && formDirty || consentState.dirty || state.commands.some(v => !v.ack) || reviewState.dirty || impactState.dirty, otherSafe = state.ready && !state.busy && consentState.safe && (!reviewOpen || reviewState.safe), safe = otherSafe && impactState.safe, isolated = otherSafe && impactState.isolated
-  useEffect(() => { callback.current({ dirty, safe, isolated }) }, [dirty, safe, isolated])
+  const dirty = heldReviewForms || state.academic && formDirty || consentState.dirty || state.commands.some(v => !v.ack) || reviewState.dirty || impactState.dirty, otherSafe = state.ready && !state.busy && consentState.safe && (!reviewOpen || reviewState.safe), safe = otherSafe && impactState.safe, isolated = otherSafe && impactState.isolated
+  useEffect(() => { callback.current({ dirty, safe, isolated, discardForms }) }, [dirty, safe, isolated, discardForms])
   const detail = state.detail, draft = state.draft, numeric = state.numeric
   return <div className="authoring-panel"><p>可以准备例题、教材小节、习题集与测试题组草稿。模型调用与数值执行分别授权；生成完成不会自动获得数学、来源或教学质量批准。</p>
     <button disabled={state.busy} onClick={() => void state.refresh()}>刷新安全任务列表与当前权限</button>
@@ -46,6 +50,6 @@ export function AuthoringPanel({ workspace, paused, currentBlock, onState, port 
       {numeric && <NumericCheckPanel key={`${numeric.id}:${numeric.revision}:${numeric.operation_sha256}`} value={numeric} busy={state.busy || !state.ready} commandExists={state.commands.some(v => (v.kind === 'numeric_decision' || v.kind === 'group_numeric_decision') && v.check_id === numeric.id && (!v.rejection || !!v.ack))} decide={body => void state.create({ kind: 'target' in numeric ? 'group_numeric_decision' : 'numeric_decision', check_id: numeric.id, body })} refresh={() => void state.readNumeric(numeric.id)} />}
     </div>}
     {impactsOpen && <ContentImpactsPanel workspace={workspace} paused={paused || !state.academic} onState={setImpactState} />}
-    {reviewOpen && <ReviewPanel workspace={workspace} paused={paused || !state.academic} candidate={state.academic ? draft?.candidate ?? null : null} candidateState="draft" onState={setReviewState} />}
+    {reviewOpen && <ReviewPanel formScope="authoring" formOwner={draft && 'root' in draft ? 'authoring_group' : 'authoring_single'} workspace={workspace} paused={paused || !state.academic} candidate={state.academic ? draft?.candidate ?? null : null} candidateState="draft" onState={setReviewState} />}
   </div>
 }

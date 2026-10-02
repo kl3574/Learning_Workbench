@@ -20,5 +20,5 @@ test.each(['busy', 'unread', 'review_undurable', 'others_safe'] as const)('Conte
   controls.ready = mode !== 'unread'; controls.busy = mode === 'busy'; controls.reviewSafe = mode !== 'review_undurable'
   const changed = vi.fn(); render(<AuthoringPanel workspace="workspace_isolation" paused={false} currentBlock={null} onState={changed} />)
   fireEvent.click(screen.getByRole('button', { name: '打开候选审核与恢复' })); fireEvent.click(screen.getByRole('button', { name: '打开内容变更影响复核' }))
-  await waitFor(() => expect(changed.mock.lastCall?.[0]).toEqual({ dirty: true, safe: false, isolated: mode === 'others_safe' }))
+  await waitFor(() => expect(changed.mock.lastCall?.[0]).toEqual({ dirty: true, safe: false, isolated: mode === 'others_safe', discardForms: expect.any(Function) }))
 })

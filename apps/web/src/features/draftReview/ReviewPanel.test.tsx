@@ -4,14 +4,17 @@ import { afterEach, expect, test, vi } from 'vitest'
 import type { ReviewPort } from './reviewClient'
 import { ReviewPanel } from './ReviewPanel'
 import { reviewCandidate, machineReceipt, reviewSession, safeReviewJob } from './reviewFixtures'
+import { discardReviewForms, pendingReviewForms, type ReviewPanelState } from './reviewFormMemory'
 import { reviewCommandStore, reviewControlStore, reviewJobStore } from './reviewCommands'
 HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
 HTMLDialogElement.prototype.close = function () { this.removeAttribute('open') }
 
-afterEach(async () => { cleanup(); vi.restoreAllMocks(); await Promise.all([reviewCommandStore.close(), reviewControlStore.close(), reviewJobStore.close()]) })
+const workspaces: string[] = []
+afterEach(async () => { cleanup(); for (const workspace of workspaces.splice(0)) discardReviewForms(workspace, 'authoring_single'); vi.restoreAllMocks(); await Promise.all([reviewCommandStore.close(), reviewControlStore.close(), reviewJobStore.close()]) })
 function fixture() {
   const workspace = `workspace_${crypto.randomUUID()}`
-  const port: ReviewPort = { session: vi.fn(async () => reviewSession(workspace)),
+  workspaces.push(workspace)
+  const port: ReviewPort = { candidate: vi.fn(async () => structuredClone(reviewCandidate)), session: vi.fn(async () => reviewSession(workspace)),
     create: vi.fn(async () => ({ id: machineReceipt.id, status: 'queued' as const })), read: vi.fn(async () => structuredClone(machineReceipt)),
     decide: vi.fn(async (_id, body) => ({ ...machineReceipt, revision: 2, mathematical: body.mathematical, sources: body.sources, decision_reason: body.reason, reviewer: 'synthetic_current_author' })),
     job: vi.fn(async () => safeReviewJob(workspace)), cancel: vi.fn(async () => ({ ...safeReviewJob(workspace), status: 'cancelled' as const })),
@@ -102,7 +105,7 @@ test('candidate switches retain the original note without applying it to a diffe
   expect(port.create).not.toHaveBeenCalled()
 })
 
-test('permission refresh asks before discarding forms while Policy revocation bypasses confirmation and clears memory', async () => {
+test('permission refresh explicitly discards forms while Policy revocation hides them until fresh recovery', async () => {
   const { workspace, port } = fixture()
   const view = render(<ReviewPanel workspace={workspace} paused={false} candidate={reviewCandidate} port={port} />)
   fireEvent.change(await screen.findByLabelText('本次审核备注'), { target: { value: 'SYNTHETIC_PENDING_NOTE' } })
@@ -123,4 +126,110 @@ test('permission refresh asks before discarding forms while Policy revocation by
   expect(screen.queryByDisplayValue('SYNTHETIC_REVOKED_NOTE')).toBeNull()
   view.rerender(<ReviewPanel workspace={workspace} paused={false} candidate={reviewCandidate} port={port} />)
   expect((await screen.findByLabelText('本次审核备注') as HTMLTextAreaElement).value).toBe('')
+})
+
+
+test('Policy hides but retains an unsubmitted note across unmount until explicit verified recovery', async () => {
+  const { workspace, port } = fixture()
+  const view = render(<ReviewPanel workspace={workspace} paused={false} candidate={reviewCandidate} port={port} />)
+  fireEvent.change(await screen.findByLabelText('本次审核备注'), { target: { value: 'SYNTHETIC_RETAIN_ON_POLICY' } })
+  view.rerender(<ReviewPanel workspace={workspace} paused candidate={null} port={port} />)
+  expect(screen.queryByDisplayValue('SYNTHETIC_RETAIN_ON_POLICY')).toBeNull()
+  view.unmount()
+  const leaving = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(leaving)
+  expect(leaving.defaultPrevented).toBe(true)
+  expect(port.create).not.toHaveBeenCalled(); expect(port.decide).not.toHaveBeenCalled()
+})
+
+
+test('original actor explicitly recovers notes and reasons after Policy unmount with fresh candidate and Review reads, without writes', async () => {
+  const { workspace, port } = fixture()
+  const view = render(<ReviewPanel workspace={workspace} paused={false} candidate={reviewCandidate} port={port} />)
+  fireEvent.change(await screen.findByLabelText('本次审核备注'), { target: { value: 'ORIGINAL_PRIVATE_NOTE' } })
+  fireEvent.change(screen.getByLabelText('已有服务端审核 ID'), { target: { value: machineReceipt.id } })
+  fireEvent.click(screen.getByRole('button', { name: '读取这个审核任务' }))
+  const read = await screen.findByRole('button', { name: '另行读取当前审核回执' })
+  await waitFor(() => expect((read as HTMLButtonElement).disabled).toBe(false)); fireEvent.click(read)
+  fireEvent.change(await screen.findByLabelText('审核理由'), { target: { value: 'ORIGINAL_PRIVATE_REASON' } })
+  fireEvent.change(screen.getByLabelText('数学审核决定'), { target: { value: 'REJECTED' } })
+  fireEvent.click(screen.getByLabelText('我已核对准确候选与本回执，明确记录上述数学和来源决定及理由。'))
+  view.rerender(<ReviewPanel workspace={workspace} paused candidate={null} port={port} />)
+  expect(screen.queryByDisplayValue('ORIGINAL_PRIVATE_NOTE')).toBeNull()
+  expect(screen.queryByDisplayValue('ORIGINAL_PRIVATE_REASON')).toBeNull()
+  expect(pendingReviewForms(workspace)).toBe(true)
+  view.unmount()
+  render(<ReviewPanel workspace={workspace} paused={false} candidate={null} port={port} />)
+  const recover = await screen.findByRole('button', { name: '核验原会话与准确基准，恢复临时审核表单' })
+  expect(screen.queryByDisplayValue('ORIGINAL_PRIVATE_NOTE')).toBeNull()
+  expect(port.candidate).not.toHaveBeenCalled()
+  fireEvent.click(recover)
+  await screen.findByDisplayValue('ORIGINAL_PRIVATE_NOTE')
+  expect(screen.getByDisplayValue('ORIGINAL_PRIVATE_REASON')).toBeTruthy()
+  expect(port.candidate).toHaveBeenCalledTimes(2)
+  expect(port.read).toHaveBeenCalledTimes(2)
+  expect((screen.getByLabelText('数学审核决定') as HTMLSelectElement).value).toBe('REJECTED')
+  expect((screen.getByLabelText('我已核对准确候选与本回执，明确记录上述数学和来源决定及理由。') as HTMLInputElement).checked).toBe(false)
+  expect(port.create).not.toHaveBeenCalled(); expect(port.decide).not.toHaveBeenCalled()
+})
+
+test('another actor cannot discover original payload; fresh original actor recovery keeps changed basis read-only', async () => {
+  const { workspace, port } = fixture()
+  const view = render(<ReviewPanel workspace={workspace} paused={false} candidate={reviewCandidate} port={port} />)
+  fireEvent.change(await screen.findByLabelText('本次审核备注'), { target: { value: 'ORIGINAL_ACTOR_NOTE' } })
+  view.unmount()
+  vi.mocked(port.session).mockResolvedValue({ ...reviewSession(workspace), actor_session_id: 'session_other_actor' })
+  const other = render(<ReviewPanel workspace={workspace} paused={false} candidate={null} port={port} />)
+  fireEvent.click(await screen.findByRole('button', { name: '核验原会话与准确基准，恢复临时审核表单' }))
+  await screen.findByText(/本次操作未确认或记录无法核验/)
+  expect(port.candidate).not.toHaveBeenCalled(); expect(screen.queryByDisplayValue('ORIGINAL_ACTOR_NOTE')).toBeNull()
+  other.unmount()
+  vi.mocked(port.session).mockResolvedValue(reviewSession(workspace))
+  vi.mocked(port.candidate!).mockResolvedValue({ ...reviewCandidate, draft_revision: 2, candidate_sha256: 'b'.repeat(64) })
+  render(<ReviewPanel workspace={workspace} paused={false} candidate={null} port={port} />)
+  fireEvent.click(await screen.findByRole('button', { name: '核验原会话与准确基准，恢复临时审核表单' }))
+  const original = await screen.findByDisplayValue('ORIGINAL_ACTOR_NOTE')
+  expect((original as HTMLTextAreaElement).disabled).toBe(true)
+  expect(screen.getByText(/服务端候选或审核记录已变化/)).toBeTruthy()
+  expect(port.create).not.toHaveBeenCalled()
+})
+
+test('late recovery does not reveal payload after Policy changes and explicit discard is scoped and stable', async () => {
+  const { workspace, port } = fixture(), states: ReviewPanelState[] = []
+  const onState = (state: ReviewPanelState) => states.push(state)
+  const view = render(<ReviewPanel workspace={workspace} paused={false} candidate={reviewCandidate} port={port} onState={onState} />)
+  fireEvent.change(await screen.findByLabelText('本次审核备注'), { target: { value: 'LATE_PRIVATE_NOTE' } })
+  const discard = states.at(-1)!.discardForms
+  view.rerender(<ReviewPanel workspace={workspace} paused candidate={null} port={port} onState={onState} />)
+  view.rerender(<ReviewPanel workspace={workspace} paused={false} candidate={null} port={port} onState={onState} />)
+  let finish!: (value: typeof reviewCandidate) => void
+  vi.mocked(port.candidate!).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+  fireEvent.click(await screen.findByRole('button', { name: '核验原会话与准确基准，恢复临时审核表单' }))
+  await waitFor(() => expect(port.candidate).toHaveBeenCalledTimes(1))
+  view.rerender(<ReviewPanel workspace={workspace} paused candidate={null} port={port} onState={onState} />)
+  finish(reviewCandidate)
+  await waitFor(() => expect(states.at(-1)?.safe).toBe(true))
+  expect(screen.queryByDisplayValue('LATE_PRIVATE_NOTE')).toBeNull()
+  expect(states.at(-1)?.discardForms).toBe(discard)
+  expect(pendingReviewForms(workspace)).toBe(true)
+  discard()
+  expect(pendingReviewForms(workspace)).toBe(false)
+  expect(port.create).not.toHaveBeenCalled(); expect(port.decide).not.toHaveBeenCalled()
+})
+
+
+test('changed Review revision preserves the old reason read-only without adopting a new decision basis', async () => {
+  const { workspace, port } = fixture()
+  const view = render(<ReviewPanel workspace={workspace} paused={false} candidate={reviewCandidate} port={port} />)
+  await screen.findByLabelText('本次审核备注')
+  fireEvent.change(screen.getByLabelText('已有服务端审核 ID'), { target: { value: machineReceipt.id } }); fireEvent.click(screen.getByRole('button', { name: '读取这个审核任务' }))
+  const read = await screen.findByRole('button', { name: '另行读取当前审核回执' })
+  await waitFor(() => expect((read as HTMLButtonElement).disabled).toBe(false)); fireEvent.click(read)
+  fireEvent.change(await screen.findByLabelText('审核理由'), { target: { value: 'ORIGINAL_RECEIPT_REASON' } })
+  view.unmount()
+  vi.mocked(port.read).mockResolvedValue({ ...machineReceipt, revision: 2, decision_reason: 'Other explicit server decision' })
+  render(<ReviewPanel workspace={workspace} paused={false} candidate={null} port={port} />)
+  fireEvent.click(await screen.findByRole('button', { name: '核验原会话与准确基准，恢复临时审核表单' }))
+  expect((await screen.findByDisplayValue('ORIGINAL_RECEIPT_REASON') as HTMLTextAreaElement).disabled).toBe(true)
+  expect(screen.getByText(/服务端候选或审核记录已变化/)).toBeTruthy()
+  expect(port.decide).not.toHaveBeenCalled()
 })

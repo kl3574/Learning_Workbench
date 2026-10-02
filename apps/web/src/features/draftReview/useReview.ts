@@ -8,7 +8,10 @@ import { sameValue, validIdentity } from '../providers/providerSchema'
 import { reviewClient, type ReviewPort } from './reviewClient'
 import { knownReviewJobs, makeReviewCommand, persistReviewCommand, readReviewCommand, rememberReviewJob, reviewCommandStore, reviewControlStore, sameReviewActorPage, type ReviewCommand, type ReviewCommandInput } from './reviewCommands'
 import { reviewMemoryVersion, pendingReviewMemory, recoverableReviewMemory, releaseReviewMemory, retainReviewMemory, subscribeReviewMemory } from './reviewMemory'
-import { reviewJob, reviewReceipt } from './reviewSchema'
+import { checkedReview, reviewJob, reviewReceipt } from './reviewSchema'
+
+import { originalReviewForms, type VerifiedReviewForm } from './reviewFormMemory'
+import { readReviewFormCandidate } from './reviewFormCandidate'
 
 const terminal = (job: JobSnapshot | null) => !!job && ['completed', 'failed', 'cancelled'].includes(job.status)
 const accessDenied = (error: unknown) => error instanceof ApiError && ([401, 403].includes(error.status)
@@ -18,7 +21,7 @@ type Report = { path: string; text: string; sha256: string }
 export function useReview(workspace: string, paused: boolean, port: ReviewPort = reviewClient) {
   const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
   useSyncExternalStore(subscribeReviewMemory, reviewMemoryVersion, reviewMemoryVersion)
-  const sessionIdentity = useRef('')
+  const sessionIdentity = useRef(''), formActor = useRef('')
   const owner = `${workspace}:${access}`, scope = useRef({ owner, paused }); scope.current = { owner, paused }
   const live = useRef(false), academicRef = useRef(false), sequence = useRef(0), working = useRef(false)
   const jobReads = useRef(0), jobSelection = useRef(0)
@@ -33,7 +36,7 @@ export function useReview(workspace: string, paused: boolean, port: ReviewPort =
   const current = (subject = false) => live.current && scope.current.owner === owner && getSessionGeneration() === access
     && (!subject || academicRef.current && !scope.current.paused)
   const revokeSubject = () => {
-    academicRef.current = false; sessionIdentity.current = ''; setAllowed(false); setReady(false); setReceipt(null); setReport(null)
+    academicRef.current = false; sessionIdentity.current = ''; formActor.current = ''; setAllowed(false); setReady(false); setReceipt(null); setReport(null)
     setCommands(old => old.filter(value => value.kind === 'cancel'))
     for (const controller of writers.current) controller.abort()
     for (const url of urls.current) URL.revokeObjectURL(url)
@@ -72,7 +75,7 @@ export function useReview(workspace: string, paused: boolean, port: ReviewPort =
       const canRead = session.role === 'author' && session.active_independent_attempt_id === null && session.active_open_book_attempt_id === null && !scope.current.paused
       const values = canRead ? await loadCommands(true) : controls
       if (!current() || token !== sequence.current) return
-      sessionIdentity.current = canRead ? session.csrf_token : ''; setCommands(values); setAllowed(canRead); setReady(canRead)
+      sessionIdentity.current = canRead ? session.csrf_token : ''; formActor.current = canRead ? session.actor_session_id : ''; setCommands(values); setAllowed(canRead); setReady(canRead)
     } catch (reason) { if (current() && token === sequence.current) fail(reason) } finally { finish(token) }
   }
   useEffect(() => {
@@ -214,6 +217,33 @@ export function useReview(workspace: string, paused: boolean, port: ReviewPort =
       if (current(true) && token === sequence.current) setReceipt(value)
     } catch (reason) { if (current() && token === sequence.current) fail(reason) } finally { finish(token) }
   }
+  const recoverForms = async (formScope: string, accept: (rows: VerifiedReviewForm[]) => void) => {
+    const token = begin(true); if (token === null) return
+    const actor = formActor.current
+    const freshSession = async () => {
+      const session = checkedReview<Awaited<ReturnType<ReviewPort['session']>>>('SessionResponse', await port.session())
+      if (!current(true) || token !== sequence.current) return false
+      if (session.workspace_id !== workspace || session.actor_session_id !== actor || session.role !== 'author'
+          || session.active_independent_attempt_id !== null || session.active_open_book_attempt_id !== null) {
+        revokeSubject(); throw new Error('原会话或当前权限无法核对。')
+      }
+      return true
+    }
+    try {
+      if (!await freshSession()) return
+      const forms = originalReviewForms(workspace, formScope, actor), rows: VerifiedReviewForm[] = []
+      if (!forms.length) throw new Error('仅原会话可恢复临时表单。')
+      for (const form of forms) {
+        const currentCandidate = checkedReview<DraftCandidate>('DraftCandidate', await (port.candidate ?? readReviewFormCandidate)(form.owner, form.candidate))
+        if (!current(true) || token !== sequence.current) return
+        if (currentCandidate.draft_id !== form.candidate.draft_id || currentCandidate.entity !== form.candidate.entity) throw new Error('候选身份不一致。')
+        const currentReceipt = form.kind === 'decision' ? reviewReceipt(await port.read(form.receipt.id), form.receipt.id, form.candidate) : null
+        if (!current(true) || token !== sequence.current) return
+        rows.push({ form, currentCandidate, currentReceipt })
+      }
+      if (await freshSession() && current(true) && token === sequence.current) accept(rows)
+    } catch (reason) { if (current() && token === sequence.current) fail(reason) } finally { finish(token) }
+  }
   const artifact = async (path: string, download: boolean) => {
     if (!receipt || !receipt.evidence_paths.includes(path)) return
     const basis = receipt, token = begin(true); if (token === null) return
@@ -237,12 +267,14 @@ export function useReview(workspace: string, paused: boolean, port: ReviewPort =
       }
     } catch (reason) { if (current() && token === sequence.current) fail(reason) } finally { finish(token) }
   }
-  return { pendingMemory: pendingReviewMemory(workspace), canSaveMemory: academic && recoverableReviewMemory(workspace, sessionIdentity.current).length > 0, saveMemory, academic, ready: academic && ready, controlsReady: renderOwner === owner && controlsReady, busy,
+  return { formActor: academic ? formActor.current : '', recoverForms, pendingMemory: pendingReviewMemory(workspace), canSaveMemory: academic && recoverableReviewMemory(workspace, sessionIdentity.current).length > 0, saveMemory, academic, ready: academic && ready, controlsReady: renderOwner === owner && controlsReady, busy,
     commands: renderOwner === owner ? commands.filter(value => academic || value.kind === 'cancel') : [],
     ids: renderOwner === owner ? ids : [], selected: renderOwner === owner ? selected : '', job: renderOwner === owner ? job : null,
     receipt: academic ? receipt : null, report: academic ? report : null, error: renderOwner === owner ? error : '',
     refresh, selectJob, read, execute, artifact, canReplay: (value: ReviewCommand) => sameReviewActorPage(value, access),
     create: (candidate: DraftCandidate, body: DraftReviewWrite) => createCommand({ kind: 'create', candidate, body }),
+    decideRecovered: (basis: StoredReviewReceipt, body: ReviewDecisionWrite) => academic && body.expected_revision === basis.revision && body.candidate_sha256 === basis.candidate.candidate_sha256
+      ? createCommand({ kind: 'decision', review_id: basis.id, candidate: basis.candidate, body }) : Promise.resolve(),
     decide: (body: ReviewDecisionWrite) => receipt && academic && body.expected_revision === receipt.revision && body.candidate_sha256 === receipt.candidate.candidate_sha256
       ? createCommand({ kind: 'decision', review_id: receipt.id, candidate: receipt.candidate, body }) : Promise.resolve(),
     cancel: () => job && !terminal(job) ? createCommand({ kind: 'cancel', review_id: job.id, body: { expected_revision: job.revision } }) : Promise.resolve(),
