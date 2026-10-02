@@ -4375,6 +4375,25 @@
           "candidate": {
             "$ref": "#/components/schemas/DraftCandidate"
           },
+          "numeric_check_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Numeric Check Ids",
+            "type": "array"
+          },
+          "numeric_material": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RestoreNumericMaterialView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "owner": {
             "const": "authoring_restore",
             "title": "Owner",
@@ -4434,7 +4453,9 @@
           "source_material_sha256",
           "warnings",
           "state",
-          "published_ref"
+          "published_ref",
+          "numeric_material",
+          "numeric_check_ids"
         ],
         "title": "ContentRestoreDraftSnapshot",
         "type": "object"
@@ -11176,6 +11197,184 @@
           "responses"
         ],
         "title": "ResponsesWrite",
+        "type": "object"
+      },
+      "RestoreNumericAssertionBinding": {
+        "additionalProperties": false,
+        "properties": {
+          "assertion_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Assertion Id",
+            "type": "string"
+          },
+          "expected_source": {
+            "$ref": "#/components/schemas/RestoreNumericSourceSpan"
+          },
+          "expression_source": {
+            "$ref": "#/components/schemas/RestoreNumericSourceSpan"
+          }
+        },
+        "required": [
+          "assertion_id",
+          "expression_source",
+          "expected_source"
+        ],
+        "title": "RestoreNumericAssertionBinding",
+        "type": "object"
+      },
+      "RestoreNumericMaterialView": {
+        "additionalProperties": false,
+        "properties": {
+          "body_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Body Sha256",
+            "type": "string"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/AuthoringCandidate"
+          },
+          "material": {
+            "$ref": "#/components/schemas/RestoreNumericMaterialWrite"
+          },
+          "numeric_material_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Numeric Material Sha256",
+            "type": "string"
+          },
+          "owner": {
+            "const": "authoring_restore",
+            "title": "Owner",
+            "type": "string"
+          },
+          "restore_record_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Restore Record Sha256",
+            "type": "string"
+          },
+          "source_material_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Material Sha256",
+            "type": "string"
+          },
+          "source_ref": {
+            "$ref": "#/components/schemas/AuthoringBlockRef"
+          }
+        },
+        "required": [
+          "owner",
+          "candidate",
+          "restore_record_sha256",
+          "source_ref",
+          "source_material_sha256",
+          "body_sha256",
+          "material",
+          "numeric_material_sha256"
+        ],
+        "title": "RestoreNumericMaterialView",
+        "type": "object"
+      },
+      "RestoreNumericMaterialWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "assertion_bindings": {
+            "items": {
+              "$ref": "#/components/schemas/RestoreNumericAssertionBinding"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Assertion Bindings",
+            "type": "array"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/NumericPlan"
+          },
+          "reason": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "symbols": {
+            "items": {
+              "$ref": "#/components/schemas/WorkedExampleSymbol"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Symbols",
+            "type": "array"
+          },
+          "variable_bindings": {
+            "items": {
+              "$ref": "#/components/schemas/RestoreNumericVariableBinding"
+            },
+            "maxItems": 32,
+            "title": "Variable Bindings",
+            "type": "array"
+          },
+          "version": {
+            "const": "restore-numeric-material-v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "symbols",
+          "plan",
+          "variable_bindings",
+          "assertion_bindings",
+          "reason"
+        ],
+        "title": "RestoreNumericMaterialWrite",
+        "type": "object"
+      },
+      "RestoreNumericSourceSpan": {
+        "additionalProperties": false,
+        "properties": {
+          "end_codepoint": {
+            "maximum": 400000.0,
+            "minimum": 1.0,
+            "title": "End Codepoint",
+            "type": "integer"
+          },
+          "quote": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Quote",
+            "type": "string"
+          },
+          "start_codepoint": {
+            "maximum": 399999.0,
+            "minimum": 0.0,
+            "title": "Start Codepoint",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start_codepoint",
+          "end_codepoint",
+          "quote"
+        ],
+        "title": "RestoreNumericSourceSpan",
+        "type": "object"
+      },
+      "RestoreNumericVariableBinding": {
+        "additionalProperties": false,
+        "properties": {
+          "value_source": {
+            "$ref": "#/components/schemas/RestoreNumericSourceSpan"
+          },
+          "variable_name": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+            "title": "Variable Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "variable_name",
+          "value_source"
+        ],
+        "title": "RestoreNumericVariableBinding",
         "type": "object"
       },
       "RetainedOriginal": {
@@ -33243,7 +33442,7 @@
   },
   "x-source-spec": {
     "source": "PRODUCT_DESIGN.md",
-    "spec_sha256": "35018183fbd6d7253001e71b2c932eb10410813ed81625936a667a6be71d0c29",
-    "spec_version": "3.0.11"
+    "spec_sha256": "1c571ee91a7d39dedd2e8395f48766bd6183d496154ee9bdd9b67cb978ff26d7",
+    "spec_version": "3.0.12"
   }
 }

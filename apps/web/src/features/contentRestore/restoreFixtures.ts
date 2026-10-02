@@ -8,7 +8,7 @@ export const current = { metadata: { ...base.metadata, revision: 2, title: '当�
 export const publicationDraft: ContentRestoreDraftSnapshot = { owner: 'authoring_restore', candidate: { draft_id: 'restore_synthetic', draft_revision: 1, entity: 'block', candidate_sha256: 'a'.repeat(64) },
   source_ref: { entity: 'block', id: base.metadata.id, revision: 1, sha256: digest(canonical(base.metadata)) }, base_ref: { entity: 'block', id: base.metadata.id, revision: 2, sha256: digest(canonical(current.metadata)) },
   reason: '明确合成历史恢复，不作教学批准。', proposed_block: { ...base.metadata, revision: 3 }, body_markdown: base.body_markdown, source_material_sha256: 'b'.repeat(64),
-  warnings: [0, 1].map(index => ({ code: 'SOURCE_CONFIRM', severity: 'warning', message: `合成警告 ${index}`, locator: null })), state: 'draft', published_ref: null }
+  warnings: [0, 1].map(index => ({ code: 'SOURCE_CONFIRM', severity: 'warning', message: `合成警告 ${index}`, locator: null })), state: 'draft', published_ref: null, numeric_material: null, numeric_check_ids: [] }
 export const publicationReceipt: StoredReviewReceipt = { ...machineReceipt, candidate: publicationDraft.candidate, revision: 2, mathematical: 'APPROVED', sources: 'APPROVED', decision_reason: '合成测试，无真实质量验收。' }
 export const publicationRef = restoreTargetRef(prepareRestoreBasis(publicationDraft, base, publicationReceipt))
 export const createBody = { source_ref: publicationDraft.source_ref, expected_current_ref: publicationDraft.base_ref, reason: publicationDraft.reason }

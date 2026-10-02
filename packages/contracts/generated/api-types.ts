@@ -1,5 +1,5 @@
-// Generated from PRODUCT_DESIGN.md v3.0.11. DO NOT EDIT.
-// spec_sha256: 35018183fbd6d7253001e71b2c932eb10410813ed81625936a667a6be71d0c29
+// Generated from PRODUCT_DESIGN.md v3.0.12. DO NOT EDIT.
+// spec_sha256: 1c571ee91a7d39dedd2e8395f48766bd6183d496154ee9bdd9b67cb978ff26d7
 // JSON Schema is the type source; runtime semantic checks remain required.
 
 export type ActualUsageCost = {
@@ -723,6 +723,8 @@ export type ContentRestoreDraftSnapshot = {
   "warnings": Array<Warning>;
   "state": "draft" | "published";
   "published_ref": (ContentRef | null);
+  "numeric_material": (RestoreNumericMaterialView | null);
+  "numeric_check_ids": Array<string>;
 };
 
 export type ContextSnapshot = {
@@ -1901,6 +1903,43 @@ export type ResponseDraft = {
 export type ResponsesWrite = {
   "expected_revision": number;
   "responses": Array<ResponseDraft>;
+};
+
+export type RestoreNumericAssertionBinding = {
+  "assertion_id": string;
+  "expression_source": RestoreNumericSourceSpan;
+  "expected_source": RestoreNumericSourceSpan;
+};
+
+export type RestoreNumericMaterialView = {
+  "owner": "authoring_restore";
+  "candidate": AuthoringCandidate;
+  "restore_record_sha256": string;
+  "source_ref": AuthoringBlockRef;
+  "source_material_sha256": string;
+  "body_sha256": string;
+  "material": RestoreNumericMaterialWrite;
+  "numeric_material_sha256": string;
+};
+
+export type RestoreNumericMaterialWrite = {
+  "version": "restore-numeric-material-v1";
+  "symbols": Array<WorkedExampleSymbol>;
+  "plan": NumericPlan;
+  "variable_bindings": Array<RestoreNumericVariableBinding>;
+  "assertion_bindings": Array<RestoreNumericAssertionBinding>;
+  "reason": string;
+};
+
+export type RestoreNumericSourceSpan = {
+  "start_codepoint": number;
+  "end_codepoint": number;
+  "quote": string;
+};
+
+export type RestoreNumericVariableBinding = {
+  "variable_name": string;
+  "value_source": RestoreNumericSourceSpan;
 };
 
 export type RetainedOriginal = {
