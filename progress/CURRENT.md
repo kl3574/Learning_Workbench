@@ -2,9 +2,9 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-02T07:47:35Z；规范 SHA-256：`a6832a01966e72e5b9f63ee283ae300119446c38bcccd91beee508331ba57a98`
+更新：2026-10-02T08:03:31Z；规范 SHA-256：`a6832a01966e72e5b9f63ee283ae300119446c38bcccd91beee508331ba57a98`
 
-仓库发布：VERIFIED；Issues 同步：PENDING_M62_LOCAL_CHANGES
+仓库发布：VERIFIED；Issues 同步：VERIFIED_PR55_ISSUE31_HEAD_1AD328D
 实施：IN_PROGRESS；当前任务：M6.2；下一任务：M6.2
 
 整合并审查已批准v3.0.9的Content影响决定、Learning证据适用性及历史公开块恢复，随后完成固定组合门禁、证据和PR55/Issue31同步。v3.0.10非秘密会话连续性提案c43cd43已供所有者决定，未采纳；此前跨页未知ACK限制、生产InputProof和数值环境阻塞保留。
@@ -180,6 +180,7 @@
 - M6.2_agent_current_e58: {'source_commit': 'e58abaaf4baa5b06d27bd1db1f06c8a13c1c730a', 'command': '.venv/bin/python -m pytest -q tests/integration/test_tutor_http.py tests/integration/test_tutor_runs.py tests/integration/test_provider_proof_admission.py tests/security/test_provider_network.py', 'result': '53 PASS/2 dependency warnings/13.87s', 'receipt': 'progress/evidence/2026-09-28/M6.2-agent-current-e58/receipt.json', 'real_provider': 'NOT_RUN; no production full InputProof registered; user key not supplied to tests'}
 - M6.2_e58_publication_readback: {'source_commit': 'e58abaaf4baa5b06d27bd1db1f06c8a13c1c730a', 'publication_commit': '8701c8a04b654c2462e4311f0128201507ebaf7e', 'branch_head': '8701c8a04b654c2462e4311f0128201507ebaf7e', 'pull_request_head': '8701c8a04b654c2462e4311f0128201507ebaf7e', 'pull_request': 'draft/open/unmerged', 'issue': 'open; original milestone/labels and outside-managed body preserved', 'push_run': 36389800538, 'pull_request_run': 36389807970, 'ci': 'IN_PROGRESS; no conclusion', 'receipt': 'progress/evidence/2026-09-28/M6.2-e58-publication-readback.json'}
 - M6.2_editor_d302: {'status': 'LOCAL_FOUR_GATES_PASS_NOT_PUBLISHED', 'source_commit': 'd302c075a85c45dc11ff8a4b6a539ef8baed48f3', 'source_count': 1092, 'source_scope': 'all tracked non-progress files; external dependencies/runtime excluded', 'web': '562 PASS /94files', 'native': '1 PASS /14.0s actual test; no retry', 'static': 'strict TS/lint and build PASS;766modules; original chunk warning', 'evidence': 'progress/evidence/2026-10-02/M6.2-editor-d302/manifest.json', 'limitations': 'Current full Python NOT_RUN; provider and teaching quality NOT_RUN; unknownACK after newpage remains restricted pending approved contract.'}
+- M6.2_1ad_publication: {'readback_at': '2026-10-02T08:02:38.088451+00:00', 'head': '1ad328d0d30c67030d7b62c5d712a37e9161a6aa', 'pr': 55, 'draft': True, 'open': True, 'merged': False, 'issue': 31, 'issue_preserved_fields': ['id', 'number', 'title', 'state', 'labels', 'milestone', 'body outside managed progress block'], 'pr_body_sha256': '9de4e41b92b0a0575ecd47c1d4b5252eea297582b46c9aa5b99bcfa2b090291b', 'issue_body_sha256': 'c32d5926fe6339e12d74cb9b89d8bd5f6570109b74022775e76cf4e5d6bacb8e', 'new_ci': 'TERMINAL_NOT_YET_READ', 'body_sha256': '97cff19cd8776cd9c4a9836d4ef40a7a6b42c4e328893bbd63eab52d76e25e43', 'purpose': 'absolute evidence links pinned to actual published head', 'evidence': 'progress/evidence/2026-10-02/M6.2-1ad-publication/manifest.json'}
 
 ## 阻塞与待决项
 
