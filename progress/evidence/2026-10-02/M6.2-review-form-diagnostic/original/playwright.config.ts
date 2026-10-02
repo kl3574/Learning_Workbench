@@ -1,0 +1,3 @@
+import { defineConfig } from "$HOME/.cache/learning-workbench-acceptance/m62-review-form-ci-diagnosis-oct02/apps/web/node_modules/@playwright/test/index.mjs"
+import base from "$HOME/.cache/learning-workbench-acceptance/m62-review-form-ci-diagnosis-oct02/tests/e2e/playwright.config.ts"
+export default defineConfig({ ...base, testDir: "$HOME/.cache/learning-workbench-acceptance/m62-review-form-ci-diagnosis-oct02/tests/e2e", webServer: undefined, retries: 0, workers: 1, outputDir: "$HOME/.cache/learning-workbench-acceptance/m62-review-form-ci-diagnosis-evidence-oct02/original-case-01/artifacts" })
