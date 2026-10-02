@@ -32,23 +32,38 @@ def test_collection_registered_to_required_closed_page_and_query_models():
     'no_sha','legacy_sha','pending_duplicate','pending_unsorted','action_duplicate','overlap','bool_revision'])
 def test_corrupt_summary_rejected(change):
     value = deepcopy(summary())
-    if change == 'extra': value['reason_text'] = 'not public'
-    elif change == 'missing_null': value.pop('event_snapshot_sha256')
-    elif change == 'wrong_kind': value['old_ref']['entity'] = value['new_ref']['entity'] = 'note'
-    elif change == 'wrong_entity': value['new_ref']['entity'] = 'lesson'
-    elif change == 'wrong_id': value['new_ref']['id'] = 'other'
-    elif change == 'reverse_revision': value['new_ref']['revision'] = 1
-    elif change == 'no_sha': value['event_snapshot_sha256'] = None
-    elif change == 'legacy_sha': value['evidence_version'] = 'legacy_unverified'
-    elif change == 'pending_duplicate': value['pending_target_ids'] = ['lesson_a','lesson_a']
-    elif change == 'pending_unsorted': value['pending_target_ids'].reverse()
-    elif change == 'action_duplicate': value['action_required_target_ids'] = ['course_a','course_a']
-    elif change == 'overlap': value['action_required_target_ids'] = ['lesson_a']
-    elif change == 'bool_revision': value['old_ref']['revision'] = True
-    with pytest.raises(ValidationError): ContentImpactSummary.model_validate(value)
+    if change == 'extra':
+        value['reason_text'] = 'not public'
+    elif change == 'missing_null':
+        value.pop('event_snapshot_sha256')
+    elif change == 'wrong_kind':
+        value['old_ref']['entity'] = value['new_ref']['entity'] = 'note'
+    elif change == 'wrong_entity':
+        value['new_ref']['entity'] = 'lesson'
+    elif change == 'wrong_id':
+        value['new_ref']['id'] = 'other'
+    elif change == 'reverse_revision':
+        value['new_ref']['revision'] = 1
+    elif change == 'no_sha':
+        value['event_snapshot_sha256'] = None
+    elif change == 'legacy_sha':
+        value['evidence_version'] = 'legacy_unverified'
+    elif change == 'pending_duplicate':
+        value['pending_target_ids'] = ['lesson_a','lesson_a']
+    elif change == 'pending_unsorted':
+        value['pending_target_ids'].reverse()
+    elif change == 'action_duplicate':
+        value['action_required_target_ids'] = ['course_a','course_a']
+    elif change == 'overlap':
+        value['action_required_target_ids'] = ['lesson_a']
+    elif change == 'bool_revision':
+        value['old_ref']['revision'] = True
+    with pytest.raises(ValidationError):
+        ContentImpactSummary.model_validate(value)
 
 
 @pytest.mark.parametrize('value', [dict(items=[summary(),summary()], next_cursor=None),
     dict(items=[],next_cursor=''), dict(items=[]), dict(items=[],next_cursor=None,secret='not public')])
 def test_page_cannot_duplicate_events_or_relax_nullable_contract(value):
-    with pytest.raises(ValidationError): ContentImpactPage.model_validate(value)
+    with pytest.raises(ValidationError):
+        ContentImpactPage.model_validate(value)
