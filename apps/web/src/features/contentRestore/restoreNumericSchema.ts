@@ -2,7 +2,6 @@ import schemas from '../../../../../packages/contracts/generated/restore-numeric
 import type { ApprovalDecision, ContentRestoreDraftSnapshot, NumericCheckDecisionAck } from '../../../../../packages/contracts/generated/api-types'
 import type { NumericPlan, RestoreNumericCheckPreviewWrite, RestoreNumericCheckView, RestoreNumericMaterialWrite, RestoreNumericSourceSpan } from '../../../../../packages/contracts/generated/restore-numeric-types'
 import { checkedProvider, sameValue } from '../providers/providerSchema'
-import { canonical, digest } from '../retrieval/retrievalModel'
 import { restoreSnapshot } from './restoreSchema'
 
 type Shape = { $ref?: string; $defs?: Record<string, Shape>; type?: string; properties?: Record<string, Shape>; required?: string[];
@@ -136,9 +135,12 @@ export function restoreNumericCheck(raw: unknown, id?: string, snapshot?: Conten
   const completed = ['passed', 'mismatch', 'evaluation_error'].includes(result.outcome)
   const status = completed ? 'completed' : result.outcome === 'cancelled' ? 'cancelled' : 'failed'
   const verdict = result.outcome === 'passed' ? 'PASS' : completed ? 'FAIL' : 'BLOCKED'
-  const { result_sha256: resultHash, ...facts } = result
+  // The owner verifies the complete original result/output bytes. Python's
+  // learning-json-1 distinguishes 3.0 from 3; parsed JavaScript numbers cannot
+  // faithfully reconstruct that hash. Preserve its strict SHA shape, without
+  // substituting a different serialization and rejecting valid original facts.
   if (!job || job.id !== result.job_id || job.status !== status || value.operation_sha256 !== result.operation_sha256
-      || result.verdict !== verdict || digest(canonical(facts)) !== resultHash
+      || result.verdict !== verdict
       || result.started_at !== null && Date.parse(result.started_at) > Date.parse(result.finished_at)) invalid()
   unique(result.assertions.map(assertion => assertion.id))
   const passing = result.assertions.every(assertion => assertion.passed), errors = result.assertions.some(assertion => assertion.error_code !== null)

@@ -75,7 +75,7 @@ test('current GET is separate from the original preview/decision ACK', () => {
   }
   expect(() => checkedRestoreNumeric('UnknownShape', {})).toThrow()
 })
-test('a synthetic terminal result must bind the exact original job, complete assertions and canonical facts', () => {
+test('a synthetic terminal result must bind the exact original job, complete assertions and actual result semantics', () => {
   const facts = { job_id: numericDecisionReceipt.job.id, input_sha256: '2'.repeat(64), operation_sha256: numericPreview.operation_sha256,
     outcome: 'passed' as const, verdict: 'PASS' as const, started_at: '2026-10-02T00:01:00Z', finished_at: '2026-10-02T00:01:01Z', exit_code: 0,
     assertions: [{ id: 'assert_sum', actual: 3, passed: true, error_code: null }], output_sha256: '3'.repeat(64) }
