@@ -32,7 +32,7 @@ export function AuthoringPanel({ workspace, paused, currentBlock, onState, port 
     <button onClick={() => setReviewOpen(true)}>打开候选审核与恢复</button>
     <button onClick={() => setImpactsOpen(true)}>打开内容变更影响复核</button>
     {state.error && <p role="status">{state.error}</p>}
-    <AuthoringControlList jobs={state.jobs} busy={state.busy || !state.controlReady} academic={state.academic} read={id => void state.read(id)} cancel={job => void state.cancel(job)} />
+    <AuthoringControlList jobs={state.jobs} busy={state.busy || !state.controlReady} academic={state.academic} readBlocked={!state.ready} read={id => void state.read(id)} cancel={job => void state.cancel(job)} />
     {state.cursor && <button disabled={state.busy} onClick={() => void state.refresh(true)}>继续读取安全任务</button>}
     <section aria-label="原创作命令回执"><h3>本机保留的原命令</h3>{state.commands.map(command => <article key={command.command_id}><p>{command.kind === 'cancel' ? '取消任务' : command.kind === 'prepare' ? '准备例题' : command.kind === 'group_prepare' ? '准备组合草稿' : ['numeric_preview', 'group_numeric_preview'].includes(command.kind) ? '数值检查预览' : '独立数值决定'} · {command.ack ? '原命令已确认' : command.rejection ? '服务端拒绝，保留原基准' : '结果未知，原 key 与完整命令保留'}</p><details><summary>核对原命令</summary><p>{command.command_id}</p>{command.kind !== 'cancel' && <pre>{JSON.stringify(command.body, null, 2)}</pre>}{command.ack && <p>原回执不是当前状态。请从任务列表重新读取；数值检查从原候选的检查列表进入。</p>}</details><button disabled={state.busy || !(command.kind === 'cancel' ? state.controlReady : state.ready) || !!command.ack} onClick={() => void state.execute(command)}>回放原命令 {command.command_id}</button></article>)}</section>
     {!state.academic ? <p role="status">当前只开放安全任务控制。主题、材料、候选、数值输入与结果已收起；请在作者会话且当前测试策略允许后明确重新读取。</p> : <div key={`${workspace}:${access}`}>

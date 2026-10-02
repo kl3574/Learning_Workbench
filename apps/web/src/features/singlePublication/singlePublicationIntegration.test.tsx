@@ -19,7 +19,7 @@ function fixture() {
 test('Authoring actual published projection blocks new preview and approval while showing original ref and preserving decline', async () => {
   const f = fixture(); render(<AuthoringPanel workspace={f.workspace} paused={false} currentBlock={null} port={f.port} provider={providerFixture().port} onState={vi.fn()} />)
   // This scenario starts after academic command recovery has completed. The
-  // pre-existing control/subject initialization race is tracked separately.
+  // Control/subject initialization has its own held-journal regression tests.
   await waitFor(() => expect(screen.getByLabelText('例题主题').matches(':disabled')).toBe(false))
   const read = await screen.findByRole('button', { name: `读取创作详情 ${f.generation.summary.id}` }); await waitFor(() => expect((read as HTMLButtonElement).disabled).toBe(false)); fireEvent.click(read)
   fireEvent.click(await screen.findByRole('button', { name: '读取这份准确例题候选' }))
