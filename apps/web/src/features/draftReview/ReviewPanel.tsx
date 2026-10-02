@@ -1,27 +1,28 @@
 import { useEffect, useRef, useState } from 'react'
-import type { DraftCandidate, ImportDraftSnapshot } from '../../../../../packages/contracts/generated/api-types'
+import type { DraftCandidate, EditDraftSnapshot, ImportDraftSnapshot } from '../../../../../packages/contracts/generated/api-types'
 import { Dialog } from '../../workbench/Controls'
 import { sameValue, validIdentity } from '../providers/providerSchema'
 import type { ReviewPort } from './reviewClient'
 import { ReviewCreateForm, ReviewDecisionForm, emptyCreateForm, emptyDecisionForm, createFormDirty, decisionFormDirty, type CreateFormValue, type DecisionFormValue } from './ReviewForms'
 import { useReview } from './useReview'
 import { PublicationPanel } from '../draftPublication/PublicationPanel'
+import { EditPublicationPanel } from '../editPublication/EditPublicationPanel'
+import { discardReviewMemory } from './reviewMemory'
 import './review.css'
 const candidateKey = (candidate: DraftCandidate) => `${candidate.entity}:${candidate.draft_id}:${candidate.draft_revision}:${candidate.candidate_sha256}`
 
-export function ReviewPanel({ workspace, paused, candidate, candidateState = '未重新读取', importDraft, port, onState }: {
+export function ReviewPanel({ workspace, paused, candidate, candidateState = '未重新读取', importDraft, editDraft, port, onState }: {
   workspace: string; paused: boolean; candidate: DraftCandidate | null; candidateState?: string; port?: ReviewPort
-  importDraft?: ImportDraftSnapshot | null
   onState?: (value: { dirty: boolean; safe: boolean }) => void
-}) {
+} & ({ importDraft?: ImportDraftSnapshot | null; editDraft?: never } | { editDraft: EditDraftSnapshot | null; importDraft?: never })) {
   const state = useReview(workspace, paused, port), [manualId, setManualId] = useState('')
   const [creates, setCreates] = useState<Record<string, CreateFormValue>>({}), [decisions, setDecisions] = useState<Record<string, DecisionFormValue>>({})
-  const [confirmRefresh, setConfirmRefresh] = useState(false)
+  const [confirmRefresh, setConfirmRefresh] = useState(false), [discardMemory, setDiscardMemory] = useState(false)
   const [publicationState, setPublicationState] = useState({ dirty: false, safe: true })
   const callback = useRef(onState); callback.current = onState
   const formCount = Object.values(creates).filter(createFormDirty).length + Object.values(decisions).filter(decisionFormDirty).length
-  const dirty = publicationState.dirty || state.academic && (formCount > 0 || state.commands.some(value => !value.ack && !value.rejection))
-  const safe = publicationState.safe && state.controlsReady && !state.busy
+  const dirty = state.pendingMemory || publicationState.dirty || state.academic && (formCount > 0 || state.commands.some(value => !value.ack && !value.rejection))
+  const safe = !state.pendingMemory && publicationState.safe && state.controlsReady && !state.busy
   useEffect(() => { if (!state.academic) { setCreates({}); setDecisions({}); setConfirmRefresh(false) } }, [state.academic])
   useEffect(() => {
     if (!dirty && safe) return
@@ -39,6 +40,9 @@ export function ReviewPanel({ workspace, paused, candidate, candidateState = '�
     <p>机器检查、人工决定与内容发布分别记录。审核回执已保存不代表草稿状态已推进或教材已发布。</p>
     <button disabled={state.busy || !publicationState.safe} onClick={() => { if ((formCount || publicationState.dirty) && state.academic) setConfirmRefresh(true); else void state.refresh() }}>刷新审核权限与本机恢复记录</button>
     {state.academic && confirmRefresh && <Dialog title="刷新前保留审核表单" close={() => setConfirmRefresh(false)}><p>重新核验权限会清空当前页面的临时审核及发布确认。已经安全保存的原命令仍保留；返回可以继续编辑。</p><button onClick={() => setConfirmRefresh(false)}>返回保留审核表单</button><button onClick={() => { setConfirmRefresh(false); setCreates({}); setDecisions({}); void state.refresh() }}>明确丢弃临时审核表单并刷新权限</button></Dialog>}
+    {state.pendingMemory && <><p role="alert">原审核命令或回执尚未落盘，隔离保留在本页内存；刷新可能丢失，权限恢复后只保存原记录。</p><button disabled={state.busy} onClick={() => setDiscardMemory(true)}>放弃未落盘审核记录</button></>}
+    {state.canSaveMemory && <button disabled={state.busy} onClick={() => void state.saveMemory()}>保存原会话的审核内存记录</button>}
+    {discardMemory && <Dialog title="放弃未落盘审核记录" close={() => setDiscardMemory(false)}><p>明确放弃当前工作区尚未落盘的原审核命令或回执；已保存记录与服务端内容不变。此内存无法恢复。</p><button disabled={state.busy} onClick={() => { discardReviewMemory(workspace); setDiscardMemory(false) }}>确认放弃未落盘审核记录</button></Dialog>}
     {state.error && <p role="status">{state.error}</p>}
     <section aria-label="安全审核任务"><h4>已知审核任务</h4>
       <p>这里只保存实际审核 ID。当前状态另从服务端读取；刷新不会重新创建任务。</p>
@@ -59,7 +63,7 @@ export function ReviewPanel({ workspace, paused, candidate, candidateState = '�
     </article>)}</section>
     {!state.academic ? <p role="status">当前只开放安全审核任务控制。候选、备注、审核回执与报告已收起；权限恢复后请明确重新读取。</p> : <>
       {formCount > 0 && <p>当前页面保留 {formCount} 份临时审核表单，各自绑定原候选或原回执版本。重新读取相同基准可以继续编辑；新基准不会套用旧理由。</p>}
-      {candidate ? <ReviewCreateForm key={createKey} candidate={candidate} candidateState={candidateState} busy={state.busy || !publicationState.safe || !state.ready} value={creates[createKey] ?? emptyCreateForm()} change={value => setCreates(old => ({ ...old, [createKey]: value }))} submit={body => void state.create(candidate, body)} />
+      {candidate ? <ReviewCreateForm key={createKey} candidate={candidate} candidateState={candidateState} busy={state.busy || !publicationState.safe || !state.ready || state.pendingMemory} value={creates[createKey] ?? emptyCreateForm()} change={value => setCreates(old => ({ ...old, [createKey]: value }))} submit={body => void state.create(candidate, body)} />
         : <p>请从已有导入或创作入口明确读取准确候选，再准备审核。已有审核任务仍可只读恢复。</p>}
       {receipt && <section aria-label="当前审核回执"><h4>实际审核回执 r{receipt.revision}</h4><p>{receipt.id} · {receipt.candidate.draft_id} · 候选 r{receipt.candidate.draft_revision}</p><code>{receipt.candidate.candidate_sha256}</code>
         <dl><dt>结构检查</dt><dd>{receipt.structural}</dd><dt>数学人工决定</dt><dd>{receipt.mathematical}</dd><dt>来源人工决定</dt><dd>{receipt.sources}</dd><dt>独立教学验收</dt><dd>NOT_RUN</dd></dl>
@@ -67,12 +71,14 @@ export function ReviewPanel({ workspace, paused, candidate, candidateState = '�
         <button disabled={state.busy || !publicationState.safe} onClick={() => void state.read(receipt.id)}>重新读取审核回执</button>
         {receipt.evidence_paths.map((path, index) => <div key={path}><p>{index === 0 ? '实际机器审核报告' : `已绑定证据附件 ${index}`}</p>{index === 0 && <button disabled={state.busy || !publicationState.safe} onClick={() => void state.artifact(path, false)}>读取受控审核报告</button>}<button disabled={state.busy || !publicationState.safe} onClick={() => void state.artifact(path, true)}>下载审核附件 {index + 1}</button></div>)}
         {state.report && <details open><summary>已取得的原报告文本</summary><p>本次字节 SHA256：<code>{state.report.sha256}</code></p><pre>{state.report.text}</pre></details>}
-        {matches ? <ReviewDecisionForm key={decisionKey} receipt={receipt} busy={state.busy || !publicationState.safe || !state.ready} value={decisions[decisionKey] ?? emptyDecisionForm()} change={value => setDecisions(old => ({ ...old, [decisionKey]: value }))} submit={body => void state.decide(body)} />
+        {matches ? <ReviewDecisionForm key={decisionKey} receipt={receipt} busy={state.busy || !publicationState.safe || !state.ready || state.pendingMemory} value={decisions[decisionKey] ?? emptyDecisionForm()} change={value => setDecisions(old => ({ ...old, [decisionKey]: value }))} submit={body => void state.decide(body)} />
           : <p>当前候选入口尚未读到与本回执完全相同的候选；这里只读展示回执，请先核对准确候选后再记录决定。</p>}
       </section>}
     </>}
     {importDraft !== undefined && <PublicationPanel workspace={workspace} paused={paused || !state.academic} blocked={state.busy}
       draft={state.academic ? importDraft : null} receipt={receipt} onState={setPublicationState} />}
+    {editDraft !== undefined && <EditPublicationPanel workspace={workspace} paused={paused || !state.academic} blocked={state.busy}
+      draft={state.academic ? editDraft : null} receipt={receipt} onState={setPublicationState} />}
     <p>未提交的表单仅保留在当前面板；明确提交时先保存完整原命令。关闭不会自动批准或发布。</p>
   </section>
 }

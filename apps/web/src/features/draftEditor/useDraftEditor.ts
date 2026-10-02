@@ -18,13 +18,14 @@ export function useDraftEditor(workspace: string, baseRef: ContentRef, paused: b
   const [renderOwner, setRenderOwner] = useState(owner), [allowed, setAllowed] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('')
   const [commands, setCommands] = useState<EditCommand[]>([]), [buffers, setBuffers] = useState<EditBuffer[]>([]), [buffer, setBuffer] = useState<EditBuffer | null>(null)
   const [saving, setSaving] = useState(false), [storageFailed, setStorageFailed] = useState(false), [conflict, setConflict] = useState<Conflict | null>(null)
+  const [reviewSnapshot, setReviewSnapshot] = useState<EditDraftSnapshot | null>(null)
   const memorySession = useRef('')
   const pendingMemory = pendingEditMemory(workspace, baseRef)
   const ready = renderOwner === owner && allowed && !paused
   admitted.current = ready
   const current = (subject = true) => live.current && scope.current.owner === owner && getSessionGeneration() === access && (!subject || admitted.current && !scope.current.paused)
   const retain = () => { if (work.current && !localDurable.current && memorySession.current) retainEditMemory(work.current, memorySession.current) }
-  const clear = () => { retain(); admitted.current = false; setAllowed(false); setBuffer(null); work.current = null; memorySession.current = ''; setBuffers([]); setCommands([]); setConflict(null); abort.current.abort() }
+  const clear = () => { retain(); admitted.current = false; setAllowed(false); setBuffer(null); work.current = null; memorySession.current = ''; setBuffers([]); setCommands([]); setConflict(null); setReviewSnapshot(null); abort.current.abort() }
   const fail = (e: unknown) => {
     if (denied(e)) clear()
     setError(denied(e) ? '当前权限或测试策略不允许编辑，正文已收起，本机原记录保留。'
@@ -69,6 +70,7 @@ export function useDraftEditor(workspace: string, baseRef: ContentRef, paused: b
     return pending
   }
   const adopt = async (baseline: EditDraftSnapshot, local = snapshotText(baseline)) => {
+    setReviewSnapshot(null)
     const next: EditBuffer = { version: 1, workspace, id: `editbuf_${crypto.randomUUID()}`, base_ref: baseRef, baseline, local }
     await saveBuffer(next)
   }
@@ -106,7 +108,7 @@ export function useDraftEditor(workspace: string, baseRef: ContentRef, paused: b
   }
   const update = (local: EditText) => {
     if (!current() || working.current || !work.current || conflict || work.current.baseline.state !== 'draft') return
-    void saveBuffer({ ...work.current, local }).catch(() => {})
+    setReviewSnapshot(null); void saveBuffer({ ...work.current, local }).catch(() => {})
   }
   const loadConflict = async (command: EditCommand, token: number) => {
     const stored = (await loadCommands()).find(c => c.key === command.key)
@@ -187,11 +189,24 @@ export function useDraftEditor(workspace: string, baseRef: ContentRef, paused: b
     } catch (e) { if (valid(token, false)) fail(e) } finally { finish(token) }
   }
   const dirty = !!buffer && !sameValue(snapshotText(buffer.baseline), buffer.local) || commands.some(c => !c.ack && c.rejection === null)
+  const selectReview = async () => {
+    if (!work.current || conflict || dirty || !localDurable.current) return
+    const token = begin(); if (token === null) return
+    const saved = work.current.baseline; setReviewSnapshot(null)
+    try {
+      const [rawExact, rawHead] = await Promise.all([port.read(saved.candidate.draft_id, saved.candidate.draft_revision), port.read(saved.candidate.draft_id)])
+      const exact = editSnapshot(rawExact, baseRef, saved.candidate.draft_id, saved.candidate.draft_revision)
+      const head = editSnapshot(rawHead, baseRef, saved.candidate.draft_id)
+      if (!sameValue(exact, head) || !sameValue(exact.candidate, saved.candidate) || !sameValue(exact.payload, saved.payload)
+          || exact.state !== 'draft') throw new Error('Only the independently checked saved current edit can enter review')
+      if (valid(token)) setReviewSnapshot(exact)
+    } catch (e) { if (valid(token, false)) fail(e) } finally { finish(token) }
+  }
   return { ready, busy: renderOwner === owner && busy, saving: ready && saving, safe: !pendingMemory && (!ready || !busy && !saving && !storageFailed), pendingMemory,
     canRecoverMemory: ready && !!recoverableEditMemory(workspace, baseRef, memorySession.current), recoverMemory,
     discardMemory: () => { if (current(false) && !working.current) discardEditMemory(workspace, baseRef) },
     error: renderOwner === owner ? error : '', buffer: ready ? buffer : null, buffers: ready ? buffers : [], commands: ready ? commands : [], conflict: ready ? conflict : null, dirty: ready && dirty,
-    refresh, read, restore, update, create, submit, execute, readConflict, resolve,
+    refresh, read, restore, update, create, submit, execute, readConflict, resolve, selectReview, reviewSnapshot: ready ? reviewSnapshot : null,
     retrySave: () => work.current && saveBuffer(work.current).catch(() => {}),
     canReplay: (c: EditCommand) => ready && c.page === editPage && c.access === access }
 }

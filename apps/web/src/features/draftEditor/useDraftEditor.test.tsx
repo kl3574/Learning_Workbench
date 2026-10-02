@@ -236,3 +236,20 @@ test('pending local save survives component removal but a different session cann
   expect(second.result.current.pendingMemory).toBe(false); expect(second.result.current.safe).toBe(true)
   expect(port.patch).not.toHaveBeenCalled()
 })
+
+
+test('review entry requires separately read exact saved head and never admits a local buffer or stale ACK', async () => {
+  const { workspace, port } = fixture(), h = renderHook(() => useDraftEditor(workspace, editBase, false, port))
+  await waitFor(() => expect(h.result.current.ready).toBe(true)); await act(() => h.result.current.read('draft_edit_synthetic'))
+  act(() => h.result.current.update({ title: '仅本机文字', body_markdown: '未同步' }))
+  await waitFor(() => expect(h.result.current.saving).toBe(false))
+  await act(() => h.result.current.selectReview()); expect(h.result.current.reviewSnapshot).toBeNull(); expect(port.read).toHaveBeenCalledTimes(1)
+  await act(() => h.result.current.read('draft_edit_synthetic'))
+  await act(() => h.result.current.selectReview()); expect(h.result.current.reviewSnapshot).toEqual(editFixture())
+  expect(vi.mocked(port.read).mock.calls.slice(-2)).toEqual([['draft_edit_synthetic', 1], ['draft_edit_synthetic']])
+  act(() => h.result.current.update({ title: '新的本机文字', body_markdown: '候选须失效' }))
+  expect(h.result.current.reviewSnapshot).toBeNull()
+  await waitFor(() => expect(h.result.current.saving).toBe(false)); await act(() => h.result.current.read('draft_edit_synthetic'))
+  vi.mocked(port.read).mockResolvedValueOnce(editFixture()).mockResolvedValueOnce(editFixture(2))
+  await act(() => h.result.current.selectReview()); expect(h.result.current.reviewSnapshot).toBeNull(); expect(port.patch).not.toHaveBeenCalled()
+})

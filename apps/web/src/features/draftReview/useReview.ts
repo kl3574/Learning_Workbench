@@ -7,6 +7,7 @@ import { controlledDownloadPath } from '../imports/recovery'
 import { sameValue, validIdentity } from '../providers/providerSchema'
 import { reviewClient, type ReviewPort } from './reviewClient'
 import { knownReviewJobs, makeReviewCommand, persistReviewCommand, readReviewCommand, rememberReviewJob, reviewCommandStore, reviewControlStore, sameReviewActorPage, type ReviewCommand, type ReviewCommandInput } from './reviewCommands'
+import { reviewMemoryVersion, pendingReviewMemory, recoverableReviewMemory, releaseReviewMemory, retainReviewMemory, subscribeReviewMemory } from './reviewMemory'
 import { reviewJob, reviewReceipt } from './reviewSchema'
 
 const terminal = (job: JobSnapshot | null) => !!job && ['completed', 'failed', 'cancelled'].includes(job.status)
@@ -16,6 +17,8 @@ type Report = { path: string; text: string; sha256: string }
 
 export function useReview(workspace: string, paused: boolean, port: ReviewPort = reviewClient) {
   const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
+  useSyncExternalStore(subscribeReviewMemory, reviewMemoryVersion, reviewMemoryVersion)
+  const sessionIdentity = useRef('')
   const owner = `${workspace}:${access}`, scope = useRef({ owner, paused }); scope.current = { owner, paused }
   const live = useRef(false), academicRef = useRef(false), sequence = useRef(0), working = useRef(false)
   const jobReads = useRef(0), jobSelection = useRef(0)
@@ -30,7 +33,7 @@ export function useReview(workspace: string, paused: boolean, port: ReviewPort =
   const current = (subject = false) => live.current && scope.current.owner === owner && getSessionGeneration() === access
     && (!subject || academicRef.current && !scope.current.paused)
   const revokeSubject = () => {
-    academicRef.current = false; setAllowed(false); setReady(false); setReceipt(null); setReport(null)
+    academicRef.current = false; sessionIdentity.current = ''; setAllowed(false); setReady(false); setReceipt(null); setReport(null)
     setCommands(old => old.filter(value => value.kind === 'cancel'))
     for (const controller of writers.current) controller.abort()
     for (const url of urls.current) URL.revokeObjectURL(url)
@@ -51,8 +54,8 @@ export function useReview(workspace: string, paused: boolean, port: ReviewPort =
     if (privateCommands.some(value => value.kind === 'cancel')) throw new Error('审核命令归属不一致。')
     return [...controls, ...privateCommands]
   }
-  const begin = (subject: boolean) => {
-    if (!current(subject) || working.current) return null
+  const begin = (subject: boolean, recovering = false) => {
+    if (!current(subject) || working.current || subject && !recovering && pendingReviewMemory(workspace)) return null
     working.current = true; setBusy(true); setError(''); return ++sequence.current
   }
   const finish = (token: number) => { if (current() && token === sequence.current) { working.current = false; setBusy(false) } }
@@ -69,7 +72,7 @@ export function useReview(workspace: string, paused: boolean, port: ReviewPort =
       const canRead = session.role === 'author' && session.active_independent_attempt_id === null && session.active_open_book_attempt_id === null && !scope.current.paused
       const values = canRead ? await loadCommands(true) : controls
       if (!current() || token !== sequence.current) return
-      setCommands(values); setAllowed(canRead); setReady(canRead)
+      sessionIdentity.current = canRead ? session.csrf_token : ''; setCommands(values); setAllowed(canRead); setReady(canRead)
     } catch (reason) { if (current() && token === sequence.current) fail(reason) } finally { finish(token) }
   }
   useEffect(() => {
@@ -126,6 +129,7 @@ export function useReview(workspace: string, paused: boolean, port: ReviewPort =
     if (command.workspace_id !== workspace || !(subject ? ready : controlsReady)) return
     if (!sameReviewActorPage(command, access)) { setError('无法核对原操作者。保留原 body、key 和已知审核 ID，只读恢复；本页不会把新会话的同 key 发送冒充原命令重放。'); return }
     const token = begin(subject); if (token === null) return
+    const originalSession = sessionIdentity.current
     ++jobSelection.current
     const controller = subject ? new AbortController() : null
     if (controller) writers.current.add(controller)
@@ -133,7 +137,9 @@ export function useReview(workspace: string, paused: boolean, port: ReviewPort =
     const unsubscribe = controller ? subscribeSessionAccess(() => controller.abort()) : undefined
     if (subject) { setReceipt(null); setReport(null) }
     try {
+      if (subject) retainReviewMemory(command, originalSession)
       const retained = await persistReviewCommand(command, undefined, guard)
+      if (subject) releaseReviewMemory(command.command_id, originalSession)
       const pending = await loadCommands(academicRef.current)
       if (!current(subject) || token !== sequence.current) return
       setCommands(pending)
@@ -141,7 +147,9 @@ export function useReview(workspace: string, paused: boolean, port: ReviewPort =
         : retained.kind === 'decision' ? await port.decide(retained.review_id, retained.body, retained.command_id)
           : await port.cancel(retained.review_id, retained.body, retained.command_id))
       if (!current(subject) || token !== sequence.current) return
+      if (subject) retainReviewMemory({ ...retained, rejection: null, ack } as ReviewCommand, originalSession)
       const confirmed = await persistReviewCommand({ ...retained, rejection: null, ack } as ReviewCommand, undefined, guard)
+      if (subject) releaseReviewMemory(command.command_id, originalSession)
       if (!current(subject) || token !== sequence.current) return
       const id = confirmed.kind === 'create' ? confirmed.ack!.id : confirmed.review_id
       await rememberReviewJob(workspace, id)
@@ -154,7 +162,10 @@ export function useReview(workspace: string, paused: boolean, port: ReviewPort =
         if (!accessDenied(reason) && reason instanceof ApiError && [400, 409, 412, 422].includes(reason.status)) {
           try {
             const code = /^[A-Z][A-Z0-9_]{0,79}$/.test(reason.code ?? '') ? reason.code! : null
-            await persistReviewCommand({ ...command, rejection: { status: reason.status, code } }, undefined, guard)
+            const rejected = { ...command, rejection: { status: reason.status, code } }
+            if (subject) retainReviewMemory(rejected, originalSession)
+            await persistReviewCommand(rejected, undefined, guard)
+            if (subject) releaseReviewMemory(command.command_id, originalSession)
             const values = await loadCommands(academicRef.current)
             if (current(subject) && token === sequence.current) setCommands(values)
           } catch { /* Original committed command remains intact. */ }
@@ -166,6 +177,23 @@ export function useReview(workspace: string, paused: boolean, port: ReviewPort =
       if (current() && token === sequence.current) setPollRevision(old => old + 1)
       finish(token)
     }
+  }
+  const saveMemory = async () => {
+    const token = begin(true, true); if (token === null) return
+    const session = sessionIdentity.current, controller = new AbortController(); writers.current.add(controller)
+    const guard = { allowed: () => current(true) && token === sequence.current && sessionIdentity.current === session, signal: controller.signal }
+    const unsubscribe = subscribeSessionAccess(() => controller.abort())
+    try {
+      for (const command of recoverableReviewMemory(workspace, session)) {
+        await persistReviewCommand(command, undefined, guard)
+        if (!current(true) || token !== sequence.current) return
+        releaseReviewMemory(command.command_id, session)
+        if (command.ack) await rememberReviewJob(workspace, command.kind === 'create' ? command.ack.id : command.review_id)
+      }
+      const [known, values] = await Promise.all([knownReviewJobs(workspace), loadCommands(true)])
+      if (current(true) && token === sequence.current) { setIds(known); setCommands(values) }
+    } catch (reason) { if (current() && token === sequence.current) fail(reason) }
+    finally { unsubscribe(); writers.current.delete(controller); finish(token) }
   }
   const createCommand = async (input: ReviewCommandInput) => {
     if (!current(input.kind !== 'cancel') || working.current) return
@@ -209,7 +237,7 @@ export function useReview(workspace: string, paused: boolean, port: ReviewPort =
       }
     } catch (reason) { if (current() && token === sequence.current) fail(reason) } finally { finish(token) }
   }
-  return { academic, ready: academic && ready, controlsReady: renderOwner === owner && controlsReady, busy,
+  return { pendingMemory: pendingReviewMemory(workspace), canSaveMemory: academic && recoverableReviewMemory(workspace, sessionIdentity.current).length > 0, saveMemory, academic, ready: academic && ready, controlsReady: renderOwner === owner && controlsReady, busy,
     commands: renderOwner === owner ? commands.filter(value => academic || value.kind === 'cancel') : [],
     ids: renderOwner === owner ? ids : [], selected: renderOwner === owner ? selected : '', job: renderOwner === owner ? job : null,
     receipt: academic ? receipt : null, report: academic ? report : null, error: renderOwner === owner ? error : '',

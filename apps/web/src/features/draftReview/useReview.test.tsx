@@ -275,3 +275,20 @@ test('an unknown old-page cancel never prevents a new explicit current-Job cance
   const current = readReviewCommand(retained[key], workspace)
   expect(current.kind === 'cancel' && current.ack?.status).toBe('cancelled')
 })
+
+
+test('failed private command save survives unmount in isolated memory and only the original session can save it without sending', async () => {
+  const { workspace, port, body } = fixture(), first = renderHook(() => useReview(workspace, false, port))
+  await waitFor(() => expect(first.result.current.ready).toBe(true))
+  vi.spyOn(reviewCommandStore, 'save').mockRejectedValueOnce(new Error('Synthetic IDB abort'))
+  await act(() => first.result.current.create(reviewCandidate, body))
+  expect(first.result.current.pendingMemory).toBe(true); expect(port.create).not.toHaveBeenCalled()
+  first.unmount(); vi.mocked(port.session).mockResolvedValue({ ...reviewSession(workspace), csrf_token: 'other-session' })
+  const second = renderHook(() => useReview(workspace, false, port))
+  await waitFor(() => expect(second.result.current.ready).toBe(true))
+  expect(second.result.current.canSaveMemory).toBe(false); expect(second.result.current.commands).toEqual([])
+  await act(() => second.result.current.saveMemory()); expect(second.result.current.pendingMemory).toBe(true)
+  vi.mocked(port.session).mockResolvedValue(reviewSession(workspace)); await act(() => second.result.current.refresh())
+  await act(() => second.result.current.saveMemory()); expect(second.result.current.pendingMemory).toBe(false)
+  expect(second.result.current.commands[0].body).toEqual(body); expect(port.create).not.toHaveBeenCalled()
+})
