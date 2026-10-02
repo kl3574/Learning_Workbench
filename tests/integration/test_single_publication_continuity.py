@@ -49,6 +49,18 @@ def test_derived_expiry_alone_does_not_make_the_complete_numeric_endpoint_stale(
     assert publication.publish(case.identity, case.candidate.draft_id, intent, 'publish').revision == 1
 
 
+def test_no_source_single_preserves_existing_not_applicable_source_admission(tmp_path):
+    case, reviews = generated_case(tmp_path, 'single')
+    publication = DraftPublicationService(case.database, reviews, ImportService(case.database))
+    case.authoring.verify_publication = publication.verify_recorded
+    synthetic_numeric(case, 'synthetic-numeric')
+    receipt = reviewed(case.database, case.identity, case.candidate, reviews, sources='NOT_APPLICABLE')
+    intent = publish_request(case.database, case.identity, case.candidate, reviews, receipt)
+    result = publication.publish(case.identity, case.candidate.draft_id, intent, 'publish')
+    assert case.authoring.draft(case.identity, case.candidate.draft_id).published_ref.id == result.id
+    assert publication.publish(case.identity, case.candidate.draft_id, intent, 'publish') == result
+
+
 def test_pending_preview_can_be_declined_after_publication_without_invalidating_old_ack(tmp_path):
     case, reviews = generated_case(tmp_path, 'single')
     publication = DraftPublicationService(case.database, reviews, ImportService(case.database))

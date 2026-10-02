@@ -56,10 +56,12 @@ class DraftPublicationService:
         machine = history.records[0]
         humans = [item for item in history.records if isinstance(item, ReviewDecisionRecord)
                   and item.receipt.revision == record.admission.review_revision]
+        # Single source applicability is rechecked by its recorded admission;
+        # an empty source selection may retain the existing NOT_APPLICABLE choice.
         if (len(humans) != 1 or metadata_sha256(humans[0]) != record.human_record_sha256
                 or metadata_sha256(humans[0].receipt) != record.admission.receipt_sha256
                 or (isinstance(record, PublicationRecord) and humans[0].receipt.mathematical != 'NOT_APPLICABLE')
-                or humans[0].receipt.sources != 'APPROVED'
+                or (not isinstance(record, SinglePublicationRecord) and humans[0].receipt.sources != 'APPROVED')
                 or machine.structural_report.structural != 'PASS'
                 or machine.numeric.descriptor_sha256 != record.admission.numeric_observation_sha256):
             raise integrity()
