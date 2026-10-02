@@ -2034,7 +2034,7 @@ accepted_answers保留完整原数组、顺序及字符串，不trim、去重或
 | GET `/readiness` | 已有本机会话 | `{database_ready:boolean,worker_ready:boolean,data_schema_version:string,migrations_pending:boolean}`；不联网、不测试密钥 |
 | POST `/session/bootstrap` | `{one_time_code:string}`，同源且有效Host | `{workspace_id,csrf_token,expires_at}`，设HttpOnly/SameSite cookie；一次性code消耗后禁止重用 |
 | POST `/session/logout` | 空对象+CSRF | `{logged_out:true}`；使会话失效，不删除学习数据 |
-| GET `/session` | 无 | 严格 SessionResponse=`{workspace_id,actor_session_id:Id,role:learner|author,csrf_token,active_independent_attempt_id:Id|null,active_open_book_attempt_id:Id|null}`；actor ID 仅为非秘密连续性标识，规则见§20.10.1；两个活动 ID 来自服务端 Policy，开卷只限制学科 Agent，不锁普通材料或导入；POST `/session/role` 返回相同形状 |
+| GET `/session` | 无 | 严格 SessionResponse=`{workspace_id,actor_session_id:Id,role:learner|author,csrf_token,active_independent_attempt_id:Id|null,active_open_book_attempt_id:Id|null}`；actor ID 仅为非秘密连续性标识，规则见§20.10.1；两个活动 ID 来自服务端 Policy，开卷只限制学科 Agent，不锁普通材料或导入；角色切换响应返回相同形状 |
 | POST `/session/role` | `{role:learner|author}` | 同GET session；切author不绕过active测试策略 |
 | GET `/workbench/session` | 无 | WorkbenchSession；对象缺失显示unresolved且不丢原始快照 |
 | PUT `/workbench/session` | `{expected_revision,session:WorkbenchSession}` | WorkbenchSession；会话revision由服务端递增，包含布局/展开/滚动/标签，成绩不在其中 |
