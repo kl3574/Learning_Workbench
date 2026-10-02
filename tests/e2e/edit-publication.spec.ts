@@ -67,14 +67,57 @@ test('native saved edit enters Review, explicit synthetic decisions publish base
     const draft: EditDraftSnapshot = await page.request.get(`/api/v1/draft-edits/${id}`).then(r => r.json())
     expect(draft.owner).toBe('authoring_edit'); expect(draft.candidate.draft_revision).toBe(2)
     const panel = editor(page).getByRole('region', { name: '候选审核与原命令恢复', exact: true })
-    await expect(panel.getByText(draft.candidate.candidate_sha256, { exact: true })).toBeVisible()
-    await panel.getByLabel('本次审核备注', { exact: true }).fill('合成浏览器软件验收，不作真实数学、来源或教学批准。')
-    await panel.getByLabel('我已核对候选 ID、修订、哈希与本次检查范围，明确创建审核任务。', { exact: true }).check()
+    await expect(panel.getByRole('region', { name: '准备准确候选审核', exact: true }).getByText(draft.candidate.candidate_sha256, { exact: true })).toBeVisible()
+    const source = editor(page).getByLabel('本机正文', { exact: true })
+    const sourceText = () => source.locator('.cm-line').allTextContents().then(lines => lines.join('\n'))
+    const note = panel.getByRole('textbox', { name: '本次审核备注', exact: true })
+    const confirmation = panel.getByLabel('我已核对候选 ID、修订、哈希与本次检查范围，明确创建审核任务。', { exact: true })
+    const sourceGuards: { state: string; text: string; editable: string | null; activeElement: string }[] = []
+    const activeElement = () => page.evaluate(() => `${document.activeElement?.tagName}.${document.activeElement?.className}`)
+    const assertSourceBlocked = async (state: string) => {
+      await expect(source).toHaveAttribute('contenteditable', 'false')
+      // The disabled content DOM is intentionally not focusable. Use CM's
+      // native focusable scroller, and verify focus so keys cannot hit the form.
+      // This checks native focus behavior, not CM's input transaction handler;
+      // the DOM regression separately dispatches real CM input and nonempty undo.
+      const scroller = source.locator('..')
+      await scroller.focus(); await expect(scroller).toBeFocused()
+      await page.keyboard.type('BLOCKED_INPUT'); await page.keyboard.press('Control+z')
+      expect(await sourceText()).toBe(draft.payload.body_markdown)
+      sourceGuards.push({ state, text: await sourceText(), editable: await source.getAttribute('contenteditable'), activeElement: await activeElement() })
+    }
+    await note.fill('合成浏览器软件验收，不作真实数学、来源或教学批准。')
+    await assertSourceBlocked('unsaved-review-form')
+    await note.fill(''); await expect(source).toHaveAttribute('contenteditable', 'true')
+    await source.fill(draft.payload.body_markdown + '恢复输入 🧠\n\\alpha\n')
+    expect(await sourceText()).toBe(draft.payload.body_markdown + '恢复输入 🧠\n\\alpha\n')
+    await source.fill(draft.payload.body_markdown)
+    await expect(enter).toBeEnabled(); await enter.click()
+    await expect(panel.getByRole('region', { name: '准备准确候选审核', exact: true }).getByText(draft.candidate.candidate_sha256, { exact: true })).toBeVisible()
+    await note.fill('合成浏览器软件验收，不作真实数学、来源或教学批准。')
+    await confirmation.check()
     const reviewing = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith(`/api/v1/drafts/${id}/review`))
     await panel.getByRole('button', { name: '明确创建本次审核任务', exact: true }).click()
     const reviewResponse = await reviewing; expect(reviewResponse.status()).toBe(202); const review = await reviewResponse.json()
     const read = panel.getByRole('button', { name: '另行读取当前审核回执', exact: true })
-    await expect(read).toBeEnabled(); await read.click()
+    await expect(read).toBeEnabled()
+    await note.fill(''); await confirmation.uncheck(); await expect(source).toHaveAttribute('contenteditable', 'true')
+    // Hold a real response after its successful server read. Review is unsafe
+    // only while the read is in flight; no fabricated receipt or product hook.
+    let releaseRead!: () => void, readHeld = false
+    const heldRead = new Promise<void>(resolve => { releaseRead = resolve })
+    const readPattern = `**/api/v1/reviews/${review.id}`
+    await page.route(readPattern, async route => { const actual = await route.fetch(); expect(actual.status()).toBe(200); readHeld = true; await heldRead; await route.fulfill({ response: actual }) })
+    await read.click()
+    try { await expect.poll(() => readHeld).toBe(true); await assertSourceBlocked('review-read-in-flight') }
+    finally { releaseRead() }
+    await expect(source).toHaveAttribute('contenteditable', 'true'); await page.unroute(readPattern)
+    await source.fill(draft.payload.body_markdown + '读取恢复后输入\n')
+    expect(await sourceText()).toBe(draft.payload.body_markdown + '读取恢复后输入\n')
+    await source.fill(draft.payload.body_markdown)
+    await expect(enter).toBeEnabled(); await enter.click()
+    await expect(panel.getByRole('region', { name: '准备准确候选审核', exact: true }).getByText(draft.candidate.candidate_sha256, { exact: true })).toBeVisible()
+    sourceGuards.push({ state: 'review-read-recovered', text: await sourceText(), editable: await source.getAttribute('contenteditable'), activeElement: await activeElement() })
     const decision = panel.getByRole('region', { name: '明确人工审核决定', exact: true })
     await decision.getByLabel('数学审核决定').selectOption('NOT_APPLICABLE')
     await decision.getByLabel('来源审核决定').selectOption('APPROVED')
@@ -168,6 +211,6 @@ test('native saved edit enters Review, explicit synthetic decisions publish base
     expect(await restored.request.get(`/api/v1/lessons/${fixture.lessons[0].id}?revision=1`).then(r => r.json())).toEqual(lessonBefore)
     expect((await restored.request.get(`/api/v1/draft-edits/${id}?revision=2`).then(r => r.json())).state).toBe('published')
     expect(errors).toEqual([])
-    writeFileSync(info.outputPath('edit-publication-flow.json'), JSON.stringify({ scope: 'Synthetic native editing, real SQLite/HTTP/IndexedDB, explicit Review and author decisions, publication, original-key replay, old parent pin and restart. No provider or real quality acceptance.', created, draft, human, commands, original, restoredCurrent, lessonBefore, retained, generations: runtime.generations.length, errors }, null, 2))
+    writeFileSync(info.outputPath('edit-publication-flow.json'), JSON.stringify({ scope: 'Synthetic native editing, real SQLite/HTTP/IndexedDB, explicit Review and author decisions, publication, original-key replay, old parent pin and restart. No provider or real quality acceptance.', created, draft, sourceGuards, human, commands, original, restoredCurrent, lessonBefore, retained, generations: runtime.generations.length, errors }, null, 2))
   } finally { await runtime.close() }
 })

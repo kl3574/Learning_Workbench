@@ -1,11 +1,13 @@
 import 'fake-indexeddb/auto'
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { isolateHistory, undo, undoDepth } from '@codemirror/commands'
 import { afterEach, expect, test, vi } from 'vitest'
 import { ApiError } from '../../api/client'
 import type { ComponentProps, ComponentType } from 'react'
 import { useWorkspacePolicy } from '../assessment/useWorkspacePolicy'
 import type { LoadedBlock } from '../reader/contentClient'
 import { reviewSession } from '../draftReview/reviewFixtures'
+import { reviewClient } from '../draftReview/reviewClient'
 import type { EditPort } from './editClient'
 import { editBase, editFixture } from './editFixtures'
 import { editBuffers, editCommands } from './editJournal'
@@ -120,4 +122,57 @@ test('a different session may explicitly discard isolated memory without seeing 
   fireEvent.click(screen.getByRole('button', { name: '确认放弃隔离文字' }))
   expect(screen.queryByText(/有尚未落盘的文字隔离保留在本页内存中/)).toBeNull()
   expect(await editBuffers.load(workspace)).toEqual(saved); expect(port.patch).not.toHaveBeenCalled()
+})
+
+test('real Review dirty and unsafe states fence CM input and existing undo history, then restore editing', async () => {
+  const workspace = `workspace_${crypto.randomUUID()}`, saved = editFixture(), session = reviewSession(workspace)
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(session))))
+  const reviewSessionRead = vi.spyOn(reviewClient, 'session').mockResolvedValue(session)
+  const port: EditPort = { session: async () => session, read: vi.fn(async () => saved), create: vi.fn(), patch: vi.fn() }
+  render(<DraftEditor workspace={workspace} block={block} port={port} />)
+  fireEvent.click(screen.getByRole('button', { name: '编辑此精确文本块' }))
+  await screen.findByLabelText('读取已有编辑稿 ID')
+  fireEvent.change(screen.getByLabelText('读取已有编辑稿 ID'), { target: { value: saved.candidate.draft_id } })
+  fireEvent.click(screen.getByRole('button', { name: '另行读取服务端草稿头' }))
+  const enter = await screen.findByRole('button', { name: '核验已保存精确编辑稿并进入审核' })
+  await waitFor(() => expect((enter as HTMLButtonElement).disabled).toBe(false))
+  const view = sourceView(screen.getByLabelText('本机正文')), original = saved.payload.body_markdown
+  await waitFor(() => expect(view.state.readOnly).toBe(false))
+  // Two isolated real transactions return to the exact saved text while retaining
+  // a nonempty undo stack; a blocked undo must not silently modify local storage.
+  for (const text of [original + '\n本机撤销探针', original]) act(() => view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: text }, annotations: isolateHistory.of('full'), userEvent: 'input',
+  }))
+  await waitFor(() => expect((enter as HTMLButtonElement).disabled).toBe(false))
+  expect(undoDepth(view.state)).toBe(2)
+  fireEvent.click(enter)
+  const note = await screen.findByLabelText('本次审核备注')
+  await waitFor(() => expect(view.state.readOnly).toBe(false))
+  const durable = await editBuffers.load(workspace)
+  const assertBlocked = () => {
+    expect(view.state.readOnly).toBe(true)
+    expect(view.contentDOM.getAttribute('contenteditable')).toBe('false')
+    replaceSource(view.contentDOM, '不得写入的正文')
+    act(() => { expect(undo(view)).toBe(false) })
+    expect(view.state.doc.toString()).toBe(original)
+    expect(undoDepth(view.state)).toBe(2)
+  }
+  fireEvent.change(note, { target: { value: '尚未提交的准确候选审核表单' } })
+  await waitFor(() => expect(view.state.readOnly).toBe(true)); assertBlocked()
+  expect(await editBuffers.load(workspace)).toEqual(durable)
+  fireEvent.change(note, { target: { value: '' } })
+  await waitFor(() => expect(view.state.readOnly).toBe(false))
+  let release!: () => void
+  reviewSessionRead.mockImplementationOnce(() => new Promise(resolve => { release = () => resolve(session) }))
+  fireEvent.click(screen.getByRole('button', { name: '刷新审核权限与本机恢复记录' }))
+  await waitFor(() => expect(reviewSessionRead).toHaveBeenCalledTimes(2))
+  assertBlocked(); expect(await editBuffers.load(workspace)).toEqual(durable)
+  await act(async () => release())
+  await waitFor(() => expect(view.state.readOnly).toBe(false))
+  act(() => { expect(undo(view)).toBe(true) })
+  expect(view.state.doc.toString()).toBe(original + '\n本机撤销探针')
+  await waitFor(() => expect(view.state.readOnly).toBe(false))
+  replaceSource(view.contentDOM, '恢复后可继续编辑 🧠\n\\alpha\n')
+  await waitFor(async () => expect(Object.values(await editBuffers.load(workspace)).some(value => JSON.parse(value.text).local.body_markdown === '恢复后可继续编辑 🧠\n\\alpha\n')).toBe(true))
+  expect(port.patch).not.toHaveBeenCalled()
 })
