@@ -32,6 +32,15 @@ def test_route_inventory_includes_inline_response_routes_and_e1():
     assert all(routes[operation]["task_id"] == "M6.1" for operation in group_routes)
     assert routes["GET", "/api/v1/authoring/drafts/{id}"]["task_id"] == "M6.1"
     assert routes["GET", "/api/v1/draft-edits/{id}"]["task_id"] == "M6.2"
+    impact_routes = {
+        ("GET", "/api/v1/content/impacts/{event_id}"),
+        ("POST", "/api/v1/content/impacts/{event_id}/decisions"),
+        ("POST", "/api/v1/content/restore-drafts"),
+        ("GET", "/api/v1/content/restore-drafts/{id}"),
+        ("GET", "/api/v1/learning/evidence/{id}/applicability"),
+        ("POST", "/api/v1/learning/evidence/{id}/applicability-decisions"),
+    }
+    assert all(routes[operation]["task_id"] == "M6.2" for operation in impact_routes)
     assert routes["POST", "/api/v1/authoring/numeric-checks/{id}/decision"]["task_id"] == "M6.1"
     assert routes["GET", "/api/v1/blocks/{id}/body"]["location"] == "inline_response_cell"
     assert routes["GET", "/api/v1/attempts/{id}/responses"]["location"] == "inline_response_cell"
