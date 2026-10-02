@@ -5,11 +5,12 @@ import { ApiError, getSessionGeneration, request } from '../../api/client'
 import { commandStore, makeCommand, persist, readCommand, decode } from './commands'
 import { artifacts, basis, readView, receipt, page } from './schema'
 import { discard, recoverable } from './memory'
+import { discardForms } from './formMemory'
 import { ack, original, listing, targetRef, targetId, eventId, portFor, session, body } from './fixtures'
 import { useContentImpacts } from './useContentImpacts'
 import { ContentImpactsPanel } from './ContentImpactsPanel'
 const spaces: string[] = []
-afterEach(async () => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); for (const workspace of spaces.splice(0)) discard(workspace); await commandStore.close() })
+afterEach(async () => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); for (const workspace of spaces.splice(0)) { discard(workspace); discardForms(workspace) }; await commandStore.close() })
 function fixture() { const workspace = `workspace_${crypto.randomUUID()}`; spaces.push(workspace); const port = portFor(workspace); port.list = vi.fn(port.list); port.current = vi.fn(port.current); port.read = vi.fn(port.read); port.decide = vi.fn(port.decide); port.session = vi.fn(port.session); return { workspace, port } }
 async function prepared() { const f = fixture(), h = renderHook(() => useContentImpacts(f.workspace, false, f.port)); await waitFor(() => expect(h.result.current.ready).toBe(true)); await act(() => h.result.current.discover()); await act(() => h.result.current.read(eventId)); await act(() => h.result.current.read(eventId, targetId)); act(() => h.result.current.adopt()); return { ...f, h } }
 function deferred<T>() { let resolve!: (v: T) => void; const promise = new Promise<T>(r => { resolve = r }); return { promise, resolve } }

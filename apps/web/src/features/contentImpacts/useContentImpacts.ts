@@ -6,12 +6,14 @@ import { impactClient, type ImpactPort } from './client'
 import { checked, page, readView, currentRef, eventFacts, receipt, basis as validateBasis, type Basis } from './schema'
 import { commandStore, makeCommand, persist, readCommand, samePage, type Command } from './commands'
 import * as memory from './memory'
+import * as forms from './formMemory'
 const denied = (e: unknown) => e instanceof ApiError && ([401, 403].includes(e.status) || ['POLICY_DENIED', 'ASSESSMENT_ACTIVE', 'ASSESSMENT_ANSWER_PROTECTED'].includes(e.code ?? ''))
 type Reading = { target: string | null; value: View; history: Receipt[]; current_ref: ContentRef | null }
 type Listing = { filter: string | null; limit: number; items: Summary[]; next_cursor: string | null }
 export function useContentImpacts(workspace: string, paused: boolean, port: ImpactPort = impactClient) {
   const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
   useSyncExternalStore(memory.subscribe, memory.version, memory.version)
+  useSyncExternalStore(forms.subscribeForms, forms.formsVersion, forms.formsVersion)
   const owner = JSON.stringify([workspace, access]), scope = useRef({ owner, paused }); scope.current = { owner, paused }
   const live = useRef(false), admitted = useRef(false), working = useRef(false), sequence = useRef(0), sessionId = useRef(''), writers = useRef(new Set<AbortController>())
   const [renderOwner, setRenderOwner] = useState(owner), [allowed, setAllowed] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('')
@@ -74,9 +76,31 @@ export function useContentImpacts(workspace: string, paused: boolean, port: Impa
   }
   const adopt = () => {
     if (!current() || working.current || !adoptionAllowed || !reading?.target || !reading.current_ref || reading.value.evidence_version !== 'owner_frozen_v1' || memory.pending(workspace)) return
-    ++sequence.current; setFrozen(validateBasis({ target_id: reading.target, view: reading.value, current_ref: reading.current_ref })); setBasisVersion(v => v + 1)
+    if (forms.ownForm(workspace, sessionId.current)) return
+    const selected = validateBasis({ target_id: reading.target, view: reading.value, current_ref: reading.current_ref })
+    forms.retainForm(workspace, sessionId.current, { basis: selected, value: { decision: '', reason: '', ids: '', confirmed: false } })
+    ++sequence.current; setFrozen(selected); setBasisVersion(v => v + 1)
   }
-  const execute = async (command: Command) => {
+  const restoreForm = async () => {
+    const n = begin(true, true); if (n === null) return
+    const originalSession = sessionId.current
+    try {
+      const session = checked<Awaited<ReturnType<ImpactPort['session']>>>('SessionResponse', await port.session())
+      if (!valid(n)) return
+      if (session.workspace_id !== workspace || session.csrf_token !== originalSession || session.role !== 'author' || session.active_independent_attempt_id !== null || session.active_open_book_attempt_id !== null) { clear(); return }
+      const form = forms.ownForm(workspace, originalSession)
+      if (!form) return
+      const value = readView(await port.read(form.basis.view.event_id, form.basis.target_id), form.basis.view.event_id, form.basis.target_id)
+      if (!valid(n)) return
+      if (!sameValue(eventFacts(value), eventFacts(form.basis.view))) throw new Error('Original event changed')
+      const ref = currentRef(await port.current(form.basis.target_id), form.basis.target_id)
+      if (!valid(n)) return
+      forms.retainForm(workspace, originalSession, { ...form, value: { ...form.value, confirmed: false } })
+      setReading({ target: form.basis.target_id, value, history: value.decisions, current_ref: ref }); setAdoptionAllowed(true)
+      setFrozen(form.basis); setBasisVersion(v => v + 1)
+    } catch (e) { if (valid(n, false)) fail(e) } finally { finish(n) }
+  }
+  const execute = async (command: Command, submittedForm = false) => {
     if (!current() || command.workspace_id !== workspace) return
     if (!samePage(command, access) || !memory.ownsOriginal(command, sessionId.current)) { setError('页面或授权状态已改变；原决定只读保留，不能借用现在的权限重新发送。'); return }
     const n = begin(); if (n === null) return
@@ -88,7 +112,7 @@ export function useContentImpacts(workspace: string, paused: boolean, port: Impa
       memory.release(command.command_id, session)
       const values = await load()
       if (!valid(n)) return
-      setCommands(values); setFrozen(null); setAdoptionAllowed(false)
+      setCommands(values); consumeCurrentForm(original, session); if (submittedForm) forms.releaseForm(workspace, session); setFrozen(null); setAdoptionAllowed(false)
       const ack = receipt(await port.decide(original.basis.view.event_id, original.body, original.command_id), original.basis, original.body)
       if (!valid(n)) return
       memory.retain({ ...original, ack, rejection: null }, session)
@@ -105,6 +129,7 @@ export function useContentImpacts(workspace: string, paused: boolean, port: Impa
       }
     } finally { unsubscribe(); writers.current.delete(controller); finish(n) }
   }
+  const consumeCurrentForm = (command: Command, session: string) => forms.consumeForm(workspace, session, command.basis, command.body)
   const submit = async (decision: Write['decision'], reason: string, ids: string[]) => {
     if (!current() || working.current || !frozen) return
     const before = sequence.current, selected = frozen
@@ -118,7 +143,7 @@ export function useContentImpacts(workspace: string, paused: boolean, port: Impa
       const body: Write = { target_id: selected.target_id, observed_ref: selected.current_ref, expected_decision_revision: selected.view.target_decision_head!, expected_event_snapshot_sha256: selected.view.event_snapshot_sha256!, decision, reason, evidence_artifact_ids: ids }
       const command = makeCommand(workspace, access, selected, body)
       memory.bindOriginal(command, sessionId.current)
-      await execute(command)
+      await execute(command, true)
     } catch (e) { if (current()) fail(e) }
   }
   const saveMemory = async () => {
@@ -128,6 +153,10 @@ export function useContentImpacts(workspace: string, paused: boolean, port: Impa
     try { for (const command of memory.recoverable(workspace, session)) { await persist(command, guard); if (!valid(n)) return; memory.release(command.command_id, session) }; const values = await load(); if (valid(n)) setCommands(values) } catch (e) { if (valid(n, false)) fail(e) } finally { unsubscribe(); writers.current.delete(controller); finish(n) }
   }
   return { ready, canAdopt: ready && adoptionAllowed, listing: ready ? listing : null, busy: renderOwner === owner && busy, error: renderOwner === owner ? error : '', commands: ready ? commands : [], reading: ready ? reading : null, frozen: ready ? frozen : null, basisVersion,
+    pendingForm: forms.formsPending(workspace), form: ready && frozen ? forms.ownForm(workspace, sessionId.current)?.value ?? null : null,
+    canRestoreForm: ready && !!forms.ownForm(workspace, sessionId.current), restoreForm,
+    canSubmitForm: ready && !!frozen && sameValue([reading?.target, reading?.current_ref, reading?.value.target_decision_head, reading?.value.event_id], [frozen.target_id, frozen.current_ref, frozen.view.target_decision_head, frozen.view.event_id]),
+    changeForm: (value: forms.FormValue) => { if (current() && !working.current && frozen) forms.retainForm(workspace, sessionId.current, { basis: frozen, value }) },
     pendingMemory: memory.pending(workspace), canSaveMemory: ready && memory.recoverable(workspace, sessionId.current).length > 0, saveMemory,
-    refresh, discover, read, adopt, submit, execute, clearBasis: () => { if (current() && !working.current) { ++sequence.current; setFrozen(null); setBasisVersion(v => v + 1) } }, canReplay: (c: Command) => ready && samePage(c, access) && memory.ownsOriginal(c, sessionId.current) }
+    refresh, discover, read, adopt, submit, execute, clearBasis: () => { if (current() && !working.current) { ++sequence.current; forms.releaseForm(workspace, sessionId.current); setFrozen(null); setBasisVersion(v => v + 1) } }, canReplay: (c: Command) => ready && samePage(c, access) && memory.ownsOriginal(c, sessionId.current) }
 }

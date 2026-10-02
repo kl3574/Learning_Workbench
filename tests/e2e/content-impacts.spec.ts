@@ -17,7 +17,7 @@ async function freeze(page: Page, event: string, target: string) {
   await expect(panel(page).getByRole('group', { name: '本次人工内容决定', exact: true })).toContainText(event)
 }
 async function form(page: Page, decision: Write['decision'], reason: string) {
-  await panel(page).getByLabel('本次人工决定', { exact: true }).selectOption(decision); await panel(page).getByLabel('决定理由', { exact: true }).fill(reason)
+  await panel(page).getByLabel('本次人工决定', { exact: true }).selectOption(decision); await panel(page).getByRole('textbox', { name: '决定理由', exact: true }).fill(reason)
   await panel(page).getByLabel('我已比对原变更、当前对象和冻结依据，明确追加这次人工判断。', { exact: true }).check()
 }
 async function submit(page: Page) { await panel(page).getByRole('button', { name: '明确保存内容决定', exact: true }).click() }
@@ -92,5 +92,43 @@ test('native edit publication discovers actual impacts and preserves human decis
     expect((await restored.request.get('/api/v1/content/impacts')).status()).toBe(409)
     writeFileSync(info.outputPath('actual-content-impacts.json'), JSON.stringify({ scope: 'Actual native UI Edit/Review/manual publication then public impact discovery, decisions, lost response, real IDB abort and actor isolation. Extra owner publications only test pagination; event IDs always from HTTP. Synthetic intent; no academic/numeric approval.', publication, discovered, original, corrected, commands, page_membership: ids, all, extra, durable, parentBefore, page_errors: errors }, null, 2))
     expect(errors).toEqual([])
+  } finally { await runtime.close() }
+})
+
+test('native unsubmitted Content judgment survives role cycles with original basis and explicit close discard', async ({ playwright }, info) => {
+  test.setTimeout(150_000)
+  const runtime = await RestartRuntime.start(), decisionWrites: string[] = []
+  try {
+    const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]; page.on('request', request => { const path = new URL(request.url()).pathname; if (request.method() === 'POST' && /^\/api\/v1\/content\/impacts\/[^/]+\/decisions$/.test(path)) decisionWrites.push(path) }); await runtime.authenticateOnly(page)
+    const publication = await publishEditedBlock(page, runtime), target = publication.fixture.lessons[0].id
+    const currentSession = await page.request.get('/api/v1/session').then(r => r.json())
+    await open(page); const event = (await list(page, publication.published.id)).items[0].event_id
+    await panel(page).getByRole('button', { name: `查看影响详情 ${event}`, exact: true }).click(); await freeze(page, event, target)
+    const reason = '尚未提交的原始人工理由 α\n保留换行、Unicode 与旧依据。'
+    await form(page, 'new_revision_required', reason)
+    const controls = await context.newPage(); await controls.goto(runtime.origin); await expect(controls.getByText('✓ UI 会话已保存')).toBeVisible(); await controls.keyboard.press('Control+Shift+P'); await controls.getByRole('dialog', { name: '命令面板', exact: true }).getByRole('button', { name: /^导入/ }).click()
+    for (let i = 0; i < 2; i++) {
+      await controls.getByRole('button', { name: '切换为学习者角色', exact: true }).click()
+      await expect(panel(page).getByRole('textbox', { name: '决定理由', exact: true })).toHaveCount(0)
+      await expect(panel(page).getByText(/本页仍保留未提交的内容决定表单与原依据/)).toBeVisible()
+      await expect(panel(page).getByRole('button', { name: '重新核验权限与当前依据，恢复原会话表单', exact: true })).toBeDisabled()
+      if (i === 1) publishExtra(runtime, currentSession.workspace_id, publication.fixture.lessons[0], [2])
+      await controls.getByRole('button', { name: '切换为作者角色', exact: true }).click()
+      const restoring = panel(page).getByRole('button', { name: '重新核验权限与当前依据，恢复原会话表单', exact: true }); await expect(restoring).toBeEnabled(); await restoring.click()
+      await expect(panel(page).getByRole('textbox', { name: '决定理由', exact: true })).toHaveValue(reason)
+      await expect(panel(page).getByLabel('我已比对原变更、当前对象和冻结依据，明确追加这次人工判断。', { exact: true })).not.toBeChecked()
+      expect(await journal(page)).toEqual([])
+    }
+    await expect(panel(page).getByText(/新读取与已采用依据不同/)).toBeVisible()
+    await panel(page).getByLabel('我已比对原变更、当前对象和冻结依据，明确追加这次人工判断。', { exact: true }).check()
+    await expect(panel(page).getByRole('button', { name: '明确保存内容决定', exact: true })).toBeDisabled()
+    await panel(page).getByRole('button', { name: '丢弃未提交表单与冻结依据', exact: true }).click()
+    await panel(page).getByRole('button', { name: '采用本次对象依据准备决定', exact: true }).click(); await form(page, 'no_revision_needed', reason)
+    await page.getByRole('button', { name: '关闭创作', exact: true }).click()
+    const guard = page.getByRole('dialog', { name: '保留创作原命令', exact: true }); await guard.getByRole('button', { name: '返回创作', exact: true }).click(); await expect(panel(page).getByRole('textbox', { name: '决定理由', exact: true })).toHaveValue(reason)
+    await page.getByRole('button', { name: '关闭创作', exact: true }).click(); await guard.getByRole('button', { name: '保留原命令，明确丢弃临时表单并关闭', exact: true }).click()
+    await open(page); await expect(panel(page).getByText(/本页仍保留未提交的内容决定表单与原依据/)).toHaveCount(0)
+    expect(await journal(page)).toEqual([]); expect((await view(page, event, target)).decisions).toEqual([]); expect(decisionWrites).toEqual([])
+    writeFileSync(info.outputPath('unsubmitted-form-readback.json'), JSON.stringify({ scope: 'Synthetic unsubmitted judgment; two real role cycles, fresh same-session restore, changed target keeps original basis, confirmed explicit close discard. No Content decision HTTP write.', reason, event, decisionWrites, original_target: publication.fixture.lessons[0], durable_commands: await journal(page), decisions: (await view(page, event, target)).decisions }, null, 2))
   } finally { await runtime.close() }
 })
