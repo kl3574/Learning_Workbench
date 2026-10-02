@@ -80,6 +80,13 @@ class RestoreReviewNumericObservation(AuthoringModel):
                     or check.view.expired != (check.view.expires_at <= self.observed_at)
                     or check.view.created_at > self.observed_at):
                 raise ValueError('Restore check observation identity/time mismatch')
+            times = [command.created_at for command in check.commands] + [event.occurred_at for event in check.events]
+            if check.start:
+                times += [value for value in (check.start.admitted_at, check.start.actual_started_at) if value is not None]
+            if check.end:
+                times.append(check.end.result.finished_at)
+            if any(value > self.observed_at for value in times):
+                raise ValueError('observation cannot claim future Job or execution facts')
         if any(event.workspace_id != self.workspace_id or event.draft_id != self.candidate.draft_id
                or event.recorded_at > self.observed_at for event in self.ledger_events):
             raise ValueError('observation cannot claim foreign or future ledger facts')
@@ -124,7 +131,10 @@ def read_observation(repo: RestoreNumericRepository, candidate, original: Restor
                 assert previous_job is not None
                 revision = previous_job.revision
             job = repo.jobs.snapshot(value.view.job.id, revision)
-            job_input = repo.job_input(job.id)
+            # Current history already verified each exact immutable input and
+            # membership. Recheck that one Job instead of rereading every check
+            # once per check (the candidate is bounded at 100 previews).
+            job_input = repo.verified_input(current, identifier)
             events = [RestoreNumericJobEvent(seq=e.seq, type=e.type, payload_json=e.payload_json, occurred_at=e.occurred_at)
                       for e in repo.jobs.event_prefix(job.id, job.revision)]
         checks.append(RestoreNumericCheckObservation(record=value,

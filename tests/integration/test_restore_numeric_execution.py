@@ -136,3 +136,117 @@ def test_base_changes_gate_start_but_preserve_actual_terminal_after_start(restor
     assert result.result.outcome == ('cancelled' if before_start else 'passed')
     assert bool(result.result.started_at) != before_start
     assert runtime.calls == (0 if before_start else 1)
+
+
+class SyntheticFailure(SyntheticExecution):
+    outcome = 'mismatch'
+
+    def run_checked(self, value, cancellation, *, on_started=None):
+        execution = super().run_checked(value, cancellation, on_started=on_started)
+        from packages.contracts.canonical import strict_json
+        raw = execution.result.model_dump(mode='json')
+        raw.update(outcome=self.outcome, verdict='FAIL' if self.outcome == 'mismatch' else 'BLOCKED')
+        if self.outcome == 'mismatch':
+            raw['assertions'][0].update(actual=5.0, passed=False)
+            output = strict_json(execution.stdout)
+            output['assertions'] = raw['assertions']
+            stdout = canonical_bytes(output)
+        else:
+            raw.update(assertions=[], exit_code=-9)
+            stdout = b''
+        raw['output_sha256'] = sha256_bytes(stdout) if stdout else None
+        raw['result_sha256'] = numeric_result_sha256(raw)
+        return NumericExecution(NumericCheckResult.model_validate(raw), stdout, b'', True, (), self.manifest_document())
+
+
+def fresh_publish(case, key='fresh', math='APPROVED'):
+    from packages.contracts import domain_models as dm
+    from tests.integration.test_publication_admission import reviewed, publish_request
+    candidate = dm.DraftCandidate.model_validate(case.snapshot['candidate'])
+    receipt = reviewed(case.database, case.identity, candidate, case.app.state.review_service, key=key, math=math)
+    return publish_request(case.database, case.identity, candidate, case.app.state.review_service, receipt).model_dump(mode='json')
+
+
+@pytest.mark.parametrize('newest', ['pending', 'decline', 'mismatch', 'timeout'])
+def test_new_review_cannot_skip_newer_nonpass_check(restored, newest):
+    case = restored
+    executed(case)
+    latest = preview(case, 'latest')
+    if newest == 'decline':
+        case.service.decide(case.identity, latest.id, decision(latest, 'decline'), 'latest-decline')
+    elif newest in {'mismatch', 'timeout'}:
+        runtime = SyntheticFailure()
+        runtime.outcome = newest
+        case.service.runtime = runtime
+        case.service.decide(case.identity, latest.id, decision(latest), 'latest-approve')
+        assert RestoreNumericWorker(case.database, case.service, runtime).run_once()
+        assert case.service.read(case.identity, latest.id).result.outcome == newest
+    publish = fresh_publish(case)
+    before = table_hashes(case.database)
+    response = case.client.post(f'/api/v1/drafts/{case.identifier}/publish', json=publish, headers=command(case.headers, 'publish'))
+    assert response.status_code == 409 and response.json()['error']['code'] == 'PUBLISH_NUMERIC_REQUIRED'
+    assert table_hashes(case.database) == before
+
+
+def test_published_ack_uses_original_observation_after_later_decline_fact(restored):
+    case = restored
+    pending = preview(case, 'older-pending')
+    executed(case)
+    publish = fresh_publish(case)
+    path = f'/api/v1/drafts/{case.identifier}/publish'
+    published = case.client.post(path, json=publish, headers=command(case.headers, 'publish'))
+    assert published.status_code == 201, published.text
+    old_review = case.client.get('/api/v1/reviews/' + publish['review_receipt_id']).json()
+    case.service.decide(case.identity, pending.id, decision(pending, 'decline'), 'after-publish-decline')
+    before = table_hashes(case.database)
+    assert case.client.get('/api/v1/reviews/' + publish['review_receipt_id']).json() == old_review
+    assert case.client.post(path, json=publish, headers=command(case.headers, 'publish')).json() == published.json()
+    assert case.app.state.content_restore_service.read(case.identity, case.identifier).state == 'published'
+    assert table_hashes(case.database) == before
+
+
+@pytest.mark.parametrize('fault', ['math_rejected', 'base_race', 'rollback'])
+def test_numeric_pass_cannot_bypass_human_cas_or_atomic_publication(restored, monkeypatch, fault):
+    case = restored
+    executed(case)
+    publish = fresh_publish(case, math='REJECTED' if fault == 'math_rejected' else 'APPROVED')
+    if fault == 'base_race':
+        ContentService(case.database).publish(case.identity.workspace_id,
+            [case.block.model_copy(update={'revision': 3})], {case.block.body_path: BODY.encode()})
+    elif fault == 'rollback':
+        from services.api.app.application.restore_publication import RestoreBlockPublication
+        from services.api.app.application.errors import ApiError
+        def fail(*args):
+            raise ApiError(409, 'INJECTED_AFTER_CONTENT', 'Synthetic failure after content publication')
+        monkeypatch.setattr(RestoreBlockPublication, 'freeze', fail)
+    before = table_hashes(case.database)
+    response = case.client.post(f'/api/v1/drafts/{case.identifier}/publish', json=publish, headers=command(case.headers, 'publish'))
+    assert response.status_code == (412 if fault == 'base_race' else 409), response.text
+    assert table_hashes(case.database) == before
+
+
+def test_bad_complete_output_cannot_commit_pass_or_terminal(restored):
+    case = restored
+    runtime = SyntheticExecution()
+    case.service.runtime = runtime
+    view = preview(case)
+    case.service.decide(case.identity, view.id, decision(view), 'approve')
+    worker = RestoreNumericWorker(case.database, case.service, runtime)
+    lease, value, actor = worker.claim()
+    with case.database.transaction() as conn:
+        RestoreNumericRepository(conn, case.identity.workspace_id).begin(lease, utc_now())
+    execution = runtime.run_checked(value, lambda: False, on_started=lambda actual: worker._started(lease, actual))
+    raw = execution.result.model_dump(mode='json')
+    wrong = b'{}'
+    raw['output_sha256'] = sha256_bytes(wrong)
+    raw['result_sha256'] = numeric_result_sha256(raw)
+    before = table_hashes(case.database)
+    from services.api.app.application.errors import ApiError
+    with case.database.transaction() as conn:
+        with pytest.raises(ApiError) as error:
+            RestoreNumericRepository(conn, case.identity.workspace_id).finish(lease,
+                NumericCheckResult.model_validate(raw), wrong, b'', True, runtime.manifest_document())
+        assert error.value.status == 409
+    assert table_hashes(case.database) == before
+    worker._finish(lease, execution)
+    assert case.service.read(case.identity, view.id).result.verdict == 'PASS'

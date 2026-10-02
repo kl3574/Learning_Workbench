@@ -62,6 +62,27 @@ class AuthoringJobRepository:
     def __init__(self, connection: sqlite3.Connection, workspace_id: str):
         self.conn, self.workspace_id = connection, workspace_id
 
+    def claimable_numeric(self, version: str, cursor: tuple[str, str] | None,
+                          limit: int = 32) -> list[sqlite3.Row]:
+        """Bounded scheduling hints; the numeric owner must verify before claim.
+
+        This port reads only explicitly registered numeric versions. A hint is
+        not an execution permission or a substitute for full owner history.
+        """
+        if version not in {'authoring-numeric-job-v1', 'authoring-group-numeric-job-v1', 'restore-numeric-job-v1'} or not 1 <= limit <= 32:
+            raise integrity()
+        base = ("SELECT created_at,id FROM jobs WHERE workspace_id=? AND kind='authoring_numeric_check' "
+                "AND json_extract(input_json,'$.version')=? AND (status='queued' OR (status='running' AND lease_until<=?))")
+        params = (self.workspace_id, version, utc_now())
+        if cursor is None:
+            return self.conn.execute(base + ' ORDER BY created_at,id LIMIT ?', (*params, limit)).fetchall()
+        rows = self.conn.execute(base + ' AND (created_at,id)>(?,?) ORDER BY created_at,id LIMIT ?',
+                                 (*params, *cursor, limit)).fetchall()
+        if len(rows) < limit:
+            rows += self.conn.execute(base + ' AND (created_at,id)<=(?,?) ORDER BY created_at,id LIMIT ?',
+                                      (*params, *cursor, limit - len(rows))).fetchall()
+        return rows
+
     def numeric_members(self, version: str, draft: str) -> set[str]:
         """Jobs-owned membership fact, never a subject permission grant."""
         return {row[0] for row in self.conn.execute(

@@ -285,6 +285,10 @@ class RestoreNumericRepository:
             raise integrity()
         return row[0]
 
+    def verified_input(self, history: RestoreNumericHistory, identifier: str) -> RestoreNumericJobInput:
+        """Numeric-owner read port for an already fully verified ledger snapshot."""
+        return self._job(history, identifier)
+
     def job_input(self, identifier):
         check_id = self.check_for_job(identifier)
         history = self.history(self.draft_for_check(check_id))

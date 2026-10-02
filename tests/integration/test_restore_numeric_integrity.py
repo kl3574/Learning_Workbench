@@ -161,3 +161,18 @@ def test_numeric_historical_actor_workspace_is_verified_with_another_current_aut
         case.service.read(case.identity, view.id)
     assert error.value.status == 409 and error.value.code == 'RESTORE_NUMERIC_INTEGRITY_ERROR'
     assert table_hashes(case.database) == before
+
+
+@pytest.mark.parametrize('table', ['checks', 'commands', 'jobs'])
+def test_alternate_unique_key_replace_cannot_delete_original_membership(restored, table):
+    case = restored
+    view = preview(case)
+    case.service.decide(case.identity, view.id, decision(view), 'approve')
+    name = 'restore_numeric_' + table
+    with case.database.transaction() as conn:
+        row = dict(conn.execute(f'SELECT * FROM {name} LIMIT 1').fetchone())
+        field = {'checks': 'check_id', 'commands': 'command_key', 'jobs': 'job_id'}[table]
+        row[field] = 'replacement_identifier'
+        with pytest.raises(sqlite3.IntegrityError, match='immutable'):
+            conn.execute(f'INSERT OR REPLACE INTO {name}({",".join(row)}) VALUES({",".join("?" for _ in row)})', tuple(row.values()))
+    assert case.service.read(case.identity, view.id).decision == 'approve_once'

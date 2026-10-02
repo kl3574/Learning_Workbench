@@ -52,11 +52,8 @@ class RestoreNumericWorker:
     def claim(self) -> tuple[AuthoringLease, RestoreNumericJobInput, str] | None:
         workspace = self.database.workspace_id()
         with self.database.transaction() as conn:
-            rows = conn.execute("SELECT created_at,id FROM jobs WHERE workspace_id=? AND kind='authoring_numeric_check' AND json_extract(input_json,'$.version')='restore-numeric-job-v1' AND (status='queued' OR (status='running' AND lease_until<=?)) ORDER BY created_at,id",
-                                (workspace, utc_now())).fetchall()
-            if self._cursor is not None:
-                rows = [row for row in rows if tuple(row) > self._cursor] + [row for row in rows if tuple(row) <= self._cursor]
             repo = RestoreNumericRepository(conn, workspace)
+            rows = repo.jobs.claimable_numeric('restore-numeric-job-v1', self._cursor)
             first_error = None
             for row in rows[:32]:
                 self._cursor = tuple(row)
