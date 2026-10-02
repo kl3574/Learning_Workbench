@@ -1,10 +1,11 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { ContentRef } from '../../../../../../packages/contracts/generated/api-types'
 import { canonical } from '../../retrieval/retrievalModel'
 import type { LoadedBlock } from '../contentClient'
 import { compareClient, type ComparePort } from './compareClient'
 import { boundedLineDiff } from './boundedDiff'
 import { useVersionCompare } from './useVersionCompare'
+import { RestorePanel, type RestoreStatus } from '../../contentRestore/RestorePanel'
 import './versionCompare.css'
 
 const fields = ['kind', 'title', 'body_path', 'body_sha256', 'concepts', 'citations', 'depends_on'] as const
@@ -18,7 +19,11 @@ function SourceScope({ value }: { value: LoadedBlock }) {
     {value.warnings.map((warning, index) => <p key={index}>{warning.code} · {warning.message}</p>)}
   </div>
 }
-export function BlockVersionCompare({ workspace, blockRef, port = compareClient }: { workspace: string | null; blockRef: ContentRef; port?: ComparePort }) {
+export function BlockVersionCompare({ workspace, blockRef, port = compareClient, paused = true, onRestoreState }: { workspace: string | null; blockRef: ContentRef; port?: ComparePort; paused?: boolean; onRestoreState?: (value: RestoreStatus) => void }) {
+  const restoreScope = JSON.stringify([workspace, blockRef.id])
+  const [openRestoreScope, setOpenRestoreScope] = useState(''), [choice, setChoice] = useState<{ scope: string; ref: ContentRef } | null>(null)
+  const source = choice?.scope === restoreScope ? choice.ref : null
+  const [restoreStatus, setRestoreStatus] = useState<RestoreStatus>({ dirty: false, safe: true, closeSafe: true })
   const state = useVersionCompare(workspace, blockRef.id, port)
   const diff = useMemo(() => state.result ? boundedLineDiff(state.result[0].body, state.result[1].body) : null, [state.result])
   const refs = [...state.items.map(item => item.ref)]
@@ -30,11 +35,12 @@ export function BlockVersionCompare({ workspace, blockRef, port = compareClient 
       <div className="compare-actions"><button disabled={state.busy} onClick={() => void state.history()}>重新读取历史列表</button>{state.cursor && <button disabled={state.busy || state.items.length >= 200} onClick={() => void state.history(true)}>加载更多修订</button>}<button disabled={state.busy || !state.left || !state.right || state.left.sha256 === state.right.sha256} onClick={() => void state.read()}>读取所选两个修订</button></div>
       {state.cursor && state.items.length >= 200 && <p>本次历史列表最多保留 200 项，尚有历史未列出；没有用当前版本替代所选修订。</p>}
       {state.busy && <p role="status">正在核对权限和准确修订…</p>}{state.error && <p role="alert">{state.error}</p>}
-      {state.result && <><div className="compare-columns">{state.result.map((value, index) => <section key={index} aria-label={index ? '右侧版本' : '左侧版本'}><h4>{index ? '右侧' : '左侧'} · 修订 {value.block_ref.revision}</h4><p><code>{value.block_ref.id}</code> · {value.block.title}</p><SourceScope value={value} /></section>)}</div>
+      {state.result && <><div className="compare-columns">{state.result.map((value, index) => <section key={index} aria-label={index ? '右侧版本' : '左侧版本'}><h4>{index ? '右侧' : '左侧'} · 修订 {value.block_ref.revision}</h4><p><code>{value.block_ref.id}</code> · {value.block.title}</p><SourceScope value={value} /><button disabled={paused || restoreStatus.dirty || !restoreStatus.closeSafe} onClick={() => { setChoice({ scope: restoreScope, ref: value.block_ref }); setOpenRestoreScope(restoreScope) }}>选择{index ? '右侧' : '左侧'}历史版本准备恢复</button></section>)}</div>
         <h4>字段差异</h4>{fields.filter(field => canonical(state.result![0].block[field]) !== canonical(state.result![1].block[field])).map(field => <div className="compare-field" key={field}><strong>{labels[field]}</strong><div className="compare-columns"><pre aria-label={`左侧${labels[field]}`}>{JSON.stringify(state.result![0].block[field], null, 2)}</pre><pre aria-label={`右侧${labels[field]}`}>{JSON.stringify(state.result![1].block[field], null, 2)}</pre></div></div>)}
         <h4>原文差异</h4>{diff?.kind === 'parallel' ? <p role="status">{diff.reason}</p> : <><p>按完整行保留相同的开头和结尾；变化的中段整体标记增删，未推断公式含义。</p><div className="compare-diff" aria-label="逐行文字差异">{diff?.changes.map((change, index) => <div className={`compare-${change.kind}`} key={index}><strong>{change.kind === 'added' ? '右侧新增' : change.kind === 'removed' ? '左侧删除' : '相同行'}</strong><pre>{change.text}</pre></div>)}</div></>}
         <div className="compare-columns compare-originals">{state.result.map((value, index) => <section key={index}><h4>{index ? '右侧' : '左侧'}完整原文</h4><pre tabIndex={0} aria-label={index ? '右侧完整原文' : '左侧完整原文'}>{value.body}</pre></section>)}</div>
       </>}
     </div>}
+    {workspace && <><button onClick={() => setOpenRestoreScope(restoreScope)}>打开此块的恢复原记录</button>{openRestoreScope === restoreScope && <RestorePanel key={workspace + ':' + blockRef.id} workspace={workspace} blockId={blockRef.id} selectedSource={source} paused={paused} onState={value => { setRestoreStatus(value); onRestoreState?.(value) }} />}</>}
   </section>
 }

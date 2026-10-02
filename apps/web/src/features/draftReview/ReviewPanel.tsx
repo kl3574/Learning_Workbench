@@ -1,20 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
-import type { DraftCandidate, EditDraftSnapshot, ImportDraftSnapshot } from '../../../../../packages/contracts/generated/api-types'
+import type { DraftCandidate, ContentRestoreDraftSnapshot, EditDraftSnapshot, ImportDraftSnapshot } from '../../../../../packages/contracts/generated/api-types'
 import { Dialog } from '../../workbench/Controls'
 import { sameValue, validIdentity } from '../providers/providerSchema'
 import type { ReviewPort } from './reviewClient'
 import { ReviewCreateForm, ReviewDecisionForm, emptyCreateForm, emptyDecisionForm, createFormDirty, decisionFormDirty, type CreateFormValue, type DecisionFormValue } from './ReviewForms'
 import { useReview } from './useReview'
 import { PublicationPanel } from '../draftPublication/PublicationPanel'
+import { RestorePublicationPanel } from '../contentRestore/RestorePublicationPanel'
 import { EditPublicationPanel } from '../editPublication/EditPublicationPanel'
 import { discardReviewMemory } from './reviewMemory'
 import './review.css'
 const candidateKey = (candidate: DraftCandidate) => `${candidate.entity}:${candidate.draft_id}:${candidate.draft_revision}:${candidate.candidate_sha256}`
 
-export function ReviewPanel({ workspace, paused, candidate, candidateState = '未重新读取', importDraft, editDraft, port, onState }: {
+export function ReviewPanel({ workspace, paused, candidate, candidateState = '未重新读取', importDraft, editDraft, restoreDraft, restoreBlockId, port, onState }: {
   workspace: string; paused: boolean; candidate: DraftCandidate | null; candidateState?: string; port?: ReviewPort
   onState?: (value: { dirty: boolean; safe: boolean }) => void
-} & ({ importDraft?: ImportDraftSnapshot | null; editDraft?: never } | { editDraft: EditDraftSnapshot | null; importDraft?: never })) {
+} & ({ importDraft?: ImportDraftSnapshot | null; editDraft?: never; restoreDraft?: never; restoreBlockId?: never } | { editDraft: EditDraftSnapshot | null; importDraft?: never; restoreDraft?: never; restoreBlockId?: never } | { restoreDraft: ContentRestoreDraftSnapshot | null; restoreBlockId: string; editDraft?: never; importDraft?: never })) {
   const state = useReview(workspace, paused, port), [manualId, setManualId] = useState('')
   const [creates, setCreates] = useState<Record<string, CreateFormValue>>({}), [decisions, setDecisions] = useState<Record<string, DecisionFormValue>>({})
   const [confirmRefresh, setConfirmRefresh] = useState(false), [discardMemory, setDiscardMemory] = useState(false)
@@ -79,6 +80,8 @@ export function ReviewPanel({ workspace, paused, candidate, candidateState = '�
       draft={state.academic ? importDraft : null} receipt={receipt} onState={setPublicationState} />}
     {editDraft !== undefined && <EditPublicationPanel workspace={workspace} paused={paused || !state.academic} blocked={state.busy}
       draft={state.academic ? editDraft : null} receipt={receipt} onState={setPublicationState} />}
+    {restoreDraft !== undefined && <RestorePublicationPanel blockId={restoreBlockId} workspace={workspace} paused={paused || !state.academic} blocked={state.busy}
+      draft={state.academic ? restoreDraft : null} receipt={receipt} onState={setPublicationState} />}
     <p>未提交的表单仅保留在当前面板；明确提交时先保存完整原命令。关闭不会自动批准或发布。</p>
   </section>
 }
