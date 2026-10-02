@@ -1,6 +1,6 @@
 # 知径 Learning Workbench：完整产品设计与工程实施规范
 
-**版本：3.0.12 提案（未批准）｜日期：2026-10-02｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
+**版本：3.0.12｜日期：2026-10-02｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
 
 **本文件（含文末附录）是唯一产品与工程规范。** 将它放入空目录即可开始；不需要旧版设计包、旧 Demo、之前聊天、私有 GitHub 仓库或另一份提示词说明需求。正文定义产品，附录内嵌数据模型、HTTP 字段、数据库设计、模块接口、样例和验收用例。构建 Agent 根据本文生成实现文件、OpenAPI、测试和进度记录；这些是派生产物，不是第二套产品需求。
 
@@ -34,7 +34,7 @@
 | 3.0.9 | M6.2 内容影响逐对象人工决定、学习证据适用性复核及历史公开内容块恢复草稿的提议合同 | 提案待所有者确认与实施；不表示影响已复核、旧内容已恢复或M6.2已验收；不改54 core/0001/学习包3.0.0 |
 | 3.0.10 | M6.2 编辑命令的非秘密会话连续性标识与未知 ACK 跨页面显式重放 | 已获所有者批准；不授予新会话继承原命令，不持久化 CSRF/cookie，不代表 M6.2 验收完成；不改54 core/0001/学习包3.0.0 |
 | 3.0.11 | M6.2 真实 Content 影响事件的只读发现列表、严格摘要与固定高水位分页（§20.13） | 已获所有者批准，待实施验收；不表示任何影响已处理，不改54 core/0001/学习包3.0.0 |
-| 3.0.12 提案 | M6.2 恢复例题的作者显式数值计划、原文定位、独立预览/单次执行与新Review绑定（§20.14） | 未获批准，仅供审阅；不开放实现/执行、不继承旧批准、不放宽发布准入，不改54 core/0001/学习包3.0.0 |
+| 3.0.12 | M6.2 恢复例题的作者显式数值计划、原文定位、独立预览/单次执行与新Review绑定（§20.14） | 已获所有者批准，待实施验收；不继承旧批准、不放宽发布准入，不改54 core/0001/学习包3.0.0 |
 
 v3.0.10 会话连续性与 v3.0.11 内容影响事件发现均已获所有者明确批准；本文件保留两项合同。批准不代表实现或验收通过，实际状态见进度事实记录。
 
@@ -1244,9 +1244,9 @@ item 的 event_id 唯一，old/new refs 同 entity/稳定 ID 且 old.revision<ne
 - 至少三页及两种 changed_object_id 筛选，第一/二页之间真实追加新发布事件、另作有效决定或修改目标当前版本；旧游标事件集合不混入新项、不重漏，当前状态按真实依据变化，新第一页包含新事件。未知/重复参数、伪造游标、跨 workspace/filter/limit 复用均拒绝；全部读路径前后完整数据库行清单一致。
 - author/learner 切换、Policy 未知/活动独立测试/撤权，列表与详情 API 及已显示页面均不漏材料，必要未落盘命令仍受保护。真实 legacy、新事件缺快照、原事件/决定历史/head/证据字节篡改均有拒绝或只读边界测试；坏记录不被筛掉为成功，错误路径仍零写。Content-only 变更在没有任何 Learning evidence 时也可发现，Note/纯ID保守关系和空数组均不被包装为全平台已完成。
 
-### 20.14 M6.2 恢复例题的独立数值计划与执行（v3.0.12 提案，未批准）
+### 20.14 M6.2 恢复例题的独立数值计划与执行（v3.0.12）
 
-**缺口与最小范围。** §20.11 可建立任意原 kind 的公开块恢复候选，但公开 ContentBlock 与恢复 DTO 没有 NumericPlan；§20.8/§20.9 的数值口仅能读取其真实生成候选的计划，不授权借 Authoring 单块/组 owner 为 `authoring_restore` 冒名执行。没有绑定新恢复候选的真实数值记录时，worked_example 继续 NOT_RUN 并阻断发布。本提案仅增加 Restore 所属例题的明确提供计划→冻结预览→单次批准→隔离执行→新 Review 数值观察；不解释或执行历史 Markdown/代码，不自动抽取计划，不新增模型/Provider 调用或任意脚本入口，不降低数学、来源、数值发布准入。批准前本节及新增路由均不是可实施授权，当前 v3.0.11 合同保持原义。
+**缺口与最小范围。** §20.11 可建立任意原 kind 的公开块恢复候选，但公开 ContentBlock 与恢复 DTO 没有 NumericPlan；§20.8/§20.9 的数值口仅能读取其真实生成候选的计划，不授权借 Authoring 单块/组 owner 为 `authoring_restore` 冒名执行。没有绑定新恢复候选的真实数值记录时，worked_example 继续 NOT_RUN 并阻断发布。本节仅增加 Restore 所属例题的明确提供计划→冻结预览→单次批准→隔离执行→新 Review 数值观察；不解释或执行历史 Markdown/代码，不自动抽取计划，不新增模型/Provider 调用或任意脚本入口，不降低数学、来源、数值发布准入。本节已获所有者明确批准；批准不代表实现、运行或验收成功，实际状态见进度事实记录。
 
 **计划必须由作者明确提供。** 作者重新读取同一确切未发布 Restore candidate、原完整正文及元数据后，在独立表单提供 `RestoreNumericMaterialWrite` 并明确提交。计划沿 §20.8 的 finite-arithmetic-v1、NumericPlan、WorkedExampleSymbol、有限数与符号规则；不把正文中的代码围栏、旧计划、旧输出、历史批准或旧 runtime 当输入/授权。历史中合法保留的文本可供人查看后手工重新提供，但无复制即生效或自动选取。每个变量值、每个断言期望值和公式关联都须给出该候选原正文内的精确 codepoint 定位；不接受 URL、任意 artifact/file 路径或另一对象作为替代材料。正文没有本切片可核验的具体有限数值实例时明确拒绝，不造空计划或随意选择 1=1 充数。历史文本只有符号、LaTeX 分数、统计模拟或受限语言外计算时，本切片可保持阻断；不声称所有例题都能由有限算术执行。
 
@@ -1282,7 +1282,7 @@ worked_example 发布仍要求所选新 Review 中本候选唯一 material 的�
 
 发布同事务记录选中的 material/check/观察 SHA，并沿 §20.11 原 source→Restore→人审→新 ContentRef 强 CAS 与影响处理。原 source 字段/body 完整副本不变，新 current 恰为base+1；父 Lesson/Course pin、旧题/私解/attempt/grade/evidence 均不动，Note stale/检索失效/推荐dirty仍按正常发布处理。学术/来源/教学批准与软件合成验收严格分开。
 
-**采纳前的验收矩阵（全部待实施，不因本提案记 PASS）。**
+**实施验收矩阵（全部须实际验收，不因规范获批准记 PASS）。**
 
 | 场景 | 必须得到的实际事实 |
 |---|---|
@@ -1297,7 +1297,7 @@ worked_example 发布仍要求所选新 Review 中本候选唯一 material 的�
 | 发布原子性 | current竞态412、source变坏/人审拒绝/数值证据失效409、事务注入失败回滚content current/发布/影响/ACK；正常Note stale、Retrieval dirty、Recommendation dirty，原grades/private/pins不动 |
 | 合同与回归 | 仅新增下表3条真实路由及具名DTO、Restore snapshot发现字段、已列Jobs/Review适配；从本文重建OpenAPI/端口/前端并逐条actual HTTP核验；旧Import/Edit/Authoring single/group正常路径及所有坏owner路径保持，54 core/0001/包3.0.0不变 |
 
-本提案选择“作者明确提供、原文数值定位、每个 Restore candidate 唯一不可变计划绑定、逐次单独执行许可”。任何自动抽取/模型代填、自定义运行语言、跨对象数值材料、候选内修改计划、任意artifact代替运行、其他kind扩展或跨页面数值命令继承均不在本提案内，须另有明确合同。是否采纳须由根节点审阅后再交所有者决定；此稿不触发批准或实施。
+本节选择“作者明确提供、原文数值定位、每个 Restore candidate 唯一不可变计划绑定、逐次单独执行许可”。任何自动抽取/模型代填、自定义运行语言、跨对象数值材料、候选内修改计划、任意artifact代替运行、其他kind扩展或跨页面数值命令继承均不在本节内，须另有明确合同。本节已获所有者批准纳入唯一规范；实现与各项验收必须另记真实结果。
 
 ## 21. 旧格式兼容与确定的范围边界
 
@@ -1402,9 +1402,9 @@ worked_example 发布仍要求所选新 Review 中本候选唯一 material 的�
 | POST `/content/impacts/{event_id}/decisions` | ImpactObjectDecisionWrite；Idempotency-Key、Origin/CSRF | ImpactObjectDecisionReceipt；目标属真实受影响集合，作者逐对象决定、当前ref及事件SHA强CAS；只写Content自有不可变决定 |
 | POST `/content/restore-drafts` | ContentRestoreDraftCreateWrite；Idempotency-Key、Origin/CSRF | 201 ContentRestoreDraftCreateAck；冻结精确旧公开block与活动当前base，建立待审专属草稿，不发布 |
 | GET `/content/restore-drafts/{id}` | 无query/body | ContentRestoreDraftSnapshot；当前author/Policy、真实来源与不可变历史、no-store/零写；未知或错owner404 |
-| POST `/content/restore-drafts/{id}/numeric-checks` | RestoreNumericCheckPreviewWrite；Idempotency-Key、Origin/CSRF；§20.14 未批准提案 | 201 RestoreNumericCheckView；专属Restore owner核原候选/原文，首次绑定唯一numeric material并冻结预览，零执行；M6.2 |
-| GET `/content/restore-numeric-checks/{id}` | 无query/body；§20.14 未批准提案 | RestoreNumericCheckView；author/当前Policy，核原owner/材料/完整运行事实，no-store/零写/零执行；M6.2 |
-| POST `/content/restore-numeric-checks/{id}/decision` | ApprovalDecision；Idempotency-Key、Origin/CSRF；§20.14 未批准提案 | NumericCheckDecisionAck；approve_once后202且只创建一个真实Job，decline后200且job=null；操作SHA/强CAS；M6.2 |
+| POST `/content/restore-drafts/{id}/numeric-checks` | RestoreNumericCheckPreviewWrite；Idempotency-Key、Origin/CSRF；§20.14 | 201 RestoreNumericCheckView；专属Restore owner核原候选/原文，首次绑定唯一numeric material并冻结预览，零执行；M6.2 |
+| GET `/content/restore-numeric-checks/{id}` | 无query/body；§20.14 | RestoreNumericCheckView；author/当前Policy，核原owner/材料/完整运行事实，no-store/零写/零执行；M6.2 |
+| POST `/content/restore-numeric-checks/{id}/decision` | ApprovalDecision；Idempotency-Key、Origin/CSRF；§20.14 | NumericCheckDecisionAck；approve_once后202且只创建一个真实Job，decline后200且job=null；操作SHA/强CAS；M6.2 |
 | POST `/drafts` | `{kind:course|lesson|block|question|practice_set|assessment,base_ref:ContentRef|null,title:string}` | 201 `{draft_id,revision,base_ref,state:draft}`；不是发布对象 |
 | PATCH `/drafts/{id}` | `{expected_revision,patches:{field:string,value:JSON}[]}` | `{draft_id,revision,validation_warnings}`。field 必须属于对应kind白名单；拒绝改对象id/基准hash/审核结论 |
 | POST `/drafts/{id}/review` | `{expected_revision,checks:[structure|sources|mathematics|numerical_examples],reviewer_note:string}` | 202 JobRef；结构可自动，数学/来源未独立执行则 NOT_RUN，不自行批准 |
