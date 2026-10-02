@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from pydantic import TypeAdapter
 from packages.contracts import domain_models as dm
+from packages.contracts.budgets import ImportBudgets
 from packages.contracts.canonical import metadata_sha256
 from ..infrastructure.database import Database, utc_now
 from ..infrastructure.publication_repository import PublicationRepository
@@ -14,6 +15,7 @@ from .draft_edits import DraftEditService
 from .edit_publication import EditBlockPublication
 from .content_restore import ContentRestoreService
 from .restore_publication import RestoreBlockPublication
+from .single_publication import SingleBlockPublication
 from .errors import ApiError
 from .import_publication import ImportBlockPublication, unsupported
 from .imports import ImportService
@@ -21,9 +23,9 @@ from .providers import validate_key
 from .publication_admission import PublicationAdmissionService
 from .publication_admission_models import PublicationAdmission
 from .publication_admission_models import DraftPublishWrite
-from .publication_models import PublicationHistory, PublicationRecord, EditPublicationRecord, RestorePublicationRecord, integrity, validated
+from .publication_models import PublicationHistory, PublicationRecord, EditPublicationRecord, RestorePublicationRecord, SinglePublicationRecord, integrity, validated
 from .review_history_models import ReviewDecisionRecord, ReviewMachineRecord
-from .review_material_models import ImportReviewMaterial, EditReviewMaterial, RestoreReviewMaterial, CheckedReviewMaterial
+from .review_material_models import ImportReviewMaterial, EditReviewMaterial, RestoreReviewMaterial, SingleReviewMaterial, CheckedReviewMaterial
 from .review_service import ReviewService
 
 
@@ -34,6 +36,7 @@ class DraftPublicationService:
         self.admission = PublicationAdmissionService(reviews)
         self.edit_owner = EditBlockPublication(DraftEditService(database))
         self.restore_owner = RestoreBlockPublication(ContentRestoreService(database))
+        self.single_owner = SingleBlockPublication(reviews.candidates)
 
     @staticmethod
     def _access(conn: sqlite3.Connection, identity: SessionIdentity) -> SessionIdentity:
@@ -60,7 +63,10 @@ class DraftPublicationService:
                 or machine.structural_report.structural != 'PASS'
                 or machine.numeric.descriptor_sha256 != record.admission.numeric_observation_sha256):
             raise integrity()
-        if isinstance(record, RestorePublicationRecord):
+        if isinstance(record, SinglePublicationRecord):
+            generated = self.single_owner.verify(conn, identity, record)
+            expected_block, expected_body = generated.block, generated.body
+        elif isinstance(record, RestorePublicationRecord):
             restored = self.restore_owner.verify(conn, identity, record)
             expected_block, expected_body = restored.payload.proposed_block, restored.payload.source.body_markdown.encode()
         elif isinstance(record, EditPublicationRecord):
@@ -132,6 +138,34 @@ class DraftPublicationService:
             payload=p, block=p.proposed_block, source=source, result=result, adopted_at=adopted, published_at=utc_now())
         return self._verify(conn, current, repo.finish(record))
 
+    def _publish_single(self, conn: sqlite3.Connection, current: SessionIdentity, repo: PublicationRepository,
+                        material: CheckedReviewMaterial, body: DraftPublishWrite, key: str) -> dm.ContentRef:
+        repo.single_for_candidate(material.candidate)
+        repo.require_unpublished_draft(material.candidate.draft_id)
+        prepared = self.single_owner.prepare(conn, current, material.candidate)
+        if prepared.material != material or not isinstance(material.payload, SingleReviewMaterial):
+            raise integrity()
+        identifier, adopted = 'publication_' + uuid4().hex, utc_now()
+        repo.adopt(identifier, material.candidate, adopted, owner='authoring')
+        repo.advance(identifier, 1, 'draft', 'in_review', utc_now())
+        admission = self.admission.check(conn, current, material.candidate.draft_id, body)
+        history, checked_material = self.reviews.read_publication_basis(conn, current, body.review_receipt_id)
+        human = history.records[-1]
+        if checked_material != material or not isinstance(human, ReviewDecisionRecord):
+            raise integrity()
+        repo.advance(identifier, 2, 'in_review', 'approved', utc_now())
+        result = self.content.publish_new_block_in_transaction(conn, current.workspace_id,
+            prepared.block, prepared.body, ImportBudgets())
+        assert isinstance(admission, PublicationAdmission)
+        original = material.payload.record
+        record = SinglePublicationRecord(version='single-worked-example-publication-v1', id=identifier,
+            workspace_id=current.workspace_id, owner='authoring', candidate=material.candidate, actor_id=current.id,
+            route=f'POST /drafts/{material.candidate.draft_id}/publish', command_key=key, request=body,
+            admission=admission, human_record_sha256=metadata_sha256(human),
+            generation_record_sha256=metadata_sha256(original), source_job_id=original.source_job_id,
+            payload=original.payload, block=prepared.block, result=result, adopted_at=adopted, published_at=utc_now())
+        return self._verify(conn, current, repo.finish(record))
+
     def publish(self, identity: SessionIdentity, draft_id: str, body: DraftPublishWrite, key: str) -> dm.ContentRef:
         key, body = validate_key(key), validated(DraftPublishWrite, body)
         try:
@@ -154,6 +188,8 @@ class DraftPublicationService:
                     return self._publish_restore(conn, current, repo, material, body, key)
                 if isinstance(material.payload, EditReviewMaterial):
                     return self._publish_edit(conn, current, repo, material, body, key)
+                if isinstance(material.payload, SingleReviewMaterial):
+                    return self._publish_single(conn, current, repo, material, body, key)
                 if not isinstance(material.payload, ImportReviewMaterial):
                     raise unsupported()
                 prepared = self.owner.prepare(conn, current, material.candidate)

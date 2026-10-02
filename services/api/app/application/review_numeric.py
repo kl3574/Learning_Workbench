@@ -212,3 +212,19 @@ class ReviewNumeric:
         current = self.restore_owner.read_review_numeric(connection, identity, observation.candidate)
         if not same_endpoint(current, observation):
             raise ApiError(409, 'PUBLISH_NUMERIC_OBSERVATION_STALE', '数值账本已变化，需要新的 Review 与明确人工决定。')
+
+    def require_current_single_observation(self, connection, identity, observation):
+        """First publication uses the complete ledger endpoint, not a valid old prefix."""
+        if not isinstance(observation, ReviewNumericObservation) or observation.source_kind != 'authoring_single':
+            raise ApiError(409, 'PUBLISH_NUMERIC_COVERAGE_UNAVAILABLE', '此审核没有单块候选的完整数值观察。')
+        current = self.read_review_numeric(connection, identity, observation.candidate.draft_id,
+                                           observation.candidate.draft_revision)
+
+        def facts(value):
+            raw = value.model_dump(mode='json', exclude={'observed_at', 'descriptor_sha256'})
+            for check in raw['checks']:
+                check['view'].pop('expired')
+            return raw
+
+        if facts(current) != facts(observation):
+            raise ApiError(409, 'PUBLISH_NUMERIC_OBSERVATION_STALE', '数值账本已变化，需要新的 Review 与明确人工决定。')

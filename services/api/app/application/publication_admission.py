@@ -86,6 +86,8 @@ class PublicationAdmissionService:
             raise blocked('PUBLISH_HUMAN_REVIEW_REQUIRED', '发布准入需要绑定此候选的明确人工审核决定。')
         if isinstance(material.payload, RestoreReviewMaterial) and material.payload.record.payload.proposed_block.kind == 'worked_example':
             self.reviews.numeric.require_current_restore_observation(connection, identity, history.records[0].numeric)
+        if isinstance(material.payload, SingleReviewMaterial):
+            self.reviews.numeric.require_current_single_observation(connection, identity, history.records[0].numeric)
         return self._evaluate(material, history.records[0], history.records[-1], draft_id, body)
 
     def verify_recorded(self, connection: sqlite3.Connection, identity: SessionIdentity,

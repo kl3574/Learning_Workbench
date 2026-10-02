@@ -4,9 +4,11 @@ import hashlib
 import hmac
 import secrets
 import sqlite3
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .restore_numeric_service import RestoreNumericService
+    from .publication_models import PublicationHistory
 from uuid import uuid4
 
 from packages.contracts import domain_models as dm
@@ -16,6 +18,7 @@ from ..import_dto import JobCancelRequest, JobSnapshot
 from ..infrastructure.authoring_job_repository import integrity
 from ..infrastructure.authoring_repository import AuthoringRepository, AuthoringRecord
 from ..infrastructure.database import Database
+from ..infrastructure.publication_repository import PublicationRepository
 from ..infrastructure.security import SessionIdentity, author_execution_identity
 from .authoring_context import AuthoringContext
 from .authoring_models import AuthoringCandidateRecord, AuthoringJobInput
@@ -34,6 +37,7 @@ class AuthoringService:
         self.context = context or AuthoringContext(database)
         self.provider = provider
         self.restore_numeric: RestoreNumericService | None = None
+        self.verify_publication: Callable[[sqlite3.Connection, SessionIdentity, 'PublicationHistory'], dm.ContentRef] | None = None
         self._cursor_key = secrets.token_bytes(32)
 
     def resolve_candidate(self, connection: sqlite3.Connection, identity: SessionIdentity,
@@ -143,7 +147,35 @@ class AuthoringService:
                 raise integrity()
             for check_id in result.numeric_check_ids:
                 numeric.current(check_id)
+            published = self.published_ref_in_transaction(conn, identity,
+                dm.DraftCandidate.model_validate(result.candidate.model_dump()))
+            if published is not None:
+                result = AuthoringDraftView.model_validate({**result.model_dump(), 'state': 'published',
+                    'published_ref': published.model_dump(), 'warnings': [
+                        {**warning.model_dump(), 'message': '原生成阶段未执行数学、来源或教学审核；当前发布以绑定的发布记录为准。'}
+                        if warning.code == 'AUTHORING_REVIEW_NOT_RUN' else warning.model_dump()
+                        for warning in result.warnings]})
             return result
+
+    def published_ref_in_transaction(self, conn: sqlite3.Connection, identity: SessionIdentity,
+                                     candidate: dm.DraftCandidate) -> dm.ContentRef | None:
+        """Current Single projection; source, publication and actual Content stay checked."""
+        from .publication_models import SinglePublicationRecord
+        resolved, _, _ = self._candidate_history(conn, identity, candidate)
+        publication = PublicationRepository(conn, identity.workspace_id).single_for_candidate(resolved.candidate)
+        if publication is None:
+            return None
+        if not isinstance(publication.record, SinglePublicationRecord):
+            raise integrity()
+        if self.verify_publication is None:
+            raise ApiError(503, 'PUBLICATION_OWNER_UNAVAILABLE', '生成候选的真实发布记录当前无法核验。')
+        return self.verify_publication(conn, identity, publication)
+
+    def require_unpublished_candidate(self, conn: sqlite3.Connection, identity: SessionIdentity,
+                                      candidate: dm.DraftCandidate) -> None:
+        """Call in the same write transaction as new preview/approval/start permission."""
+        if self.published_ref_in_transaction(conn, identity, candidate) is not None:
+            raise ApiError(409, 'DRAFT_ALREADY_PUBLISHED', '此生成候选已发布，不能新增数值批准或启动许可。')
 
     def job(self, identity: SessionIdentity, identifier: str) -> JobSnapshot:
         with self.database.transaction(immediate=False) as conn:

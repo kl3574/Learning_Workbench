@@ -6,7 +6,7 @@ from packages.contracts.canonical import canonical_bytes, sha256_bytes, strict_j
 from ..application.errors import ApiError
 from ..application.publication_admission_models import DraftPublishWrite
 from ..application.publication_models import (
-    PublicationEvent, PublicationHistory, PublicationRecord, EditPublicationRecord, RestorePublicationRecord, PublicationState, integrity, validated, publication_record,
+    PublicationEvent, PublicationHistory, PublicationRecord, EditPublicationRecord, RestorePublicationRecord, SinglePublicationRecord, PublicationState, integrity, validated, publication_record,
 )
 
 
@@ -52,6 +52,12 @@ class PublicationRepository:
         if (len(commands) != 1 or tuple(commands[0]) != (record.workspace_id, record.actor_id, record.route,
                                                        record.command_key, record.id)):
             raise integrity()
+        if isinstance(record, SinglePublicationRecord):
+            binding = self.conn.execute('SELECT * FROM single_publication_bindings WHERE publication_id=?',
+                                        (identifier,)).fetchone()
+            if binding is None or tuple(binding) != (record.workspace_id, candidate.draft_id,
+                    candidate.draft_revision, candidate.candidate_sha256, record.id, result['sha256']):
+                raise integrity()
         return validated(PublicationHistory, dict(record=record, events=events))
 
     def replay(self, actor_id: str, route: str, key: str, body: DraftPublishWrite) -> PublicationHistory | None:
@@ -84,6 +90,21 @@ class PublicationRepository:
             if record.result == ref and isinstance(record, (PublicationRecord, RestorePublicationRecord)) and record.source is not None:
                 return True
         return False
+
+    def single_for_candidate(self, candidate: dm.DraftCandidate) -> PublicationHistory | None:
+        """A lost terminal association is corruption, never a fresh draft projection."""
+        history = self.for_candidate(candidate)
+        bindings = self.conn.execute('SELECT publication_id FROM single_publication_bindings '
+            'WHERE workspace_id=? AND draft_id=?', (self.workspace_id, candidate.draft_id)).fetchall()
+        results = self.conn.execute("SELECT publication_id FROM draft_publication_results WHERE "
+            "json_extract(record_json,'$.version')='single-worked-example-publication-v1' AND "
+            "json_extract(record_json,'$.workspace_id')=? AND json_extract(record_json,'$.candidate.draft_id')=?",
+            (self.workspace_id, candidate.draft_id)).fetchall()
+        expected = [] if history is None else [history.record.id]
+        if ([row[0] for row in bindings] != expected or [row[0] for row in results] != expected
+                or (history is not None and not isinstance(history.record, SinglePublicationRecord))):
+            raise integrity()
+        return history
 
     def require_unpublished_draft(self, draft_id: str) -> None:
         """A committed publication is terminal for new commands on this producer Draft."""
@@ -119,13 +140,17 @@ class PublicationRepository:
             raise ApiError(409, 'PUBLICATION_STATE_CONFLICT', '发布内部状态已经改变。')
         self._event(identifier, expected_revision + 1, state, now)
 
-    def finish(self, record: PublicationRecord | EditPublicationRecord | RestorePublicationRecord) -> PublicationHistory:
+    def finish(self, record: PublicationRecord | EditPublicationRecord | RestorePublicationRecord | SinglePublicationRecord) -> PublicationHistory:
         record = publication_record(record)
         if record.workspace_id != self.workspace_id:
             raise integrity()
         raw = canonical_bytes(record)
         self.conn.execute('INSERT INTO draft_publication_results VALUES(?,?,?)',
                           (record.id, raw.decode(), sha256_bytes(raw)))
+        if isinstance(record, SinglePublicationRecord):
+            self.conn.execute('INSERT INTO single_publication_bindings VALUES(?,?,?,?,?,?)',
+                (self.workspace_id, record.candidate.draft_id, record.candidate.draft_revision,
+                 record.candidate.candidate_sha256, record.id, sha256_bytes(raw)))
         self.conn.execute('INSERT INTO draft_publication_commands VALUES(?,?,?,?,?)',
                           (self.workspace_id, record.actor_id, record.route, record.command_key, record.id))
         self.advance(record.id, 3, 'approved', 'published', record.published_at)

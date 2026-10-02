@@ -123,6 +123,7 @@ def create_app(settings: Settings | None = None, *,
     review_worker = ReviewWorker(review_service)
     publication_service = DraftPublicationService(database, review_service, import_service)
     content_restores.verify_publication = publication_service.verify_recorded
+    authoring_service.verify_publication = publication_service.verify_recorded
     artifacts = ArtifactsService(database, review_service.readers())
     content_impacts = ContentImpactDecisionService(database, artifacts)
     jobs = JobService(database, review=review_service, restore_numeric=restore_numeric_service)

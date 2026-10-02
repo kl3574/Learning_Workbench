@@ -55,6 +55,9 @@ class NumericService:
             previous = repo.replay(identity, route, key, body, NumericCheckView)
             if previous is not None:
                 return previous
+            assert self.authoring is not None
+            self.authoring.require_unpublished_candidate(conn, identity,
+                dm.DraftCandidate.model_validate(original.candidate.model_dump()))
             if (body.candidate.draft_id != draft_id or body.candidate.entity != original.candidate.entity):
                 raise ApiError(409, 'NUMERIC_CANDIDATE_MISMATCH', '数值检查必须使用该原候选的完整身份。')
             if body.candidate.draft_revision != original.candidate.draft_revision:
@@ -112,6 +115,9 @@ class NumericService:
             if body.operation_sha256 != record.view.operation_sha256:
                 raise ApiError(409, 'NUMERIC_OPERATION_MISMATCH', '待批准操作身份不匹配。')
             if body.decision == 'approve_once':
+                assert self.authoring is not None
+                self.authoring.require_unpublished_candidate(conn, identity,
+                    dm.DraftCandidate.model_validate(record.view.candidate.model_dump()))
                 if record.view.expires_at <= utc_now():
                     raise ApiError(409, 'NUMERIC_APPROVAL_EXPIRED', '数值预览已过期，请明确新建预览。')
                 try:

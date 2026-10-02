@@ -5,8 +5,8 @@ from typing import Annotated, Literal, Self, TypeVar
 from pydantic import BaseModel, Field, model_validator
 from packages.contracts import domain_models as dm
 from packages.contracts.budgets import ImportBudgets
-from packages.contracts.canonical import metadata_sha256
-from ..authoring_dto import AuthoringModel
+from packages.contracts.canonical import metadata_sha256, sha256_bytes
+from ..authoring_dto import AuthoringModel, WorkedExamplePayload
 from ..infrastructure.provenance_repository import FrozenProvenance
 from .errors import ApiError
 from .draft_edit_models import DraftBaseMaterial, DraftEditPayload
@@ -162,13 +162,61 @@ class RestorePublicationRecord(AuthoringModel):
         return self
 
 
-def publication_record(value: object) -> PublicationRecord | EditPublicationRecord | RestorePublicationRecord:
+def single_block(payload: WorkedExamplePayload, identifier: str) -> dm.ContentBlock:
+    """The complete §20.15 mapping; the caller owns the new stable identity."""
+    return dm.ContentBlock(id=identifier, revision=1, kind='worked_example', title=payload.title,
+        body_path=f'content/{identifier}.r1.md', body_sha256=sha256_bytes(payload.body_markdown.encode()),
+        concepts=[], citations=[], depends_on=[dm.ContentRef.model_validate(ref.model_dump())
+                                               for ref in payload.declared_source_refs])
+
+
+class SinglePublicationRecord(AuthoringModel):
+    version: Literal['single-worked-example-publication-v1']
+    id: dm.Id
+    workspace_id: dm.Id
+    owner: Literal['authoring']
+    candidate: dm.DraftCandidate
+    actor_id: dm.Id
+    route: str
+    command_key: str
+    request: DraftPublishWrite
+    admission: PublicationAdmission
+    human_record_sha256: dm.Sha256
+    generation_record_sha256: dm.Sha256
+    source_job_id: dm.Id
+    payload: WorkedExamplePayload
+    block: dm.ContentBlock
+    result: dm.ContentRef
+    adopted_at: dm.UTC
+    published_at: dm.UTC
+
+    @model_validator(mode='after')
+    def exact_bindings(self) -> Self:
+        c, a, r = self.candidate, self.admission, self.request
+        if (self.route != f'POST /drafts/{c.draft_id}/publish' or not self.command_key
+                or c.entity != 'block' or c.draft_revision != 1 or r.expected_revision != 1
+                or c.candidate_sha256 != metadata_sha256(self.payload)
+                or r.expected_content_sha256 != c.candidate_sha256
+                or a.workspace_id != self.workspace_id or a.candidate != c
+                or a.review_receipt_id != r.review_receipt_id
+                or a.acknowledged_warning_codes != r.acknowledged_warning_codes
+                or a.numeric_coverage != 'complete' or len(a.numeric_check_ids) != 1
+                or self.block != single_block(self.payload, self.block.id)
+                or self.result != dm.ContentRef(entity='block', id=self.block.id, revision=1,
+                                                sha256=metadata_sha256(self.block))):
+            raise ValueError('Single publication must preserve its exact generated example and numeric admission')
+        return self
+
+
+def publication_record(value: object) -> PublicationRecord | EditPublicationRecord | RestorePublicationRecord | SinglePublicationRecord:
     if isinstance(value, PublicationRecord):
         return validated(PublicationRecord, value)
     if isinstance(value, EditPublicationRecord):
         return validated(EditPublicationRecord, value)
     if isinstance(value, RestorePublicationRecord):
         return validated(RestorePublicationRecord, value)
+    if isinstance(value, SinglePublicationRecord):
+        return validated(SinglePublicationRecord, value)
     if isinstance(value, dict):
         if value.get('version') == 'draft-publication-v1':
             return validated(PublicationRecord, value)
@@ -176,6 +224,8 @@ def publication_record(value: object) -> PublicationRecord | EditPublicationReco
             return validated(RestorePublicationRecord, value)
         if value.get('version') == 'edit-publication-v1':
             return validated(EditPublicationRecord, value)
+        if value.get('version') == 'single-worked-example-publication-v1':
+            return validated(SinglePublicationRecord, value)
     raise integrity()
 
 
@@ -191,7 +241,7 @@ class PublicationEvent(AuthoringModel):
 
 
 class PublicationHistory(AuthoringModel):
-    record: Annotated[PublicationRecord | EditPublicationRecord | RestorePublicationRecord, Field(discriminator='version')]
+    record: Annotated[PublicationRecord | EditPublicationRecord | RestorePublicationRecord | SinglePublicationRecord, Field(discriminator='version')]
     events: list[PublicationEvent]
 
     @model_validator(mode='after')
