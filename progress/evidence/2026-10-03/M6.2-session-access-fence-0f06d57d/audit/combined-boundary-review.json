@@ -1,0 +1,50 @@
+{
+  "reviewed_commit": "0b885ec31bafbd6f64a83108b4fc491a8179b28a",
+  "mode": "Independent read-only combined-boundary review; no new test execution and no edits to root/frozen combined source.",
+  "result": "No newly confirmed blocker within the same-page admission/exit/original-command replay boundary.",
+  "findings": [],
+  "source": [
+    {
+      "path": "apps/web/src/api/client.ts",
+      "sha256": "f19fef2c82b97e7f503e7fa7017ee397ba6b6a0770dbd42af39ce9355b9ab311"
+    },
+    {
+      "path": "apps/web/src/features/evidenceApplicability/useApplicability.ts",
+      "sha256": "0802cfea6940129482108068456d6d76530fc5e9595d9c5c7b72757ddd19a7dc"
+    },
+    {
+      "path": "apps/web/src/features/evidenceApplicability/memory.ts",
+      "sha256": "88aac4bd19b3ba0b0dee98f61a985ad9f61b7eb6e13300c2f8e90fa421027f95"
+    },
+    {
+      "path": "apps/web/src/features/evidenceApplicability/commands.ts",
+      "sha256": "fff55f25da9080eccbf0c61aca01ea7e268922aff72461287f1d95279f0378d3"
+    },
+    {
+      "path": "apps/web/src/features/evidenceApplicability/schema.ts",
+      "sha256": "3688a23fbe4e01cb2eeeed1d77b68f172eda9134256cce55d3f1808f548b74d0"
+    },
+    {
+      "path": "apps/web/src/features/authoring/useAuthoring.ts",
+      "sha256": "4e4416514f0f80c84f207316c6d74067fa55895b77a1c3aa815401c004ffe738"
+    },
+    {
+      "path": "apps/web/src/features/imports/useImportWorkflow.ts",
+      "sha256": "3f8f59470bcb9749b193a62f7258cc0c93586770e1eb8367942d1c5d63e65230"
+    }
+  ],
+  "checks": [
+    "Access count increments before start-generation notification; waiting Session reads dispatch only after all pending local mutations settle; finally covers throw/abort/non-OK response without assuming authority.",
+    "Already-dispatched old Session replies remain invalid under owner generation. Bootstrap and explicit role POST do not wait on their own fence.",
+    "Safe Authoring controls load their journal/list independently of port.session; request layer also leaves Jobs reads/cancel unfenced.",
+    "Applicable execute retains the strictly checked ACK with its captured original session before stale-operation exit; live generation still guards all persistence/render. Pending-memory hint contains no retained subject payload.",
+    "Returning author must pass fresh Session and may explicitly save the original ACK; canReplay still requires original page/access generation and original session proof. ACK retention does not create a second POST or substitute key/body.",
+    "Old unknown durable command and rejected/ACK/current states are not collapsed. Corrupt receipt cannot be retained as a valid ACK. Workspace and session-scoped recovery remain enforced."
+  ],
+  "limitations": [
+    "No cross-page pending fence claim; BroadcastChannel carries changed notification only.",
+    "No declaration that historical full-native failure had this unique cause; controlled experiment provides a compatible, demonstrated same-page mechanism.",
+    "No full-Web/native/Python rerun by this combined review; root owns the frozen integrated gate.",
+    "The separate test-only follow-up479dfff1 shortens one synthetic bootstrap marker, with8transportPASS. It changes no production bytes and is not part of the current frozen0b native source."
+  ]
+}
