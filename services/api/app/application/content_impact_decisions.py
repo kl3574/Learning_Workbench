@@ -16,7 +16,7 @@ from ..content_impact_dto import (
 from ..infrastructure.blobs import BlobStore
 from ..infrastructure.content_repository import ContentRepository, reference, missing, damaged
 from ..infrastructure.database import Database, utc_now
-from ..infrastructure.security import SessionIdentity, current_session_identity
+from ..infrastructure.security import SessionIdentity, current_session_identity, historical_session_belongs_to
 from .artifacts import ArtifactsService
 from .authoring_context import AuthoringContext
 from .content import ContentService
@@ -146,9 +146,7 @@ class ContentImpactDecisionService:
                         or r.decision_revision != (previous.decision_revision + 1 if previous else 1)
                         or record.previous_receipt_sha256 != (previous.receipt_sha256 if previous else None)):
                     raise integrity()
-                actor = conn.execute('SELECT workspace_id FROM local_sessions WHERE id=?',
-                                     (r.actor_session_id,)).fetchone()
-                if actor is None or actor['workspace_id'] != record.workspace_id:
+                if not historical_session_belongs_to(conn, record.workspace_id, r.actor_session_id):
                     raise integrity()
                 original = repo.load(r.observed_ref.entity, r.target_id, r.observed_ref.revision).value
                 if reference(original) != r.observed_ref or self._body(repo, original) != r.target_body_sha256:
