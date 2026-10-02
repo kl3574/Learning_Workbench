@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-09-28T07:10:19Z；规范 SHA-256：`2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d`
+更新：2026-10-02T07:32:19Z；规范 SHA-256：`a6832a01966e72e5b9f63ee283ae300119446c38bcccd91beee508331ba57a98`
 
-仓库发布：VERIFIED；Issues 同步：VERIFIED_E58_BRANCH_PR_ISSUE31_READBACK
+仓库发布：VERIFIED；Issues 同步：PENDING_M62_LOCAL_CHANGES
 实施：IN_PROGRESS；当前任务：M6.2；下一任务：M6.2
 
-观察8701c8a精确push/PR双CI终态并封存原始证据，不因后续提交取消当前运行；独立复核编辑稿发布事务及只读影响快照候选，再在唯一规范许可范围内整合。编辑稿外部精确GET与影响决定/恢复合同未定义，真实平台DeepSeek仍缺完整InputProof。
+继续已批准v3.0.9的Content影响决定、Learning证据适用性及历史公开块恢复；独审并整合a7bff45权限切换内存保护。最终组合源码完成真实门禁、脱敏证据与PR55/Issue31同步；未知ACK跨新页面合同、生产InputProof及数值环境阻塞保留。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -32,7 +32,7 @@
 | M5.3 Tutor 状态机、SSE/取消/重连/异步上下文 | review | [#28](https://github.com/kl3574/Learning_Workbench/issues/28) | 919a00532b499cff604ef2be4e90c88cc6378490 |
 | M5.4 真实模型与搜索评测 | blocked | [#29](https://github.com/kl3574/Learning_Workbench/issues/29) | e982a14644317c7be12a63ec0b31c1e615c72fa6 |
 | M6.1 教材/例题/题目生成 schema + 数值验证 | blocked | [#30](https://github.com/kl3574/Learning_Workbench/issues/30) | 9d4aa2e75c0583b4752e1a2669534ef621e6c7f9 |
-| M6.2 审校/发布/版本对比/影响分析/恢复旧内容 | in_progress | [#31](https://github.com/kl3574/Learning_Workbench/issues/31) | e58abaaf4baa5b06d27bd1db1f06c8a13c1c730a |
+| M6.2 审校/发布/版本对比/影响分析/恢复旧内容 | in_progress | [#31](https://github.com/kl3574/Learning_Workbench/issues/31) | b8619a9c67a200cce9e54f6308af74ee9621d243 |
 | M6.3 CodexBroker/App Server、操作审批、产物清单 | todo | [#32](https://github.com/kl3574/Learning_Workbench/issues/32) | 未验证提交 |
 | M7.1 全备份/学习者包/作者包/恢复预览和事务 | todo | [#33](https://github.com/kl3574/Learning_Workbench/issues/33) | 未验证提交 |
 | M7.2 安全/可访问性/性能/故障注入 | todo | [#34](https://github.com/kl3574/Learning_Workbench/issues/34) | 未验证提交 |
@@ -41,15 +41,15 @@
 
 ## 验证边界
 
-- spec_checks: e58源码的结构规范校验实际PASS：6嵌入文件、54 core、76生成产物、119声明路由；仅静态结构，不等于所有路由业务验收。2026-09-28系统默认旧python调用exit1为解释器语法不兼容，工程.venv/bin/python重跑exit0。
-- unit: ea86495隔离固定完整Python2991PASS/1真实数值环境SKIP/2依赖warning；e58后端同字节但非同一完整工程输入，e58只相关Python239PASS/2warning。四组e58受控Agent测试53PASS/2warning包含于另一次定向运行，不与全套相加。
-- contract: e58相关Python239PASS包含合同用例，固定Web538PASS/91files、严格TS、Ruff/mypy210/spec/build759PASS；完整Python只在ea86495运行，不重标为e58全套。
-- integration: 4cc远端push/PR各1570PASS/1真实数值环境SKIP/2依赖warning；e58本地相关Python239PASS。真实DeepSeek平台NOT_RUN。
-- browser_native: 4cc远端push/PR各browser106PASS1FAIL（Tutor原completed标题5000ms），实际两workflow FAILURE；e58尚无完整browser/native测试。历史受控loopback原件另列，不能替代真实Provider。
+- spec_checks: b8619a9规范v3.0.9结构PASS：126声明路由、76产物、54core、6嵌入文件；六新增合同业务未实现。
+- unit: 3fc完整Python3072PASS1FAIL1真实数值ENVSKIP2warning；旧路由计数断言a357修正，focused4PASS；当前全套NOT_RUN。
+- contract: b8619a9路由归属与生成契约4PASS；仅结构，非新增端点业务验收。
+- integration: 已整合真实编辑发布/笔记stale/历史成绩不改/索引失效合成HTTP测试1PASS；成绩样例不属于本次影响闭包，不声称适用性复核。
+- browser_native: 8701push107PASS，PR106PASS1原Tutor5sFAIL。编辑器isolated a7bff结果待独审，当前组合完整native NOT_RUN。
 - real_provider: 历史2026-09-15独立DeepSeek直连GET models200/Chat200、usage14/1/15仅有进度记录，未找到可独立核验的原始HTTP回执。PLATFORM_AGENT_NOT_RUN：生产RequestPreparer(ProofRegistry())注册表为空，无符合唯一规范§20.5的托管完整输入证明；用户密钥未进入本轮测试或仓库。
 - real_codex: NOT_RUN
 - learning_effectiveness: NOT_RUN
-- ci: 4cc4fd5 push36386011041/PR36386016520 completed/failure, each5 success/1browser fail. Current 8701c8a push36389800538/PR36389807970 in_progress; result NOT_YET_AVAILABLE.
+- ci: 8701push36389800538 SUCCESS(6jobs)，PR36389807970 FAILURE(5success/1browserfail)。当前本地b8619a9未推送，CI NOT_RUN。
 - m4_1_development: 开发和独立审查的所有原失败/修复、环境诊断已保留；最终源码新验收通过，不覆盖历史失败。
 - m4_1_exact: 5bd8157新lint/types/spec/247web/build/74native均PASS，504源码前后相同；同SHA双workflow12checks成功。
 - m4_1_layout_repair: PASS:真实412布局及焦点回归；原失败保留，限定机制归因；新74完整套件通过。
@@ -195,8 +195,13 @@
 - M62_507_PR_BROWSER_FAILED: 507push全六job成功/browser101PASS；同tree实际PRmerge f74cd7只有browser99PASS2FAIL。Authoring在原prepareACK成功回放后read-details10s失败，Tutor原5s完成显示失败；冻结观察未显示completed字节被UI丢弃。两integration各1472PASS1数值环境SKIP。372原件含12日志/7附件已核，不把pushPASS反推PR原因。
 - M62_A944_CLOSE_TEST_FAILED: a944 push frontend511PASS1FAIL：确认关闭后导入dialog仍在。受控真实IDB load禁用click机制已复现，36b501仅测试修正经独立双轴审查、49相关PASS且444全Web538PASS；原远端click状态缺trace，唯一历史原因UNKNOWN。完整失败及修复证据已本地公开封包，待推送与新head CI。
 - M62_A944_TUTOR_BROWSER_FAILED: a944 push/PR两实际browser均105PASS1FAIL，Tutor原完成heading5000ms断言失败；真实checkout与同tree已核，12完整joblog/两ZIP16成员已冻结，原因未知。新发布native通过不关闭整套失败。
-- M62_EDIT_DRAFT_READ_CONTRACT_GAP: PRODUCT_DESIGN.md v3.0.7把GET /drafts/{id}限定为ImportDraftSnapshot；编辑稿仅有内部精确read，缺外部读取合同。刷新及412后三方比较无法端到端验收；新增路由须先同步唯一规范。
-- M62_EDIT_PUBLICATION_PENDING: 当前发布准入、服务和持久记录仍仅支持ImportReviewMaterial；编辑稿即使经Review也尚不能发布新Content revision。M6.2保持in_progress。
+- M62_EDIT_DRAFT_READ_CONTRACT_GAP: v3.0.8已明确批准并实现专属GET；当前v3.0.9继承合同，仍待编辑器完整整合验收。
+- M62_EDIT_PUBLICATION_PENDING: 编辑稿发布已本地整合并有a60源门禁；PR未发布本轮代码，M6.2仍未完成。
 - M62_4CC_TUTOR_BROWSER_FAILED: 4cc精确push/PR各5 job成功、browser106PASS1FAIL，原Tutor completed标题5000ms断言失败；同源answer_delta在期限前抵浏览器，但两现场均未观测completed，原因UNKNOWN。两integration各1570PASS1真实数值环境SKIP2依赖warning；原始12job与两ZIP16成员公开包已复制且严格重放，manifest 5ba8e015。
+- M62_8701_PR_TUTOR_FAILED: 8701原push六job成功，PR browser106PASS1原Tutor5s失败，原因未知；完整原件已封包。
+- M62_EDITOR_POLICY_MEMORY_REVIEW_PENDING: a7bff45修复权限切换时未落盘文字丢失，隔离证据已取得；独立审查/主树整合待完成。
+- M62_EDITOR_NEW_PAGE_ACK_CONTRACT: 未知ACK原命令跨整页刷新或权限代次变化不可安全回放，缺原actor连续性读取合同。
+- M62_IMPACT_RESTORE_IMPLEMENTING: v3.0.9已批准，Content/Learning决定及历史公开ContentBlock恢复正在实现，不能称已验收。
+- M62_FINAL_COMBINED_GATES_PENDING: 当前组合源尚无完整新Python/原生/CI门禁；3fc全Python失败记录保留。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。
