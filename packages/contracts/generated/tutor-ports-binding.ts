@@ -1,12 +1,12 @@
-// Generated from PRODUCT_DESIGN.md v3.0.12; do not edit.
-// spec_sha256: 1c571ee91a7d39dedd2e8395f48766bd6183d496154ee9bdd9b67cb978ff26d7
+// Generated from PRODUCT_DESIGN.md v3.0.13; do not edit.
+// spec_sha256: 949e2348902d8b8cb65f560b36fa58039fce75cd2e70c0a9ce9dcd8023160c05
 
 import type { TutorApplicationDTOMap } from "../module-ports";
 import type * as Api from "./api-types";
 import type { TutorSSEEvent } from "./tutor-sse";
 export type { TutorSSEEvent } from "./tutor-sse";
-// Generated from PRODUCT_DESIGN.md v3.0.12. DO NOT EDIT.
-// spec_sha256: 1c571ee91a7d39dedd2e8395f48766bd6183d496154ee9bdd9b67cb978ff26d7
+// Generated from PRODUCT_DESIGN.md v3.0.13. DO NOT EDIT.
+// spec_sha256: 949e2348902d8b8cb65f560b36fa58039fce75cd2e70c0a9ce9dcd8023160c05
 // JSON Schema is the type source; runtime semantic checks remain required.
 
 export type TutorEventsQuery = {

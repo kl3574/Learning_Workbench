@@ -1,4 +1,4 @@
-"""Closed M6.1 application contracts from the sole PRODUCT_DESIGN 3.0.6.
+"""Closed single-block Authoring contracts from the sole PRODUCT_DESIGN 3.0.13.
 
 Local shape and byte relationships do not establish authorization, source
 ownership, immutable history, runtime safety, or approval. Owners check those
@@ -497,7 +497,8 @@ class AuthoringDraftView(AuthoringModel):
     owner: Literal['authoring']
     candidate: AuthoringCandidate
     source_job_id: dm.Id
-    state: Literal['draft']
+    state: Literal['draft', 'published']
+    published_ref: AuthoringBlockRef | None
     base_ref: None
     body_sha256: dm.Sha256
     payload: WorkedExamplePayload
@@ -508,6 +509,8 @@ class AuthoringDraftView(AuthoringModel):
     @model_validator(mode='after')
     def immutable_candidate(self) -> Self:
         validate_candidate(self.candidate, self.payload, self.body_sha256, self.validation)
+        if (self.state == 'published') != (self.published_ref is not None):
+            raise ValueError('published state requires its actual immutable block reference')
         if len(set(self.numeric_check_ids)) != len(self.numeric_check_ids):
             raise ValueError('each numerical preview identity is independent and unique')
         return self

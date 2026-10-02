@@ -1,7 +1,7 @@
 # 派生需求追踪（不是产品验收结果）
 
-来源：PRODUCT_DESIGN.md v3.0.12
-spec_sha256: `1c571ee91a7d39dedd2e8395f48766bd6183d496154ee9bdd9b67cb978ff26d7`
+来源：PRODUCT_DESIGN.md v3.0.13
+spec_sha256: `949e2348902d8b8cb65f560b36fa58039fce75cd2e70c0a9ce9dcd8023160c05`
 
 由 `scripts/generate_contracts.py` 生成；实现和测试事实见 progress/state.json。
 
