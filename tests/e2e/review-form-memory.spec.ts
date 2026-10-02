@@ -3,6 +3,7 @@ import { expect, test } from '../../apps/web/node_modules/@playwright/test/index
 import type { AttemptSnapshot, ImportDraftSnapshot, StoredReviewReceipt } from '../../packages/contracts/generated/api-types'
 import { RestartRuntime } from './restartRuntime'
 import { importAssessmentPackage, originalAssessmentPackage } from './assessmentTestData'
+import { retainReviewFormDiagnostic } from './reviewFormDiagnostic'
 
 test('real Policy and role cycles retain unsent Review note and reason with fresh reads, explicit discard and zero automatic decisions', async ({ playwright }, info) => {
   test.setTimeout(120_000)
@@ -53,7 +54,7 @@ test('real Policy and role cycles retain unsent Review note and reason with fres
     await recover.click()
     const recoveredNote = panel.getByRole('region', { name: '恢复的临时审核表单 1', exact: true })
     const recoveredReason = panel.getByRole('region', { name: '恢复的临时审核表单 2', exact: true })
-    try { await expect(recoveredNote.getByLabel('本次审核备注', { exact: true })).toHaveValue(note) } catch (error) { writeFileSync(info.outputPath('panel.html'), await panel.innerHTML()); throw error }
+    try { await expect(recoveredNote.getByLabel('本次审核备注', { exact: true })).toHaveValue(note) } catch (error) { await retainReviewFormDiagnostic(page, info, id); throw error }
     await expect(recoveredReason.getByLabel('审核理由', { exact: true })).toHaveValue(reason)
     await expect(recoveredReason.getByLabel('数学审核决定')).toHaveValue('REJECTED')
     await expect(recoveredReason.getByLabel('我已核对准确候选与本回执，明确记录上述数学和来源决定及理由。', { exact: true })).not.toBeChecked()
