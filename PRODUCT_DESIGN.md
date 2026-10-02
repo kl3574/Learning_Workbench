@@ -1,6 +1,6 @@
 # 知径 Learning Workbench：完整产品设计与工程实施规范
 
-**版本：3.0.10｜日期：2026-10-02｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
+**版本：3.0.11｜日期：2026-10-02｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
 
 **本文件（含文末附录）是唯一产品与工程规范。** 将它放入空目录即可开始；不需要旧版设计包、旧 Demo、之前聊天、私有 GitHub 仓库或另一份提示词说明需求。正文定义产品，附录内嵌数据模型、HTTP 字段、数据库设计、模块接口、样例和验收用例。构建 Agent 根据本文生成实现文件、OpenAPI、测试和进度记录；这些是派生产物，不是第二套产品需求。
 
@@ -32,7 +32,10 @@
 | 3.0.7 | M6.1 小节与题目组的一次许可计划/草稿、原子候选组、私解绑定及成员数值检查 | 待对应真实实施验收；不改54 core/0001/学习包3.0.0，不代表M6.2/M6.3或托管模型及内容质量已完成 |
 | 3.0.8 | M6.2 编辑稿专属精确只读合同和刷新/412三方冲突恢复 | 仅补读取合同；不授予编辑稿发布、影响决定或完整恢复验收，不改54 core/0001/学习包3.0.0 |
 | 3.0.9 | M6.2 内容影响逐对象人工决定、学习证据适用性复核及历史公开内容块恢复草稿的提议合同 | 提案待所有者确认与实施；不表示影响已复核、旧内容已恢复或M6.2已验收；不改54 core/0001/学习包3.0.0 |
-| 3.0.10 | M6.2 编辑命令的非秘密会话连续性标识与未知 ACK 跨页面显式重放 | 提案待所有者确认；不授予新会话继承原命令，不持久化 CSRF/cookie，不代表 M6.2 验收完成；不改54 core/0001/学习包3.0.0 |
+| 3.0.10 | M6.2 编辑命令的非秘密会话连续性标识与未知 ACK 跨页面显式重放 | 已获所有者批准；不授予新会话继承原命令，不持久化 CSRF/cookie，不代表 M6.2 验收完成；不改54 core/0001/学习包3.0.0 |
+| 3.0.11 | M6.2 真实 Content 影响事件的只读发现列表、严格摘要与固定高水位分页（§20.13） | 已获所有者批准，待实施验收；不表示任何影响已处理，不改54 core/0001/学习包3.0.0 |
+
+v3.0.10 会话连续性与 v3.0.11 内容影响事件发现均已获所有者明确批准；本文件保留两项合同。批准不代表实现或验收通过，实际状态见进度事实记录。
 
 ## 0. 执行摘要与不可变决策
 
@@ -542,7 +545,7 @@ visibility 取 `learner` 或 `author_private`。导出学习者包不是 CSS 隐
 | Workspace | GET `/workspace`；PUT `/workspace/preferences` | UI/学习偏好与 revision，不返回密钥 |
 | Import | POST `/imports`；GET `/imports/{id}`；POST `/imports/{id}/commit`；POST `/imports/{id}/cancel` | 原件上传、预览任务、确认与幂等 |
 | Content | GET `/courses`；GET `/courses/{id}`；GET `/lessons/{id}?revision=`；GET `/blocks/{id}?revision=` | 列表轻量；精确修订正文 |
-| Impact / restore | GET/POST `/content/impacts/{event_id}` 的具名子操作；POST `/content/restore-drafts`；GET `/content/restore-drafts/{id}`；GET/POST 证据适用性决定 | 只读报告、人类决定与旧块新修订；严格合同见§20.11/附录A |
+| Impact / restore | GET `/content/impacts`；GET/POST `/content/impacts/{event_id}` 的具名子操作；POST `/content/restore-drafts`；GET `/content/restore-drafts/{id}`；GET/POST 证据适用性决定 | 只读发现/报告、人类决定与旧块新修订；严格合同见§20.11、§20.13/附录A |
 | Draft | POST `/drafts`；PATCH `/drafts/{id}`；POST `/drafts/{id}/review`；POST `/drafts/{id}/publish` | 基准修订、变更、审核回执、发布 |
 | Route | GET/POST `/routes`；PUT `/routes/{id}`；POST `/routes/{id}/steps/{step_id}/complete` | typed refs、依赖、版本与人工标记 |
 | Practice | POST `/practice/sessions`；PUT `/practice/sessions/{id}/responses`；POST `/practice/sessions/{id}/submit` | 题集、草稿版本、反馈 |
@@ -1217,6 +1220,29 @@ ContentRestoreDraftSnapshot = {owner:authoring_restore,candidate:DraftCandidate,
 
 **待所有者决定的范围选择。** 本提案选择「逐 event/受影响公开 Content 对象」与「逐 event/原 Evidence」分离的人类决定；选择只恢复同 ID 公开 ContentBlock，不原子改写父 Lesson/Course 或旧题/成绩；选择专属 `authoring_restore` 候选复用现有人审/发布端点；选择 event/决定追加账本作可追踪任务、legacy 只读而不伪造 Job。批准前这些是明确的产品语义提议，不是当前 v3.0.8 已实现能力；若要批量自动清理、跨对象原子恢复、归档对象恢复、重评旧成绩或 legacy 可决定，需另定合同与验收。
 
+### 20.13 M6.2 内容影响事件只读发现（v3.0.11，已获所有者批准）
+
+**入口与归属。** §20.11 的详情需要已知真实 event_id，而发布 ACK 保持原 `ContentRef`，普通公开内容变更也未必关联任何 Learning evidence。新增 GET `/content/impacts`，由 Content owner 从已持久化的 `content.dependencies_invalidated` 事件发现范围，作者可在辅助创作工具中浏览并进入原 GET `/content/impacts/{event_id}`。不得由前端推测/构造事件 ID、借 Learning 证据列表冒充所有 Content 事件、暴露原始 outbox，或伪造通用 Jobs。只列当前工作区实际存在且当前 author/学科 Policy 允许读取的 Content 事件，old/new ref 的 entity 仅为 course、lesson、block、concept、question、practice_set、assessment；`content.published`、Note/Route 等其他 owner 事件、尚未发布草稿均不充数。首次创建没有旧修订时可真实为空；事件已投递、推荐已刷新、索引已重建或 Content 决定已作出均不从发现列表删除该事件。
+
+**请求与严格摘要。** 可选 `changed_object_id` 只按原事件 `old_ref.id` 精确匹配，不按 `affected_ids`、新 current、标题、正文或相似 ID 扩范围；省略为当前工作区全部可读影响事件。该筛选不是授权，未知或跨工作区 ID 无可读匹配时返回空页，不泄露别处对象是否存在。`limit` 默认20、严格整数1..100，`cursor` 可省略，出现时为非空服务端不透明游标；拒未知/重复 query、空筛选、无效 ID/整数及任何 GET body，统一422。以下均为封闭应用 DTO，全部字段 required，nullable 必须显式 null，未知字段拒绝，不扩54 core：
+
+```text
+ContentImpactSummary = {event_id:Id,old_ref:ContentRef,new_ref:ContentRef,reason:content_revision_published,evidence_version:owner_frozen_v1|legacy_unverified,event_snapshot_sha256:Sha256|null,pending_target_ids:Id[],action_required_target_ids:Id[]}
+ContentImpactPage = {items:ContentImpactSummary[0..100],next_cursor:string|null}
+```
+
+item 的 event_id 唯一，old/new refs 同 entity/稳定 ID 且 old.revision<new.revision，refs、reason、evidence_version 和冻结 SHA 必须与真实原事件及 §20.11 详情一致；owner_frozen_v1 的 SHA 必须非null，legacy_unverified 才为null。两个目标 ID 数组各自去重、按 ID 稳定排序且互斥，仅依 §20.11 当前公开 Content 目标和有效决定计算。每次读取重新核当前目标 ref/lifecycle、完整决定链及原证据字节/hash；历史决定失效则重新列 pending，`new_revision_required` 仍列 action_required，不因读取或后续事件自动完成。摘要不含正文、私解、作答/评分 trace、原始任务/上下文材料、actor、命令、决定理由或证据 artifact 内容。它不把 id_only_candidate 升为 exact_ref，不替 Note、Learning、Retrieval、Recommendation 等 owner 宣告已处理；两个数组为空只说明本次读取没有这两类 Content 目标状态，不是全平台完成标志。legacy 必须明确显示未验证和只读，不能填假 SHA、补造精确边或开放人工决定。
+
+**固定事件高水位，当前状态另核。** 第一页在一致只读事务中确定既有事件的固定高水位；按 Content owner 的持久化追加顺序稳定分页，顺序须能排除其后新提交的事件，不能以随机 UUID 排序、读取时钟或当前 pending 状态充当追加位置。服务端签发并验证 cursor，绑定当前 workspace、规范化筛选（含未筛选）、limit、固定高水位与上一页位置；续页不得重复/遗漏该既有事件范围、混入之后新事件或无提示切换到最新列表。重新从第一页读取才能发现新事件。分页只冻结事件成员和顺序，不冻结目标当前状态：续页和详情仍各自按当次一致快照重算 pending/action，不承诺跨页状态同时有效。无效/伪造/跨 workspace、筛选或 limit 的游标422；原合法游标所指已有事件/高水位材料丢失或损坏，按完整性错误409拒绝，不能伪作到达末页。签名已无法验证（含重启后实际失效）的游标明确拒绝并要求从第一页重读，不新增 GET 写入的游标/快照记录。
+
+**权限、完整性与零写。** 每次请求先重核可信本机会话、当前 author、workspace 和当前学科 Policy；不得因上页、发布 ACK、旧 event_id 或游标绕过独立测试及私有材料限制。响应 `Cache-Control:no-store`；权限未知/撤销或角色变化时立即隐藏列表与详情学科 payload，遵守既有未落盘命令保护，不能为列表切换丢弃必要内存。Content owner 核原事件归属、配对发布事实、精确 old/new 版本及冻结快照，并对摘要依赖的决定账本/head/原证据作 §20.11 同等完整校验。对发现范围内的坏事件/快照/决定链返回安全409，不跳过成空页/短页或“已处理”；只有明确有效的其他 workspace 归属、其他 owner 事件或不匹配 old_ref.id 的完整事件可按上述范围排除；归属缺失/矛盾、坏记录不得当作无匹配。迁移前 legacy 仅凭真实保留记录识别，新事件缺冻结证据不得降级为 legacy。正常、空页、分页、错误和重启回读全部零数据库写/零外发，不创建 case、Job、outbox、幂等回执、投影或决定，不清除任何待复核事实。
+
+**M6.2 实施归属与验收。** 本提案只新增附录 A 的 GET `/content/impacts`，route owner 为 Content、里程碑为 M6.2；原详情/决定和 Publish ACK 不改形状。采纳后由唯一规范重建 route ownership、具名 DTO/schema、OpenAPI、前端绑定和 mock 边界，并逐项检查实际 HTTP 路由；本提案提交不表示已生成或实现。至少完成以下实际验收并保留命令、退出码及原始失败证据：
+
+- 原生浏览器执行真实公开块编辑 → 精确已保存稿审核/显式人工决定 → 发布新修订 → 列表按 old_ref.id 发现服务端真实事件 → 打开同 ID 详情；不得预先从测试数据库/内部 outbox 注入 event_id。使用原创合成内容及人工测试决定时明确其质量边界；重启后从第一页仍能发现同一事件，原父 Lesson 精确 pin 不变。
+- 至少三页及两种 changed_object_id 筛选，第一/二页之间真实追加新发布事件、另作有效决定或修改目标当前版本；旧游标事件集合不混入新项、不重漏，当前状态按真实依据变化，新第一页包含新事件。未知/重复参数、伪造游标、跨 workspace/filter/limit 复用均拒绝；全部读路径前后完整数据库行清单一致。
+- author/learner 切换、Policy 未知/活动独立测试/撤权，列表与详情 API 及已显示页面均不漏材料，必要未落盘命令仍受保护。真实 legacy、新事件缺快照、原事件/决定历史/head/证据字节篡改均有拒绝或只读边界测试；坏记录不被筛掉为成功，错误路径仍零写。Content-only 变更在没有任何 Learning evidence 时也可发现，Note/纯ID保守关系和空数组均不被包装为全平台已完成。
+
 ## 21. 旧格式兼容与确定的范围边界
 
 旧 Demo 不是依赖。仅保证以下可识别的迁移轮廓：
@@ -1315,6 +1341,7 @@ ContentRestoreDraftSnapshot = {owner:authoring_restore,candidate:DraftCandidate,
 | GET `/courses/{id}` | `revision` 必需 | Course；文件里不含自己的hash，响应头ETag为该对象hash；正式服务可另设 resolve-current 查询，不把latest写入证据 |
 | GET `/lessons/{id}` | `revision` 必需 | Lesson；按引用读取各块，不默认整库下发 |
 | GET `/blocks/{id}` | `revision` 必需 | ContentBlock；Markdown body 由 GET `/blocks/{id}/body?revision=` 返回 `text/markdown`，ETag=body_sha256，并有同样权限检查 |
+| GET `/content/impacts` | `changed_object_id?`,`cursor?`,`limit?`；无body、拒未知/重复query | ContentImpactPage / ContentImpactSummary；§20.13 真实事件发现，筛选只匹配old_ref.id、固定事件高水位、当前目标状态另核；author/workspace/Policy、no-store、零写；Content owner / M6.2 |
 | GET `/content/impacts/{event_id}` | `target_id?`,`cursor?`,`limit?`；无body、拒未知/重复query | ContentImpactView；§20.11 的事件原事实、保守/精确边界与决定历史；author/Policy、no-store、零写，legacy不能作决定 |
 | POST `/content/impacts/{event_id}/decisions` | ImpactObjectDecisionWrite；Idempotency-Key、Origin/CSRF | ImpactObjectDecisionReceipt；目标属真实受影响集合，作者逐对象决定、当前ref及事件SHA强CAS；只写Content自有不可变决定 |
 | POST `/content/restore-drafts` | ContentRestoreDraftCreateWrite；Idempotency-Key、Origin/CSRF | 201 ContentRestoreDraftCreateAck；冻结精确旧公开block与活动当前base，建立待审专属草稿，不发布 |
