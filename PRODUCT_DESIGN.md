@@ -1,6 +1,6 @@
 # 知径 Learning Workbench：完整产品设计与工程实施规范
 
-**版本：3.0.11｜日期：2026-10-02｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
+**版本：3.0.12 提案（未批准）｜日期：2026-10-02｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
 
 **本文件（含文末附录）是唯一产品与工程规范。** 将它放入空目录即可开始；不需要旧版设计包、旧 Demo、之前聊天、私有 GitHub 仓库或另一份提示词说明需求。正文定义产品，附录内嵌数据模型、HTTP 字段、数据库设计、模块接口、样例和验收用例。构建 Agent 根据本文生成实现文件、OpenAPI、测试和进度记录；这些是派生产物，不是第二套产品需求。
 
@@ -34,6 +34,7 @@
 | 3.0.9 | M6.2 内容影响逐对象人工决定、学习证据适用性复核及历史公开内容块恢复草稿的提议合同 | 提案待所有者确认与实施；不表示影响已复核、旧内容已恢复或M6.2已验收；不改54 core/0001/学习包3.0.0 |
 | 3.0.10 | M6.2 编辑命令的非秘密会话连续性标识与未知 ACK 跨页面显式重放 | 已获所有者批准；不授予新会话继承原命令，不持久化 CSRF/cookie，不代表 M6.2 验收完成；不改54 core/0001/学习包3.0.0 |
 | 3.0.11 | M6.2 真实 Content 影响事件的只读发现列表、严格摘要与固定高水位分页（§20.13） | 已获所有者批准，待实施验收；不表示任何影响已处理，不改54 core/0001/学习包3.0.0 |
+| 3.0.12 提案 | M6.2 恢复例题的作者显式数值计划、原文定位、独立预览/单次执行与新Review绑定（§20.14） | 未获批准，仅供审阅；不开放实现/执行、不继承旧批准、不放宽发布准入，不改54 core/0001/学习包3.0.0 |
 
 v3.0.10 会话连续性与 v3.0.11 内容影响事件发现均已获所有者明确批准；本文件保留两项合同。批准不代表实现或验收通过，实际状态见进度事实记录。
 
@@ -1211,7 +1212,7 @@ EvidenceApplicabilityDecisionView = {evidence_id:Id,original_evidence:Evidence,q
 ContentRestoreDraftCreateWrite = {source_ref:ContentRef,expected_current_ref:ContentRef,reason:nonblank string}
 RestoreSourceMaterial = {version:restore-source-v1,source_ref:ContentRef,metadata:ContentBlock,body_sha256:Sha256,source_descriptor_sha256:Sha256|null,warnings:Warning[]}
 ContentRestoreDraftCreateAck = {candidate:DraftCandidate,source_ref:ContentRef,base_ref:ContentRef,state:draft}
-ContentRestoreDraftSnapshot = {owner:authoring_restore,candidate:DraftCandidate,source_ref:ContentRef,base_ref:ContentRef,reason:nonblank string,proposed_block:ContentBlock,body_markdown:string,source_material_sha256:Sha256,warnings:Warning[],state:draft|published,published_ref:ContentRef|null}
+ContentRestoreDraftSnapshot = {owner:authoring_restore,candidate:DraftCandidate,source_ref:ContentRef,base_ref:ContentRef,reason:nonblank string,proposed_block:ContentBlock,body_markdown:string,source_material_sha256:Sha256,warnings:Warning[],state:draft|published,published_ref:ContentRef|null,numeric_material:RestoreNumericMaterialView|null,numeric_check_ids:Id[0..100]}
 ```
 
 恢复稿沿已有 POST `/drafts/{id}/review` → POST `/reviews/{id}/decision` → POST `/drafts/{id}/publish` 使用同一确切候选与人类决定；旧批准不自动转授，结构/数学/来源/数值检查各报真实状态，未满足发布准入则阻断。发布在一个 Content/Review/Restore owner 事务中再次核 source 和当前 base 的完整 ref/hash、活动生命周期、依赖可访问与无环，强 CAS 使新 revision 恰为当时 current+1；若当前已变化返回412并保留原稿，须明确重新创建，不暗改 source 或 base。发布记录不可变地绑定 source→draft→人审→新 ContentRef、原 body bytes/hash 与新的实际来源描述；旧来源为 frozen 也只保留原核验事实，不宣称重新外部核验，来源 unresolved 则保留 warning，不能以旧数学批准或旧数值结果声称新修订已审。失败回滚新当前指针、发布/影响事件、快照与 ACK；可能留下未引用 blob 仅按原安全 GC 处理。新修订触发正常 Note stale、Retrieval 失效与 Recommendation dirty；旧笔记/阅读定位不静默迁移、检索仍须显式 rebuild、学习适用性决定不因“内容恢复”自动清除。Lesson/Course 中原有完整 ContentRef 仍指向原修订，须另经显式审校/发布更新父引用才能让其教学路径呈现新块；不得将块 current 指针变化冒充课程已经切换。旧题面、私解、attempt、作答、grade、evidence 和历史引用始终不覆盖；`state=published` 当且仅当 `published_ref` 非null且真实发布记录匹配。
@@ -1242,6 +1243,61 @@ item 的 event_id 唯一，old/new refs 同 entity/稳定 ID 且 old.revision<ne
 - 原生浏览器执行真实公开块编辑 → 精确已保存稿审核/显式人工决定 → 发布新修订 → 列表按 old_ref.id 发现服务端真实事件 → 打开同 ID 详情；不得预先从测试数据库/内部 outbox 注入 event_id。使用原创合成内容及人工测试决定时明确其质量边界；重启后从第一页仍能发现同一事件，原父 Lesson 精确 pin 不变。
 - 至少三页及两种 changed_object_id 筛选，第一/二页之间真实追加新发布事件、另作有效决定或修改目标当前版本；旧游标事件集合不混入新项、不重漏，当前状态按真实依据变化，新第一页包含新事件。未知/重复参数、伪造游标、跨 workspace/filter/limit 复用均拒绝；全部读路径前后完整数据库行清单一致。
 - author/learner 切换、Policy 未知/活动独立测试/撤权，列表与详情 API 及已显示页面均不漏材料，必要未落盘命令仍受保护。真实 legacy、新事件缺快照、原事件/决定历史/head/证据字节篡改均有拒绝或只读边界测试；坏记录不被筛掉为成功，错误路径仍零写。Content-only 变更在没有任何 Learning evidence 时也可发现，Note/纯ID保守关系和空数组均不被包装为全平台已完成。
+
+### 20.14 M6.2 恢复例题的独立数值计划与执行（v3.0.12 提案，未批准）
+
+**缺口与最小范围。** §20.11 可建立任意原 kind 的公开块恢复候选，但公开 ContentBlock 与恢复 DTO 没有 NumericPlan；§20.8/§20.9 的数值口仅能读取其真实生成候选的计划，不授权借 Authoring 单块/组 owner 为 `authoring_restore` 冒名执行。没有绑定新恢复候选的真实数值记录时，worked_example 继续 NOT_RUN 并阻断发布。本提案仅增加 Restore 所属例题的明确提供计划→冻结预览→单次批准→隔离执行→新 Review 数值观察；不解释或执行历史 Markdown/代码，不自动抽取计划，不新增模型/Provider 调用或任意脚本入口，不降低数学、来源、数值发布准入。批准前本节及新增路由均不是可实施授权，当前 v3.0.11 合同保持原义。
+
+**计划必须由作者明确提供。** 作者重新读取同一确切未发布 Restore candidate、原完整正文及元数据后，在独立表单提供 `RestoreNumericMaterialWrite` 并明确提交。计划沿 §20.8 的 finite-arithmetic-v1、NumericPlan、WorkedExampleSymbol、有限数与符号规则；不把正文中的代码围栏、旧计划、旧输出、历史批准或旧 runtime 当输入/授权。历史中合法保留的文本可供人查看后手工重新提供，但无复制即生效或自动选取。每个变量值、每个断言期望值和公式关联都须给出该候选原正文内的精确 codepoint 定位；不接受 URL、任意 artifact/file 路径或另一对象作为替代材料。正文没有本切片可核验的具体有限数值实例时明确拒绝，不造空计划或随意选择 1=1 充数。历史文本只有符号、LaTeX 分数、统计模拟或受限语言外计算时，本切片可保持阻断；不声称所有例题都能由有限算术执行。
+
+**闭合 DTO 与绑定。** 以下应用 DTO 不扩 54 core；字段全部 required、未知字段拒绝、nullable 显式 null、整数/有限数拒 bool，reason 非空且≤2000 codepoints。symbols 长度1..64、名称唯一，每个 plan 变量同名属于 symbols；plan 沿原变量0..32、断言1..32和 seed=null。所有定位均针对原 `body_markdown` 的 Unicode codepoint 半开区间 `[start_codepoint,end_codepoint)`，0≤start<end≤原文长度，quote 为1..512 codepoints且必须逐码点等于该切片，不做 NFC/NFKC、换行或 LaTeX 规范化。variable_bindings 与 plan.variables 按名称恰好一一对应；assertion_bindings 与 plan.assertions 按 id 恰好一一对应，不得漏项/重复/多项。value_source.quote 与 expected_source.quote 必须各自是一个完整有限十进制字面量（JSON number 词法，无空白/单位/百分号/LaTeX；采用与 NumericPlan 相同的有限 binary64 转换），并分别等于声明的 variable.value 与 assertion.expected；无可验证字面量拒绝 NUMERIC_PLAN_UNSUPPORTED。expression_source 仅绑定真实原文公式片段；表达式翻译、变量含义、适用条件、完整覆盖和单位语义仍需本次明确人工数学审核，精确 quote 或数值 PASS 都不能自动证明二者等价。解析/定位超限或坏形状422；合法形状但无法建立上述数值材料关系409；原已保留正文/记录损坏409完整性错误，不降级为无材料。
+
+```text
+RestoreNumericSourceSpan = {start_codepoint:integer>=0,end_codepoint:integer>=1,quote:nonblank string}
+RestoreNumericVariableBinding = {variable_name:string,value_source:RestoreNumericSourceSpan}
+RestoreNumericAssertionBinding = {assertion_id:Id,expression_source:RestoreNumericSourceSpan,expected_source:RestoreNumericSourceSpan}
+RestoreNumericMaterialWrite = {version:restore-numeric-material-v1,symbols:WorkedExampleSymbol[],plan:NumericPlan,variable_bindings:RestoreNumericVariableBinding[],assertion_bindings:RestoreNumericAssertionBinding[],reason:nonblank string}
+RestoreNumericMaterialView = {owner:authoring_restore,candidate:DraftCandidate,restore_record_sha256:Sha256,source_ref:ContentRef,source_material_sha256:Sha256,body_sha256:Sha256,material:RestoreNumericMaterialWrite,numeric_material_sha256:Sha256}
+RestoreNumericCheckPreviewWrite = {candidate:DraftCandidate,material:RestoreNumericMaterialWrite}
+RestoreNumericCheckView = {owner:authoring_restore,id:Id,revision:Revision,candidate:DraftCandidate,numeric_material_sha256:Sha256,plan:NumericPlan,runtime:NumericRuntimeProfile,operation_sha256:Sha256,decision:pending|approve_once|decline,created_at:UTC,expires_at:UTC,expired:boolean,job:JobRef|null,job_revision:Revision|null,result:NumericCheckResult|null,warnings:Warning[]}
+```
+
+原 `ContentRestoreDraftCreateWrite` 与 CreateAck 不变；不能向原 create 追加调用者 numeric_plan 字段。`ContentRestoreDraftSnapshot` 增加必填 `numeric_material:RestoreNumericMaterialView|null`、`numeric_check_ids:Id[0..100]`；这是受检 owner 发现投影，不修改原候选 SHA、修订、source/base 或拟发布正文。旧无数值记录恢复稿以 null/[] 真实投影，GET 不补记录/计划；其他 kind 也为 null/[]，其数值预览请求409 RESTORE_NUMERIC_KIND_UNSUPPORTED。既有 HTTP 调用方/生成类型须随采纳后的 DTO 同时更新；不把原 GET 改成任意 JSON union。
+
+首次成功预览在一个事务中冻结该精确 Restore candidate 唯一的完整 numeric material、首个预览及原命令 ACK；失败全部回滚。`numeric_material_sha256` 对 `{version:"restore-numeric-binding-v1",workspace_id,...RestoreNumericMaterialView_without_numeric_material_sha256}` 的规范 JSON 计算，其中 restore_record_sha256、source_ref、source_material_sha256、body_sha256 均由所属 owner 核真实原记录取得，不接受调用方 hash 宣称；不把该 SHA 称为 candidate_sha256。一个 candidate 之后只允许对同一完整 material 新建预览；不同 key 不能换计划/定位/理由，409 RESTORE_NUMERIC_MATERIAL_CONFLICT。更改材料必须显式新建独立恢复稿并重新数值批准及人审，不能暗改旧候选或旧绑定。两个标签首次绑定竞态只有一个成功，另一份相同 material 可按预览配额另建，不同 material 拒绝；同 key/同 body 返回原不可变 ACK，异 body409。
+
+**预览与执行仍分开。** 新增三条 Restore 专属路由见附录 A。preview 只作当前 author/workspace/Policy、真实 source/Restore 完整性、plan/定位与受信 runtime 实际闭包的核验，零进程执行、零联网；服务端冻结完整 material 绑定、原候选、实际 runtime 与资源限制。`operation_sha256=SHA256(规范JSON {version:"restore-numeric-operation-v1",workspace_id,check_id,candidate,numeric_material_sha256,plan,runtime})`；plan 必须逐字段等于唯一绑定内的计划，不接受客户端 runtime/operation SHA 替换。预览成功后须另读 Restore snapshot 的完整 material 投影并核绑定；批准界面展示原文定位、全部变量/表达式/期望值/容差/单位、完整 runtime 与仅本机运行范围，原预览 ACK 不冒充当前运行状态。每候选最多100份预览（过期/拒绝/完成也计入），不删除历史腾位；达到上限413 NUMERIC_PREVIEW_LIMIT，原记录读取、原 ACK 和已批准 Job 取消仍可用。
+
+决定沿原 `ApprovalDecision`，expected_revision 强 CAS、operation_sha256 完整匹配；初始预览 r1，唯一决定 r2。approve_once 仅在10分钟内且当前材料/许可/runtime 再核通过时，原子创建一个真实 `jobs.kind=authoring_numeric_check`，返回原 `NumericCheckDecisionAck`；decline 返回同 DTO、job=null，零执行。不同 key 对已决定预览409，原 key 回 ACK 不创建第二个 Job；原已成功预览/决定的同命令回放核当前许可与真实原历史，不把过期、后来 base/runtime 变化当作改写原 ACK 的理由，也不据原 ACK 授予新的执行；另行 GET 当前状态，尚未开始的 Job 仍重核开始许可。过期可 decline，不能新作 approve_once。新预览/新批准不借旧运行许可。新预览、approve_once 及真实进程开始前须核 Restore 未发布、原 source 完整、base 仍为活动 current；当前变化412，保留原稿和既有事实，不 rebase。进程已经开始后发生变化则仍保存实际终态，发布另作当前 CAS，不把已运行改成未运行。
+
+数值 owner 复用原固定 evaluator、完整部署闭包、5秒wall/2秒CPU/256MiB/64KiB输出/单evaluator进程、无网络无宿主环境fallback的隔离 runner。runtime 不可核验或环境不满足仍 BLOCKED_ENVIRONMENT；算术失败、非有限数、超时、取消、执行状态未知各存原真实结果，绝不填空 PASS 或伪造退出码。计划/批准不能授权 eval/exec、shell、通用 Python/Codex 代码、随机数或文件读写。结果保留输入/计划/operation/runtime/hash、实际开始/结束、输出字节与退出码；正常/失败均不自动 Review、人类批准或发布。
+
+**owner、控制与不可变历史。** Restore owner 持有 candidate→numeric material 唯一绑定、预览/决定原命令与不可变关联；Quality 数值 owner 持实际 runtime/受检运行事实，Jobs 持租约、开始许可、取消和唯一终态。新增 `restore-numeric-job-v1` 输入与独立 record/operation 版本，输入绑定 workspace/job/check/完整candidate、真实Restore记录SHA、numeric material SHA、plan、runtime、operation SHA；经具名受检端口协作，不伪造 source generation Job、Provider receipt、Authoring single/group 成员或 import_id，不跨 owner SQL 猜归属。允许沿既有 authoring_numeric_check kind 调度，必须按受检输入版本显式注册新 owner；既有 Authoring 单块/组历史与 route 语义不变。
+
+所属前向迁移保留追加式预览/决定/开始/终态/命令及可核验完整性 head/membership，不可变业务行拒 UPDATE/DELETE/INSERT OR REPLACE 绕过与冲突键替换；head 只经所属事务强 CAS 单调推进，不能据截断后的历史重算较小 head；单列损坏、尾删/全删或丢原关联 failclosed，不通过 GET 修补。源码/运行闭包变更后原历史按其冻结事实可读，不能用新闭包重新解释/执行旧批准。GET 全部 no-store、同工作区当前 author/学科 Policy、只读零DML/零执行/零外发；错误路径也不修状态。安全控制继续用原通用 Jobs 读/取消及 authoring Jobs 安全列表，列表须通过注册 owner 包含这类数值 Job，但不返回候选/原块/计划/标题/输入/输出；角色降低或 Policy 锁定不丢安全取消，不能借控制投影恢复学科 payload。所有写、回放及执行边界均核真实会话、Origin/CSRF、actor/workspace/route/key/完整 body/CAS；numeric material/preview/decision journal 保留原 owner 限制，§20.10.1 的 Edit 跨页回放不自动扩权。丢 ACK、IDB 中断、角色/Policy 切换、未落盘表单和页关闭沿既有隔离内存/显式恢复保护，GET 和重开页面绝不发起数值执行。
+
+**Review 与发布不能借旧事实。** ReviewNumeric 通过真实 `authoring_restore` 数值 owner 读取该候选唯一 material 与全部检查的有序完整账本，而非固定无管线或套用 Authoring 单块/组身份；内部受检观察新增具名版本 `restore-review-numeric-observation-v1`，绑定真实 Restore record/material SHA 与原命令、Job/input/events/start/end/实际输出全部字节及 hash，无伪造 Provider 字段。已有 v1 观察、Review 和无数值管线历史原样可读；新运行不会回填旧 machine receipt 或转授旧人审。新数值检查完成后必须显式创建新的 Review，并明确作新的数学/来源决定；材料须展示计划、每项原文定位与数值状态，数学审查包含正文—计划对应、假设/单位及覆盖是否充分，数值 PASS 本身不批准这些事项。
+
+worked_example 发布仍要求所选新 Review 中本候选唯一 material 的最新一次检查有完整真实 PASS，包含单次批准、开始许可/实际开始、已完成 Job、完整输出和0退出码，所有断言通过，全部 warning 实例确认；不得跳过较新的 pending/decline/FAIL/BLOCKED 去选较早 PASS。所选 machine 观察须覆盖 publication 时仍相同的完整数值账本终点；新增预览、决定或运行事实后旧 Review 仍能历史回读，但不能据以首次发布，须新的 Review 和人审，不把后续事实追加到原 receipt。无绑定/无真实执行保留 PUBLISH_NUMERIC_COVERAGE_UNAVAILABLE 或 PUBLISH_NUMERIC_REQUIRED 拒绝；人工 NOT_APPLICABLE、历史 PASS 或任意 artifact 不能清除本 kind 的数值要求。历史已发布 ACK 的核验使用原提交的完整观察，不要求后来状态倒回原时刻。
+
+发布同事务记录选中的 material/check/观察 SHA，并沿 §20.11 原 source→Restore→人审→新 ContentRef 强 CAS 与影响处理。原 source 字段/body 完整副本不变，新 current 恰为base+1；父 Lesson/Course pin、旧题/私解/attempt/grade/evidence 均不动，Note stale/检索失效/推荐dirty仍按正常发布处理。学术/来源/教学批准与软件合成验收严格分开。
+
+**采纳前的验收矩阵（全部待实施，不因本提案记 PASS）。**
+
+| 场景 | 必须得到的实际事实 |
+|---|---|
+| 真实历史 worked_example 有有限十进制输入/期望值 | 原生界面选旧ref→Restore→手工完整计划/定位→preview零执行→独立approve_once→真实隔离PASS→新Review→明确数学/来源决定→发布base+1；正文/元数据逐字节原副本、依赖与父pin不改 |
+| 无可验证材料或受限能力之外 | 无计划/缺定位/错quote/错数字/仅符号或LaTeX非字面量/模拟/函数调用明确422或409；不自动生成计划、换owner、降准入或造PASS |
+| 身份与闭合DTO | 跨workspace、其他owner、其他kind、错candidate/revision/hash、body内runtime/actor/未知字段全部拒绝；新关联不能接受旧numeric Job/批准/输出；旧create的numeric_plan仍422 |
+| 首次绑定/计划更改 | 双标签首次不同计划一胜一409；同计划预览有界、上限100；改输入/表达式/期望值/容差/单位/符号/定位/reason必须新Restore候选，不改旧material或candidateSHA |
+| 单次授权/资源边界 | preview、GET、decline零执行；过期approve拒绝；原key同ACK/不同key重复决定409；实际runtime闭包变化/沙箱缺失阻断、无fallback；取消/超时/非有限数/未知结果均原样回读 |
+| Review时间与数值失败 | 旧Review/旧数学批准不继承；较新pending、decline、FAIL、BLOCKED阻断较早PASS；已Review后出现任何新数值事实需新Review与新决定；人工不适用不能绕过数值要求 |
+| Policy/恢复 | author→learner→author、活动independent/open_book/private保护、未知权限、已撤销或新会话不泄露计划/原文/结果；安全Job发现/取消可用；实际丢ACK、IDB事务失败、原命令显式恢复、页面关闭/重启不自动批准执行 |
+| 持久完整性 | runtime成员/原body/provenance/material/计划/批准/Job/input/输出单边损坏、actor workspace错、尾删/全删、REPLACE与重启读回均拒绝坏记录，不改旧记录、不补GET事实；每次核完整行清单与真实字节 |
+| 发布原子性 | current竞态412、source变坏/人审拒绝/数值证据失效409、事务注入失败回滚content current/发布/影响/ACK；正常Note stale、Retrieval dirty、Recommendation dirty，原grades/private/pins不动 |
+| 合同与回归 | 仅新增下表3条真实路由及具名DTO、Restore snapshot发现字段、已列Jobs/Review适配；从本文重建OpenAPI/端口/前端并逐条actual HTTP核验；旧Import/Edit/Authoring single/group正常路径及所有坏owner路径保持，54 core/0001/包3.0.0不变 |
+
+本提案选择“作者明确提供、原文数值定位、每个 Restore candidate 唯一不可变计划绑定、逐次单独执行许可”。任何自动抽取/模型代填、自定义运行语言、跨对象数值材料、候选内修改计划、任意artifact代替运行、其他kind扩展或跨页面数值命令继承均不在本提案内，须另有明确合同。是否采纳须由根节点审阅后再交所有者决定；此稿不触发批准或实施。
 
 ## 21. 旧格式兼容与确定的范围边界
 
@@ -1346,6 +1402,9 @@ item 的 event_id 唯一，old/new refs 同 entity/稳定 ID 且 old.revision<ne
 | POST `/content/impacts/{event_id}/decisions` | ImpactObjectDecisionWrite；Idempotency-Key、Origin/CSRF | ImpactObjectDecisionReceipt；目标属真实受影响集合，作者逐对象决定、当前ref及事件SHA强CAS；只写Content自有不可变决定 |
 | POST `/content/restore-drafts` | ContentRestoreDraftCreateWrite；Idempotency-Key、Origin/CSRF | 201 ContentRestoreDraftCreateAck；冻结精确旧公开block与活动当前base，建立待审专属草稿，不发布 |
 | GET `/content/restore-drafts/{id}` | 无query/body | ContentRestoreDraftSnapshot；当前author/Policy、真实来源与不可变历史、no-store/零写；未知或错owner404 |
+| POST `/content/restore-drafts/{id}/numeric-checks` | RestoreNumericCheckPreviewWrite；Idempotency-Key、Origin/CSRF；§20.14 未批准提案 | 201 RestoreNumericCheckView；专属Restore owner核原候选/原文，首次绑定唯一numeric material并冻结预览，零执行；M6.2 |
+| GET `/content/restore-numeric-checks/{id}` | 无query/body；§20.14 未批准提案 | RestoreNumericCheckView；author/当前Policy，核原owner/材料/完整运行事实，no-store/零写/零执行；M6.2 |
+| POST `/content/restore-numeric-checks/{id}/decision` | ApprovalDecision；Idempotency-Key、Origin/CSRF；§20.14 未批准提案 | NumericCheckDecisionAck；approve_once后202且只创建一个真实Job，decline后200且job=null；操作SHA/强CAS；M6.2 |
 | POST `/drafts` | `{kind:course|lesson|block|question|practice_set|assessment,base_ref:ContentRef|null,title:string}` | 201 `{draft_id,revision,base_ref,state:draft}`；不是发布对象 |
 | PATCH `/drafts/{id}` | `{expected_revision,patches:{field:string,value:JSON}[]}` | `{draft_id,revision,validation_warnings}`。field 必须属于对应kind白名单；拒绝改对象id/基准hash/审核结论 |
 | POST `/drafts/{id}/review` | `{expected_revision,checks:[structure|sources|mathematics|numerical_examples],reviewer_note:string}` | 202 JobRef；结构可自动，数学/来源未独立执行则 NOT_RUN，不自行批准 |
