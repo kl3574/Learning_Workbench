@@ -70,9 +70,12 @@ def test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec():
         ('POST', '/api/v1/learning/evidence/{id}/applicability-decisions'),
         ('POST', '/api/v1/content/restore-drafts'),
         ('GET', '/api/v1/content/restore-drafts/{id}'),
+        ('POST', '/api/v1/content/restore-drafts/{id}/numeric-checks'),
+        ('GET', '/api/v1/content/restore-numeric-checks/{id}'),
+        ('POST', '/api/v1/content/restore-numeric-checks/{id}/decision'),
     } <= projection
-    assert len(projection) == 107
-    assert len(SPEC_ROUTES) == 127
+    assert len(projection) == 110
+    assert len(SPEC_ROUTES) == 130
     assert len(SPEC_ROUTES - projection) == 20
 
 

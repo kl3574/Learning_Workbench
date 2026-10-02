@@ -284,3 +284,44 @@ def test_actual_other_kind_stays_explicitly_unbound_and_cannot_borrow_numeric_ow
     response = no_write_response(case, 'POST', path + '/numeric-checks', status=409,
         json={'candidate': candidate, 'material': case.body['material']}, headers=command(case.headers, 'other-numeric'))
     assert response.json()['error']['code'] == 'RESTORE_NUMERIC_KIND_UNSUPPORTED'
+
+
+def test_actual_approve_http_creates_one_job_and_safe_cancel_never_rewrites_original_ack(numeric_http):
+    case = numeric_http
+    original, path = preview(case)
+    body = decision(original, 'approve_once')
+    approved = case.client.post(path + '/decision', json=body, headers=command(case.headers, 'approve'))
+    assert approved.status_code == 202, approved.text
+    ack = approved.json()
+    assert ack['job']['status'] == 'queued' and ack['revision'] == 2
+    assert no_write_response(case, 'POST', path + '/decision', status=202, json=body,
+        headers=command(case.headers, 'approve')).json() == ack
+    no_write_response(case, 'POST', path + '/decision', status=409, json=body,
+                      headers=command(case.headers, 'different-approval'))
+    with case.database.connect() as conn:
+        assert conn.execute("SELECT count(*) FROM jobs WHERE kind='authoring_numeric_check'").fetchone()[0] == 1
+    assert case.client.post('/api/v1/session/role', json={'role': 'learner'},
+        headers=command(case.headers, 'learner')).status_code == 200
+    no_write_response(case, 'GET', path, status=403)
+    no_write_response(case, 'POST', path + '/decision', status=403, json=body,
+                      headers=command(case.headers, 'approve'))
+    job_path = '/api/v1/jobs/' + ack['job']['id']
+    control = no_write_response(case, 'GET', job_path, status=200)
+    page = no_write_response(case, 'GET', '/api/v1/authoring/jobs', status=200)
+    assert any(item['id'] == ack['job']['id'] for item in page.json()['items'])
+    for response in [control, page]:
+        assert case.body['material']['reason'] not in response.text
+        assert 'numeric_material' not in response.text and 'x+1' not in response.text
+    cancelled = case.client.post(job_path + '/cancel', json={'expected_revision': control.json()['revision']},
+                                 headers=command(case.headers, 'cancel'))
+    assert cancelled.status_code == 200 and cancelled.json()['status'] == 'cancelled', cancelled.text
+    assert case.client.post('/api/v1/session/role', json={'role': 'author'},
+        headers=command(case.headers, 'author-again')).status_code == 200
+    current = no_write_response(case, 'GET', path, status=200).json()
+    assert current['job']['status'] == 'cancelled'
+    assert current['result']['outcome'] == 'cancelled' and current['result']['verdict'] == 'BLOCKED'
+    assert current['result']['started_at'] is None and current['result']['exit_code'] is None
+    assert no_write_response(case, 'POST', path + '/decision', status=202, json=body,
+        headers=command(case.headers, 'approve')).json() == ack
+    assert no_write_response(case, 'POST', case.preview_path, status=201, json=case.body,
+        headers=command(case.headers, 'preview')).json() == original
