@@ -76,13 +76,11 @@ test('native saved edit enters Review, explicit synthetic decisions publish base
     const activeElement = () => page.evaluate(() => `${document.activeElement?.tagName}.${document.activeElement?.className}`)
     const assertSourceBlocked = async (state: string) => {
       await expect(source).toHaveAttribute('contenteditable', 'false')
-      // The disabled content DOM is intentionally not focusable. Use CM's
-      // native focusable scroller, and verify focus so keys cannot hit the form.
-      // This checks native focus behavior, not CM's input transaction handler;
-      // the DOM regression separately dispatches real CM input and nonempty undo.
-      const scroller = source.locator('..')
-      await scroller.focus(); await expect(scroller).toBeFocused()
-      await page.keyboard.type('BLOCKED_INPUT'); await page.keyboard.press('Control+z')
+      await expect(source).toHaveAttribute('aria-readonly', 'true')
+      await expect(source).not.toBeEditable()
+      // Native acceptance covers the actual disabled DOM and recovery fills.
+      // The DOM regression separately dispatches real CM input and nonempty
+      // undo; browser Undo on another focus target is not a CM input probe.
       expect(await sourceText()).toBe(draft.payload.body_markdown)
       sourceGuards.push({ state, text: await sourceText(), editable: await source.getAttribute('contenteditable'), activeElement: await activeElement() })
     }
@@ -117,6 +115,7 @@ test('native saved edit enters Review, explicit synthetic decisions publish base
     await source.fill(draft.payload.body_markdown)
     await expect(enter).toBeEnabled(); await enter.click()
     await expect(panel.getByRole('region', { name: '准备准确候选审核', exact: true }).getByText(draft.candidate.candidate_sha256, { exact: true })).toBeVisible()
+    await expect(source).toHaveAttribute('contenteditable', 'true')
     sourceGuards.push({ state: 'review-read-recovered', text: await sourceText(), editable: await source.getAttribute('contenteditable'), activeElement: await activeElement() })
     const decision = panel.getByRole('region', { name: '明确人工审核决定', exact: true })
     await decision.getByLabel('数学审核决定').selectOption('NOT_APPLICABLE')
