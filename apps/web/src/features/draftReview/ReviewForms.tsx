@@ -8,8 +8,9 @@ export const emptyDecisionForm = (): DecisionFormValue => ({ mathematical: '', s
 export const createFormDirty = (value: CreateFormValue) => !!value.note || value.confirmed || value.checks.length !== 4
 export const decisionFormDirty = (value: DecisionFormValue) => !!(value.mathematical || value.sources || value.reason || value.evidence || value.confirmed)
 
-export function ReviewCreateForm({ candidate, candidateState, busy, submit, value, change }: {
+export function ReviewCreateForm({ candidate, candidateState, busy, submitBlocked = false, submit, value, change }: {
   candidate: DraftCandidate; candidateState: string; busy: boolean; submit: (body: DraftReviewWrite) => void
+  submitBlocked?: boolean
   value: CreateFormValue; change: (value: CreateFormValue) => void
 }) {
   const { checks, note, confirmed } = value
@@ -22,12 +23,13 @@ export function ReviewCreateForm({ candidate, candidateState, busy, submit, valu
     <p>任务读取现有数值历史，不启动新的数值执行。数学、来源和独立教学审核不会由机器检查自动批准。</p>
     <label>本次审核备注<textarea aria-label="本次审核备注" value={note} disabled={busy} onChange={event => change({ ...value, note: event.target.value })} /></label>
     <label><input type="checkbox" checked={confirmed} disabled={busy} onChange={event => change({ ...value, confirmed: event.target.checked })} />我已核对候选 ID、修订、哈希与本次检查范围，明确创建审核任务。</label>
-    <button disabled={busy || !confirmed || !checks.length} onClick={() => submit({ expected_revision: candidate.draft_revision, checks, reviewer_note: note })}>明确创建本次审核任务</button>
+    <button disabled={busy || submitBlocked || !confirmed || !checks.length} onClick={() => submit({ expected_revision: candidate.draft_revision, checks, reviewer_note: note })}>明确创建本次审核任务</button>
   </section>
 }
 
-export function ReviewDecisionForm({ receipt, busy, submit, value, change }: {
+export function ReviewDecisionForm({ receipt, busy, submitBlocked = false, submit, value, change }: {
   receipt: StoredReviewReceipt; busy: boolean; submit: (body: ReviewDecisionWrite) => void
+  submitBlocked?: boolean
   value: DecisionFormValue; change: (value: DecisionFormValue) => void
 }) {
   const { mathematical, sources, reason, evidence, confirmed } = value
@@ -44,7 +46,7 @@ export function ReviewDecisionForm({ receipt, busy, submit, value, change }: {
     <p>只接受本工作区当前可访问的实际附件，服务端会核验归属与字节；输入 ID 不是上传或授权。</p>
     {!valid && <p role="alert">附件 ID 无效或重复。</p>}
     <label><input type="checkbox" checked={confirmed} disabled={busy} onChange={event => change({ ...value, confirmed: event.target.checked })} />我已核对准确候选与本回执，明确记录上述数学和来源决定及理由。</label>
-    <button disabled={busy || !mathematical || !sources || !reason.trim() || !valid || !confirmed}
+    <button disabled={busy || submitBlocked || !mathematical || !sources || !reason.trim() || !valid || !confirmed}
       onClick={() => { if (mathematical && sources) submit({ expected_revision: receipt.revision!, candidate_sha256: receipt.candidate.candidate_sha256, mathematical, sources, reason, evidence_artifact_ids: ids }) }}>明确保存这次人工审核决定</button>
   </section>
 }

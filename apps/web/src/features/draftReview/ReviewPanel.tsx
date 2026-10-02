@@ -54,6 +54,9 @@ export function ReviewPanel({ workspace, paused, candidate, candidateState = '�
   const matches = receipt && candidate && sameValue(receipt.candidate, candidate)
   const createKey = candidate ? candidateKey(candidate) : ''
   const decisionKey = receipt ? reviewDecisionKey(receipt) : ''
+  // A subordinate Publication read must not disable a focused local input.
+  // Its safety still gates submission, other commands and parent close.
+  const formBusy = state.busy || !state.ready || state.pendingMemory
   const retainCreate = (basis: DraftCandidate, value: CreateFormValue, sourceOwner = owner) => { setCreates(old => ({ ...old, [candidateKey(basis)]: value })); retainReviewForm({ workspace, scope, actor: state.formActor, owner: sourceOwner, candidate: basis, kind: 'create', value }, createFormDirty(value)) }
   const retainDecision = (basis: NonNullable<typeof receipt>, value: DecisionFormValue, sourceOwner = owner) => { setDecisions(old => ({ ...old, [reviewDecisionKey(basis)]: value })); retainReviewForm({ workspace, scope, actor: state.formActor, owner: sourceOwner, candidate: basis.candidate, kind: 'decision', receipt: basis, value }, decisionFormDirty(value)) }
   return <section className="review-panel" aria-label="候选审核与原命令恢复"><h3>候选审核与恢复</h3>
@@ -85,7 +88,7 @@ export function ReviewPanel({ workspace, paused, candidate, candidateState = '�
     </article>)}</section>
     {!state.academic ? <p role="status">当前只开放安全审核任务控制。候选、备注、审核回执与报告已收起；权限恢复后请明确重新读取。</p> : <>
       {formCount > 0 && <p>当前页面保留 {formCount} 份临时审核表单，各自绑定原候选或原回执版本。重新读取相同基准可以继续编辑；新基准不会套用旧理由。</p>}
-      {candidate ? recovered.some(row => row.form.kind === 'create' && sameValue(row.form.candidate, candidate)) ? null : <ReviewCreateForm key={createKey} candidate={candidate} candidateState={candidateState} busy={state.busy || !publicationState.safe || !state.ready || state.pendingMemory} value={creates[createKey] ?? emptyCreateForm()} change={value => retainCreate(candidate, value)} submit={body => void state.create(candidate, body)} />
+      {candidate ? recovered.some(row => row.form.kind === 'create' && sameValue(row.form.candidate, candidate)) ? null : <ReviewCreateForm key={createKey} candidate={candidate} candidateState={candidateState} busy={formBusy} submitBlocked={!publicationState.safe} value={creates[createKey] ?? emptyCreateForm()} change={value => retainCreate(candidate, value)} submit={body => void state.create(candidate, body)} />
         : <p>请从已有导入或创作入口明确读取准确候选，再准备审核。已有审核任务仍可只读恢复。</p>}
       {receipt && <section aria-label="当前审核回执"><h4>实际审核回执 r{receipt.revision}</h4><p>{receipt.id} · {receipt.candidate.draft_id} · 候选 r{receipt.candidate.draft_revision}</p><code>{receipt.candidate.candidate_sha256}</code>
         <dl><dt>结构检查</dt><dd>{receipt.structural}</dd><dt>数学人工决定</dt><dd>{receipt.mathematical}</dd><dt>来源人工决定</dt><dd>{receipt.sources}</dd><dt>独立教学验收</dt><dd>NOT_RUN</dd></dl>
@@ -93,19 +96,19 @@ export function ReviewPanel({ workspace, paused, candidate, candidateState = '�
         <button disabled={state.busy || !publicationState.safe} onClick={() => void state.read(receipt.id)}>重新读取审核回执</button>
         {receipt.evidence_paths.map((path, index) => <div key={path}><p>{index === 0 ? '实际机器审核报告' : `已绑定证据附件 ${index}`}</p>{index === 0 && <button disabled={state.busy || !publicationState.safe} onClick={() => void state.artifact(path, false)}>读取受控审核报告</button>}<button disabled={state.busy || !publicationState.safe} onClick={() => void state.artifact(path, true)}>下载审核附件 {index + 1}</button></div>)}
         {state.report && <details open><summary>已取得的原报告文本</summary><p>本次字节 SHA256：<code>{state.report.sha256}</code></p><pre>{state.report.text}</pre></details>}
-        {matches ? recovered.some(row => row.form.kind === 'decision' && sameValue(row.form.receipt, receipt)) ? null : <ReviewDecisionForm key={decisionKey} receipt={receipt} busy={state.busy || !publicationState.safe || !state.ready || state.pendingMemory} value={decisions[decisionKey] ?? emptyDecisionForm()} change={value => retainDecision(receipt, value)} submit={body => void state.decide(body)} />
+        {matches ? recovered.some(row => row.form.kind === 'decision' && sameValue(row.form.receipt, receipt)) ? null : <ReviewDecisionForm key={decisionKey} receipt={receipt} busy={formBusy} submitBlocked={!publicationState.safe} value={decisions[decisionKey] ?? emptyDecisionForm()} change={value => retainDecision(receipt, value)} submit={body => void state.decide(body)} />
           : <p>当前候选入口尚未读到与本回执完全相同的候选；这里只读展示回执，请先核对准确候选后再记录决定。</p>}
       </section>}
     </>}
     {state.academic && recovered.map((row, index) => {
       const form = row.form, current = sameValue(form.candidate, row.currentCandidate) && (form.kind === 'create' || sameValue(form.receipt, row.currentReceipt))
-      const unavailable = state.busy || !publicationState.safe || !state.ready || state.pendingMemory || !current
+      const unavailable = formBusy || !current
       return <section key={`${form.kind}:${candidateKey(form.candidate)}:${index}`} aria-label={`恢复的临时审核表单 ${index + 1}`}><h4>原临时表单 · {form.candidate.draft_id} · 候选 r{form.candidate.draft_revision}</h4>
         {!current && <p role="alert">服务端候选或审核记录已变化。以下原文只读保留，不会套用到新基准；请另行读取并准备新的表单。</p>}
         <details><summary>核对原基准与本次读取</summary><pre>{JSON.stringify({ original: form.candidate, current: row.currentCandidate, original_review: form.kind === 'decision' ? form.receipt : null, current_review: row.currentReceipt }, null, 2)}</pre></details>
-        {form.kind === 'create' ? <ReviewCreateForm candidate={form.candidate} candidateState="本次重新核验" busy={unavailable}
+        {form.kind === 'create' ? <ReviewCreateForm candidate={form.candidate} candidateState="本次重新核验" busy={unavailable} submitBlocked={!publicationState.safe}
           value={creates[candidateKey(form.candidate)] ?? { ...form.value, confirmed: false }} change={value => retainCreate(form.candidate, value, form.owner)} submit={body => void state.create(form.candidate, body)} />
-          : <ReviewDecisionForm receipt={form.receipt} busy={unavailable} value={decisions[reviewDecisionKey(form.receipt)] ?? { ...form.value, confirmed: false }}
+          : <ReviewDecisionForm receipt={form.receipt} busy={unavailable} submitBlocked={!publicationState.safe} value={decisions[reviewDecisionKey(form.receipt)] ?? { ...form.value, confirmed: false }}
             change={value => retainDecision(form.receipt, value, form.owner)} submit={body => void state.decideRecovered(form.receipt, body)} />}
       </section>
     })}
