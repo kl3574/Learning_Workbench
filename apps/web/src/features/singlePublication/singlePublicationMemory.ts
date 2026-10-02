@@ -3,6 +3,17 @@ import type { SinglePublicationCommand } from './singlePublicationCommands'
 import type { SinglePublicationBasis } from './singlePublicationSchema'
 
 // Session identity is compared only in page memory; never serialized to IDB.
+const actors = new Map<string, { actor: string; original: SinglePublicationCommand }>()
+const immutable = (command: SinglePublicationCommand) => ({ ...command, ack: null, rejection: null })
+export function rememberSinglePublicationActor(command: SinglePublicationCommand, actor: string) {
+  const old = actors.get(command.command_id)
+  if (!actor || old && (old.actor !== actor || !sameValue(old.original, immutable(command)))) throw new Error('Original publication actor cannot change')
+  if (!old) actors.set(command.command_id, { actor, original: structuredClone(immutable(command)) })
+}
+export function hasSinglePublicationActor(command: SinglePublicationCommand, actor: string) {
+  const old = actors.get(command.command_id)
+  return !!actor && !!old && old.actor === actor && sameValue(old.original, immutable(command))
+}
 const commands = new Map<string, { command: SinglePublicationCommand; session: string }>()
 export type SinglePublicationForm = { key: string; workspace: string; basis: SinglePublicationBasis; selected: number[]; confirmed: boolean }
 const forms = new Map<string, { form: SinglePublicationForm; session: string }>()

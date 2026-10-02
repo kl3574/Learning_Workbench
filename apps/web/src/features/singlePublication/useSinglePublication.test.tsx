@@ -104,3 +104,35 @@ test('draft-scoped publication rejects foreign preparation and replay without an
   await act(() => hook.result.current.prepare(f.draft, f.receipt)); await act(() => hook.result.current.execute(command)); await act(() => hook.result.current.readCurrent({ ...command, ack: f.ack }))
   expect(hook.result.current.basis).toBeNull(); expect(f.port.draft).not.toHaveBeenCalled(); expect(f.port.publish).not.toHaveBeenCalled(); expect(f.port.current).not.toHaveBeenCalled()
 })
+test('sending an original command freshly detects a different actor even without refresh or access-generation notification', async () => {
+  const f = fixture(), hook = await ready(f); vi.mocked(f.port.publish).mockRejectedValueOnce(new Error('synthetic response unavailable'))
+  await act(() => hook.result.current.publish([0, 1])); const original = hook.result.current.commands[0]
+  f.session.actor_session_id = 'session_other_unannounced'
+  await act(() => hook.result.current.execute(original)); expect(f.port.publish).toHaveBeenCalledTimes(1)
+  expect(hook.result.current.ready).toBe(false); expect(readSinglePublicationCommand((await singlePublicationCommandStore.load(f.workspace))[original.command_id], f.workspace)).toEqual(original)
+})
+test('form recovery checks fresh actor before recovering original confirmation or reading its protected basis', async () => {
+  const f = fixture(), hook = await ready(f); act(() => hook.result.current.retainForm([0, 1], true)); const form = hook.result.current.forms[0], reads = vi.mocked(f.port.draft).mock.calls.length
+  f.session.actor_session_id = 'session_other_unannounced'; await act(() => hook.result.current.recoverForm(form))
+  expect(hook.result.current.basis).toBeNull(); expect(hook.result.current.pendingForms).toBe(true); expect(f.port.draft).toHaveBeenCalledTimes(reads); expect(f.port.publish).not.toHaveBeenCalled()
+})
+test('memory save checks fresh actor and never persists an original ACK under an unannounced replacement session', async () => {
+  const f = fixture(), hook = await ready(f), save = singlePublicationCommandStore.save.bind(singlePublicationCommandStore)
+  vi.spyOn(singlePublicationCommandStore, 'save').mockImplementation(async (...args) => { if (JSON.parse(args[2]).ack) throw new Error('synthetic ack save failure'); return save(...args) })
+  await act(() => hook.result.current.publish([0, 1])); const original = hook.result.current.commands[0]; expect(hook.result.current.pendingMemory).toBe(true); vi.restoreAllMocks()
+  f.session.actor_session_id = 'session_other_unannounced'; await act(() => hook.result.current.saveMemory())
+  expect(hook.result.current.pendingMemory).toBe(true); expect(readSinglePublicationCommand((await singlePublicationCommandStore.load(f.workspace))[original.command_id], f.workspace).ack).toBeNull(); expect(f.port.publish).toHaveBeenCalledTimes(1)
+})
+test('actor change during HTTP retains received ACK in original actor memory without committing it under new actor', async () => {
+  const f = fixture(), hook = await ready(f)
+  vi.mocked(f.port.publish).mockImplementationOnce(async () => { f.session.actor_session_id = 'session_other_during_response'; return f.ack })
+  await act(() => hook.result.current.publish([0, 1])); expect(hook.result.current.pendingMemory).toBe(true); expect(hook.result.current.ready).toBe(false)
+  const record = Object.values(await singlePublicationCommandStore.load(f.workspace))[0]; expect(readSinglePublicationCommand(record, f.workspace).ack).toBeNull()
+  f.session.actor_session_id = 'session_fixture_reviewFixtures'; await act(() => hook.result.current.refresh()); await act(() => hook.result.current.saveMemory())
+  expect(hook.result.current.pendingMemory).toBe(false); expect(hook.result.current.commands[0].ack).toEqual(f.ack); expect(f.port.publish).toHaveBeenCalledTimes(1)
+})
+test('a journal command without original page actor proof remains read-only even with matching page and generation', async () => {
+  const f = fixture(), command = makeSinglePublicationCommand(f.workspace, getSessionGeneration(), f.basis(), [0, 1]); await persistSinglePublicationCommand(command)
+  const hook = await ready(f); expect(hook.result.current.canReplay(command)).toBe(false)
+  await act(() => hook.result.current.execute(command)); expect(f.port.publish).not.toHaveBeenCalled()
+})
