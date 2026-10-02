@@ -25,12 +25,13 @@ print(json.dumps({'archive':base64.b64encode(f.getvalue()).decode(),'course':ref
   return { ...value, bytes: Buffer.from(value.archive, 'base64') }
 }
 
-export async function publishEditedBlock(page: Page, runtime: RestartRuntime) {
+export async function publishEditedBlock(page: Page, runtime: RestartRuntime, beforeEdit?: (fixture: ReaderPackage) => Promise<void>, revisedBody = '原创合成内容影响发布正文，仅验证软件保存与复核流程。\n') {
   const fixture = originalImpactPackage(), imported = await importReaderPackage(page, fixture)
   await imported.dialog.getByRole('button', { name: '切换为作者角色', exact: true }).click()
   await imported.dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
   const href = `${runtime.origin}/?reader=${encodeURIComponent(JSON.stringify({ course: fixture.course, lesson: fixture.lessons[0], block: fixture.blocks[0], view: 'lesson' }))}`
   await page.goto(href)
+  if (beforeEdit) await beforeEdit(fixture)
   const editor = page.getByRole('region', { name: '文本块编辑与恢复', exact: true })
   await editor.getByRole('button', { name: '编辑此精确文本块', exact: true }).click()
   const creating = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/api/v1/drafts'))
@@ -39,7 +40,7 @@ export async function publishEditedBlock(page: Page, runtime: RestartRuntime) {
   await editor.getByLabel('读取已有编辑稿 ID', { exact: true }).fill(created.draft_id)
   await editor.getByRole('button', { name: '另行读取服务端草稿头', exact: true }).click()
   await editor.getByLabel('本机标题', { exact: true }).fill('发布后原创内容影响标题')
-  await editor.getByLabel('本机正文', { exact: true }).fill('原创合成内容影响发布正文，仅验证软件保存与复核流程。\n')
+  await editor.getByLabel('本机正文', { exact: true }).fill(revisedBody)
   const patch = page.waitForResponse(r => r.request().method() === 'PATCH' && r.url().endsWith(`/api/v1/drafts/${created.draft_id}`))
   await editor.getByRole('button', { name: '明确提交本机标题与正文', exact: true }).click(); expect((await patch).status()).toBe(200)
   await editor.getByRole('button', { name: '另行读取服务端草稿头', exact: true }).click()

@@ -58,6 +58,19 @@ export function selectionFromSource(ref: ContentRef, source: string, startUtf16:
   return { kind: 'selected', selection: Object.freeze(selection) }
 }
 
+/** Map LF-normalized textarea UTF-16 offsets back to the untouched source. */
+export function selectionFromTextarea(ref: ContentRef, source: string, start: number, end: number): SelectionResult {
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start) return rejected()
+  let original = 0, displayed = 0, originalStart = -1
+  while (displayed < end && original < source.length) {
+    if (displayed === start) originalStart = original
+    original += source[original] === '\r' && source[original + 1] === '\n' ? 2 : 1
+    displayed++
+  }
+  if (displayed !== end) return rejected()
+  return selectionFromSource(ref, source, start === end ? original : originalStart, original)
+}
+
 function compare(document: Document, left: Node, leftOffset: number, right: Node, rightOffset: number): number {
   const a = document.createRange(), b = document.createRange()
   a.setStart(left, leftOffset); a.collapse(true)
