@@ -29,3 +29,5 @@ Frozen input SHA-256 values:
 | `green-related.txt` | `6dab60b1c641e44026cb712c35515545cd21d6345387de3337b702f147857a45` |
 
 The decision and its limits are in [ADR 0035](../../../../docs/adr/0035-content-impact-event-snapshot.md): `owner_frozen_v1` proves only the transaction-frozen explicit ContentRef closure found through validated rows, not present-day dependency-table integrity or completeness. Pure concept-ID edges are conservative. Pre-migration events remain `legacy_unverified`; an absent new evidence row fails closed. No historical exact edge is manufactured.
+
+Publication preparation on 2026-10-02: the three linked test logs now replace the exact private worktree prefix with `WORKTREE/`; no lines were removed. The table above retains their original raw hashes. Raw/public hashes, byte counts and exact replacement counts are recorded in `../../2026-10-02/M6.2-publication-path-redaction.json`. The original local commits and raw logs remain preserved privately. Only these evidence paths differ between the local and public commit mappings; all product, test and specification bytes are identical. This is a privacy repair, not a test rerun.
