@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-02T08:03:31Z；规范 SHA-256：`a6832a01966e72e5b9f63ee283ae300119446c38bcccd91beee508331ba57a98`
+更新：2026-10-02T08:13:44Z；规范 SHA-256：`a6832a01966e72e5b9f63ee283ae300119446c38bcccd91beee508331ba57a98`
 
-仓库发布：VERIFIED；Issues 同步：VERIFIED_PR55_ISSUE31_HEAD_1AD328D
+仓库发布：VERIFIED；Issues 同步：PENDING_LOCAL_BACKEND_PROGRESS_AFTER_1AD_READBACK
 实施：IN_PROGRESS；当前任务：M6.2；下一任务：M6.2
 
-整合并审查已批准v3.0.9的Content影响决定、Learning证据适用性及历史公开块恢复，随后完成固定组合门禁、证据和PR55/Issue31同步。v3.0.10非秘密会话连续性提案c43cd43已供所有者决定，未采纳；此前跨页未知ACK限制、生产InputProof和数值环境阻塞保留。
+完成Restore独审和同事务恢复发布整合，重建实际106路由契约并明确覆盖v3.0.9六接口，运行固定组合完整门禁；编辑稿Review/发布UI隔离实施中。观察1ad新CI真实终态，之后同步新实现与证据。v3.0.10会话连续性提案仍待所有者决定，既有跨页未知ACK限制不放宽。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -32,7 +32,7 @@
 | M5.3 Tutor 状态机、SSE/取消/重连/异步上下文 | review | [#28](https://github.com/kl3574/Learning_Workbench/issues/28) | 919a00532b499cff604ef2be4e90c88cc6378490 |
 | M5.4 真实模型与搜索评测 | blocked | [#29](https://github.com/kl3574/Learning_Workbench/issues/29) | e982a14644317c7be12a63ec0b31c1e615c72fa6 |
 | M6.1 教材/例题/题目生成 schema + 数值验证 | blocked | [#30](https://github.com/kl3574/Learning_Workbench/issues/30) | 9d4aa2e75c0583b4752e1a2669534ef621e6c7f9 |
-| M6.2 审校/发布/版本对比/影响分析/恢复旧内容 | in_progress | [#31](https://github.com/kl3574/Learning_Workbench/issues/31) | d302c075a85c45dc11ff8a4b6a539ef8baed48f3 |
+| M6.2 审校/发布/版本对比/影响分析/恢复旧内容 | in_progress | [#31](https://github.com/kl3574/Learning_Workbench/issues/31) | 47df9cc9ccd68256d2f5a64ddcd43a23e76fc107 |
 | M6.3 CodexBroker/App Server、操作审批、产物清单 | todo | [#32](https://github.com/kl3574/Learning_Workbench/issues/32) | 未验证提交 |
 | M7.1 全备份/学习者包/作者包/恢复预览和事务 | todo | [#33](https://github.com/kl3574/Learning_Workbench/issues/33) | 未验证提交 |
 | M7.2 安全/可访问性/性能/故障注入 | todo | [#34](https://github.com/kl3574/Learning_Workbench/issues/34) | 未验证提交 |
@@ -181,6 +181,7 @@
 - M6.2_e58_publication_readback: {'source_commit': 'e58abaaf4baa5b06d27bd1db1f06c8a13c1c730a', 'publication_commit': '8701c8a04b654c2462e4311f0128201507ebaf7e', 'branch_head': '8701c8a04b654c2462e4311f0128201507ebaf7e', 'pull_request_head': '8701c8a04b654c2462e4311f0128201507ebaf7e', 'pull_request': 'draft/open/unmerged', 'issue': 'open; original milestone/labels and outside-managed body preserved', 'push_run': 36389800538, 'pull_request_run': 36389807970, 'ci': 'IN_PROGRESS; no conclusion', 'receipt': 'progress/evidence/2026-09-28/M6.2-e58-publication-readback.json'}
 - M6.2_editor_d302: {'status': 'LOCAL_FOUR_GATES_PASS_NOT_PUBLISHED', 'source_commit': 'd302c075a85c45dc11ff8a4b6a539ef8baed48f3', 'source_count': 1092, 'source_scope': 'all tracked non-progress files; external dependencies/runtime excluded', 'web': '562 PASS /94files', 'native': '1 PASS /14.0s actual test; no retry', 'static': 'strict TS/lint and build PASS;766modules; original chunk warning', 'evidence': 'progress/evidence/2026-10-02/M6.2-editor-d302/manifest.json', 'limitations': 'Current full Python NOT_RUN; provider and teaching quality NOT_RUN; unknownACK after newpage remains restricted pending approved contract.'}
 - M6.2_1ad_publication: {'readback_at': '2026-10-02T08:02:38.088451+00:00', 'head': '1ad328d0d30c67030d7b62c5d712a37e9161a6aa', 'pr': 55, 'draft': True, 'open': True, 'merged': False, 'issue': 31, 'issue_preserved_fields': ['id', 'number', 'title', 'state', 'labels', 'milestone', 'body outside managed progress block'], 'pr_body_sha256': '9de4e41b92b0a0575ecd47c1d4b5252eea297582b46c9aa5b99bcfa2b090291b', 'issue_body_sha256': 'c32d5926fe6339e12d74cb9b89d8bd5f6570109b74022775e76cf4e5d6bacb8e', 'new_ci': 'TERMINAL_NOT_YET_READ', 'body_sha256': '97cff19cd8776cd9c4a9836d4ef40a7a6b42c4e328893bbd63eab52d76e25e43', 'purpose': 'absolute evidence links pinned to actual published head', 'evidence': 'progress/evidence/2026-10-02/M6.2-1ad-publication/manifest.json'}
+- M6.2_content_learning_combined: {'source_commit': '29ecd60', 'inputs': 1113, 'tests': '192 PASS /2 warnings /90.63s', 'later_source_commit': '47df9cc9ccd68256d2f5a64ddcd43a23e76fc107', 'later_tests': '12 PASS /67 deselected /2 warnings /5.90s', 'evidence': 'progress/evidence/2026-10-02/M6.2-content-learning-composition/manifest.json', 'scope': 'four actual new routes; complete restore/UI/fullgate pending'}
 
 ## 阻塞与待决项
 
@@ -205,5 +206,6 @@
 - M62_EDITOR_NEW_PAGE_ACK_CONTRACT: 跨新页面未知ACK无法安全确认原actor；独立提案c43cd43只补非秘密SessionResponse.actor_session_id与同会话显式重放，已请求所有者决定，未采纳或推送。
 - M62_IMPACT_RESTORE_IMPLEMENTING: v3.0.9已批准，Content/Learning决定及历史公开ContentBlock恢复正在实现，不能称已验收。
 - M62_FINAL_COMBINED_GATES_PENDING: 当前组合源尚无完整新Python/原生/CI门禁；3fc全Python失败记录保留。
+- M62_1AD_SPEC_CI_FAILED: 1ad push/PR spec-contracts各608PASS1FAIL：test_api_projection缺失路由集26而原期望20；v3.0.9六新业务端点尚未在该已发布head实施。原始完整失败job日志已私有保留，整个run尚未终态回读。最终实现六条后做具名覆盖与106实际路由验收，不把结构catalog通过当实际handler完成。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。
