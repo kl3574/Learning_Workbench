@@ -1,0 +1,36 @@
+
+Running 4 tests using 1 worker
+
+(node:1753822) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/e2e/draft-editor.spec.ts:54:1 › real editor retains IndexedDB originals through competing tabs, 412 resolution, lost ACK, browser and API restart (15.1s)
+  ✓  2 tests/e2e/draft-publication.spec.ts:7:1 › real synthetic Import text block receives explicit human decisions, survives lost publish ACK and reads actual current independently (8.3s)
+  ✓  3 tests/e2e/draft-review.spec.ts:17:1 › real imported candidate review keeps original ACK, authenticated report bytes and explicit rejected decision across reload (7.2s)
+  ✘  4 tests/e2e/edit-publication.spec.ts:42:1 › native saved edit enters Review, explicit synthetic decisions publish base+1, preserve parent pins, original ACK and restart recovery (17.7s)
+
+
+  1) tests/e2e/edit-publication.spec.ts:42:1 › native saved edit enters Review, explicit synthetic decisions publish base+1, preserve parent pins, original ACK and restart recovery 
+
+    TimeoutError: locator.fill: Timeout 10000ms exceeded.
+    Call log:
+      - waiting for getByRole('region', { name: '文本块编辑与恢复', exact: true }).getByRole('region', { name: '候选审核与原命令恢复', exact: true }).getByLabel('本次审核备注', { exact: true })
+
+
+      82 |     await note.fill('合成浏览器软件验收，不作真实数学、来源或教学批准。')
+      83 |     await assertSourceBlocked('unsaved-review-form')
+    > 84 |     await note.fill(''); await expect(source).toHaveAttribute('contenteditable', 'true')
+         |                ^
+      85 |     await source.fill(draft.payload.body_markdown + '恢复输入 🧠\n\\alpha\n')
+      86 |     expect(await sourceText()).toBe(draft.payload.body_markdown + '恢复输入 🧠\n\\alpha\n')
+      87 |     await source.fill(draft.payload.body_markdown)
+        at LOCAL_HOME/.cache/learning-workbench-acceptance/m62-codemirror-publication-combined-oct02/tests/e2e/edit-publication.spec.ts:84:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-codemirror-publication-combined-evidence-oct02/native-artifacts/edit-publication-native-sa-973b9-al-ACK-and-restart-recovery/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m62-codemirror-publication-combined-evidence-oct02/native-artifacts/edit-publication-native-sa-973b9-al-ACK-and-restart-recovery/error-context.md
+
+  1 failed
+    tests/e2e/edit-publication.spec.ts:42:1 › native saved edit enters Review, explicit synthetic decisions publish base+1, preserve parent pins, original ACK and restart recovery 
+  3 passed (48.7s)

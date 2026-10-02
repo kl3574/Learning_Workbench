@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-02T08:57:03Z；规范 SHA-256：`a6832a01966e72e5b9f63ee283ae300119446c38bcccd91beee508331ba57a98`
+更新：2026-10-02T09:31:23Z；规范 SHA-256：`35018183fbd6d7253001e71b2c932eb10410813ed81625936a667a6be71d0c29`
 
-仓库发布：VERIFIED；Issues 同步：PENDING_LOCAL_BACKEND_PROGRESS_AFTER_1AD_READBACK
+仓库发布：VERIFIED；Issues 同步：VERIFIED_PR55_ISSUE31_HEAD_A5C4CA9
 实施：IN_PROGRESS；当前任务：M6.2；下一任务：M6.2
 
-完成固定8fb64dc完整Python门禁并保留真实结果；独审整合Edit发布UI和CodeMirror6，做组合原生验证；推进Restore/影响决定/证据适用性UI及Tutor原CI失败复现。v3.0.10会话连续性合同已获所有者批准，在独立分支实施；新会话/旧journal限制保留。经公开扫描后同步实现、失败证据与PR55/Issue31，保留draft/open。
+完成已批准v3.0.10会话连续性与v3.0.11只读事件发现的独审及组合生成；整合已验证Edit/CodeMirror和Learning适用性界面，继续Content影响决定与Restore UI及真实原生验收。已发布a5c4ca9的push/PR CI均运行中；固定8fb Python3227PASS/1ENVSKIP已完成，后续变化不冒用该门禁。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -184,7 +184,11 @@
 - M6.2_content_learning_combined: {'source_commit': '29ecd60', 'inputs': 1113, 'tests': '192 PASS /2 warnings /90.63s', 'later_source_commit': '47df9cc9ccd68256d2f5a64ddcd43a23e76fc107', 'later_tests': '12 PASS /67 deselected /2 warnings /5.90s', 'evidence': 'progress/evidence/2026-10-02/M6.2-content-learning-composition/manifest.json', 'scope': 'four actual new routes; complete restore/UI/fullgate pending'}
 - M6.2_1ad_ci_terminal: {'status': 'FAILURE_BOTH_RUNS', 'push_run': 36981521690, 'pr_run': 36981528047, 'head': '1ad328d0d30c67030d7b62c5d712a37e9161a6aa', 'pr_checkout': 'a92c0b8f8695033899e8670ab5c152ff72e2ed94', 'spec': 'each608PASS1FAIL; published100runtime/126declared', 'browser': 'push107PASS1TutorFAIL; PR108PASS', 'backend': 'each731PASS2warnings', 'integration': 'each1747PASS1numericENVSKIP2warnings', 'frontend': 'each562PASS94files plus lint/types/build', 'evidence': 'progress/evidence/2026-10-02/M6.2-1ad-ci-terminal/manifest.json'}
 - M6.2_backend_8fb64dc: {'source': '8fb64dc1f7d91628692123d70e232f807922110f', 'inputs': 1123, 'focused': '149PASS2warnings158.11s', 'static': 'Ruff/mypy227/strictTS/spec76PASS', 'runtime_routes': 106, 'declared_routes': 126, 'full_python': {'status': 'PASS_WITH_ENVIRONMENT_SKIP', 'passed': 3227, 'skipped': 1, 'warnings': 2, 'pytest_seconds': 1233.82, 'exit_code': 0, 'skip': 'test_authoring_numeric_runtime.py:46 BLOCKED_ENVIRONMENT; sealed calculator not executed; original failure retained'}, 'native': 'NOT_RUN_COMBINED', 'evidence': 'progress/evidence/2026-10-02/M6.2-backend-8fb64dc/manifest.json', 'full_python_source': '8fb64dc1f7d91628692123d70e232f807922110f'}
-- M6.2_v3_0_10_owner_approval: {'status': 'APPROVED_NOT_YET_IMPLEMENTED', 'proposal_commit': 'c43cd43b745064c56bf593bff5547d79eaadcd2c', 'format_only_commit': 'fbdedd9ddd0e4b132e6bbb075728449822541942', 'scope': 'required nonsecret actor_session_id in SessionResponse; same current authenticated actor/workspace and fresh Policy plus explicit original editor command replay; no stored cookie/CSRF/credential hash; old journals remain restricted', 'current_frozen_spec': '3.0.9 until fixed gate finishes; adoption in isolated work underway'}
+- M6.2_v3_0_10_owner_approval: {'status': 'APPROVED_SPEC_ADOPTED_IMPLEMENTATION_PENDING', 'proposal_commit': 'c43cd43b745064c56bf593bff5547d79eaadcd2c', 'format_only_commit': 'fbdedd9ddd0e4b132e6bbb075728449822541942', 'scope': 'required nonsecret actor_session_id in SessionResponse; same current authenticated actor/workspace and fresh Policy plus explicit original editor command replay; no stored cookie/CSRF/credential hash; old journals remain restricted', 'current_frozen_spec': 'v3.0.9 fixed8fb fullPython completed; normative v3.0.10 now adopted; generated/runtime update pending'}
+- M6.2_a5_publication: {'readback_at': '2026-10-02T09:19:59.746428+00:00', 'head': 'a5c4ca9d46a740737d29499fb212cdfcd64187f8', 'pr': 55, 'draft': True, 'open': True, 'merged': False, 'issue': 31, 'issue_preserved_fields': ['id', 'number', 'title', 'state', 'labels', 'milestone', 'body outside managed progress block'], 'pr_body_sha256': '47b50eaec7f66f99f03bb3f11c892ae7733dd2bdfc74f85965441227633eb23b', 'issue_body_sha256': 'f333a79015277edb2099e366b7999ddef43ebf1b8f1ac9a43bc698aef1a8e4f8', 'new_ci': 'TERMINAL_NOT_YET_READ'}
+- M6.2_v311_approved: APPROVED_ADOPTED: proposal90f2b5b→spec8b36488同时保留v10，d47f147仅解除SessionResponse行重复路由声明；当前唯一规范SHA35018183fbd6d7253001e71b2c932eb10410813ed81625936a667a6be71d0c29。Content列表后端f0181d3定向88PASS，独审进行中；UI/生成和最终门禁待完成，未发布该新合同实现。
+- M6.2_edit_codemirror_3657dab: LOCAL_COMBINATION_PASS: exact3657dab Web586/97files、focused79、四native49.1s、strictTS/lint/build794、audit0通过；191证据hash根回读、26源文件逐字同根整合c26a543。原探针失败及被替代的浏览器Undo断言保留；root独立阅CM/合并保护与390图。v3.0.9固定范围，不覆盖新actor/list。
+- M6.2_learning_ui_acab600: {'reviewed_commit': 'acab6006a7a286d64e083f4ed0ead2562a47a050', 'integrated_commit': '3393472', 'review': 'No blocker found in reviewed Learning UI scope after reading production code, owner/Policy guards, journal/memory and native assertions. Root executed focused and native independently.', 'actual_checks': {'focused': '32 PASS', 'native': '1 PASS /21.0s', 'captured_nonprogress_inputs': 1134, 'before_after_git': 'EQUAL', 'full_web': 'NOT_RERUN_BY_ROOT; author578 retained separately', 'v3_0_10_11_combined': 'NOT_RUN'}, 'boundary': 'Original synthetic questions and explicit fixture human judgments; no original grade, eligibility or private pin modification; no provider/academic/teaching acceptance.'}
 
 ## 阻塞与待决项
 
@@ -206,11 +210,12 @@
 - M62_4CC_TUTOR_BROWSER_FAILED: 4cc精确push/PR各5 job成功、browser106PASS1FAIL，原Tutor completed标题5000ms断言失败；同源answer_delta在期限前抵浏览器，但两现场均未观测completed，原因UNKNOWN。两integration各1570PASS1真实数值环境SKIP2依赖warning；原始12job与两ZIP16成员公开包已复制且严格重放，manifest 5ba8e015。
 - M62_8701_PR_TUTOR_FAILED: 8701原push六job成功，PR browser106PASS1原Tutor5s失败，原因未知；完整原件已封包。
 - M62_EDITOR_POLICY_MEMORY_REVIEW_PENDING: a7bff45已独审并整合为d302；24项定向复验通过，root固定1092输入Web562/原生1/strictTS/build通过。未落盘文字保护已验，跨新页面原命令重放另有合同缺口。
-- M62_EDITOR_NEW_PAGE_ACK_CONTRACT: 所有者本轮明确批准c43cd43 v3.0.10非秘密actor_session_id与同会话跨刷新显式原命令重放；fbdedd9仅修表格空行。独立实现与规范正式整合待做，当前8fb固定门禁仍按v3.0.9完成，不借批准提前声称已实现；新会话/旧无actor journal限制保留。
-- M62_IMPACT_RESTORE_IMPLEMENTING: 已批准v3.0.9六条Content/Learning/Restore接口已整合，149定向及Restore独审45PASS；完整组合门禁运行中，影响/证据适用性/恢复UI待实施。worked_example恢复发布缺新候选数值链仍阻断。
-- M62_FINAL_COMBINED_GATES_PENDING: 8fb固定1123输入完整Python运行中；当前定向149及静态门禁通过。Edit发布UI/CodeMirror隔离实现须独审整合及组合原生门禁，历史完整失败保留。
-- M62_1AD_SPEC_CI_FAILED: 1ad双CI真实终态FAILURE，两spec各608PASS1FAIL，旧head缺6个v3.0.9已声明路由；完整日志和实际checkout已公开封包。本地8fb实际实施6条、106路由明确覆盖与149组合PASS；不改写旧失败，新完整门禁运行中。
-- M62_1AD_TUTOR_BROWSER_FAILED: 1ad push browser107PASS1FAIL，Tutor原5秒completed断言失败；同提交PRmerge browser108PASS。完整失败日志与artifact11216825333原hash已核，断言后GET仍running，不归因为浏览器漏事件；隔离原用例3次PASS不能关闭故障，继续实际复现。
-- M62_CODEMIRROR_SOURCE_EDITOR_PENDING: 规范§8要求CodeMirror6，现有本机及手动合并源码仍textarea；隔离替换与真实原生验证进行中，未归入当前组合验收。
+- M62_EDITOR_NEW_PAGE_ACK_CONTRACT: v3.0.10已批准并纳入唯一规范。actor隔离实现及真实跨刷新/重启原key回放测试进行中；尚待与Edit/CM界面组合，新会话/旧v1限制保留。
+- M62_IMPACT_RESTORE_IMPLEMENTING: v3.0.9六真实后台端点已有8fb完整Python门禁；Learning UI acab开发578Web/native1、root独立32/native1通过并本地整合3393472。Restore与Content决定/事件列表界面仍实施；worked_example新候选数值链未完成。
+- M62_FINAL_COMBINED_GATES_PENDING: 固定8fb的完整Python3227PASS/1真实数值ENVSKIP已完成；更晚Tutor/Session/列表与新增UI须新组合门禁，不沿用旧PASS。
+- M62_1AD_SPEC_CI_FAILED: 1ad双CI608PASS1FAIL的缺6路由原失败保留；8fb真实106/126路由与完整3227Python通过，a5已发布，新双CI运行中。
+- M62_1AD_TUTOR_BROWSER_FAILED: 1ad push原Tutor5秒completed失败仍保留，唯一原因UNKNOWN。局部快照复验减重复扫描026已独审并本地整合067，根68相关+1scope探针通过；新完整组合/发布CI尚待。
+- M62_CODEMIRROR_SOURCE_EDITOR_PENDING: CodeMirror实际实现已与Edit Review/publication组合3657dab，586Web/四native等固定门禁PASS，已整合本地c26a543。更晚v10/v11完整组合仍待验；未发布此界面。
+- M62_IMPACT_DISCOVERY_IMPLEMENTING: v3.0.11已批准；f018列表后台88相关PASS在独审，发现→详情/决定真实UI和完整组合待验。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。
