@@ -1,0 +1,45 @@
+
+Running 2 tests using 1 worker
+
+(node:2783951) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/e2e/private-content-role-completion.spec.ts:5:35 › Content detail role completion before read control (15.9s)
+  ✘  2 tests/e2e/private-content-role-completion.spec.ts:5:35 › Content detail role completion after read (21.8s)
+
+
+  1) tests/e2e/private-content-role-completion.spec.ts:5:35 › Content detail role completion after read 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('region', { name: '内容变更影响复核', exact: true }).getByRole('region', { name: '本次读取的内容影响详情', exact: true })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('region', { name: '内容变更影响复核', exact: true }).getByRole('region', { name: '本次读取的内容影响详情', exact: true }) with timeout 5000ms
+      - waiting for getByRole('region', { name: '内容变更影响复核', exact: true }).getByRole('region', { name: '本次读取的内容影响详情', exact: true })
+
+
+      29 |     events.push({ at: Date.now(), type: 'before-late-release', ...(await snapshot() as object) })
+      30 |     if (late) { release(); await completion; await expect(detail).toHaveCount(0) }
+    > 31 |     try { await expect(detail).toBeVisible() }
+         |                                ^
+      32 |     catch (error) { events.push({ at: Date.now(), type: 'assertion-failed', ...(await snapshot() as object) }); throw error }
+      33 |   } finally {
+      34 |     events.push({ at: Date.now(), type: 'finally-enter', ...(snapshot ? await snapshot() as object : {}) }); release()
+        at $HOME/.cache/learning-workbench-acceptance/m62-content-impacts-native-oct03/tests/e2e/private-content-role-completion.spec.ts:31:32
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-content-impacts-native-evidence-oct03/role-completion-01/artifacts/private-content-role-compl-bcd45--role-completion-after-read/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-content-impacts-native-evidence-oct03/role-completion-01/artifacts/private-content-role-compl-bcd45--role-completion-after-read/test-failed-2.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m62-content-impacts-native-evidence-oct03/role-completion-01/artifacts/private-content-role-compl-bcd45--role-completion-after-read/error-context.md
+
+  1 failed
+    tests/e2e/private-content-role-completion.spec.ts:5:35 › Content detail role completion after read 
+  1 passed (38.0s)

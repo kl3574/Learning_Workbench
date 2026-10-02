@@ -1,0 +1,2 @@
+import original from '$HOME/.cache/learning-workbench-acceptance/m62-content-impacts-native-oct03/tests/e2e/playwright.config.ts'
+export default { ...original, testDir: '$HOME/.cache/learning-workbench-acceptance/m62-content-impacts-native-oct03/tests/e2e', webServer: undefined, workers: 1, retries: 0, outputDir: '$HOME/.cache/learning-workbench-acceptance/m62-content-impacts-native-evidence-oct03/original-controlled-01/artifacts' }

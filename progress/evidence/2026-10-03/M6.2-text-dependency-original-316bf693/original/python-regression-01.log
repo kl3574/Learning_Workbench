@@ -1,0 +1,52 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+rootdir: $HOME/.cache/learning-workbench-acceptance/m62-text-edit-dependencies-oct02
+configfile: pyproject.toml
+plugins: anyio-4.15.1
+collected 169 items
+
+tests/integration/test_draft_edit_boundaries.py ........................ [ 14%]
+................................                                         [ 33%]
+tests/integration/test_draft_edit_http.py .........                      [ 38%]
+tests/integration/test_draft_edit_integrity.py .......................   [ 52%]
+tests/integration/test_draft_edit_migration.py ....                      [ 54%]
+tests/integration/test_draft_edit_read_http.py ...............           [ 63%]
+tests/integration/test_draft_edits.py ..                                 [ 64%]
+tests/integration/test_edit_publication.py .................             [ 74%]
+tests/integration/test_edit_publication_atomic.py ............           [ 81%]
+tests/integration/test_edit_publication_dependencies.py .F.............. [ 91%]
+                                                                         [ 91%]
+tests/integration/test_edit_publication_http.py .......                  [ 95%]
+tests/integration/test_edit_publication_learning_http.py .               [ 95%]
+tests/integration/test_edit_publication_migration.py ...                 [ 97%]
+tests/integration/test_edit_publication_terminal.py ..                   [ 98%]
+tests/contract/test_draft_edit_projection.py ..                          [100%]
+
+=================================== FAILURES ===================================
+_ test_historical_dependencies_with_original_concept_pins_are_readonly_even_after_current_moves_or_archives _
+tests/integration/test_edit_publication_dependencies.py:138: in test_historical_dependencies_with_original_concept_pins_are_readonly_even_after_current_moves_or_archives
+    assert table_hashes(case.database) == before
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/test_authoring_numeric_provider_history.py:29: in table_hashes
+    return {name: sha256_bytes(repr(rows).encode()) for name, rows in all_rows(database).items()}
+                                                                      ^^^^^^^^^^^^^^^^^^
+tests/integration/test_retrieval.py:33: in all_rows
+    with database.connect() as connection:
+         ^^^^^^^^^^^^^^^^^^
+tests/integration/test_edit_publication_dependencies.py:129: in connect
+    connection.set_authorizer(authorize)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+E   AttributeError: '_GeneratorContextManager' object has no attribute 'set_authorizer'
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  $HOME/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  $HOME/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_edit_publication_dependencies.py::test_historical_dependencies_with_original_concept_pins_are_readonly_even_after_current_moves_or_archives
+============ 1 failed, 168 passed, 2 warnings in 198.57s (0:03:18) =============

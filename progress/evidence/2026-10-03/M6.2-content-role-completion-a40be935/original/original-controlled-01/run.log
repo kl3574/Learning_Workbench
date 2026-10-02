@@ -1,0 +1,51 @@
+
+Running 1 test using 1 worker
+
+(node:2786949) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/e2e/content-impacts.spec.ts:28:1 › native edit publication discovers actual impacts and preserves human decisions through CAS, lost reply, IDB failure, access changes, stable pages and restart (36.3s)
+
+
+  1) tests/e2e/content-impacts.spec.ts:28:1 › native edit publication discovers actual impacts and preserves human decisions through CAS, lost reply, IDB failure, access changes, stable pages and restart 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('region', { name: '内容变更影响复核', exact: true }).getByRole('region', { name: '本次读取的内容影响详情', exact: true })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('region', { name: '内容变更影响复核', exact: true }).getByRole('region', { name: '本次读取的内容影响详情', exact: true }) with timeout 5000ms
+      - waiting for getByRole('region', { name: '内容变更影响复核', exact: true }).getByRole('region', { name: '本次读取的内容影响详情', exact: true })
+
+
+      85 |     await panel(restored).getByRole('button', { name: `查看影响详情 ${event}`, exact: true }).click(); await expect(panel(restored).getByRole('region', { name: '本次读取的内容影响详情', exact: true })).toBeVisible()
+      86 |     const policyPage = await next.newPage(); await policyPage.goto(runtime.origin); const assessment = originalAssessmentPackage('impactpolicy'); const imported = await importAssessmentPackage(policyPage, assessment); await imported.dialog.getByRole('button', { name: '切换为作者角色', exact: true }).click(); await imported.dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
+    > 87 |     await panel(restored).getByRole('button', { name: '重新核验内容复核权限', exact: true }).click(); await list(restored, block); await panel(restored).getByRole('button', { name: `查看影响详情 ${event}`, exact: true }).click(); await expect(panel(restored).getByRole('region', { name: '本次读取的内容影响详情', exact: true })).toBeVisible()
+         |                                                                                                                                                                                                                                                                                                               ^
+      88 |     expect((await restored.request.get('/api/v1/session').then(r => r.json())).role).toBe('author')
+      89 |     const href = `${runtime.origin}/?assessment=${encodeURIComponent(JSON.stringify({ assessment_ref: assessment.assessment, course_ref: assessment.course }))}`; await policyPage.goto(href)
+      90 |     await policyPage.getByRole('checkbox', { name: '我已核对内容状态与模式，确认开始未评分测试', exact: true }).check(); await policyPage.getByRole('button', { name: '明确开始本次测试', exact: true }).click()
+        at $HOME/.cache/learning-workbench-acceptance/m62-content-impacts-native-oct03/tests/e2e/content-impacts.spec.ts:87:303
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-content-impacts-native-evidence-oct03/original-controlled-01/artifacts/private-content-original-c-301d3-es-stable-pages-and-restart/test-failed-4.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-content-impacts-native-evidence-oct03/original-controlled-01/artifacts/private-content-original-c-301d3-es-stable-pages-and-restart/test-failed-2.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-content-impacts-native-evidence-oct03/original-controlled-01/artifacts/private-content-original-c-301d3-es-stable-pages-and-restart/test-failed-3.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #4: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-content-impacts-native-evidence-oct03/original-controlled-01/artifacts/private-content-original-c-301d3-es-stable-pages-and-restart/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m62-content-impacts-native-evidence-oct03/original-controlled-01/artifacts/private-content-original-c-301d3-es-stable-pages-and-restart/error-context.md
+
+  1 failed
+    tests/e2e/content-impacts.spec.ts:28:1 › native edit publication discovers actual impacts and preserves human decisions through CAS, lost reply, IDB failure, access changes, stable pages and restart 

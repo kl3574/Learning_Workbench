@@ -1,0 +1,58 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/draftEditor/DraftEditor.test.tsx src/features/editPublication/editPublicationCommands.test.ts -t existing exact dependency|text editing exposes
+
+
+ RUN  v5.0.0 $HOME/.cache/learning-workbench-acceptance/m62-text-edit-dependencies-oct02/apps/web
+
+ ❯ src/features/editPublication/editPublicationCommands.test.ts (5 tests | 1 failed | 4 skipped) 6ms
+   × existing exact dependency refs and order stay bound to the original base and publication journal 5ms
+ ❯ src/features/draftEditor/DraftEditor.test.tsx (6 tests | 1 failed | 5 skipped) 84ms
+   × text editing exposes preserved exact dependencies as read-only while concepts and other kinds stay unsupported 82ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/draftEditor/DraftEditor.test.tsx > text editing exposes preserved exact dependencies as read-only while concepts and other kinds stay unsupported
+TestingLibraryElementError: Unable to find an accessible element with the role "button" and name "编辑此精确文本块"
+
+There are no accessible roles. But there might be some inaccessible roles. If you wish to access them, then set the `hidden` option to `true`. Learn more about this here: https://testing-library.com/docs/dom-testing-library/api-queries#byrole
+
+Ignored nodes: comments, script, style
+[36m<body>[39m
+  [36m<div />[39m
+[36m</body>[39m
+ ❯ Object.getElementError ../../../m62-public-safe-oct02/apps/web/node_modules/@testing-library/dom/dist/config.js:37:19
+ ❯ ../../../m62-public-safe-oct02/apps/web/node_modules/@testing-library/dom/dist/query-helpers.js:76:38
+ ❯ ../../../m62-public-safe-oct02/apps/web/node_modules/@testing-library/dom/dist/query-helpers.js:52:17
+ ❯ ../../../m62-public-safe-oct02/apps/web/node_modules/@testing-library/dom/dist/query-helpers.js:95:19
+ ❯ src/features/draftEditor/DraftEditor.test.tsx:25:26
+     23|   const port: EditPort = { verifyBase: vi.fn(async () => {}), session:…
+     24|   const view = render(<DraftEditor workspace={workspace} block={source…
+     25|   fireEvent.click(screen.getByRole('button', { name: '编辑此精确文本块' }))
+       |                          ^
+     26|   const shown = await screen.findByLabelText('原精确依赖只读记录')
+     27|   expect(JSON.parse(shown.textContent!)).toEqual(refs)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/features/editPublication/editPublicationCommands.test.ts > existing exact dependency refs and order stay bound to the original base and publication journal
+Error: 编辑稿发布基准与原块、准确候选、审核或目标引用不一致。
+ ❯ invalid src/features/editPublication/editPublicationSchema.ts:10:38
+      8| export type EditPublicationBasis = { owner: 'authoring_edit'; snapshot…
+      9|   candidate: DraftCandidate; target: PublicationTarget; review: Stored…
+     10| const invalid = (): never => { throw new Error('编辑稿发布基准与原块、准确候选、审核或目标引…
+       |                                      ^
+     11| export function checkedEditBasis(value: EditPublicationBasis): EditPub…
+     12|   if (!exactObject(value, ['owner', 'snapshot', 'base', 'candidate', '…
+ ❯ checkedEditBasis src/features/editPublication/editPublicationSchema.ts:20:108
+ ❯ prepareEditBasis src/features/editPublication/editPublicationSchema.ts:31:10
+ ❯ src/features/editPublication/editPublicationCommands.test.ts:17:17
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 9 skipped (11)
+   Start at  23:34:52
+   Duration  843ms (environment 36%, transform 36%, import 20%, tests 7%)
+

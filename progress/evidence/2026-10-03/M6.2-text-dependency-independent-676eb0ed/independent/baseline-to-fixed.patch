@@ -1,0 +1,800 @@
+diff --git a/services/api/app/application/content.py b/services/api/app/application/content.py
+index 4dc1fbbd..7ed18297 100644
+--- a/services/api/app/application/content.py
++++ b/services/api/app/application/content.py
+@@ -9,6 +9,7 @@ import re
+ import secrets
+ import sqlite3
+ import time
++from typing import Literal
+ 
+ from pydantic import ValidationError
+ 
+@@ -27,6 +28,7 @@ from ..infrastructure.database import Database
+ from ..infrastructure.notes_repository import mark_stale_notes
+ from ..infrastructure.security import guard_subject_access
+ from .content_impact import ContentImpactSnapshot, impact_snapshot
++from .content_dependency_models import ContentDependencyEdge, ContentDependencyWitness
+ from .errors import ApiError
+ 
+ 
+@@ -409,7 +411,7 @@ class ContentService:
+         return refs[0]
+ 
+     def verify_retained_dependencies_in_transaction(self, connection: sqlite3.Connection,
+-                                                    workspace_id: str, expected: dm.ContentRef) -> None:
++                                                    workspace_id: str, expected: dm.ContentRef) -> ContentDependencyWitness:
+         """Verify existing public edges and original pins, never resolve them to current.
+ 
+         The caller owns its transaction and admission. Historical reads/ACKs may
+@@ -421,6 +423,7 @@ class ContentService:
+         pending: list[PublishedModel] = [block]
+         graph: dict[str, list[str]] = {}
+         edge_count = 0
++        edges: dict[bytes, ContentDependencyEdge] = {}
+         try:
+             while pending:
+                 value = pending.pop()
+@@ -433,7 +436,7 @@ class ContentService:
+                     if value.body_path.startswith('private/'):
+                         raise ApiError(403, 'CONTENT_DEPENDENCY_PROTECTED', '精确依赖包含受保护正文。')
+                     self.verify_publication_in_transaction(connection, workspace_id, owner)
+-                targets = [(ref, 'reference') for ref in refs_in(value)]
++                targets: list[tuple[dm.ContentRef, Literal['reference', 'concept']]] = [(ref, 'reference') for ref in refs_in(value)]
+                 targets.extend((reference(repository.concept_dependency(value, identifier)), 'concept')
+                                for identifier in concept_ids(value))
+                 # Course dependencies also retain their full original concept
+@@ -467,7 +470,12 @@ class ContentService:
+                     if reference(stored.value) != ref:
+                         raise damaged()
+                     pending.append(stored.value)
++                for ref, relation in targets:
++                    edge = ContentDependencyEdge(owner_ref=owner, target_ref=ref, relation=relation)
++                    edges[canonical_bytes(edge)] = edge
+             validate_dag(graph)
++            return ContentDependencyWitness(version='content-dependency-witness-v1', root_ref=expected,
++                edges=[edges[key] for key in sorted(edges)])
+         except ApiError as error:
+             if error.status == 404:
+                 raise damaged() from None
+@@ -476,7 +484,8 @@ class ContentService:
+             raise damaged() from None
+ 
+     def publish_edited_block_in_transaction(self, connection: sqlite3.Connection, workspace_id: str,
+-                                            base: dm.ContentRef, block: dm.ContentBlock, body: bytes) -> dm.ContentRef:
++                                            base: dm.ContentRef, block: dm.ContentBlock, body: bytes,
++                                            *, expected_dependencies: ContentDependencyWitness | None = None) -> dm.ContentRef:
+         """Exact active current-base CAS; old body/history and invalidation remain Content-owned."""
+         if not connection.in_transaction:
+             raise ApiError(409, 'TRANSACTION_REQUIRED', '发布需要当前事务。')
+@@ -494,10 +503,16 @@ class ContentService:
+         if block != expected or block.kind != 'text' or block.concepts:
+             raise invalid()
+         if original.depends_on:
+-            self.verify_retained_dependencies_in_transaction(connection, workspace_id, base)
++            if self.verify_retained_dependencies_in_transaction(connection, workspace_id, base) != expected_dependencies:
++                raise damaged()
++        elif expected_dependencies is not None:
++            raise damaged()
+         refs = self.publish_in_transaction(connection, workspace_id, [block], {block.body_path: body})
+         if refs != [reference(block)] or reference(repository.current(block.id).value) != refs[0]:
+             raise damaged()
++        if expected_dependencies is not None and self.verify_retained_dependencies_in_transaction(
++                connection, workspace_id, refs[0]) != expected_dependencies.revised_root(refs[0]):
++            raise damaged()
+         return refs[0]
+ 
+     def publish_restored_block_in_transaction(self, connection: sqlite3.Connection, workspace_id: str,
+diff --git a/services/api/app/application/content_dependency_models.py b/services/api/app/application/content_dependency_models.py
+new file mode 100644
+index 00000000..471f3979
+--- /dev/null
++++ b/services/api/app/application/content_dependency_models.py
+@@ -0,0 +1,34 @@
++"""Internal Content-owned witness of exact retained dependency edges."""
++from typing import Literal, Self
++from pydantic import ConfigDict, Field, model_validator
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import canonical_bytes
++
++
++class ContentDependencyEdge(dm.StrictModel):
++    model_config = ConfigDict(hide_input_in_errors=True)
++    owner_ref: dm.ContentRef
++    target_ref: dm.ContentRef
++    relation: Literal['reference', 'concept']
++
++
++class ContentDependencyWitness(dm.StrictModel):
++    model_config = ConfigDict(hide_input_in_errors=True)
++    version: Literal['content-dependency-witness-v1']
++    root_ref: dm.ContentRef
++    edges: list[ContentDependencyEdge] = Field(max_length=100000)
++
++    @model_validator(mode='after')
++    def ordered(self) -> Self:
++        keys = [canonical_bytes(edge) for edge in self.edges]
++        if keys != sorted(set(keys)):
++            raise ValueError('dependency witness must contain ordered unique original edges')
++        return self
++
++    def revised_root(self, ref: dm.ContentRef) -> 'ContentDependencyWitness':
++        """Only the edited root advances; every target and descendant pin stays exact."""
++        if ref.entity != self.root_ref.entity or ref.id != self.root_ref.id or ref.revision != self.root_ref.revision + 1:
++            raise ValueError('dependency witness can only retain edges for the next same root revision')
++        edges = [ContentDependencyEdge(owner_ref=ref if edge.owner_ref == self.root_ref else edge.owner_ref,
++                 target_ref=edge.target_ref, relation=edge.relation) for edge in self.edges]
++        return ContentDependencyWitness(version=self.version, root_ref=ref, edges=sorted(edges, key=canonical_bytes))
+diff --git a/services/api/app/application/content_draft_source.py b/services/api/app/application/content_draft_source.py
+index db88ac88..fb9ebaac 100644
+--- a/services/api/app/application/content_draft_source.py
++++ b/services/api/app/application/content_draft_source.py
+@@ -1,5 +1,6 @@
+ """Content-owned exact public base and retained provenance, in the caller transaction."""
+ import sqlite3
++from pydantic import TypeAdapter
+ 
+ from packages.contracts import domain_models as dm
+ from ..infrastructure.database import Database
+@@ -7,14 +8,14 @@ from ..infrastructure.provenance_repository import ProvenanceRepository
+ from ..infrastructure.security import SessionIdentity, current_session_identity
+ from .authoring_context import AuthoringContext
+ from .content import ContentService
+-from .draft_edit_models import DraftBaseMaterial, checked, integrity, unsupported, unresolved_warning
++from .draft_edit_models import DraftBaseMaterial, DependencyDraftBaseMaterial, StoredDraftBase, checked, integrity, unsupported, unresolved_warning
+ 
+ 
+ class ContentDraftSource:
+     def __init__(self, database: Database):
+         self.content = ContentService(database)
+ 
+-    def read_exact(self, conn: sqlite3.Connection, identity: SessionIdentity, ref: dm.ContentRef) -> DraftBaseMaterial:
++    def read_exact(self, conn: sqlite3.Connection, identity: SessionIdentity, ref: dm.ContentRef) -> StoredDraftBase:
+         current = current_session_identity(conn, identity)
+         AuthoringContext.check_access(conn, current)
+         ref = checked(dm.ContentRef, ref, request=True)
+@@ -23,16 +24,22 @@ class ContentDraftSource:
+         block, raw = self.content.verify_publication_in_transaction(conn, current.workspace_id, ref)
+         if block.kind != 'text' or block.concepts or block.body_path.startswith('private/'):
+             raise unsupported()
+-        if block.depends_on:
+-            self.content.verify_retained_dependencies_in_transaction(conn, current.workspace_id, ref)
++        dependencies = self.content.verify_retained_dependencies_in_transaction(conn, current.workspace_id, ref) if block.depends_on else None
+         provenance = ProvenanceRepository(conn, current.workspace_id).bounded_frozen(block, max_bytes=2_000_000)
+         try:
++            if dependencies is not None:
++                return DependencyDraftBaseMaterial(version='draft-base-material-dependencies-v2', ref=ref, metadata=block,
++                    body_markdown=raw.decode('utf-8'), provenance=provenance,
++                    warnings=provenance.warnings if provenance else [unresolved_warning()], dependency_witness=dependencies)
+             return DraftBaseMaterial(ref=ref, metadata=block, body_markdown=raw.decode('utf-8'), provenance=provenance,
+                 warnings=provenance.warnings if provenance else [unresolved_warning()])
+         except (ValueError, TypeError, UnicodeError):
+             raise integrity() from None
+ 
+-    def verify_exact(self, conn: sqlite3.Connection, identity: SessionIdentity, expected: DraftBaseMaterial) -> None:
+-        expected = checked(DraftBaseMaterial, expected)
++    def verify_exact(self, conn: sqlite3.Connection, identity: SessionIdentity, expected: StoredDraftBase) -> None:
++        try:
++            expected = TypeAdapter(StoredDraftBase).validate_python(expected.model_dump(mode='python', warnings='error'))
++        except (ValueError, TypeError, AttributeError):
++            raise integrity() from None
+         if self.read_exact(conn, identity, expected.ref) != expected:
+             raise integrity()
+diff --git a/services/api/app/application/draft_edit_models.py b/services/api/app/application/draft_edit_models.py
+index d8016c8b..531c08c3 100644
+--- a/services/api/app/application/draft_edit_models.py
++++ b/services/api/app/application/draft_edit_models.py
+@@ -1,5 +1,5 @@
+ """Immutable local edit facts. Construction and stored hashes grant no access."""
+-from typing import Literal, Self, TypeVar
++from typing import Annotated, Literal, Self, TypeVar
+ 
+ from pydantic import BaseModel, Field, model_validator
+ from packages.contracts import domain_models as dm
+@@ -7,6 +7,7 @@ from packages.contracts.canonical import metadata_sha256, sha256_bytes
+ from ..draft_dto import DraftCreateWrite, DraftPatchWrite, DraftCreated, DraftPatched, DraftModel
+ from ..infrastructure.provenance_repository import FrozenProvenance
+ from .errors import ApiError
++from .content_dependency_models import ContentDependencyWitness
+ 
+ M = TypeVar('M', bound=BaseModel)
+ MAX_BODY_BYTES = 2_000_000
+@@ -49,20 +50,46 @@ class DraftBaseMaterial(DraftModel):
+ 
+     @model_validator(mode='after')
+     def exact(self) -> Self:
+-        value = self.metadata
+-        if (self.ref.entity != 'block' or self.ref.id != value.id or self.ref.revision != value.revision
+-                or self.ref.sha256 != metadata_sha256(value) or value.kind != 'text' or value.concepts
+-                or value.body_path.startswith('private/') or value.body_sha256 != body_hash(self.body_markdown)):
+-            raise ValueError('base must be the exact supported historical text block')
+-        if self.provenance is not None:
+-            if (self.provenance.block_ref != self.ref or {x.id for x in self.provenance.citations} != set(value.citations)
+-                    or len(self.provenance.citations) != len(value.citations) or self.warnings != self.provenance.warnings):
+-                raise ValueError('base provenance must bind its exact metadata and original warnings')
+-        elif self.warnings != [unresolved_warning()]:
+-            raise ValueError('unresolved sources must retain their actual warning')
++        _verify_base(self)
++        if self.metadata.depends_on:
++            raise ValueError('legacy base has no frozen dependency witness')
+         return self
+ 
+ 
++class DependencyDraftBaseMaterial(DraftModel):
++    version: Literal['draft-base-material-dependencies-v2']
++    ref: dm.ContentRef
++    metadata: dm.ContentBlock
++    body_markdown: str = Field(max_length=400000)
++    provenance: FrozenProvenance | None
++    warnings: list[dm.Warning]
++    dependency_witness: ContentDependencyWitness
++
++    @model_validator(mode='after')
++    def exact(self) -> Self:
++        _verify_base(self)
++        if not self.metadata.depends_on or self.dependency_witness.root_ref != self.ref:
++            raise ValueError('dependency base must bind its original exact root and witness')
++        return self
++
++
++StoredDraftBase = Annotated[DraftBaseMaterial | DependencyDraftBaseMaterial, Field(discriminator='version')]
++
++
++def _verify_base(base: DraftBaseMaterial | DependencyDraftBaseMaterial) -> None:
++    value = base.metadata
++    if (base.ref.entity != 'block' or base.ref.id != value.id or base.ref.revision != value.revision
++            or base.ref.sha256 != metadata_sha256(value) or value.kind != 'text' or value.concepts
++            or value.body_path.startswith('private/') or value.body_sha256 != body_hash(base.body_markdown)):
++        raise ValueError('base must be the exact supported historical text block')
++    if base.provenance is not None:
++        if (base.provenance.block_ref != base.ref or {x.id for x in base.provenance.citations} != set(value.citations)
++                or len(base.provenance.citations) != len(value.citations) or base.warnings != base.provenance.warnings):
++            raise ValueError('base provenance must bind its exact metadata and original warnings')
++    elif base.warnings != [unresolved_warning()]:
++        raise ValueError('unresolved sources must retain their actual warning')
++
++
+ def unresolved_warning() -> dm.Warning:
+     return dm.Warning(code='PROVENANCE_UNRESOLVED', severity='warning',
+                       message='此精确修订尚无可核验的冻结来源记录；原始引用保留，未猜测来源。')
+@@ -106,7 +133,7 @@ class EditDraftSnapshot(DraftModel):
+         return self
+ 
+ 
+-def initial_payload(base: DraftBaseMaterial, title: str) -> DraftEditPayload:
++def initial_payload(base: StoredDraftBase, title: str) -> DraftEditPayload:
+     return DraftEditPayload(version='text-block-edit-v1', entity='block', kind='text',
+         base_ref=base.ref, body_path=base.metadata.body_path, citations=base.metadata.citations,
+         title=title, body_markdown=base.body_markdown, body_sha256=base.metadata.body_sha256,
+@@ -129,7 +156,7 @@ def apply_patch(payload: DraftEditPayload, request: DraftPatchWrite) -> DraftEdi
+     return result
+ 
+ 
+-def edit_warnings(base: DraftBaseMaterial) -> list[dm.Warning]:
++def edit_warnings(base: StoredDraftBase) -> list[dm.Warning]:
+     return [*base.warnings, dm.Warning(code='DRAFT_EDIT_UNREVIEWED', severity='warning',
+         message='此编辑候选尚未取得数学、来源或教学批准；继承来源不是对新正文的认证。')]
+ 
+@@ -138,7 +165,7 @@ class DraftEditRecord(DraftModel):
+     version: Literal['draft-edit-record-v1'] = 'draft-edit-record-v1'
+     workspace_id: dm.Id
+     candidate: dm.DraftCandidate
+-    base: DraftBaseMaterial
++    base: StoredDraftBase
+     payload: DraftEditPayload
+     actor_id: dm.Id
+     command_key: str | None
+diff --git a/services/api/app/application/draft_edits.py b/services/api/app/application/draft_edits.py
+index 64b55c6c..6dcd5503 100644
+--- a/services/api/app/application/draft_edits.py
++++ b/services/api/app/application/draft_edits.py
+@@ -18,7 +18,7 @@ from .content_draft_source import ContentDraftSource
+ from .draft_candidate_models import ResolvedDraftCandidate, match_candidate
+ from .draft_candidates import DraftCandidates
+ from .draft_edit_models import (
+-    DraftEditRecord, EditDraftSnapshot, MAX_VERSIONS, ack, apply_patch, checked, initial_payload, invalid, edit_warnings,
++    DraftEditRecord, DependencyDraftBaseMaterial, EditDraftSnapshot, MAX_VERSIONS, ack, apply_patch, checked, initial_payload, invalid, edit_warnings,
+     unsupported, integrity,
+ )
+ from .errors import ApiError
+@@ -114,6 +114,11 @@ class DraftEditService:
+                             conn, record.workspace_id, published.result)
+                         if block != published.block or body != record.payload.body_markdown.encode('utf-8'):
+                             raise integrity()
++                        if isinstance(record.base, DependencyDraftBaseMaterial):
++                            dependencies = self.source.content.verify_retained_dependencies_in_transaction(
++                                conn, record.workspace_id, published.result)
++                            if dependencies != record.base.dependency_witness.revised_root(published.result):
++                                raise integrity()
+                         state = 'published'
+                     return checked(EditDraftSnapshot, EditDraftSnapshot(
+                         owner='authoring_edit', candidate=record.candidate, base_ref=record.base.ref,
+diff --git a/services/api/app/application/draft_publication.py b/services/api/app/application/draft_publication.py
+index cb1e06bd..da645f31 100644
+--- a/services/api/app/application/draft_publication.py
++++ b/services/api/app/application/draft_publication.py
+@@ -12,6 +12,7 @@ from ..infrastructure.security import SessionIdentity, current_session_identity
+ from .authoring_context import AuthoringContext
+ from .content import ContentService
+ from .draft_edits import DraftEditService
++from .draft_edit_models import DependencyDraftBaseMaterial
+ from .edit_publication import EditBlockPublication
+ from .content_restore import ContentRestoreService
+ from .restore_publication import RestoreBlockPublication
+@@ -80,6 +81,10 @@ class DraftPublicationService:
+         block, raw = self.content.verify_publication_in_transaction(conn, identity.workspace_id, record.result)
+         if block != expected_block or raw != expected_body:
+             raise integrity()
++        if isinstance(record, EditPublicationRecord) and isinstance(record.base, DependencyDraftBaseMaterial):
++            actual = self.content.verify_retained_dependencies_in_transaction(conn, identity.workspace_id, record.result)
++            if actual != record.base.dependency_witness.revised_root(record.result):
++                raise integrity()
+         return record.result
+ 
+     def verify_recorded(self, conn: sqlite3.Connection, identity: SessionIdentity,
+@@ -104,7 +109,9 @@ class DraftPublicationService:
+             raise integrity()
+         repo.advance(identifier, 2, 'in_review', 'approved', utc_now())
+         result = self.content.publish_edited_block_in_transaction(conn, current.workspace_id,
+-            prepared.record.base.ref, prepared.block, prepared.body)
++            prepared.record.base.ref, prepared.block, prepared.body,
++            expected_dependencies=prepared.record.base.dependency_witness
++                if isinstance(prepared.record.base, DependencyDraftBaseMaterial) else None)
+         assert isinstance(admission, PublicationAdmission)
+         record = EditPublicationRecord(version='edit-publication-v1', id=identifier,
+             workspace_id=current.workspace_id, owner='authoring', candidate=material.candidate,
+diff --git a/services/api/app/application/publication_models.py b/services/api/app/application/publication_models.py
+index 95cc09e8..5d8833d2 100644
+--- a/services/api/app/application/publication_models.py
++++ b/services/api/app/application/publication_models.py
+@@ -9,7 +9,7 @@ from packages.contracts.canonical import metadata_sha256, sha256_bytes
+ from ..authoring_dto import AuthoringModel, WorkedExamplePayload
+ from ..infrastructure.provenance_repository import FrozenProvenance
+ from .errors import ApiError
+-from .draft_edit_models import DraftBaseMaterial, DraftEditPayload
++from .draft_edit_models import StoredDraftBase, DraftEditPayload
+ from .content_restore_models import RestorePayload
+ from .publication_admission_models import DraftPublishWrite, PublicationAdmission, RestoreNumericAdmission
+ from .review_material_models import CheckedReviewMaterial
+@@ -91,7 +91,7 @@ class EditPublicationRecord(AuthoringModel):
+     admission: PublicationAdmission
+     human_record_sha256: dm.Sha256
+     edit_record_sha256: dm.Sha256
+-    base: DraftBaseMaterial
++    base: StoredDraftBase
+     payload: DraftEditPayload
+     block: dm.ContentBlock
+     result: dm.ContentRef
+diff --git a/tests/contract/test_draft_edit_legacy_records.py b/tests/contract/test_draft_edit_legacy_records.py
+new file mode 100644
+index 00000000..d8eb9421
+--- /dev/null
++++ b/tests/contract/test_draft_edit_legacy_records.py
+@@ -0,0 +1,71 @@
++"""Actual old owner bytes stay exact; missing original dependency pins are never inferred."""
++import json
++from pathlib import Path
++
++import pytest
++from pydantic import ValidationError
++from packages.contracts.canonical import canonical_bytes, metadata_sha256, sha256_bytes
++from services.api.app.application.draft_edit_models import DraftEditRecord, DraftEditCommand, ack
++from services.api.app.application.errors import ApiError
++from services.api.app.application.publication_models import EditPublicationRecord
++from services.api.app.infrastructure.draft_edit_repository import DraftEditRepository
++
++FIXTURES = Path(__file__).resolve().parents[1] / 'fixtures' / 'draft_edit_legacy_v1'
++
++
++def original(directory, name):
++    folder = FIXTURES / directory
++    manifest = json.loads((folder / 'manifest.json').read_bytes())
++    assert manifest['source_commit'] == '316bf693e52f1ca08a675fc7671f4d9cebad3e8b'
++    raw = (folder / name).read_bytes()
++    entry = next(item for item in manifest['files'] if item['path'] == name)
++    assert (len(raw), sha256_bytes(raw)) == (entry['bytes'], entry['sha256'])
++    return raw
++
++
++@pytest.mark.parametrize('revision', [1, 2])
++def test_original_no_dependency_v1_record_hash_payload_and_http_ack_remain_exact(revision):
++    folder = 'empty-dependencies-published'
++    raw = original(folder, f'version-r{revision}.json')
++    record = DraftEditRepository.decode(DraftEditRecord, {'record_json': raw.decode(), 'record_sha256': sha256_bytes(raw)})
++    assert canonical_bytes(record) == raw
++    assert record.base.version == 'draft-base-material-v1' and not record.base.metadata.depends_on
++    assert 'dependency_witness' not in record.base.model_dump()
++    assert record.payload.base_material_sha256 == metadata_sha256(record.base)
++    assert record.candidate.candidate_sha256 == metadata_sha256(record.payload)
++    assert ack(record).model_dump_json().encode() == original(folder, 'http-post-ack.bin' if revision == 1 else 'http-patch-ack.bin')
++
++
++@pytest.mark.parametrize('revision', [1, 2])
++def test_original_no_dependency_v1_command_and_ack_remain_exact(revision):
++    folder = 'empty-dependencies-published'
++    raw = original(folder, f'command-r{revision}.json')
++    command = DraftEditRepository.decode(DraftEditCommand, {'record_json': raw.decode(), 'record_sha256': sha256_bytes(raw)})
++    assert canonical_bytes(command) == raw
++    assert command.record_sha256 == sha256_bytes(original(folder, f'version-r{revision}.json'))
++    assert command.ack.model_dump_json().encode() == original(folder, 'http-post-ack.bin' if revision == 1 else 'http-patch-ack.bin')
++
++
++def test_original_no_dependency_v1_publication_and_result_ack_remain_exact():
++    folder = 'empty-dependencies-published'
++    raw = original(folder, 'publication-record.json')
++    publication = EditPublicationRecord.model_validate_json(raw)
++    assert canonical_bytes(publication) == raw
++    assert publication.base.version == 'draft-base-material-v1'
++    assert publication.edit_record_sha256 == sha256_bytes(original(folder, 'version-r2.json'))
++    assert publication.payload.base_material_sha256 == metadata_sha256(publication.base)
++    assert publication.result.model_dump_json().encode() == original(folder, 'http-publication-ack.bin')
++
++
++@pytest.mark.parametrize('revision', [1, 2])
++def test_actual_unreleased_v1_dependency_records_fail_closed_without_default_witness(revision):
++    raw = original('dependencies-no-witness-unpublished', f'version-r{revision}.json')
++    original_value = json.loads(raw)
++    assert original_value['base']['version'] == 'draft-base-material-v1'
++    assert original_value['base']['metadata']['depends_on'] and 'dependency_witness' not in original_value['base']
++    assert metadata_sha256(original_value['base']) == original_value['payload']['base_material_sha256']
++    with pytest.raises(ValidationError, match='legacy base has no frozen dependency witness'):
++        DraftEditRecord.model_validate_json(raw)
++    with pytest.raises(ApiError) as caught:
++        DraftEditRepository.decode(DraftEditRecord, {'record_json': raw.decode(), 'record_sha256': sha256_bytes(raw)})
++    assert caught.value.code == 'DRAFT_EDIT_INTEGRITY'
+diff --git a/tests/fixtures/draft_edit_legacy_v1/README.md b/tests/fixtures/draft_edit_legacy_v1/README.md
+new file mode 100644
+index 00000000..05c0b05c
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v1/README.md
+@@ -0,0 +1,7 @@
++# Original v1 synthetic owner records
++
++Captured from fixed source `316bf693e52f1ca08a675fc7671f4d9cebad3e8b` by two independent real local HTTP Edit fixtures. `empty-dependencies-published` ran create, PATCH, machine Review, an explicitly synthetic human decision and publication. `dependencies-no-witness-unpublished` ran create and PATCH against an original text block with two dependencies.
++
++Record JSON files are the exact SQLite owner record bytes, with their stored digests checked during capture. ACK files are exact response body bytes obtained by replaying the original complete requests and keys; table hashes were unchanged by replay. Each directory manifest binds its raw bytes. No headers, session tokens, database copy or real teaching material are included. The synthetic decisions prove protocol behavior only.
++
++Keep these bytes unchanged. New code must retain the no-dependency v1 JSON, hashes and ACKs. The unreleased v1 dependency records lack a frozen dependency witness and must fail closed; they must never receive a default witness or be silently rehashed as v2.
+diff --git a/tests/fixtures/draft_edit_legacy_v1/dependencies-no-witness-unpublished/command-r1.json b/tests/fixtures/draft_edit_legacy_v1/dependencies-no-witness-unpublished/command-r1.json
+new file mode 100644
+index 00000000..cafe1f80
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v1/dependencies-no-witness-unpublished/command-r1.json
+@@ -0,0 +1 @@
++{"ack":{"base_ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"draft_id":"draft_62870010aa1146c7acfae6523f685400","revision":1,"state":"draft"},"actor_id":"session_091668507d714eae81abce305c428279","key":"dependency-create","record_sha256":"90d5ae49602d8442f4a669f2d1db8f487c2a55c2d72d62af253fed7c884f947d","request":{"base_ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"kind":"block","title":"Synthetic corrected title"},"route":"POST /drafts","version":"draft-edit-command-v1","workspace_id":"workspace_44d54479965a4d8d86117116d0fe399f"}
+\ No newline at end of file
+diff --git a/tests/fixtures/draft_edit_legacy_v1/dependencies-no-witness-unpublished/command-r2.json b/tests/fixtures/draft_edit_legacy_v1/dependencies-no-witness-unpublished/command-r2.json
+new file mode 100644
+index 00000000..047d1596
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v1/dependencies-no-witness-unpublished/command-r2.json
+@@ -0,0 +1 @@
++{"ack":{"draft_id":"draft_62870010aa1146c7acfae6523f685400","revision":2,"validation_warnings":[{"code":"PROVENANCE_UNRESOLVED","locator":null,"message":"此精确修订尚无可核验的冻结来源记录；原始引用保留，未猜测来源。","severity":"warning"},{"code":"DRAFT_EDIT_UNREVIEWED","locator":null,"message":"此编辑候选尚未取得数学、来源或教学批准；继承来源不是对新正文的认证。","severity":"warning"}]},"actor_id":"session_091668507d714eae81abce305c428279","key":"dependency-patch","record_sha256":"188244c4852bfe5e41c92416032588bf9cd01ff067fd2d98cfe2adcb6ce19a04","request":{"expected_revision":1,"patches":[{"field":"body_markdown","value":"Corrected synthetic prose.\n"}]},"route":"PATCH /drafts/draft_62870010aa1146c7acfae6523f685400","version":"draft-edit-command-v1","workspace_id":"workspace_44d54479965a4d8d86117116d0fe399f"}
+\ No newline at end of file
+diff --git a/tests/fixtures/draft_edit_legacy_v1/dependencies-no-witness-unpublished/http-patch-ack.bin b/tests/fixtures/draft_edit_legacy_v1/dependencies-no-witness-unpublished/http-patch-ack.bin
+new file mode 100644
+index 00000000..12b85f0d
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v1/dependencies-no-witness-unpublished/http-patch-ack.bin
+@@ -0,0 +1 @@
++{"draft_id":"draft_62870010aa1146c7acfae6523f685400","revision":2,"validation_warnings":[{"code":"PROVENANCE_UNRESOLVED","message":"此精确修订尚无可核验的冻结来源记录；原始引用保留，未猜测来源。","locator":null,"severity":"warning"},{"code":"DRAFT_EDIT_UNREVIEWED","message":"此编辑候选尚未取得数学、来源或教学批准；继承来源不是对新正文的认证。","locator":null,"severity":"warning"}]}
+\ No newline at end of file
+diff --git a/tests/fixtures/draft_edit_legacy_v1/dependencies-no-witness-unpublished/http-post-ack.bin b/tests/fixtures/draft_edit_legacy_v1/dependencies-no-witness-unpublished/http-post-ack.bin
+new file mode 100644
+index 00000000..a332bb0a
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v1/dependencies-no-witness-unpublished/http-post-ack.bin
+@@ -0,0 +1 @@
++{"draft_id":"draft_62870010aa1146c7acfae6523f685400","revision":1,"base_ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"state":"draft"}
+\ No newline at end of file
+diff --git a/tests/fixtures/draft_edit_legacy_v1/dependencies-no-witness-unpublished/manifest.json b/tests/fixtures/draft_edit_legacy_v1/dependencies-no-witness-unpublished/manifest.json
+new file mode 100644
+index 00000000..af535414
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v1/dependencies-no-witness-unpublished/manifest.json
+@@ -0,0 +1,68 @@
++{
++  "source_commit": "316bf693e52f1ca08a675fc7671f4d9cebad3e8b",
++  "synthetic": true,
++  "draft_id": "draft_62870010aa1146c7acfae6523f685400",
++  "workspace_id": "workspace_44d54479965a4d8d86117116d0fe399f",
++  "versions": [
++    {
++      "revision": 1,
++      "candidate_sha256": "b704851fbfaa60ea3106e41ee5af7d37650ccb3a8df5089cf7c0f590743a01d9",
++      "record_sha256": "90d5ae49602d8442f4a669f2d1db8f487c2a55c2d72d62af253fed7c884f947d",
++      "parent_sha256": null
++    },
++    {
++      "revision": 2,
++      "candidate_sha256": "2ebdc85bd1be5dc861e1f19e11bdd2ecac8f36391aa2cb2f61c1e216e558b75d",
++      "record_sha256": "188244c4852bfe5e41c92416032588bf9cd01ff067fd2d98cfe2adcb6ce19a04",
++      "parent_sha256": "90d5ae49602d8442f4a669f2d1db8f487c2a55c2d72d62af253fed7c884f947d"
++    }
++  ],
++  "commands": [
++    {
++      "revision": 1,
++      "route": "POST /drafts",
++      "command_key": "dependency-create",
++      "record_sha256": "4f26e6248f66fb772237aa27859143802de6583151446e65a9ae831c23c4e074",
++      "http_status": 201
++    },
++    {
++      "revision": 2,
++      "route": "PATCH /drafts/draft_62870010aa1146c7acfae6523f685400",
++      "command_key": "dependency-patch",
++      "record_sha256": "a7d3697605ba88d02c1f1dae5c59013c53d5b83c34b07699956eb0bbab6cc2e5",
++      "http_status": 200
++    }
++  ],
++  "files": [
++    {
++      "path": "version-r1.json",
++      "bytes": 2561,
++      "sha256": "90d5ae49602d8442f4a669f2d1db8f487c2a55c2d72d62af253fed7c884f947d"
++    },
++    {
++      "path": "version-r2.json",
++      "bytes": 2526,
++      "sha256": "188244c4852bfe5e41c92416032588bf9cd01ff067fd2d98cfe2adcb6ce19a04"
++    },
++    {
++      "path": "command-r1.json",
++      "bytes": 725,
++      "sha256": "4f26e6248f66fb772237aa27859143802de6583151446e65a9ae831c23c4e074"
++    },
++    {
++      "path": "http-post-ack.bin",
++      "bytes": 228,
++      "sha256": "216bd1e8f5fbb7a22ea0493891ff138325c22ee35b8729e14b93796cd944d485"
++    },
++    {
++      "path": "command-r2.json",
++      "bytes": 887,
++      "sha256": "a7d3697605ba88d02c1f1dae5c59013c53d5b83c34b07699956eb0bbab6cc2e5"
++    },
++    {
++      "path": "http-patch-ack.bin",
++      "bytes": 449,
++      "sha256": "e0d5a5cf0837a02ad56cf7bb456522a32bd67705d5c1bd89aa3bcdfc6710b8ff"
++    }
++  ]
++}
+diff --git a/tests/fixtures/draft_edit_legacy_v1/dependencies-no-witness-unpublished/version-r1.json b/tests/fixtures/draft_edit_legacy_v1/dependencies-no-witness-unpublished/version-r1.json
+new file mode 100644
+index 00000000..e26a4a27
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v1/dependencies-no-witness-unpublished/version-r1.json
+@@ -0,0 +1 @@
++{"actor_id":"session_091668507d714eae81abce305c428279","base":{"body_markdown":"Synthetic original base.\n","metadata":{"body_path":"content/edit-dependent.md","body_sha256":"343757b3b428169e8541904f6a179300583c16feb2f345de393626809a9ce78a","citations":[],"concepts":[],"depends_on":[{"entity":"block","id":"edit_dependency_second","revision":1,"sha256":"652e62beb88165d993a4ecd5cfb5950abfadd59f47821329dad443c3c27583e3"},{"entity":"block","id":"edit_dependency_first","revision":1,"sha256":"52008c8137228ab108df7c83704d68c7cef6830fbcf4852173d791855a64368f"}],"entity":"block","id":"edit_dependent_text","kind":"text","revision":1,"schema_version":"3.0.0","title":"Original synthetic text"},"provenance":null,"ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"version":"draft-base-material-v1","warnings":[{"code":"PROVENANCE_UNRESOLVED","locator":null,"message":"此精确修订尚无可核验的冻结来源记录；原始引用保留，未猜测来源。","severity":"warning"}]},"candidate":{"candidate_sha256":"b704851fbfaa60ea3106e41ee5af7d37650ccb3a8df5089cf7c0f590743a01d9","draft_id":"draft_62870010aa1146c7acfae6523f685400","draft_revision":1,"entity":"block"},"command_key":"dependency-create","created_at":"2026-10-02T23:10:42.854029Z","parent_sha256":null,"payload":{"base_material_sha256":"1d34935a8f5808c88670f5b2e99a7557713fe3b6a61389088076323af096231d","base_ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"body_markdown":"Synthetic original base.\n","body_path":"content/edit-dependent.md","body_sha256":"343757b3b428169e8541904f6a179300583c16feb2f345de393626809a9ce78a","citations":[],"entity":"block","kind":"text","title":"Synthetic corrected title","version":"text-block-edit-v1"},"request":{"base_ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"kind":"block","title":"Synthetic corrected title"},"version":"draft-edit-record-v1","warnings":[{"code":"PROVENANCE_UNRESOLVED","locator":null,"message":"此精确修订尚无可核验的冻结来源记录；原始引用保留，未猜测来源。","severity":"warning"},{"code":"DRAFT_EDIT_UNREVIEWED","locator":null,"message":"此编辑候选尚未取得数学、来源或教学批准；继承来源不是对新正文的认证。","severity":"warning"}],"workspace_id":"workspace_44d54479965a4d8d86117116d0fe399f"}
+\ No newline at end of file
+diff --git a/tests/fixtures/draft_edit_legacy_v1/dependencies-no-witness-unpublished/version-r2.json b/tests/fixtures/draft_edit_legacy_v1/dependencies-no-witness-unpublished/version-r2.json
+new file mode 100644
+index 00000000..0eaad7a6
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v1/dependencies-no-witness-unpublished/version-r2.json
+@@ -0,0 +1 @@
++{"actor_id":"session_091668507d714eae81abce305c428279","base":{"body_markdown":"Synthetic original base.\n","metadata":{"body_path":"content/edit-dependent.md","body_sha256":"343757b3b428169e8541904f6a179300583c16feb2f345de393626809a9ce78a","citations":[],"concepts":[],"depends_on":[{"entity":"block","id":"edit_dependency_second","revision":1,"sha256":"652e62beb88165d993a4ecd5cfb5950abfadd59f47821329dad443c3c27583e3"},{"entity":"block","id":"edit_dependency_first","revision":1,"sha256":"52008c8137228ab108df7c83704d68c7cef6830fbcf4852173d791855a64368f"}],"entity":"block","id":"edit_dependent_text","kind":"text","revision":1,"schema_version":"3.0.0","title":"Original synthetic text"},"provenance":null,"ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"version":"draft-base-material-v1","warnings":[{"code":"PROVENANCE_UNRESOLVED","locator":null,"message":"此精确修订尚无可核验的冻结来源记录；原始引用保留，未猜测来源。","severity":"warning"}]},"candidate":{"candidate_sha256":"2ebdc85bd1be5dc861e1f19e11bdd2ecac8f36391aa2cb2f61c1e216e558b75d","draft_id":"draft_62870010aa1146c7acfae6523f685400","draft_revision":2,"entity":"block"},"command_key":"dependency-patch","created_at":"2026-10-02T23:10:42.887910Z","parent_sha256":"90d5ae49602d8442f4a669f2d1db8f487c2a55c2d72d62af253fed7c884f947d","payload":{"base_material_sha256":"1d34935a8f5808c88670f5b2e99a7557713fe3b6a61389088076323af096231d","base_ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"body_markdown":"Corrected synthetic prose.\n","body_path":"content/edit-dependent.md","body_sha256":"66a9d043451eb9cd089172ba1e6f69ad5744edbf5c41152f42381ecc9adfd558","citations":[],"entity":"block","kind":"text","title":"Synthetic corrected title","version":"text-block-edit-v1"},"request":{"expected_revision":1,"patches":[{"field":"body_markdown","value":"Corrected synthetic prose.\n"}]},"version":"draft-edit-record-v1","warnings":[{"code":"PROVENANCE_UNRESOLVED","locator":null,"message":"此精确修订尚无可核验的冻结来源记录；原始引用保留，未猜测来源。","severity":"warning"},{"code":"DRAFT_EDIT_UNREVIEWED","locator":null,"message":"此编辑候选尚未取得数学、来源或教学批准；继承来源不是对新正文的认证。","severity":"warning"}],"workspace_id":"workspace_44d54479965a4d8d86117116d0fe399f"}
+\ No newline at end of file
+diff --git a/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/command-r1.json b/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/command-r1.json
+new file mode 100644
+index 00000000..1456d973
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/command-r1.json
+@@ -0,0 +1 @@
++{"ack":{"base_ref":{"entity":"block","id":"block_3816081ff7038f943f4f32d4c1e23940","revision":1,"sha256":"ddfa0777a220bdc36a4149af07a39025d7cbddaa91b99bbf83ffd74f16f18c0d"},"draft_id":"draft_0c3f45dec64a46fab6c74dbc49f344d5","revision":1,"state":"draft"},"actor_id":"session_21512321d51947eb8290b02b182c32bd","key":"create","record_sha256":"f5ce36fb9ed6e122a3d7e45caf79ad95d60daf201aa465e38f9fce9f77fe797d","request":{"base_ref":{"entity":"block","id":"block_3816081ff7038f943f4f32d4c1e23940","revision":1,"sha256":"ddfa0777a220bdc36a4149af07a39025d7cbddaa91b99bbf83ffd74f16f18c0d"},"kind":"block","title":"Synthetic revised publication"},"route":"POST /drafts","version":"draft-edit-command-v1","workspace_id":"workspace_73dfc365f88d4e4e8d0adacbb09baeaf"}
+\ No newline at end of file
+diff --git a/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/command-r2.json b/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/command-r2.json
+new file mode 100644
+index 00000000..b2918df1
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/command-r2.json
+@@ -0,0 +1 @@
++{"ack":{"draft_id":"draft_0c3f45dec64a46fab6c74dbc49f344d5","revision":2,"validation_warnings":[{"code":"IMPORT_REVIEW_UNVERIFIED","locator":null,"message":"确认解析结果不会认证材料的数学正确性或来源权利。","severity":"warning"},{"code":"DRAFT_EDIT_UNREVIEWED","locator":null,"message":"此编辑候选尚未取得数学、来源或教学批准；继承来源不是对新正文的认证。","severity":"warning"}]},"actor_id":"session_21512321d51947eb8290b02b182c32bd","key":"patch","record_sha256":"216b5d78e8560249345518e84cada8413ffe53dd531352c75cad08cb74e972d7","request":{"expected_revision":1,"patches":[{"field":"body_markdown","value":"精确修订文本 🌏\nSynthetic revised prose.\n"}]},"route":"PATCH /drafts/draft_0c3f45dec64a46fab6c74dbc49f344d5","version":"draft-edit-command-v1","workspace_id":"workspace_73dfc365f88d4e4e8d0adacbb09baeaf"}
+\ No newline at end of file
+diff --git a/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/http-patch-ack.bin b/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/http-patch-ack.bin
+new file mode 100644
+index 00000000..e81e1071
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/http-patch-ack.bin
+@@ -0,0 +1 @@
++{"draft_id":"draft_0c3f45dec64a46fab6c74dbc49f344d5","revision":2,"validation_warnings":[{"code":"IMPORT_REVIEW_UNVERIFIED","message":"确认解析结果不会认证材料的数学正确性或来源权利。","locator":null,"severity":"warning"},{"code":"DRAFT_EDIT_UNREVIEWED","message":"此编辑候选尚未取得数学、来源或教学批准；继承来源不是对新正文的认证。","locator":null,"severity":"warning"}]}
+\ No newline at end of file
+diff --git a/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/http-post-ack.bin b/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/http-post-ack.bin
+new file mode 100644
+index 00000000..711bb372
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/http-post-ack.bin
+@@ -0,0 +1 @@
++{"draft_id":"draft_0c3f45dec64a46fab6c74dbc49f344d5","revision":1,"base_ref":{"entity":"block","id":"block_3816081ff7038f943f4f32d4c1e23940","revision":1,"sha256":"ddfa0777a220bdc36a4149af07a39025d7cbddaa91b99bbf83ffd74f16f18c0d"},"state":"draft"}
+\ No newline at end of file
+diff --git a/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/http-publication-ack.bin b/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/http-publication-ack.bin
+new file mode 100644
+index 00000000..044ed3bf
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/http-publication-ack.bin
+@@ -0,0 +1 @@
++{"entity":"block","id":"block_3816081ff7038f943f4f32d4c1e23940","revision":2,"sha256":"d2e91f56de8c0165b140fda47994ce942f209f469e1cf790b6fa4055d1920636"}
+\ No newline at end of file
+diff --git a/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/manifest.json b/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/manifest.json
+new file mode 100644
+index 00000000..ecb8ad4a
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/manifest.json
+@@ -0,0 +1,82 @@
++{
++  "source_commit": "316bf693e52f1ca08a675fc7671f4d9cebad3e8b",
++  "synthetic": true,
++  "draft_id": "draft_0c3f45dec64a46fab6c74dbc49f344d5",
++  "workspace_id": "workspace_73dfc365f88d4e4e8d0adacbb09baeaf",
++  "versions": [
++    {
++      "revision": 1,
++      "candidate_sha256": "81fb96d6fdc3ec6a349a6f8eccd64f2aa301002f77ce4317a59ee21670372a19",
++      "record_sha256": "f5ce36fb9ed6e122a3d7e45caf79ad95d60daf201aa465e38f9fce9f77fe797d",
++      "parent_sha256": null
++    },
++    {
++      "revision": 2,
++      "candidate_sha256": "0cf3e594bc627085da6cdf56809cd61aa3b2c56f2227d1976d23737c50556f8d",
++      "record_sha256": "216b5d78e8560249345518e84cada8413ffe53dd531352c75cad08cb74e972d7",
++      "parent_sha256": "f5ce36fb9ed6e122a3d7e45caf79ad95d60daf201aa465e38f9fce9f77fe797d"
++    }
++  ],
++  "commands": [
++    {
++      "revision": 1,
++      "route": "POST /drafts",
++      "command_key": "create",
++      "record_sha256": "d9bfcf79efdce5d727afa3cb81525d569b466f27a5c3aeb3e2c6447fc25993ca",
++      "http_status": 201
++    },
++    {
++      "revision": 2,
++      "route": "PATCH /drafts/draft_0c3f45dec64a46fab6c74dbc49f344d5",
++      "command_key": "patch",
++      "record_sha256": "fcb98b2330b92e2079d2cc9f8bcb65fc4ee5bc0c83393cc93779d15e6d221974",
++      "http_status": 200
++    }
++  ],
++  "files": [
++    {
++      "path": "version-r1.json",
++      "bytes": 3356,
++      "sha256": "f5ce36fb9ed6e122a3d7e45caf79ad95d60daf201aa465e38f9fce9f77fe797d"
++    },
++    {
++      "path": "version-r2.json",
++      "bytes": 3344,
++      "sha256": "216b5d78e8560249345518e84cada8413ffe53dd531352c75cad08cb74e972d7"
++    },
++    {
++      "path": "command-r1.json",
++      "bytes": 756,
++      "sha256": "d9bfcf79efdce5d727afa3cb81525d569b466f27a5c3aeb3e2c6447fc25993ca"
++    },
++    {
++      "path": "http-post-ack.bin",
++      "bytes": 247,
++      "sha256": "f6b295226b6ab6e33254ef3d7e7e767fa05330954fec81bdb92c94643e1c39d2"
++    },
++    {
++      "path": "command-r2.json",
++      "bytes": 881,
++      "sha256": "fcb98b2330b92e2079d2cc9f8bcb65fc4ee5bc0c83393cc93779d15e6d221974"
++    },
++    {
++      "path": "http-patch-ack.bin",
++      "bytes": 431,
++      "sha256": "7c4e793bb352bbea8b323214130a7a18f887b57a93af78e9af1cdb9a6ddecf06"
++    },
++    {
++      "path": "publication-record.json",
++      "bytes": 4822,
++      "sha256": "f9122be23d65fff3f4bc2e93fd34dc7a719d1cac16bf9db6cd447f4d65b0058d"
++    },
++    {
++      "path": "http-publication-ack.bin",
++      "bytes": 153,
++      "sha256": "85942e0b4d297c8b08eec3b6aceea26093ee5f77abd75e3bb6e3094f66ab5c76"
++    }
++  ],
++  "publication": {
++    "record_sha256": "f9122be23d65fff3f4bc2e93fd34dc7a719d1cac16bf9db6cd447f4d65b0058d",
++    "publication_id": "publication_d11cb0ddda2e4b759493494525153cc5"
++  }
++}
+diff --git a/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/publication-record.json b/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/publication-record.json
+new file mode 100644
+index 00000000..2ad604ca
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/publication-record.json
+@@ -0,0 +1 @@
++{"actor_id":"session_21512321d51947eb8290b02b182c32bd","admission":{"acknowledged_warning_codes":["DRAFT_EDIT_UNREVIEWED","IMPORT_REVIEW_UNVERIFIED"],"candidate":{"candidate_sha256":"0cf3e594bc627085da6cdf56809cd61aa3b2c56f2227d1976d23737c50556f8d","draft_id":"draft_0c3f45dec64a46fab6c74dbc49f344d5","draft_revision":2,"entity":"block"},"material_descriptor_sha256":"3b153f196381f7c60e3365e69a82c1b4f9651dd65c89d8a987e2403ed51371f9","numeric_check_ids":[],"numeric_coverage":"not_required_by_material","numeric_observation_sha256":"6b4a3cf080bc68e3ca0c9096693105fc5223c05ced6c5f35198f8be0161bfba4","publication":"NOT_RUN","receipt_sha256":"6817761998f0801a9c3a950833280ba180ebe0150faca5e24bdbac0fcaa8acac","review_receipt_id":"review_215ab67a737c48bd9a6668897219bf40","review_revision":2,"version":"publication-admission-observation-v1","workspace_id":"workspace_73dfc365f88d4e4e8d0adacbb09baeaf"},"adopted_at":"2026-10-02T23:10:41.679646Z","base":{"body_markdown":"# Synthetic review input\n","metadata":{"body_path":"content/block_3816081ff7038f943f4f32d4c1e23940.r1.md","body_sha256":"90145ea89f2d384f3c9925433469a27f3b694e2694dbb5a988f15959266fe6ea","citations":["citation_46f98b551790a1f5b96a8d6d4122a9eb"],"concepts":[],"depends_on":[],"entity":"block","id":"block_3816081ff7038f943f4f32d4c1e23940","kind":"text","revision":1,"schema_version":"3.0.0","title":"Synthetic review input"},"provenance":{"block_ref":{"entity":"block","id":"block_3816081ff7038f943f4f32d4c1e23940","revision":1,"sha256":"ddfa0777a220bdc36a4149af07a39025d7cbddaa91b99bbf83ffd74f16f18c0d"},"citations":[{"id":"citation_46f98b551790a1f5b96a8d6d4122a9eb","locator":"source:source_c4ea5af4bf274710a9803c96ee03019d;original-file;parsed-lines:1-1","source_sha256":"650f5e349d3d8f66d32bfa4e74e0c67d2df44937bcf098951e7a3041748d7bdb","title":"review-source","url":null,"verification":"user_supplied"}],"source":{"id":"source_c4ea5af4bf274710a9803c96ee03019d","media_type":"text/markdown","parser_version":"learning-import-1","rights":"user_supplied; rights_not_verified","sha256":"650f5e349d3d8f66d32bfa4e74e0c67d2df44937bcf098951e7a3041748d7bdb","size":43},"warnings":[{"code":"IMPORT_REVIEW_UNVERIFIED","locator":null,"message":"确认解析结果不会认证材料的数学正确性或来源权利。","severity":"warning"}]},"ref":{"entity":"block","id":"block_3816081ff7038f943f4f32d4c1e23940","revision":1,"sha256":"ddfa0777a220bdc36a4149af07a39025d7cbddaa91b99bbf83ffd74f16f18c0d"},"version":"draft-base-material-v1","warnings":[{"code":"IMPORT_REVIEW_UNVERIFIED","locator":null,"message":"确认解析结果不会认证材料的数学正确性或来源权利。","severity":"warning"}]},"block":{"body_path":"content/block_3816081ff7038f943f4f32d4c1e23940.r1.md","body_sha256":"e58c4d4b2a9bef2468f84d0dadca8d3cfdfaa92f41a8c416830543a7ae310b36","citations":["citation_46f98b551790a1f5b96a8d6d4122a9eb"],"concepts":[],"depends_on":[],"entity":"block","id":"block_3816081ff7038f943f4f32d4c1e23940","kind":"text","revision":2,"schema_version":"3.0.0","title":"Synthetic revised publication"},"candidate":{"candidate_sha256":"0cf3e594bc627085da6cdf56809cd61aa3b2c56f2227d1976d23737c50556f8d","draft_id":"draft_0c3f45dec64a46fab6c74dbc49f344d5","draft_revision":2,"entity":"block"},"command_key":"publish-edit","edit_record_sha256":"216b5d78e8560249345518e84cada8413ffe53dd531352c75cad08cb74e972d7","human_record_sha256":"4b5bec7d221ae1f0b5cc36bc8333c37766924e883bbdb60420d8e62a54c00db2","id":"publication_d11cb0ddda2e4b759493494525153cc5","owner":"authoring","payload":{"base_material_sha256":"4d87422dde77be2d79daefd972850d328a0caf89c785defdaad3460696d3e68c","base_ref":{"entity":"block","id":"block_3816081ff7038f943f4f32d4c1e23940","revision":1,"sha256":"ddfa0777a220bdc36a4149af07a39025d7cbddaa91b99bbf83ffd74f16f18c0d"},"body_markdown":"精确修订文本 🌏\nSynthetic revised prose.\n","body_path":"content/block_3816081ff7038f943f4f32d4c1e23940.r1.md","body_sha256":"e58c4d4b2a9bef2468f84d0dadca8d3cfdfaa92f41a8c416830543a7ae310b36","citations":["citation_46f98b551790a1f5b96a8d6d4122a9eb"],"entity":"block","kind":"text","title":"Synthetic revised publication","version":"text-block-edit-v1"},"published_at":"2026-10-02T23:10:41.716308Z","request":{"acknowledged_warning_codes":["DRAFT_EDIT_UNREVIEWED","IMPORT_REVIEW_UNVERIFIED"],"expected_content_sha256":"0cf3e594bc627085da6cdf56809cd61aa3b2c56f2227d1976d23737c50556f8d","expected_revision":2,"review_receipt_id":"review_215ab67a737c48bd9a6668897219bf40"},"result":{"entity":"block","id":"block_3816081ff7038f943f4f32d4c1e23940","revision":2,"sha256":"d2e91f56de8c0165b140fda47994ce942f209f469e1cf790b6fa4055d1920636"},"route":"POST /drafts/draft_0c3f45dec64a46fab6c74dbc49f344d5/publish","version":"edit-publication-v1","workspace_id":"workspace_73dfc365f88d4e4e8d0adacbb09baeaf"}
+\ No newline at end of file
+diff --git a/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/version-r1.json b/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/version-r1.json
+new file mode 100644
+index 00000000..f1577c04
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/version-r1.json
+@@ -0,0 +1 @@
++{"actor_id":"session_21512321d51947eb8290b02b182c32bd","base":{"body_markdown":"# Synthetic review input\n","metadata":{"body_path":"content/block_3816081ff7038f943f4f32d4c1e23940.r1.md","body_sha256":"90145ea89f2d384f3c9925433469a27f3b694e2694dbb5a988f15959266fe6ea","citations":["citation_46f98b551790a1f5b96a8d6d4122a9eb"],"concepts":[],"depends_on":[],"entity":"block","id":"block_3816081ff7038f943f4f32d4c1e23940","kind":"text","revision":1,"schema_version":"3.0.0","title":"Synthetic review input"},"provenance":{"block_ref":{"entity":"block","id":"block_3816081ff7038f943f4f32d4c1e23940","revision":1,"sha256":"ddfa0777a220bdc36a4149af07a39025d7cbddaa91b99bbf83ffd74f16f18c0d"},"citations":[{"id":"citation_46f98b551790a1f5b96a8d6d4122a9eb","locator":"source:source_c4ea5af4bf274710a9803c96ee03019d;original-file;parsed-lines:1-1","source_sha256":"650f5e349d3d8f66d32bfa4e74e0c67d2df44937bcf098951e7a3041748d7bdb","title":"review-source","url":null,"verification":"user_supplied"}],"source":{"id":"source_c4ea5af4bf274710a9803c96ee03019d","media_type":"text/markdown","parser_version":"learning-import-1","rights":"user_supplied; rights_not_verified","sha256":"650f5e349d3d8f66d32bfa4e74e0c67d2df44937bcf098951e7a3041748d7bdb","size":43},"warnings":[{"code":"IMPORT_REVIEW_UNVERIFIED","locator":null,"message":"确认解析结果不会认证材料的数学正确性或来源权利。","severity":"warning"}]},"ref":{"entity":"block","id":"block_3816081ff7038f943f4f32d4c1e23940","revision":1,"sha256":"ddfa0777a220bdc36a4149af07a39025d7cbddaa91b99bbf83ffd74f16f18c0d"},"version":"draft-base-material-v1","warnings":[{"code":"IMPORT_REVIEW_UNVERIFIED","locator":null,"message":"确认解析结果不会认证材料的数学正确性或来源权利。","severity":"warning"}]},"candidate":{"candidate_sha256":"81fb96d6fdc3ec6a349a6f8eccd64f2aa301002f77ce4317a59ee21670372a19","draft_id":"draft_0c3f45dec64a46fab6c74dbc49f344d5","draft_revision":1,"entity":"block"},"command_key":"create","created_at":"2026-10-02T23:10:41.323143Z","parent_sha256":null,"payload":{"base_material_sha256":"4d87422dde77be2d79daefd972850d328a0caf89c785defdaad3460696d3e68c","base_ref":{"entity":"block","id":"block_3816081ff7038f943f4f32d4c1e23940","revision":1,"sha256":"ddfa0777a220bdc36a4149af07a39025d7cbddaa91b99bbf83ffd74f16f18c0d"},"body_markdown":"# Synthetic review input\n","body_path":"content/block_3816081ff7038f943f4f32d4c1e23940.r1.md","body_sha256":"90145ea89f2d384f3c9925433469a27f3b694e2694dbb5a988f15959266fe6ea","citations":["citation_46f98b551790a1f5b96a8d6d4122a9eb"],"entity":"block","kind":"text","title":"Synthetic revised publication","version":"text-block-edit-v1"},"request":{"base_ref":{"entity":"block","id":"block_3816081ff7038f943f4f32d4c1e23940","revision":1,"sha256":"ddfa0777a220bdc36a4149af07a39025d7cbddaa91b99bbf83ffd74f16f18c0d"},"kind":"block","title":"Synthetic revised publication"},"version":"draft-edit-record-v1","warnings":[{"code":"IMPORT_REVIEW_UNVERIFIED","locator":null,"message":"确认解析结果不会认证材料的数学正确性或来源权利。","severity":"warning"},{"code":"DRAFT_EDIT_UNREVIEWED","locator":null,"message":"此编辑候选尚未取得数学、来源或教学批准；继承来源不是对新正文的认证。","severity":"warning"}],"workspace_id":"workspace_73dfc365f88d4e4e8d0adacbb09baeaf"}
+\ No newline at end of file
+diff --git a/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/version-r2.json b/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/version-r2.json
+new file mode 100644
+index 00000000..d4fac66c
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v1/empty-dependencies-published/version-r2.json
+@@ -0,0 +1 @@
++{"actor_id":"session_21512321d51947eb8290b02b182c32bd","base":{"body_markdown":"# Synthetic review input\n","metadata":{"body_path":"content/block_3816081ff7038f943f4f32d4c1e23940.r1.md","body_sha256":"90145ea89f2d384f3c9925433469a27f3b694e2694dbb5a988f15959266fe6ea","citations":["citation_46f98b551790a1f5b96a8d6d4122a9eb"],"concepts":[],"depends_on":[],"entity":"block","id":"block_3816081ff7038f943f4f32d4c1e23940","kind":"text","revision":1,"schema_version":"3.0.0","title":"Synthetic review input"},"provenance":{"block_ref":{"entity":"block","id":"block_3816081ff7038f943f4f32d4c1e23940","revision":1,"sha256":"ddfa0777a220bdc36a4149af07a39025d7cbddaa91b99bbf83ffd74f16f18c0d"},"citations":[{"id":"citation_46f98b551790a1f5b96a8d6d4122a9eb","locator":"source:source_c4ea5af4bf274710a9803c96ee03019d;original-file;parsed-lines:1-1","source_sha256":"650f5e349d3d8f66d32bfa4e74e0c67d2df44937bcf098951e7a3041748d7bdb","title":"review-source","url":null,"verification":"user_supplied"}],"source":{"id":"source_c4ea5af4bf274710a9803c96ee03019d","media_type":"text/markdown","parser_version":"learning-import-1","rights":"user_supplied; rights_not_verified","sha256":"650f5e349d3d8f66d32bfa4e74e0c67d2df44937bcf098951e7a3041748d7bdb","size":43},"warnings":[{"code":"IMPORT_REVIEW_UNVERIFIED","locator":null,"message":"确认解析结果不会认证材料的数学正确性或来源权利。","severity":"warning"}]},"ref":{"entity":"block","id":"block_3816081ff7038f943f4f32d4c1e23940","revision":1,"sha256":"ddfa0777a220bdc36a4149af07a39025d7cbddaa91b99bbf83ffd74f16f18c0d"},"version":"draft-base-material-v1","warnings":[{"code":"IMPORT_REVIEW_UNVERIFIED","locator":null,"message":"确认解析结果不会认证材料的数学正确性或来源权利。","severity":"warning"}]},"candidate":{"candidate_sha256":"0cf3e594bc627085da6cdf56809cd61aa3b2c56f2227d1976d23737c50556f8d","draft_id":"draft_0c3f45dec64a46fab6c74dbc49f344d5","draft_revision":2,"entity":"block"},"command_key":"patch","created_at":"2026-10-02T23:10:41.359014Z","parent_sha256":"f5ce36fb9ed6e122a3d7e45caf79ad95d60daf201aa465e38f9fce9f77fe797d","payload":{"base_material_sha256":"4d87422dde77be2d79daefd972850d328a0caf89c785defdaad3460696d3e68c","base_ref":{"entity":"block","id":"block_3816081ff7038f943f4f32d4c1e23940","revision":1,"sha256":"ddfa0777a220bdc36a4149af07a39025d7cbddaa91b99bbf83ffd74f16f18c0d"},"body_markdown":"精确修订文本 🌏\nSynthetic revised prose.\n","body_path":"content/block_3816081ff7038f943f4f32d4c1e23940.r1.md","body_sha256":"e58c4d4b2a9bef2468f84d0dadca8d3cfdfaa92f41a8c416830543a7ae310b36","citations":["citation_46f98b551790a1f5b96a8d6d4122a9eb"],"entity":"block","kind":"text","title":"Synthetic revised publication","version":"text-block-edit-v1"},"request":{"expected_revision":1,"patches":[{"field":"body_markdown","value":"精确修订文本 🌏\nSynthetic revised prose.\n"}]},"version":"draft-edit-record-v1","warnings":[{"code":"IMPORT_REVIEW_UNVERIFIED","locator":null,"message":"确认解析结果不会认证材料的数学正确性或来源权利。","severity":"warning"},{"code":"DRAFT_EDIT_UNREVIEWED","locator":null,"message":"此编辑候选尚未取得数学、来源或教学批准；继承来源不是对新正文的认证。","severity":"warning"}],"workspace_id":"workspace_73dfc365f88d4e4e8d0adacbb09baeaf"}
+\ No newline at end of file
+diff --git a/tests/integration/test_edit_publication_dependencies.py b/tests/integration/test_edit_publication_dependencies.py
+index 305520cc..1aa91205 100644
+--- a/tests/integration/test_edit_publication_dependencies.py
++++ b/tests/integration/test_edit_publication_dependencies.py
+@@ -159,6 +159,64 @@ def test_corrupt_dependency_before_creation_and_attempted_dependency_edit_create
+     assert table_hashes(case.database) == before
+ 
+ 
++@pytest.mark.parametrize('published', [False, True])
++def test_frozen_indirect_concept_pin_cannot_be_reinterpreted_by_one_changed_stored_edge(prepared_review_http, published):
++    case = prepared_review_http
++    content = ContentService(case.database)
++    concept = dm.Concept(id='frozen_dependency_concept', revision=1, title='Original concept')
++    content.publish(case.identity.workspace_id, [concept], {})
++    raw = b'Synthetic dependency source.'
++    leaf = dm.ContentBlock(id='frozen_dependency_leaf', revision=1, kind='definition', title='Original leaf',
++        body_path='content/frozen-leaf.md', body_sha256=sha256_bytes(raw), concepts=[concept.id])
++    leaf_ref = content.publish(case.identity.workspace_id, [leaf], {leaf.body_path: raw})[0]
++    block = dm.ContentBlock(id='frozen_dependency_edit', revision=1, kind='text', title='Original editing base',
++        body_path='content/frozen-edit.md', body_sha256=sha256_bytes(raw), depends_on=[leaf_ref])
++    base = content.publish(case.identity.workspace_id, [block], {block.body_path: raw})[0]
++    identifier, create, _, patch, _, snapshot = draft(case, base)
++    content.publish(case.identity.workspace_id, [concept.model_copy(update={'revision': 2, 'title': 'Later concept'})], {})
++    publication = reviewed(case, identifier, snapshot)
++    path = f'/api/v1/drafts/{identifier}/publish'
++    if published:
++        assert case.client.post(path, json=publication, headers=command(case.headers, 'dependency-publish')).status_code == 201
++    with case.database.transaction() as connection:
++        connection.execute("UPDATE object_dependencies SET target_revision=2 WHERE owner_id=? AND owner_revision=1 AND target_id=? AND relation='concept'", (leaf.id, concept.id))
++    before = table_hashes(case.database)
++    assert case.client.get('/api/v1/draft-edits/' + identifier).status_code in (409, 503)
++    assert case.client.post('/api/v1/drafts', json=create, headers=command(case.headers, 'dependency-create')).status_code in (409, 503)
++    assert case.client.patch('/api/v1/drafts/' + identifier, json=patch, headers=command(case.headers, 'dependency-patch')).status_code in (409, 503)
++    assert case.client.post(path, json=publication, headers=command(case.headers, 'dependency-publish')).status_code in (409, 503)
++    assert case.client.get('/api/v1/reviews/' + publication['review_receipt_id']).status_code in (409, 503)
++    review = case.client.post(f'/api/v1/drafts/{identifier}/review', json={'expected_revision': 2,
++        'checks': ['structure'], 'reviewer_note': 'Synthetic damaged original concept pin recheck.'},
++        headers=command(case.headers, 'damaged-pin-review'))
++    assert review.status_code in (409, 503)
++    assert table_hashes(case.database) == before
++
++
++def test_published_root_edges_remain_bound_to_the_original_dependency_witness(prepared_review_http):
++    case = prepared_review_http
++    _, _, base, dependencies, _, _ = source(case)
++    identifier, create, created, patch, patched, snapshot = draft(case, base)
++    publication = reviewed(case, identifier, snapshot)
++    review_path = '/api/v1/reviews/' + publication['review_receipt_id']
++    original_review = case.client.get(review_path)
++    assert original_review.status_code == 200
++    path = f'/api/v1/drafts/{identifier}/publish'
++    assert case.client.post(path, json=publication, headers=command(case.headers, 'dependency-publish')).status_code == 201
++    with case.database.transaction() as connection:
++        connection.execute('DELETE FROM object_dependencies WHERE owner_id=? AND owner_revision=2 AND target_id=?',
++            (base.id, dependencies[0].id))
++    before = table_hashes(case.database)
++    assert case.client.get('/api/v1/draft-edits/' + identifier).status_code in (409, 503)
++    assert case.client.post(path, json=publication, headers=command(case.headers, 'dependency-publish')).status_code in (409, 503)
++    # These ACKs/Review bind the intact original candidate, not its later result.
++    assert case.client.post('/api/v1/drafts', json=create, headers=command(case.headers, 'dependency-create')).content == created.content
++    assert case.client.patch('/api/v1/drafts/' + identifier, json=patch, headers=command(case.headers, 'dependency-patch')).content == patched.content
++    reread = case.client.get(review_path)
++    assert reread.status_code == 200 and reread.content == original_review.content
++    assert table_hashes(case.database) == before
++
++
+ def test_dependency_body_damage_refuses_frozen_draft_read_and_original_command_without_writes(prepared_review_http):
+     case = prepared_review_http
+     _, _, base, dependencies, _, _ = source(case)
