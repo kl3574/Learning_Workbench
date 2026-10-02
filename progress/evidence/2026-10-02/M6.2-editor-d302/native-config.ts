@@ -1,0 +1,2 @@
+import { defineConfig } from "WORKTREE/apps/web/node_modules/@playwright/test/index.mjs"
+export default defineConfig({"testDir": "WORKTREE/tests/e2e", "testMatch": "draft-editor.spec.ts", "workers": 1, "fullyParallel": false, "timeout": 30000, "retries": 0, "reporter": [["list"]], "outputDir": "EVIDENCE_ROOT/native/artifacts", "webServer": [], "use": {"headless": true, "trace": "off", "screenshot": "only-on-failure", "launchOptions": {"executablePath": "/usr/bin/google-chrome"}}})

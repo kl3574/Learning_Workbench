@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-02T07:32:19Z；规范 SHA-256：`a6832a01966e72e5b9f63ee283ae300119446c38bcccd91beee508331ba57a98`
+更新：2026-10-02T07:47:35Z；规范 SHA-256：`a6832a01966e72e5b9f63ee283ae300119446c38bcccd91beee508331ba57a98`
 
 仓库发布：VERIFIED；Issues 同步：PENDING_M62_LOCAL_CHANGES
 实施：IN_PROGRESS；当前任务：M6.2；下一任务：M6.2
 
-继续已批准v3.0.9的Content影响决定、Learning证据适用性及历史公开块恢复；独审并整合a7bff45权限切换内存保护。最终组合源码完成真实门禁、脱敏证据与PR55/Issue31同步；未知ACK跨新页面合同、生产InputProof及数值环境阻塞保留。
+整合并审查已批准v3.0.9的Content影响决定、Learning证据适用性及历史公开块恢复，随后完成固定组合门禁、证据和PR55/Issue31同步。v3.0.10非秘密会话连续性提案c43cd43已供所有者决定，未采纳；此前跨页未知ACK限制、生产InputProof和数值环境阻塞保留。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -32,7 +32,7 @@
 | M5.3 Tutor 状态机、SSE/取消/重连/异步上下文 | review | [#28](https://github.com/kl3574/Learning_Workbench/issues/28) | 919a00532b499cff604ef2be4e90c88cc6378490 |
 | M5.4 真实模型与搜索评测 | blocked | [#29](https://github.com/kl3574/Learning_Workbench/issues/29) | e982a14644317c7be12a63ec0b31c1e615c72fa6 |
 | M6.1 教材/例题/题目生成 schema + 数值验证 | blocked | [#30](https://github.com/kl3574/Learning_Workbench/issues/30) | 9d4aa2e75c0583b4752e1a2669534ef621e6c7f9 |
-| M6.2 审校/发布/版本对比/影响分析/恢复旧内容 | in_progress | [#31](https://github.com/kl3574/Learning_Workbench/issues/31) | b8619a9c67a200cce9e54f6308af74ee9621d243 |
+| M6.2 审校/发布/版本对比/影响分析/恢复旧内容 | in_progress | [#31](https://github.com/kl3574/Learning_Workbench/issues/31) | d302c075a85c45dc11ff8a4b6a539ef8baed48f3 |
 | M6.3 CodexBroker/App Server、操作审批、产物清单 | todo | [#32](https://github.com/kl3574/Learning_Workbench/issues/32) | 未验证提交 |
 | M7.1 全备份/学习者包/作者包/恢复预览和事务 | todo | [#33](https://github.com/kl3574/Learning_Workbench/issues/33) | 未验证提交 |
 | M7.2 安全/可访问性/性能/故障注入 | todo | [#34](https://github.com/kl3574/Learning_Workbench/issues/34) | 未验证提交 |
@@ -179,6 +179,7 @@
 - M6.2_4cc_ci_terminal: {'source_head': '4cc4fd5c24fe135186147dfb86d3f071b26f4fb7', 'push_run': 36386011041, 'pull_request_run': 36386016520, 'both_runs': 'COMPLETED_FAILURE; per run 5 SUCCESS, 1 browser FAILURE', 'integration_each': '1570 PASS/1 actual sealed numeric ENVIRONMENT SKIP/2 dependency warnings', 'frontend_each': 'SUCCESS; known a944 close test no longer fails at 4cc', 'browser_each': '106 PASS/1 FAIL; unchanged original Tutor completed heading five-second assertion', 'tutor_cause': 'UNKNOWN; answer_delta observed before deadline, no completed state observed by deadline', 'raw_terminal_package': 'progress/evidence/2026-09-28/M6.2-4cc-terminal-ci/manifest.json', 'e58_ci': 'push36389800538 and PR36389807970 IN_PROGRESS; exact result NOT_YET_AVAILABLE', 'manifest_sha256': '5ba8e015dc136fbaed6358e6cbe8c3c1c2e9576878b48ee15bec51fae8eb7638', 'public_replay': '78 files/92 raw mappings/12 complete logs/16 original artifact members; 77 explicit hash-bound exclusions; copied public-only and strict private raw replay PASS; no product tests', 'push_checkout': '4cc4fd5c24fe135186147dfb86d3f071b26f4fb7', 'pr_checkout': '538bf74da04fac1cdea69cc70e1416d54c5643cd', 'shared_git_tree': '7014f0f0abfe5f692141415752403922624e10f9'}
 - M6.2_agent_current_e58: {'source_commit': 'e58abaaf4baa5b06d27bd1db1f06c8a13c1c730a', 'command': '.venv/bin/python -m pytest -q tests/integration/test_tutor_http.py tests/integration/test_tutor_runs.py tests/integration/test_provider_proof_admission.py tests/security/test_provider_network.py', 'result': '53 PASS/2 dependency warnings/13.87s', 'receipt': 'progress/evidence/2026-09-28/M6.2-agent-current-e58/receipt.json', 'real_provider': 'NOT_RUN; no production full InputProof registered; user key not supplied to tests'}
 - M6.2_e58_publication_readback: {'source_commit': 'e58abaaf4baa5b06d27bd1db1f06c8a13c1c730a', 'publication_commit': '8701c8a04b654c2462e4311f0128201507ebaf7e', 'branch_head': '8701c8a04b654c2462e4311f0128201507ebaf7e', 'pull_request_head': '8701c8a04b654c2462e4311f0128201507ebaf7e', 'pull_request': 'draft/open/unmerged', 'issue': 'open; original milestone/labels and outside-managed body preserved', 'push_run': 36389800538, 'pull_request_run': 36389807970, 'ci': 'IN_PROGRESS; no conclusion', 'receipt': 'progress/evidence/2026-09-28/M6.2-e58-publication-readback.json'}
+- M6.2_editor_d302: {'status': 'LOCAL_FOUR_GATES_PASS_NOT_PUBLISHED', 'source_commit': 'd302c075a85c45dc11ff8a4b6a539ef8baed48f3', 'source_count': 1092, 'source_scope': 'all tracked non-progress files; external dependencies/runtime excluded', 'web': '562 PASS /94files', 'native': '1 PASS /14.0s actual test; no retry', 'static': 'strict TS/lint and build PASS;766modules; original chunk warning', 'evidence': 'progress/evidence/2026-10-02/M6.2-editor-d302/manifest.json', 'limitations': 'Current full Python NOT_RUN; provider and teaching quality NOT_RUN; unknownACK after newpage remains restricted pending approved contract.'}
 
 ## 阻塞与待决项
 
@@ -199,8 +200,8 @@
 - M62_EDIT_PUBLICATION_PENDING: 编辑稿发布已本地整合并有a60源门禁；PR未发布本轮代码，M6.2仍未完成。
 - M62_4CC_TUTOR_BROWSER_FAILED: 4cc精确push/PR各5 job成功、browser106PASS1FAIL，原Tutor completed标题5000ms断言失败；同源answer_delta在期限前抵浏览器，但两现场均未观测completed，原因UNKNOWN。两integration各1570PASS1真实数值环境SKIP2依赖warning；原始12job与两ZIP16成员公开包已复制且严格重放，manifest 5ba8e015。
 - M62_8701_PR_TUTOR_FAILED: 8701原push六job成功，PR browser106PASS1原Tutor5s失败，原因未知；完整原件已封包。
-- M62_EDITOR_POLICY_MEMORY_REVIEW_PENDING: a7bff45修复权限切换时未落盘文字丢失，隔离证据已取得；独立审查/主树整合待完成。
-- M62_EDITOR_NEW_PAGE_ACK_CONTRACT: 未知ACK原命令跨整页刷新或权限代次变化不可安全回放，缺原actor连续性读取合同。
+- M62_EDITOR_POLICY_MEMORY_REVIEW_PENDING: a7bff45已独审并整合为d302；24项定向复验通过，root固定1092输入Web562/原生1/strictTS/build通过。未落盘文字保护已验，跨新页面原命令重放另有合同缺口。
+- M62_EDITOR_NEW_PAGE_ACK_CONTRACT: 跨新页面未知ACK无法安全确认原actor；独立提案c43cd43只补非秘密SessionResponse.actor_session_id与同会话显式重放，已请求所有者决定，未采纳或推送。
 - M62_IMPACT_RESTORE_IMPLEMENTING: v3.0.9已批准，Content/Learning决定及历史公开ContentBlock恢复正在实现，不能称已验收。
 - M62_FINAL_COMBINED_GATES_PENDING: 当前组合源尚无完整新Python/原生/CI门禁；3fc全Python失败记录保留。
 
