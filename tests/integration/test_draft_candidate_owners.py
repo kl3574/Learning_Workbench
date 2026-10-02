@@ -322,13 +322,26 @@ def test_upgrade_of_real_original_owner_records_backfills_without_rewriting_payl
     case = ProviderHistoryCase('single' if kind == 'single' else 'group', state)
     before = table_hashes(case.database)
     assert 'draft_candidate_identities' not in before
-    original = case.authoring.draft(case.identity, case.candidate.draft_id)
+
+    def original_owner_snapshot():
+        if kind != 'single':
+            return case.authoring.draft(case.identity, case.candidate.draft_id)
+        # This fixture stops at schema 15/16, before Publication exists. Read
+        # the original Single owner snapshot and real Provider history, not
+        # the v13 current-publication projection requiring migrations 18/26.
+        from services.api.app.infrastructure.authoring_repository import AuthoringRepository
+        with case.database.transaction(immediate=False) as connection:
+            snapshot = AuthoringRepository(connection, case.identity.workspace_id).draft(case.candidate.draft_id)
+            case.authoring.verify_history(connection, case.identity, snapshot.source_job_id)
+            return snapshot
+
+    original = original_owner_snapshot()
     shutil.copyfile(REPOSITORY_ROOT / 'migrations/0016_draft_candidate_identities.sql',
                     migrations / '0016_draft_candidate_identities.sql')
     assert case.database.initialize() == case.identity.workspace_id
     after = table_hashes(case.database)
     assert {name for name in before if before[name] != after[name]} == {'schema_migrations'}
-    assert case.authoring.draft(case.identity, case.candidate.draft_id) == original
+    assert original_owner_snapshot() == original
     assert admit(case).candidate.model_dump() == case.candidate.model_dump()
     assert table_hashes(case.database) == after
     assert len(list((case.database.settings.data_dir / 'backups').glob('*.sqlite3'))) == 1

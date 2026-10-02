@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 
 import pytest
-from packages.contracts.canonical import sha256_bytes
+from packages.contracts.canonical import canonical_bytes, sha256_bytes
 from services.api.app.application.content import ContentService
 from services.api.app.application.draft_publication import DraftPublicationService
 from services.api.app.application.errors import ApiError
@@ -75,6 +75,12 @@ def test_publication_and_actual_worker_start_permission_serialize_on_one_writer_
     if not permit_first:
         assert end.result.outcome == 'cancelled'
         assert publication.publish(case.identity, case.candidate.draft_id, intent, 'publish') == result
+    (tmp_path / 'synthetic-single-start-publication-race.json').write_bytes(canonical_bytes({
+        'evidence_kind': 'controlled-runtime-boundary-with-synthetic-B-ledger', 'physical_processes_started': 0,
+        'order': 'start-permit-before-publication' if permit_first else 'publication-before-start-permit',
+        'runtime_run_checked_calls': runtime.launch_requests, 'start': start.model_dump(mode='json'),
+        'end': end.model_dump(mode='json'), 'job': case.numeric.job(case.identity, work[0].job_id).model_dump(mode='json'),
+        'publication': {'error': 'PUBLISH_NUMERIC_OBSERVATION_STALE'} if permit_first else result.model_dump(mode='json')}))
 
 
 def test_allocated_id_collision_is_absent_current_cas_not_revision_two(tmp_path, monkeypatch):

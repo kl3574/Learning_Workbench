@@ -11,7 +11,8 @@ from tests.integration.test_single_publication import ready_single
 
 
 @pytest.mark.parametrize('damage', ['provider', 'body', 'report', 'review_command', 'publication_event',
-    'publication_command', 'publication_result', 'binding', 'candidate', 'numeric_output', 'numeric_membership', 'role', 'revoked'])
+    'publication_command', 'publication_result', 'binding', 'candidate', 'numeric_output', 'numeric_end_tail',
+    'numeric_membership', 'role', 'revoked'])
 def test_published_get_and_original_ack_fail_closed_without_writes(tmp_path, damage):
     case, _, publication, intent = ready_single(tmp_path)
     result = publication.publish(case.identity, case.candidate.draft_id, intent, 'publish')
@@ -48,6 +49,8 @@ def test_published_get_and_original_ack_fail_closed_without_writes(tmp_path, dam
                 conn.execute("UPDATE authoring_candidates SET record_sha256=?", ('0'*64,))
             elif damage == 'numeric_output':
                 conn.execute("UPDATE authoring_numeric_executions SET end_sha256=?", ('0'*64,))
+            elif damage == 'numeric_end_tail':
+                conn.execute('UPDATE authoring_numeric_executions SET end_json=NULL,end_sha256=NULL')
             elif damage == 'numeric_membership':
                 conn.execute('DELETE FROM authoring_numeric_checks')
             elif damage == 'role':
