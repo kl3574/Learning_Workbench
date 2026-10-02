@@ -1,0 +1,60 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_ test_generated_types_and_executed_transport_preserve_old_calls_and_bind_exact_parameters _
+
+tmp_path = PosixPath('/tmp/pytest-of-lkx/pytest-208/test_generated_types_and_execu0')
+
+    def test_generated_types_and_executed_transport_preserve_old_calls_and_bind_exact_parameters(tmp_path):
+        generated = artifacts(transport_fixture())
+        for name in ("api-types.ts", "api-client.ts"):
+            (tmp_path / name).write_text(generated[name])
+        (tmp_path / "package.json").write_text(json.dumps({"type": "module"}))
+        (tmp_path / "compile.ts").write_text('''import { createApiClient, type ApiResponse, type JsonTransport } from './api-client';
+    const oldTransport: JsonTransport = async (_path, _init) => ({ value: 'old caller' });
+    const request = createApiClient(oldTransport);
+    const oldRead: Promise<{ value: string }> = request('GET /session', undefined);
+    request('POST /bootstrap', { code: 'value' }, { 'Idempotency-Key': 'create-1' });
+    request('GET /courses', undefined);
+    request('GET /courses', undefined, undefined, { query: { q: '中文', limit: 20 } });
+    request('GET /courses/{id}', undefined, undefined, { path: { id: 'course' }, query: { revision: 1 } });
+    const markdown: Promise<string> = request('GET /blocks/{id}/body', undefined, undefined, { path: { id: 'block' }, query: { revision: 1 } });
+    const response: ApiResponse<'GET /blocks/{id}/body'> = 'Markdown';
+    // @ts-expect-error required path/query parameters cannot be omitted
+    request('GET /courses/{id}', undefined);
+    // @ts-expect-error revision is required
+    request('GET /courses/{id}', undefined, undefined, { path: { id: 'course' }, query: {} });
+    // @ts-expect-error revision is numeric
+    request('GET /courses/{id}', undefined, undefined, { path: { id: 'course' }, query: { revision: '1' } });
+    // @ts-expect-error path id must be declared with its required type
+    request('GET /courses/{id}', undefined, undefined, { path: { id: 1 }, query: { revision: 1 } });
+    // @ts-expect-error body is a strict named DTO
+    request('POST /bootstrap', { wrong: 'value' }, { 'Idempotency-Key': 'create-1' });
+    // @ts-expect-error old required headers remain required
+    request('POST /bootstrap', { code: 'value' });
+    // @ts-expect-error undeclared query keys have no client binding
+    request('GET /courses', undefined, undefined, { query: { latest: true } });
+    // @ts-expect-error Markdown transport returns string, never a copied JSON DTO
+    const incorrect: Promise<{ value: string }> = request('GET /blocks/{id}/body', undefined, undefined, { path: { id: 'block' }, query: { revision: 1 } });
+    ''')
+>       run_node(ROOT / "apps/web/node_modules/.bin/tsc", "--strict", "--skipLibCheck", "--target", "ES2022",
+                 "--module", "ESNext", "--moduleResolution", "Bundler", "--lib", "ES2022,DOM", "--outDir", "out",
+                 "api-types.ts", "api-client.ts", "compile.ts", cwd=tmp_path)
+
+tests/contract/test_generated_transport.py:94: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cwd = PosixPath('/tmp/pytest-of-lkx/pytest-208/test_generated_types_and_execu0')
+args = (PosixPath('$HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/apps/web/node_modules/.bin/tsc'), '--strict', '--skipLibCheck', '--target', 'ES2022', '--module', ...)
+
+    def run_node(*args, cwd):
+        result = subprocess.run(["bash", str(ROOT / "scripts/node.sh"), *map(str, args)], cwd=cwd, capture_output=True, text=True)
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: $HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/scripts/node.sh: line 13: $HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/apps/web/node_modules/.bin/tsc: No such file or directory
+E         
+E       assert 127 == 0
+E        +  where 127 = CompletedProcess(args=['bash', '$HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/scripts/node.../learning-workbench-acceptance/m62-combined-gate-819aa927/apps/web/node_modules/.bin/tsc: No such file or directory\n').returncode
+
+tests/contract/test_generated_transport.py:59: AssertionError
+=========================== short test summary info ============================
+FAILED tests/contract/test_generated_transport.py::test_generated_types_and_executed_transport_preserve_old_calls_and_bind_exact_parameters
+1 failed in 0.03s

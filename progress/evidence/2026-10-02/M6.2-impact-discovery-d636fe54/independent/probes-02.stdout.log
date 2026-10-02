@@ -1,0 +1,74 @@
+FF.........                                                              [100%]
+=================================== FAILURES ===================================
+________ test_missing_current_target_revision_is_integrity_error[False] ________
+
+case = Case(database=<services.api.app.infrastructure.database.Database object at 0x7ee10e1f1f40>, identity=SessionIdentity(i...i.app.application.content.ContentService object at 0x7ee10dde2030>, event_id='outbox_07201c5dbdb74f88a9fcddf9974dcbb7')
+filtered = False
+
+    @pytest.mark.parametrize('filtered', [False, True])
+    def test_missing_current_target_revision_is_integrity_error(case, filtered):
+        # A retained exact target and its historical ref remain intact; its current
+        # pointer now names absent storage. This is not a caller-supplied missing ID.
+        fault(case, "UPDATE objects SET current_revision=999 WHERE id='lesson'")
+>       unchanged(case, 409, **({'changed_object_id': 'unknown'} if filtered else {}))
+
+../evidence/test_independent_discovery.py:34: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+case = Case(database=<services.api.app.infrastructure.database.Database object at 0x7ee10e1f1f40>, identity=SessionIdentity(i...i.app.application.content.ContentService object at 0x7ee10dde2030>, event_id='outbox_07201c5dbdb74f88a9fcddf9974dcbb7')
+expected = 409, params = {}
+
+    def unchanged(case, expected, **params):
+        before = table_hashes(case.database)
+        response = case.client.get(PATH, params=params)
+        assert table_hashes(case.database) == before
+        assert response.headers['cache-control'] == 'no-store'
+>       assert response.status_code == expected, response.text
+E       AssertionError: {"error":{"code":"REFERENCE_MISSING","message":"指定内容修订不存在或不可访问。","request_id":"request_44706f78d7a940fd9a92c435f6bcbe96","retryable":false,"details":[]}}
+E       assert 404 == 409
+E        +  where 404 = <Response [404 Not Found]>.status_code
+
+../evidence/test_independent_discovery.py:25: AssertionError
+________ test_missing_current_target_revision_is_integrity_error[True] _________
+
+case = Case(database=<services.api.app.infrastructure.database.Database object at 0x7ee10d3e07d0>, identity=SessionIdentity(i...i.app.application.content.ContentService object at 0x7ee10c7a8b60>, event_id='outbox_18422df94c8647f18ddeb8a42ccf7f49')
+filtered = True
+
+    @pytest.mark.parametrize('filtered', [False, True])
+    def test_missing_current_target_revision_is_integrity_error(case, filtered):
+        # A retained exact target and its historical ref remain intact; its current
+        # pointer now names absent storage. This is not a caller-supplied missing ID.
+        fault(case, "UPDATE objects SET current_revision=999 WHERE id='lesson'")
+>       unchanged(case, 409, **({'changed_object_id': 'unknown'} if filtered else {}))
+
+../evidence/test_independent_discovery.py:34: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+case = Case(database=<services.api.app.infrastructure.database.Database object at 0x7ee10d3e07d0>, identity=SessionIdentity(i...i.app.application.content.ContentService object at 0x7ee10c7a8b60>, event_id='outbox_18422df94c8647f18ddeb8a42ccf7f49')
+expected = 409, params = {'changed_object_id': 'unknown'}
+
+    def unchanged(case, expected, **params):
+        before = table_hashes(case.database)
+        response = case.client.get(PATH, params=params)
+        assert table_hashes(case.database) == before
+        assert response.headers['cache-control'] == 'no-store'
+>       assert response.status_code == expected, response.text
+E       AssertionError: {"error":{"code":"REFERENCE_MISSING","message":"指定内容修订不存在或不可访问。","request_id":"request_aec89b9ac5654c6381fa2cf9d1a38ce6","retryable":false,"details":[]}}
+E       assert 404 == 409
+E        +  where 404 = <Response [404 Not Found]>.status_code
+
+../evidence/test_independent_discovery.py:25: AssertionError
+=============================== warnings summary ===============================
+../../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  $HOME/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  $HOME/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ::test_missing_current_target_revision_is_integrity_error[False] - Ass...
+FAILED ::test_missing_current_target_revision_is_integrity_error[True] - Asse...
+2 failed, 9 passed, 2 warnings in 4.71s

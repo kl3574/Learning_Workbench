@@ -1,0 +1,33 @@
+
+Running 1 test using 1 worker
+
+(node:1790895) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/e2e/draft-editor.spec.ts:46:1 › real editor retains IndexedDB originals through competing tabs, 412 resolution, lost ACK, browser and API restart (17.7s)
+
+
+  1) tests/e2e/draft-editor.spec.ts:46:1 › real editor retains IndexedDB originals through competing tabs, 412 resolution, lost ACK, browser and API restart 
+
+    TimeoutError: page.waitForResponse: Timeout 10000ms exceeded while waiting for event "response"
+
+      88 |     await expect(panel(b).getByText(/结果未知，完整原命令保留/)).toBeVisible()
+      89 |     await b.unroute(`**/api/v1/drafts/${id}`)
+    > 90 |     const savingA = a.waitForResponse(r => r.request().method() === 'PATCH' && r.url().endsWith(`/api/v1/drafts/${id}`))
+         |                       ^
+      91 |     await submit(a).click(); expect((await savingA).status()).toBe(200)
+      92 |     await open(b, href)
+      93 |     const savingB = b.waitForResponse(r => r.request().method() === 'PATCH' && r.url().endsWith(`/api/v1/drafts/${id}`))
+        at $HOME/.cache/learning-workbench-acceptance/m62-session-editor-continuity-oct02/tests/e2e/draft-editor.spec.ts:90:23
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-session-editor-continuity-evidence-oct02/native-01/draft-editor-real-editor-r-f8abf-ACK-browser-and-API-restart/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-session-editor-continuity-evidence-oct02/native-01/draft-editor-real-editor-r-f8abf-ACK-browser-and-API-restart/test-failed-2.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m62-session-editor-continuity-evidence-oct02/native-01/draft-editor-real-editor-r-f8abf-ACK-browser-and-API-restart/error-context.md
+
+  1 failed
+    tests/e2e/draft-editor.spec.ts:46:1 › real editor retains IndexedDB originals through competing tabs, 412 resolution, lost ACK, browser and API restart 

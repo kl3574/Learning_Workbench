@@ -1,0 +1,50 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__________ test_orphaned_known_pure_id_candidate_not_silently_dropped __________
+
+case = Case(database=<services.api.app.infrastructure.database.Database object at 0x74f1d9d5db50>, identity=SessionIdentity(i...i.app.application.content.ContentService object at 0x74f1d99356a0>, event_id='outbox_be51c6175e2949868e9c8caadc2483c1')
+
+    def test_orphaned_known_pure_id_candidate_not_silently_dropped(case):
+        # Candidate's only relation to this event is ID-only. Its surviving published
+        # Content revision proves a deleted objects row is broken storage, not a new
+        # unknown owner identity. Normal foreign keys prevent this deletion.
+        import sqlite3
+        with case.database.transaction() as conn:
+            with pytest.raises(sqlite3.IntegrityError):
+                conn.execute("DELETE FROM objects WHERE id='lesson_candidate'")
+        with case.database.connect() as conn:
+            conn.execute('PRAGMA foreign_keys=OFF');conn.execute('BEGIN IMMEDIATE')
+            conn.execute("DELETE FROM objects WHERE id='lesson_candidate'");conn.commit()
+            assert conn.execute("SELECT COUNT(*) FROM revisions WHERE object_id='lesson_candidate'").fetchone()[0]==1
+>       unchanged(case,409,changed_object_id='unknown')
+
+../evidence/test_independent_discovery.py:180: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+case = Case(database=<services.api.app.infrastructure.database.Database object at 0x74f1d9d5db50>, identity=SessionIdentity(i...i.app.application.content.ContentService object at 0x74f1d99356a0>, event_id='outbox_be51c6175e2949868e9c8caadc2483c1')
+expected = 409, params = {'changed_object_id': 'unknown'}
+
+    def unchanged(case, expected, **params):
+        before = table_hashes(case.database)
+        response = case.client.get(PATH, params=params)
+        assert table_hashes(case.database) == before
+        assert response.headers['cache-control'] == 'no-store'
+>       assert response.status_code == expected, response.text
+E       AssertionError: {"items":[],"next_cursor":null}
+E       assert 200 == 409
+E        +  where 200 = <Response [200 OK]>.status_code
+
+../evidence/test_independent_discovery.py:25: AssertionError
+=============================== warnings summary ===============================
+../../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  $HOME/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  $HOME/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ::test_orphaned_known_pure_id_candidate_not_silently_dropped - Asserti...
+1 failed, 14 deselected, 2 warnings in 0.70s
