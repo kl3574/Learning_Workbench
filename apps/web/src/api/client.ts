@@ -3,6 +3,8 @@ import type { ApiArgs, ApiResponse, EndpointKey, ResponseKind } from '../../../.
 import type { WorkbenchSession } from '../../../../packages/contracts/generated/types'
 let csrf = ''
 let sessionGeneration = 0
+let accessMutations = 0
+const accessSettled = new Set<() => void>()
 const roleChannel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('learning-workbench.session-access.v1')
 const accessListeners = new Set<() => void>()
 const changed = (broadcast = true) => { sessionGeneration++; accessListeners.forEach(listener => listener()); if (broadcast) roleChannel?.postMessage('access-changed') }
@@ -16,12 +18,23 @@ export class ApiError extends Error {
 }
 async function transport(path: string, init: RequestInit, responseKind: ResponseKind = 'json', metadata?: (etag: string | null) => void) {
   const accessMutation = init.method === 'POST' && (['/api/v1/session/role', '/api/v1/session/logout', '/api/v1/session/bootstrap'].includes(path) || /^\/api\/v1\/(?:assessments\/[^/]+\/attempts|attempts\/[^/]+\/(?:submit|abandon))$/.test(path))
-  if (accessMutation) changed()
+  // A fresh permission read must follow all in-flight access changes from this
+  // page. Otherwise the start notification can readmit the still-old role.
+  // Role writes and safe Job controls never wait on their own transition.
+  if (path === '/api/v1/session' && init.method === 'GET') {
+    while (accessMutations) await new Promise<void>(resolve => accessSettled.add(resolve))
+  }
+  if (accessMutation) { accessMutations++; changed() }
   let response: Response
   try { response = await fetch(path, {
     credentials: 'same-origin', ...init,
     headers: { ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }), ...(csrf ? { 'X-CSRF-Token': csrf } : {}), ...init.headers },
-  }) } finally { if (accessMutation) changed() }
+  }) } finally {
+    if (accessMutation) {
+      accessMutations--; changed()
+      if (!accessMutations) { const readers = [...accessSettled]; accessSettled.clear(); readers.forEach(resolve => resolve()) }
+    }
+  }
   if (!response.ok) {
     const body = await response.json().catch(() => null)
     throw new ApiError(response.status, body?.error?.message ?? `服务请求失败 (${response.status})`, body?.error?.code)
