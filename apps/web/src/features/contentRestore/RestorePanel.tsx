@@ -6,23 +6,24 @@ import type { RestorePort } from './restoreClient'
 import { useRestoreDrafts } from './useRestoreDrafts'
 import { pendingRestoreCreateMemory, discardRestoreCreateMemory } from './restoreCreateMemory'
 import { pendingRestorePublicationMemory } from './restorePublicationMemory'
+import { pendingRestoreForms, discardRestoreForms } from './restoreFormMemory'
 import './restore.css'
 
 export type RestoreStatus = { dirty: boolean; safe: boolean; closeSafe: boolean }
-export const pendingRestoreMemory = (workspace: string) => pendingRestoreCreateMemory(workspace) || pendingRestorePublicationMemory(workspace) || pendingReviewMemory(workspace)
+const pendingRestoreCommands = (workspace: string) => pendingRestoreCreateMemory(workspace) || pendingRestorePublicationMemory(workspace) || pendingReviewMemory(workspace)
+export const pendingRestoreMemory = (workspace: string) => pendingRestoreCommands(workspace) || pendingRestoreForms(workspace)
 export function RestorePanel({ workspace, blockId, selectedSource, paused, onState, port }: {
   workspace: string; blockId: string; selectedSource: ContentRef | null; paused: boolean; onState?: (value: RestoreStatus) => void; port?: RestorePort
 }) {
   const state = useRestoreDrafts(workspace, paused, blockId, port)
-  const [reason, setReason] = useState(''), [confirmed, setConfirmed] = useState(false), [draftId, setDraftId] = useState('')
-  const [reviewOpen, setReviewOpen] = useState(false), [discarding, setDiscarding] = useState(false)
+  const [draftId, setDraftId] = useState('')
+  const [reviewOpen, setReviewOpen] = useState(false), [discarding, setDiscarding] = useState(false), [discardingForm, setDiscardingForm] = useState(false)
   const [reviewState, setReviewState] = useState({ dirty: false, safe: true })
   const callback = useRef(onState); callback.current = onState
-  const pending = pendingRestoreMemory(workspace), safe = !state.busy && !pending && reviewState.safe
-  const formDirty = state.ready && (!!reason || confirmed)
+  const pending = pendingRestoreMemory(workspace), safe = !state.busy && !pendingRestoreCommands(workspace) && reviewState.safe
+  const { reason, confirmed } = state.form ?? { reason: '', confirmed: false }, formDirty = state.pendingForm
   const dirty = formDirty || pending || reviewState.dirty || state.commands.some(command => !command.ack && !command.rejection)
-  useEffect(() => { setReason(''); setConfirmed(false) }, [state.preparedAt, state.ready, state.basis === null])
-  useEffect(() => { callback.current?.({ dirty, safe: pending || safe, closeSafe: safe }) }, [dirty, safe, pending])
+  useEffect(() => { callback.current?.({ dirty, safe: pending || safe, closeSafe: safe && !formDirty }) }, [dirty, safe, pending, formDirty])
   useEffect(() => () => { const held = pendingRestoreMemory(workspace); callback.current?.({ dirty: held, safe: true, closeSafe: !held }) }, [workspace, blockId])
   useEffect(() => {
     if (!dirty && safe) return
@@ -36,16 +37,18 @@ export function RestorePanel({ workspace, blockId, selectedSource, paused, onSta
     {state.pendingMemory && <><p role="alert">恢复创建命令或 ACK 尚未落盘，隔离保留在本页内存。请保持页面打开，恢复原会话后只保存原记录。</p><button disabled={state.busy} onClick={() => setDiscarding(true)}>放弃未落盘恢复创建记录</button></>}
     {state.canSaveMemory && <button disabled={state.busy} onClick={() => void state.saveMemory()}>保存原会话的恢复创建内存记录</button>}
     {discarding && <div role="dialog" aria-label="放弃未落盘恢复创建记录"><p>明确放弃尚未落盘的原恢复创建命令或 ACK，无法恢复；已保存命令和服务端内容不变。</p><button disabled={state.busy} onClick={() => { discardRestoreCreateMemory(workspace); setDiscarding(false) }}>确认放弃恢复创建内存</button><button onClick={() => setDiscarding(false)}>取消放弃恢复创建内存</button></div>}
+    {formDirty && !state.basis && <div role="alert"><p>本页保留了未提交的恢复理由和原依据。权限受限或会话改变时不显示原内容；恢复会重新核验权限和原件，不会自动创建或采用新基准。</p><button disabled={state.busy || !state.canRestoreForm} onClick={() => void state.restoreForm()}>重新核验并恢复原会话的恢复表单</button><button disabled={state.busy} onClick={() => setDiscardingForm(true)}>明确放弃未提交恢复表单</button></div>}
+    {discardingForm && <div role="dialog" aria-label="放弃未提交恢复表单"><p>明确丢弃本页此工作区、此内容块的未提交恢复理由和原依据；不删除已保存原命令或回执。</p><button disabled={state.busy} onClick={() => { discardRestoreForms(workspace, blockId); setDiscardingForm(false) }}>确认放弃未提交恢复表单</button><button onClick={() => setDiscardingForm(false)}>继续保留恢复表单</button></div>}
     {!state.ready ? <p>需要当前作者权限和允许的学科 Policy；历史正文和候选已收起，原记录仍保留。</p> : <>
       {selectedSource && <p>比较中明确选定的来源：{selectedSource.id} · r{selectedSource.revision} · <code>{selectedSource.sha256}</code></p>}
       <button disabled={blocked || formDirty || !selectedSource} onClick={() => { if (selectedSource) void state.prepare(selectedSource) }}>重新读取当前基准并核验所选历史原件</button>
       {state.basis && <section aria-label="恢复创建的准确基准"><p>历史来源 r{state.basis.source_ref.revision} → 活动当前 r{state.basis.base_ref.revision} → 拟发布 r{state.basis.base_ref.revision + 1}。最终由服务端强 CAS 再核，当前变化将拒绝。</p>
         <div className="restore-comparison">{[{ name: '历史来源', value: state.basis.source }, { name: '当前基准', value: state.basis.current }].map(side => <section key={side.name}><h4>{side.name}完整元数据</h4><pre aria-label={`${side.name}完整元数据`}>{JSON.stringify(side.value.metadata, null, 2)}</pre><h4>{side.name}完整正文</h4><pre aria-label={`${side.name}完整正文`}>{side.value.body_markdown}</pre></section>)}</div>
         <p>kind、概念、引用、依赖和正文均来自历史来源；不沿用当前字段，不判断数学等价。</p>
-        <label>本次恢复理由<textarea disabled={blocked} value={reason} onChange={event => { setReason(event.target.value); setConfirmed(false) }} /></label>
-        <label><input type="checkbox" disabled={blocked} checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />我已核对历史来源、当前基准与全部字段，明确创建独立待审恢复稿。</label>
-        <button disabled={blocked || !confirmed || !reason.trim() || [...reason].length > 2000} onClick={() => void state.create(reason)}>明确创建本次历史恢复稿</button>
-        {formDirty && <button disabled={blocked} onClick={() => { setReason(''); setConfirmed(false) }}>明确清除未提交的恢复表单</button>}
+        <label>本次恢复理由<textarea disabled={blocked} value={reason} onChange={event => state.changeForm({ reason: event.target.value, confirmed: false })} /></label>
+        <label><input type="checkbox" disabled={blocked} checked={confirmed} onChange={event => state.changeForm({ reason, confirmed: event.target.checked })} />我已核对历史来源、当前基准与全部字段，明确创建独立待审恢复稿。</label>
+        <button disabled={blocked || !state.canCreate || !confirmed || !reason.trim() || [...reason].length > 2000} onClick={() => void state.create(reason)}>明确创建本次历史恢复稿</button>
+        {formDirty && <button disabled={blocked} onClick={state.clearForm}>明确清除未提交的恢复表单</button>}
       </section>}
       <label>读取已有恢复稿 ID<input value={draftId} onChange={event => setDraftId(event.target.value)} /></label><button disabled={blocked || formDirty || !draftId.trim()} onClick={() => void state.read(draftId)}>另行读取准确恢复稿</button>
       {state.commands.map(command => <article key={command.command_id}><p><code>{command.command_id}</code> · {command.ack ? '原恢复创建 ACK 已保存' : command.rejection ? `原恢复创建被拒绝：${command.rejection.status}` : '创建结果未知，原 key 与完整命令保留'}</p>

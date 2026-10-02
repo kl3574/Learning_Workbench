@@ -6,25 +6,28 @@ import { restoreClient, type RestorePort } from './restoreClient'
 import { makeRestoreCreateCommand, persistRestoreCreateCommand, restoreCreateCommandStore, readRestoreCreateCommand, sameRestoreCreateActorPage, type RestoreCreateCommand } from './restoreCreateCommands'
 import { checkedPublication, publicationRef } from '../draftPublication/publicationSchema'
 import { restoreAck, restoreMaterial, restoreRequest, restoreSnapshot, type RestoreMaterial } from './restoreSchema'
-type RestoreCreateBasis = { source_ref: ContentRef; base_ref: ContentRef; source: RestoreMaterial; current: RestoreMaterial }
+export type RestoreCreateBasis = { source_ref: ContentRef; base_ref: ContentRef; source: RestoreMaterial; current: RestoreMaterial }
 import { restoreCreateMemoryVersion, pendingRestoreCreateMemory, recoverableRestoreCreateMemory, releaseRestoreCreateMemory, retainRestoreCreateMemory, subscribeRestoreCreateMemory } from './restoreCreateMemory'
+import * as forms from './restoreFormMemory'
 
 const denied = (error: unknown) => error instanceof ApiError && ([401, 403].includes(error.status) || ['POLICY_DENIED', 'ASSESSMENT_ACTIVE', 'ASSESSMENT_ANSWER_PROTECTED'].includes(error.code ?? ''))
 export function useRestoreDrafts(workspace: string, paused: boolean, blockId: string, port: RestorePort = restoreClient) {
   const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
   useSyncExternalStore(subscribeRestoreCreateMemory, restoreCreateMemoryVersion, restoreCreateMemoryVersion)
+  useSyncExternalStore(forms.subscribeRestoreForms, forms.restoreFormsVersion, forms.restoreFormsVersion)
   const sessionIdentity = useRef('')
   const owner = JSON.stringify([workspace, access, blockId]), scope = useRef({ owner, paused }); scope.current = { owner, paused }
   const live = useRef(false), admitted = useRef(false), sequence = useRef(0), working = useRef(false), writers = useRef(new Set<AbortController>())
   const [renderOwner, setRenderOwner] = useState(owner), [allowed, setAllowed] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('')
   const [commands, setCommands] = useState<RestoreCreateCommand[]>([]), [basis, setBasis] = useState<RestoreCreateBasis | null>(null), [preparedAt, setPreparedAt] = useState(0)
   const [draft, setDraft] = useState<ContentRestoreDraftSnapshot | null>(null)
+  const [basisCurrent, setBasisCurrent] = useState(false)
   const ready = renderOwner === owner && allowed && !paused
   admitted.current = ready
   const current = (subject = true) => live.current && scope.current.owner === owner && getSessionGeneration() === access
     && (!subject || admitted.current && !scope.current.paused)
   const clearProtected = () => {
-    admitted.current = false; sessionIdentity.current = ''; setAllowed(false); setCommands([]); setBasis(null); setDraft(null)
+    admitted.current = false; sessionIdentity.current = ''; setAllowed(false); setCommands([]); setBasis(null); setBasisCurrent(false); setDraft(null)
     for (const controller of writers.current) controller.abort()
   }
   const fail = (reason: unknown) => {
@@ -57,6 +60,7 @@ export function useRestoreDrafts(workspace: string, paused: boolean, blockId: st
     return () => { live.current = false; ++sequence.current; working.current = false; for (const controller of writers.current) controller.abort() }
   }, [owner, paused, port])
   const prepare = async (sourceRef: ContentRef) => {
+    if (forms.pendingRestoreForms(workspace, blockId)) { setError('本块仍有未提交恢复表单，请先恢复或明确丢弃；不会覆盖原理由和依据。'); return }
     const token = begin(); if (token === null) return
     setBasis(null); setDraft(null)
     try {
@@ -65,7 +69,7 @@ export function useRestoreDrafts(workspace: string, paused: boolean, blockId: st
       restoreRequest({ source_ref: sourceRef, expected_current_ref: currentRef, reason: '核验历史基准' })
       const [source, current] = await Promise.all([port.source(sourceRef), port.source(currentRef)])
       restoreMaterial(source, sourceRef); restoreMaterial(current, currentRef)
-      if (valid(token)) { setBasis({ source_ref: sourceRef, base_ref: currentRef, source, current }); setPreparedAt(token) }
+      if (valid(token)) { setBasis({ source_ref: sourceRef, base_ref: currentRef, source, current }); setBasisCurrent(true); setPreparedAt(token) }
     } catch (reason) { if (valid(token, false)) fail(reason) } finally { finish(token) }
   }
   const execute = async (command: RestoreCreateCommand) => {
@@ -82,7 +86,7 @@ export function useRestoreDrafts(workspace: string, paused: boolean, blockId: st
       releaseRestoreCreateMemory(command.command_id, originalSession)
       const values = await load()
       if (!valid(token)) return
-      setCommands(values); setBasis(null)
+      setCommands(values); forms.consumeRestoreForm(workspace, originalSession, original.body); setBasis(null); setBasisCurrent(false)
       // Only an explicit user action reaches this write, including known-ACK
       // verification. It uses the permanently retained original body and key.
       const ack = restoreAck(await port.create(original.body, original.command_id), original.body)
@@ -119,6 +123,7 @@ export function useRestoreDrafts(workspace: string, paused: boolean, blockId: st
       for (const command of recoverableRestoreCreateMemory(workspace, session)) {
         await persistRestoreCreateCommand(command, undefined, guard)
         if (!valid(token)) return
+        forms.consumeRestoreForm(workspace, session, command.body)
         releaseRestoreCreateMemory(command.command_id, session)
       }
       const values = await load(); if (valid(token)) setCommands(values)
@@ -126,7 +131,7 @@ export function useRestoreDrafts(workspace: string, paused: boolean, blockId: st
     finally { unsubscribe(); writers.current.delete(controller); finish(token) }
   }
   const create = async (reason: string) => {
-    if (!current() || working.current || !basis) return
+    if (!current() || working.current || !basis || !basisCurrent) return
     const selectedAt = sequence.current
     try {
       const body = restoreRequest({ source_ref: basis.source_ref, expected_current_ref: basis.base_ref, reason })
@@ -151,7 +156,33 @@ export function useRestoreDrafts(workspace: string, paused: boolean, blockId: st
       if (valid(token)) setDraft(value)
     } catch (reason) { if (valid(token, false)) fail(reason) } finally { finish(token) }
   }
+  const restoreForm = async () => {
+    const token = begin(true, true); if (token === null) return
+    const originalSession = sessionIdentity.current
+    try {
+      const session = checkedPublication<SessionResponse>('SessionResponse', await port.session())
+      if (!valid(token)) return
+      if (session.workspace_id !== workspace || session.csrf_token !== originalSession || session.role !== 'author'
+          || session.active_independent_attempt_id !== null || session.active_open_book_attempt_id !== null) { clearProtected(); return }
+      const held = forms.ownRestoreForm(workspace, blockId, originalSession)
+      if (!held) return
+      const currentRef = publicationRef(await port.current(blockId))
+      if (!valid(token)) return
+      if (currentRef.entity !== 'block' || currentRef.id !== blockId) throw new Error('当前块身份不一致。')
+      const [source, originalBase] = await Promise.all([port.source(held.basis.source_ref), port.source(held.basis.base_ref)])
+      restoreMaterial(source, held.basis.source_ref); restoreMaterial(originalBase, held.basis.base_ref)
+      if (!valid(token)) return
+      if (!sameValue(source, held.basis.source) || !sameValue(originalBase, held.basis.current)) throw new Error('原恢复依据已损坏。')
+      forms.retainRestoreForm(workspace, blockId, originalSession, held.basis, { ...held.value, confirmed: false })
+      setBasis(held.basis); setBasisCurrent(sameValue(currentRef, held.basis.base_ref)); setPreparedAt(token)
+      if (!sameValue(currentRef, held.basis.base_ref)) setError('当前修订已变化。原理由和旧依据保留供比对，不能按旧基准创建；请明确丢弃原表单后重新选择基准。')
+    } catch (reason) { if (valid(token, false)) fail(reason) } finally { finish(token) }
+  }
   return { ready, busy: renderOwner === owner && busy, pendingMemory: pendingRestoreCreateMemory(workspace),
+    pendingForm: forms.pendingRestoreForms(workspace, blockId), form: ready && basis ? forms.ownRestoreForm(workspace, blockId, sessionIdentity.current)?.value ?? { reason: '', confirmed: false } : null,
+    canRestoreForm: ready && !!forms.ownRestoreForm(workspace, blockId, sessionIdentity.current), restoreForm, canCreate: ready && basisCurrent,
+    changeForm: (value: forms.RestoreFormValue) => { if (current() && !working.current && basis) forms.retainRestoreForm(workspace, blockId, sessionIdentity.current, basis, value) },
+    clearForm: () => { if (current() && !working.current) { forms.releaseRestoreForm(workspace, blockId, sessionIdentity.current); setBasis(null); setBasisCurrent(false); ++sequence.current } },
     canSaveMemory: ready && recoverableRestoreCreateMemory(workspace, sessionIdentity.current).length > 0, saveMemory,
     error: renderOwner === owner ? error : '',
     commands: ready ? commands : [], basis: ready ? basis : null, preparedAt,

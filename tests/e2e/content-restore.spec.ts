@@ -154,6 +154,56 @@ async function post(page: Page, path: string, body: unknown, key: string) {
     return { status: response.status, body: await response.json() }
   }, { path, body, key })
 }
+test('unsubmitted Restore reason survives a role cycle and explicit fresh read without creating a draft', async ({ playwright }, info) => {
+  test.setTimeout(120_000)
+  const runtime = await RestartRuntime.start(), commands: string[] = [], errors: string[] = []
+  try {
+    const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]
+    page.on('pageerror', error => errors.push(error.message))
+    page.on('request', request => { if (request.method() === 'POST' && request.url().endsWith('/content/restore-drafts')) commands.push(request.postData() ?? '') })
+    await runtime.authenticateOnly(page)
+    const fixture = await historical(page, runtime)
+    const reason = '尚未提交的恢复理由：保留 Unicode 数学文字 α 与原始依据。'
+    await restore(page).getByRole('textbox', { name: '本次恢复理由', exact: true }).fill(reason)
+    await restore(page).getByLabel('我已核对历史来源、当前基准与全部字段，明确创建独立待审恢复稿。', { exact: true }).check()
+    expect(await page.evaluate(() => { const event = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(event); return event.defaultPrevented })).toBe(true)
+    await page.getByRole('button', { name: '导入', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '导入', exact: true })
+    await dialog.getByRole('button', { name: '切换为学习者角色', exact: true }).click()
+    await expect(dialog.getByText('操作角色：学习者', { exact: true })).toBeVisible()
+    await dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
+    await block(page).getByRole('button', { name: '打开此块的恢复原记录', exact: true }).click()
+    await expect(restore(page).getByText('本页保留了未提交的恢复理由和原依据。', { exact: false })).toBeVisible()
+    expect(await restore(page).getByRole('textbox', { name: '本次恢复理由', exact: true }).count()).toBe(0)
+    expect(await restore(page).getByText(reason, { exact: true }).count()).toBe(0)
+    await expect(restore(page).getByRole('button', { name: '重新核验并恢复原会话的恢复表单', exact: true })).toBeDisabled()
+    await page.getByRole('button', { name: '导入', exact: true }).click()
+    await dialog.getByRole('button', { name: '切换为作者角色', exact: true }).click()
+    await expect(dialog.getByText('操作角色：作者', { exact: true })).toBeVisible()
+    await dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
+    await block(page).getByRole('button', { name: '打开此块的恢复原记录', exact: true }).click()
+    const reads: string[] = []
+    page.on('request', request => { if (request.method() === 'GET') reads.push(new URL(request.url()).pathname) })
+    await restore(page).getByRole('button', { name: '重新核验并恢复原会话的恢复表单', exact: true }).click()
+    await expect(restore(page).getByRole('textbox', { name: '本次恢复理由', exact: true })).toHaveValue(reason)
+    await expect(restore(page).getByLabel('我已核对历史来源、当前基准与全部字段，明确创建独立待审恢复稿。', { exact: true })).not.toBeChecked()
+    expect(reads).toContain('/api/v1/session')
+    expect(reads).toContain(`/api/v1/objects/${id}/current`)
+    expect(reads.filter(path => path === `/api/v1/blocks/${id}/body`)).toHaveLength(2)
+    expect(await restore(page).getByLabel('历史来源完整正文', { exact: true }).textContent()).toBe(fixture.old.bodies[id])
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 })
+      await restore(page).getByRole('textbox', { name: '本次恢复理由', exact: true }).scrollIntoViewIfNeeded()
+      expect(await restore(page).evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+      await page.screenshot({ path: info.outputPath(`restore-unsent-form-${width}.png`) })
+    }
+    await restore(page).getByRole('button', { name: '明确清除未提交的恢复表单', exact: true }).click()
+    expect(await restore(page).getByRole('textbox', { name: '本次恢复理由', exact: true }).count()).toBe(0)
+    expect(await page.evaluate(() => { const event = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(event); return event.defaultPrevented })).toBe(false)
+    expect(commands).toEqual([]); expect(errors).toEqual([])
+    writeFileSync(info.outputPath('restore-unsent-form.json'), JSON.stringify({ source: fixture.old.blocks[1], base: fixture.current.blocks[1], reason, reads, commands, errors, scope: 'Real UI role cycle and fresh source reads; zero Restore create POST; page-only same-session form.' }, null, 2))
+  } finally { await runtime.close() }
+})
 test('actual current publication race returns 412 without rebasing the already prepared Restore UI candidate', async ({ playwright }, info) => {
   test.setTimeout(120_000)
   const runtime = await RestartRuntime.start()
