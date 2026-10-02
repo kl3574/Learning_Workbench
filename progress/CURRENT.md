@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-02T10:18:17Z；规范 SHA-256：`35018183fbd6d7253001e71b2c932eb10410813ed81625936a667a6be71d0c29`
+更新：2026-10-02T12:25:58Z；规范 SHA-256：`1c571ee91a7d39dedd2e8395f48766bd6183d496154ee9bdd9b67cb978ff26d7`
 
-仓库发布：VERIFIED；Issues 同步：VERIFIED_PR55_ISSUE31_A5_TERMINAL_LOCAL_SCOPE_DISTINCT
+仓库发布：VERIFIED；Issues 同步：VERIFIED_PR55_ISSUE31_V312_LOCAL_RUNTIME_BLOCKED
 实施：IN_PROGRESS；当前任务：M6.2；下一任务：M6.2
 
-继续已批准Content影响事件发现/决定UI及真实发布后发现链；固定819aa927完整Python重新运行（首次因隔离环境漏装tsc而6FAIL后中断，原记录保留），6b0dc4dc完整native112PASS；ContentUI固定提交待独审。v10会话恢复、v11列表后台、Restore和Learning/Edit/CodeMirror已本地组合复核。a5双CI已终态push成功/PR Tutor失败，下一次发布须绑定新证据，PR55保持draft/open；worked_example恢复数值合同缺口另行审阅，不放宽准入。
+完成固定v3.0.12完整Python/native及数值UI独审，保留实际BLOCKED和原失败证据后同步发布状态；并行核现行规范下Single/Group生成稿发布缺口。M6.2保持in_progress，M6.3/M7尚未开始。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -41,15 +41,15 @@
 
 ## 验证边界
 
-- spec_checks: b8619a9规范v3.0.9结构PASS：126声明路由、76产物、54core、6嵌入文件；六新增合同业务未实现。
-- unit: 3fc完整Python3072PASS1FAIL1真实数值ENVSKIP2warning；旧路由计数断言a357修正，focused4PASS；当前全套NOT_RUN。
-- contract: b8619a9路由归属与生成契约4PASS；仅结构，非新增端点业务验收。
+- spec_checks: v3.0.12/300b6903结构PASS：130声明/110实际HTTP、78生成物、54core、6嵌入文件；20未实施路由没有伪造handler。
+- unit: d252组合824Web/116files PASS；Ruff/strictTS/mypy234/build834 PASS。v3.0.12完整Python RUNNING@d252。历史819/v3.0.11完整3294PASS/1真实ENVskip/2warnings，1156输入不变，不转授v12。
+- contract: v3.0.12三新增真实HTTP与7DTO闭合，最终owner源ea3组合117DTO/transport/projection/真实HTTP PASS；此前固定fca+4a779完整contract与指定RestoreHTTP PASS，各自来源不混计。
 - integration: 已整合真实编辑发布/笔记stale/历史成绩不改/索引失效合成HTTP测试1PASS；成绩样例不属于本次影响闭包，不声称适用性复核。
-- browser_native: 8701push107PASS，PR106PASS1原Tutor5sFAIL。编辑器isolated a7bff结果待独审，当前组合完整native NOT_RUN。
+- browser_native: ac5已组合7真实场景PASS，1198工程输入匹配Git。Restore数值root7023原生1PASS13.9s：preview丢ACK→原key回放→独立approve→实际BLOCKED→新Review/合成人审→发布409，未宣称数值PASS。当前完整native RUNNING@300b6903。
 - real_provider: 历史2026-09-15独立DeepSeek直连GET models200/Chat200、usage14/1/15仅有进度记录，未找到可独立核验的原始HTTP回执。PLATFORM_AGENT_NOT_RUN：生产RequestPreparer(ProofRegistry())注册表为空，无符合唯一规范§20.5的托管完整输入证明；用户密钥未进入本轮测试或仓库。
 - real_codex: NOT_RUN
 - learning_effectiveness: NOT_RUN
-- ci: 8701push36389800538 SUCCESS(6jobs)，PR36389807970 FAILURE(5success/1browserfail)。当前本地b8619a9未推送，CI NOT_RUN。
+- ci: 已发布仍a5：push36988843781 SUCCESS；PR36988849056 FAILURE（107native PASS/1 Tutor原5000ms FAIL），原因未确证。本地300b6903未推送，CI NOT_RUN。
 - m4_1_development: 开发和独立审查的所有原失败/修复、环境诊断已保留；最终源码新验收通过，不覆盖历史失败。
 - m4_1_exact: 5bd8157新lint/types/spec/247web/build/74native均PASS，504源码前后相同；同SHA双workflow12checks成功。
 - m4_1_layout_repair: PASS:真实412布局及焦点回归；原失败保留，限定机制归因；新74完整套件通过。
@@ -193,10 +193,22 @@
 - M6.2_session_list_819aa927: Approvedv3.0.10/11 implemented locally;107actual/127declared/20remaining,76generatedchecked;168focusedPythonPASS,Ruff,mypy227,TS PASS at1156unchangedinputs. b78 actor independent102Web+114HTTP+2native+lintPASS; no v1 migration/no other-owner replay expansion.
 - M6.2_impact_discovery_d636fe54: Readonly list backend d636fe54 root111PASS/2warnings/staticPASS; independent148PASS including15 adversarial probes. Original current-pointer404/orphan-revisions omission fixed to409; original failing probes+Ruff failure retained; stable highwater/zero writes checked.
 - M6.2_restore_combined_6b0dc4dc: 22Restore paths byte-identical to da867; root read allproduction/shared attachments; combined661Web/104files,6actualnative,lint/build813 PASS;1175inputs Gitbound. Original660PASS1ShellcaseFAIL and separate2PASS retained; case workspace isolated+durableACKawait, no productguard weakened. Fullnative stillRUNNING.
-- M6.2_819_complete_retry: RUNNING. Original full819gate INTERRUPTED exit2:6FAIL1403PASS1ENVskip647.82s, all6missingtsc127; actual boundedred reproduced. npmci exactlock installed257/audit0,Node24.21.0/TS7.0.2,sourceunchanged. Whole identical command restarted; no all-suitePASS claim.
+- M6.2_819_complete_retry: Fixed819aa927 v3.0.11 complete quota-isolated gatePASS:3294PASS/1sealed numericENVskip/2warnings/1768.83s;1156before/after inputs equal and every path matches Git;treeCLEAN. Only TMPDIR/basetemp changed. Original130FAIL/3072PASS/92ERROR/1SKIP/1274.49s retained and all222 unsuccessful cases mapped;15representative controlsPASS. Start/sample quota full, endpoint below limit;no continuous-full claim. This does not cover later scanner/UI/v3.0.12. Public package M6.2-819aa927-quota-gates binds full logs/receipts/maps/root-readback.
 - M6.2_a5_terminal_progress_sync: {'readback_at': '2026-10-02T10:09:44.553490+00:00', 'head_unchanged': 'a5c4ca9d46a740737d29499fb212cdfcd64187f8', 'pull_request': 55, 'draft': True, 'open': True, 'merged': False, 'issue': 31, 'issue_outside_managed_block_and_metadata_unchanged': True, 'pr_body_sha256': '65fbee56f19f68e8745e4c586b22aed8112342de4c491b74494c299756d469f1', 'issue_body_sha256': 'bd2aa132f3ed1ef351eb0b9c2344e83d3431cd2719677127b933088997d45401', 'source_push': False, 'ci_state': 'a5 pushSUCCESS/PRFAILURE; new local complete gatesRUNNING'}
 - M6.2_full_native_6b0dc4dc: 112PASS/12.6min/1worker/0retry/exit0 at6b. Rawcaptureunchanged=false because six preexisting docs/ui generated outputs changed; raw manifests retained, before/after archived and originalGit bytes restored. All1169others unchanged and1175beforeGitbound. Tutor original5000ms casePASS only this localrun; a5PRfailure not closed. Not ContentUI/realProvider/quality.
-- M6.2_restore_numeric_gap: Actual unmodified6bHTTPprobe1PASS confirms no legal numericowner path forRestore; software test synthetichuman only. Proposal472d41a7 modifies only specification in isolated branch, canonical35018183 unchanged; ownerquestionpending, no implementation/execution/remote mutation for proposed3routes.
+- M6.2_restore_numeric_gap: Owner approved proposal472d41a7;sole spec nowv3.0.12 adopted50f80c14. Previous realHTTP gap probe and publish denial preserved. DTO/HTTP/backend/Jobs/Review implementation underway; complete sandbox execution and new numerical publication NOT_RUN, no fallback.
+- M6.2_content_ui_e0_independent: 已修复并整合cf326765：原e0理由丢失P1与3be submit新文字丢失P1均有原RED保留；50d独立42focused/2actualnative PASS。root组合703Web/5native/static/build PASS；83项公开证据含原失败、作者与独立报告和root固定source回读。
+- M6.2_publication_scanner_b74: Integratedeebfromb74 root25focusedPASS; original20case9FAIL11PASS retained. 5d preserves provenance while correcting3oldprose matches and2currentinventories;author14037alltrackedPASS. Root currentfullscan pending.
+- M6.2_v312_approved: {'proposal_commit': '472d41a7c0fdf8a92613cb88fb7a17d61c382658', 'adoption_commit': '50f80c14', 'approval': 'Explicit owner approval received; implementation authorized', 'scope': '7 strict Restore numeric DTOs, 3 real routes, required snapshot discovery fields, explicit anchored finite-arithmetic material, separate one-time sealed execution, owner Jobs/Review/publication integrity', 'implementation': 'IN_PROGRESS: isolated a932 strict7DTO54PASS/TS/78generated;34bb HTTP pre-owner dispatch39PASS. Backend owner integrity and execution/newReview chain, numericUI under implementation; whole-route/live numeric publication NOT_RUN.'}
+- M6.2_v312_approval_progress_sync: {'readback_at': '2026-10-02T10:49:24.411127+00:00', 'head_unchanged': 'a5c4ca9d46a740737d29499fb212cdfcd64187f8', 'pull_request': 55, 'draft': True, 'open': True, 'merged': False, 'issue': 31, 'issue_outside_managed_block_and_metadata_unchanged': True, 'pr_body_sha256': '69eb3c49f9a27a375350e40c056925883fb147b724e1e362f8fb0eef1d688ec9', 'issue_body_sha256': 'df49bca3e732405e500ce770bbcd62752ca37379ab8c6715061effd428e85dbd', 'source_push': False, 'ci_state': 'a5 pushSUCCESS/PRFAILURE; fixed819 quota-isolated full gate RUNNING', 'spec_adoption_local': '50f80c14 v3.0.12; implementation in progress'}
+- M6.2_content_ui_cf326765: {'fixed_source': 'cf326765be48ca1619c733d87f9ccd51e808c848', 'web': '703PASS/108files', 'native': '5PASS/1.9min', 'static': 'strict lint/types and build821PASS', 'inputs': 1192, 'source_proof': 'before/after equal; every engineering path matches fixed Git bytes', 'evidence': 'progress/evidence/2026-10-02/M6.2-content-ui-cf326765/manifest.json', 'numeric_v12': 'not implemented in this fixed tree; no numerical execution or release claim'}
+- M6.2_restore_form_0b8: isolated0b8 author49focused/667Web/lint/build/3actualnativePASS;1178gateinputs bind fixedGit. Root inspected390/1440actual screenshots. Independent review ongoing; not yet integrated. No numeric feature credited.
+- M6.2_review_form_f93: isolatedf93 author668Web/lint/build/3actualnativePASS;original actualPolicy-unmount red retained. Root source review/integration pending. Earlynative log output collision disclosed, not all old artifacts complete.
+- M6.2_review_restore_forms_ac5: 716Web/109files、strictTS、build824、7native PASS；1198输入逐Git及前后一致。Review表单f93、Restore创建表单0b8与Content作用域保护合并，无新会话继承；Restore独审57PASS/3native，报告与原失败公开包89项。
+- M6.2_restore_numeric_v312: 本地300b6903已整合v3.0.12 Restore数值材料、3实际接口与新Review/发布账本：110实际/130声明路由、78生成物、54core不变。生产源d252组合824Web/116files、strictTS、Ruff、mypy234、build834、spec PASS；完整Python冻结d252、完整native冻结300正在运行，不记完成。后端ea3独审56PASS/4独立探针，真封存执行BLOCKED_ENVIRONMENT；root7023实际浏览器新Review+合成人审后发布409 PUBLISH_NUMERIC_REQUIRED，草稿/current/父Lesson不变。所有学术/教学判断仍未验收。
+- M6.2_restore_numeric_physical: BLOCKED_ENVIRONMENT：实际封存353成员运行闭包、实际开始/结束/exit1，bwrap loopback RTM_NEWADDR EPERM，无fallback。HTTPpreview201/approve202/currentGET200；新Review/人审后publish409 PUBLISH_NUMERIC_REQUIRED。仅协议/合成算术验收，无真实numeric PASS。
+- M6.2_v312_runtime_progress_sync: {'readback_at': '2026-10-02T12:21:32.665557+00:00', 'head_unchanged': 'a5c4ca9d46a740737d29499fb212cdfcd64187f8', 'pull_request': 55, 'draft': True, 'open': True, 'merged': False, 'issue': 31, 'issue_outside_managed_block_and_metadata_unchanged': True, 'pr_body_sha256': '2666297bdb375c8b40c7481cc9e1c74019a2b09f784816c8bd32fd78934e252b', 'issue_body_sha256': 'dfa1b849b330c2bdcc64b6f047376c8025bad9156c65777043db0a27ede4ffc0', 'source_push': False, 'ci_state': 'a5 pushSUCCESS/PRFAILURE; fixed819 full PASS; v312 d252 Python/300 native RUNNING', 'spec_adoption_local': 'v3.0.12 implemented locally; physical numeric BLOCKED'}
+- M6.2_numeric_ui_final: 固定dec5e902：830Web/117files、strictTS/build834、原生数值→新Review→合成人审→发布拒绝1PASS；1238工程输入逐Git与前后相同。CRLF P2原同probe2PASS1FAIL→3PASS+14独立边界；独审200focused/TS PASS，无剩余已证实P1/P2。实际numeric仍BLOCKED环境；完整Python d252/native300另跑，尚未终态。
 
 ## 阻塞与待决项
 
@@ -219,13 +231,13 @@
 - M62_8701_PR_TUTOR_FAILED: 8701原push六job成功，PR browser106PASS1原Tutor5s失败，原因未知；完整原件已封包。
 - M62_EDITOR_POLICY_MEMORY_REVIEW_PENDING: a7bff45已独审并整合为d302；24项定向复验通过，root固定1092输入Web562/原生1/strictTS/build通过。未落盘文字保护已验，跨新页面原命令重放另有合同缺口。
 - M62_EDITOR_NEW_PAGE_ACK_CONTRACT: v3.0.10已批准采纳并实现。b78独审102Web/114HTTP/2native及7新增负例PASS；与实际列表107/127组合819的168Python/staticPASS。真实同actor刷新/API重启显式原key/body回放、v1不升级/新actor不继承通过；其他owner限制不扩。
-- M62_IMPACT_RESTORE_IMPLEMENTING: v3.0.9后台已有8fb完整门禁。Learning/Edit/CM/Restore在6b组合661Web/6native/staticPASS，Restore独立owner从实际历史proof到新Review/人审/CAS发布与412竞态通过，旧父pin不变。Content发现/决定UI仍实施，worked_example数值归属缺合同，拒绝发布保留。
-- M62_FINAL_COMBINED_GATES_PENDING: 8fb旧3227PASS1ENVskip保留但不覆盖新增实现。819完整Python首次环境漏装tsc有6FAIL后中断，原证据保留；安装锁定依赖后原完整命令重跑中。6b全Web661/重点native6PASS，6b全native112PASS（六个旧docs/ui输出单列且原件还原）；ContentUI固定提交待独审；M6.2未完成。
+- M62_IMPACT_RESTORE_IMPLEMENTING: Content发现/逐对象决定、Learning逐原证据适用性、proof Restore新审核/发布及未提交表单保护已组合到ac5并通过716Web/7native。worked_example已按批准v12接入独立数值链；物理执行仍环境阻断，发布拒绝保留。
+- M62_FINAL_COMBINED_GATES_PENDING: v12固定d252 fullPython和300 fullnative正在运行；824Web/strictTS/Ruff/mypy234/build834/spec已PASS。数值UI独审还未终态，当前代码未推送，不转授历史完整门禁。
 - M62_1AD_SPEC_CI_FAILED: 原1ad双608PASS1路由覆盖FAIL保留；a5的两spec619PASS。新增v11实际107/127是本地819证据，不追记为a5能力。
 - M62_1AD_TUTOR_BROWSER_FAILED: 1ad和旧head Tutor失败保留。a5 push108PASS但PR107PASS1同5000msFAIL，唯一原因UNKNOWN；本地026/067只证明重复扫描优化和受控负载差异，不据此关闭CI失败。
 - M62_CODEMIRROR_SOURCE_EDITOR_PENDING: 实际CodeMirror保留原文/Unicode/TeX/撤销/只读及Review保护；已与actor/Restore/Edit/Learning组合6b，661Web和六重点native PASS。尚未将此次新UI发布或宣称全M6.2验收。
-- M62_IMPACT_DISCOVERY_IMPLEMENTING: v3.0.11只读事件列表d636后台独审148PASS、根111PASS，原完整性反例已修；实际107/127契约在819重建并168联合PASS。辅助创作入口真实发布后发现/决定UI正在实施。
+- M62_IMPACT_DISCOVERY_IMPLEMENTING: 只读列表后台独审通过；Content UI未提交理由丢失及await期间新文字丢失均修复，固定cf703Web/5native PASS，独审42focused/2native。后续ac5 Review/Restore组合通过。
 - M62_A5_PR_TUTOR_FAILED: a5 PR36988849056的browser110780057263在Tutor completed标题5000ms断言失败；107PASS1FAIL。对应push108PASS不抵消该失败；12原job logs及GitHub artifact11219786276完整保留。
-- M62_RESTORE_NUMERIC_CONTRACT: 现行v3.0.11没有Restore专属数值计划/预览/执行合同：真实HTTP探针确认旧create追加plan422、借single404、发布409 PUBLISH_NUMERIC_COVERAGE_UNAVAILABLE且拒绝零写。仅规范提案472d41a7已审阅并提交所有者决定，未合并/推送/实施；原文定位的手工有限算术计划、3新路由、单次隔离执行、新Review均待明确批准。其他已批准工作继续。
+- M62_RESTORE_NUMERIC_CONTRACT: 批准472d41a7已纳入唯一规范v3.0.12；3真实HTTP、7DTO、手工原文计划与唯一账本/单次执行/新Review发布已本地实施。实际bwrap exit1环境阻断；新人工批准后publish409仍拒绝，不宣称physical PASS。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。

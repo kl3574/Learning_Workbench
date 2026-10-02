@@ -1,0 +1,46 @@
+
+Running 1 test using 1 worker
+
+(node:2017549) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/e2e/content-impacts.spec.ts:28:1 › native edit publication discovers actual impacts and preserves human decisions through CAS, lost reply, IDB failure, access changes, stable pages and restart (4.0s)
+
+
+  1) tests/e2e/content-impacts.spec.ts:28:1 › native edit publication discovers actual impacts and preserves human decisions through CAS, lost reply, IDB failure, access changes, stable pages and restart 
+
+    Error: browserType.launchPersistentContext: Target page, context or browser has been closed
+    Browser logs:
+
+    <launching> /usr/bin/google-chrome --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --user-data-dir=$HOME/.cache/learning-workbench-acceptance/m62-content-impacts-ui-independent-evidence-oct02/tmp/learning-workbench-reader-restart-browser-VRkkBB --remote-debugging-pipe about:blank
+    <launched> pid=2017643
+    [pid=2017643][err] [2017643:2017643:1002/182905.004810:FATAL:chrome/browser/process_singleton_posix.cc:313] Socket path too long: $HOME/.cache/learning-workbench-acceptance/m62-content-impacts-ui-independent-evidence-oct02/tmp/com.google.Chrome.Hv5Lw1/SingletonSocket.
+    Call log:
+      - <launching> /usr/bin/google-chrome --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --user-data-dir=$HOME/.cache/learning-workbench-acceptance/m62-content-impacts-ui-independent-evidence-oct02/tmp/learning-workbench-reader-restart-browser-VRkkBB --remote-debugging-pipe about:blank
+      - <launched> pid=2017643
+      - [pid=2017643][err] [2017643:2017643:1002/182905.004810:FATAL:chrome/browser/process_singleton_posix.cc:313] Socket path too long: $HOME/.cache/learning-workbench-acceptance/m62-content-impacts-ui-independent-evidence-oct02/tmp/com.google.Chrome.Hv5Lw1/SingletonSocket.
+      - [pid=2017643] <gracefully close start>
+      - [pid=2017643] <kill>
+      - [pid=2017643] <will force kill>
+      - [pid=2017643] exception while trying to kill process: Error: kill ESRCH
+      - [pid=2017643] <process did exit: exitCode=null, signal=SIGABRT>
+      - [pid=2017643] starting temporary directories cleanup
+      - [pid=2017643] finished temporary directories cleanup
+      - [pid=2017643] <gracefully close end>
+
+
+       at restartRuntime.ts:111
+
+      109 |   async openBrowser(browserType: BrowserType) {
+      110 |     if (this.context) throw new Error('Close the actual previous browser before reopening')
+    > 111 |     this.context = await browserType.launchPersistentContext(this.profile, {
+          |                    ^
+      112 |       headless: true, viewport: { width: 1440, height: 900 }, baseURL: this.origin,
+      113 |       ...(existsSync('/usr/bin/google-chrome') ? { executablePath: '/usr/bin/google-chrome' } : {}),
+      114 |     })
+        at RestartRuntime.openBrowser ($HOME/.cache/learning-workbench-acceptance/m62-content-impacts-ui-independent-oct02/tests/e2e/restartRuntime.ts:111:20)
+        at $HOME/.cache/learning-workbench-acceptance/m62-content-impacts-ui-independent-oct02/tests/e2e/content-impacts.spec.ts:32:21
+
+    Error Context: ../m62-content-impacts-ui-independent-evidence-oct02/native-artifacts/content-impacts-native-edi-b32dd-es-stable-pages-and-restart/error-context.md
+
+  1 failed
+    tests/e2e/content-impacts.spec.ts:28:1 › native edit publication discovers actual impacts and preserves human decisions through CAS, lost reply, IDB failure, access changes, stable pages and restart 

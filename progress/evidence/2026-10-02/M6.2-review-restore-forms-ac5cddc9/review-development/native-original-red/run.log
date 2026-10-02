@@ -1,0 +1,43 @@
+
+> @learning-workbench/web@0.1.0 test:e2e
+> playwright test --config ../../tests/e2e/playwright.config.ts --config $HOME/.cache/learning-workbench-acceptance/m62-review-form-memory-evidence-oct02/original.config.ts
+
+
+Running 1 test using 1 worker
+
+(node:2170619) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 ../../tests/e2e/review-form-memory.spec.ts:7:1 › real Policy and role cycles retain unsent Review note and reason with fresh reads, explicit discard and zero automatic decisions (15.3s)
+
+
+  1) ../../tests/e2e/review-form-memory.spec.ts:7:1 › real Policy and role cycles retain unsent Review note and reason with fresh reads, explicit discard and zero automatic decisions 
+
+    Error: expect(locator).toBeEnabled() failed
+
+    Locator: getByRole('dialog', { name: '导入', exact: true }).getByRole('region', { name: '候选审核与原命令恢复', exact: true }).getByRole('button', { name: '核验原会话与准确基准，恢复临时审核表单', exact: true })
+    Expected: enabled
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeEnabled" getByRole('dialog', { name: '导入', exact: true }).getByRole('region', { name: '候选审核与原命令恢复', exact: true }).getByRole('button', { name: '核验原会话与准确基准，恢复临时审核表单', exact: true }) with timeout 5000ms
+      - waiting for getByRole('dialog', { name: '导入', exact: true }).getByRole('region', { name: '候选审核与原命令恢复', exact: true }).getByRole('button', { name: '核验原会话与准确基准，恢复临时审核表单', exact: true })
+
+
+      49 |     expect(abandoned.status()).toBe(200)
+      50 |     const recover = panel.getByRole('button', { name: '核验原会话与准确基准，恢复临时审核表单', exact: true })
+    > 51 |     await expect(recover).toBeEnabled(); expect(writes).toEqual([])
+         |                           ^
+      52 |     await recover.click()
+      53 |     const recoveredNote = panel.getByRole('region', { name: '恢复的临时审核表单 1', exact: true })
+      54 |     const recoveredReason = panel.getByRole('region', { name: '恢复的临时审核表单 2', exact: true })
+        at $HOME/.cache/learning-workbench-acceptance/m62-review-form-memory-original-oct02/tests/e2e/review-form-memory.spec.ts:51:27
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../m62-review-form-memory-evidence-oct02/native-original-output/review-form-memory-real-Po-ef706-nd-zero-automatic-decisions/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../m62-review-form-memory-evidence-oct02/native-original-output/review-form-memory-real-Po-ef706-nd-zero-automatic-decisions/error-context.md
+
+  1 failed
+    ../../tests/e2e/review-form-memory.spec.ts:7:1 › real Policy and role cycles retain unsent Review note and reason with fresh reads, explicit discard and zero automatic decisions 

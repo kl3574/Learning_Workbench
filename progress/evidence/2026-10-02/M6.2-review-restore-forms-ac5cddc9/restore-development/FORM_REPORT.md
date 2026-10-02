@@ -1,0 +1,9 @@
+# Restore unsent form preservation
+
+Fixed source: `0b8a3d7fa43e2306facded1b69259a85b3c04de9` (base 50f80c14); this report excludes the later v3.0.12 DTO and numeric implementation.
+
+Original Policy change cleared unsubmitted restore reason and confirmation; the real Panel RED and original source remain in form-red.log/form-red-source. The fix preserves original protected source/base and reason only in page memory, hides the payload when authorization is unavailable, and requires an explicit fresh Session/current/source/base read before original-session recovery. Recovery removes the confirmation and never sends create POST. A changed current keeps the old basis with submission disabled. Late permission replies cannot disclose payload; a new session cannot inherit the form; explicit discard is scoped. Exact-body consumption preserves a newer reason entered while original submission awaits IDB. No original command key/body/replay permission changed.
+
+Actual validation: 49 focused tests, 667 full Web tests (105 files), lint and build PASS. Three actual native scenarios PASS: unsent role-cycle/fresh-read/unchecked confirmation/zero POST and explicit discard; original proof restoration with fresh human Review, lost ACK/real IDB abort/role/restart; current-publication 412 race. All 1178 engineering inputs were unchanged across the three captured combined gates and independently match fixed Git blobs (form-fixed-source-readback.json). Desktop and narrow screenshots were inspected. Synthetic human judgments are protocol evidence, not mathematical or teaching approval.
+
+Failures retained: original form RED; first private native config failed before test execution because external config lacked ESM package metadata. The corrected harness added private package.json only; no test or production weakening. Standard build chunk-size warning remains. No provider/network model call, publication to GitHub, release, or whole-M6.2 acceptance is claimed.

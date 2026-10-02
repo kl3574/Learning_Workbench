@@ -1,0 +1,45 @@
+
+Running 2 tests using 1 worker
+
+(node:2081862) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/e2e/content-impacts.spec.ts:28:1 › native edit publication discovers actual impacts and preserves human decisions through CAS, lost reply, IDB failure, access changes, stable pages and restart (28.5s)
+  ✘  2 tests/e2e/content-impacts.spec.ts:98:1 › native unsubmitted Content judgment survives role cycles with original basis and explicit close discard (7.9s)
+
+
+  1) tests/e2e/content-impacts.spec.ts:98:1 › native unsubmitted Content judgment survives role cycles with original basis and explicit close discard 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('✓ UI 会话已保存')
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByText('✓ UI 会话已保存') with timeout 5000ms
+      - waiting for getByText('✓ UI 会话已保存')
+
+
+       at readerTestData.ts:16
+
+      14 |
+      15 | export async function importReaderPackage(page: Page, value: ReaderPackage) {
+    > 16 |   await expect(page.getByText('✓ UI 会话已保存')).toBeVisible()
+         |                                              ^
+      17 |   await page.keyboard.press('Control+Shift+P')
+      18 |   await page.getByRole('dialog', { name: '命令面板', exact: true }).getByRole('button', { name: /^导入/ }).click()
+      19 |   const dialog = page.getByRole('dialog', { name: '导入', exact: true })
+        at importReaderPackage ($HOME/.cache/learning-workbench-acceptance/m62-content-impacts-ui-independent-oct02/tests/e2e/readerTestData.ts:16:46)
+        at publishEditedBlock ($HOME/.cache/learning-workbench-acceptance/m62-content-impacts-ui-independent-oct02/tests/e2e/contentImpactsData.ts:29:61)
+        at $HOME/.cache/learning-workbench-acceptance/m62-content-impacts-ui-independent-oct02/tests/e2e/content-impacts.spec.ts:103:31
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-content-impacts-ui-independent-evidence-oct02/native-fix-artifacts/content-impacts-native-uns-5714f--and-explicit-close-discard/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m62-content-impacts-ui-independent-evidence-oct02/native-fix-artifacts/content-impacts-native-uns-5714f--and-explicit-close-discard/error-context.md
+
+  1 failed
+    tests/e2e/content-impacts.spec.ts:98:1 › native unsubmitted Content judgment survives role cycles with original basis and explicit close discard 
+  1 passed (36.7s)

@@ -1,0 +1,256 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run
+
+
+ RUN  v5.0.0 $HOME/.cache/learning-workbench-acceptance/m62-public-safe-oct02/apps/web
+
+ ❯ src/features/authoring/AuthoringImpactIsolation.test.tsx (4 tests | 4 failed) 4163ms
+   × Content isolated memory does not bypass other Authoring protection: busy 1113ms
+   × Content isolated memory does not bypass other Authoring protection: unread 1020ms
+   × Content isolated memory does not bypass other Authoring protection: review_undurable 1010ms
+   × Content isolated memory does not bypass other Authoring protection: others_safe 1019ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/authoring/AuthoringImpactIsolation.test.tsx > Content isolated memory does not bypass other Authoring protection: busy
+AssertionError: expected { dirty: true, safe: false, …(2) } to deeply equal { dirty: true, safe: false, …(1) }
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"authoring-panel"[39m
+      [36m>[39m
+        [36m<p>[39m
+          [0m可以准备例题、教材小节、习题集与测试题组草稿。模型调用与数值执行分别授权；生成完成不会自动获得数学、来源或教学质量批准。[0m
+        [36m</p>[39m
+        [36m<button[39m
+          [33mdisabled[39m=[32m""[39m
+        [36m>[39m
+          [0m刷新安全任务列表与当前权限[0m
+        [36m</button>[39m
+        [36m<button>[39m
+          [0m打开候选审核与恢复[0m
+        [36m</button>[39m
+        [36m<button>[39m
+          [0m打开内容变更影响复核[0m
+        [36m</button>[39m
+        [36m<section[39m
+          [33maria-label[39m=[32m"创作任务安全控制"[39m
+        [36m>[39m
+          [36m<h3>[39m
+            [0m已有创作与数值任务[0m
+          [36m</h3>[39m
+          [36m<p>[39m
+            [0m这里只显示任务状态。取消请求不保证远端尚未执行，也不撤销已发生的计算。[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0m本页没有任务。[0m
+          [36m</p>[39m
+        [36m</section>[39m
+        [36m<section[39m
+          [33maria-label[39m=[32m"原创作命令回执"[39m
+        [36m>[39m
+          [36m<h3>[39m
+            [0m本机保留的原命令[0m
+          [36m</h3>[39m
+        [36m</section>[39m
+        [36m<p[39m
+          [33mrole[39m=[32m"status"[39m
+        [36m>[39m
+          [0m当前只开放安全任务控制。主题、材料、候选、数值输入与结果已收起；请在作者会话且当前测试策略允许后明确重新读取。[0m
+        [36m</p>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</body>[39m
+[36m</html>[39m
+
+- Expected
++ Received
+
+  {
+    "dirty": true,
++   "discardForms": [Function anonymous],
+    "isolated": false,
+    "safe": false,
+  }
+
+ ❯ src/features/authoring/AuthoringImpactIsolation.test.tsx:23:58
+     21|   const changed = vi.fn(); render(<AuthoringPanel workspace="workspace…
+     22|   fireEvent.click(screen.getByRole('button', { name: '打开候选审核与恢复' })); …
+     23|   await waitFor(() => expect(changed.mock.lastCall?.[0]).toEqual({ dir…
+       |                                                          ^
+     24| })
+     25|
+ ❯ runWithExpensiveErrorDiagnosticsDisabled node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+
+ FAIL  src/features/authoring/AuthoringImpactIsolation.test.tsx > Content isolated memory does not bypass other Authoring protection: unread
+ FAIL  src/features/authoring/AuthoringImpactIsolation.test.tsx > Content isolated memory does not bypass other Authoring protection: review_undurable
+AssertionError: expected { dirty: true, safe: false, …(2) } to deeply equal { dirty: true, safe: false, …(1) }
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"authoring-panel"[39m
+      [36m>[39m
+        [36m<p>[39m
+          [0m可以准备例题、教材小节、习题集与测试题组草稿。模型调用与数值执行分别授权；生成完成不会自动获得数学、来源或教学质量批准。[0m
+        [36m</p>[39m
+        [36m<button>[39m
+          [0m刷新安全任务列表与当前权限[0m
+        [36m</button>[39m
+        [36m<button>[39m
+          [0m打开候选审核与恢复[0m
+        [36m</button>[39m
+        [36m<button>[39m
+          [0m打开内容变更影响复核[0m
+        [36m</button>[39m
+        [36m<section[39m
+          [33maria-label[39m=[32m"创作任务安全控制"[39m
+        [36m>[39m
+          [36m<h3>[39m
+            [0m已有创作与数值任务[0m
+          [36m</h3>[39m
+          [36m<p>[39m
+            [0m这里只显示任务状态。取消请求不保证远端尚未执行，也不撤销已发生的计算。[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0m本页没有任务。[0m
+          [36m</p>[39m
+        [36m</section>[39m
+        [36m<section[39m
+          [33maria-label[39m=[32m"原创作命令回执"[39m
+        [36m>[39m
+          [36m<h3>[39m
+            [0m本机保留的原命令[0m
+          [36m</h3>[39m
+        [36m</section>[39m
+        [36m<p[39m
+          [33mrole[39m=[32m"status"[39m
+        [36m>[39m
+          [0m当前只开放安全任务控制。主题、材料、候选、数值输入与结果已收起；请在作者会话且当前测试策略允许后明确重新读取。[0m
+        [36m</p>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</body>[39m
+[36m</html>[39m
+
+- Expected
++ Received
+
+  {
+    "dirty": true,
++   "discardForms": [Function anonymous],
+    "isolated": false,
+    "safe": false,
+  }
+
+ ❯ src/features/authoring/AuthoringImpactIsolation.test.tsx:23:58
+     21|   const changed = vi.fn(); render(<AuthoringPanel workspace="workspace…
+     22|   fireEvent.click(screen.getByRole('button', { name: '打开候选审核与恢复' })); …
+     23|   await waitFor(() => expect(changed.mock.lastCall?.[0]).toEqual({ dir…
+       |                                                          ^
+     24| })
+     25|
+ ❯ runWithExpensiveErrorDiagnosticsDisabled node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+
+ FAIL  src/features/authoring/AuthoringImpactIsolation.test.tsx > Content isolated memory does not bypass other Authoring protection: others_safe
+AssertionError: expected { dirty: true, safe: false, …(2) } to deeply equal { dirty: true, safe: false, …(1) }
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"authoring-panel"[39m
+      [36m>[39m
+        [36m<p>[39m
+          [0m可以准备例题、教材小节、习题集与测试题组草稿。模型调用与数值执行分别授权；生成完成不会自动获得数学、来源或教学质量批准。[0m
+        [36m</p>[39m
+        [36m<button>[39m
+          [0m刷新安全任务列表与当前权限[0m
+        [36m</button>[39m
+        [36m<button>[39m
+          [0m打开候选审核与恢复[0m
+        [36m</button>[39m
+        [36m<button>[39m
+          [0m打开内容变更影响复核[0m
+        [36m</button>[39m
+        [36m<section[39m
+          [33maria-label[39m=[32m"创作任务安全控制"[39m
+        [36m>[39m
+          [36m<h3>[39m
+            [0m已有创作与数值任务[0m
+          [36m</h3>[39m
+          [36m<p>[39m
+            [0m这里只显示任务状态。取消请求不保证远端尚未执行，也不撤销已发生的计算。[0m
+          [36m</p>[39m
+          [36m<p>[39m
+            [0m本页没有任务。[0m
+          [36m</p>[39m
+        [36m</section>[39m
+        [36m<section[39m
+          [33maria-label[39m=[32m"原创作命令回执"[39m
+        [36m>[39m
+          [36m<h3>[39m
+            [0m本机保留的原命令[0m
+          [36m</h3>[39m
+        [36m</section>[39m
+        [36m<p[39m
+          [33mrole[39m=[32m"status"[39m
+        [36m>[39m
+          [0m当前只开放安全任务控制。主题、材料、候选、数值输入与结果已收起；请在作者会话且当前测试策略允许后明确重新读取。[0m
+        [36m</p>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</body>[39m
+[36m</html>[39m
+
+- Expected
++ Received
+
+  {
+    "dirty": true,
++   "discardForms": [Function anonymous],
+    "isolated": true,
+    "safe": false,
+  }
+
+ ❯ src/features/authoring/AuthoringImpactIsolation.test.tsx:23:58
+     21|   const changed = vi.fn(); render(<AuthoringPanel workspace="workspace…
+     22|   fireEvent.click(screen.getByRole('button', { name: '打开候选审核与恢复' })); …
+     23|   await waitFor(() => expect(changed.mock.lastCall?.[0]).toEqual({ dir…
+       |                                                          ^
+     24| })
+     25|
+ ❯ runWithExpensiveErrorDiagnosticsDisabled node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+
+
+ Test Files  1 failed | 107 passed (108)
+      Tests  4 failed | 706 passed (710)
+   Start at  19:41:20
+   Duration  7.70s (tests 49%, environment 37%, import 8%, transform 6%)
+
+Environment  jsdom was created 108 times · 36.75s total, 37% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+

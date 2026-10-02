@@ -1,0 +1,46 @@
+
+Running 2 tests using 1 worker
+
+(node:2089243) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/e2e/content-impacts.spec.ts:28:1 › native edit publication discovers actual impacts and preserves human decisions through CAS, lost reply, IDB failure, access changes, stable pages and restart (31.7s)
+  ✘  2 tests/e2e/content-impacts.spec.ts:98:1 › native unsubmitted Content judgment survives role cycles with original basis and explicit close discard (19.1s)
+
+
+  1) tests/e2e/content-impacts.spec.ts:98:1 › native unsubmitted Content judgment survives role cycles with original basis and explicit close discard 
+
+    Error: expect(locator).toHaveValue(expected) failed
+
+    Locator: getByRole('region', { name: '内容变更影响复核', exact: true }).getByLabel('决定理由', { exact: true })
+    Expected: "尚未提交的原始人工理由 α
+    保留换行、Unicode 与旧依据。"
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toHaveValue" getByRole('region', { name: '内容变更影响复核', exact: true }).getByLabel('决定理由', { exact: true }) with timeout 5000ms
+      - waiting for getByRole('region', { name: '内容变更影响复核', exact: true }).getByLabel('决定理由', { exact: true })
+
+
+      116 |       await controls.getByRole('button', { name: '切换为作者角色', exact: true }).click()
+      117 |       const restoring = panel(page).getByRole('button', { name: '重新核验权限与当前依据，恢复原会话表单', exact: true }); await expect(restoring).toBeEnabled(); await restoring.click()
+    > 118 |       await expect(panel(page).getByLabel('决定理由', { exact: true })).toHaveValue(reason)
+          |                                                                     ^
+      119 |       await expect(panel(page).getByLabel('我已比对原变更、当前对象和冻结依据，明确追加这次人工判断。', { exact: true })).not.toBeChecked()
+      120 |       expect(await journal(page)).toEqual([])
+      121 |     }
+        at $HOME/.cache/learning-workbench-acceptance/m62-content-impacts-ui-independent-oct02/tests/e2e/content-impacts.spec.ts:118:69
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-content-impacts-ui-independent-evidence-oct02/native-fix-03-artifacts/content-impacts-native-uns-5714f--and-explicit-close-discard/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-content-impacts-ui-independent-evidence-oct02/native-fix-03-artifacts/content-impacts-native-uns-5714f--and-explicit-close-discard/test-failed-2.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m62-content-impacts-ui-independent-evidence-oct02/native-fix-03-artifacts/content-impacts-native-uns-5714f--and-explicit-close-discard/error-context.md
+
+  1 failed
+    tests/e2e/content-impacts.spec.ts:98:1 › native unsubmitted Content judgment survives role cycles with original basis and explicit close discard 
+  1 passed (51.2s)
