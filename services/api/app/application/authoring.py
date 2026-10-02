@@ -4,6 +4,9 @@ import hashlib
 import hmac
 import secrets
 import sqlite3
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .restore_numeric_service import RestoreNumericService
 from uuid import uuid4
 
 from packages.contracts import domain_models as dm
@@ -30,6 +33,7 @@ class AuthoringService:
         self.database = database
         self.context = context or AuthoringContext(database)
         self.provider = provider
+        self.restore_numeric: RestoreNumericService | None = None
         self._cursor_key = secrets.token_bytes(32)
 
     def resolve_candidate(self, connection: sqlite3.Connection, identity: SessionIdentity,
@@ -147,6 +151,10 @@ class AuthoringService:
 
     def _control(self, conn: sqlite3.Connection, identity: SessionIdentity, identifier: str) -> JobSnapshot:
         repo = AuthoringRepository(conn, identity.workspace_id)
+        if repo.jobs.input_version(identifier) == 'restore-numeric-job-v1':
+            if self.restore_numeric is None:
+                raise ApiError(503, 'NUMERIC_OWNER_UNAVAILABLE', '恢复数值安全控制服务当前不可用。')
+            return self.restore_numeric.control_in_transaction(conn, identity, identifier)
         if repo.jobs.input_version(identifier) in {'authoring-group-job-v1', 'authoring-group-numeric-job-v1'}:
             from .authoring_group import AuthoringGroupService
             return AuthoringGroupService(self.database)._control(conn, identity, identifier)

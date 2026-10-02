@@ -37,3 +37,19 @@ class PublicationAdmission(AuthoringModel):
     numeric_coverage: Literal['complete', 'not_required_by_material']
     acknowledged_warning_codes: list[str]
     publication: Literal['NOT_RUN']
+
+
+class RestoreNumericAdmission(AuthoringModel):
+    version: Literal['restore-numeric-publication-admission-v1']
+    workspace_id: dm.Id
+    candidate: dm.DraftCandidate
+    review_receipt_id: dm.Id
+    review_revision: dm.Revision
+    receipt_sha256: dm.Sha256
+    material_descriptor_sha256: dm.Sha256
+    numeric_material_sha256: dm.Sha256
+    numeric_observation_sha256: dm.Sha256
+    numeric_check_ids: list[dm.Id]
+    numeric_coverage: Literal['complete']
+    acknowledged_warning_codes: list[str]
+    publication: Literal['NOT_RUN']

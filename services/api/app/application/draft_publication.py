@@ -19,6 +19,7 @@ from .import_publication import ImportBlockPublication, unsupported
 from .imports import ImportService
 from .providers import validate_key
 from .publication_admission import PublicationAdmissionService
+from .publication_admission_models import PublicationAdmission
 from .publication_admission_models import DraftPublishWrite
 from .publication_models import PublicationHistory, PublicationRecord, EditPublicationRecord, RestorePublicationRecord, integrity, validated
 from .review_history_models import ReviewDecisionRecord, ReviewMachineRecord
@@ -96,6 +97,7 @@ class DraftPublicationService:
         repo.advance(identifier, 2, 'in_review', 'approved', utc_now())
         result = self.content.publish_edited_block_in_transaction(conn, current.workspace_id,
             prepared.record.base.ref, prepared.block, prepared.body)
+        assert isinstance(admission, PublicationAdmission)
         record = EditPublicationRecord(version='edit-publication-v1', id=identifier,
             workspace_id=current.workspace_id, owner='authoring', candidate=material.candidate,
             actor_id=current.id, route=f'POST /drafts/{material.candidate.draft_id}/publish', command_key=key,
@@ -123,7 +125,7 @@ class DraftPublicationService:
         result = self.content.publish_restored_block_in_transaction(conn, current.workspace_id,
             p.request.expected_current_ref, p.request.source_ref, p.proposed_block, p.source.body_markdown.encode())
         source = self.restore_owner.freeze(conn, current, prepared)
-        record = RestorePublicationRecord(version='restore-publication-v1', id=identifier,
+        record = RestorePublicationRecord(version='restore-numeric-publication-v1' if p.proposed_block.kind == 'worked_example' else 'restore-publication-v1', id=identifier,
             workspace_id=current.workspace_id, owner='authoring', candidate=material.candidate, actor_id=current.id,
             route=f'POST /drafts/{material.candidate.draft_id}/publish', command_key=key, request=body,
             admission=admission, human_record_sha256=metadata_sha256(human), restore_record_sha256=metadata_sha256(prepared),
@@ -169,6 +171,7 @@ class DraftPublicationService:
                 result = self.content.publish_new_block_in_transaction(conn, current.workspace_id,
                     prepared.block, prepared.body, prepared.budgets)
                 source = self.owner.freeze(conn, current, prepared, result)
+                assert isinstance(admission, PublicationAdmission)
                 record = PublicationRecord(version='draft-publication-v1', id=identifier,
                     workspace_id=current.workspace_id, owner='import', candidate=material.candidate,
                     actor_id=current.id, route=route, command_key=key, request=body, admission=admission,

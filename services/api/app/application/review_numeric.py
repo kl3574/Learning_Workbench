@@ -8,6 +8,7 @@ import sqlite3
 from typing import Literal, Protocol
 
 from pydantic import ValidationError
+from .restore_review_numeric import RestoreReviewNumericObservation, same_endpoint
 from pydantic_core import PydanticSerializationError
 from packages.contracts import domain_models as dm
 from packages.contracts.canonical import canonical_bytes, metadata_sha256, sha256_bytes
@@ -159,12 +160,16 @@ class ReviewNumericOwner(Protocol):
 class ReviewNumeric:
     """Catalog-routed read facade. Import absence is a pipeline fact, not N/A."""
     def __init__(self, candidates: DraftCandidates,
-                 owners: dict[Literal['authoring_single', 'authoring_group'], ReviewNumericOwner]):
+                 owners: dict[Literal['authoring_single', 'authoring_group'], ReviewNumericOwner], restore_owner=None):
         self.candidates, self.owners = candidates, dict(owners)
+        self.restore_owner = restore_owner
 
     def read_review_numeric(self, connection: sqlite3.Connection, identity: SessionIdentity,
-                            draft_id: str, expected_revision: int) -> ReviewNumericObservation:
+                            draft_id: str, expected_revision: int) -> ReviewNumericObservation | RestoreReviewNumericObservation:
         resolved = self.candidates.lookup(connection, identity, draft_id, expected_revision)
+        if resolved.source_kind == 'authoring_restore' and self.restore_owner is not None:
+            result = self.restore_owner.read_review_numeric(connection, identity, resolved.candidate)
+            return RestoreReviewNumericObservation.model_validate(result.model_dump())
         if resolved.source_kind in {'import', 'authoring_edit', 'authoring_restore'}:
             return _observation(dict(version='review-numeric-observation-v1', workspace_id=resolved.workspace_id,
                 source_kind=resolved.source_kind, candidate=resolved.candidate.model_dump(mode='json'), candidate_record_sha256=None,
@@ -180,7 +185,16 @@ class ReviewNumeric:
         return result
 
     def verify_review_numeric(self, connection: sqlite3.Connection, identity: SessionIdentity,
-                              observation: ReviewNumericObservation) -> None:
+                              observation: ReviewNumericObservation | RestoreReviewNumericObservation) -> None:
+        if isinstance(observation, RestoreReviewNumericObservation):
+            if self.restore_owner is None:
+                raise ApiError(503, 'NUMERIC_OWNER_UNAVAILABLE', '恢复数值观察所属服务当前不可用。')
+            resolved = self.candidates.lookup(connection, identity, observation.candidate.draft_id, observation.candidate.draft_revision)
+            if (resolved.source_kind != 'authoring_restore' or observation.workspace_id != resolved.workspace_id
+                    or observation.candidate != resolved.candidate):
+                raise integrity()
+            self.restore_owner.verify_review_numeric(connection, identity, observation)
+            return
         original = _checked_observation(observation)
         resolved = self.candidates.lookup(connection, identity, original.candidate.draft_id, original.candidate.draft_revision)
         if (original.workspace_id != resolved.workspace_id or original.source_kind != resolved.source_kind
@@ -191,3 +205,10 @@ class ReviewNumeric:
             if owner is None:
                 raise ApiError(503, 'NUMERIC_OWNER_UNAVAILABLE', '数值观察所属服务当前不可用。')
             owner.verify_review_numeric(connection, identity, original)
+
+    def require_current_restore_observation(self, connection, identity, observation):
+        if not isinstance(observation, RestoreReviewNumericObservation) or self.restore_owner is None:
+            raise ApiError(409, 'PUBLISH_NUMERIC_COVERAGE_UNAVAILABLE', '此审核没有新恢复候选的完整数值观察。')
+        current = self.restore_owner.read_review_numeric(connection, identity, observation.candidate)
+        if not same_endpoint(current, observation):
+            raise ApiError(409, 'PUBLISH_NUMERIC_OBSERVATION_STALE', '数值账本已变化，需要新的 Review 与明确人工决定。')

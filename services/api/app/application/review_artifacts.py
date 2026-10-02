@@ -12,6 +12,7 @@ from .review_checks import StructuralReviewReport
 from .review_material_models import CheckedReviewMaterial
 from .review_models import ReviewJobInput
 from .review_numeric_models import ReviewNumericObservation
+from .restore_review_numeric import RestoreReviewNumericObservation
 
 PROFILE = 'quality_review_report'
 FILENAME = 'review-report.json'
@@ -25,7 +26,7 @@ class ReviewReport(AuthoringModel):
     material_descriptor_sha256: dm.Sha256
     structure: StructuralReviewReport
     numerical_examples_requested: bool
-    numeric_observation: ReviewNumericObservation
+    numeric_observation: ReviewNumericObservation | RestoreReviewNumericObservation
     mathematical: Literal['NOT_RUN']
     sources: Literal['NOT_RUN']
     independent_pedagogy: Literal['NOT_RUN']
@@ -33,7 +34,7 @@ class ReviewReport(AuthoringModel):
 
 
 def report_bytes(value: ReviewJobInput, material: CheckedReviewMaterial,
-                 numeric: ReviewNumericObservation, structural: StructuralReviewReport) -> bytes:
+                 numeric: ReviewNumericObservation | RestoreReviewNumericObservation, structural: StructuralReviewReport) -> bytes:
     return canonical_bytes(ReviewReport(version='quality-review-report-v1', review_id=value.review_id,
         candidate=value.candidate, input_sha256=metadata_sha256(value),
         material_descriptor_sha256=material.descriptor_sha256, structure=structural,

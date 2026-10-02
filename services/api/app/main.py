@@ -16,6 +16,9 @@ from .application.jobs import JobService
 from .application.draft_candidates import DraftCandidates
 from .application.draft_edits import DraftEditService
 from .application.content_restore import ContentRestoreService
+from .application.restore_numeric_service import RestoreNumericService
+from .application.restore_numeric_worker import RestoreNumericWorker
+from .interfaces.restore_numeric_http import create_restore_numeric_router
 from .interfaces.content_restore_http import create_content_restore_router
 from .application.review_numeric import ReviewNumeric
 from .application.review_service import ReviewService
@@ -107,17 +110,22 @@ def create_app(settings: Settings | None = None, *,
     group_numeric_worker = GroupNumericWorker(database, authoring_group_context, group_numeric_runtime, authoring=authoring_group_service)
     draft_edits = DraftEditService(database)
     content_restores = ContentRestoreService(database)
+    restore_numeric_runtime = NumericRuntime()
+    restore_numeric_service = RestoreNumericService(database, content_restores, restore_numeric_runtime)
+    restore_numeric_worker = RestoreNumericWorker(database, restore_numeric_service, restore_numeric_runtime)
+    content_restores.numeric_projection = restore_numeric_service.projection
+    authoring_service.restore_numeric = restore_numeric_service
     candidates = DraftCandidates({'import': import_service, 'authoring_single': authoring_service,
                                   'authoring_group': authoring_group_service, 'authoring_edit': draft_edits, 'authoring_restore': content_restores})
     review_service = ReviewService(database, candidates,
-        ReviewNumeric(candidates, {'authoring_single': numeric_service, 'authoring_group': group_numeric_service}),
+        ReviewNumeric(candidates, {'authoring_single': numeric_service, 'authoring_group': group_numeric_service}, restore_owner=restore_numeric_service),
         {(profile, 'import'): import_service for profile in IMPORT_ARTIFACT_PROFILES})
     review_worker = ReviewWorker(review_service)
     publication_service = DraftPublicationService(database, review_service, import_service)
     content_restores.verify_publication = publication_service.verify_recorded
     artifacts = ArtifactsService(database, review_service.readers())
     content_impacts = ContentImpactDecisionService(database, artifacts)
-    jobs = JobService(database, review=review_service)
+    jobs = JobService(database, review=review_service, restore_numeric=restore_numeric_service)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
@@ -134,11 +142,13 @@ def create_app(settings: Settings | None = None, *,
         authoring_group_worker.start()
         numeric_worker.start()
         group_numeric_worker.start()
+        restore_numeric_worker.start()
         review_worker.start()
         try:
             yield
         finally:
             review_worker.stop()
+            restore_numeric_worker.stop()
             group_numeric_worker.stop()
             numeric_worker.stop()
             authoring_group_worker.stop()
@@ -177,6 +187,9 @@ def create_app(settings: Settings | None = None, *,
     application.state.publication_service = publication_service
     application.state.draft_edit_service = draft_edits
     application.state.content_restore_service = content_restores
+    application.state.restore_numeric_service = restore_numeric_service
+    application.state.restore_numeric_worker = restore_numeric_worker
+    application.state.restore_numeric_runtime = restore_numeric_runtime
     application.state.artifacts_service = artifacts
     application.state.outbound_sources = provider_sources
     application.state.request_preparer = provider_preparer
@@ -202,6 +215,7 @@ def create_app(settings: Settings | None = None, *,
     application.include_router(create_publication_router(publication_service))
     application.include_router(create_draft_router(draft_edits))
     application.include_router(create_content_restore_router(content_restores))
+    application.include_router(create_restore_numeric_router(restore_numeric_service))
     if settings.static_dir.is_dir():
         application.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="workbench")
     return application

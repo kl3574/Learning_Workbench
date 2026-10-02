@@ -11,7 +11,7 @@ from ..infrastructure.provenance_repository import FrozenProvenance
 from .errors import ApiError
 from .draft_edit_models import DraftBaseMaterial, DraftEditPayload
 from .content_restore_models import RestorePayload
-from .publication_admission_models import DraftPublishWrite, PublicationAdmission
+from .publication_admission_models import DraftPublishWrite, PublicationAdmission, RestoreNumericAdmission
 from .review_material_models import CheckedReviewMaterial
 
 M = TypeVar('M', bound=BaseModel)
@@ -120,7 +120,7 @@ class EditPublicationRecord(AuthoringModel):
 
 
 class RestorePublicationRecord(AuthoringModel):
-    version: Literal['restore-publication-v1']
+    version: Literal['restore-publication-v1', 'restore-numeric-publication-v1']
     id: dm.Id
     workspace_id: dm.Id
     owner: Literal['authoring']
@@ -129,7 +129,7 @@ class RestorePublicationRecord(AuthoringModel):
     route: str
     command_key: str
     request: DraftPublishWrite
-    admission: PublicationAdmission
+    admission: Annotated[PublicationAdmission | RestoreNumericAdmission, Field(discriminator="version")]
     human_record_sha256: dm.Sha256
     restore_record_sha256: dm.Sha256
     payload: RestorePayload
@@ -149,10 +149,16 @@ class RestorePublicationRecord(AuthoringModel):
                 or c.candidate_sha256 != metadata_sha256(self.payload) or r.expected_content_sha256 != c.candidate_sha256
                 or a.workspace_id != self.workspace_id or a.candidate != c or a.review_receipt_id != r.review_receipt_id
                 or a.acknowledged_warning_codes != r.acknowledged_warning_codes
-                or a.numeric_coverage != 'not_required_by_material' or a.numeric_check_ids
                 or self.block != self.payload.proposed_block or self.source != expected_source
                 or self.result != dm.ContentRef(entity='block', id=self.block.id, revision=self.block.revision, sha256=metadata_sha256(self.block))):
             raise ValueError('Restore publication must bind the old source, original candidate, new review and actual new block')
+        numeric = self.block.kind == 'worked_example'
+        if numeric:
+            if (self.version != 'restore-numeric-publication-v1' or not isinstance(a, RestoreNumericAdmission)
+                    or a.numeric_coverage != 'complete' or len(a.numeric_check_ids) != 1):
+                raise ValueError('worked example Restore publication requires its new numeric admission')
+        elif self.version != 'restore-publication-v1' or not isinstance(a, PublicationAdmission) or a.numeric_check_ids or a.numeric_coverage != 'not_required_by_material':
+            raise ValueError('non-numeric Restore publication preserves its original admission')
         return self
 
 
@@ -166,7 +172,7 @@ def publication_record(value: object) -> PublicationRecord | EditPublicationReco
     if isinstance(value, dict):
         if value.get('version') == 'draft-publication-v1':
             return validated(PublicationRecord, value)
-        if value.get('version') == 'restore-publication-v1':
+        if value.get('version') in {'restore-publication-v1', 'restore-numeric-publication-v1'}:
             return validated(RestorePublicationRecord, value)
         if value.get('version') == 'edit-publication-v1':
             return validated(EditPublicationRecord, value)

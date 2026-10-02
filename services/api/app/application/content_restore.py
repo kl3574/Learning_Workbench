@@ -27,6 +27,7 @@ class ContentRestoreService:
     def __init__(self, database):
         self.database, self.source = database, ContentRestoreSource(database)
         self.candidates = DraftCandidates({'authoring_restore': self})
+        self.numeric_projection = None
         self.verify_publication: Callable[[sqlite3.Connection, SessionIdentity, 'PublicationHistory'], dm.ContentRef] | None = None
 
     @staticmethod
@@ -102,11 +103,15 @@ class ContentRestoreService:
                     if self.verify_publication is None:
                         raise ApiError(503, 'PUBLICATION_OWNER_UNAVAILABLE', '恢复发布记录核验服务暂不可用。')
                     result = self.verify_publication(conn, identity, publication)
+                if self.numeric_projection is None:
+                    raise ApiError(503, 'NUMERIC_OWNER_UNAVAILABLE', '恢复数值所属服务暂不可用。')
+                numeric_material, numeric_check_ids = self.numeric_projection(conn, identity, record)
                 p = record.payload
                 return ContentRestoreDraftSnapshot(owner='authoring_restore', candidate=record.candidate,
                     source_ref=p.request.source_ref, base_ref=p.request.expected_current_ref, reason=p.request.reason,
                     proposed_block=p.proposed_block, body_markdown=p.source.body_markdown,
                     source_material_sha256=metadata_sha256(p.source.material), warnings=p.warnings,
-                    state='published' if result else 'draft', published_ref=result)
+                    state='published' if result else 'draft', published_ref=result,
+                    numeric_material=numeric_material, numeric_check_ids=numeric_check_ids)
             finally:
                 conn.rollback()

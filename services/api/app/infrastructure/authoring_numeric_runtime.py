@@ -33,15 +33,16 @@ from packages.contracts.canonical import canonical_bytes, strict_json
 from ..authoring_dto import NumericRuntimeProfile, NumericAssertionResult, NumericCheckResult, numeric_result_sha256
 from ..application.authoring_models import NumericJobInput
 from ..application.authoring_group_models import AuthoringGroupNumericJobInput
+from ..application.restore_numeric_models import RestoreNumericJobInput
 from ..application.authoring_numeric import validate_plan
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 from typing import Annotated, Literal
 
 
 NumericExecutionInput = Annotated[
-    NumericJobInput | AuthoringGroupNumericJobInput, Field(discriminator='version')
+    NumericJobInput | AuthoringGroupNumericJobInput | RestoreNumericJobInput, Field(discriminator='version')
 ]
-_NUMERIC_INPUT: TypeAdapter[NumericJobInput | AuthoringGroupNumericJobInput] = TypeAdapter(NumericExecutionInput)
+_NUMERIC_INPUT: TypeAdapter[NumericJobInput | AuthoringGroupNumericJobInput | RestoreNumericJobInput] = TypeAdapter(NumericExecutionInput)
 
 
 class NumericRuntimeError(ValueError):
@@ -552,3 +553,10 @@ def _collect(process: subprocess.Popen[bytes], deadline: float,
         _kill(process)
         process.stdout.close()
         process.stderr.close()
+
+
+def verify_execution_output(result: NumericCheckResult, stdout: bytes) -> None:
+    """Pure verification of retained successful evaluator bytes; never executes."""
+    output = _Output.model_validate(strict_json(stdout))
+    if output.isolation.uid == 0 or output.isolation.gid == 0 or output.assertions != result.assertions:
+        raise ValueError('retained evaluator bytes do not match actual numeric result')

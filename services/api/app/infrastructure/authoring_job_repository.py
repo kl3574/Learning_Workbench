@@ -62,6 +62,24 @@ class AuthoringJobRepository:
     def __init__(self, connection: sqlite3.Connection, workspace_id: str):
         self.conn, self.workspace_id = connection, workspace_id
 
+    def numeric_members(self, version: str, draft: str) -> set[str]:
+        """Jobs-owned membership fact, never a subject permission grant."""
+        return {row[0] for row in self.conn.execute(
+            "SELECT id FROM jobs WHERE workspace_id=? AND kind='authoring_numeric_check' "
+            "AND json_extract(input_json,'$.version')=? AND json_extract(input_json,'$.candidate.draft_id')=?",
+            (self.workspace_id, version, draft))}
+
+    def register_restore_numeric(self, identifier, actor, value):
+        raw = canonical_bytes({'version': 'restore-numeric-membership-v1', 'input': value.model_dump(mode='json')}).decode()
+        self.conn.execute('INSERT INTO authoring_records(job_id,workspace_id,actor_id,record_json,record_sha256) VALUES(?,?,?,?,?)',
+                          (identifier, self.workspace_id, actor, raw, sha256_bytes(raw.encode())))
+
+    def verify_restore_numeric_membership(self, identifier, actor, value):
+        row = self.conn.execute('SELECT workspace_id,actor_id,record_json,record_sha256 FROM authoring_records WHERE job_id=?', (identifier,)).fetchone()
+        raw = canonical_bytes({'version': 'restore-numeric-membership-v1', 'input': value.model_dump(mode='json')}).decode()
+        if row is None or tuple(row) != (self.workspace_id, actor, raw, sha256_bytes(raw.encode())):
+            raise integrity()
+
     def member_ids(self) -> set[str]:
         kinds = sorted(self.kinds)
         placeholders = ','.join('?' for _ in kinds)
@@ -75,7 +93,7 @@ class AuthoringJobRepository:
         value = checked(row['input_json'], row['input_sha256'])
         version = value.get('version')
         allowed = ({'authoring-job-v1', 'authoring-group-job-v1'} if row['kind'] == 'authoring'
-                   else {'authoring-numeric-job-v1', 'authoring-group-numeric-job-v1'})
+                   else {'authoring-numeric-job-v1', 'authoring-group-numeric-job-v1', 'restore-numeric-job-v1'})
         if not isinstance(version, str) or version not in allowed:
             raise integrity()
         return version

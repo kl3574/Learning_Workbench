@@ -109,9 +109,10 @@ def require_pending_import_confirmation(connection: sqlite3.Connection, workspac
 
 class JobService:
     """Dispatch only implemented job kinds to their owning application service."""
-    def __init__(self, database, review: 'ReviewService | None' = None):
+    def __init__(self, database, review: 'ReviewService | None' = None, restore_numeric=None):
         self.database = database
         self.review = review
+        self.restore_numeric = restore_numeric
 
     def _owner(self, identity, identifier):
         from .errors import ApiError
@@ -147,6 +148,10 @@ class JobService:
             from ..infrastructure.authoring_job_repository import AuthoringJobRepository
             with self.database.transaction(immediate=False) as conn:
                 version = AuthoringJobRepository(conn, identity.workspace_id).input_version(identifier)
+            if version == 'restore-numeric-job-v1':
+                if self.restore_numeric is None:
+                    raise ApiError(503, 'NUMERIC_OWNER_UNAVAILABLE', '恢复数值安全控制服务当前不可用。')
+                return self.restore_numeric
             if version == 'authoring-group-numeric-job-v1':
                 from .authoring_group_context import AuthoringGroupContext
                 from .authoring_group_numeric_service import GroupNumericService

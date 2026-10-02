@@ -19,6 +19,7 @@ from .review_models import ReviewJobInput
 from .review_checks import StructuralReviewReport
 from .review_material_models import CheckedReviewMaterial
 from .review_numeric_models import ReviewNumericObservation
+from .restore_review_numeric import RestoreReviewNumericObservation
 
 
 def instant(value: str) -> datetime:
@@ -128,7 +129,7 @@ class ReviewMachineRecord(AuthoringModel):
     job_revision: dm.Revision
     input_sha256: dm.Sha256
     material: CheckedReviewMaterial
-    numeric: ReviewNumericObservation
+    numeric: ReviewNumericObservation | RestoreReviewNumericObservation
     structural_report: StructuralReviewReport
     report: ReviewArtifactBinding
     receipt: StoredReviewReceipt

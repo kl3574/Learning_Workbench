@@ -238,6 +238,9 @@ class ReviewRepository:
             raise integrity()
         payload = record.material.payload
         if not isinstance(payload, (ImportReviewMaterial, EditReviewMaterial, RestoreReviewMaterial)):
+            from ..application.review_numeric_models import ReviewNumericObservation
+            if not isinstance(record.numeric, ReviewNumericObservation):
+                raise integrity()
             if (record.numeric.candidate_record_sha256 != record.material.owner_record_sha256
                     or record.numeric.source_job_id != payload.record.source_job_id
                     or record.numeric.provider_receipt_id != payload.record.provider_receipt_id):
