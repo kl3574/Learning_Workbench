@@ -10,7 +10,7 @@ from dataclasses import dataclass
 import sqlite3
 from typing import Literal
 
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from packages.contracts import domain_models as dm
 from packages.contracts.canonical import CANONICAL_VERSION, canonical_bytes, sha256_bytes, strict_json
@@ -185,7 +185,7 @@ def impact_snapshot(connection: sqlite3.Connection, workspace_id: str, event_id:
             raise missing()
         old_ref = dm.ContentRef.model_validate(value["old_ref"])
         new_ref = dm.ContentRef.model_validate(value["new_ref"])
-        ids = value["affected_ids"]
+        ids = TypeAdapter(list[dm.Id]).validate_python(value["affected_ids"])
         if (not isinstance(ids, list) or not ids or any(not isinstance(item, str) or not item for item in ids)
                 or ids != sorted(set(ids)) or old_ref.entity != new_ref.entity or old_ref.id != new_ref.id
                 or old_ref.revision >= new_ref.revision or old_ref.id not in ids):
@@ -220,7 +220,19 @@ def list_impact_snapshots(connection: sqlite3.Connection, workspace_id: str) -> 
     if not connection.in_transaction:
         raise damaged()
     rows = connection.execute(
-        "SELECT id FROM outbox WHERE event_type='content.dependencies_invalidated' "
-        "AND json_extract(payload_json,'$.workspace_id')=? ORDER BY id", (workspace_id,),
+        "SELECT id,payload_json FROM outbox WHERE event_type='content.dependencies_invalidated' ORDER BY id",
     ).fetchall()
-    return tuple(impact_snapshot(connection, workspace_id, row['id']) for row in rows)
+    snapshots = []
+    for row in rows:
+        try:
+            payload = strict_json(row['payload_json'])
+            if not isinstance(payload, dict):
+                raise damaged()
+            owner = TypeAdapter(dm.Id).validate_python(payload['workspace_id'])
+        except (ValueError, TypeError, KeyError):
+            # An event without reliable ownership cannot be silently discarded
+            # as though no Content change happened in this workspace.
+            raise damaged() from None
+        if owner == workspace_id:
+            snapshots.append(impact_snapshot(connection, workspace_id, row['id']))
+    return tuple(snapshots)

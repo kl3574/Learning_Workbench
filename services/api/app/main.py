@@ -10,6 +10,7 @@ from packages.contracts.domain_models import ErrorEnvelope
 
 from .application.imports import ImportService, IMPORT_ARTIFACT_PROFILES
 from .application.artifacts import ArtifactsService
+from .application.content_impact_decisions import ContentImpactDecisionService
 from .application.jobs import JobService
 from .application.draft_candidates import DraftCandidates
 from .application.draft_edits import DraftEditService
@@ -45,6 +46,7 @@ from .database import Database
 from .interfaces.boundary import install_boundary
 from .interfaces.assessment_http import create_assessment_router
 from .interfaces.content_http import create_content_router
+from .interfaces.content_impact_http import create_content_impact_router
 from .interfaces.concept_state_http import create_concept_state_router
 from .interfaces.http import create_router
 from .interfaces.import_http import create_import_router
@@ -108,6 +110,7 @@ def create_app(settings: Settings | None = None, *,
     review_worker = ReviewWorker(review_service)
     publication_service = DraftPublicationService(database, review_service, import_service)
     artifacts = ArtifactsService(database, review_service.readers())
+    content_impacts = ContentImpactDecisionService(database, artifacts)
     jobs = JobService(database, review=review_service)
 
     @asynccontextmanager
@@ -173,6 +176,7 @@ def create_app(settings: Settings | None = None, *,
     install_boundary(application, settings, database)
     application.include_router(create_router(settings, database, worker_ready=import_worker.is_alive))
     application.include_router(create_content_router(database))
+    application.include_router(create_content_impact_router(content_impacts))
     application.include_router(create_import_router(settings, import_service, jobs=jobs, artifacts=artifacts))
     application.include_router(create_learning_router(database))
     application.include_router(create_practice_router(database))

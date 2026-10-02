@@ -143,21 +143,36 @@ def test_impact_read_holds_attempt_writer_gate_and_is_sqlite_query_only(tmp_path
     assert caught.value.code == "ASSESSMENT_ACTIVE"
 
 
-def test_forward_migration_leaves_prior_outbox_event_explicitly_unverified(published):
-    database, workspace, service, original = published
+def test_forward_migration_leaves_prior_outbox_event_explicitly_unverified(tmp_path, monkeypatch):
+    from dataclasses import replace
+    import shutil
+    from services.api.app.application import content_impact as impact_module
+
+    settings = Settings(data_dir=tmp_path / "legacy-data")
+    prior_migrations = tmp_path / "through-0020"
+    prior_migrations.mkdir()
+    for migration in settings.migrations_dir.glob("*.sql"):
+        if migration.name < "0021":
+            shutil.copyfile(migration, prior_migrations / migration.name)
+    database = Database(replace(settings, migrations_dir=prior_migrations))
+    workspace = database.initialize()
+    service = ContentService(database)
+    original, bodies = tree()
+    service.publish(workspace, original, bodies)
     changed = original[1].model_copy(update={"revision": 2, "title": "旧版事件模拟"})
-    service.publish(workspace, [changed], {})
+    # Emulate the pre-0021 publication owner: actual published revisions/outbox,
+    # without the snapshot writer that did not exist in that installed schema.
+    with monkeypatch.context() as patch:
+        patch.setattr(impact_module, "freeze_impact_event", lambda *args: None)
+        service.publish(workspace, [changed], {})
     event_id = invalidation_id(database, changed.id)
-    with database.transaction() as connection:
-        # Controlled 0019-era fixture: retain the real outbox/revisions, remove
-        # only 0021-owned tables and its migration receipt before upgrade.
-        connection.execute("DROP TABLE content_impact_snapshots")
-        connection.execute("DROP TABLE content_impact_legacy_events")
-        connection.execute("DELETE FROM schema_migrations WHERE version='0021_impact_event_snapshots'")
+    database = Database(settings)
     assert database.initialize() == workspace
+    service = ContentService(database)
 
     snapshot = service.impact_snapshot(workspace, event_id)
     assert snapshot.evidence_version == "legacy_unverified"
+    assert snapshot.snapshot_sha256 is None
     assert snapshot.exact_dependency_refs == ()
     assert snapshot.conservative_only_ids == ("course", "lesson")
     with database.connect() as connection:
@@ -440,3 +455,24 @@ def test_existing_note_stale_revision_is_not_rewritten_by_impact_read(tmp_path):
 
     assert reference(original_note) in snapshot.exact_dependency_refs
     assert NotesService(database).list(workspace).items == current
+
+
+def test_enumeration_validates_ownership_and_never_filters_away_corrupt_scope(published):
+    from services.api.app.application.content_impact import list_impact_snapshots
+    from packages.contracts.canonical import strict_json, canonical_bytes
+
+    database, workspace, service, original = published
+    changed = original[1].model_copy(update={'revision':2, 'title':'New synthetic revision'})
+    service.publish(workspace, [changed], {})
+    event_id = invalidation_id(database, changed.id)
+    with database.transaction() as conn:
+        values = list_impact_snapshots(conn, workspace)
+        assert [value.event_id for value in values] == [event_id]
+        row = conn.execute('SELECT payload_json FROM outbox WHERE id=?',(event_id,)).fetchone()
+        payload = strict_json(row[0])
+        payload.pop('workspace_id')
+        conn.execute('UPDATE outbox SET payload_json=? WHERE id=?',(canonical_bytes(payload).decode(),event_id))
+    with database.transaction() as conn:
+        with pytest.raises(ApiError) as caught:
+            list_impact_snapshots(conn, workspace)
+        assert caught.value.status == 409
