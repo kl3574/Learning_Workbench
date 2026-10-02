@@ -35,6 +35,10 @@ test('single generated example uses actual sealed numeric facts and fresh human 
     expect(['passed', 'environment_unavailable']).toContain(actual.result!.outcome)
     expect(actual.result!.verdict).toBe(actual.result!.outcome === 'passed' ? 'PASS' : 'BLOCKED')
     expect(actual.job!.id).toBe(numericAck.job.id)
+    writeFileSync(info.outputPath('single-publication-actual.json'), JSON.stringify({
+      stage: 'numeric_observed_before_review', scope: 'Actual sealed numeric result from the original controlled loopback fixture. Later Review, publication and browser assertions have not completed. No external provider or academic approval.',
+      candidate, numericPreview: numeric, numericAck, actual, externalModelCalls: 0, physicalNumeric: actual.result!.verdict,
+    }, null, 2))
     await dialog.getByRole('button', { name: '另行读取数值检查当前状态', exact: true }).click()
     await expect(dialog.getByRole('heading', { name: `实际数值结果：${actual.result!.verdict}`, exact: true })).toBeVisible()
     await dialog.getByRole('button', { name: '刷新候选的检查记录', exact: true }).click()
@@ -115,6 +119,7 @@ test('single generated example uses actual sealed numeric facts and fresh human 
     expect(runtime.control().received_request_count).toBe(1); expect(runtime.control().validated_request_count).toBe(1)
     expect(runtime.control().invalid_request_count).toBe(0); expect(errors).toEqual([])
     writeFileSync(info.outputPath('single-publication-actual.json'), JSON.stringify({
+      stage: 'closed_chain',
       scope: 'Real SQLite/HTTP/browser and actual sealed numeric runtime. The provider is a complete-byte controlled loopback fixture, never DeepSeek. Human decisions are synthetic software intent, not academic/source/teaching acceptance. Physical BLOCKED denies UI preparation and independently rejects HTTP publish; only actual physical PASS exercises lost-ACK publication and independent current/ref reads.',
       candidate, numericPreview: numeric, numericAck, actual, receipt, outcome, published, finalDraft, writes, errors,
       externalModelCalls: 0, loopbackCalls: 1, physicalNumeric: actual.result!.verdict,

@@ -76,4 +76,3 @@ export async function screenshot(page: Page, dialog: Locator, width: number, tar
   await page.screenshot({ path: info.outputPath(name) })
   return bounds
 }
-
