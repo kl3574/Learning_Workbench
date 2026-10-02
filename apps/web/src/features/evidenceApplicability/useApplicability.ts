@@ -73,8 +73,10 @@ export function useApplicability(workspace: string, paused: boolean, port: Appli
       if (!valid(n)) return
       setCommands(values); setFrozen(null)
       const ack = receipt(await port.decide(original.basis.view.evidence_id, original.body, original.command_id), original.basis, original.body)
-      if (!valid(n)) return
+      // A received, checked ACK belongs to the sending session even after access
+      // changes. Keep it isolated; stale callbacks still cannot persist or render.
       memory.retain({ ...original, ack, rejection: null }, session)
+      if (!valid(n)) return
       await persist({ ...original, ack, rejection: null }, guard)
       memory.release(command.command_id, session)
       const confirmed = await load()
