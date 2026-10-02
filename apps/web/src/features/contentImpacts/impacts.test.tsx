@@ -29,12 +29,15 @@ test('read-only selection never adopts new basis; 412 preserves original and exp
   vi.mocked(port.read).mockResolvedValueOnce({ ...original, target_decision_head: 1 })
   await act(() => h.result.current.read(eventId, targetId)); expect(h.result.current.frozen).toEqual(frozen)
   vi.mocked(port.decide).mockRejectedValueOnce(new ApiError(412, 'stale', 'REVISION_MISMATCH'))
+  // Model the real UI's controlled form before submitting its captured values.
+  act(() => h.result.current.changeForm({ decision: 'no_revision_needed', reason: 'Original explicit judgment', ids: '', confirmed: true }))
   await act(() => h.result.current.submit('no_revision_needed', 'Original explicit judgment', []))
   const old = h.result.current.commands[0]; expect(old.body.expected_decision_revision).toBe(0); expect(old.rejection?.status).toBe(412)
   expect(h.result.current.frozen).toBeNull(); await act(() => h.result.current.submit('no_revision_needed', 'No implicit basis', [])); expect(port.decide).toHaveBeenCalledTimes(1)
   act(() => h.result.current.adopt()); expect(h.result.current.frozen).toBeNull()
   vi.mocked(port.read).mockResolvedValueOnce({ ...original, target_decision_head: 1 }); await act(() => h.result.current.read(eventId, targetId))
-  act(() => h.result.current.adopt()); await act(() => h.result.current.submit('new_revision_required', 'Explicit correction', []))
+  act(() => h.result.current.adopt()); act(() => h.result.current.changeForm({ decision: 'new_revision_required', reason: 'Explicit correction', ids: '', confirmed: true }))
+  await act(() => h.result.current.submit('new_revision_required', 'Explicit correction', []))
   expect(port.decide).toHaveBeenCalledTimes(2); const current = h.result.current.commands.find(c => c.ack)!
   expect(current.command_id).not.toBe(old.command_id); expect(current.body.expected_decision_revision).toBe(1); expect(h.result.current.commands.find(c => c.command_id === old.command_id)).toEqual(old)
   expect(h.result.current.reading?.value.pending_target_ids).toEqual([targetId])

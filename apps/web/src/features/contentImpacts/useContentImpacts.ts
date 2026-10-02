@@ -100,7 +100,7 @@ export function useContentImpacts(workspace: string, paused: boolean, port: Impa
       setFrozen(form.basis); setBasisVersion(v => v + 1)
     } catch (e) { if (valid(n, false)) fail(e) } finally { finish(n) }
   }
-  const execute = async (command: Command, submittedForm = false) => {
+  const execute = async (command: Command) => {
     if (!current() || command.workspace_id !== workspace) return
     if (!samePage(command, access) || !memory.ownsOriginal(command, sessionId.current)) { setError('页面或授权状态已改变；原决定只读保留，不能借用现在的权限重新发送。'); return }
     const n = begin(); if (n === null) return
@@ -112,7 +112,7 @@ export function useContentImpacts(workspace: string, paused: boolean, port: Impa
       memory.release(command.command_id, session)
       const values = await load()
       if (!valid(n)) return
-      setCommands(values); consumeCurrentForm(original, session); if (submittedForm) forms.releaseForm(workspace, session); setFrozen(null); setAdoptionAllowed(false)
+      setCommands(values); consumeCurrentForm(original, session); setFrozen(null); setAdoptionAllowed(false)
       const ack = receipt(await port.decide(original.basis.view.event_id, original.body, original.command_id), original.basis, original.body)
       if (!valid(n)) return
       memory.retain({ ...original, ack, rejection: null }, session)
@@ -143,7 +143,7 @@ export function useContentImpacts(workspace: string, paused: boolean, port: Impa
       const body: Write = { target_id: selected.target_id, observed_ref: selected.current_ref, expected_decision_revision: selected.view.target_decision_head!, expected_event_snapshot_sha256: selected.view.event_snapshot_sha256!, decision, reason, evidence_artifact_ids: ids }
       const command = makeCommand(workspace, access, selected, body)
       memory.bindOriginal(command, sessionId.current)
-      await execute(command, true)
+      await execute(command)
     } catch (e) { if (current()) fail(e) }
   }
   const saveMemory = async () => {
