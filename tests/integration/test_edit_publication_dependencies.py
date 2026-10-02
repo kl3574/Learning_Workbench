@@ -159,6 +159,64 @@ def test_corrupt_dependency_before_creation_and_attempted_dependency_edit_create
     assert table_hashes(case.database) == before
 
 
+@pytest.mark.parametrize('published', [False, True])
+def test_frozen_indirect_concept_pin_cannot_be_reinterpreted_by_one_changed_stored_edge(prepared_review_http, published):
+    case = prepared_review_http
+    content = ContentService(case.database)
+    concept = dm.Concept(id='frozen_dependency_concept', revision=1, title='Original concept')
+    content.publish(case.identity.workspace_id, [concept], {})
+    raw = b'Synthetic dependency source.'
+    leaf = dm.ContentBlock(id='frozen_dependency_leaf', revision=1, kind='definition', title='Original leaf',
+        body_path='content/frozen-leaf.md', body_sha256=sha256_bytes(raw), concepts=[concept.id])
+    leaf_ref = content.publish(case.identity.workspace_id, [leaf], {leaf.body_path: raw})[0]
+    block = dm.ContentBlock(id='frozen_dependency_edit', revision=1, kind='text', title='Original editing base',
+        body_path='content/frozen-edit.md', body_sha256=sha256_bytes(raw), depends_on=[leaf_ref])
+    base = content.publish(case.identity.workspace_id, [block], {block.body_path: raw})[0]
+    identifier, create, _, patch, _, snapshot = draft(case, base)
+    content.publish(case.identity.workspace_id, [concept.model_copy(update={'revision': 2, 'title': 'Later concept'})], {})
+    publication = reviewed(case, identifier, snapshot)
+    path = f'/api/v1/drafts/{identifier}/publish'
+    if published:
+        assert case.client.post(path, json=publication, headers=command(case.headers, 'dependency-publish')).status_code == 201
+    with case.database.transaction() as connection:
+        connection.execute("UPDATE object_dependencies SET target_revision=2 WHERE owner_id=? AND owner_revision=1 AND target_id=? AND relation='concept'", (leaf.id, concept.id))
+    before = table_hashes(case.database)
+    assert case.client.get('/api/v1/draft-edits/' + identifier).status_code in (409, 503)
+    assert case.client.post('/api/v1/drafts', json=create, headers=command(case.headers, 'dependency-create')).status_code in (409, 503)
+    assert case.client.patch('/api/v1/drafts/' + identifier, json=patch, headers=command(case.headers, 'dependency-patch')).status_code in (409, 503)
+    assert case.client.post(path, json=publication, headers=command(case.headers, 'dependency-publish')).status_code in (409, 503)
+    assert case.client.get('/api/v1/reviews/' + publication['review_receipt_id']).status_code in (409, 503)
+    review = case.client.post(f'/api/v1/drafts/{identifier}/review', json={'expected_revision': 2,
+        'checks': ['structure'], 'reviewer_note': 'Synthetic damaged original concept pin recheck.'},
+        headers=command(case.headers, 'damaged-pin-review'))
+    assert review.status_code in (409, 503)
+    assert table_hashes(case.database) == before
+
+
+def test_published_root_edges_remain_bound_to_the_original_dependency_witness(prepared_review_http):
+    case = prepared_review_http
+    _, _, base, dependencies, _, _ = source(case)
+    identifier, create, created, patch, patched, snapshot = draft(case, base)
+    publication = reviewed(case, identifier, snapshot)
+    review_path = '/api/v1/reviews/' + publication['review_receipt_id']
+    original_review = case.client.get(review_path)
+    assert original_review.status_code == 200
+    path = f'/api/v1/drafts/{identifier}/publish'
+    assert case.client.post(path, json=publication, headers=command(case.headers, 'dependency-publish')).status_code == 201
+    with case.database.transaction() as connection:
+        connection.execute('DELETE FROM object_dependencies WHERE owner_id=? AND owner_revision=2 AND target_id=?',
+            (base.id, dependencies[0].id))
+    before = table_hashes(case.database)
+    assert case.client.get('/api/v1/draft-edits/' + identifier).status_code in (409, 503)
+    assert case.client.post(path, json=publication, headers=command(case.headers, 'dependency-publish')).status_code in (409, 503)
+    # These ACKs/Review bind the intact original candidate, not its later result.
+    assert case.client.post('/api/v1/drafts', json=create, headers=command(case.headers, 'dependency-create')).content == created.content
+    assert case.client.patch('/api/v1/drafts/' + identifier, json=patch, headers=command(case.headers, 'dependency-patch')).content == patched.content
+    reread = case.client.get(review_path)
+    assert reread.status_code == 200 and reread.content == original_review.content
+    assert table_hashes(case.database) == before
+
+
 def test_dependency_body_damage_refuses_frozen_draft_read_and_original_command_without_writes(prepared_review_http):
     case = prepared_review_http
     _, _, base, dependencies, _, _ = source(case)

@@ -12,6 +12,7 @@ from ..infrastructure.security import SessionIdentity, current_session_identity
 from .authoring_context import AuthoringContext
 from .content import ContentService
 from .draft_edits import DraftEditService
+from .draft_edit_models import DependencyDraftBaseMaterial
 from .edit_publication import EditBlockPublication
 from .content_restore import ContentRestoreService
 from .restore_publication import RestoreBlockPublication
@@ -80,6 +81,10 @@ class DraftPublicationService:
         block, raw = self.content.verify_publication_in_transaction(conn, identity.workspace_id, record.result)
         if block != expected_block or raw != expected_body:
             raise integrity()
+        if isinstance(record, EditPublicationRecord) and isinstance(record.base, DependencyDraftBaseMaterial):
+            actual = self.content.verify_retained_dependencies_in_transaction(conn, identity.workspace_id, record.result)
+            if actual != record.base.dependency_witness.revised_root(record.result):
+                raise integrity()
         return record.result
 
     def verify_recorded(self, conn: sqlite3.Connection, identity: SessionIdentity,
@@ -104,7 +109,9 @@ class DraftPublicationService:
             raise integrity()
         repo.advance(identifier, 2, 'in_review', 'approved', utc_now())
         result = self.content.publish_edited_block_in_transaction(conn, current.workspace_id,
-            prepared.record.base.ref, prepared.block, prepared.body)
+            prepared.record.base.ref, prepared.block, prepared.body,
+            expected_dependencies=prepared.record.base.dependency_witness
+                if isinstance(prepared.record.base, DependencyDraftBaseMaterial) else None)
         assert isinstance(admission, PublicationAdmission)
         record = EditPublicationRecord(version='edit-publication-v1', id=identifier,
             workspace_id=current.workspace_id, owner='authoring', candidate=material.candidate,

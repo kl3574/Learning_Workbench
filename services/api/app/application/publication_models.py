@@ -9,7 +9,7 @@ from packages.contracts.canonical import metadata_sha256, sha256_bytes
 from ..authoring_dto import AuthoringModel, WorkedExamplePayload
 from ..infrastructure.provenance_repository import FrozenProvenance
 from .errors import ApiError
-from .draft_edit_models import DraftBaseMaterial, DraftEditPayload
+from .draft_edit_models import StoredDraftBase, DraftEditPayload
 from .content_restore_models import RestorePayload
 from .publication_admission_models import DraftPublishWrite, PublicationAdmission, RestoreNumericAdmission
 from .review_material_models import CheckedReviewMaterial
@@ -91,7 +91,7 @@ class EditPublicationRecord(AuthoringModel):
     admission: PublicationAdmission
     human_record_sha256: dm.Sha256
     edit_record_sha256: dm.Sha256
-    base: DraftBaseMaterial
+    base: StoredDraftBase
     payload: DraftEditPayload
     block: dm.ContentBlock
     result: dm.ContentRef

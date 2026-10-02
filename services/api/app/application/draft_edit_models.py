@@ -1,5 +1,5 @@
 """Immutable local edit facts. Construction and stored hashes grant no access."""
-from typing import Literal, Self, TypeVar
+from typing import Annotated, Literal, Self, TypeVar
 
 from pydantic import BaseModel, Field, model_validator
 from packages.contracts import domain_models as dm
@@ -7,6 +7,7 @@ from packages.contracts.canonical import metadata_sha256, sha256_bytes
 from ..draft_dto import DraftCreateWrite, DraftPatchWrite, DraftCreated, DraftPatched, DraftModel
 from ..infrastructure.provenance_repository import FrozenProvenance
 from .errors import ApiError
+from .content_dependency_models import ContentDependencyWitness
 
 M = TypeVar('M', bound=BaseModel)
 MAX_BODY_BYTES = 2_000_000
@@ -49,18 +50,44 @@ class DraftBaseMaterial(DraftModel):
 
     @model_validator(mode='after')
     def exact(self) -> Self:
-        value = self.metadata
-        if (self.ref.entity != 'block' or self.ref.id != value.id or self.ref.revision != value.revision
-                or self.ref.sha256 != metadata_sha256(value) or value.kind != 'text' or value.concepts
-                or value.body_path.startswith('private/') or value.body_sha256 != body_hash(self.body_markdown)):
-            raise ValueError('base must be the exact supported historical text block')
-        if self.provenance is not None:
-            if (self.provenance.block_ref != self.ref or {x.id for x in self.provenance.citations} != set(value.citations)
-                    or len(self.provenance.citations) != len(value.citations) or self.warnings != self.provenance.warnings):
-                raise ValueError('base provenance must bind its exact metadata and original warnings')
-        elif self.warnings != [unresolved_warning()]:
-            raise ValueError('unresolved sources must retain their actual warning')
+        _verify_base(self)
+        if self.metadata.depends_on:
+            raise ValueError('legacy base has no frozen dependency witness')
         return self
+
+
+class DependencyDraftBaseMaterial(DraftModel):
+    version: Literal['draft-base-material-dependencies-v2']
+    ref: dm.ContentRef
+    metadata: dm.ContentBlock
+    body_markdown: str = Field(max_length=400000)
+    provenance: FrozenProvenance | None
+    warnings: list[dm.Warning]
+    dependency_witness: ContentDependencyWitness
+
+    @model_validator(mode='after')
+    def exact(self) -> Self:
+        _verify_base(self)
+        if not self.metadata.depends_on or self.dependency_witness.root_ref != self.ref:
+            raise ValueError('dependency base must bind its original exact root and witness')
+        return self
+
+
+StoredDraftBase = Annotated[DraftBaseMaterial | DependencyDraftBaseMaterial, Field(discriminator='version')]
+
+
+def _verify_base(base: DraftBaseMaterial | DependencyDraftBaseMaterial) -> None:
+    value = base.metadata
+    if (base.ref.entity != 'block' or base.ref.id != value.id or base.ref.revision != value.revision
+            or base.ref.sha256 != metadata_sha256(value) or value.kind != 'text' or value.concepts
+            or value.body_path.startswith('private/') or value.body_sha256 != body_hash(base.body_markdown)):
+        raise ValueError('base must be the exact supported historical text block')
+    if base.provenance is not None:
+        if (base.provenance.block_ref != base.ref or {x.id for x in base.provenance.citations} != set(value.citations)
+                or len(base.provenance.citations) != len(value.citations) or base.warnings != base.provenance.warnings):
+            raise ValueError('base provenance must bind its exact metadata and original warnings')
+    elif base.warnings != [unresolved_warning()]:
+        raise ValueError('unresolved sources must retain their actual warning')
 
 
 def unresolved_warning() -> dm.Warning:
@@ -106,7 +133,7 @@ class EditDraftSnapshot(DraftModel):
         return self
 
 
-def initial_payload(base: DraftBaseMaterial, title: str) -> DraftEditPayload:
+def initial_payload(base: StoredDraftBase, title: str) -> DraftEditPayload:
     return DraftEditPayload(version='text-block-edit-v1', entity='block', kind='text',
         base_ref=base.ref, body_path=base.metadata.body_path, citations=base.metadata.citations,
         title=title, body_markdown=base.body_markdown, body_sha256=base.metadata.body_sha256,
@@ -129,7 +156,7 @@ def apply_patch(payload: DraftEditPayload, request: DraftPatchWrite) -> DraftEdi
     return result
 
 
-def edit_warnings(base: DraftBaseMaterial) -> list[dm.Warning]:
+def edit_warnings(base: StoredDraftBase) -> list[dm.Warning]:
     return [*base.warnings, dm.Warning(code='DRAFT_EDIT_UNREVIEWED', severity='warning',
         message='此编辑候选尚未取得数学、来源或教学批准；继承来源不是对新正文的认证。')]
 
@@ -138,7 +165,7 @@ class DraftEditRecord(DraftModel):
     version: Literal['draft-edit-record-v1'] = 'draft-edit-record-v1'
     workspace_id: dm.Id
     candidate: dm.DraftCandidate
-    base: DraftBaseMaterial
+    base: StoredDraftBase
     payload: DraftEditPayload
     actor_id: dm.Id
     command_key: str | None

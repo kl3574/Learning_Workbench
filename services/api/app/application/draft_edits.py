@@ -18,7 +18,7 @@ from .content_draft_source import ContentDraftSource
 from .draft_candidate_models import ResolvedDraftCandidate, match_candidate
 from .draft_candidates import DraftCandidates
 from .draft_edit_models import (
-    DraftEditRecord, EditDraftSnapshot, MAX_VERSIONS, ack, apply_patch, checked, initial_payload, invalid, edit_warnings,
+    DraftEditRecord, DependencyDraftBaseMaterial, EditDraftSnapshot, MAX_VERSIONS, ack, apply_patch, checked, initial_payload, invalid, edit_warnings,
     unsupported, integrity,
 )
 from .errors import ApiError
@@ -114,6 +114,11 @@ class DraftEditService:
                             conn, record.workspace_id, published.result)
                         if block != published.block or body != record.payload.body_markdown.encode('utf-8'):
                             raise integrity()
+                        if isinstance(record.base, DependencyDraftBaseMaterial):
+                            dependencies = self.source.content.verify_retained_dependencies_in_transaction(
+                                conn, record.workspace_id, published.result)
+                            if dependencies != record.base.dependency_witness.revised_root(published.result):
+                                raise integrity()
                         state = 'published'
                     return checked(EditDraftSnapshot, EditDraftSnapshot(
                         owner='authoring_edit', candidate=record.candidate, base_ref=record.base.ref,

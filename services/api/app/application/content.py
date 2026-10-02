@@ -9,6 +9,7 @@ import re
 import secrets
 import sqlite3
 import time
+from typing import Literal
 
 from pydantic import ValidationError
 
@@ -27,6 +28,7 @@ from ..infrastructure.database import Database
 from ..infrastructure.notes_repository import mark_stale_notes
 from ..infrastructure.security import guard_subject_access
 from .content_impact import ContentImpactSnapshot, impact_snapshot
+from .content_dependency_models import ContentDependencyEdge, ContentDependencyWitness
 from .errors import ApiError
 
 
@@ -409,7 +411,7 @@ class ContentService:
         return refs[0]
 
     def verify_retained_dependencies_in_transaction(self, connection: sqlite3.Connection,
-                                                    workspace_id: str, expected: dm.ContentRef) -> None:
+                                                    workspace_id: str, expected: dm.ContentRef) -> ContentDependencyWitness:
         """Verify existing public edges and original pins, never resolve them to current.
 
         The caller owns its transaction and admission. Historical reads/ACKs may
@@ -421,6 +423,7 @@ class ContentService:
         pending: list[PublishedModel] = [block]
         graph: dict[str, list[str]] = {}
         edge_count = 0
+        edges: dict[bytes, ContentDependencyEdge] = {}
         try:
             while pending:
                 value = pending.pop()
@@ -433,7 +436,7 @@ class ContentService:
                     if value.body_path.startswith('private/'):
                         raise ApiError(403, 'CONTENT_DEPENDENCY_PROTECTED', '精确依赖包含受保护正文。')
                     self.verify_publication_in_transaction(connection, workspace_id, owner)
-                targets = [(ref, 'reference') for ref in refs_in(value)]
+                targets: list[tuple[dm.ContentRef, Literal['reference', 'concept']]] = [(ref, 'reference') for ref in refs_in(value)]
                 targets.extend((reference(repository.concept_dependency(value, identifier)), 'concept')
                                for identifier in concept_ids(value))
                 # Course dependencies also retain their full original concept
@@ -467,7 +470,12 @@ class ContentService:
                     if reference(stored.value) != ref:
                         raise damaged()
                     pending.append(stored.value)
+                for ref, relation in targets:
+                    edge = ContentDependencyEdge(owner_ref=owner, target_ref=ref, relation=relation)
+                    edges[canonical_bytes(edge)] = edge
             validate_dag(graph)
+            return ContentDependencyWitness(version='content-dependency-witness-v1', root_ref=expected,
+                edges=[edges[key] for key in sorted(edges)])
         except ApiError as error:
             if error.status == 404:
                 raise damaged() from None
@@ -476,7 +484,8 @@ class ContentService:
             raise damaged() from None
 
     def publish_edited_block_in_transaction(self, connection: sqlite3.Connection, workspace_id: str,
-                                            base: dm.ContentRef, block: dm.ContentBlock, body: bytes) -> dm.ContentRef:
+                                            base: dm.ContentRef, block: dm.ContentBlock, body: bytes,
+                                            *, expected_dependencies: ContentDependencyWitness | None = None) -> dm.ContentRef:
         """Exact active current-base CAS; old body/history and invalidation remain Content-owned."""
         if not connection.in_transaction:
             raise ApiError(409, 'TRANSACTION_REQUIRED', '发布需要当前事务。')
@@ -494,9 +503,15 @@ class ContentService:
         if block != expected or block.kind != 'text' or block.concepts:
             raise invalid()
         if original.depends_on:
-            self.verify_retained_dependencies_in_transaction(connection, workspace_id, base)
+            if self.verify_retained_dependencies_in_transaction(connection, workspace_id, base) != expected_dependencies:
+                raise damaged()
+        elif expected_dependencies is not None:
+            raise damaged()
         refs = self.publish_in_transaction(connection, workspace_id, [block], {block.body_path: body})
         if refs != [reference(block)] or reference(repository.current(block.id).value) != refs[0]:
+            raise damaged()
+        if expected_dependencies is not None and self.verify_retained_dependencies_in_transaction(
+                connection, workspace_id, refs[0]) != expected_dependencies.revised_root(refs[0]):
             raise damaged()
         return refs[0]
 
