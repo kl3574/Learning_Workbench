@@ -53,7 +53,7 @@ test('initial session and CSRF acquisition do not deadlock the first explicit ro
 
 test('bootstrap can settle while simultaneous session readers wait, then the first role operation proceeds', async () => {
   const gate = deferred<Response>(); let reads = 0
-  history.replaceState(null, '', '/#bootstrap=synthetic_bootstrap_only')
+  history.replaceState(null, '', '/#bootstrap=synthetic_boot')
   vi.stubGlobal('fetch', vi.fn(async (path: string) => { if (path.endsWith('/bootstrap')) return gate.promise; if (path === '/api/v1/session') reads++; return response('author') }))
   const boot = connectSession(), read = request('GET /api/v1/session', undefined)
   try { await Promise.resolve(); expect(reads).toBe(0) }
