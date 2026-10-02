@@ -1,0 +1,41 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/draftReview src/features/draftPublication src/features/editPublication src/features/contentRestore src/features/imports
+
+
+ RUN  v5.0.0 $HOME/.cache/learning-workbench-acceptance/m62-review-form-input-fix-oct02/apps/web
+
+ ❯ src/features/draftReview/ReviewImportShell.test.tsx (3 tests | 1 failed) 1173ms
+   × Import close stays blocked during the current publication ledger read and requires a new explicit enabled click 328ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/draftReview/ReviewImportShell.test.tsx > Import close stays blocked during the current publication ledger read and requires a new explicit enabled click
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/features/draftReview/ReviewImportShell.test.tsx:101:29
+     99|     holdPublication = true; fireEvent.click(refresh)
+    100|     await waitFor(() => expect(heldLoads).toBe(1))
+    101|     expect(reason.disabled).toBe(true)
+       |                             ^
+    102|     fireEvent.click(within(dialog).getByRole('button', { name: '关闭导入' …
+    103|     const confirmation = await screen.findByRole('dialog', { name: '保留…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 31 passed (32)
+      Tests  1 failed | 271 passed (272)
+   Start at  22:48:18
+   Duration  3.80s (tests 36%, environment 36%, transform 18%, import 11%)
+
+Environment  jsdom was created 32 times · 11.74s total, 36% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+

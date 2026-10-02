@@ -1,0 +1,45 @@
+
+> @learning-workbench/web@0.1.0 test:e2e
+> playwright test --config ../../tests/e2e/playwright.config.ts --config $HOME/.cache/learning-workbench-acceptance/m62-review-form-race-audit-evidence-oct02/playwright.config.ts tests/e2e/independent-review-form-race.spec.ts --workers=1 --output=$HOME/.cache/learning-workbench-acceptance/m62-review-form-race-audit-evidence-oct02/controlled-native-03-results
+
+
+Running 1 test using 1 worker
+
+(node:2443811) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 ../../tests/e2e/independent-review-form-race.spec.ts:7:1 › independent audit held real Review GET interleaves native fill and preserves exact form memory through original Policy recovery (19.4s)
+
+
+  1) ../../tests/e2e/independent-review-form-race.spec.ts:7:1 › independent audit held real Review GET interleaves native fill and preserves exact form memory through original Policy recovery 
+
+    Error: expect(locator).toHaveValue(expected) failed
+
+    Locator:  getByRole('dialog', { name: '导入', exact: true }).getByRole('region', { name: '候选审核与原命令恢复', exact: true }).getByRole('region', { name: '恢复的临时审核表单 1', exact: true }).getByLabel('本次审核备注', { exact: true })
+    Expected: "尚未提交的原创备注 🧠"
+    Received: ""
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toHaveValue" getByRole('dialog', { name: '导入', exact: true }).getByRole('region', { name: '候选审核与原命令恢复', exact: true }).getByRole('region', { name: '恢复的临时审核表单 1', exact: true }).getByLabel('本次审核备注', { exact: true }) with timeout 5000ms
+      - waiting for getByRole('dialog', { name: '导入', exact: true }).getByRole('region', { name: '候选审核与原命令恢复', exact: true }).getByRole('region', { name: '恢复的临时审核表单 1', exact: true }).getByLabel('本次审核备注', { exact: true })
+        12 × locator resolved to <textarea aria-label="本次审核备注"></textarea>
+           - unexpected value ""
+
+
+      128 |     const recoveredNote = panel.getByRole('region', { name: '恢复的临时审核表单 1', exact: true })
+      129 |     const recoveredReason = panel.getByRole('region', { name: '恢复的临时审核表单 2', exact: true })
+    > 130 |     try { await expect(recoveredNote.getByLabel('本次审核备注', { exact: true })).toHaveValue(note) } catch (error) { writeFileSync(info.outputPath('panel.html'), await panel.innerHTML()); throw error }
+          |                                                                             ^
+      131 |     await observe('explicit_recovery_completed')
+      132 |     await expect(recoveredReason.getByLabel('审核理由', { exact: true })).toHaveValue(reason)
+      133 |     await expect(recoveredReason.getByLabel('数学审核决定')).toHaveValue('REJECTED')
+        at $HOME/.cache/learning-workbench-acceptance/m62-review-form-race-audit-oct02/tests/e2e/independent-review-form-race.spec.ts:130:77
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../m62-review-form-race-audit-evidence-oct02/controlled-native-03-results/independent-review-form-ra-246ff-gh-original-Policy-recovery/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../m62-review-form-race-audit-evidence-oct02/controlled-native-03-results/independent-review-form-ra-246ff-gh-original-Policy-recovery/error-context.md
+
+  1 failed
+    ../../tests/e2e/independent-review-form-race.spec.ts:7:1 › independent audit held real Review GET interleaves native fill and preserves exact form memory through original Policy recovery 

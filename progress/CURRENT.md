@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-02T14:32:06Z；规范 SHA-256：`949e2348902d8b8cb65f560b36fa58039fce75cd2e70c0a9ce9dcd8023160c05`
+更新：2026-10-02T15:23:35Z；规范 SHA-256：`949e2348902d8b8cb65f560b36fa58039fce75cd2e70c0a9ce9dcd8023160c05`
 
-仓库发布：VERIFIED；Issues 同步：VERIFIED_PR55_ISSUE31_C2_FAILURES_V313_LOCAL_DRAFT
+仓库发布：VERIFIED；Issues 同步：VERIFIED_PR55_ISSUE31_V313_LOCAL_GATES_RUNNING
 实施：IN_PROGRESS；当前任务：M6.2；下一任务：M6.2
 
-完成已批准v3.0.13 Single例题真实发布owner、完整数值账本/同事务启动许可与发布互斥及界面；独审并组合验收。Import入口已本地修复，继续调查原CI审核备注空；保留c2双FAIL。数值物理环境BLOCKED，平台DeepSeek NOT_RUN，M6.2仍in_progress。
+完成冻结完整Python/native与最终独审，封存原失败和BLOCKED数值证据、扫描全部新增Git对象，再同步PR55/Issue31并按普通快进推送已审查的源码。继续按唯一规范核M6.2剩余已授权范围；Group不继承v13 Single合同。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -32,7 +32,7 @@
 | M5.3 Tutor 状态机、SSE/取消/重连/异步上下文 | review | [#28](https://github.com/kl3574/Learning_Workbench/issues/28) | 919a00532b499cff604ef2be4e90c88cc6378490 |
 | M5.4 真实模型与搜索评测 | blocked | [#29](https://github.com/kl3574/Learning_Workbench/issues/29) | e982a14644317c7be12a63ec0b31c1e615c72fa6 |
 | M6.1 教材/例题/题目生成 schema + 数值验证 | blocked | [#30](https://github.com/kl3574/Learning_Workbench/issues/30) | 9d4aa2e75c0583b4752e1a2669534ef621e6c7f9 |
-| M6.2 审校/发布/版本对比/影响分析/恢复旧内容 | in_progress | [#31](https://github.com/kl3574/Learning_Workbench/issues/31) | dec5e9028b833aca3abc989ddc17cd25036f1dba |
+| M6.2 审校/发布/版本对比/影响分析/恢复旧内容 | in_progress | [#31](https://github.com/kl3574/Learning_Workbench/issues/31) | 60fa2b8c18bbd3bbd4122df81bb798fd6d0a3dab |
 | M6.3 CodexBroker/App Server、操作审批、产物清单 | todo | [#32](https://github.com/kl3574/Learning_Workbench/issues/32) | 未验证提交 |
 | M7.1 全备份/学习者包/作者包/恢复预览和事务 | todo | [#33](https://github.com/kl3574/Learning_Workbench/issues/33) | 未验证提交 |
 | M7.2 安全/可访问性/性能/故障注入 | todo | [#34](https://github.com/kl3574/Learning_Workbench/issues/34) | 未验证提交 |
@@ -224,6 +224,11 @@
 - M6.2_v313_contracts: {'status': 'DTO_GENERATED_FRONTEND_ONLY', 'source_commit': '3d9701526f5a586accc74d37b9a38a3a309a3a5c', 'root_commit': 'da2a2e63', 'actual': '609 non-storage contract tests /869 Web121files /88 focused /strict types/lint /78 generated checks PASS', 'boundary': 'Four storage/transport files excluded. At this source backend GET construction still lacks required real state projection. Publication implementation and backend/native acceptance NOT_RUN.', 'evidence': 'progress/evidence/2026-10-02/M6.2-v313-contracts-3d970152/REPORT.json'}
 - M6.2_review_form_ci_diagnosis: {'status': 'UNKNOWN_NOT_REPRODUCED', 'source': 'c2f47a27', 'actual_original_case': '1 PASS17.0s; original runner config CJS failure preserved. Original CI remains FAIL.', 'diagnostics': 'Failure-only observation self-check deliberately wrong expected literal produced original five-second assertion failure; DOM and same-actor original page-memory both contained synthetic note. Restored original assertion passed14.6s. Earlier one-time DOM corruption repaired itself and did not exercise diagnostic; retained.', 'boundary': 'These controlled diagnostic checks do not identify or fix original missing-note cause. Read-only independent source review ongoing.', 'diagnostic_commit': 'd7025bbf7cc8de532d82edc654207f57032eb4a6', 'root_commit': '4f666c40', 'final_native': '1PASS14.6s,1239 engineering inputs unchanged and match Git', 'evidence': 'progress/evidence/2026-10-02/M6.2-review-form-diagnostic/REPORT.json'}
 - M6.2_c2_terminal_progress_sync: {'readback_at': '2026-10-02T14:29:19.204010+00:00', 'head_unchanged': 'c2f47a2778bb6a78c73237f8bb89fb271dfedcd6', 'pull_request': 55, 'draft': True, 'open': True, 'merged': False, 'issue': 31, 'issue_outside_managed_block_and_metadata_unchanged': True, 'pr_body_sha256': '62da56221876350ad5001847f1228ba3a9daa542e39e3280ae3267848c5d9323', 'issue_body_sha256': '292ea5f00f87d620071634eb711fae34fb5bc788c56ec393af3279e77c7daf47', 'source_push': False, 'ci_state': 'c2 both FAIL;10successful jobs2browser failures; fixed d252 Python3490PASS2ENVskip; current v13 unpublished', 'spec_adoption_local': 'v3.0.13 approved/adopted locally; Single owner/UI in progress; physical numeric BLOCKED'}
+- M6.2_single_backend_v313: {'original_source': 'c65372cfe5c2469dac3ad396eec62aa59efe2c75', 'integrated_source': 'ac44316f35b7fa2f17a19de995b25043e0ef5f12', 'tests': 'contracts737; old_publication_numeric145; old_owner_restore141; final_single_related48 PASS', 'independent': 'root4 adversarial PASS on3658; source N/A later repair separately48', 'physical_numeric': 'NOT_RUN by backend unit/integration task; controlled ledgers only'}
+- M6.2_single_combined_60fa2b8c: {'source': '60fa2b8c18bbd3bbd4122df81bb798fd6d0a3dab', 'web': '919PASS/132files', 'static': 'strictTS and build841 PASS', 'native': '10PASS/1.7min/1worker/0retry', 'source_inputs': 1275, 'git_and_before_after_equal': True, 'full_python': 'RUNNING at frozen ac44316f', 'full_native': 'RUNNING at frozen60fa2b8c', 'physical': 'actual numeric environment_unavailable/BLOCKED/exit1; HTTP409 refusal and draft/null preserved; positive publication NOT_RUN', 'external_model_calls': 0}
+- M6.2_review_form_input_repair: {'source': '3adcdec4f3184f97837c56240c30fc63e733909b', 'integrated': 'a8e9ebea', 'results': '832Web/2native/strictTS/build834; exact permanent2DOM+1native RED to GREEN, rootcombined919Web/10native PASS', 'boundary': 'Demonstrated Publication-read focus/disabled timing mechanism, not unique proof of old c2 CI cause. Original5000ms unchanged; accepted-input deletion not demonstrated.'}
+- M6.2_v313_local_progress_sync: {'readback_at': '2026-10-02T15:15:10.133049+00:00', 'head_unchanged': 'c2f47a2778bb6a78c73237f8bb89fb271dfedcd6', 'pull_request': 55, 'draft': True, 'open': True, 'merged': False, 'issue': 31, 'issue_outside_managed_block_and_metadata_unchanged': True, 'pr_body_sha256': 'e053f8c1fbe94d29d035009a349368c0666e3e9f5e0903f42aba589057093779', 'issue_body_sha256': 'afe661bef2c7dbbb1a549c4b8f79c6fafe08b6c83453df4595395e364c424ddb', 'source_push': False, 'ci_state': 'c2 both FAIL; local v13 919Web10nativePASS; complete gates RUNNING; source unpublished', 'spec_adoption_local': 'v3.0.13 Single owner/UI implemented locally60fa; physical numeric BLOCKED'}
+- M6.2_single_independent_final: a4b7045e独立actor/r1原3probe及40组PASS；晚表单原3probe/新增3Panel IDB恢复及60相关PASS/strictTS。原P1/P2失败保留，无范围内剩余确认阻断。e717 uploader静态核通过，远端未执行。
 
 ## 阻塞与待决项
 
@@ -247,7 +252,7 @@
 - M62_EDITOR_POLICY_MEMORY_REVIEW_PENDING: a7bff45已独审并整合为d302；24项定向复验通过，root固定1092输入Web562/原生1/strictTS/build通过。未落盘文字保护已验，跨新页面原命令重放另有合同缺口。
 - M62_EDITOR_NEW_PAGE_ACK_CONTRACT: v3.0.10已批准采纳并实现。b78独审102Web/114HTTP/2native及7新增负例PASS；与实际列表107/127组合819的168Python/staticPASS。真实同actor刷新/API重启显式原key/body回放、v1不升级/新actor不继承通过；其他owner限制不扩。 已随c2源码发布，PR55仍draft/open/unmerged。
 - M62_IMPACT_RESTORE_IMPLEMENTING: Content发现/逐对象决定、Learning逐原证据适用性、proof Restore新审核/发布及未提交表单保护已组合到ac5并通过716Web/7native。worked_example已按批准v12接入独立数值链；物理执行仍环境阻断，发布拒绝保留。
-- M62_FINAL_COMBINED_GATES_PENDING: v12固定d252完整3490Python PASS/2真实ENVskip；300完整117native PASS；dec5 CRLF修复830Web/1native/strict/build及独审200focused PASS。c2源码已发布，远端CI终态待核；真实numeric仍BLOCKED，M6.2生成稿/通用草稿等仍未完成。
+- M62_FINAL_COMBINED_GATES_PENDING: v12完整3490Python/117native历史证据保留；v13固定60fa919Web/10native/strictTS/build841 PASS。完整Python ac44316f、完整native60fa运行中；c2双CI仍FAIL，物理numeric BLOCKED。
 - M62_1AD_SPEC_CI_FAILED: 原1ad双608PASS1路由覆盖FAIL保留；a5的两spec619PASS。新增v11实际107/127是本地819证据，不追记为a5能力。
 - M62_1AD_TUTOR_BROWSER_FAILED: 1ad和旧head Tutor失败保留。a5 push108PASS但PR107PASS1同5000msFAIL，唯一原因UNKNOWN；本地026/067只证明重复扫描优化和受控负载差异，不据此关闭CI失败。
 - M62_CODEMIRROR_SOURCE_EDITOR_PENDING: 实际CodeMirror保留原文/Unicode/TeX/撤销/只读及Review保护；已与actor/Restore/Edit/Learning组合6b，661Web和六重点native PASS。已随c2源码推送，PR55仍draft/open/unmerged，非全M6.2验收。
@@ -255,6 +260,6 @@
 - M62_A5_PR_TUTOR_FAILED: a5 PR36988849056的browser110780057263在Tutor completed标题5000ms断言失败；107PASS1FAIL。对应push108PASS不抵消该失败；12原job logs及GitHub artifact11219786276完整保留。
 - M62_RESTORE_NUMERIC_CONTRACT: 批准472d41a7已纳入唯一规范v3.0.12；3真实HTTP、7DTO、手工原文计划与唯一账本/单次执行/新Review发布已实施并发布c2。实际bwrap exit1环境阻断；新人工批准后publish409仍拒绝，不宣称physical PASS。
 - M62_C2_PUSH_IMPORT_ENTRY_FAILED: 原c2 push116PASS1FAIL保留；已受控复现Policy未知时命令导入误可点，72efe/根61b仅同步subjectLocked disabled；4native107Web/strict/build PASS，原helper/5s未改；新CI待组合发布。
-- M62_C2_PR_REVIEW_FORM_FAILED: 原c2 PR116PASS1FAIL保留；恢复表单1备注空。固定原case一次PASS不关闭失败；原panel/HTTP不在旧上传白名单，独立根因调查与受限失败后诊断继续。
+- M62_C2_PR_REVIEW_FORM_FAILED: 原c2 PR116PASS1FAIL保留。受控真实Publication读取使textarea临时disabled/失焦，原fill可未发input；3adc将本机编辑与提交安全分开，2DOM/1native原RED→GREEN，原case5s未改，root组合919Web/10native PASS。不能证明历史CI唯一原因；新远端待推送。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。

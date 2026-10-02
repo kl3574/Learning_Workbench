@@ -1,0 +1,379 @@
+diff --git a/apps/web/src/features/singlePublication/independentActorReview.test.tsx b/apps/web/src/features/singlePublication/independentActorReview.test.tsx
+new file mode 100644
+index 00000000..d63abcaa
+--- /dev/null
++++ b/apps/web/src/features/singlePublication/independentActorReview.test.tsx
+@@ -0,0 +1,29 @@
++import 'fake-indexeddb/auto'
++import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
++import { afterEach, expect, test, vi } from 'vitest'
++import { getSessionGeneration } from '../../api/client'
++import { singlePublicationFixture } from './singlePublicationFixtures'
++import { singlePublicationCommandStore } from './singlePublicationCommands'
++import { discardSinglePublicationForms, discardSinglePublicationMemory } from './singlePublicationMemory'
++import { useSinglePublication } from './useSinglePublication'
++
++let workspace = ''
++afterEach(async () => { cleanup(); discardSinglePublicationForms(workspace); discardSinglePublicationMemory(workspace); await singlePublicationCommandStore.close() })
++test('independent: newly observed different actor cannot replay same-page original command', async () => {
++  const f = singlePublicationFixture(); workspace = f.workspace
++  vi.mocked(f.port.publish).mockRejectedValueOnce(new Error('synthetic response unavailable'))
++  const hook = renderHook(() => useSinglePublication(f.workspace, false, 'selected', f.port, f.draft.candidate.draft_id))
++  await waitFor(() => expect(hook.result.current.ready).toBe(true))
++  await act(() => hook.result.current.prepare(f.draft, f.receipt))
++  await act(() => hook.result.current.publish([0, 1]))
++  const original = hook.result.current.commands[0], oldGeneration = getSessionGeneration()
++  expect(original.ack).toBeNull()
++  // Fresh /session truth changed, independently of this page's event counter.
++  f.session.actor_session_id = 'session_independently_observed_new_actor'
++  await act(() => hook.result.current.refresh())
++  expect(hook.result.current.ready).toBe(true)
++  expect(getSessionGeneration()).toBe(oldGeneration)
++  await act(() => hook.result.current.execute(original))
++  expect(f.port.publish).toHaveBeenCalledTimes(1)
++  expect(hook.result.current.canReplay(original)).toBe(false)
++})
+diff --git a/apps/web/src/features/singlePublication/independentReadbackReview.test.ts b/apps/web/src/features/singlePublication/independentReadbackReview.test.ts
+new file mode 100644
+index 00000000..a2cbf336
+--- /dev/null
++++ b/apps/web/src/features/singlePublication/independentReadbackReview.test.ts
+@@ -0,0 +1,9 @@
++import { expect, test } from 'vitest'
++import { singlePublicationFixture } from './singlePublicationFixtures'
++import { singleSnapshot } from './singlePublicationSchema'
++
++test('independent: Single publication GET cannot substitute later current r2 for original r1', () => {
++  const f = singlePublicationFixture()
++  expect(() => singleSnapshot({ ...f.draft, state: 'published',
++    published_ref: { ...f.ack, revision: 2 } })).toThrow()
++})
+diff --git a/apps/web/src/features/singlePublication/independentSingleReview.test.tsx b/apps/web/src/features/singlePublication/independentSingleReview.test.tsx
+new file mode 100644
+index 00000000..73fc6855
+--- /dev/null
++++ b/apps/web/src/features/singlePublication/independentSingleReview.test.tsx
+@@ -0,0 +1,59 @@
++import 'fake-indexeddb/auto'
++import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
++import { afterEach, expect, test, vi } from 'vitest'
++import { SinglePublicationPanel } from './SinglePublicationPanel'
++import { singlePublicationFixture } from './singlePublicationFixtures'
++import { discardSinglePublicationForms, discardSinglePublicationMemory, recoverableSinglePublicationForms } from './singlePublicationMemory'
++import { singlePublicationCommandStore } from './singlePublicationCommands'
++const workspaces: string[] = []
++afterEach(async () => { cleanup(); vi.restoreAllMocks(); for (const workspace of workspaces.splice(0)) { discardSinglePublicationForms(workspace); discardSinglePublicationMemory(workspace) }; await singlePublicationCommandStore.close() })
++function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(accept => { resolve = accept }); return { resolve, promise } }
++async function setup() {
++  const f = singlePublicationFixture(); workspaces.push(f.workspace)
++  const props = { workspace: f.workspace, paused: false, blocked: false, draft: f.draft, receipt: f.receipt, port: f.port }
++  const view = render(<SinglePublicationPanel {...props} />)
++  const prepare = await screen.findByRole('button', { name: '选择此审核并重新读取生成发布基准' })
++  await waitFor(() => expect((prepare as HTMLButtonElement).disabled).toBe(false)); fireEvent.click(prepare)
++  const region = await screen.findByRole('region', { name: '本次生成发布基准' })
++  const boxes = within(region).getAllByRole('checkbox') as HTMLInputElement[]
++  boxes.forEach(box => fireEvent.click(box))
++  return { f, props, view, boxes, forms: () => recoverableSinglePublicationForms(f.workspace, f.session.actor_session_id) }
++}
++test('independent: edits accepted while submit awaits the first ledger read survive consumption of its original form', async () => {
++  const { f, boxes, forms } = await setup()
++  const gate = deferred<Awaited<ReturnType<typeof singlePublicationCommandStore.load>>>()
++  const load = vi.spyOn(singlePublicationCommandStore, 'load').mockReturnValueOnce(gate.promise)
++  fireEvent.click(screen.getByRole('button', { name: '明确发布这一生成例题' }))
++  await waitFor(() => expect(load).toHaveBeenCalledTimes(1))
++  expect(boxes[1].disabled).toBe(false)
++  fireEvent.click(boxes[1]); fireEvent.click(boxes[2])
++  expect(forms()).toHaveLength(1)
++  expect(forms()[0]).toMatchObject({ selected: [0], confirmed: false })
++  await act(async () => gate.resolve({}))
++  await screen.findByText('原生成发布 ACK 已保存')
++  expect(f.port.publish).toHaveBeenCalledTimes(1)
++  expect(vi.mocked(f.port.publish).mock.calls[0][1].acknowledged_warning_codes).toEqual(['SOURCE_CONFIRM'])
++  // The original click may complete. It must not delete subsequently accepted local choices.
++  expect(forms()).toHaveLength(1)
++  expect(forms()[0]).toMatchObject({ selected: [0], confirmed: false })
++})
++test('independent: first ledger load failure retains exact unsent choices and sends no write', async () => {
++  const { f, forms } = await setup(), before = forms()
++  vi.spyOn(singlePublicationCommandStore, 'load').mockRejectedValueOnce(new Error('synthetic initial IDB read failure'))
++  fireEvent.click(screen.getByRole('button', { name: '明确发布这一生成例题' }))
++  await screen.findByText(/本次发布操作未确认或记录无法核验/)
++  expect(forms()).toEqual(before); expect(f.port.publish).not.toHaveBeenCalled()
++  expect(await singlePublicationCommandStore.load(f.workspace)).toEqual({})
++})
++test('independent: late fresh-candidate read after Policy hides original form and does not submit', async () => {
++  const { f, props, view, forms } = await setup(), before = forms()
++  const gate = deferred<typeof f.draft>()
++  vi.mocked(f.port.draft).mockReturnValueOnce(gate.promise)
++  fireEvent.click(screen.getByRole('button', { name: '核验并恢复原生成发布表单' }))
++  await waitFor(() => expect(f.port.draft).toHaveBeenCalledTimes(2))
++  view.rerender(<SinglePublicationPanel {...props} paused draft={null} receipt={null} />)
++  await act(async () => gate.resolve(f.draft))
++  expect(screen.queryByRole('region', { name: '本次生成发布基准' })).toBeNull()
++  expect(screen.queryByText(f.receipt.decision_reason)).toBeNull()
++  expect(forms()).toEqual(before); expect(f.port.publish).not.toHaveBeenCalled()
++})
+diff --git a/apps/web/src/features/singlePublication/singlePublicationIntegration.test.tsx b/apps/web/src/features/singlePublication/singlePublicationIntegration.test.tsx
+index 63bd660d..9560b1ee 100644
+--- a/apps/web/src/features/singlePublication/singlePublicationIntegration.test.tsx
++++ b/apps/web/src/features/singlePublication/singlePublicationIntegration.test.tsx
+@@ -19,7 +19,7 @@ function fixture() {
+ test('Authoring actual published projection blocks new preview and approval while showing original ref and preserving decline', async () => {
+   const f = fixture(); render(<AuthoringPanel workspace={f.workspace} paused={false} currentBlock={null} port={f.port} provider={providerFixture().port} onState={vi.fn()} />)
+   // This scenario starts after academic command recovery has completed. The
+-  // pre-existing control/subject initialization race is tracked separately.
++  // Control/subject initialization has its own held-journal regression tests.
+   await waitFor(() => expect(screen.getByLabelText('例题主题').matches(':disabled')).toBe(false))
+   const read = await screen.findByRole('button', { name: `读取创作详情 ${f.generation.summary.id}` }); await waitFor(() => expect((read as HTMLButtonElement).disabled).toBe(false)); fireEvent.click(read)
+   fireEvent.click(await screen.findByRole('button', { name: '读取这份准确例题候选' }))
+diff --git a/apps/web/src/features/singlePublication/singlePublicationMemory.ts b/apps/web/src/features/singlePublication/singlePublicationMemory.ts
+index 2b243dd8..ea2fefd0 100644
+--- a/apps/web/src/features/singlePublication/singlePublicationMemory.ts
++++ b/apps/web/src/features/singlePublication/singlePublicationMemory.ts
+@@ -3,11 +3,22 @@ import type { SinglePublicationCommand } from './singlePublicationCommands'
+ import type { SinglePublicationBasis } from './singlePublicationSchema'
+ 
+ // Session identity is compared only in page memory; never serialized to IDB.
++const actors = new Map<string, { actor: string; original: SinglePublicationCommand }>()
++const immutable = (command: SinglePublicationCommand) => ({ ...command, ack: null, rejection: null })
++export function rememberSinglePublicationActor(command: SinglePublicationCommand, actor: string) {
++  const old = actors.get(command.command_id)
++  if (!actor || old && (old.actor !== actor || !sameValue(old.original, immutable(command)))) throw new Error('Original publication actor cannot change')
++  if (!old) actors.set(command.command_id, { actor, original: structuredClone(immutable(command)) })
++}
++export function hasSinglePublicationActor(command: SinglePublicationCommand, actor: string) {
++  const old = actors.get(command.command_id)
++  return !!actor && !!old && old.actor === actor && sameValue(old.original, immutable(command))
++}
+ const commands = new Map<string, { command: SinglePublicationCommand; session: string }>()
+-export type SinglePublicationForm = { key: string; workspace: string; basis: SinglePublicationBasis; selected: number[]; confirmed: boolean }
++export type SinglePublicationForm = { key: string; version: number; workspace: string; basis: SinglePublicationBasis; selected: number[]; confirmed: boolean }
+ const forms = new Map<string, { form: SinglePublicationForm; session: string }>()
+ const listeners = new Set<() => void>()
+-let revision = 0
++let revision = 0, formVersion = 0
+ const changed = () => { ++revision; listeners.forEach(listener => listener()) }
+ export const subscribeSinglePublicationMemory = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } }
+ export const singlePublicationMemoryVersion = () => revision
+@@ -28,15 +39,14 @@ const formKey = (workspace: string, session: string, basis: SinglePublicationBas
+ export function retainSinglePublicationForm(workspace: string, session: string, basis: SinglePublicationBasis, selected: number[], confirmed: boolean) {
+   if (!session) throw new Error('Missing original form session')
+   const key = formKey(workspace, session, basis)
+-  if (selected.length || confirmed) forms.set(key, { form: structuredClone({ key, workspace, basis, selected, confirmed }), session })
++  if (selected.length || confirmed) forms.set(key, { form: structuredClone({ key, version: ++formVersion, workspace, basis, selected, confirmed }), session })
+   else forms.delete(key)
+   changed()
+ }
+ export const pendingSinglePublicationForms = (workspace: string) => [...forms.values()].some(row => row.form.workspace === workspace)
+ export const recoverableSinglePublicationForms = (workspace: string, session: string) => [...forms.values()].filter(row => row.form.workspace === workspace && row.session === session).map(row => structuredClone(row.form))
+-export function releaseSinglePublicationForm(workspace: string, session: string, basis: SinglePublicationBasis) {
+-  const key = formKey(workspace, session, basis)
+-  if (forms.get(key)?.session === session) { forms.delete(key); changed() }
++export function releaseSinglePublicationForm(form: SinglePublicationForm, session: string) {
++  if (originalSinglePublicationForm(form, form.workspace, session)) { forms.delete(form.key); changed() }
+ }
+ export function discardSinglePublicationForms(workspace: string) {
+   for (const [key, row] of forms) if (row.form.workspace === workspace) forms.delete(key)
+diff --git a/apps/web/src/features/singlePublication/singlePublicationSchema.ts b/apps/web/src/features/singlePublication/singlePublicationSchema.ts
+index 779cea74..76f681cd 100644
+--- a/apps/web/src/features/singlePublication/singlePublicationSchema.ts
++++ b/apps/web/src/features/singlePublication/singlePublicationSchema.ts
+@@ -17,6 +17,7 @@ export function singleSnapshot(raw: unknown, candidate?: DraftCandidate): Author
+   if (value.owner !== 'authoring' || value.candidate.entity !== 'block' || value.candidate.draft_revision !== 1
+       || value.body_sha256 !== digest(value.payload.body_markdown) || candidate && !sameValue(value.candidate, candidate)
+       || new Set(value.numeric_check_ids).size !== value.numeric_check_ids.length) invalid()
++  if (value.published_ref !== null) singlePublishedRef(value.published_ref)
+   return value
+ }
+ export function singlePublishedRef(raw: unknown): ContentRef {
+diff --git a/apps/web/src/features/singlePublication/useSinglePublication.test.tsx b/apps/web/src/features/singlePublication/useSinglePublication.test.tsx
+index b4d6bf8c..f40779c7 100644
+--- a/apps/web/src/features/singlePublication/useSinglePublication.test.tsx
++++ b/apps/web/src/features/singlePublication/useSinglePublication.test.tsx
+@@ -104,3 +104,54 @@ test('draft-scoped publication rejects foreign preparation and replay without an
+   await act(() => hook.result.current.prepare(f.draft, f.receipt)); await act(() => hook.result.current.execute(command)); await act(() => hook.result.current.readCurrent({ ...command, ack: f.ack }))
+   expect(hook.result.current.basis).toBeNull(); expect(f.port.draft).not.toHaveBeenCalled(); expect(f.port.publish).not.toHaveBeenCalled(); expect(f.port.current).not.toHaveBeenCalled()
+ })
++test('sending an original command freshly detects a different actor even without refresh or access-generation notification', async () => {
++  const f = fixture(), hook = await ready(f); vi.mocked(f.port.publish).mockRejectedValueOnce(new Error('synthetic response unavailable'))
++  await act(() => hook.result.current.publish([0, 1])); const original = hook.result.current.commands[0]
++  f.session.actor_session_id = 'session_other_unannounced'
++  await act(() => hook.result.current.execute(original)); expect(f.port.publish).toHaveBeenCalledTimes(1)
++  expect(hook.result.current.ready).toBe(false); expect(readSinglePublicationCommand((await singlePublicationCommandStore.load(f.workspace))[original.command_id], f.workspace)).toEqual(original)
++})
++test('form recovery checks fresh actor before recovering original confirmation or reading its protected basis', async () => {
++  const f = fixture(), hook = await ready(f); act(() => hook.result.current.retainForm([0, 1], true)); const form = hook.result.current.forms[0], reads = vi.mocked(f.port.draft).mock.calls.length
++  f.session.actor_session_id = 'session_other_unannounced'; await act(() => hook.result.current.recoverForm(form))
++  expect(hook.result.current.basis).toBeNull(); expect(hook.result.current.pendingForms).toBe(true); expect(f.port.draft).toHaveBeenCalledTimes(reads); expect(f.port.publish).not.toHaveBeenCalled()
++})
++test('memory save checks fresh actor and never persists an original ACK under an unannounced replacement session', async () => {
++  const f = fixture(), hook = await ready(f), save = singlePublicationCommandStore.save.bind(singlePublicationCommandStore)
++  vi.spyOn(singlePublicationCommandStore, 'save').mockImplementation(async (...args) => { if (JSON.parse(args[2]).ack) throw new Error('synthetic ack save failure'); return save(...args) })
++  await act(() => hook.result.current.publish([0, 1])); const original = hook.result.current.commands[0]; expect(hook.result.current.pendingMemory).toBe(true); vi.restoreAllMocks()
++  f.session.actor_session_id = 'session_other_unannounced'; await act(() => hook.result.current.saveMemory())
++  expect(hook.result.current.pendingMemory).toBe(true); expect(readSinglePublicationCommand((await singlePublicationCommandStore.load(f.workspace))[original.command_id], f.workspace).ack).toBeNull(); expect(f.port.publish).toHaveBeenCalledTimes(1)
++})
++test('actor change during HTTP retains received ACK in original actor memory without committing it under new actor', async () => {
++  const f = fixture(), hook = await ready(f)
++  vi.mocked(f.port.publish).mockImplementationOnce(async () => { f.session.actor_session_id = 'session_other_during_response'; return f.ack })
++  await act(() => hook.result.current.publish([0, 1])); expect(hook.result.current.pendingMemory).toBe(true); expect(hook.result.current.ready).toBe(false)
++  const record = Object.values(await singlePublicationCommandStore.load(f.workspace))[0]; expect(readSinglePublicationCommand(record, f.workspace).ack).toBeNull()
++  f.session.actor_session_id = 'session_fixture_reviewFixtures'; await act(() => hook.result.current.refresh()); await act(() => hook.result.current.saveMemory())
++  expect(hook.result.current.pendingMemory).toBe(false); expect(hook.result.current.commands[0].ack).toEqual(f.ack); expect(f.port.publish).toHaveBeenCalledTimes(1)
++})
++test('a journal command without original page actor proof remains read-only even with matching page and generation', async () => {
++  const f = fixture(), command = makeSinglePublicationCommand(f.workspace, getSessionGeneration(), f.basis(), [0, 1]); await persistSinglePublicationCommand(command)
++  const hook = await ready(f); expect(hook.result.current.canReplay(command)).toBe(false)
++  await act(() => hook.result.current.execute(command)); expect(f.port.publish).not.toHaveBeenCalled()
++})
++
++test('later unsent form version survives original command storage failure and save-only recovery', async () => {
++  const f = fixture(), hook = await ready(f), delayed = deferred<Awaited<ReturnType<typeof singlePublicationCommandStore.load>>>()
++  act(() => hook.result.current.retainForm([0, 1], true))
++  vi.spyOn(singlePublicationCommandStore, 'load').mockReturnValueOnce(delayed.promise)
++  let sending!: Promise<void>; act(() => { sending = hook.result.current.publish([0, 1]) })
++  act(() => hook.result.current.retainForm([0], false)); const later = hook.result.current.forms[0]
++  vi.spyOn(singlePublicationCommandStore, 'save').mockRejectedValueOnce(new Error('synthetic command write failure'))
++  await act(async () => { delayed.resolve({}); await sending })
++  expect(hook.result.current.pendingMemory).toBe(true); expect(hook.result.current.forms).toEqual([later]); expect(f.port.publish).not.toHaveBeenCalled()
++  await act(() => hook.result.current.saveMemory()); expect(hook.result.current.commands[0].body.acknowledged_warning_codes).toEqual(['SOURCE_CONFIRM']); expect(hook.result.current.forms).toEqual([later]); expect(f.port.publish).not.toHaveBeenCalled()
++})
++test('original command replay never consumes a newly prepared confirmation with the same basis', async () => {
++  const f = fixture(), hook = await ready(f); vi.mocked(f.port.publish).mockRejectedValueOnce(new Error('synthetic lost response'))
++  await act(() => hook.result.current.publish([0, 1])); const original = hook.result.current.commands[0]
++  await act(() => hook.result.current.prepare(f.draft, f.receipt)); act(() => hook.result.current.retainForm([0, 1], true)); const later = hook.result.current.forms[0]
++  await act(() => hook.result.current.execute(original)); expect(hook.result.current.commands[0].ack).toEqual(f.ack); expect(hook.result.current.forms).toEqual([later])
++  expect(vi.mocked(f.port.publish).mock.calls[1]).toEqual(vi.mocked(f.port.publish).mock.calls[0])
++})
+diff --git a/apps/web/src/features/singlePublication/useSinglePublication.ts b/apps/web/src/features/singlePublication/useSinglePublication.ts
+index 9952a505..25f0e5d8 100644
+--- a/apps/web/src/features/singlePublication/useSinglePublication.ts
++++ b/apps/web/src/features/singlePublication/useSinglePublication.ts
+@@ -8,10 +8,11 @@ import { makeSinglePublicationCommand, persistSinglePublicationCommand, singlePu
+ import { checkedPublication, publicationRef } from '../draftPublication/publicationSchema'
+ import { SinglePublicationUnavailable, singleSnapshot, singlePublishedRef } from './singlePublicationSchema'
+ import { matchesSingleCandidate, prepareSingleBasis, type SinglePublicationBasis } from './singlePublicationSchema'
+-import { singlePublicationMemoryVersion, pendingSinglePublicationMemory, recoverableSinglePublicationMemory, releaseSinglePublicationMemory, retainSinglePublicationMemory, subscribeSinglePublicationMemory,
++import { hasSinglePublicationActor, rememberSinglePublicationActor, singlePublicationMemoryVersion, pendingSinglePublicationMemory, recoverableSinglePublicationMemory, releaseSinglePublicationMemory, retainSinglePublicationMemory, subscribeSinglePublicationMemory,
+   pendingSinglePublicationForms, recoverableSinglePublicationForms, retainSinglePublicationForm, releaseSinglePublicationForm, originalSinglePublicationForm, type SinglePublicationForm } from './singlePublicationMemory'
+ 
+-const denied = (error: unknown) => error instanceof ApiError && ([401, 403].includes(error.status) || ['POLICY_DENIED', 'ASSESSMENT_ACTIVE', 'ASSESSMENT_ANSWER_PROTECTED'].includes(error.code ?? ''))
++class SinglePublicationAccessChanged extends Error {}
++const denied = (error: unknown) => error instanceof SinglePublicationAccessChanged || error instanceof ApiError && ([401, 403].includes(error.status) || ['POLICY_DENIED', 'ASSESSMENT_ACTIVE', 'ASSESSMENT_ANSWER_PROTECTED'].includes(error.code ?? ''))
+ export function useSinglePublication(workspace: string, paused: boolean, selection: string, port: SinglePublicationPort = singlePublicationClient, draftId?: string) {
+   const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
+   useSyncExternalStore(subscribeSinglePublicationMemory, singlePublicationMemoryVersion, singlePublicationMemoryVersion)
+@@ -33,13 +34,18 @@ export function useSinglePublication(workspace: string, paused: boolean, selecti
+   const fail = (reason: unknown) => {
+     if (denied(reason)) clearProtected()
+     const code = reason instanceof ApiError && /^[A-Z][A-Z0-9_]{0,79}$/.test(reason.code ?? '') ? `${reason.code}：` : ''
+-    setError(code + (reason instanceof SinglePublicationUnavailable ? reason.message : denied(reason) ? '当前权限或测试策略不允许发布资料，保护内容已收起，原命令仍保留。'
++    setError(code + (reason instanceof SinglePublicationUnavailable ? reason.message : denied(reason) ? '当前会话身份、权限或测试策略已变化，保护内容已收起，原命令与原会话内存仍保留。'
+       : reason instanceof ApiError && reason.status === 412 ? '候选或审核基准已变化。原命令保留；请核对当前引用；请明确重新读取候选并创建新的审核和人工决定，不能替换原命令基准。'
+         : '本次发布操作未确认或记录无法核验。原 body 与 key 保留，不自动重发或创建新命令。'))
+   }
+   const load = async () => Object.values(await singlePublicationCommandStore.load(workspace)).map(value => readSinglePublicationCommand(value, workspace)).filter(value => !draftId || value.basis.candidate.draft_id === draftId)
+   const begin = (subject = true, recovering = false) => { if (!current(subject) || working.current || subject && !recovering && pendingSinglePublicationMemory(workspace)) return null; working.current = true; setBusy(true); setError(''); return ++sequence.current }
+   const valid = (token: number, subject = true) => current(subject) && token === sequence.current
++  const checkActor = async (token: number, actor: string) => {
++    const session = checkedPublication<SessionResponse>('SessionResponse', await port.session())
++    if (!valid(token) || !actor || session.actor_session_id !== actor || session.workspace_id !== workspace
++        || session.role !== 'author' || session.active_independent_attempt_id || session.active_open_book_attempt_id) throw new SinglePublicationAccessChanged()
++  }
+   const finish = (token: number) => { if (valid(token, false)) { working.current = false; setBusy(false) } }
+   const refresh = async () => {
+     const token = begin(false); if (token === null) return
+@@ -71,20 +77,21 @@ export function useSinglePublication(workspace: string, paused: boolean, selecti
+   const prepare = async (draft: AuthoringDraftView, selectedReview: StoredReviewReceipt) => {
+     const token = begin(); if (token === null) return
+     setBasis(null)
+-    try { const prepared = await readBasis(draft, selectedReview); if (valid(token)) { setBasis(prepared); setPreparedAt(token) } }
++    try { const actor = sessionIdentity.current; await checkActor(token, actor); const prepared = await readBasis(draft, selectedReview); await checkActor(token, actor); if (valid(token)) { setBasis(prepared); setPreparedAt(token) } }
+     catch (reason) { if (valid(token, false)) fail(reason) } finally { finish(token) }
+   }
+-  const execute = async (command: SinglePublicationCommand) => {
++  const execute = async (command: SinglePublicationCommand, submittedForm?: SinglePublicationForm) => {
+     if (!current() || command.workspace_id !== workspace || draftId && command.basis.candidate.draft_id !== draftId) return
+-    if (!sameSinglePublicationActorPage(command, access)) { setError('无法核对原操作者。旧页面或旧访问代次的原发布命令只读保留，不用当前会话冒充原 key 回放。'); return }
++    if (!sameSinglePublicationActorPage(command, access) || !hasSinglePublicationActor(command, sessionIdentity.current)) { setError('无法核对原操作者。旧页面或旧访问代次的原发布命令只读保留，不用当前会话冒充原 key 回放。'); return }
+     const token = begin(); if (token === null) return
+     const originalSession = sessionIdentity.current
+     const controller = new AbortController(); writers.current.add(controller)
+     const guard = { allowed: () => valid(token), signal: controller.signal }, unsubscribe = subscribeSessionAccess(() => controller.abort())
+     setCurrentRead(null)
+     try {
++      await checkActor(token, originalSession)
+       retainSinglePublicationMemory(command, originalSession)
+-      releaseSinglePublicationForm(workspace, originalSession, command.basis)
++      if (submittedForm && sameValue(submittedForm.basis, command.basis)) releaseSinglePublicationForm(submittedForm, originalSession)
+       const original = await persistSinglePublicationCommand(command, undefined, guard)
+       releaseSinglePublicationMemory(command.command_id, originalSession)
+       const values = await load()
+@@ -92,10 +99,12 @@ export function useSinglePublication(workspace: string, paused: boolean, selecti
+       setCommands(values); setBasis(null)
+       // Only an explicit user action reaches this write, including known-ACK
+       // verification. It uses the permanently retained original four fields/key.
++      await checkActor(token, originalSession)
+       const ack = singlePublishedRef(await port.publish(original.basis.candidate.draft_id, original.body, original.command_id))
+       if (original.ack && !sameValue(original.ack, ack)) throw new Error('原发布回执不能替换。')
+       retainSinglePublicationMemory({ ...original, ack, rejection: null }, originalSession)
+       if (!valid(token)) return
++      await checkActor(token, originalSession)
+       await persistSinglePublicationCommand({ ...original, ack, rejection: null }, undefined, guard)
+       releaseSinglePublicationMemory(command.command_id, originalSession)
+       const confirmed = await load()
+@@ -122,11 +131,13 @@ export function useSinglePublication(workspace: string, paused: boolean, selecti
+     const guard = { allowed: () => valid(token) && sessionIdentity.current === session, signal: controller.signal }
+     const unsubscribe = subscribeSessionAccess(() => controller.abort())
+     try {
++      await checkActor(token, session)
+       // Save retained facts only. This never changes origin/page/access or sends
+       // HTTP, even if the current access generation differs from the original.
+       for (const command of recoverableSinglePublicationMemory(workspace, session)) {
+         await persistSinglePublicationCommand(command, undefined, guard)
+         if (!valid(token)) return
++        await checkActor(token, session)
+         releaseSinglePublicationMemory(command.command_id, session)
+       }
+       const values = await load(); if (valid(token)) setCommands(values)
+@@ -136,6 +147,10 @@ export function useSinglePublication(workspace: string, paused: boolean, selecti
+   const publish = async (selectedWarnings: number[]) => {
+     if (!current() || working.current || !basis) return
+     const selectedAt = sequence.current
++    // Capture the exact unsent version before the first await. Later edits remain
++    // separate local work; original-command replay never consumes those forms.
++    const submittedForm = recoverableSinglePublicationForms(workspace, sessionIdentity.current).find(form => sameValue(form.basis, basis)
++      && sameValue(form.selected, selectedWarnings) && form.confirmed)
+     try {
+       // Re-read the ledger: another panel must not be silently replaced by a
+       // second key. Server owns cross-page transactions and candidate uniqueness.
+@@ -145,7 +160,9 @@ export function useSinglePublication(workspace: string, paused: boolean, selecti
+       if (values.some(value => sameValue(value.basis.candidate, basis.candidate) && !value.rejection)) {
+         setError('已有同候选原发布命令。保留原 key、结果和基准；请使用原命令恢复，不创建第二次发布。'); return
+       }
+-      await execute(makeSinglePublicationCommand(workspace, access, basis, selectedWarnings))
++      const command = makeSinglePublicationCommand(workspace, access, basis, selectedWarnings)
++      rememberSinglePublicationActor(command, sessionIdentity.current)
++      await execute(command, submittedForm)
+     } catch (reason) { if (current()) fail(reason) }
+   }
+   const readCurrent = async (command: SinglePublicationCommand) => {
+@@ -175,8 +192,10 @@ export function useSinglePublication(workspace: string, paused: boolean, selecti
+     const token = begin(); if (token === null) return
+     setBasis(null)
+     try {
+-      if (!originalSinglePublicationForm(form, workspace, sessionIdentity.current)) throw new Error('无法核对原表单会话。')
++      const actor = sessionIdentity.current; await checkActor(token, actor)
++      if (!originalSinglePublicationForm(form, workspace, actor)) throw new Error('无法核对原表单会话。')
+       const fresh = await readBasis(form.basis.snapshot, form.basis.review)
++      await checkActor(token, actor)
+       if (!sameValue(fresh, form.basis)) throw new Error('原数值或审核基准已变化；保留原表单，不迁移确认。')
+       if (valid(token)) { setBasis(fresh); setPreparedAt(token); retainSinglePublicationForm(workspace, sessionIdentity.current, fresh, form.selected, false); return { key: token, selected: form.selected } }
+     } catch (reason) { if (valid(token, false)) fail(reason) } finally { finish(token) }
+@@ -187,5 +206,5 @@ export function useSinglePublication(workspace: string, paused: boolean, selecti
+     error: renderOwner === owner ? error : '',
+     commands: ready ? commands : [], basis: ready ? basis : null, preparedAt,
+     publicationRead: ready ? publicationRead : null, currentRead: ready ? currentRead : null, refresh, prepare, publish, execute, readCurrent, readPublication,
+-    canReplay: (value: SinglePublicationCommand) => ready && value.workspace_id === workspace && (!draftId || value.basis.candidate.draft_id === draftId) && sameSinglePublicationActorPage(value, access) }
++    canReplay: (value: SinglePublicationCommand) => ready && value.workspace_id === workspace && (!draftId || value.basis.candidate.draft_id === draftId) && sameSinglePublicationActorPage(value, access) && hasSinglePublicationActor(value, sessionIdentity.current) }
+ }

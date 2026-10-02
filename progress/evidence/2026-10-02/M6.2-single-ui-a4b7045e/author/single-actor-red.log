@@ -1,0 +1,384 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/singlePublication/independentActorReview.test.tsx src/features/singlePublication/useSinglePublication.test.tsx
+
+
+ RUN  v5.0.0 $HOME/.cache/learning-workbench-acceptance/m62-single-publication-ui-oct02/apps/web
+
+ ❯ src/features/singlePublication/independentActorReview.test.tsx (1 test | 1 failed) 78ms
+   × independent: newly observed different actor cannot replay same-page original command 77ms
+ ❯ src/features/singlePublication/useSinglePublication.test.tsx (18 tests | 5 failed) 1221ms
+   × sending an original command freshly detects a different actor even without refresh or access-generation notification 66ms
+   × form recovery checks fresh actor before recovering original confirmation or reading its protected basis 58ms
+   × memory save checks fresh actor and never persists an original ACK under an unannounced replacement session 63ms
+   × actor change during HTTP retains received ACK in original actor memory without committing it under new actor 61ms
+   × a journal command without original page actor proof remains read-only even with matching page and generation 57ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/singlePublication/independentActorReview.test.tsx > independent: newly observed different actor cannot replay same-page original command
+AssertionError: expected "vi.fn()" to be called 1 times, but got 2 times
+ ❯ src/features/singlePublication/independentActorReview.test.tsx:27:26
+     25|   expect(getSessionGeneration()).toBe(oldGeneration)
+     26|   await act(() => hook.result.current.execute(original))
+     27|   expect(f.port.publish).toHaveBeenCalledTimes(1)
+       |                          ^
+     28|   expect(hook.result.current.canReplay(original)).toBe(false)
+     29| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  src/features/singlePublication/useSinglePublication.test.tsx > sending an original command freshly detects a different actor even without refresh or access-generation notification
+AssertionError: expected "vi.fn()" to be called 1 times, but got 2 times
+ ❯ src/features/singlePublication/useSinglePublication.test.tsx:111:82
+    109|   await act(() => hook.result.current.publish([0, 1])); const original…
+    110|   f.session.actor_session_id = 'session_other_unannounced'
+    111|   await act(() => hook.result.current.execute(original)); expect(f.por…
+       |                                                                                  ^
+    112|   expect(hook.result.current.ready).toBe(false); expect(readSinglePubl…
+    113| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  src/features/singlePublication/useSinglePublication.test.tsx > form recovery checks fresh actor before recovering original confirmation or reading its protected basis
+AssertionError: expected { owner: 'authoring_single', …(7) } to be null
+
+- Expected:
+null
+
++ Received:
+{
+  "candidate": {
+    "candidate_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "draft_id": "draft_3abb46a7-1364-4f5a-b62b-381429a1b4a1",
+    "draft_revision": 1,
+    "entity": "block",
+  },
+  "checks": [
+    {
+      "candidate": {
+        "candidate_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "draft_id": "draft_3abb46a7-1364-4f5a-b62b-381429a1b4a1",
+        "draft_revision": 1,
+        "entity": "block",
+      },
+      "created_at": "2026-10-01T00:00:02Z",
+      "decision": "approve_once",
+      "expired": true,
+      "expires_at": "2026-10-01T00:10:02Z",
+      "id": "check_current",
+      "job": {
+        "id": "job_numeric",
+        "status": "completed",
+      },
+      "job_revision": 4,
+      "operation_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "plan": {
+        "assertions": [
+          {
+            "atol": 0,
+            "expected": 6,
+            "expression": "x*2",
+            "id": "assertion_double",
+            "rtol": 0,
+            "unit": "1",
+          },
+        ],
+        "seed": null,
+        "variables": [
+          {
+            "name": "x",
+            "unit": "1",
+            "value": 3,
+          },
+        ],
+        "version": "finite-arithmetic-v1",
+      },
+      "result": {
+        "assertions": [
+          {
+            "actual": 6,
+            "error_code": null,
+            "id": "assertion_double",
+            "passed": true,
+          },
+        ],
+        "exit_code": 0,
+        "finished_at": "2026-10-01T00:00:04Z",
+        "input_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "job_id": "job_numeric",
+        "operation_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "outcome": "passed",
+        "output_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "result_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "started_at": "2026-10-01T00:00:03Z",
+        "verdict": "PASS",
+      },
+      "revision": 2,
+      "runtime": {
+        "cpu_seconds": 2,
+        "evaluator_process_limit": 1,
+        "evaluator_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "evaluator_version": "finite-arithmetic-v1",
+        "memory_bytes": 268435456,
+        "output_bytes": 65536,
+        "python_version": "synthetic-python",
+        "runtime_manifest_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "sandbox_version": "synthetic-runtime",
+        "wall_seconds": 5,
+      },
+      "warnings": [
+        {
+          "code": "SOURCE_CONFIRM",
+          "locator": null,
+          "message": "同代码另一数值警告实例",
+          "severity": "warning",
+        },
+      ],
+    },
+  ],
+  "generation": {
+    "consent_id": "consent_synthetic",
+    "error_code": null,
+    "preparation": {
+      "character_count": 200,
+      "context_snapshot_id": "context_synthetic",
+      "job_input_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "materials": [],
+      "prepared_input_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "snapshot_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "warnings": [
+        {
+          "code": "SOURCE_CONFIRM",
+          "locator": null,
+          "message": "合成来源材料待确认",
+          "severity": "warning",
+        },
+      ],
+    },
+    "proposal_id": "proposal_synthetic",
+    "provider_outcome": "completed",
+    "provider_receipt_id": "providerreceipt_synthetic",
+    "raw_answer": "{\"version\":\"worked-example-candidate-v1\",\"kind\":\"worked_example\",\"title\":\"合成例题\",\"body_markdown\":\"原文 😀：x=3，x*2=6。\\n\",\"symbols\":[{\"name\":\"x\",\"tex\":\"x\",\"domain\":\"real\",\"dimension\":\"1\"}],\"declared_source_refs\":[],\"numeric_plan\":{\"version\":\"finite-arithmetic-v1\",\"seed\":null,\"variables\":[{\"name\":\"x\",\"value\":3,\"unit\":\"1\"}],\"assertions\":[{\"id\":\"assertion_double\",\"expression\":\"x*2\",\"expected\":6,\"atol\":0,\"rtol\":0,\"unit\":\"1\"}]}}",
+    "raw_refusal": null,
+    "request": {
+      "objectives": [
+        "计算",
+      ],
+      "output_kind": "worked_example",
+      "prerequisites": [],
+      "proof_policy": "full",
+      "provider_id": "provider_synthetic",
+      "source_refs": [],
+      "topic": "合成主题",
+    },
+    "summary": {
+      "candidate": {
+        "candidate_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "draft_id": "draft_3abb46a7-1364-4f5a-b62b-381429a1b4a1",
+        "draft_revision": 1,
+        "entity": "block",
+      },
+      "created_at": "2026-10-01T00:00:00Z",
+      "id": "job_generation",
+      "job_revision": 3,
+      "kind": "authoring",
+      "status": "completed",
+      "title": "合成例题",
+      "updated_at": "2026-10-01T00:00:01Z",
+    },
+    "usage": {
+      "input_tokens": 1,
+      "output_tokens": 1,
+    },
+    "validation": {
+      "independent_pedagogy": "NOT_RUN",
+      "issues": [],
+      "mathematical": "NOT_RUN",
+      "references": "PASS",
+      "schema": "PASS",
+      "sources": "NOT_RUN",
+      "symbol_declarations": "PASS",
+    },
+  },
+  "owner": "authoring_single",
+  "review": {
+    "candidate": {
+      "candidate_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "draft_id": "draft_3abb46a7-1364-4f5a-b62b-381429a1b4a1",
+      "draft_revision": 1,
+      "entity": "block",
+    },
+    "created_at": "2026-10-01T00:00:05Z",
+    "decision_reason": "合成受控人审理由，无真实质量批准",
+    "evidence_paths": [
+      "/api/v1/artifacts/artifact_synthetic/download",
+    ],
+    "id": "review_synthetic",
+    "independent_pedagogy": "NOT_RUN",
+    "mathematical": "APPROVED",
+    "reviewer": "human_synthetic",
+    "revision": 2,
+    "sources": "NOT_APPLICABLE",
+    "structural": "PASS",
+  },
+  "snapshot": {
+    "base_ref": null,
+    "body_sha256": "e9573cc81cbc714a7df3fd2295afa8c4a59cadbcc66e46e0c347177d942fe813",
+    "candidate": {
+      "candidate_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "draft_id": "draft_3abb46a7-1364-4f5a-b62b-381429a1b4a1",
+      "draft_revision": 1,
+      "entity": "block",
+    },
+    "numeric_check_ids": [
+      "check_current",
+    ],
+    "owner": "authoring",
+    "payload": {
+      "body_markdown": "原文 😀：x=3，x*2=6。
+",
+      "declared_source_refs": [],
+      "kind": "worked_example",
+      "numeric_plan": {
+        "assertions": [
+          {
+            "atol": 0,
+            "expected": 6,
+            "expression": "x*2",
+            "id": "assertion_double",
+            "rtol": 0,
+            "unit": "1",
+          },
+        ],
+        "seed": null,
+        "variables": [
+          {
+            "name": "x",
+            "unit": "1",
+            "value": 3,
+          },
+        ],
+        "version": "finite-arithmetic-v1",
+      },
+      "symbols": [
+        {
+          "dimension": "1",
+          "domain": "real",
+          "name": "x",
+          "tex": "x",
+        },
+      ],
+      "title": "合成例题",
+      "version": "worked-example-candidate-v1",
+    },
+    "published_ref": null,
+    "source_job_id": "job_generation",
+    "state": "draft",
+    "validation": {
+      "independent_pedagogy": "NOT_RUN",
+      "issues": [],
+      "mathematical": "NOT_RUN",
+      "references": "PASS",
+      "schema": "PASS",
+      "sources": "NOT_RUN",
+      "symbol_declarations": "PASS",
+    },
+    "warnings": [
+      {
+        "code": "AUTHORING_REVIEW_NOT_RUN",
+        "locator": null,
+        "message": "原生成阶段显示说明",
+        "severity": "warning",
+      },
+    ],
+  },
+  "target": {
+    "current": null,
+    "entity": "block",
+    "revision": 1,
+  },
+  "warnings": [
+    {
+      "code": "SOURCE_CONFIRM",
+      "locator": null,
+      "message": "合成来源材料待确认",
+      "severity": "warning",
+    },
+    {
+      "code": "SOURCE_CONFIRM",
+      "locator": null,
+      "message": "同代码另一数值警告实例",
+      "severity": "warning",
+    },
+  ],
+}
+
+ ❯ src/features/singlePublication/useSinglePublication.test.tsx:117:37
+    115|   const f = fixture(), hook = await ready(f); act(() => hook.result.cu…
+    116|   f.session.actor_session_id = 'session_other_unannounced'; await act(…
+    117|   expect(hook.result.current.basis).toBeNull(); expect(hook.result.cur…
+       |                                     ^
+    118| })
+    119| test('memory save checks fresh actor and never persists an original AC…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  src/features/singlePublication/useSinglePublication.test.tsx > memory save checks fresh actor and never persists an original ACK under an unannounced replacement session
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/features/singlePublication/useSinglePublication.test.tsx:124:45
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+ FAIL  src/features/singlePublication/useSinglePublication.test.tsx > actor change during HTTP retains received ACK in original actor memory without committing it under new actor
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/features/singlePublication/useSinglePublication.test.tsx:129:99
+    127|   const f = fixture(), hook = await ready(f)
+    128|   vi.mocked(f.port.publish).mockImplementationOnce(async () => { f.ses…
+    129|   await act(() => hook.result.current.publish([0, 1])); expect(hook.re…
+       |                                                                                                   ^
+    130|   const record = Object.values(await singlePublicationCommandStore.loa…
+    131|   f.session.actor_session_id = 'session_fixture_reviewFixtures'; await…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/6]⎯
+
+ FAIL  src/features/singlePublication/useSinglePublication.test.tsx > a journal command without original page actor proof remains read-only even with matching page and generation
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ src/features/singlePublication/useSinglePublication.test.tsx:136:79
+    134| test('a journal command without original page actor proof remains read…
+    135|   const f = fixture(), command = makeSinglePublicationCommand(f.worksp…
+    136|   const hook = await ready(f); expect(hook.result.current.canReplay(co…
+       |                                                                               ^
+    137|   await act(() => hook.result.current.execute(command)); expect(f.port…
+    138| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/6]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  6 failed | 13 passed (19)
+   Start at  23:00:39
+   Duration  1.77s (tests 58%, environment 19%, transform 15%, import 8%)
+

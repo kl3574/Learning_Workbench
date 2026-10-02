@@ -1,0 +1,30 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/singlePublication/independentFormFixedReview.test.tsx
+
+
+ RUN  v5.0.0 $HOME/.cache/learning-workbench-acceptance/m62-single-form-fixed-review-oct02/apps/web
+
+ ❯ src/features/singlePublication/independentFormFixedReview.test.tsx (3 tests | 1 failed) 298ms
+   × independent fixed: failed ACK IDB write retains original ACK and later choices; explicit save does not POST again 46ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/singlePublication/independentFormFixedReview.test.tsx > independent fixed: failed ACK IDB write retains original ACK and later choices; explicit save does not POST again
+AssertionError: expected "vi.fn()" to be called 1 times, but got 0 times
+ ❯ src/features/singlePublication/independentFormFixedReview.test.tsx:67:26
+     65|   fireEvent.click(boxes[1]); fireEvent.click(boxes[2]); const later = …
+     66|   await act(async () => gate.resolve({})); await screen.findByText(/原发…
+     67|   expect(f.port.publish).toHaveBeenCalledTimes(1); expect(forms()).toE…
+       |                          ^
+     68|   const originalWithAck = memory()[0]; expect(originalWithAck.ack).toE…
+     69|   const rows = await singlePublicationCommandStore.load(f.workspace)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 2 passed (3)
+   Start at  23:15:02
+   Duration  995ms (transform 34%, tests 33%, environment 23%, import 10%)
+

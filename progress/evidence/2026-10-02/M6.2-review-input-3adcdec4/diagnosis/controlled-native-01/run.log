@@ -1,0 +1,41 @@
+
+> @learning-workbench/web@0.1.0 test:e2e
+> playwright test --config ../../tests/e2e/playwright.config.ts --config $HOME/.cache/learning-workbench-acceptance/m62-review-form-race-audit-evidence-oct02/playwright.config.ts tests/e2e/independent-review-form-race.spec.ts --workers=1 --output=$HOME/.cache/learning-workbench-acceptance/m62-review-form-race-audit-evidence-oct02/controlled-native-01-results
+
+
+Running 1 test using 1 worker
+
+(node:2420725) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 ../../tests/e2e/independent-review-form-race.spec.ts:7:1 › independent audit held real Review GET interleaves native fill and preserves exact form memory through original Policy recovery (10.0s)
+
+
+  1) ../../tests/e2e/independent-review-form-race.spec.ts:7:1 › independent audit held real Review GET interleaves native fill and preserves exact form memory through original Policy recovery 
+
+    Error: expect(received).toEqual(expected) // deep equality
+
+    - Expected  - 1
+    + Received  + 1
+
+      Array [
+    -   "尚未提交的原创备注 🧠",
+    +   "",
+      ]
+
+      65 |     }
+      66 |     const justFilled = await observe('native_fill_completed')
+    > 67 |     expect(justFilled.notes).toEqual([note])
+         |                              ^
+      68 |     expect(justFilled.forms).toContainEqual(expect.objectContaining({ kind: 'create', matches: true, value: expect.objectContaining({ note }) }))
+      69 |     await panel.getByLabel('审核理由', { exact: true }).fill(reason)
+      70 |     await panel.getByLabel('数学审核决定').selectOption('REJECTED')
+        at $HOME/.cache/learning-workbench-acceptance/m62-review-form-race-audit-oct02/tests/e2e/independent-review-form-race.spec.ts:67:30
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../m62-review-form-race-audit-evidence-oct02/controlled-native-01-results/independent-review-form-ra-246ff-gh-original-Policy-recovery/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../m62-review-form-race-audit-evidence-oct02/controlled-native-01-results/independent-review-form-ra-246ff-gh-original-Policy-recovery/error-context.md
+
+  1 failed
+    ../../tests/e2e/independent-review-form-race.spec.ts:7:1 › independent audit held real Review GET interleaves native fill and preserves exact form memory through original Policy recovery 

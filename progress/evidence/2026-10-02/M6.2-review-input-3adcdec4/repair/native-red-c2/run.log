@@ -1,0 +1,45 @@
+
+> @learning-workbench/web@0.1.0 test:e2e
+> playwright test --config ../../tests/e2e/playwright.config.ts --config $HOME/.cache/learning-workbench-acceptance/m62-review-form-input-fix-evidence-oct02/playwright.config.ts tests/e2e/review-form-publication-input.spec.ts --workers=1 --output=$HOME/.cache/learning-workbench-acceptance/m62-review-form-input-fix-evidence-oct02/native-red-c2-results
+
+
+Running 1 test using 1 worker
+
+(node:2453215) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 ../../tests/e2e/review-form-publication-input.spec.ts:7:1 › Publication refresh preserves Review input and focus while blocking submission, then original Policy recovery preserves both forms (15.5s)
+
+
+  1) ../../tests/e2e/review-form-publication-input.spec.ts:7:1 › Publication refresh preserves Review input and focus while blocking submission, then original Policy recovery preserves both forms 
+
+    Error: expect(locator).toBeEditable() failed
+
+    Locator:  getByRole('dialog', { name: '导入', exact: true }).getByRole('region', { name: '候选审核与原命令恢复', exact: true }).getByLabel('本次审核备注', { exact: true })
+    Expected: editable
+    Received: disabled
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toBeEditable" getByRole('dialog', { name: '导入', exact: true }).getByRole('region', { name: '候选审核与原命令恢复', exact: true }).getByLabel('本次审核备注', { exact: true }) with timeout 5000ms
+      - waiting for getByRole('dialog', { name: '导入', exact: true }).getByRole('region', { name: '候选审核与原命令恢复', exact: true }).getByLabel('本次审核备注', { exact: true })
+        14 × locator resolved to <textarea disabled aria-label="本次审核备注"></textarea>
+           - unexpected value "disabled"
+
+
+      54 |     await expect(publication.getByRole('button', { name: '重新核验发布权限与本机记录', exact: true })).toBeDisabled()
+      55 |     const noteInput = panel.getByLabel('本次审核备注', { exact: true })
+    > 56 |     await expect(noteInput).toBeEditable()
+         |                             ^
+      57 |     await noteInput.focus(); await expect(noteInput).toBeFocused()
+      58 |     await noteInput.fill(note); await expect(noteInput).toHaveValue(note)
+      59 |     await expect(noteInput).toBeFocused()
+        at $HOME/.cache/learning-workbench-acceptance/m62-review-form-input-fix-oct02/tests/e2e/review-form-publication-input.spec.ts:56:29
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../m62-review-form-input-fix-evidence-oct02/native-red-c2-results/review-form-publication-in-4e326-covery-preserves-both-forms/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../m62-review-form-input-fix-evidence-oct02/native-red-c2-results/review-form-publication-in-4e326-covery-preserves-both-forms/error-context.md
+
+  1 failed
+    ../../tests/e2e/review-form-publication-input.spec.ts:7:1 › Publication refresh preserves Review input and focus while blocking submission, then original Policy recovery preserves both forms 
