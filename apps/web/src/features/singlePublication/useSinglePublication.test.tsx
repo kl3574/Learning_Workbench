@@ -136,3 +136,22 @@ test('a journal command without original page actor proof remains read-only even
   const hook = await ready(f); expect(hook.result.current.canReplay(command)).toBe(false)
   await act(() => hook.result.current.execute(command)); expect(f.port.publish).not.toHaveBeenCalled()
 })
+
+test('later unsent form version survives original command storage failure and save-only recovery', async () => {
+  const f = fixture(), hook = await ready(f), delayed = deferred<Awaited<ReturnType<typeof singlePublicationCommandStore.load>>>()
+  act(() => hook.result.current.retainForm([0, 1], true))
+  vi.spyOn(singlePublicationCommandStore, 'load').mockReturnValueOnce(delayed.promise)
+  let sending!: Promise<void>; act(() => { sending = hook.result.current.publish([0, 1]) })
+  act(() => hook.result.current.retainForm([0], false)); const later = hook.result.current.forms[0]
+  vi.spyOn(singlePublicationCommandStore, 'save').mockRejectedValueOnce(new Error('synthetic command write failure'))
+  await act(async () => { delayed.resolve({}); await sending })
+  expect(hook.result.current.pendingMemory).toBe(true); expect(hook.result.current.forms).toEqual([later]); expect(f.port.publish).not.toHaveBeenCalled()
+  await act(() => hook.result.current.saveMemory()); expect(hook.result.current.commands[0].body.acknowledged_warning_codes).toEqual(['SOURCE_CONFIRM']); expect(hook.result.current.forms).toEqual([later]); expect(f.port.publish).not.toHaveBeenCalled()
+})
+test('original command replay never consumes a newly prepared confirmation with the same basis', async () => {
+  const f = fixture(), hook = await ready(f); vi.mocked(f.port.publish).mockRejectedValueOnce(new Error('synthetic lost response'))
+  await act(() => hook.result.current.publish([0, 1])); const original = hook.result.current.commands[0]
+  await act(() => hook.result.current.prepare(f.draft, f.receipt)); act(() => hook.result.current.retainForm([0, 1], true)); const later = hook.result.current.forms[0]
+  await act(() => hook.result.current.execute(original)); expect(hook.result.current.commands[0].ack).toEqual(f.ack); expect(hook.result.current.forms).toEqual([later])
+  expect(vi.mocked(f.port.publish).mock.calls[1]).toEqual(vi.mocked(f.port.publish).mock.calls[0])
+})

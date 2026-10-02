@@ -80,7 +80,7 @@ export function useSinglePublication(workspace: string, paused: boolean, selecti
     try { const actor = sessionIdentity.current; await checkActor(token, actor); const prepared = await readBasis(draft, selectedReview); await checkActor(token, actor); if (valid(token)) { setBasis(prepared); setPreparedAt(token) } }
     catch (reason) { if (valid(token, false)) fail(reason) } finally { finish(token) }
   }
-  const execute = async (command: SinglePublicationCommand) => {
+  const execute = async (command: SinglePublicationCommand, submittedForm?: SinglePublicationForm) => {
     if (!current() || command.workspace_id !== workspace || draftId && command.basis.candidate.draft_id !== draftId) return
     if (!sameSinglePublicationActorPage(command, access) || !hasSinglePublicationActor(command, sessionIdentity.current)) { setError('无法核对原操作者。旧页面或旧访问代次的原发布命令只读保留，不用当前会话冒充原 key 回放。'); return }
     const token = begin(); if (token === null) return
@@ -91,7 +91,7 @@ export function useSinglePublication(workspace: string, paused: boolean, selecti
     try {
       await checkActor(token, originalSession)
       retainSinglePublicationMemory(command, originalSession)
-      releaseSinglePublicationForm(workspace, originalSession, command.basis)
+      if (submittedForm && sameValue(submittedForm.basis, command.basis)) releaseSinglePublicationForm(submittedForm, originalSession)
       const original = await persistSinglePublicationCommand(command, undefined, guard)
       releaseSinglePublicationMemory(command.command_id, originalSession)
       const values = await load()
@@ -147,6 +147,10 @@ export function useSinglePublication(workspace: string, paused: boolean, selecti
   const publish = async (selectedWarnings: number[]) => {
     if (!current() || working.current || !basis) return
     const selectedAt = sequence.current
+    // Capture the exact unsent version before the first await. Later edits remain
+    // separate local work; original-command replay never consumes those forms.
+    const submittedForm = recoverableSinglePublicationForms(workspace, sessionIdentity.current).find(form => sameValue(form.basis, basis)
+      && sameValue(form.selected, selectedWarnings) && form.confirmed)
     try {
       // Re-read the ledger: another panel must not be silently replaced by a
       // second key. Server owns cross-page transactions and candidate uniqueness.
@@ -158,7 +162,7 @@ export function useSinglePublication(workspace: string, paused: boolean, selecti
       }
       const command = makeSinglePublicationCommand(workspace, access, basis, selectedWarnings)
       rememberSinglePublicationActor(command, sessionIdentity.current)
-      await execute(command)
+      await execute(command, submittedForm)
     } catch (reason) { if (current()) fail(reason) }
   }
   const readCurrent = async (command: SinglePublicationCommand) => {
