@@ -7,6 +7,7 @@ import { pendingEditMemory } from './editMemory'
 import { pendingReviewMemory } from '../draftReview/reviewMemory'
 import { ReviewPanel } from '../draftReview/ReviewPanel'
 import { pendingEditPublicationMemory } from '../editPublication/editPublicationMemory'
+import { MarkdownSourceEditor } from './MarkdownSourceEditor'
 import './editor.css'
 
 export type EditorStatus = { dirty: boolean; safe: boolean; closeSafe: boolean }
@@ -28,6 +29,7 @@ export function DraftEditor({ workspace, block, onState, port, paused = false }:
   if (!supported) return null
   const close = () => { if (dirty || !safe) setClosing(true); else setOpen(false) }
   const conflict = state.conflict
+  const editorDisabled = reviewState.dirty || !reviewState.safe || state.busy || !!conflict || state.buffer?.baseline.state !== 'draft'
   return <section className="draft-editor" aria-label="文本块编辑与恢复">
     <button aria-expanded={open} onClick={() => open ? close() : setOpen(true)}>{open ? '收起文本编辑' : '编辑此精确文本块'}</button>
     {open && <div><h3>编辑未发布草稿</h3><p>基于此块修订 {block.block_ref.revision} · <code>{block.block_ref.sha256}</code>。本机编辑只保存标题和正文。准确服务端修订须另行进入审核，再明确发布为原块下一修订。</p>
@@ -40,7 +42,7 @@ export function DraftEditor({ workspace, block, onState, port, paused = false }:
         {state.buffers.length > 0 && <section aria-label="本机工作副本"><h4>本机工作副本</h4><p>恢复会复制原副本；重新核验原精确草稿修订，不自动采用服务端新头。</p>{state.buffers.map(b => <button key={b.id} disabled={!safe || reviewState.dirty} onClick={() => void state.restore(b)}>恢复本机副本 {b.id} · {b.local.title} · 草稿 r{b.baseline.candidate.draft_revision}</button>)}</section>}
         {state.buffer && <section aria-label="当前本机编辑"><h4>当前本机编辑</h4><p><code>{state.buffer.baseline.candidate.draft_id}</code> · 基准草稿 r{state.buffer.baseline.candidate.draft_revision} · <code>{state.buffer.baseline.candidate.candidate_sha256}</code></p>
           <p>{state.buffer.baseline.state === 'published' ? '该精确草稿已发布，只读保留。' : '未取得数学、来源或教学批准。'}</p>
-          <fieldset disabled={reviewState.dirty || !reviewState.safe || state.busy || !!conflict || state.buffer.baseline.state !== 'draft'}><label>本机标题<input value={state.buffer.local.title} onChange={e => state.update({ ...state.buffer!.local, title: e.target.value })} /></label><label>本机正文<textarea aria-label="本机正文" rows={8} value={state.buffer.local.body_markdown} onChange={e => state.update({ ...state.buffer!.local, body_markdown: e.target.value })} /></label></fieldset>
+          <fieldset disabled={editorDisabled}><label>本机标题<input value={state.buffer.local.title} onChange={e => state.update({ ...state.buffer!.local, title: e.target.value })} /></label><MarkdownSourceEditor label="本机正文" sourceIdentity={JSON.stringify([workspace, block.block_ref, state.buffer.id, state.buffer.baseline.candidate])} disabled={editorDisabled} value={state.buffer.local.body_markdown} onChange={body_markdown => state.update({ ...state.buffer!.local, body_markdown })} /></fieldset>
           <p role="status">{state.saving ? '正在保存本机工作副本…' : state.safe ? '本机工作副本已保存；不代表已同步到服务端。' : '本机保存尚未确认，请保持页面打开。'}</p>
           {!state.safe && !state.busy && !state.saving && <button onClick={() => void state.retrySave()}>重试保存本机工作副本</button>}
           <button disabled={!safe || reviewState.dirty || !!conflict || !state.dirty || state.buffer.baseline.state !== 'draft'} onClick={() => void state.submit()}>明确提交本机标题与正文</button>
@@ -70,7 +72,7 @@ function ConflictResolution({ base, local, server, disabled, resolve }: { base: 
   const [title, setTitle] = useState(''), [body, setBody] = useState(''), [custom, setCustom] = useState<EditText>({ title: '', body_markdown: '' }), [confirmed, setConfirmed] = useState(false)
   const choices: Record<string, EditText> = { base, local, server, custom }
   return <fieldset disabled={disabled}><legend>明确选择解决结果</legend>
-    {(['title', 'body_markdown'] as const).map(field => <div key={field}><label>{field === 'title' ? '标题解决方式' : '正文解决方式'}<select aria-label={field === 'title' ? '标题解决方式' : '正文解决方式'} value={field === 'title' ? title : body} onChange={e => { (field === 'title' ? setTitle : setBody)(e.target.value); setConfirmed(false) }}><option value="">请选择</option><option value="base">采用基准</option><option value="local">采用本地待同步</option><option value="server">采用服务端当前</option><option value="custom">手动合并</option></select></label>{(field === 'title' ? title : body) === 'custom' && <label>{field === 'title' ? '手动解决标题' : '手动解决正文'}<textarea aria-label={field === 'title' ? '手动解决标题' : '手动解决正文'} value={custom[field]} onChange={e => { setCustom({ ...custom, [field]: e.target.value }); setConfirmed(false) }} /></label>}</div>)}
+    {(['title', 'body_markdown'] as const).map(field => <div key={field}><label>{field === 'title' ? '标题解决方式' : '正文解决方式'}<select aria-label={field === 'title' ? '标题解决方式' : '正文解决方式'} value={field === 'title' ? title : body} onChange={e => { (field === 'title' ? setTitle : setBody)(e.target.value); setConfirmed(false) }}><option value="">请选择</option><option value="base">采用基准</option><option value="local">采用本地待同步</option><option value="server">采用服务端当前</option><option value="custom">手动合并</option></select></label>{(field === 'title' ? title : body) === 'custom' && (field === 'body_markdown' ? <MarkdownSourceEditor label="手动解决正文" sourceIdentity="conflict-body" value={custom.body_markdown} disabled={disabled} onChange={body_markdown => { setCustom({ ...custom, body_markdown }); setConfirmed(false) }} /> : <label>手动解决标题<textarea aria-label="手动解决标题" value={custom.title} onChange={e => { setCustom({ ...custom, title: e.target.value }); setConfirmed(false) }} /></label>)}</div>)}
     <label><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />我已核对三方标题和正文，明确以本次服务端修订作为新基准。</label>
     <button disabled={!title || !body || !confirmed} onClick={() => void resolve({ title: choices[title].title, body_markdown: choices[body].body_markdown })}>保存解决结果到本机，暂不提交</button>
   </fieldset>

@@ -28,6 +28,14 @@ print(json.dumps({'archive':base64.b64encode(f.getvalue()).decode(),'course':ref
 }
 const panel = (page: Page) => page.getByRole('region', { name: '文本块编辑与恢复', exact: true })
 const submit = (page: Page) => panel(page).getByRole('button', { name: '明确提交本机标题与正文', exact: true })
+const localBody = '乙标签本机正文 🧠 e\u0301\n\n\\[\n\\frac{α}{β}+x_1^2\n\\]\n\n'
+const memoryBody = '权限变化后仍须保留的内存正文 🧠\n\n\\alpha + \\beta\n\n'
+async function visibleSource(page: Page) {
+  // This fixture fits entirely in the viewport. Retain exact CM line text and
+  // blank lines, then independently compare the real IndexedDB/server bytes.
+  return panel(page).getByLabel('本机正文', { exact: true }).evaluate(element =>
+    Array.from(element.querySelectorAll('.cm-line'), line => line.textContent ?? '').join('\n'))
+}
 async function open(page: Page, href: string) {
   await page.goto(href)
   await panel(page).getByRole('button', { name: '编辑此精确文本块', exact: true }).click()
@@ -63,25 +71,39 @@ test('real editor retains IndexedDB originals through competing tabs, 412 resolu
     const b = await context.newPage(); await open(b, href); await read(b, id)
     for (const p of [a, b]) { p.on('pageerror', e => errors.push(e.message)); p.on('request', r => { const path = new URL(r.url()).pathname; if (r.method() === 'PATCH' && path === `/api/v1/drafts/${id}`) writes.push({ method: r.method(), path, body: r.postDataJSON() }) }) }
     await change(a, '甲标签服务器新标题', '甲标签服务器新正文\n')
-    await change(b, '乙标签本机标题', '乙标签本机正文 🧠\n')
+    await change(b, '乙标签本机标题', localBody)
+    const sourceEditor = panel(b).getByLabel('本机正文', { exact: true })
+    await expect(sourceEditor).toHaveAttribute('contenteditable', 'true')
+    await expect.poll(() => visibleSource(b)).toBe(localBody)
+    await sourceEditor.press('ControlOrMeta+z')
+    await expect.poll(() => visibleSource(b)).toBe(fixture.bodies[fixture.blocks[0].id])
+    await sourceEditor.press('ControlOrMeta+Shift+z')
+    await expect.poll(() => visibleSource(b)).toBe(localBody)
+    await expect(submit(b)).toBeEnabled()
+    for (const width of [1440, 390]) {
+      await b.setViewportSize({ width, height: 900 }); await sourceEditor.scrollIntoViewIfNeeded()
+      expect(await panel(b).evaluate(element => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+      await b.screenshot({ path: info.outputPath(`codemirror-source-${width}.png`) })
+    }
+    await b.setViewportSize({ width: 1440, height: 900 })
     const savingA = a.waitForResponse(r => r.request().method() === 'PATCH' && r.url().endsWith(`/api/v1/drafts/${id}`))
     await submit(a).click(); expect((await savingA).status()).toBe(200)
     const savingB = b.waitForResponse(r => r.request().method() === 'PATCH' && r.url().endsWith(`/api/v1/drafts/${id}`))
     await submit(b).click(); expect((await savingB).status()).toBe(412)
     let conflict = panel(b).getByRole('region', { name: '三方冲突恢复', exact: true })
     await expect(conflict.getByLabel('基准标题', { exact: true })).toHaveValue('原创合成编辑标题')
-    await expect(conflict.getByLabel('本地待同步正文', { exact: true })).toHaveValue('乙标签本机正文 🧠\n')
+    await expect(conflict.getByLabel('本地待同步正文', { exact: true })).toHaveValue(localBody)
     await expect(conflict.getByLabel('服务端当前标题', { exact: true })).toHaveValue('甲标签服务器新标题')
     const originalCommands = await b.evaluate(async () => {
       const db = await new Promise<IDBDatabase>((yes, no) => { const r = indexedDB.open('learning-workbench.edit-commands.v1', 1); r.onsuccess = () => yes(r.result); r.onerror = () => no(r.error) })
       try { return await new Promise<string[]>((yes, no) => { const t = db.transaction('drafts', 'readonly'); const r = t.objectStore('drafts').getAll(); r.onsuccess = () => yes(r.result.map((x: { text: string }) => x.text)); r.onerror = () => no(r.error) }) } finally { db.close() }
     })
     const rejected = originalCommands.map(x => JSON.parse(x)).find(c => c.rejection === 412)
-    expect(rejected.operation.local.body_markdown).toBe('乙标签本机正文 🧠\n')
+    expect(rejected.operation.local.body_markdown).toBe(localBody)
     await b.reload(); await panel(b).getByRole('button', { name: '编辑此精确文本块', exact: true }).click()
     await panel(b).getByRole('button', { name: `读取原冲突三方内容 ${rejected.key}`, exact: true }).click()
     conflict = panel(b).getByRole('region', { name: '三方冲突恢复', exact: true })
-    await expect(conflict.getByLabel('本地待同步正文', { exact: true })).toHaveValue('乙标签本机正文 🧠\n')
+    await expect(conflict.getByLabel('本地待同步正文', { exact: true })).toHaveValue(localBody)
     for (const width of [1440, 390]) {
       await b.setViewportSize({ width, height: 900 }); await conflict.scrollIntoViewIfNeeded()
       expect(await panel(b).evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true)
@@ -89,7 +111,8 @@ test('real editor retains IndexedDB originals through competing tabs, 412 resolu
     }
     await b.setViewportSize({ width: 1440, height: 900 })
     await conflict.getByLabel('标题解决方式', { exact: true }).selectOption('server')
-    await conflict.getByLabel('正文解决方式', { exact: true }).selectOption('local')
+    await conflict.getByLabel('正文解决方式', { exact: true }).selectOption('custom')
+    await conflict.getByLabel('手动解决正文', { exact: true }).fill(localBody)
     const resolveButton = conflict.getByRole('button', { name: '保存解决结果到本机，暂不提交', exact: true })
     await expect(resolveButton).toBeDisabled()
     await conflict.getByRole('checkbox').check(); await resolveButton.click()
@@ -97,9 +120,13 @@ test('real editor retains IndexedDB originals through competing tabs, 412 resolu
     const resolving = b.waitForResponse(r => r.request().method() === 'PATCH' && r.url().endsWith(`/api/v1/drafts/${id}`))
     await submit(b).click(); const resolved = await resolving; expect(resolved.status()).toBe(200); expect((await resolved.json() as DraftPatched).revision).toBe(3)
     const current = await b.request.get(`/api/v1/draft-edits/${id}`).then(r => r.json()) as EditDraftSnapshot
-    expect(current.candidate.draft_revision).toBe(3); expect(current.payload.title).toBe('甲标签服务器新标题'); expect(current.payload.body_markdown).toBe('乙标签本机正文 🧠\n')
+    expect(current.candidate.draft_revision).toBe(3); expect(current.payload.title).toBe('甲标签服务器新标题'); expect(current.payload.body_markdown).toBe(localBody)
     expect((writes[2].body as DraftPatchWrite).expected_revision).toBe(2)
-    await read(b, id); await change(b, '丢失 ACK 的原命令标题', '保留原 key 的正文\n')
+    await read(b, id)
+    await panel(b).getByLabel('本机正文', { exact: true }).press('ControlOrMeta+z')
+    await expect.poll(() => visibleSource(b)).toBe(localBody)
+    await expect(submit(b)).toBeDisabled()
+    await change(b, '丢失 ACK 的原命令标题', '保留原 key 的正文\n')
     const lostCommands: { key: string; body: DraftPatchWrite }[] = []; let dropped = false
     await b.route(`**/api/v1/drafts/${id}`, async route => {
       if (route.request().method() !== 'PATCH') return route.continue()
@@ -134,7 +161,7 @@ test('real editor retains IndexedDB originals through competing tabs, 412 resolu
       }
     })
     await panel(page).getByLabel('本机标题', { exact: true }).fill('尚未落盘的原会话标题')
-    await panel(page).getByLabel('本机正文', { exact: true }).fill('权限变化后仍须保留的内存正文\n')
+    await panel(page).getByLabel('本机正文', { exact: true }).fill(memoryBody)
     await expect(panel(page).getByRole('button', { name: '重试保存本机工作副本', exact: true })).toBeVisible()
     await page.getByRole('button', { name: '导入', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: '导入', exact: true }); await dialog.getByRole('button', { name: '切换为学习者角色', exact: true }).click()
@@ -155,10 +182,15 @@ test('real editor retains IndexedDB originals through competing tabs, 412 resolu
     await expect(dialog.getByText('操作角色：作者', { exact: true })).toBeVisible(); await dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
     await panel(page).getByRole('button', { name: '编辑此精确文本块', exact: true }).click()
     await panel(page).getByRole('button', { name: '核验原会话与精确基准，恢复内存副本', exact: true }).click()
-    await expect(panel(page).getByLabel('本机正文', { exact: true })).toHaveValue('权限变化后仍须保留的内存正文\n')
+    await expect.poll(() => visibleSource(page)).toBe(memoryBody)
     await expect(panel(page).getByText('本机工作副本已保存；不代表已同步到服务端。', { exact: true })).toBeVisible()
     expect((await page.request.get(`/api/v1/draft-edits/${id}`).then(r => r.json())).candidate.draft_revision).toBe(4)
     expect(errors).toEqual([])
-    writeFileSync(info.outputPath('editor-flow.json'), JSON.stringify({ scope: 'Real synthetic Import/SQLite/HTTP/IndexedDB, two pages, exact 412 recovery, same-page original ACK replay, browser/API restart, actual IDB abort and role-denied memory recovery; no provider or content approval', created, current, rejected, writes, lostCommands, generations: runtime.generations.length, originalContentUnchanged: true, unsavedMemoryRecoveredAfterRoleDenial: true, errors }, null, 2))
+    const localCopies = await page.evaluate(async () => {
+      const db = await new Promise<IDBDatabase>((yes, no) => { const r = indexedDB.open('learning-workbench.edit-buffers.v1', 1); r.onsuccess = () => yes(r.result); r.onerror = () => no(r.error) })
+      try { return await new Promise<string[]>((yes, no) => { const t = db.transaction('drafts', 'readonly'); const r = t.objectStore('drafts').getAll(); r.onsuccess = () => yes(r.result.map((x: { text: string }) => x.text)); r.onerror = () => no(r.error) }) } finally { db.close() }
+    })
+    expect(localCopies.map(raw => JSON.parse(raw).local.body_markdown)).toContain(memoryBody)
+    writeFileSync(info.outputPath('editor-flow.json'), JSON.stringify({ scope: 'Real synthetic Import/SQLite/HTTP/IndexedDB, native CodeMirror contenteditable.fill, Unicode/TeX/blank lines, undo/redo, identity reset, two pages, exact 412 recovery, same-page original ACK replay, browser/API restart, actual IDB abort and role-denied memory recovery; no provider or content approval', created, current, rejected, writes, lostCommands, localBody, memoryBody, generations: runtime.generations.length, originalContentUnchanged: true, unsavedMemoryRecoveredAfterRoleDenial: true, errors }, null, 2))
   } finally { await runtime.close() }
 })
