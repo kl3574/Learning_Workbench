@@ -2,7 +2,7 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-02T12:25:58Z；规范 SHA-256：`1c571ee91a7d39dedd2e8395f48766bd6183d496154ee9bdd9b67cb978ff26d7`
+更新：2026-10-02T12:33:01Z；规范 SHA-256：`1c571ee91a7d39dedd2e8395f48766bd6183d496154ee9bdd9b67cb978ff26d7`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED_PR55_ISSUE31_V312_LOCAL_RUNTIME_BLOCKED
 实施：IN_PROGRESS；当前任务：M6.2；下一任务：M6.2
@@ -45,7 +45,7 @@
 - unit: d252组合824Web/116files PASS；Ruff/strictTS/mypy234/build834 PASS。v3.0.12完整Python RUNNING@d252。历史819/v3.0.11完整3294PASS/1真实ENVskip/2warnings，1156输入不变，不转授v12。
 - contract: v3.0.12三新增真实HTTP与7DTO闭合，最终owner源ea3组合117DTO/transport/projection/真实HTTP PASS；此前固定fca+4a779完整contract与指定RestoreHTTP PASS，各自来源不混计。
 - integration: 已整合真实编辑发布/笔记stale/历史成绩不改/索引失效合成HTTP测试1PASS；成绩样例不属于本次影响闭包，不声称适用性复核。
-- browser_native: ac5已组合7真实场景PASS，1198工程输入匹配Git。Restore数值root7023原生1PASS13.9s：preview丢ACK→原key回放→独立approve→实际BLOCKED→新Review/合成人审→发布409，未宣称数值PASS。当前完整native RUNNING@300b6903。
+- browser_native: 冻结300b6903完整117PASS/16.1min/1worker/0retry；1237输入逐Git验证，5个既有截图/zoom指标测试输出归档并精确还原，其余1232不变，原unchanged=false保留。后续dec5修CRLF：830Web/strictTS/build834/真实numeric→Review→publish拒绝1native PASS，1238前后同Git；不冒称dec5另跑全117。
 - real_provider: 历史2026-09-15独立DeepSeek直连GET models200/Chat200、usage14/1/15仅有进度记录，未找到可独立核验的原始HTTP回执。PLATFORM_AGENT_NOT_RUN：生产RequestPreparer(ProofRegistry())注册表为空，无符合唯一规范§20.5的托管完整输入证明；用户密钥未进入本轮测试或仓库。
 - real_codex: NOT_RUN
 - learning_effectiveness: NOT_RUN
@@ -209,6 +209,8 @@
 - M6.2_restore_numeric_physical: BLOCKED_ENVIRONMENT：实际封存353成员运行闭包、实际开始/结束/exit1，bwrap loopback RTM_NEWADDR EPERM，无fallback。HTTPpreview201/approve202/currentGET200；新Review/人审后publish409 PUBLISH_NUMERIC_REQUIRED。仅协议/合成算术验收，无真实numeric PASS。
 - M6.2_v312_runtime_progress_sync: {'readback_at': '2026-10-02T12:21:32.665557+00:00', 'head_unchanged': 'a5c4ca9d46a740737d29499fb212cdfcd64187f8', 'pull_request': 55, 'draft': True, 'open': True, 'merged': False, 'issue': 31, 'issue_outside_managed_block_and_metadata_unchanged': True, 'pr_body_sha256': '2666297bdb375c8b40c7481cc9e1c74019a2b09f784816c8bd32fd78934e252b', 'issue_body_sha256': 'dfa1b849b330c2bdcc64b6f047376c8025bad9156c65777043db0a27ede4ffc0', 'source_push': False, 'ci_state': 'a5 pushSUCCESS/PRFAILURE; fixed819 full PASS; v312 d252 Python/300 native RUNNING', 'spec_adoption_local': 'v3.0.12 implemented locally; physical numeric BLOCKED'}
 - M6.2_numeric_ui_final: 固定dec5e902：830Web/117files、strictTS/build834、原生数值→新Review→合成人审→发布拒绝1PASS；1238工程输入逐Git与前后相同。CRLF P2原同probe2PASS1FAIL→3PASS+14独立边界；独审200focused/TS PASS，无剩余已证实P1/P2。实际numeric仍BLOCKED环境；完整Python d252/native300另跑，尚未终态。
+- M6.2_v312_full_native: 冻结300b6903完整117PASS/16.1min/1worker/0retry；1237输入逐Git验证，5个既有截图/zoom指标测试输出归档并精确还原，其余1232不变，原unchanged=false保留。后续dec5修CRLF：830Web/strictTS/build834/真实numeric→Review→publish拒绝1native PASS，1238前后同Git；不冒称dec5另跑全117。
+- M6.2_v312_publication_safety: 提交前14780index文件strict scanner PASS/index前后2b71798相同；a5→98eaf27d历史43commit/1062newblob/1162path-blob完整覆盖零finding，含中间版本。3处原有说明命中已修现行文字并保留原hash来源，不作为新增私有泄露；后续小证据增量另核。
 
 ## 阻塞与待决项
 
@@ -232,7 +234,7 @@
 - M62_EDITOR_POLICY_MEMORY_REVIEW_PENDING: a7bff45已独审并整合为d302；24项定向复验通过，root固定1092输入Web562/原生1/strictTS/build通过。未落盘文字保护已验，跨新页面原命令重放另有合同缺口。
 - M62_EDITOR_NEW_PAGE_ACK_CONTRACT: v3.0.10已批准采纳并实现。b78独审102Web/114HTTP/2native及7新增负例PASS；与实际列表107/127组合819的168Python/staticPASS。真实同actor刷新/API重启显式原key/body回放、v1不升级/新actor不继承通过；其他owner限制不扩。
 - M62_IMPACT_RESTORE_IMPLEMENTING: Content发现/逐对象决定、Learning逐原证据适用性、proof Restore新审核/发布及未提交表单保护已组合到ac5并通过716Web/7native。worked_example已按批准v12接入独立数值链；物理执行仍环境阻断，发布拒绝保留。
-- M62_FINAL_COMBINED_GATES_PENDING: v12固定d252 fullPython和300 fullnative正在运行；824Web/strictTS/Ruff/mypy234/build834/spec已PASS。数值UI独审还未终态，当前代码未推送，不转授历史完整门禁。
+- M62_FINAL_COMBINED_GATES_PENDING: v12冻结300完整117native通过，dec5 CRLF修复830Web/1native/strict/build通过，独审200focused闭合；冻结d252完整Python仍RUNNING。真实numericBLOCKED环境，M6.2仍有生成稿/通用草稿等缺口。
 - M62_1AD_SPEC_CI_FAILED: 原1ad双608PASS1路由覆盖FAIL保留；a5的两spec619PASS。新增v11实际107/127是本地819证据，不追记为a5能力。
 - M62_1AD_TUTOR_BROWSER_FAILED: 1ad和旧head Tutor失败保留。a5 push108PASS但PR107PASS1同5000msFAIL，唯一原因UNKNOWN；本地026/067只证明重复扫描优化和受控负载差异，不据此关闭CI失败。
 - M62_CODEMIRROR_SOURCE_EDITOR_PENDING: 实际CodeMirror保留原文/Unicode/TeX/撤销/只读及Review保护；已与actor/Restore/Edit/Learning组合6b，661Web和六重点native PASS。尚未将此次新UI发布或宣称全M6.2验收。
