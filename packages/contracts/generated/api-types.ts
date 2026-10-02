@@ -658,6 +658,22 @@ export type ContentBlock = {
   "depends_on"?: Array<ContentRef>;
 };
 
+export type ContentImpactPage = {
+  "items": Array<ContentImpactSummary>;
+  "next_cursor": (string | null);
+};
+
+export type ContentImpactSummary = {
+  "event_id": string;
+  "old_ref": ContentRef;
+  "new_ref": ContentRef;
+  "reason": "content_revision_published";
+  "evidence_version": "owner_frozen_v1" | "legacy_unverified";
+  "event_snapshot_sha256": (string | null);
+  "pending_target_ids": Array<string>;
+  "action_required_target_ids": Array<string>;
+};
+
 export type ContentImpactView = {
   "event_id": string;
   "old_ref": ContentRef;
