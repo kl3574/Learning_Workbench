@@ -10,19 +10,23 @@ import { AuthoringConsent } from './AuthoringConsent'
 import { NumericCheckPanel, NumericPlanDisplay } from './NumericCheckPanel'
 import type { ProviderPort } from '../providers/providerClient'
 import { ReviewPanel } from '../draftReview/ReviewPanel'
+import { ContentImpactsPanel, type ImpactState } from '../contentImpacts/ContentImpactsPanel'
 import './authoring.css'
-export function AuthoringPanel({ workspace, paused, currentBlock, onState, port = authoringClient, provider }: { workspace: string; paused: boolean; currentBlock: ContentRef | null; onState: (value: { dirty: boolean; safe: boolean }) => void; port?: AuthoringPort; provider?: ProviderPort }) {
+export type AuthoringPanelState = { dirty: boolean; safe: boolean; isolated: boolean }
+export function AuthoringPanel({ workspace, paused, currentBlock, onState, port = authoringClient, provider }: { workspace: string; paused: boolean; currentBlock: ContentRef | null; onState: (value: AuthoringPanelState) => void; port?: AuthoringPort; provider?: ProviderPort }) {
   const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
   const state = useAuthoring(workspace, paused, port), [formDirty, setFormDirty] = useState(false), [consentState, setConsentState] = useState({ dirty: false, safe: true })
   const [reviewOpen, setReviewOpen] = useState(false), [reviewState, setReviewState] = useState({ dirty: false, safe: true })
+  const [impactsOpen, setImpactsOpen] = useState(false), [impactState, setImpactState] = useState<ImpactState>({ dirty: false, safe: true, isolated: false })
   const callback = useRef(onState); callback.current = onState
   useEffect(() => { if (!state.academic) { setFormDirty(false); setConsentState({ dirty: false, safe: true }) } }, [state.academic, workspace, access])
-  const dirty = state.academic && formDirty || consentState.dirty || state.commands.some(v => !v.ack) || reviewState.dirty, safe = state.ready && !state.busy && consentState.safe && (!reviewOpen || reviewState.safe)
-  useEffect(() => { callback.current({ dirty, safe }) }, [dirty, safe])
+  const dirty = state.academic && formDirty || consentState.dirty || state.commands.some(v => !v.ack) || reviewState.dirty || impactState.dirty, otherSafe = state.ready && !state.busy && consentState.safe && (!reviewOpen || reviewState.safe), safe = otherSafe && impactState.safe, isolated = otherSafe && impactState.isolated
+  useEffect(() => { callback.current({ dirty, safe, isolated }) }, [dirty, safe, isolated])
   const detail = state.detail, draft = state.draft, numeric = state.numeric
   return <div className="authoring-panel"><p>可以准备例题、教材小节、习题集与测试题组草稿。模型调用与数值执行分别授权；生成完成不会自动获得数学、来源或教学质量批准。</p>
     <button disabled={state.busy} onClick={() => void state.refresh()}>刷新安全任务列表与当前权限</button>
     <button onClick={() => setReviewOpen(true)}>打开候选审核与恢复</button>
+    <button onClick={() => setImpactsOpen(true)}>打开内容变更影响复核</button>
     {state.error && <p role="status">{state.error}</p>}
     <AuthoringControlList jobs={state.jobs} busy={state.busy || !state.controlReady} academic={state.academic} read={id => void state.read(id)} cancel={job => void state.cancel(job)} />
     {state.cursor && <button disabled={state.busy} onClick={() => void state.refresh(true)}>继续读取安全任务</button>}
@@ -41,6 +45,7 @@ export function AuthoringPanel({ workspace, paused, currentBlock, onState, port 
       {draft && 'root' in draft && <AuthoringGroupDraft value={draft} solution={state.privateSolution} busy={state.busy || !state.ready} readSolution={member => void state.readPrivateSolution(member)} preview={target => void state.create({ kind: 'group_numeric_preview', draft_id: draft.candidate.draft_id, member_key: target.member_key, body: { candidate: draft.candidate, target } })} refresh={() => void state.readDraft()} readNumeric={id => void state.readNumeric(id)} />}
       {numeric && <NumericCheckPanel key={`${numeric.id}:${numeric.revision}:${numeric.operation_sha256}`} value={numeric} busy={state.busy || !state.ready} commandExists={state.commands.some(v => (v.kind === 'numeric_decision' || v.kind === 'group_numeric_decision') && v.check_id === numeric.id && (!v.rejection || !!v.ack))} decide={body => void state.create({ kind: 'target' in numeric ? 'group_numeric_decision' : 'numeric_decision', check_id: numeric.id, body })} refresh={() => void state.readNumeric(numeric.id)} />}
     </div>}
+    {impactsOpen && <ContentImpactsPanel workspace={workspace} paused={paused || !state.academic} onState={setImpactState} />}
     {reviewOpen && <ReviewPanel workspace={workspace} paused={paused || !state.academic} candidate={state.academic ? draft?.candidate ?? null : null} candidateState="draft" onState={setReviewState} />}
   </div>
 }

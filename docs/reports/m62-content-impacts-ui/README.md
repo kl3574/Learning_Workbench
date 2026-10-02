@@ -1,0 +1,19 @@
+# Content impact discovery and human decisions UI
+
+This bounded M6.2 slice implements approved PRODUCT_DESIGN.md v3.0.11 sections 20.11/20.13. From the auxiliary Authoring panel, an author explicitly reads actual Content impact events, follows the fixed filter/cursor sequence, opens details, reads a returned target's current reference and decision version, and explicitly adopts those facts before making a human decision. Legacy events remain read-only. Current reads and historical receipts are separate; decisions neither publish revisions nor complete Notes, Learning, Retrieval or Recommendation work.
+
+The dedicated local journal preserves the original event/target/basis/body/key before HTTP. Lost replies allow explicit same-page, same-access, original-session replay only. Rejected or changed bases are retained and never silently adopted. Every submission attempt requires a new explicit current-object read before another basis can be adopted; the previous read remains available for comparison. Received receipts and failed local writes survive panel removal in protected page memory; role and Policy changes hide payloads. Safe navigation to role control requires other Authoring/Review subpanels to be safe. Session secrets remain in page memory; v3.0.10's edit-only cross-refresh replay is not extended to Content decisions.
+
+Validation at the isolated implementation tree:
+
+- Focused feature and Authoring lifecycle tests: 26 PASS.
+- Full Web suite: 642 PASS across 100 files.
+- TypeScript strict unused checks and production build: PASS. Existing large-chunk build advisory retained.
+- Actual native Chromium + local HTTP/SQLite/IndexedDB flow: 1 PASS. Original text Edit → saved exact draft Review → explicit synthetic human review → publication → UI event discovery → per-target decision. Separate contexts exercise old-head CAS; the flow then covers lost response, same original replay, real IndexedDB transaction abort, isolated-memory role cycle, changed-target ID-only correction, three fixed-member pages with a later publication excluded, two filters, browser/API restart, original parent reference, and active assessment Policy hiding plus HTTP 409.
+- Independent readback checks canonical request/receipt hashes, both historical classifications, unchanged original replay and durable records.
+
+The primary publication and decisions use real UI interactions. Additional revisions solely for pagination/current-target changes use the real Content owner in a controlled synthetic fixture; their event IDs are learned only from actual public HTTP responses, never SQL or injected IDs. Original synthetic text and manual decisions are software acceptance evidence, not mathematical, numeric, source-quality or teaching approval; such quality checks remain NOT_RUN here. No backend, generated contract, specification or progress files changed. A separately committed parent test-isolation fix mirrors already-integrated `6b0dc4dc`; it does not weaken production guards.
+
+Earlier failures are retained in the external raw evidence directory: native-01's test helper enumerated warnings before rendering (publication stayed disabled), and called an incorrect cleanup method; native-02 reached the final Policy check, but its import helper had changed role to learner, so 403 correctly preceded the expected author/assessment 409. The final test restores and verifies author status and displayed detail before starting the independent assessment. Initial type command lacked the isolated Node toolchain symlink; subsequent checks use the unchanged shared pinned toolchain.
+
+Raw commands, exit codes, source snapshots, initial failures, receipts and screenshots: `m62-content-impacts-ui-evidence-oct02` under the local acceptance cache. No external provider or remote publication was used. This report does not claim complete M6.2 acceptance.
