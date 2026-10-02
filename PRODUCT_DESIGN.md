@@ -1,6 +1,6 @@
 # 知径 Learning Workbench：完整产品设计与工程实施规范
 
-**版本：3.0.9｜日期：2026-09-28｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
+**版本：3.0.10｜日期：2026-10-02｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
 
 **本文件（含文末附录）是唯一产品与工程规范。** 将它放入空目录即可开始；不需要旧版设计包、旧 Demo、之前聊天、私有 GitHub 仓库或另一份提示词说明需求。正文定义产品，附录内嵌数据模型、HTTP 字段、数据库设计、模块接口、样例和验收用例。构建 Agent 根据本文生成实现文件、OpenAPI、测试和进度记录；这些是派生产物，不是第二套产品需求。
 
@@ -32,6 +32,8 @@
 | 3.0.7 | M6.1 小节与题目组的一次许可计划/草稿、原子候选组、私解绑定及成员数值检查 | 待对应真实实施验收；不改54 core/0001/学习包3.0.0，不代表M6.2/M6.3或托管模型及内容质量已完成 |
 | 3.0.8 | M6.2 编辑稿专属精确只读合同和刷新/412三方冲突恢复 | 仅补读取合同；不授予编辑稿发布、影响决定或完整恢复验收，不改54 core/0001/学习包3.0.0 |
 | 3.0.9 | M6.2 内容影响逐对象人工决定、学习证据适用性复核及历史公开内容块恢复草稿的提议合同 | 提案待所有者确认与实施；不表示影响已复核、旧内容已恢复或M6.2已验收；不改54 core/0001/学习包3.0.0 |
+
+| 3.0.10 | M6.2 编辑命令的非秘密会话连续性标识与未知 ACK 跨页面显式重放 | 提案待所有者确认；不授予新会话继承原命令，不持久化 CSRF/cookie，不代表 M6.2 验收完成；不改54 core/0001/学习包3.0.0 |
 
 ## 0. 执行摘要与不可变决策
 
@@ -1173,6 +1175,16 @@ M6.2 已发布公开`text`块的编辑稿属于`authoring_edit`，与Import和Au
 
 PATCH返回412后，浏览器保留原待同步命令及本地基准，分别读取当前服务端草稿头与原精确草稿修订，展示`基准/本地待同步/服务端当前`三方标题与正文；用户显式解决后以新基准提交新命令。GET绝不自动rebase、发布或重复执行旧命令；原命令回执与当前读取明确分离。真实SQLite/HTTP/IndexedDB、刷新/重启、双标签竞态、Policy切换、坏hash及GET零写均须验收；此读口本身不完成编辑发布、影响决定或恢复旧内容。
 
+#### 20.10.1 编辑命令跨页面的会话连续性（v3.0.10 提案，待所有者确认）
+
+`SessionResponse` 增加必填 `actor_session_id:Id`，由服务端当前可信 `SessionIdentity.id` 取得；这是独立随机生成的现有会话记录 ID，不是 cookie、bootstrap code、CSRF、token 的原值或派生值。GET `/session` 与 POST `/session/role` 返回同一严格形状；同一有效会话的页面刷新、API 重启和角色往返不改变此 ID，新 bootstrap 会话必须取得不同 ID。GET 仍零写/零联网、no-store；旧角色切换 ACK 不能代替当前 GET 的权限事实。不扩 core model，不新增端点或把调用者声明的 ID 当认证依据。该 ID 本身不赋予读取、写入或命令继承权限，不作为 URL 参数或可转让 capability。
+
+浏览器新编辑命令在发出前以版本化本地 journal 原子保存 `workspace_id`、`actor_session_id`、原 Idempotency-Key、完整 route/body/CAS 实例与原基准；只存非秘密 ID，不存 CSRF、cookie 或凭据及其 hash。未知 ACK 的原命令跨页面恢复后，必须先成功读取当前 `/session`，确认 workspace 和 actor ID 均与原命令严格相同、author 与当前学科 Policy 允许，再由用户显式选择原 key/原 body 重放。服务端继续按实际认证 actor/workspace/route/key/body/CAS 核当前权限和原幂等回执，不接受 body 内伪造 actor，不为刷新生成新 key，不用当前草稿头或旧 ACK 猜测原写成功。原命令已成功时只回原 ACK；原命令未成功时沿原 CAS 执行，冲突仍 412 并进入已有三方恢复。GET 和恢复页面自身绝不重发写操作。
+
+角色/Policy 丢失或未知期间隐藏学科正文、停止重放并废弃旧异步回调；恢复同一会话后仍须重新读取当前权限与精确材料，不能凭本地 actor ID 恢复权限。另一会话即使属于同一 workspace 也不能回放或自动迁移原命令。已有不含 actor ID 的旧 journal 保留原件与原限制，不根据当前会话补填、改写为新格式或假称可安全跨页重放；当前页面已有可靠内存绑定的旧命令沿原受限路径。未落盘的内存文字仍由原关闭/退出保护处理，本节不承诺浏览器被强制终止后恢复未提交内存。
+
+验收须覆盖真实 SQLite/HTTP/IndexedDB：服务端已经提交而响应丢失后，整页刷新及同数据库 API 重启，同会话显式重放只产生一次原修订且 ACK 完全相同；未提交的未知命令重放仍受原 CAS；新会话、撤权、活动测验、旧无 actor journal 均不能借 ID 重放；角色往返后重新取当前 Policy 才能恢复；无显式操作时零写。核 journal/日志中没有 cookie/CSRF/凭据，篡改客户端 actor ID 不能改变服务端 actor 绑定。生成 OpenAPI/前端类型后逐项回读实际 SessionResponse；测试不能替代身份安全和教学验收。
+
 ### 20.11 M6.2 影响决定与历史内容块恢复（v3.0.9 提案，待所有者确认）
 
 **边界与身份。** 一次已发布修订的 `content.dependencies_invalidated` event_id 是影响审查的稳定身份；新事件与 Content 当前指针、配对 outbox、`old_ref/new_ref/affected_ids` 和 owner 事务冻结的显式引用快照同批提交。`affected_ids` 只是保守对象 ID 集，`exact_dependency_refs` 仅表示冻结的显式 ContentRef 链，不证明语义过期；纯概念 ID、同概念的其他块、后建修订均不得升级为精确命中。迁移前事件标 `legacy_unverified`，可读原保守范围但不能补造精确边或提交本节决定；缺失新事件的冻结证据是完整性错误，不退化为 legacy。事件与逐对象决定的追加式账本构成可追踪的影响复核任务；不把一个 GET、outbox 已投递、索引重建或推荐刷新记作人类复核完成，也不伪造通用 Jobs 终态。
@@ -1996,7 +2008,7 @@ accepted_answers保留完整原数组、顺序及字符串，不trim、去重或
 | GET `/readiness` | 已有本机会话 | `{database_ready:boolean,worker_ready:boolean,data_schema_version:string,migrations_pending:boolean}`；不联网、不测试密钥 |
 | POST `/session/bootstrap` | `{one_time_code:string}`，同源且有效Host | `{workspace_id,csrf_token,expires_at}`，设HttpOnly/SameSite cookie；一次性code消耗后禁止重用 |
 | POST `/session/logout` | 空对象+CSRF | `{logged_out:true}`；使会话失效，不删除学习数据 |
-| GET `/session` | 无 | `{workspace_id,role:learner|author,csrf_token,active_independent_attempt_id:Id|null,active_open_book_attempt_id:Id|null}`；两个活动 ID 来自服务端 Policy，开卷只限制学科 Agent，不锁普通材料或导入 |
+| GET `/session` | 无 | 严格 SessionResponse=`{workspace_id,actor_session_id:Id,role:learner|author,csrf_token,active_independent_attempt_id:Id|null,active_open_book_attempt_id:Id|null}`；actor ID 仅为非秘密连续性标识，规则见§20.10.1；两个活动 ID 来自服务端 Policy，开卷只限制学科 Agent，不锁普通材料或导入；POST `/session/role` 返回相同形状 |
 | POST `/session/role` | `{role:learner|author}` | 同GET session；切author不绕过active测试策略 |
 | GET `/workbench/session` | 无 | WorkbenchSession；对象缺失显示unresolved且不丢原始快照 |
 | PUT `/workbench/session` | `{expected_revision,session:WorkbenchSession}` | WorkbenchSession；会话revision由服务端递增，包含布局/展开/滚动/标签，成绩不在其中 |
