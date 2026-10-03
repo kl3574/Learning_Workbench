@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT))
 
 def create_backup(settings) -> Path:
     from services.api.app.application.provider_backup import sanitize_provider_backup
+    from services.api.app.application.session_backup import sanitize_session_backup
     from services.api.app.database import Database
 
     database = Database(settings)
@@ -39,6 +40,9 @@ def create_backup(settings) -> Path:
             # The copied database can retain WAL mode. Scrub this isolated copy
             # with a rollback journal so the archived .db contains the scrub.
             connection.execute("PRAGMA journal_mode=DELETE")
+            # Preserve the declared expiry lifecycle of shared replay bindings
+            # when their authentication/idempotency cache is removed below.
+            connection.execute("PRAGMA foreign_keys=ON")
             connection.row_factory = sqlite3.Row
             blobs = connection.execute("SELECT sha256,relative_path,size FROM content_blobs").fetchall()
             migrations = [dict(row) for row in connection.execute("SELECT * FROM schema_migrations ORDER BY version")]
@@ -48,11 +52,7 @@ def create_backup(settings) -> Path:
                     raise ValueError("Provider metadata contains a secret-like field; backup stopped.")
             connection.execute("BEGIN IMMEDIATE")
             provider_backup = sanitize_provider_backup(connection, live_database_path=database.path)
-            connection.execute("UPDATE reviews SET reviewer_session_id=NULL")
-            connection.execute("UPDATE approvals SET actor_session_id=NULL")
-            connection.execute("DELETE FROM local_sessions")
-            connection.execute("DELETE FROM bootstrap_codes")
-            connection.execute("DELETE FROM idempotency")
+            session_backup = sanitize_session_backup(connection, live_database_path=database.path)
             connection.commit()
             # VACUUM removes authentication material from SQLite free pages.
             connection.execute("VACUUM")
@@ -80,8 +80,9 @@ def create_backup(settings) -> Path:
                     "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                     "sensitive_personal_data": True, "migrations": migrations, "object_counts": counts,
                     "excluded": ["provider_secrets", "provider_secret_locators", "provider_hmac_material",
-                                 "bootstrap_codes", "local_sessions", "idempotency_replays"],
+                                 "bootstrap_codes", "session_authentication_material", "idempotency_replays"],
                     "consent_dispatch_disabled": True, "provider_backup": provider_backup,
+                    "session_backup": session_backup,
                     "restore_acceptance": "NOT_RUN",
                     "files": [{"path": path, "size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
                               for path, data in sorted(payloads.items())]}
