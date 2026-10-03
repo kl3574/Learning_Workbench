@@ -24,7 +24,7 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
   const [detail, setDetail] = useState<AuthoringJobReadView | null>(null), [draft, setDraft] = useState<AuthoringDraftView | AuthoringGroupDraftView | null>(null), [numeric, setNumeric] = useState<NumericCheckView | AuthoringGroupNumericCheckView | null>(null)
   const [privateSolution, setPrivateSolution] = useState<AuthoringPrivateSolutionView | null>(null)
   const groupPort = () => { if (!port.groups) throw new Error('Group Authoring port unavailable'); return port.groups }
-  const [subjectReady, setSubjectReady] = useState(false)
+  const [subjectReady, setSubjectReady] = useState(false), [actor, setActor] = useState<string | null>(null)
   const [commands, setCommands] = useState<AuthoringCommand[]>([]), [ready, setReady] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('')
   const academic = renderOwner === owner && permission && !paused && !denied
   const academicRef = useRef(academic); academicRef.current = academic
@@ -83,7 +83,7 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
       if (!admissionValid()) return
       if (session.workspace_id !== workspace) throw new Error('Session workspace mismatch')
       const allowed = session.role === 'author' && session.active_independent_attempt_id === null && session.active_open_book_attempt_id === null && !paused
-      setPermission(allowed)
+      setPermission(allowed); setActor(allowed ? session.actor_session_id : null)
       if (allowed) {
         const values = await loadCommands(true)
         if (admissionValid() && !scope.current.paused) {
@@ -111,7 +111,7 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
       if (!current() || sequence !== operation.current) return
       if (session.workspace_id !== workspace) throw new Error('Session mismatch')
       const allowed = session.role === 'author' && !session.active_independent_attempt_id && !session.active_open_book_attempt_id && !scope.current.paused
-      setPermission(allowed); setDenied(false); if (!allowed) clearSubject()
+      setPermission(allowed); setActor(allowed ? session.actor_session_id : null); setDenied(false); if (!allowed) clearSubject()
       const local = await loadCommands(allowed)
       if (current() && sequence === operation.current) { setCommands(local); setReady(true); setSubjectReady(allowed) }
     } catch (reason) { if (current() && sequence === operation.current) fail(reason) } finally { finish(sequence) }
@@ -221,7 +221,7 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
     if (pending) { setError('已有未知结果的原命令，请先回放；未创建新 key。'); return }
     try { await execute(makeAuthoringCommand(workspace, input)) } catch (reason) { if (current()) fail(reason) }
   }
-  return { jobs: renderOwner === owner ? jobs : [], cursor, detail: academic ? detail : null, draft: academic ? draft : null, numeric: academic ? numeric : null, privateSolution: academic ? privateSolution : null,
+  return { actor: academic ? actor : null, jobs: renderOwner === owner ? jobs : [], cursor, detail: academic ? detail : null, draft: academic ? draft : null, numeric: academic ? numeric : null, privateSolution: academic ? privateSolution : null,
     reportAccessError: (reason: unknown) => { if (current()) fail(reason) },
     commands: renderOwner === owner ? commands.filter(v => academic || v.kind === 'cancel') : [], academic, ready: ready && (!academic || subjectReady), controlReady: ready, busy, error: renderOwner === owner ? error : '', refresh, read, readDraft, readNumeric, readPrivateSolution, execute, create,
     cancel: (job: JobSnapshot) => { const value = checkedJob(job); return create({ kind: 'cancel', job_id: value.id, body: { expected_revision: value.revision } }) },

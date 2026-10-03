@@ -3,7 +3,8 @@ import type { AuthoringPrepareWrite, AuthoringGroupPrepareWrite, ContentRef } fr
 import { checkedAuthoring } from './authoringCommands'
 import { AuthoringTargets, type GroupTargets } from './AuthoringTargets'
 import { sameRef } from '../reader/target'
-export function AuthoringForm({ currentBlock, busy, submit, submitGroup, denied = () => {}, onDirty }: { currentBlock: ContentRef | null; busy: boolean; submit: (body: AuthoringPrepareWrite) => Promise<void>; onDirty: (dirty: boolean) => void; submitGroup?: (body: AuthoringGroupPrepareWrite) => Promise<void>; denied?: (reason: unknown) => void }) {
+import { LocalTaskDocument, type LocalTaskScope } from './LocalTaskDocument'
+export function AuthoringForm({ localTask, currentBlock, busy, submit, submitGroup, denied = () => {}, onDirty }: { localTask?: LocalTaskScope; currentBlock: ContentRef | null; busy: boolean; submit: (body: AuthoringPrepareWrite) => Promise<void>; onDirty: (dirty: boolean) => void; submitGroup?: (body: AuthoringGroupPrepareWrite) => Promise<void>; denied?: (reason: unknown) => void }) {
   const [topic, setTopic] = useState(''), [prerequisites, setPrerequisites] = useState(''), [objectives, setObjectives] = useState(''), [proof, setProof] = useState<'full' | 'declared_dependencies'>('full'), [provider, setProvider] = useState('')
   const [kind, setKind] = useState<'worked_example' | 'lesson' | 'practice_set' | 'assessment'>('worked_example')
   const [targets, setTargets] = useState<GroupTargets>({ concepts: [], lesson: null }), [modes, setModes] = useState<Array<'independent' | 'assisted' | 'open_book'>>([]), [time, setTime] = useState(''), [unlimited, setUnlimited] = useState(false)
@@ -47,6 +48,7 @@ export function AuthoringForm({ currentBlock, busy, submit, submitGroup, denied 
       {refs.map((ref, i) => <p key={`${ref.id}:${ref.revision}`}>{ref.id} · r{ref.revision} · <code>{ref.sha256}</code> <button onClick={() => setRefs(old => old.filter((_, index) => index !== i))}>移除材料 {i + 1}</button></p>)}
       <details><summary>明确加入其他准确内容块</summary><label>内容块 ID<input value={id} onChange={e => setId(e.target.value)} /></label><label>内容修订<input inputMode="numeric" value={revision} onChange={e => setRevision(e.target.value)} /></label><label>内容 SHA256<input value={hash} onChange={e => setHash(e.target.value)} /></label><button onClick={() => add({ entity: 'block', id, revision: /^[1-9][0-9]*$/.test(revision) ? Number(revision) : 0, sha256: hash })}>加入这份准确引用</button></details>
       <button onClick={() => void prepare()}>{kind === 'worked_example' ? '明确准备本次例题任务' : '明确准备本次组合创作任务'}</button>
+      {localTask && <LocalTaskDocument {...localTask} inputs={{ topic, prerequisites, objectives, proof }} busy={busy} denied={denied} />}
     </fieldset>{error && <p role="alert">{error}</p>}
   </section>
 }
