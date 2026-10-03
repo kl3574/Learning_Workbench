@@ -2,9 +2,9 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-02T23:59:34Z；规范 SHA-256：`949e2348902d8b8cb65f560b36fa58039fce75cd2e70c0a9ce9dcd8023160c05`
+更新：2026-10-03T00:04:43Z；规范 SHA-256：`949e2348902d8b8cb65f560b36fa58039fce75cd2e70c0a9ce9dcd8023160c05`
 
-仓库发布：VERIFIED；Issues 同步：VERIFIED_PR55_ISSUE31_V313_DEPENDENCY_INTEGRATION_RUNNING
+仓库发布：VERIFIED；Issues 同步：VERIFIED_PR55_ISSUE31_V313_ROLE_COMPLETION_DIALOG_PENDING
 实施：IN_PROGRESS；当前任务：M6.2；下一任务：M6.2
 
 已合入文本依赖见证及Content影响测试角色完成等待，候选3821257b。固定7d完整Python继续运行；其937Web/strict/build841/Ruff/mypy236/spec已PASS。Dialog相邻误关闭修复仍在核未提交表单保护，完成独审后合入并重跑完整native；0b及60fa原完整FAIL和c2双CIFAIL继续保留，源码推送暂停。
@@ -245,6 +245,7 @@
 - M6.2_v313_dependency_integration_sync: {'readback_at': '2026-10-02T23:41:08.171559+00:00', 'head_unchanged': 'c2f47a2778bb6a78c73237f8bb89fb271dfedcd6', 'pull_request': 55, 'draft': True, 'open': True, 'merged': False, 'issue': 31, 'issue_outside_managed_block_and_metadata_unchanged': True, 'pr_body_sha256': '6ccbbd98f10ebccc59f82d39b13d5c24f1be2217c1e5f7b14ee80d7142b0de38', 'issue_body_sha256': '2699ce9bf2b70e42a570a6a7a11898f4835638e5e9293bc1ce2ae9adf5c8a708', 'source_push': False, 'ci_state': 'c2 bothFAIL; old60fa and0b separatefullnative121PASS1FAIL; new7d937Web/staticsPASS fullPythonRUNNING; ContentImpacts causalcontrol inprogress; sourcepushheld', 'spec_adoption_local': 'v3.0.13 Single owner/UI implemented locally60fa; physical numeric BLOCKED'}
 - M6.2_content_role_completion_a40be935: {'source': 'a40be93575830f7584986af2be23444a31752ed6', 'integrated': '3821257b85aa4367499090d4a9d8e55dfc929452', 'change': 'Only exact confirmed non-suspended author-role assertion before closing Import; no product change; original detail5000ms/retry0 unchanged', 'controlled': 'Same bounded v2 controller: original exacttest RED35.0s to fixed GREEN32.7s;1283inputs includefourprivateprobes unchanged', 'fixed': '2nativePASS1.2min and strict targeted TS PASS;1279trackedinputsunchanged', 'root_review': '147evidencehashes and89explicit safesharemappings verified; removingoneexpect recovers exactoriginaltestbytes', 'history': 'Originalfull0b121PASS1FAIL retained. Failure-time dialog removal not established by teardown screenshots; uniquehistoricalcause unresolved. SeparateDialoggesture repair not claimed as originalcause.', 'new_combined_native': 'NOT_RUN'}
 - M6.2_text_role_public_preparation: {'text_packages': 'Independent133files/5packages0blocking;123originalmappings79same44exacthome;18embeddedgate hashesbound', 'role_package': 'Independent94files0blocking;92originalmappings58same34exacthome;89whitelist/15gate hashesbound;147raw privatehash readbackbyroot only', 'whole_index': '15990PASS at exact343a3666 index;laterauditpackages checked separately;notfinalsourcepublishclearance', 'history_delta': '2db..382sixcommits235path/blob212uniquePASS; prioroneexactsyntheticmarker rawFAIL/manualtriage retained', 'source_push': False}
+- M6.2_v313_role_completion_sync: {'readback_at': '2026-10-03T00:02:24.807160+00:00', 'head_unchanged': 'c2f47a2778bb6a78c73237f8bb89fb271dfedcd6', 'pull_request': 55, 'draft': True, 'open': True, 'merged': False, 'issue': 31, 'issue_outside_managed_block_and_metadata_unchanged': True, 'pr_body_sha256': '8fe66048be7b42b483ace04b6a0c591c06746cd7bc66f30fd84af2b125566470', 'issue_body_sha256': 'cf0b76a5349bc54a5b8db3ab41792e91141a01ebb4ac6b185dc05e9cccc4d860', 'source_push': False, 'ci_state': 'c2 bothFAIL; old60fa/0b completeFAIL retained;7d937Web/staticsPASS fullPythonRUNNING; rolecompletiontest integrated382; separateDialog fixes pending; sourcepushheld', 'spec_adoption_local': 'v3.0.13 Single owner/UI implemented locally60fa; physical numeric BLOCKED'}
 
 ## 阻塞与待决项
 
