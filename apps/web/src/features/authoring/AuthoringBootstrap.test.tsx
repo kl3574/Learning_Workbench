@@ -21,7 +21,7 @@ test('an explicit safe control read completes while initial academic admission b
  await waitFor(() => expect((screen.getByLabelText('例题主题') as HTMLTextAreaElement).disabled).toBe(false))
  await act(async () => reader.resolve(session()))
  await waitFor(() => expect(screen.queryByText('尚未读取当前会话与本机原命令。')).toBeNull())
- expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false)
+ await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
  expect(bootstrap.session).toHaveBeenCalledOnce(); expect(bootstrap.prepare).not.toHaveBeenCalled()
  expect(bootstrap.decide).not.toHaveBeenCalled(); expect(bootstrap.create).not.toHaveBeenCalled(); expect(unexpected).not.toHaveBeenCalled()
 })
