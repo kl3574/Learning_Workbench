@@ -1,0 +1,472 @@
+{
+  "source": {
+    "source": "PRODUCT_DESIGN.md",
+    "spec_version": "3.0.14",
+    "spec_sha256": "bed7c924955512ec4a6775812c80e6c5ce82e968f19feb403e568099f8dc4144"
+  },
+  "schemas": {
+    "CodexBootstrapPreparationWrite": {
+      "additionalProperties": false,
+      "properties": {
+        "sandbox_root_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Sandbox Root Id",
+          "type": "string"
+        },
+        "allowed_actions": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 0,
+          "minItems": 0,
+          "title": "Allowed Actions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "sandbox_root_id",
+        "allowed_actions"
+      ],
+      "title": "CodexBootstrapPreparationWrite",
+      "type": "object"
+    },
+    "CodexBootstrapScope": {
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "const": "codex-local-session-bootstrap-v1",
+          "title": "Version",
+          "type": "string"
+        },
+        "sandbox_root_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Sandbox Root Id",
+          "type": "string"
+        },
+        "sandbox_label": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Sandbox Label",
+          "type": "string"
+        },
+        "allowed_actions": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 0,
+          "minItems": 0,
+          "title": "Allowed Actions",
+          "type": "array"
+        },
+        "adapter_version": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Adapter Version",
+          "type": "string"
+        },
+        "bootstrap_profile_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Bootstrap Profile Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "sandbox_root_id",
+        "sandbox_label",
+        "allowed_actions",
+        "adapter_version",
+        "bootstrap_profile_sha256"
+      ],
+      "title": "CodexBootstrapScope",
+      "type": "object"
+    },
+    "CodexBootstrapPreparationView": {
+      "$defs": {
+        "CodexBootstrapScope": {
+          "additionalProperties": false,
+          "properties": {
+            "version": {
+              "const": "codex-local-session-bootstrap-v1",
+              "title": "Version",
+              "type": "string"
+            },
+            "sandbox_root_id": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Sandbox Root Id",
+              "type": "string"
+            },
+            "sandbox_label": {
+              "maxLength": 240,
+              "minLength": 1,
+              "title": "Sandbox Label",
+              "type": "string"
+            },
+            "allowed_actions": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 0,
+              "minItems": 0,
+              "title": "Allowed Actions",
+              "type": "array"
+            },
+            "adapter_version": {
+              "maxLength": 240,
+              "minLength": 1,
+              "title": "Adapter Version",
+              "type": "string"
+            },
+            "bootstrap_profile_sha256": {
+              "pattern": "^[a-f0-9]{64}$",
+              "title": "Bootstrap Profile Sha256",
+              "type": "string"
+            }
+          },
+          "required": [
+            "version",
+            "sandbox_root_id",
+            "sandbox_label",
+            "allowed_actions",
+            "adapter_version",
+            "bootstrap_profile_sha256"
+          ],
+          "title": "CodexBootstrapScope",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "actor_session_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Actor Session Id",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "approved",
+            "declined",
+            "consumed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/CodexBootstrapScope"
+        },
+        "operation_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Operation Sha256",
+          "type": "string"
+        },
+        "created_at": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+          "title": "Created At",
+          "type": "string"
+        },
+        "expires_at": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "consent_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Consent Id"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Session Id"
+        },
+        "validity": {
+          "enum": [
+            "current",
+            "expired",
+            "changed",
+            "unavailable",
+            "closed"
+          ],
+          "title": "Validity",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "actor_session_id",
+        "status",
+        "scope",
+        "operation_sha256",
+        "created_at",
+        "expires_at",
+        "consent_id",
+        "session_id",
+        "validity"
+      ],
+      "title": "CodexBootstrapPreparationView",
+      "type": "object"
+    },
+    "CodexBootstrapDecisionAck": {
+      "additionalProperties": false,
+      "properties": {
+        "preparation_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Preparation Id",
+          "type": "string"
+        },
+        "revision": {
+          "const": 2,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "actor_session_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Actor Session Id",
+          "type": "string"
+        },
+        "decision": {
+          "enum": [
+            "approve_once",
+            "decline"
+          ],
+          "title": "Decision",
+          "type": "string"
+        },
+        "operation_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Operation Sha256",
+          "type": "string"
+        },
+        "consent_id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Consent Id"
+        },
+        "decided_at": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+          "title": "Decided At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "preparation_id",
+        "revision",
+        "actor_session_id",
+        "decision",
+        "operation_sha256",
+        "consent_id",
+        "decided_at"
+      ],
+      "title": "CodexBootstrapDecisionAck",
+      "type": "object"
+    },
+    "CodexSessionCreateWrite": {
+      "additionalProperties": false,
+      "properties": {
+        "sandbox_root_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Sandbox Root Id",
+          "type": "string"
+        },
+        "consent_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Consent Id",
+          "type": "string"
+        },
+        "allowed_actions": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 0,
+          "minItems": 0,
+          "title": "Allowed Actions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "sandbox_root_id",
+        "consent_id",
+        "allowed_actions"
+      ],
+      "title": "CodexSessionCreateWrite",
+      "type": "object"
+    },
+    "CodexSessionCreateAck": {
+      "$defs": {
+        "CodexBootstrapFeatures": {
+          "additionalProperties": false,
+          "properties": {
+            "approvals": {
+              "const": false,
+              "title": "Approvals",
+              "type": "boolean"
+            },
+            "interrupt": {
+              "const": false,
+              "title": "Interrupt",
+              "type": "boolean"
+            },
+            "artifacts": {
+              "const": false,
+              "title": "Artifacts",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "approvals",
+            "interrupt",
+            "artifacts"
+          ],
+          "title": "CodexBootstrapFeatures",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "revision": {
+          "const": 2,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "status": {
+          "const": "ready",
+          "title": "Status",
+          "type": "string"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/CodexBootstrapFeatures"
+        },
+        "adapter_version": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Adapter Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "status",
+        "capabilities",
+        "adapter_version"
+      ],
+      "title": "CodexSessionCreateAck",
+      "type": "object"
+    },
+    "CodexSessionView": {
+      "$defs": {
+        "CodexBootstrapFeatures": {
+          "additionalProperties": false,
+          "properties": {
+            "approvals": {
+              "const": false,
+              "title": "Approvals",
+              "type": "boolean"
+            },
+            "interrupt": {
+              "const": false,
+              "title": "Interrupt",
+              "type": "boolean"
+            },
+            "artifacts": {
+              "const": false,
+              "title": "Artifacts",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "approvals",
+            "interrupt",
+            "artifacts"
+          ],
+          "title": "CodexBootstrapFeatures",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "initializing",
+            "ready",
+            "failed",
+            "unknown"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "active_turn_id": {
+          "title": "Active Turn Id",
+          "type": "null"
+        },
+        "adapter_version": {
+          "maxLength": 240,
+          "minLength": 1,
+          "title": "Adapter Version",
+          "type": "string"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/CodexBootstrapFeatures"
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "status",
+        "active_turn_id",
+        "adapter_version",
+        "capabilities"
+      ],
+      "title": "CodexSessionView",
+      "type": "object"
+    }
+  }
+}

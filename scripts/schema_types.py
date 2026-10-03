@@ -27,6 +27,8 @@ def typescript_type(schema: dict[str, Any]) -> str:
     if kind in ("integer", "number"):
         return "number"
     if kind == "array":
+        if schema.get("maxItems") == 0:
+            return "[]"
         return f"Array<{typescript_type(schema['items'])}>"
     if kind == "object":
         additional = schema.get("additionalProperties")
