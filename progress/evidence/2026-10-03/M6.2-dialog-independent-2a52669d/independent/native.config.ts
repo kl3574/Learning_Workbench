@@ -1,0 +1,2 @@
+import original from '$HOME/.cache/learning-workbench-acceptance/m62-dialog-pointer-independent-oct03/tests/e2e/playwright.config.ts'
+export default { ...original, testDir: '$HOME/.cache/learning-workbench-acceptance/m62-dialog-pointer-independent-oct03/tests/e2e', webServer: undefined, workers: 1, retries: 0, outputDir: '$HOME/.cache/learning-workbench-acceptance/m62-dialog-pointer-independent-evidence-oct03/native-521/artifacts' }

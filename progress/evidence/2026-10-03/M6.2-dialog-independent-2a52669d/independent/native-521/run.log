@@ -1,0 +1,41 @@
+
+Running 1 test using 1 worker
+
+(node:2865434) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/e2e/dialog-pointer.spec.ts:6:1 › native dialog keeps a content gesture through layout change and still accepts explicit closing (15.3s)
+
+
+  1) tests/e2e/dialog-pointer.spec.ts:6:1 › native dialog keeps a content gesture through layout change and still accepts explicit closing 
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  getByRole('dialog', { name: '创作', exact: true })
+    Expected: 0
+    Received: 1
+    Timeout:  5000ms
+
+    Call log:
+      - Expect "toHaveCount" getByRole('dialog', { name: '创作', exact: true }) with timeout 5000ms
+      - waiting for getByRole('dialog', { name: '创作', exact: true })
+        14 × locator resolved to 1 element
+           - unexpected value "1"
+
+
+      37 |     // A stationary ordinary click still invokes the actual Content detail read.
+      38 |     await button.click(); await expect(panel.getByRole('region', { name: '本次读取的内容影响详情', exact: true })).toBeVisible()
+    > 39 |     await page.mouse.click(2, 2); await expect(dialog).toHaveCount(0)
+         |                                                        ^
+      40 |     await page.getByRole('button', { name: '创作', exact: true }).click()
+      41 |     await expect(dialog).toBeVisible(); await page.keyboard.press('Escape'); await expect(dialog).toHaveCount(0)
+      42 |     await page.getByRole('button', { name: '创作', exact: true }).click()
+        at $HOME/.cache/learning-workbench-acceptance/m62-dialog-pointer-independent-oct03/tests/e2e/dialog-pointer.spec.ts:39:56
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-dialog-pointer-independent-evidence-oct03/native-521/artifacts/dialog-pointer-native-dial-21a09-ll-accepts-explicit-closing/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m62-dialog-pointer-independent-evidence-oct03/native-521/artifacts/dialog-pointer-native-dial-21a09-ll-accepts-explicit-closing/error-context.md
+
+  1 failed
+    tests/e2e/dialog-pointer.spec.ts:6:1 › native dialog keeps a content gesture through layout change and still accepts explicit closing 
