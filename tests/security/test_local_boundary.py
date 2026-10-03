@@ -202,10 +202,11 @@ def test_payload_budget_and_unimplemented_routes(runtime):
     application, client, settings = runtime
     headers = login(application, client, settings)
     assert client.post("/api/v1/session/logout", content=b"x" * (settings.max_request_bytes + 1), headers=headers).status_code == 413
-    # M5.1 now implements provider capabilities. The later Codex endpoint must not be
-    # installed as a success stub or silently fall through to the SPA.
-    assert client.get("/api/v1/codex/capabilities").status_code == 404
-    assert "/api/v1/codex/capabilities" not in application.openapi()["paths"]
+    # M6.3 implements only the read-only capabilities route. Sessions remain
+    # unimplemented and cannot silently fall through to the SPA.
+    assert client.get("/api/v1/codex/sessions").status_code == 404
+    assert "/api/v1/codex/sessions" not in application.openapi()["paths"]
+    assert "/api/v1/codex/capabilities" in application.openapi()["paths"]
 
 
 @pytest.mark.parametrize("host", ["0.0.0.0", "192.168.1.2", "example.com", "::"])
