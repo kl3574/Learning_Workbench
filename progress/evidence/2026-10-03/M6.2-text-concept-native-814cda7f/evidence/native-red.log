@@ -1,0 +1,84 @@
+
+Running 1 test using 1 worker
+
+(node:3003474) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Traceback (most recent call last):
+  File "<string>", line 13, in <module>
+  File "<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-text-concept-native-oct03/packages/contracts/canonical.py", line 26, in canonical_bytes
+    return json.dumps(
+           ^^^^^^^^^^^
+  File "<LOCAL_HOME>/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/__init__.py", line 238, in dumps
+    **kw).encode(obj)
+          ^^^^^^^^^^^
+  File "<LOCAL_HOME>/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py", line 200, in encode
+    chunks = self.iterencode(o, _one_shot=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<LOCAL_HOME>/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py", line 258, in iterencode
+    return _iterencode(o, 0)
+           ^^^^^^^^^^^^^^^^^
+  File "<LOCAL_HOME>/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py", line 180, in default
+    raise TypeError(f'Object of type {o.__class__.__name__} '
+TypeError: Object of type Concept is not JSON serializable
+  ✘  1 tests/e2e/text-edit-concepts.spec.ts:53:1 › native text edit preserves original concept pins and ordered dependencies after their current refs advance (3.4s)
+
+
+  1) tests/e2e/text-edit-concepts.spec.ts:53:1 › native text edit preserves original concept pins and ordered dependencies after their current refs advance 
+
+    Error: Command failed: <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-text-concept-native-oct03/.venv/bin/python -B -c import base64,hashlib,json,io,zipfile
+    from packages.contracts import domain_models as d
+    from packages.contracts.canonical import canonical_bytes,metadata_sha256
+    def ref(x): return d.ContentRef(entity=x.entity,id=x.id,revision=x.revision,sha256=metadata_sha256(x))
+    def block(name,body,dependencies=[],concept_ids=[]): return d.ContentBlock(id='native_concept_edit_'+name,revision=1,kind='text',title='原创合成依赖 '+name,body_path='content/dependency-'+name+'.md',body_sha256=hashlib.sha256(body.encode()).hexdigest(),depends_on=dependencies,concepts=concept_ids)
+    bodies={name:'原创合成 '+name+' 正文。只验软件保存与精确引用，不作学术或教学批准。\n' for name in ['first','second','base']}
+    concept_first=d.Concept(id='native_edit_concept_first',revision=1,title='Original first concept')
+    concept_second=d.Concept(id='native_edit_concept_second',revision=1,title='Original second concept')
+    first=block('first',bodies['first'],concept_ids=[concept_first.id]); second=block('second',bodies['second']); base=block('base',bodies['base'],[ref(second),ref(first)],[concept_second.id,concept_first.id])
+    blocks=[base,first,second]
+    lesson=d.Lesson(id='native_concept_edit_lesson',revision=1,title='合成依赖编辑小节',objectives=['保留原精确引用'],block_refs=[ref(base)])
+    course=d.Course(id='native_concept_edit_course',revision=1,title='合成依赖编辑教材',audience='软件验收',concept_refs=[ref(concept_first),ref(concept_second)],lesson_refs=[ref(lesson)])
+    p={'course.json':canonical_bytes(course),'concepts.json':canonical_bytes([concept_first,concept_second]),'symbols.json':b'[]','sources/citations.json':b'[]','lessons/dependencies.json':canonical_bytes(lesson)}
+    for value in blocks:
+     p['blocks/'+value.id+'.json']=canonical_bytes(value);p[value.body_path]=bodies[value.id.removeprefix('native_concept_edit_')].encode()
+    m=d.Manifest(package_id='native_concept_edit_package',profile='learner',created_at='2026-10-02T00:00:00Z',files=[d.FileEntry(path=k,sha256=hashlib.sha256(v).hexdigest(),size=len(v),media_type='text/markdown' if k.endswith('.md') else 'application/json',visibility='learner') for k,v in sorted(p.items())])
+    p['manifest.json']=canonical_bytes(m);f=io.BytesIO()
+    with zipfile.ZipFile(f,'w') as z:
+     for k,v in sorted(p.items()): z.writestr(zipfile.ZipInfo(k,date_time=(2026,10,2,0,0,0)),v)
+    print(json.dumps({'archive':base64.b64encode(f.getvalue()).decode(),'course':ref(course).model_dump(),'concepts':[ref(concept_second).model_dump(),ref(concept_first).model_dump()],'lessons':[ref(lesson).model_dump()],'blocks':[ref(value).model_dump() for value in blocks],'bodies':{'native_concept_edit_'+name:body for name,body in bodies.items()}}))
+    Traceback (most recent call last):
+      File "<string>", line 13, in <module>
+      File "<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-text-concept-native-oct03/packages/contracts/canonical.py", line 26, in canonical_bytes
+        return json.dumps(
+               ^^^^^^^^^^^
+      File "<LOCAL_HOME>/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/__init__.py", line 238, in dumps
+        **kw).encode(obj)
+              ^^^^^^^^^^^
+      File "<LOCAL_HOME>/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py", line 200, in encode
+        chunks = self.iterencode(o, _one_shot=True)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "<LOCAL_HOME>/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py", line 258, in iterencode
+        return _iterencode(o, 0)
+               ^^^^^^^^^^^^^^^^^
+      File "<LOCAL_HOME>/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/json/encoder.py", line 180, in default
+        raise TypeError(f'Object of type {o.__class__.__name__} '
+    TypeError: Object of type Concept is not JSON serializable
+
+
+      30 |  for k,v in sorted(p.items()): z.writestr(zipfile.ZipInfo(k,date_time=(2026,10,2,0,0,0)),v)
+      31 | print(json.dumps({'archive':base64.b64encode(f.getvalue()).decode(),'course':ref(course).model_dump(),'concepts':[ref(concept_second).model_dump(),ref(concept_first).model_dump()],'lessons':[ref(lesson).model_dump()],'blocks':[ref(value).model_dump() for value in blocks],'bodies':{'native_concept_edit_'+name:body for name,body in bodies.items()}}))`
+    > 32 |   const value = JSON.parse(execFileSync(`${root}/.venv/bin/python`, ['-B', '-c', script], { cwd: root, encoding: 'utf8' }))
+         |                            ^
+      33 |   return { ...value, bytes: Buffer.from(value.archive, 'base64') }
+      34 | }
+      35 |
+        at conceptPackage (<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-text-concept-native-oct03/tests/e2e/text-edit-concepts.spec.ts:32:28)
+        at <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-text-concept-native-oct03/tests/e2e/text-edit-concepts.spec.ts:59:21
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-text-concept-native-evidence-oct03/native-red-output/text-edit-concepts-native--f176c--their-current-refs-advance/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m62-text-concept-native-evidence-oct03/native-red-output/text-edit-concepts-native--f176c--their-current-refs-advance/error-context.md
+
+  1 failed
+    tests/e2e/text-edit-concepts.spec.ts:53:1 › native text edit preserves original concept pins and ordered dependencies after their current refs advance 

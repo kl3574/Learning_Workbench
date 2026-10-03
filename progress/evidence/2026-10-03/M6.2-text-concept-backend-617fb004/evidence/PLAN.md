@@ -1,0 +1,9 @@
+Authorized scope: fixed base 7a6a8a2a0cc4dca86abd437bd7cd532423a48167; existing published public text, title/body edits only, preserving original concepts order and exact historical pins. No external DTO/spec/migration or other kind/null-base expansion.
+
+TDD seams already explicitly requested by root: real local HTTP create/PATCH/exact GET/Review/human decision/publication/original ACK, with synthetic Content-owned fixtures; Content-owned retained dependency witness readback; deliberately damaged synthetic storage and zero-DML/table-hash checks. No additional confirmation is needed. All fixture identities/decisions are synthetic software tests, not academic approval.
+
+Existing internal V2 stores a full ContentDependencyWitness whose edges include root concept edges, descendant edges and exact refs. Reuse V2 when either original depends_on or concepts is nonempty. Keep legacy V1 restricted to neither; do not add fields/defaults or reinterpret old no-concepts records. Candidate payload already binds full base hash. Publication must pass exact original root concept pins into Content closure, never current.
+
+First tracer: nonempty ordered root concepts, create/PATCH, concept current advance, fresh Review and publication; confirm exact old pins and metadata order. Preserve base rejection RED. Next integrity tracer: frozen original/root-result/descendant pin or metadata damage, with appropriate original-candidate versus result-ACK separation; extend only after the previous loop. Old V1 oracle remains byte-preserved; request independent original 7a no-concepts V2 capture for additional backward compatibility oracle.
+
+No model/provider/network calls. No existing workspace databases, environment secrets or credentials read. Tests create their own private temporary databases; logs are redirected privately with short tracebacks.
