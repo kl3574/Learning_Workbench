@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-03T14:13:51Z；规范 SHA-256：`bed7c924955512ec4a6775812c80e6c5ce82e968f19feb403e568099f8dc4144`
+更新：2026-10-03T16:47:23Z；规范 SHA-256：`bed7c924955512ec4a6775812c80e6c5ce82e968f19feb403e568099f8dc4144`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED_PR55_ISSUE31_CONCEPTS_PUSHED_NEW_CI_OBSERVED
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
 
-修复已复现的新bootstrap父准入false→true取消合法只读响应的问题；固定差异、核收紧权限/晚ACK拒绝不变，再跑新native；收集dcfda8c2完整Python终态和适用完整组合门禁。保留原失败和三个真实unknown，公开前单独内容/对象准入。
+收集固定1843556e同命令完整Python终态；不以65相关PASS替代原完整FAIL、不推断两个setup错误原因。完成新增证据与全部对象公开准入后推送独立M6.3源码分支并建立可审draft PR；继续唯一规范已定义的下一垂直切片，完整M6.3保持in_progress。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -287,6 +287,7 @@
 - M6.3-bootstrap-backup-c73: 4PASS/2existingwarnings, realbackupCLI syntheticCodexowner;1374 Git inputs unchanged. Oldactor/8Codex tables intact; oldcookie401, newactor cannot consume/decide original authority. No actualCodex/fullrestore acceptance.
 - M6.3-bootstrap-root-focused-852: 217PASS/2existingwarnings; actual root combinationdec36,1376 inputs sameGit/unchanged. Synthetic control/realHTTP+backupCLI only; no actualCodex/native. Final upstream schema correction pending.
 - M6.3-bootstrap-final-backend-real-control: Approved sole v3.0.14 implemented in canonical dcfda8c2. Final backend df0 focused264/Ruff/mypy250/structural80 PASS, complete1365 Git inputs independently verified; actual045 HTTP201/r2 ready through1 fixed restricted CLI, original ACK and same-DB application recreation byte-equal replay,0 new starts, actual1364 Git inputs independently verified. Three original real v2 unknown instances remain unchanged. FixedUI5d07 fullWeb1037/145files PASS; new native a2d9 FAIL at first local record read before prepare/create; browser thread NOT_RUN. Narrow parent write-admission transition defect reproduced by controlled RED; repair in progress. New canonical complete Python3688 collected, RUNNING. Original ad494 fullPython ERROR and native FAIL retained. Full M6.3/AC21/Broker, account/model/academic acceptance incomplete; no source push/merge/release/deploy.
+- M6.3-bootstrap-current-complete-gates: Canonical1843556e adopts approved v3.0.14 bootstrap and reviewed narrow fixes. Backenddf0 focused264PASS; actual045 HTTP201/ready r2, one restricted zero-model CLI and zero replay starts. UIa480 repairs initial false→true write admission invalidating a legitimate read; controlled RED preserved. Test-only f321 waits button readiness: completeWeb1038PASS/145files plus strict/buildPASS. Newnativea4801PASS; formalcompletebd3 native128PASS0FAIL0skip/exit0/1worker0retry with17628 tracked/1381 engineering Git-exact before/after independently verified. Browser proves two API OS processes/same DB/five original ACK byte-equal replays, not independently counted CLI starts. CompleteDCF Python3683PASS1FAIL2setupERROR2physicalnumericENVSKIP/exit1 remains sealed FAIL. Known legacy backup test oracle corrected test-onlyb51→canonical184; originalRED retained, seven relatedfiles65PASS (single included), static review no blocker. Two setup error causes UNKNOWN; bounded readonly metadata shows nonterminal persisted Jobs only. Newdetached184 exactcompletePython3688collected RUNNING, no terminal claim. Originalad494/a2d9/a480 failures and three actualv2unknown instances unchanged. FullM6.3/AC21/Broker/M7/realProvider/quality unaccepted; no sourcepush/merge/release/deploy.
 
 ## 阻塞与待决项
 
@@ -327,9 +328,11 @@
 - M63_CONTROL_PROBE_DEEP_JSON_RECURSION: 原2000层导致协议timeout，16/17/18失败保留且不当RecursionError证据；真正16000层低于64KiB的原20实证RecursionError，94be原21安全503 CODEX_PROTOCOL_INVALID通过。
 - M63_EXTENDED_SECURITY_REVIEW_INTERRUPTED: 独立后续系统级探针被自动安全检查中止，理由possible cybersecurity risk；未继续、转派或重启。已有明确缺陷修复及常规测试、窄静态review继续；不能称完整安全独审PASS。
 - M63_AD494_FULL_NATIVE_BOOTSTRAP_FAILED: 固定ad494完整native126PASS1FAIL，import-admission.spec65初始authenticateOnly五秒未见saved；截图401本机会话未建立。原bootstrap响应未采，具体原因UNKNOWN。旧独立UI诊断被automatic安全检查中止(possible cybersecurity risk)，NOT_RUN，未重启/转派；静态现有证据不当复现成功。该固定完整Python亦已终态3633PASS2ENVSKIP1setupERROR/exit1。新bootstrap尚未整合完整验收，历史两失败均保留。
-- M63_SESSION_BOOTSTRAP_CONSENT_CONTRACT_GAP: 375e55c0已批准并纳入唯一v3.0.14，五个真实端点与单次许可已实现；固定实际045受限控制HTTP201/ready及同DB应用重建回放通过，flags仍false。完整M6.3和新浏览器门禁未通过，不是待授权阻塞。
+- M63_SESSION_BOOTSTRAP_CONSENT_CONTRACT_GAP: 375e55c0已批准纳入唯一v3.0.14，五个真实端点与单次许可已实施。固定045实际受限控制201/ready；新原生浏览器和API OS重启、显式回放通过，flags仍false。完整M6.3仍未验收，不是待授权阻塞。
 - M63_AD494_FULL_PYTHON_FIXTURE_SETUP_ERROR: generated_group assessment fixture after worker.run_once returned true: authoring.read remains running; actual error_code None. Original tamper test body not reached; root cause not established. Original fixed full gate exit1 preserved; no single-case or subset override. Bounded unchanged-source diagnosis supports legitimate lost-lease refusal and fresh-owner recovery with one original Provider dispatch; no production defect established. Host timing mechanism unresolved; full gate stillERROR.
 - M63_BOOTSTRAP_OWNER_FILE_ADMISSION: 固定366原P2保留；852把owner hold移到完整准入/原命令回放之后、消费commit之前，独立静态delta已闭合。31补四终态文件数量检查，固定df0的264 gate实际执行通过；不是整体runtime安全审计。
-- M63_BOOTSTRAP_NATIVE_INITIAL_READ_INVALIDATED: 新native a2d9首次读取本地记录后初始提示未消失，准备/创建未到达，浏览器thread NOT_RUN。新父面板受控RED证实初始writeAdmitted false→true取消合法只读响应；正在窄修，新旧失败均保留，不加等待掩盖缺陷。
+- M63_BOOTSTRAP_NATIVE_INITIAL_READ_INVALIDATED: 原a2d9首次读取FAIL保留。受控父面板RED复现false→true初始写准入取消合法只读响应，a480窄修后新case通过且固定bd3完整native128PASS；f321只等待写按钮真实ready，完整Web1038PASS。原失败原因唯一性不作额外推断。
+- M63_DCF_COMPLETE_PYTHON_FAILURE: DCF完整Python3683PASS/1FAIL/2setupERROR/2实际数值ENVSKIP，exit1。过时备份测试期待清空actor引用与M7保历史合同冲突，b51仅修该测试、65相关PASS；canonical184完整同命令另跑中，原门禁不升级。
+- M63_DCF_SETUP_ERRORS_CAUSE_UNKNOWN: Provider-owner[single]与Review guards[extra_body-decision]在setup缺终态，正文未执行。精确关联后只读合成数据库状态为running r3/r2；UTC/monotonic差值已记，不足以证明租约/宿主原因。未恢复原实例或削弱租约/权限。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。

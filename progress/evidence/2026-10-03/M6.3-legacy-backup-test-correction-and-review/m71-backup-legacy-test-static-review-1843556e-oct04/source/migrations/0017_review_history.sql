@@ -1,0 +1,168 @@
+-- Quality-owned persistence only. No existing review is promoted/backfilled.
+-- These redundant unique keys support exact foreign keys without rewriting
+-- Jobs, catalog or artifact rows. Their original primary keys stay unchanged.
+CREATE UNIQUE INDEX review_job_identity ON jobs(id,workspace_id,kind);
+CREATE UNIQUE INDEX review_candidate_source ON draft_candidate_identities(draft_id,workspace_id,owner,source_kind,entity);
+CREATE UNIQUE INDEX review_artifact_identity ON artifacts(id,workspace_id,blob_sha256);
+
+CREATE TABLE review_jobs(
+ review_id TEXT PRIMARY KEY NOT NULL,
+ workspace_id TEXT NOT NULL REFERENCES workspace(id),
+ job_kind TEXT NOT NULL DEFAULT 'draft_review' CHECK(job_kind='draft_review'),
+ owner TEXT NOT NULL CHECK(owner IN ('import','authoring')),
+ source_kind TEXT NOT NULL CHECK(source_kind IN ('import','authoring_single','authoring_group')),
+ draft_id TEXT NOT NULL,
+ draft_revision INTEGER NOT NULL CHECK(typeof(draft_revision)='integer' AND draft_revision>=1),
+ entity TEXT NOT NULL,
+ candidate_sha256 TEXT NOT NULL CHECK(length(candidate_sha256)=64 AND candidate_sha256 NOT GLOB '*[^a-f0-9]*'),
+ creator_actor_id TEXT NOT NULL CHECK(length(creator_actor_id)>0),
+ input_json TEXT NOT NULL CHECK(json_valid(input_json)),
+ input_sha256 TEXT NOT NULL CHECK(length(input_sha256)=64 AND input_sha256 NOT GLOB '*[^a-f0-9]*'),
+ created_at TEXT NOT NULL,
+ UNIQUE(review_id,workspace_id),
+ FOREIGN KEY(review_id,workspace_id,job_kind) REFERENCES jobs(id,workspace_id,kind),
+ FOREIGN KEY(draft_id,workspace_id,owner,source_kind,entity)
+  REFERENCES draft_candidate_identities(draft_id,workspace_id,owner,source_kind,entity),
+ FOREIGN KEY(workspace_id,draft_id,draft_revision,owner,entity,candidate_sha256)
+  REFERENCES draft_candidate_revisions(workspace_id,draft_id,draft_revision,owner,entity,candidate_sha256)
+);
+
+CREATE TABLE review_revisions(
+ review_id TEXT NOT NULL REFERENCES reviews(id),
+ revision INTEGER NOT NULL CHECK(typeof(revision)='integer' AND revision>=1),
+ receipt_json TEXT NOT NULL CHECK(json_valid(receipt_json)),
+ receipt_sha256 TEXT NOT NULL CHECK(length(receipt_sha256)=64 AND receipt_sha256 NOT GLOB '*[^a-f0-9]*'),
+ record_kind TEXT NOT NULL CHECK(record_kind IN ('machine','human_decision')),
+ record_json TEXT NOT NULL CHECK(json_valid(record_json)),
+ record_sha256 TEXT NOT NULL CHECK(length(record_sha256)=64 AND record_sha256 NOT GLOB '*[^a-f0-9]*'),
+ previous_receipt_sha256 TEXT CHECK(previous_receipt_sha256 IS NULL OR
+  (length(previous_receipt_sha256)=64 AND previous_receipt_sha256 NOT GLOB '*[^a-f0-9]*')),
+ previous_revision INTEGER GENERATED ALWAYS AS (CASE WHEN revision>1 THEN revision-1 END) VIRTUAL,
+ recorded_at TEXT NOT NULL,
+ PRIMARY KEY(review_id,revision),
+ UNIQUE(review_id,revision,receipt_sha256),
+ FOREIGN KEY(review_id) REFERENCES review_jobs(review_id),
+ FOREIGN KEY(review_id,previous_revision,previous_receipt_sha256)
+  REFERENCES review_revisions(review_id,revision,receipt_sha256),
+ CHECK((revision=1 AND record_kind='machine' AND previous_receipt_sha256 IS NULL)
+    OR (revision>1 AND record_kind='human_decision' AND previous_receipt_sha256 IS NOT NULL))
+);
+
+-- The current projection is written in the same future owner transaction.
+-- Its candidate must be the Job's exact catalog candidate at history insertion.
+-- Current receipt/JSON/hash/permissions still require checked application reads.
+CREATE TRIGGER review_revision_candidate BEFORE INSERT ON review_revisions
+WHEN NOT EXISTS(
+ SELECT 1 FROM reviews r JOIN review_jobs j ON r.id=j.review_id
+ WHERE r.id=NEW.review_id AND r.workspace_id=j.workspace_id
+  AND r.draft_id=j.draft_id AND r.draft_revision=j.draft_revision
+  AND r.owner=j.owner AND r.entity=j.entity AND r.candidate_sha256=j.candidate_sha256
+)
+BEGIN SELECT RAISE(ABORT,'review projection candidate mismatch'); END;
+
+CREATE TABLE review_artifact_bindings(
+ review_id TEXT NOT NULL,
+ workspace_id TEXT NOT NULL,
+ review_revision INTEGER NOT NULL CHECK(typeof(review_revision)='integer' AND review_revision>=1),
+ ordinal INTEGER NOT NULL CHECK(typeof(ordinal)='integer' AND ordinal>=0),
+ artifact_id TEXT NOT NULL,
+ artifact_owner TEXT NOT NULL CHECK(artifact_owner IN ('import','quality')),
+ artifact_sha256 TEXT NOT NULL CHECK(length(artifact_sha256)=64 AND artifact_sha256 NOT GLOB '*[^a-f0-9]*'),
+ manifest_sha256 TEXT NOT NULL CHECK(length(manifest_sha256)=64 AND manifest_sha256 NOT GLOB '*[^a-f0-9]*'),
+ binding_json TEXT NOT NULL CHECK(json_valid(binding_json)),
+ binding_sha256 TEXT NOT NULL CHECK(length(binding_sha256)=64 AND binding_sha256 NOT GLOB '*[^a-f0-9]*'),
+ PRIMARY KEY(review_id,review_revision,ordinal),
+ UNIQUE(review_id,review_revision,artifact_id),
+ FOREIGN KEY(review_id,workspace_id) REFERENCES review_jobs(review_id,workspace_id),
+ FOREIGN KEY(review_id,review_revision) REFERENCES review_revisions(review_id,revision),
+ FOREIGN KEY(artifact_id,workspace_id,artifact_sha256) REFERENCES artifacts(id,workspace_id,blob_sha256)
+);
+
+CREATE TABLE review_commands(
+ workspace_id TEXT NOT NULL,
+ actor_id TEXT NOT NULL CHECK(length(actor_id)>0),
+ route TEXT NOT NULL,
+ command_key TEXT NOT NULL CHECK(length(command_key)>0),
+ command_kind TEXT NOT NULL CHECK(command_kind IN ('create','decision','cancel')),
+ review_id TEXT NOT NULL,
+ request_json TEXT NOT NULL CHECK(json_valid(request_json)),
+ request_sha256 TEXT NOT NULL CHECK(length(request_sha256)=64 AND request_sha256 NOT GLOB '*[^a-f0-9]*'),
+ ack_json TEXT NOT NULL CHECK(json_valid(ack_json)),
+ ack_sha256 TEXT NOT NULL CHECK(length(ack_sha256)=64 AND ack_sha256 NOT GLOB '*[^a-f0-9]*'),
+ basis_revision INTEGER NOT NULL CHECK(typeof(basis_revision)='integer' AND basis_revision>=1),
+ resulting_revision INTEGER NOT NULL CHECK(typeof(resulting_revision)='integer' AND resulting_revision>=1),
+ job_basis_revision INTEGER GENERATED ALWAYS AS
+  (CASE WHEN command_kind='cancel' THEN basis_revision END) VIRTUAL,
+ job_resulting_revision INTEGER GENERATED ALWAYS AS
+  (CASE WHEN command_kind IN ('create','cancel') THEN resulting_revision END) VIRTUAL,
+ review_basis_revision INTEGER GENERATED ALWAYS AS
+  (CASE WHEN command_kind='decision' THEN basis_revision END) VIRTUAL,
+ review_resulting_revision INTEGER GENERATED ALWAYS AS
+  (CASE WHEN command_kind='decision' THEN resulting_revision END) VIRTUAL,
+ recorded_at TEXT NOT NULL,
+ PRIMARY KEY(workspace_id,actor_id,route,command_key),
+ FOREIGN KEY(review_id,workspace_id) REFERENCES review_jobs(review_id,workspace_id),
+ FOREIGN KEY(review_id,job_basis_revision) REFERENCES job_events(job_id,seq),
+ FOREIGN KEY(review_id,job_resulting_revision) REFERENCES job_events(job_id,seq),
+ FOREIGN KEY(review_id,review_basis_revision) REFERENCES review_revisions(review_id,revision),
+ FOREIGN KEY(review_id,review_resulting_revision) REFERENCES review_revisions(review_id,revision),
+ CHECK((command_kind='create' AND resulting_revision=1)
+    OR (command_kind='decision' AND resulting_revision=basis_revision+1)
+    OR (command_kind='cancel' AND resulting_revision IN (basis_revision,basis_revision+1)))
+);
+
+-- Revision domains are explicit: candidate -> initial Job, Review -> Review,
+-- and Job -> Job. A queued create/cancel needs no invented machine receipt.
+CREATE TRIGGER review_command_binding BEFORE INSERT ON review_commands
+WHEN NOT EXISTS(
+ SELECT 1 FROM review_jobs j WHERE j.review_id=NEW.review_id AND j.workspace_id=NEW.workspace_id
+ AND ((NEW.command_kind='create' AND NEW.route='POST /drafts/'||j.draft_id||'/review'
+       AND NEW.actor_id=j.creator_actor_id AND NEW.basis_revision=j.draft_revision)
+   OR (NEW.command_kind='decision' AND NEW.route='POST /reviews/'||j.review_id||'/decision'
+       AND EXISTS(SELECT 1 FROM review_revisions r WHERE r.review_id=j.review_id
+        AND r.revision=NEW.resulting_revision AND r.previous_revision=NEW.basis_revision
+        AND r.record_kind='human_decision'))
+   OR (NEW.command_kind='cancel' AND NEW.route='POST /jobs/'||j.review_id||'/cancel'))
+)
+BEGIN SELECT RAISE(ABORT,'review command binding mismatch'); END;
+
+-- Every UNIQUE conflict is guarded before SQLite can delete an old row for
+-- REPLACE, including when recursive_triggers is OFF. No session credential is
+-- stored here; historical actor IDs are not live authorization foreign keys.
+CREATE TRIGGER review_jobs_no_replace BEFORE INSERT ON review_jobs
+WHEN EXISTS(SELECT 1 FROM review_jobs WHERE review_id=NEW.review_id)
+BEGIN SELECT RAISE(ABORT,'review jobs append-only'); END;
+CREATE TRIGGER review_jobs_no_update BEFORE UPDATE ON review_jobs
+BEGIN SELECT RAISE(ABORT,'review jobs append-only'); END;
+CREATE TRIGGER review_jobs_no_delete BEFORE DELETE ON review_jobs
+BEGIN SELECT RAISE(ABORT,'review jobs append-only'); END;
+
+CREATE TRIGGER review_revisions_no_replace BEFORE INSERT ON review_revisions
+WHEN EXISTS(SELECT 1 FROM review_revisions WHERE review_id=NEW.review_id AND revision=NEW.revision)
+BEGIN SELECT RAISE(ABORT,'review revisions append-only'); END;
+CREATE TRIGGER review_revisions_no_update BEFORE UPDATE ON review_revisions
+BEGIN SELECT RAISE(ABORT,'review revisions append-only'); END;
+CREATE TRIGGER review_revisions_no_delete BEFORE DELETE ON review_revisions
+BEGIN SELECT RAISE(ABORT,'review revisions append-only'); END;
+
+CREATE TRIGGER review_artifacts_no_replace BEFORE INSERT ON review_artifact_bindings
+WHEN EXISTS(SELECT 1 FROM review_artifact_bindings WHERE review_id=NEW.review_id
+ AND review_revision=NEW.review_revision AND (ordinal=NEW.ordinal OR artifact_id=NEW.artifact_id))
+BEGIN SELECT RAISE(ABORT,'review artifacts append-only'); END;
+CREATE TRIGGER review_artifacts_no_update BEFORE UPDATE ON review_artifact_bindings
+BEGIN SELECT RAISE(ABORT,'review artifacts append-only'); END;
+CREATE TRIGGER review_artifacts_no_delete BEFORE DELETE ON review_artifact_bindings
+BEGIN SELECT RAISE(ABORT,'review artifacts append-only'); END;
+
+CREATE TRIGGER review_commands_no_replace BEFORE INSERT ON review_commands
+WHEN EXISTS(SELECT 1 FROM review_commands WHERE workspace_id=NEW.workspace_id
+ AND actor_id=NEW.actor_id AND route=NEW.route AND command_key=NEW.command_key)
+BEGIN SELECT RAISE(ABORT,'review commands append-only'); END;
+CREATE TRIGGER review_commands_no_update BEFORE UPDATE ON review_commands
+BEGIN SELECT RAISE(ABORT,'review commands append-only'); END;
+CREATE TRIGGER review_commands_no_delete BEFORE DELETE ON review_commands
+BEGIN SELECT RAISE(ABORT,'review commands append-only'); END;
+
+-- reviews stays a mutable current projection. In particular, sanitized copies
+-- may NULL reviewer_session_id without rewriting the receipt or new history.
+-- json_valid and SQL foreign keys do not authenticate owners, hashes or Policy.
