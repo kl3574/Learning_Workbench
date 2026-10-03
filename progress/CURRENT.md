@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-03T02:14:25Z；规范 SHA-256：`949e2348902d8b8cb65f560b36fa58039fce75cd2e70c0a9ce9dcd8023160c05`
+更新：2026-10-03T09:55:08Z；规范 SHA-256：`949e2348902d8b8cb65f560b36fa58039fce75cd2e70c0a9ce9dcd8023160c05`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED_PR55_ISSUE31_CONCEPTS_PUSHED_NEW_CI_OBSERVED
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
 
-优先修复并独立复验IPC命名数据报P1和配置FIFO阻塞P2，两个原probe分别RED/GREEN，并重新实测固定CLI/HTTP；其余Spec/UI审查继续。机械e992尚未运行全量门禁、未推送。
+等待固定ad494完整Python/native结果，封存原件并独立读回，再按窄控制读取切片检查公开对象并发布draftPR；session/turn/审批/产物回导仍待后续实施。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -271,6 +271,9 @@
 - M6.3_capabilities_P1_issue_sync: {'at': '2026-10-03T02:12:01.832049+00:00', 'issue': 32, 'state': 'open', 'body_sha256': '6c46c06cd36680dfec66f483f40e5686285ca62b22d51c32a8b842c3dc8a11d6', 'metadata_outside_block_unchanged': True, 'source_push': False, 'scope': 'Confirmed1abIPC_P1fixinprogress; M6.3publicationhold, nofullgateyet. LocalpriorPASSscopesretained. M6.2unaffected.'}
 - M6.3_capabilities_security_limitations: {'recorded_at': '2026-10-03T02:14:25.349339+00:00', 'source': '1ab169a83e9619bd529ca55ae8ef603c596432f2', 'ui_combination': '54fc266798a1e4be2142266012f24f468a57fb98', 'status': 'SECURITY_REVIEW_FOUND_P1_AND_P2_PUBLICATION_HELD', 'P1': 'Actual independent postfence anonymousAF_UNIX datagram socketpair sent18syntheticbytes to outside namedUnixsocket via sendto; invalidates anonymousIPC confinement inference. Does not claim actualCodex exfiltration.', 'P2': 'FIFOconfig open blocked before processdeadline while holdingprobe lock; independently reproduced and released by testownedwriter; noCLIstart.', 'prior_receipts': 'Focused/UI/actualHTTPandCLIobservationresultsremainasrecorded; noneprovefullisolationsecurity. Originalreportandsealedmanifestunchanged.', 'next': 'Ownerfix plusindependent sameprobe verification and realCLIreadback; finalcombinationfullgatesNOT_STARTED.', 'source_push': False}
 - M6.3_mechanical_combination: {'head': 'e99252dc3d15db62955409a8d8ea1c50052b5bd5', 'tree': 'm63-capabilities-combined-oct03', 'base': '6093171f6640cd88d4f4e4f5f23ec76babc1501c', 'source': 'e287publishedM6.2+merge1ab+cherry8d+UI90f+native7aac', 'gates': 'NOT_STARTED pendingconfirmedsecurityfix', 'source_push': False}
+- M6.3_capabilities_defensive_fix: {'source': '94be7220df926dd9bb38c775aafa07ab3e47649b', 'combination': 'ad49490e78c21174349595da8090c6c2b445bce9', 'focused_pass': 68, 'actual_control_readback': 'PASS; stable isolated Broker; config-change503 zero new child; DB unchanged', 'static_delta': 'Independent no-new-blocker; no executions', 'extended_review': 'NOT_RUN_AUTOMATIC_REVIEW_INTERRUPTED', 'scope': 'Control reads only; flagsfalse; no task closure/sourcepush', 'evidence_paths': ['progress/evidence/2026-10-03/M6.3-capabilities-backend-initial-with-correction/REPORT.json', 'progress/evidence/2026-10-03/M6.3-capabilities-defensive-fix-94be7220/REPORT.json', 'progress/evidence/2026-10-03/M6.3-capabilities-spec-http-ui-independent/REPORT.json', 'progress/evidence/2026-10-03/M6.3-capabilities-94be-static-independent/REPORT.json'], 'owner_execution_head_clarification': 'progress/evidence/2026-10-03/M6.3-capabilities-owner-execution-head-clarification/REPORT.json'}
+- M6.3_mechanical_combination_v2: {'head': 'ad49490e78c21174349595da8090c6c2b445bce9', 'original': 'e99252dc3d15db62955409a8d8ea1c50052b5bd5', 'defensive_delta': '94be7220df926dd9bb38c775aafa07ab3e47649b', 'static_and_web': 'PASS Web984/strict/build841/Ruff/mypy241/verify78;1340nonprogress unchanged', 'python': 'RUNNING', 'native': 'RUNNING', 'sourcepush': False}
+- M6.3_capabilities_fixed_stage_issue_sync: {'at': '2026-10-03T09:53:52.026416+00:00', 'issue': 32, 'state': 'open', 'body_sha256': '153bb50ad01ab295e384b5244fca3d9432c0057b68ba28004fe32cc2e0f1e469', 'metadata_outside_block_unchanged': True, 'sourcepush': False, 'fullgates': 'Python/native RUNNING; full Web/static PASS', 'scope': 'Known local94be fixes/static independent review and actual control read; broader security review interrupted NOT_RUN. No task closure.'}
 
 ## 阻塞与待决项
 
@@ -305,7 +308,10 @@
 - M62_C2_PR_REVIEW_FORM_FAILED: 原c2 PR116PASS1FAIL保留。受控真实Publication读取使textarea临时disabled/失焦，原fill可未发input；3adc将本机编辑与提交安全分开，2DOM/1native原RED→GREEN，原case5s未改，root组合919Web/10native PASS。不能证明历史CI唯一原因；新远端待推送。 当前0ede push37083065732/PR37083068519各6job成功，两browser各125PASS；原c2失败与机制限定保留，不把新PASS回写旧结果。
 - M62_V313_FULL_NATIVE_APPLICABILITY_FAILED: 原60fa完整121PASS1FAIL保留；受控samepage等待与lateACK修复/独审后，原applicability在0b全套及7a完整125PASS均通过，不反推历史唯一原因或旧套件PASS。
 - M62_V313_CONTENT_IMPACTS_NATIVE_FAILED: 原0b完整121PASS1FAIL保留，历史唯一原因未确立。角色完成等待修复后，ContentImpact原流程在固定7a完整125PASS套件内通过；保护逻辑未放宽。
-- M63_CONTROL_PROBE_NAMED_UNIX_DATAGRAM_ESCAPE: 独立固定1ab探针在Landlock/seccomp后socketpair(AF_UNIX,SOCK_DGRAM).sendto向沙盒外已有命名socket成功发送18个合成bytes，父端实收；证明旧匿名IPC边界不成立，不代表实际CLI主动外发。owner已接受，最窄addrNULL/消息syscall修复及同原probe与真实CLI再验收进行中。原61PASS/HTTP/native控制观测不抹除，不当完整隔离PASS；未发布M6.3，已发布M6.2无此代码。
-- M63_CONTROL_PROBE_FIFO_CONFIG_BLOCK: 独立1ab探针证明配置FIFO在fstat和8s子进程deadline前阻塞并持锁，测试ownedwriter打开后才503；无CLI启动。owner修O_NONBLOCK+原regular检查，独立复验待完成。
+- M63_CONTROL_PROBE_NAMED_UNIX_DATAGRAM_ESCAPE: 独立固定1ab探针在Landlock/seccomp后socketpair(AF_UNIX,SOCK_DGRAM).sendto向沙盒外已有命名socket成功发送18个合成bytes，父端实收；证明旧匿名IPC边界不成立，不代表实际CLI主动外发。owner已接受，最窄addrNULL/消息syscall修复及同原probe与真实CLI再验收进行中。原61PASS/HTTP/native控制观测不抹除，不当完整隔离PASS；未发布M6.3，已发布M6.2无此代码。 追加：94be最窄修复后原反例回验并保留RED/GREEN，独立静态delta无新增阻断；组合ad494门禁运行中。
+- M63_CONTROL_PROBE_FIFO_CONFIG_BLOCK: 独立1ab探针证明配置FIFO在fstat和8s子进程deadline前阻塞并持锁，测试ownedwriter打开后才503；无CLI启动。owner修O_NONBLOCK+原regular检查，独立复验待完成。 追加：94be最窄修复后原反例回验并保留RED/GREEN，独立静态delta无新增阻断；组合ad494门禁运行中。
+- M63_CONTROL_PROBE_SYSV_SHARED_MEMORY: 原1ab固定profile通过整数ID连接并修改外部自建合成共享段；94be拒绝SysV shm/sem/msg家族，原shmat反例及永久回归RED/GREEN保留，真实CLI仍可控制读取。不称实际CLI曾外发。
+- M63_CONTROL_PROBE_DEEP_JSON_RECURSION: 原2000层导致协议timeout，16/17/18失败保留且不当RecursionError证据；真正16000层低于64KiB的原20实证RecursionError，94be原21安全503 CODEX_PROTOCOL_INVALID通过。
+- M63_EXTENDED_SECURITY_REVIEW_INTERRUPTED: 独立后续系统级探针被自动安全检查中止，理由possible cybersecurity risk；未继续、转派或重启。已有明确缺陷修复及常规测试、窄静态review继续；不能称完整安全独审PASS。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。
