@@ -202,11 +202,20 @@ def test_payload_budget_and_unimplemented_routes(runtime):
     application, client, settings = runtime
     headers = login(application, client, settings)
     assert client.post("/api/v1/session/logout", content=b"x" * (settings.max_request_bytes + 1), headers=headers).status_code == 413
-    # M6.3 implements only the read-only capabilities route. Sessions remain
-    # unimplemented and cannot silently fall through to the SPA.
-    assert client.get("/api/v1/codex/sessions").status_code == 404
-    assert "/api/v1/codex/sessions" not in application.openapi()["paths"]
-    assert "/api/v1/codex/capabilities" in application.openapi()["paths"]
+    # v3.0.14 implements POST session bootstrap, but no session list or turns.
+    # Unsupported methods/routes remain JSON errors instead of serving the SPA.
+    response = client.get("/api/v1/codex/sessions")
+    assert response.status_code == 405
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json()["error"]["code"] == "METHOD_NOT_ALLOWED"
+    paths = application.openapi()["paths"]
+    assert set(paths["/api/v1/codex/sessions"]) == {"post"}
+    assert "/api/v1/codex/sessions/{id}" in paths
+    assert "/api/v1/codex/capabilities" in paths
+    assert "/api/v1/codex/sessions/{id}/turns" not in paths
+    unavailable = client.post("/api/v1/codex/sessions/unavailable/turns", json={}, headers=headers)
+    assert unavailable.status_code == 404
+    assert unavailable.json()["error"]["code"] == "REFERENCE_MISSING"
 
 
 @pytest.mark.parametrize("host", ["0.0.0.0", "192.168.1.2", "example.com", "::"])
