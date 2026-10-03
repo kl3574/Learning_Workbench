@@ -32,7 +32,9 @@ def test_online_backup_retains_committed_wal_and_excludes_session_material(tmp_p
         restored.write_bytes(snapshot)
     with sqlite3.connect(restored) as connection:
         assert connection.execute("SELECT title FROM workspace").fetchone()[0] == "committed in WAL"
-        assert connection.execute("SELECT count(*) FROM local_sessions").fetchone()[0] == 0
+        actor = connection.execute("SELECT token_hash,csrf_hash,revoked_at FROM local_sessions").fetchone()
+        assert actor is not None and actor[0].startswith('backup-disabled:')
+        assert actor[1] == 'backup-disabled' and actor[2] is not None
         assert connection.execute("SELECT count(*) FROM bootstrap_codes").fetchone()[0] == 0
     with db.connect() as original:
         assert original.execute("SELECT count(*) FROM local_sessions").fetchone()[0] == 1
