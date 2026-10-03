@@ -50,6 +50,10 @@ from .application.authoring_routing import AuthoringSourceRouter
 from .application.codex_capabilities import CodexCapabilityProbe, CodexCapabilitiesService
 from .infrastructure.codex_probe import LocalCodexProbe
 from .interfaces.codex_http import create_codex_router
+from .application.codex_bootstrap import CodexBootstrapService
+from .application.codex_bootstrap_ports import CodexBootstrapRuntime
+from .infrastructure.codex_bootstrap_runtime import LocalCodexBootstrapRuntime
+from .interfaces.codex_bootstrap_http import create_codex_bootstrap_router
 from .config import Settings
 from .database import Database
 from .interfaces.boundary import install_boundary
@@ -81,7 +85,8 @@ from .infrastructure.authoring_numeric_runtime import NumericRuntime
 def create_app(settings: Settings | None = None, *,
                outbound_sources: OutboundSourceRegistry | None = None,
                request_preparer: ProviderRequestPreparer | None = None,
-               codex_probe: CodexCapabilityProbe | None = None) -> FastAPI:
+               codex_probe: CodexCapabilityProbe | None = None,
+               codex_bootstrap_runtime: CodexBootstrapRuntime | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     database = Database(settings)
     import_service = ImportService(database)
@@ -131,10 +136,13 @@ def create_app(settings: Settings | None = None, *,
     artifacts = ArtifactsService(database, review_service.readers())
     content_impacts = ContentImpactDecisionService(database, artifacts)
     jobs = JobService(database, review=review_service, restore_numeric=restore_numeric_service)
+    codex_bootstrap = CodexBootstrapService(database, codex_bootstrap_runtime if codex_bootstrap_runtime is not None
+        else LocalCodexBootstrapRuntime(settings.data_dir, settings.codex_executable))
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         workspace_id = database.initialize()
+        application.state.codex_bootstrap_recovered = await asyncio.to_thread(codex_bootstrap.recover, workspace_id)
         provider_secrets.initialize()
         # Only consumed, abandoned records are terminated. Recovery cannot make
         # another HTTP attempt and must skip a still-live source owner lease.
@@ -198,6 +206,7 @@ def create_app(settings: Settings | None = None, *,
     application.state.artifacts_service = artifacts
     application.state.outbound_sources = provider_sources
     application.state.request_preparer = provider_preparer
+    application.state.codex_bootstrap_service = codex_bootstrap
     install_boundary(application, settings, database)
     application.include_router(create_router(settings, database, worker_ready=import_worker.is_alive))
     application.include_router(create_content_router(database))
@@ -212,6 +221,7 @@ def create_app(settings: Settings | None = None, *,
     application.include_router(create_provider_router(providers, consents))
     application.include_router(create_codex_router(CodexCapabilitiesService(database,
         codex_probe if codex_probe is not None else LocalCodexProbe(settings.data_dir, settings.codex_executable))))
+    application.include_router(create_codex_bootstrap_router(codex_bootstrap))
     application.include_router(create_concept_state_router(database))
     application.include_router(create_recommendation_router(database))
     application.include_router(create_retrieval_router(database))

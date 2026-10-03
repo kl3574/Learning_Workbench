@@ -13,20 +13,24 @@ import { emptyReviewPanelState, pendingReviewForms, discardReviewForms, subscrib
 import { ReviewPanel } from '../draftReview/ReviewPanel'
 import { ContentImpactsPanel, type ImpactState } from '../contentImpacts/ContentImpactsPanel'
 import { CodexCapabilitiesPanel } from '../codex/CodexCapabilitiesPanel'
+import type { BootstrapPort } from '../codex/bootstrapClient'
+import type { DraftStore } from '../../workbench/DraftStore'
+import { CodexBootstrapPanel, type BootstrapPanelState } from '../codex/CodexBootstrapPanel'
 import './authoring.css'
-export type AuthoringPanelState = { dirty: boolean; safe: boolean; isolated: boolean; discardForms?: () => void }
-export function AuthoringPanel({ workspace, paused, currentBlock, onState, port = authoringClient, provider }: { workspace: string; paused: boolean; currentBlock: ContentRef | null; onState: (value: AuthoringPanelState) => void; port?: AuthoringPort; provider?: ProviderPort }) {
+export type AuthoringPanelState = { dirty: boolean; safe: boolean; isolated: boolean; discardForms?: () => void; isolationLabel?: '保留本地会话隔离内存，丢弃临时表单并前往角色控制' }
+export function AuthoringPanel({ workspace, paused, currentBlock, onState, port = authoringClient, provider, bootstrap, bootstrapStore }: { workspace: string; paused: boolean; currentBlock: ContentRef | null; onState: (value: AuthoringPanelState) => void; port?: AuthoringPort; provider?: ProviderPort; bootstrap?: BootstrapPort; bootstrapStore?: DraftStore }) {
   const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
   const state = useAuthoring(workspace, paused, port), [formDirty, setFormDirty] = useState(false), [consentState, setConsentState] = useState({ dirty: false, safe: true })
   const [reviewOpen, setReviewOpen] = useState(false), [reviewState, setReviewState] = useState<ReviewPanelState>(emptyReviewPanelState)
   const [impactsOpen, setImpactsOpen] = useState(false), [impactState, setImpactState] = useState<ImpactState>({ dirty: false, safe: true, isolated: false })
+  const [bootstrapState, setBootstrapState] = useState<BootstrapPanelState>({ dirty: false, safe: true, isolated: false })
   const callback = useRef(onState); callback.current = onState
   useSyncExternalStore(subscribeReviewForms, reviewFormMemoryVersion, reviewFormMemoryVersion)
   const heldReviewForms = pendingReviewForms(workspace, 'authoring')
   const discardForms = useCallback(() => { reviewState.discardForms(); discardReviewForms(workspace, 'authoring') }, [workspace, reviewState.discardForms])
   useEffect(() => { if (!state.academic) { setFormDirty(false); setConsentState({ dirty: false, safe: true }) } }, [state.academic, workspace, access])
-  const dirty = heldReviewForms || state.academic && formDirty || consentState.dirty || state.commands.some(v => !v.ack) || reviewState.dirty || impactState.dirty, otherSafe = state.ready && !state.busy && consentState.safe && (!reviewOpen || reviewState.safe), safe = otherSafe && impactState.safe, isolated = otherSafe && impactState.isolated
-  useEffect(() => { callback.current({ dirty, safe, isolated, discardForms }) }, [dirty, safe, isolated, discardForms])
+  const dirty = heldReviewForms || state.academic && formDirty || consentState.dirty || state.commands.some(v => !v.ack) || reviewState.dirty || impactState.dirty || bootstrapState.dirty, otherSafe = state.ready && !state.busy && consentState.safe && (!reviewOpen || reviewState.safe), safe = otherSafe && impactState.safe && bootstrapState.safe, isolated = otherSafe && (impactState.isolated || bootstrapState.isolated) && (impactState.safe || impactState.isolated) && (bootstrapState.safe || bootstrapState.isolated)
+  useEffect(() => { callback.current({ dirty, safe, isolated, discardForms, isolationLabel: bootstrapState.isolated ? '保留本地会话隔离内存，丢弃临时表单并前往角色控制' : undefined }) }, [dirty, safe, isolated, discardForms, bootstrapState.isolated])
   const detail = state.detail, draft = state.draft, numeric = state.numeric
   return <div className="authoring-panel"><p>可以准备例题、教材小节、习题集与测试题组草稿。模型调用与数值执行分别授权；生成完成不会自动获得数学、来源或教学质量批准。</p>
     <button disabled={state.busy} onClick={() => void state.refresh()}>刷新安全任务列表与当前权限</button>
@@ -51,6 +55,7 @@ export function AuthoringPanel({ workspace, paused, currentBlock, onState, port 
       {numeric && <NumericCheckPanel key={`${numeric.id}:${numeric.revision}:${numeric.operation_sha256}`} value={numeric} approvalBlocked={!!draft && !('root' in draft) && draft.state === 'published'} busy={state.busy || !state.ready} commandExists={state.commands.some(v => (v.kind === 'numeric_decision' || v.kind === 'group_numeric_decision') && v.check_id === numeric.id && (!v.rejection || !!v.ack))} decide={body => void state.create({ kind: 'target' in numeric ? 'group_numeric_decision' : 'numeric_decision', check_id: numeric.id, body })} refresh={() => void state.readNumeric(numeric.id)} />}
     </div>}
     <CodexCapabilitiesPanel workspace={workspace} admitted={state.academic && state.ready} />
+    <CodexBootstrapPanel port={bootstrap} store={bootstrapStore} workspace={workspace} writeAdmitted={state.academic && state.ready && !paused} onState={setBootstrapState} />
     {impactsOpen && <ContentImpactsPanel workspace={workspace} paused={paused || !state.academic} onState={setImpactState} />}
     {reviewOpen && (draft && 'root' in draft
       ? <ReviewPanel formScope="authoring" formOwner="authoring_group" workspace={workspace} paused={paused || !state.academic} candidate={state.academic ? draft.candidate : null} candidateState="draft" onState={setReviewState} />
