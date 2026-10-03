@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-03T11:31:46Z；规范 SHA-256：`949e2348902d8b8cb65f560b36fa58039fce75cd2e70c0a9ce9dcd8023160c05`
+更新：2026-10-03T11:58:36Z；规范 SHA-256：`bed7c924955512ec4a6775812c80e6c5ce82e968f19feb403e568099f8dc4144`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED_PR55_ISSUE31_CONCEPTS_PUSHED_NEW_CI_OBSERVED
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
 
-保留ad494完整native失败并核现有代码/证据；等待完整Python真实结果。session bootstrap最窄合同提案独审后请所有者决定；无新许可不实施新接口。M7.1独立副本身份降权修复仅工程准备，不提前验收依赖。
+实施已明确批准v3.0.14本地会话bootstrap；并诊断固定ad494完整Python setup ERROR、保留原native FAIL及自动审查中止事实。新slice实际成功前不报ready，不降低零外发隔离。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -276,7 +276,8 @@
 - M6.3_capabilities_fixed_stage_issue_sync: {'at': '2026-10-03T09:53:52.026416+00:00', 'issue': 32, 'state': 'open', 'body_sha256': '153bb50ad01ab295e384b5244fca3d9432c0057b68ba28004fe32cc2e0f1e469', 'metadata_outside_block_unchanged': True, 'sourcepush': False, 'fullgates': 'Python/native RUNNING; full Web/static PASS', 'scope': 'Known local94be fixes/static independent review and actual control read; broader security review interrupted NOT_RUN. No task closure.'}
 - M6.2_e287_actual_CI_terminal: {'head': 'e2877101d9c2bda0f793a460db63ef496350c6b4', 'status': 'BOTH_COMPLETED_SUCCESS_SIX_JOBS_EACH', 'runs': [37087115486, 37087119424], 'published_tree': 'ec42efa7d5e16f994d72dd4491a2f0bb1c67bf27', 'actual_checkouts': ['e2877101d9c2bda0f793a460db63ef496350c6b4', '7b8c3c96f4c08c7f1554bf9ceb6829d466ff39af'], 'browser_each': 126, 'web_each': 961, 'spec_each': 749, 'backend_each': 751, 'integration_each': '2093PASS/2numeric ENVskip/2warnings', 'physical_numeric': 'BLOCKED; four actual results; publish409', 'evidence_path': 'progress/evidence/2026-10-03/M6.2-ci-terminal-e2877101/REPORT.json', 'sourcepush_this_step': False}
 - M6.2_e287_terminal_body_sync: {'at': '2026-10-03T10:25:24.517819+00:00', 'head': 'e2877101d9c2bda0f793a460db63ef496350c6b4', 'pr': 55, 'issue': 31, 'pr_body_sha256': '6d0d67a58e78359113efa09ef5637d08bf114bca44e95880f05c8b0945398542', 'issue_body_sha256': '92926a9bd61ccb47dbb0b345599846b52d556334aa1abeea97254c885f2a4435', 'issue_metadata_and_outside_block_unchanged': True, 'draft_open_unmerged': True, 'sourcepush': False, 'ci': 'BOTH_COMPLETED_SUCCESS_6_JOBS_EACH', 'numeric': 'BLOCKED_4_ACTUAL_RESULTS_PUBLISH409', 'boundary': 'Actual text-only status synchronization; no merge/release/deployment or CI rerun.'}
-- M6.3_session_bootstrap_proposal: {'commit': '375e55c0682f3fd1c53e2cdb9a209a2ba9811e97', 'sha256': '692a02e5a57aaa94b48c5cc0e1392de5af88b012f6576435ee09ee69ca1a4f74', 'status': 'PENDING_ACTUAL_OWNER_REPLY', 'evidence_path': 'progress/evidence/2026-10-03/M6.3-session-bootstrap-proposal-awaiting-approval/REPORT.json'}
+- M6.3_session_bootstrap_proposal: {'commit': '375e55c0682f3fd1c53e2cdb9a209a2ba9811e97', 'sha256': '692a02e5a57aaa94b48c5cc0e1392de5af88b012f6576435ee09ee69ca1a4f74', 'status': 'APPROVED_ADOPTED_IMPLEMENTING', 'evidence_path': 'progress/evidence/2026-10-03/M6.3-session-bootstrap-proposal-awaiting-approval/REPORT.json', 'adopted_spec_sha256': 'bed7c924955512ec4a6775812c80e6c5ce82e968f19feb403e568099f8dc4144'}
+- M6.3_spec_v314_adoption: {'at': '2026-10-03T11:56:45.516732+00:00', 'approval': 'actual owner answer 批准补充并实施（推荐） to request call_Hy65sEmCm1eY90jU2zrQbZkt', 'proposal_commit': '375e55c0682f3fd1c53e2cdb9a209a2ba9811e97', 'proposal_sha256': '692a02e5a57aaa94b48c5cc0e1392de5af88b012f6576435ee09ee69ca1a4f74', 'prior_spec_version': '3.0.13', 'prior_spec_sha256': '949e2348902d8b8cb65f560b36fa58039fce75cd2e70c0a9ce9dcd8023160c05', 'spec_version': '3.0.14', 'spec_sha256': 'bed7c924955512ec4a6775812c80e6c5ce82e968f19feb403e568099f8dc4144', 'changes': 'version/date/row; approved text inserted as20.16 with adoption wording and headings; two conflicting original session route contracts clarified by approved strict DTO. No other product scope.', 'implementation': 'NOT_RUN for new slice; capability full-gates original failures retained', 'sourcepush': False, 'catalog_correction': {'initial_adoption_sha256': '6185263f28f87ac23b0c9e1e251cbcc0329b7d67f173fdbf79abc830be511dd2', 'final_spec_sha256': 'bed7c924955512ec4a6775812c80e6c5ce82e968f19feb403e568099f8dc4144', 'correction': 'Table row continuity, one blank line; add three approved20.16 routes to appendixA catalog references, no additional behavior.', 'sourcepush': False}}
 
 ## 阻塞与待决项
 
@@ -317,6 +318,6 @@
 - M63_CONTROL_PROBE_DEEP_JSON_RECURSION: 原2000层导致协议timeout，16/17/18失败保留且不当RecursionError证据；真正16000层低于64KiB的原20实证RecursionError，94be原21安全503 CODEX_PROTOCOL_INVALID通过。
 - M63_EXTENDED_SECURITY_REVIEW_INTERRUPTED: 独立后续系统级探针被自动安全检查中止，理由possible cybersecurity risk；未继续、转派或重启。已有明确缺陷修复及常规测试、窄静态review继续；不能称完整安全独审PASS。
 - M63_AD494_FULL_NATIVE_BOOTSTRAP_FAILED: 固定ad494完整native126PASS1FAIL，import-admission.spec65初始authenticateOnly五秒未见saved；截图401本机会话未建立。原bootstrap响应未采，具体原因UNKNOWN。新独立UI诊断子任务又被automatic安全检查中止(possible cybersecurity risk)，未完成/未重启/未转派该探针；已有代码与截图静态核验不当复现成功。完整Python仍运行，M6.3未验收/未发布。
-- M63_SESSION_BOOTSTRAP_CONSENT_CONTRACT_GAP: A1945必需consent_id，但唯一Provider preview仅现持久tutor/authoring job/provider，不能授未来Codex输入。已审375e本地控制准备/单次许可/状态/未知读回最窄提案，三新增路径未采纳/未实现；用户async决定待回，不因预选推荐视批准。现控制GET不受此语义缺口影响。
+- M63_SESSION_BOOTSTRAP_CONSENT_CONTRACT_GAP: A1945必需consent_id，但唯一Provider preview仅现持久tutor/authoring job/provider，不能授未来Codex输入。已审375e本地控制准备/单次许可/状态/未知读回最窄提案，三新增路径未采纳/未实现；用户async决定待回，不因预选推荐视批准。现控制GET不受此语义缺口影响。 追加：所有者明确批准375e55c0，已纳入唯一规范v3.0.14；新合同尚待实现/实际受限控制验收，不再是待授权阻塞。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。
