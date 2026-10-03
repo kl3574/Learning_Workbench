@@ -29,7 +29,7 @@ export function LocalTaskDocument({ workspace, actor, port, inputs, busy, denied
       if (session.workspace_id !== workspace || session.actor_session_id !== actor || session.role !== 'author' || session.active_independent_attempt_id !== null || session.active_open_book_attempt_id !== null) {
         throw new ApiError(403, '当前身份或测试策略已改变，未下载需求说明。')
       }
-      const text = '# 离线创作需求说明\n\n未连接 Codex。本文件仅包含作者当前输入的四项需求，不含已选材料或其他任务设置；没有创建服务器任务、授权或生成结果。\n\n'
+      const text = '# 离线创作需求说明\n\n本次下载未调用 Codex。本文件仅包含作者当前输入的四项需求，不含已选材料或其他任务设置；没有创建服务器任务、授权或生成结果。\n\n'
         + `## 主题\n\n${snapshot.topic}\n\n## 已声明先修\n\n${snapshot.prerequisites}\n\n## 学习目标\n\n${snapshot.objectives}\n\n## 证明策略\n\n${snapshot.proof === 'full' ? 'full（完整证明）' : 'declared_dependencies（明确声明所依赖的结论）'}\n`
       const url = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' })); urls.current.add(url)
       const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'learning-task.md'
@@ -43,7 +43,7 @@ export function LocalTaskDocument({ workspace, actor, port, inputs, busy, denied
       if (pending.current === token) { pending.current = null; if (live.current) setWorking(false) }
     }
   }
-  return <section aria-label="离线需求说明"><p>未连接 Codex：仅下载当前主题、先修、学习目标与证明策略。已选材料、来源引用、提供商及其他任务设置不在文件内；不会创建任务或授予执行权限。</p>
+  return <section aria-label="离线需求说明"><p>本次下载不调用 Codex：仅下载当前主题、先修、学习目标与证明策略。已选材料、来源引用、提供商及其他任务设置不在文件内；不会创建任务或授予执行权限。</p>
     <button disabled={busy || working || !actor} onClick={() => void download()}>下载当前四项需求说明</button>
     {working && <p role="status">正在重新核对当前作者与测试策略…</p>}{message && <p role="status">{message}</p>}
   </section>
