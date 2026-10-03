@@ -2,7 +2,7 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-03T12:22:13Z；规范 SHA-256：`bed7c924955512ec4a6775812c80e6c5ce82e968f19feb403e568099f8dc4144`
+更新：2026-10-03T12:26:26Z；规范 SHA-256：`bed7c924955512ec4a6775812c80e6c5ce82e968f19feb403e568099f8dc4144`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED_PR55_ISSUE31_CONCEPTS_PUSHED_NEW_CI_OBSERVED
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
@@ -282,6 +282,7 @@
 - M7.1_session_history_backup_repair: {'status': 'LOCAL_REPAIRED_STATIC_AND_EVIDENCE_REVIEWED_NOT_FULL_ACCEPTANCE', 'fixed': 'b6340d913df252e30b920ec548e6cfd580505ec9', 'evidence': 'progress/evidence/2026-10-03/M7.1-session-backup-history-local-repair/REPORT.json', 'owner_gate': '221PASS1setupERROR; exact diagnostic1PASS does not clearoriginal', 'inputs': 1344, 'public_selected': 64, 'raw_private_only': 1665, 'm7_task': 'todo', 'sourcepush': False, 'immutable_evidence_admission': 'progress/evidence/2026-10-03/M7.1-backup-original-evidence-whitespace-admission/REPORT.json'}
 - M6.3_worker_fixture_lease_diagnosis: {'at': '2026-10-03T12:19:51.495122+00:00', 'raw_items_verified': 122, 'public_candidates_verified': 39, 'report_sha256': '29a5db268f13a9a71ca66f0104d65c89dd4aa0b7ad2af0c4ec55157a8406140b', 'source': 'unchanged ad494; diagnostics use ordinary synthetic protocol/real local parser and private UTC seam, no new production commit', 'conclusion': 'Historical Group terminal recorded past persisted lease; injected expiry reproduces original two assertion REDs, valid controls and fresh-owner recovery pass without second Provider dispatch. Underlying host clock/suspension mechanism and historical Import cause remain UNKNOWN. No new production defect established.', 'gate_status': 'Root3633PASS2ENVSKIP1ERROR and backup-owner221PASS1ERROR remain actual failed complete/related gates; diagnostic expectedRED/PASS cannot overwrite.', 'scope': 'independent hash/provenance/report readback only; no new execution, system security probes or native UI', 'sourcepush': False, 'evidence': 'progress/evidence/2026-10-03/M6.3-worker-lease-fixture-bounded-diagnosis/REPORT.json', 'root_verified_inputs': 1340}
 - M6.3_v314_dto_integrated_structural: {'head': '21684db22c61b14d941532a644dbc74b6aa6d01a', 'exit_code': 0, 'status': 'PASS_STRUCTURAL_ONLY', 'generated': 80, 'declared_routes': 133, 'log_sha256': 'c0f897986c31981f8861026785f81f96cd01088392ad0c41a8e27f5e2191bbcc', 'new_dto_source': '6a1977854e4f9344206df6288e692e01626b210a', 'boundary': '7 new strict DTOs and generated source seams, not new runtime route registration or bootstrap success. No model/thread execution; no whole M6.3 acceptance.', 'evidence': 'progress/evidence/2026-10-03/M6.3-bootstrap-dto-integrated-structural/REPORT.json'}
+- M6.3_bootstrap_root_dto_gate: {'head': 'f1c1cd65cb2e3bc3e44f206c69f3690ae4a7327f', 'result': '34PASS/0.08s pytest;exit0', 'runner_duration_seconds': 1.887, 'tracked_inputs': 1349, 'before_after_git_match': True, 'evidence': 'progress/evidence/2026-10-03/M6.3-bootstrap-root-dto-contract/REPORT.json', 'scope': 'DTO only; no actual new session/thread'}
 
 ## 阻塞与待决项
 
