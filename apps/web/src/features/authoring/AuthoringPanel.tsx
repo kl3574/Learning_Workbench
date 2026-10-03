@@ -12,6 +12,7 @@ import type { ProviderPort } from '../providers/providerClient'
 import { emptyReviewPanelState, pendingReviewForms, discardReviewForms, subscribeReviewForms, reviewFormMemoryVersion, type ReviewPanelState } from '../draftReview/reviewFormMemory'
 import { ReviewPanel } from '../draftReview/ReviewPanel'
 import { ContentImpactsPanel, type ImpactState } from '../contentImpacts/ContentImpactsPanel'
+import { CodexCapabilitiesPanel } from '../codex/CodexCapabilitiesPanel'
 import './authoring.css'
 export type AuthoringPanelState = { dirty: boolean; safe: boolean; isolated: boolean; discardForms?: () => void }
 export function AuthoringPanel({ workspace, paused, currentBlock, onState, port = authoringClient, provider }: { workspace: string; paused: boolean; currentBlock: ContentRef | null; onState: (value: AuthoringPanelState) => void; port?: AuthoringPort; provider?: ProviderPort }) {
@@ -49,6 +50,7 @@ export function AuthoringPanel({ workspace, paused, currentBlock, onState, port 
       {draft && 'root' in draft && <AuthoringGroupDraft value={draft} solution={state.privateSolution} busy={state.busy || !state.ready} readSolution={member => void state.readPrivateSolution(member)} preview={target => void state.create({ kind: 'group_numeric_preview', draft_id: draft.candidate.draft_id, member_key: target.member_key, body: { candidate: draft.candidate, target } })} refresh={() => void state.readDraft()} readNumeric={id => void state.readNumeric(id)} />}
       {numeric && <NumericCheckPanel key={`${numeric.id}:${numeric.revision}:${numeric.operation_sha256}`} value={numeric} approvalBlocked={!!draft && !('root' in draft) && draft.state === 'published'} busy={state.busy || !state.ready} commandExists={state.commands.some(v => (v.kind === 'numeric_decision' || v.kind === 'group_numeric_decision') && v.check_id === numeric.id && (!v.rejection || !!v.ack))} decide={body => void state.create({ kind: 'target' in numeric ? 'group_numeric_decision' : 'numeric_decision', check_id: numeric.id, body })} refresh={() => void state.readNumeric(numeric.id)} />}
     </div>}
+    <CodexCapabilitiesPanel workspace={workspace} admitted={state.academic && state.ready} />
     {impactsOpen && <ContentImpactsPanel workspace={workspace} paused={paused || !state.academic} onState={setImpactState} />}
     {reviewOpen && (draft && 'root' in draft
       ? <ReviewPanel formScope="authoring" formOwner="authoring_group" workspace={workspace} paused={paused || !state.academic} candidate={state.academic ? draft.candidate : null} candidateState="draft" onState={setReviewState} />
