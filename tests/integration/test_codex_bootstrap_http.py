@@ -162,6 +162,8 @@ def test_one_consumption_original_acks_current_reads_and_restart_never_repeat(co
     assert session.json()['active_turn_id'] is None and all(value is False for value in session.json()['capabilities'].values())
     assert 'thread' not in session.text and 'receipt' not in session.text
     before = case.dump()
+    owners = case.app.state.settings.data_dir / 'codex-control-owners'
+    owner_files = {path.name for path in owners.iterdir()}
     replay = case.post('sessions', body, 'session-original')
     assert replay.status_code == response.status_code
     if outcome == 'ready':
@@ -171,6 +173,7 @@ def test_one_consumption_original_acks_current_reads_and_restart_never_repeat(co
     assert case.post('sessions', body, 'session-other').status_code == 409
     assert case.post('sessions', {**body, 'sandbox_root_id': 'other'}, 'session-original').status_code == 409
     assert len(runtime.calls) == 1 and case.dump() == before
+    assert {path.name for path in owners.iterdir()} == owner_files
     # A new application/owner on the same database reads persisted facts only.
     restarted = create_app(case.app.state.settings, codex_bootstrap_runtime=runtime)
     assert restarted.state.codex_bootstrap_service.recover(case.app.state.database.workspace_id()) == 0
