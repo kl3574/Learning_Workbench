@@ -91,7 +91,7 @@ def test_failure_after_new_schema_rolls_back_tables_indexes_and_migration_record
         assert backup.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
 
 
-def test_actual_backup_script_can_clear_legacy_session_without_changing_receipt(tmp_path):
+def test_actual_backup_script_revokes_legacy_authentication_without_changing_history(tmp_path):
     from scripts.backup import create_backup
 
     database, workspace = before_catalog(tmp_path)
@@ -101,17 +101,52 @@ def test_actual_backup_script_can_clear_legacy_session_without_changing_receipt(
     database.initialize()
     enable_migration(database)
     database.initialize()
+    # These SQL-only legacy rows exercise backup structure, not authentication
+    # or a real human approval. Historical actor references must survive export.
+    with database.transaction() as connection:
+        actor = dict(connection.execute('SELECT * FROM local_sessions').fetchone())
+        connection.execute(
+            'INSERT INTO bootstrap_codes(code_hash,workspace_id,expires_at) VALUES(?,?,?)',
+            ('e' * 64, workspace, actor['expires_at']),
+        )
+        connection.execute(
+            'INSERT INTO idempotency(actor,route,key,request_sha256,result_json,created_at,expires_at) '
+            'VALUES(?,?,?,?,?,?,?)',
+            (actor['id'], '/synthetic-legacy-backup', 'synthetic-history-only', 'f' * 64,
+             '{}', '2026-09-22T00:00:00Z', actor['expires_at']),
+        )
+        original_reviews = rows(connection, 'reviews')
+    with database.connect() as connection:
+        source_before = '\n'.join(connection.iterdump())
+        assert actor['revoked_at'] is None
+        assert connection.execute('SELECT count(*) FROM bootstrap_codes').fetchone()[0] == 1
+        assert connection.execute('SELECT count(*) FROM idempotency').fetchone()[0] == 1
     archive = create_backup(database.settings)
     snapshot = tmp_path / 'readback.sqlite3'
     with zipfile.ZipFile(archive) as backup:
         snapshot.write_bytes(backup.read('workspace.sqlite3'))
         manifest = json.loads(backup.read('manifest.json'))
         assert manifest['restore_acceptance'] == 'NOT_RUN'
+        assert manifest['session_backup']['historical_actors_retained'] == 1
+        assert manifest['session_backup']['authentication_disabled'] is True
     with closing(sqlite3.connect(snapshot)) as connection:
-        assert connection.execute('SELECT receipt_json,reviewer_session_id FROM reviews').fetchone() == (original, None)
-        assert connection.execute('SELECT count(*) FROM local_sessions').fetchone()[0] == 0
+        connection.row_factory = sqlite3.Row
+        assert rows(connection, 'reviews') == original_reviews
+        receipt = connection.execute('SELECT CAST(receipt_json AS BLOB),reviewer_session_id FROM reviews').fetchone()
+        assert tuple(receipt) == (original.encode('utf-8'), actor['id'])
+        assert connection.execute('SELECT count(*) FROM local_sessions').fetchone()[0] == 1
+        copied_actor = dict(connection.execute('SELECT * FROM local_sessions').fetchone())
+        assert {field: copied_actor[field] for field in ('id', 'workspace_id', 'role', 'expires_at')} == {
+            field: actor[field] for field in ('id', 'workspace_id', 'role', 'expires_at')}
+        assert copied_actor['token_hash'] == 'backup-disabled:' + actor['id'] != actor['token_hash']
+        assert copied_actor['csrf_hash'] == 'backup-disabled' != actor['csrf_hash']
+        assert copied_actor['revoked_at'] is not None
+        assert connection.execute('SELECT count(*) FROM bootstrap_codes').fetchone()[0] == 0
+        assert connection.execute('SELECT count(*) FROM idempotency').fetchone()[0] == 0
         assert all(rows(connection, table) == [] for table in TABLES)
+        assert connection.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
         assert connection.execute('PRAGMA foreign_key_check').fetchall() == []
     with database.connect() as connection:
-        assert connection.execute('SELECT receipt_json FROM reviews').fetchone()[0] == original
-        assert connection.execute('SELECT reviewer_session_id FROM reviews').fetchone()[0] is not None
+        assert '\n'.join(connection.iterdump()) == source_before
+        assert dict(connection.execute('SELECT * FROM local_sessions').fetchone()) == actor
+        assert rows(connection, 'reviews') == original_reviews
