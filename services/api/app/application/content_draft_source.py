@@ -22,9 +22,9 @@ class ContentDraftSource:
         if ref.entity != 'block':
             raise unsupported()
         block, raw = self.content.verify_publication_in_transaction(conn, current.workspace_id, ref)
-        if block.kind != 'text' or block.concepts or block.body_path.startswith('private/'):
+        if block.kind != 'text' or block.body_path.startswith('private/'):
             raise unsupported()
-        dependencies = self.content.verify_retained_dependencies_in_transaction(conn, current.workspace_id, ref) if block.depends_on else None
+        dependencies = self.content.verify_retained_dependencies_in_transaction(conn, current.workspace_id, ref) if block.depends_on or block.concepts else None
         provenance = ProvenanceRepository(conn, current.workspace_id).bounded_frozen(block, max_bytes=2_000_000)
         try:
             if dependencies is not None:

@@ -51,7 +51,7 @@ class DraftBaseMaterial(DraftModel):
     @model_validator(mode='after')
     def exact(self) -> Self:
         _verify_base(self)
-        if self.metadata.depends_on:
+        if self.metadata.depends_on or self.metadata.concepts:
             raise ValueError('legacy base has no frozen dependency witness')
         return self
 
@@ -68,7 +68,7 @@ class DependencyDraftBaseMaterial(DraftModel):
     @model_validator(mode='after')
     def exact(self) -> Self:
         _verify_base(self)
-        if not self.metadata.depends_on or self.dependency_witness.root_ref != self.ref:
+        if not (self.metadata.depends_on or self.metadata.concepts) or self.dependency_witness.root_ref != self.ref:
             raise ValueError('dependency base must bind its original exact root and witness')
         return self
 
@@ -79,7 +79,7 @@ StoredDraftBase = Annotated[DraftBaseMaterial | DependencyDraftBaseMaterial, Fie
 def _verify_base(base: DraftBaseMaterial | DependencyDraftBaseMaterial) -> None:
     value = base.metadata
     if (base.ref.entity != 'block' or base.ref.id != value.id or base.ref.revision != value.revision
-            or base.ref.sha256 != metadata_sha256(value) or value.kind != 'text' or value.concepts
+            or base.ref.sha256 != metadata_sha256(value) or value.kind != 'text'
             or value.body_path.startswith('private/') or value.body_sha256 != body_hash(base.body_markdown)):
         raise ValueError('base must be the exact supported historical text block')
     if base.provenance is not None:

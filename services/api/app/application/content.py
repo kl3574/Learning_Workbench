@@ -500,14 +500,19 @@ class ContentService:
             raise invalid() from None
         expected = original.model_copy(update={'revision': base.revision + 1,
                                                'title': block.title, 'body_sha256': block.body_sha256})
-        if block != expected or block.kind != 'text' or block.concepts:
+        if block != expected or block.kind != 'text':
             raise invalid()
-        if original.depends_on:
+        if original.depends_on or original.concepts:
             if self.verify_retained_dependencies_in_transaction(connection, workspace_id, base) != expected_dependencies:
                 raise damaged()
         elif expected_dependencies is not None:
             raise damaged()
-        refs = self.publish_in_transaction(connection, workspace_id, [block], {block.body_path: body})
+        # Root concept IDs retain their verified original pins just like the
+        # historical descendants. Resolving current here would reinterpret the edit.
+        bindings = {key(block): {identifier: reference(repository.concept_dependency(original, identifier))
+                                for identifier in original.concepts}}
+        refs = self.publish_in_transaction(connection, workspace_id, [block], {block.body_path: body},
+                                           frozen_concepts=bindings)
         if refs != [reference(block)] or reference(repository.current(block.id).value) != refs[0]:
             raise damaged()
         if expected_dependencies is not None and self.verify_retained_dependencies_in_transaction(
