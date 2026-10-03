@@ -1,7 +1,7 @@
 import openapi from '../../../../../packages/contracts/generated/openapi.json'
 
 type Shape = {
-  $ref?: string; type?: string; properties?: Record<string, Shape>; required?: string[]
+  $ref?: string; $defs?: Record<string, Shape>; type?: string; properties?: Record<string, Shape>; required?: string[]
   additionalProperties?: boolean | Shape; const?: unknown; enum?: unknown[]
   anyOf?: Shape[]; oneOf?: Shape[]; items?: Shape; minItems?: number; maxItems?: number
   minimum?: number; maximum?: number; exclusiveMinimum?: number; exclusiveMaximum?: number
@@ -9,12 +9,12 @@ type Shape = {
 }
 const definitions = openapi.components.schemas as Record<string, Shape>
 const fail = (): never => { throw new Error('提供商记录不符合当前生成契约；原候选保留，未发送。') }
-function check(shape: Shape, value: unknown, depth = 0): void {
+function check(shape: Shape, value: unknown, depth = 0, schemas = definitions): void {
   if (depth > 40) fail()
-  if (shape.$ref) { const next = definitions[shape.$ref.split('/').at(-1)!]; if (!next) fail(); check(next, value, depth + 1); return }
+  if (shape.$ref) { const next = schemas[shape.$ref.split('/').at(-1)!]; if (!next) fail(); check(next, value, depth + 1, schemas); return }
   if (shape.anyOf || shape.oneOf) {
     let matches = 0
-    for (const choice of shape.anyOf ?? shape.oneOf ?? []) { try { check(choice, value, depth + 1); matches++ } catch { /* Only a complete union arm qualifies. */ } }
+    for (const choice of shape.anyOf ?? shape.oneOf ?? []) { try { check(choice, value, depth + 1, schemas); matches++ } catch { /* Only a complete union arm qualifies. */ } }
     if (!matches || shape.oneOf && matches !== 1) fail()
     return
   }
@@ -39,15 +39,15 @@ function check(shape: Shape, value: unknown, depth = 0): void {
       if (!Array.isArray(value) || !shape.items) fail()
       const array = value as unknown[]
       if (shape.minItems !== undefined && array.length < shape.minItems || shape.maxItems !== undefined && array.length > shape.maxItems) fail()
-      array.forEach(item => check(shape.items!, item, depth + 1)); return
+      array.forEach(item => check(shape.items!, item, depth + 1, schemas)); return
     }
     case 'object': {
       if (!value || typeof value !== 'object' || Array.isArray(value)) fail()
       const record = value as Record<string, unknown>, properties = shape.properties ?? {}
       if (shape.required?.some(key => !(key in record))) fail()
       for (const [key, item] of Object.entries(record)) {
-        if (properties[key]) check(properties[key], item, depth + 1)
-        else if (typeof shape.additionalProperties === 'object') check(shape.additionalProperties, item, depth + 1)
+        if (properties[key]) check(properties[key], item, depth + 1, schemas)
+        else if (typeof shape.additionalProperties === 'object') check(shape.additionalProperties, item, depth + 1, schemas)
         else fail()
       }
       return
@@ -56,10 +56,10 @@ function check(shape: Shape, value: unknown, depth = 0): void {
   }
 }
 /** Wire shape only. Hash/proof/source truth is verified by the owning server. */
-export function checkedProvider<T>(name: string, value: unknown): T {
-  const schema = definitions[name]
+export function checkedProvider<T>(name: string, value: unknown, schemas = definitions): T {
+  const schema = schemas[name]
   if (!schema) throw new Error('提供商契约尚未生成，未猜测响应类型。')
-  check(schema, value)
+  check(schema, value, 0, { ...schemas, ...schema.$defs })
   return structuredClone(value) as T
 }
 export const exactObject = (value: unknown, keys: string[]): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === keys.length && Object.keys(value).every(key => keys.includes(key))
