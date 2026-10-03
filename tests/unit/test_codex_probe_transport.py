@@ -11,7 +11,8 @@ from services.api.app.infrastructure import codex_probe
 
 @pytest.mark.parametrize('mode,code', [('success', None), ('timeout', 'CODEX_PROBE_TIMEOUT'),
     ('duplicate', 'CODEX_PROTOCOL_INVALID'), ('flood', 'CODEX_PROTOCOL_INVALID'),
-    ('wrong_id', 'CODEX_PROTOCOL_INVALID'), ('eof', 'CODEX_PROBE_UNAVAILABLE')])
+    ('wrong_id', 'CODEX_PROTOCOL_INVALID'), ('eof', 'CODEX_PROBE_UNAVAILABLE'),
+    ('deep_json', 'CODEX_PROTOCOL_INVALID')])
 def test_bounded_control_transport_kills_and_reaps_owned_child(tmp_path, monkeypatch, mode, code):
     (tmp_path / 'workspace').mkdir()
     observed, children = [], []
@@ -27,6 +28,7 @@ if mode=='flood': os.write(2,b'synthetic_private_error'*4000); time.sleep(60)
 if mode=='eof': sys.exit(0)
 if mode=='duplicate': print('{"id":9,"id":1,"result":{}}',flush=True); time.sleep(60)
 if mode=='wrong_id': print('{"id":3,"result":{}}',flush=True); time.sleep(60)
+if mode=='deep_json': print('{"id":1,"result":'+'['*16000+']'*16000+'}',flush=True); time.sleep(60)
 print(json.dumps({'id':1,'result':{'codexHome':'/synthetic/private','platformFamily':'unix','platformOs':'linux','userAgent':'codex_cli_rs/0.160.0'}}),flush=True)
 assert json.loads(sys.stdin.readline())=={'method':'initialized','params':{}}
 assert json.loads(sys.stdin.readline())=={'id':2,'method':'account/read','params':{'refreshToken':False}}

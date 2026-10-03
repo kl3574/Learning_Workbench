@@ -8,7 +8,13 @@
 
 稳定 Broker 上下文位于应用数据目录下 `codex-broker/`；`home/` 是未来该 Broker 使用的身份上下文，`workspace/` 对应产品中的 `workspace_default` 沙盒根。刷新不会新建空账号上下文，不复制或读取用户全局 Codex 配置、登录、插件或 hooks。目录必须属于当前服务用户、权限不允许其他用户访问，关键目录不可为符号链接；固定配置若变化直接报错，不覆盖或重置。
 
-子进程拥有独立环境、工作目录与进程组，只继承三个 stdio 管道和该封存的可执行描述符。启动器用 `no_new_privs`、Landlock ABI 3 及 seccomp 限制本地访问：文件访问仅限 Broker 目录及 `/dev/null`，Broker 文件不可执行；禁止创建/连接/绑定可寻址 socket，禁止 io_uring。Tokio 信号处理所需的匿名 socketpair 保留，但没有继承的 socket 描述符，且所有 socket/connect/bind 入口均被拒绝。这是本地控制探测隔离，不是未来模型或工具执行沙盒。
+子进程拥有独立环境、工作目录与进程组，只继承三个 stdio 管道和该封存的可执行描述符。启动器用 `no_new_privs`、Landlock ABI 3 及 seccomp 限制本地访问：可命名文件访问仅限 Broker 目录及 `/dev/null`，Broker 文件不可执行；禁止创建/连接/绑定可寻址 socket，禁止 io_uring。Tokio 信号处理所需的匿名 socketpair 保留，但匿名本身不足以阻止向外部 Unix socket 发信。因此 `sendto` 另行要求目的地址指针的两个 32 位字都为零，`sendmsg/sendmmsg` 与可传入文件描述符的 `recvmsg/recvmmsg` 均拒绝；没有继承的 socket 描述符。已有回归分别验证命名和 abstract Unix 地址的外发被拒、匿名已连接 peer 仍能通信。这是本地控制探测隔离，不是未来模型或工具执行沙盒。
+
+配置文件以 `O_NONBLOCK | O_NOFOLLOW` 打开并先核实普通文件类型。损坏成 FIFO 时直接报告配置错误，不在类型检查之前无限等待 writer，也不改坏文件。
+
+SysV 的共享内存、消息队列和信号量通过整数标识寻址，不受目录 fence 或 close_fds 限制；此控制 profile 将 shm/sem/msg 家族一并拒绝。实际合成反例验证了旧 profile 能连接并改变父端共享段，修复后以 EPERM 拒绝且原段不变；测试最终清除自建 IPC 资源。
+
+同一固定控制 profile 不需要跨进程调试、内存访问或获取其他进程的文件描述符，相应入口也明确拒绝。该收紧是防御性配置，不表示已执行跨进程读写验收。畸形 JSON 的深度错误归入安全协议错误；不会返回原始响应。
 
 控制交互严格限定为 `initialize`、`initialized`、`account/read`（`refreshToken=false`）。受控超时为 8 秒，stdout/stderr 合并预算 64 KiB；原始响应只在内存中用于严格解析，不写日志、数据库或前端。完成、错误、超时后终止整个进程组并回收子进程。Linux fence 不可用时没有普通进程 fallback。
 

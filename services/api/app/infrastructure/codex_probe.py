@@ -161,7 +161,7 @@ class LocalCodexProbe:
                 descriptor = os.open(config, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
                 with os.fdopen(descriptor, 'wb') as output:
                     output.write(CONFIG)
-            descriptor = os.open(config, os.O_RDONLY | os.O_NOFOLLOW)
+            descriptor = os.open(config, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
             with os.fdopen(descriptor, 'rb') as source:
                 info = os.fstat(source.fileno())
                 if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077 or source.read(len(CONFIG) + 1) != CONFIG:
@@ -203,7 +203,7 @@ class LocalCodexProbe:
                             line, pending = pending.split(b'\n', 1)
                             try:
                                 value = json.loads(line, object_pairs_hook=_unique_object)
-                            except (ValueError, UnicodeError):
+                            except (ValueError, UnicodeError, RecursionError):
                                 raise failure('CODEX_PROTOCOL_INVALID') from None
                             if not isinstance(value, dict) or set(value) != {'id', 'result'} or type(value['id']) is not int or value['id'] != identifier:
                                 raise failure('CODEX_PROTOCOL_INVALID')

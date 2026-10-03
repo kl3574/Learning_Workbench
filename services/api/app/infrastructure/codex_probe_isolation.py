@@ -2,7 +2,8 @@
 
 Only the pinned static executable and the dedicated broker hierarchy are readable.
 No addressable sockets (including UNIX/keyring), network syscalls or io_uring.
-Anonymous socketpair is needed by Tokio signal handling and cannot name a peer.
+Anonymous socketpair is needed by Tokio signal handling. Destination-bearing
+messages are denied separately: anonymity alone does not forbid sendto peers.
 Unsupported kernels fail before exec; there is no ordinary-process fallback.
 """
 import ctypes
@@ -65,7 +66,27 @@ def restrict_probe(executable: Path | None, broker: Path) -> None:
     instructions = [_Instruction(0x20, 0, 0, 4), _Instruction(0x15, 1, 0, 0xC000003E),
                     _Instruction(0x06, 0, 0, 0x80000000), _Instruction(0x20, 0, 0, 0),
                     _Instruction(0x45, 0, 1, 0x40000000), _Instruction(0x06, 0, 0, 0x00050001)]
-    for syscall in (41, 42, 43, 49, 50, 288, 425, 426, 427):
+    # sendto is also libc send(): allow only a null destination pointer.
+    # Both words matter on x86_64. A non-null address can reach named or
+    # abstract UNIX peers even from an anonymous SOCK_DGRAM socketpair.
+    instructions.extend([
+        _Instruction(0x15, 0, 5, 44),
+        _Instruction(0x20, 0, 0, 48),
+        _Instruction(0x15, 0, 2, 0),
+        _Instruction(0x20, 0, 0, 52),
+        _Instruction(0x15, 1, 0, 0),
+        _Instruction(0x06, 0, 0, 0x00050001),
+        _Instruction(0x20, 0, 0, 0),
+    ])
+    # Message headers contain indirect destination/SCM_RIGHTS pointers which
+    # classic BPF cannot inspect. No control probe needs these message APIs.
+    # SysV identifiers are another addressable IPC namespace, independent of
+    # Landlock paths or inherited FDs. This fixed control profile needs none.
+    # The fixed handshake also has no need to trace processes, inspect their
+    # memory, or acquire another process's descriptors.
+    for syscall in (29, 30, 31, 41, 42, 43, 46, 47, 49, 50, 64, 65, 66, 67,
+                    68, 69, 70, 71, 101, 220, 288, 299, 307, 310, 311,
+                    425, 426, 427, 438):
         instructions.extend([_Instruction(0x15, 0, 1, syscall), _Instruction(0x06, 0, 0, 0x00050001)])
     instructions.append(_Instruction(0x06, 0, 0, 0x7FFF0000))
     array = (_Instruction * len(instructions))(*instructions)
