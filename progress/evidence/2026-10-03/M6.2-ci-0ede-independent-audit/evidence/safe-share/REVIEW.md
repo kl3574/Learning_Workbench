@@ -1,0 +1,11 @@
+# Independent 0ede CI archive and public-package audit
+
+**PASS; no confirmed blocker.** Read-only local recheck of the sealed archive and the 13-file public candidate. No GitHub API request, product rerun, remote write or source/evidence edit was performed.
+
+- All 777 RAW_MANIFEST members match actual byte lengths and SHA256; original manifest SHA256 is fd56113c50c92bee6d28fafc31233e8928a8efdd300715bacd6063aeb7c289c5.
+- Both original API terminal responses and all 12 jobs say completed/success. Every job log's actual `git log -1 --format=%H` result matches its recorded checkout: push 0ede5f94cf9bd7569e568bad15d73bc8ac26ea44; PR merge ba1716ca9a2d97cc8140c3d58841467258e88caa. Their retained Git commit API records bind the same tree e0daf97de9ac0e76214e178e039b0ed1317bea0d. Selected test counts and environment skips match original logs; overlapping Python job counts are not summed.
+- Four ZIP bytes match API SHA256 digests. ZIP CRC/membership, all six extracted member bytes and JSON parse agree. All four selected Single/Restore outcomes remain environment_unavailable/BLOCKED/exit1, empty assertions and null output. Publication stays HTTP409 PUBLISH_NUMERIC_REQUIRED; external model calls are zero. CI success is not physical numeric PASS or academic approval.
+- Eight SAFE_SHARE candidates match their declared original/candidate hashes and allowed transformations. In this package all eight are actually byte-identical. The root public package is exactly 13 files: eight payloads, three checked outer metadata, REPORT.json and manifest.json. All 12 manifest entries match, and copied sources are byte-identical; no raw API/log/ZIP payload was copied. Repository scanner plus independent header/JSON-field checks found zero issues in the 13 files.
+- Archive and public inventories were identical before/after review. The actual source here is old 0ede CI; it is separate from the new 814 concept-retention local gates. No fresh remote-state claim is made beyond retained originals.
+
+RECEIPT.json contains per-job/ZIP bindings, numeric outcomes, the exact eight-payload whitelist and all 13 public file hashes. The reviewer share allowlist contains only this review, that receipt and the audit script; it does not authorize any archived raw payload.
