@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-03T10:16:15Z；规范 SHA-256：`949e2348902d8b8cb65f560b36fa58039fce75cd2e70c0a9ce9dcd8023160c05`
+更新：2026-10-03T11:21:15Z；规范 SHA-256：`949e2348902d8b8cb65f560b36fa58039fce75cd2e70c0a9ce9dcd8023160c05`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED_PR55_ISSUE31_CONCEPTS_PUSHED_NEW_CI_OBSERVED
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
 
-等待固定ad494完整Python/native结果，封存原件并独立读回，再按窄控制读取切片检查公开对象并发布draftPR；session/turn/审批/产物回导仍待后续实施。
+保留ad494完整native失败并核现有代码/证据；等待完整Python真实结果。session bootstrap最窄合同提案独审后请所有者决定；无新许可不实施新接口。M7.1独立副本身份降权修复仅工程准备，不提前验收依赖。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -272,8 +272,10 @@
 - M6.3_capabilities_security_limitations: {'recorded_at': '2026-10-03T02:14:25.349339+00:00', 'source': '1ab169a83e9619bd529ca55ae8ef603c596432f2', 'ui_combination': '54fc266798a1e4be2142266012f24f468a57fb98', 'status': 'SECURITY_REVIEW_FOUND_P1_AND_P2_PUBLICATION_HELD', 'P1': 'Actual independent postfence anonymousAF_UNIX datagram socketpair sent18syntheticbytes to outside namedUnixsocket via sendto; invalidates anonymousIPC confinement inference. Does not claim actualCodex exfiltration.', 'P2': 'FIFOconfig open blocked before processdeadline while holdingprobe lock; independently reproduced and released by testownedwriter; noCLIstart.', 'prior_receipts': 'Focused/UI/actualHTTPandCLIobservationresultsremainasrecorded; noneprovefullisolationsecurity. Originalreportandsealedmanifestunchanged.', 'next': 'Ownerfix plusindependent sameprobe verification and realCLIreadback; finalcombinationfullgatesNOT_STARTED.', 'source_push': False}
 - M6.3_mechanical_combination: {'head': 'e99252dc3d15db62955409a8d8ea1c50052b5bd5', 'tree': 'm63-capabilities-combined-oct03', 'base': '6093171f6640cd88d4f4e4f5f23ec76babc1501c', 'source': 'e287publishedM6.2+merge1ab+cherry8d+UI90f+native7aac', 'gates': 'NOT_STARTED pendingconfirmedsecurityfix', 'source_push': False}
 - M6.3_capabilities_defensive_fix: {'source': '94be7220df926dd9bb38c775aafa07ab3e47649b', 'combination': 'ad49490e78c21174349595da8090c6c2b445bce9', 'focused_pass': 68, 'actual_control_readback': 'PASS; stable isolated Broker; config-change503 zero new child; DB unchanged', 'static_delta': 'Independent no-new-blocker; no executions', 'extended_review': 'NOT_RUN_AUTOMATIC_REVIEW_INTERRUPTED', 'scope': 'Control reads only; flagsfalse; no task closure/sourcepush', 'evidence_paths': ['progress/evidence/2026-10-03/M6.3-capabilities-backend-initial-with-correction/REPORT.json', 'progress/evidence/2026-10-03/M6.3-capabilities-defensive-fix-94be7220/REPORT.json', 'progress/evidence/2026-10-03/M6.3-capabilities-spec-http-ui-independent/REPORT.json', 'progress/evidence/2026-10-03/M6.3-capabilities-94be-static-independent/REPORT.json'], 'owner_execution_head_clarification': 'progress/evidence/2026-10-03/M6.3-capabilities-owner-execution-head-clarification/REPORT.json'}
-- M6.3_mechanical_combination_v2: {'head': 'ad49490e78c21174349595da8090c6c2b445bce9', 'original': 'e99252dc3d15db62955409a8d8ea1c50052b5bd5', 'defensive_delta': '94be7220df926dd9bb38c775aafa07ab3e47649b', 'static_and_web': 'PASS Web984/strict/build841/Ruff/mypy241/verify78;1340nonprogress unchanged', 'python': 'RUNNING', 'native': 'RUNNING', 'sourcepush': False, 'static_and_web_evidence': 'progress/evidence/2026-10-03/M6.3-capabilities-ad49490e-full-static-web/REPORT.json'}
+- M6.3_mechanical_combination_v2: {'head': 'ad49490e78c21174349595da8090c6c2b445bce9', 'original': 'e99252dc3d15db62955409a8d8ea1c50052b5bd5', 'defensive_delta': '94be7220df926dd9bb38c775aafa07ab3e47649b', 'static_and_web': 'PASS Web984/strict/build841/Ruff/mypy241/verify78;1340nonprogress unchanged', 'python': 'RUNNING', 'native': 'ACTUAL_FAIL_126_PASS_1_FAIL', 'sourcepush': False, 'static_and_web_evidence': 'progress/evidence/2026-10-03/M6.3-capabilities-ad49490e-full-static-web/REPORT.json', 'native_evidence': 'progress/evidence/2026-10-03/M6.3-capabilities-ad49490e-full-native-failure/REPORT.json'}
 - M6.3_capabilities_fixed_stage_issue_sync: {'at': '2026-10-03T09:53:52.026416+00:00', 'issue': 32, 'state': 'open', 'body_sha256': '153bb50ad01ab295e384b5244fca3d9432c0057b68ba28004fe32cc2e0f1e469', 'metadata_outside_block_unchanged': True, 'sourcepush': False, 'fullgates': 'Python/native RUNNING; full Web/static PASS', 'scope': 'Known local94be fixes/static independent review and actual control read; broader security review interrupted NOT_RUN. No task closure.'}
+- M6.2_e287_actual_CI_terminal: {'head': 'e2877101d9c2bda0f793a460db63ef496350c6b4', 'status': 'BOTH_COMPLETED_SUCCESS_SIX_JOBS_EACH', 'runs': [37087115486, 37087119424], 'published_tree': 'ec42efa7d5e16f994d72dd4491a2f0bb1c67bf27', 'actual_checkouts': ['e2877101d9c2bda0f793a460db63ef496350c6b4', '7b8c3c96f4c08c7f1554bf9ceb6829d466ff39af'], 'browser_each': 126, 'web_each': 961, 'spec_each': 749, 'backend_each': 751, 'integration_each': '2093PASS/2numeric ENVskip/2warnings', 'physical_numeric': 'BLOCKED; four actual results; publish409', 'evidence_path': 'progress/evidence/2026-10-03/M6.2-ci-terminal-e2877101/REPORT.json', 'sourcepush_this_step': False}
+- M6.2_e287_terminal_body_sync: {'at': '2026-10-03T10:25:24.517819+00:00', 'head': 'e2877101d9c2bda0f793a460db63ef496350c6b4', 'pr': 55, 'issue': 31, 'pr_body_sha256': '6d0d67a58e78359113efa09ef5637d08bf114bca44e95880f05c8b0945398542', 'issue_body_sha256': '92926a9bd61ccb47dbb0b345599846b52d556334aa1abeea97254c885f2a4435', 'issue_metadata_and_outside_block_unchanged': True, 'draft_open_unmerged': True, 'sourcepush': False, 'ci': 'BOTH_COMPLETED_SUCCESS_6_JOBS_EACH', 'numeric': 'BLOCKED_4_ACTUAL_RESULTS_PUBLISH409', 'boundary': 'Actual text-only status synchronization; no merge/release/deployment or CI rerun.'}
 
 ## 阻塞与待决项
 
@@ -313,5 +315,6 @@
 - M63_CONTROL_PROBE_SYSV_SHARED_MEMORY: 原1ab固定profile通过整数ID连接并修改外部自建合成共享段；94be拒绝SysV shm/sem/msg家族，原shmat反例及永久回归RED/GREEN保留，真实CLI仍可控制读取。不称实际CLI曾外发。
 - M63_CONTROL_PROBE_DEEP_JSON_RECURSION: 原2000层导致协议timeout，16/17/18失败保留且不当RecursionError证据；真正16000层低于64KiB的原20实证RecursionError，94be原21安全503 CODEX_PROTOCOL_INVALID通过。
 - M63_EXTENDED_SECURITY_REVIEW_INTERRUPTED: 独立后续系统级探针被自动安全检查中止，理由possible cybersecurity risk；未继续、转派或重启。已有明确缺陷修复及常规测试、窄静态review继续；不能称完整安全独审PASS。
+- M63_AD494_FULL_NATIVE_BOOTSTRAP_FAILED: 固定ad494完整native126PASS1FAIL，import-admission.spec65初始authenticateOnly五秒未见saved；截图401本机会话未建立。原bootstrap响应未采，具体原因UNKNOWN。新独立UI诊断子任务又被automatic安全检查中止(possible cybersecurity risk)，未完成/未重启/未转派该探针；已有代码与截图静态核验不当复现成功。完整Python仍运行，M6.3未验收/未发布。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。
