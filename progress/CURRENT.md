@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-03T12:26:26Z；规范 SHA-256：`bed7c924955512ec4a6775812c80e6c5ce82e968f19feb403e568099f8dc4144`
+更新：2026-10-03T13:16:28Z；规范 SHA-256：`bed7c924955512ec4a6775812c80e6c5ce82e968f19feb403e568099f8dc4144`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED_PR55_ISSUE31_CONCEPTS_PUSHED_NEW_CI_OBSERVED
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
 
-实施已明确批准v3.0.14本地会话bootstrap；并诊断固定ad494完整Python setup ERROR、保留原native FAIL及自动审查中止事实。新slice实际成功前不报ready，不降低零外发隔离。
+完成并独审固定后端 bootstrap 的冻结闭包、输出预算、一次消费/恢复及实际受限零模型 thread；再整合已固定 UI 和备份回归，运行新路径 native 与适用完整门禁。原失败保留，禁止第二 start、降低隔离或把合成 ready 当真实成功。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -283,6 +283,8 @@
 - M6.3_worker_fixture_lease_diagnosis: {'at': '2026-10-03T12:19:51.495122+00:00', 'raw_items_verified': 122, 'public_candidates_verified': 39, 'report_sha256': '29a5db268f13a9a71ca66f0104d65c89dd4aa0b7ad2af0c4ec55157a8406140b', 'source': 'unchanged ad494; diagnostics use ordinary synthetic protocol/real local parser and private UTC seam, no new production commit', 'conclusion': 'Historical Group terminal recorded past persisted lease; injected expiry reproduces original two assertion REDs, valid controls and fresh-owner recovery pass without second Provider dispatch. Underlying host clock/suspension mechanism and historical Import cause remain UNKNOWN. No new production defect established.', 'gate_status': 'Root3633PASS2ENVSKIP1ERROR and backup-owner221PASS1ERROR remain actual failed complete/related gates; diagnostic expectedRED/PASS cannot overwrite.', 'scope': 'independent hash/provenance/report readback only; no new execution, system security probes or native UI', 'sourcepush': False, 'evidence': 'progress/evidence/2026-10-03/M6.3-worker-lease-fixture-bounded-diagnosis/REPORT.json', 'root_verified_inputs': 1340}
 - M6.3_v314_dto_integrated_structural: {'head': '21684db22c61b14d941532a644dbc74b6aa6d01a', 'exit_code': 0, 'status': 'PASS_STRUCTURAL_ONLY', 'generated': 80, 'declared_routes': 133, 'log_sha256': 'c0f897986c31981f8861026785f81f96cd01088392ad0c41a8e27f5e2191bbcc', 'new_dto_source': '6a1977854e4f9344206df6288e692e01626b210a', 'boundary': '7 new strict DTOs and generated source seams, not new runtime route registration or bootstrap success. No model/thread execution; no whole M6.3 acceptance.', 'evidence': 'progress/evidence/2026-10-03/M6.3-bootstrap-dto-integrated-structural/REPORT.json'}
 - M6.3_bootstrap_root_dto_gate: {'head': 'f1c1cd65cb2e3bc3e44f206c69f3690ae4a7327f', 'result': '34PASS/0.08s pytest;exit0', 'runner_duration_seconds': 1.887, 'tracked_inputs': 1349, 'before_after_git_match': True, 'evidence': 'progress/evidence/2026-10-03/M6.3-bootstrap-root-dto-contract/REPORT.json', 'scope': 'DTO only; no actual new session/thread'}
+- M6.3-bootstrap-ui-5d07: 1037PASS/145files; strict/build849PASS;1369 complete Git inputs +63 explicit evidence independently read back. Backend366 intermediate; actual new native/threadNOT_RUN.
+- M6.3-bootstrap-backup-c73: 4PASS/2existingwarnings, realbackupCLI syntheticCodexowner;1374 Git inputs unchanged. Oldactor/8Codex tables intact; oldcookie401, newactor cannot consume/decide original authority. No actualCodex/fullrestore acceptance.
 
 ## 阻塞与待决项
 
@@ -322,8 +324,9 @@
 - M63_CONTROL_PROBE_SYSV_SHARED_MEMORY: 原1ab固定profile通过整数ID连接并修改外部自建合成共享段；94be拒绝SysV shm/sem/msg家族，原shmat反例及永久回归RED/GREEN保留，真实CLI仍可控制读取。不称实际CLI曾外发。
 - M63_CONTROL_PROBE_DEEP_JSON_RECURSION: 原2000层导致协议timeout，16/17/18失败保留且不当RecursionError证据；真正16000层低于64KiB的原20实证RecursionError，94be原21安全503 CODEX_PROTOCOL_INVALID通过。
 - M63_EXTENDED_SECURITY_REVIEW_INTERRUPTED: 独立后续系统级探针被自动安全检查中止，理由possible cybersecurity risk；未继续、转派或重启。已有明确缺陷修复及常规测试、窄静态review继续；不能称完整安全独审PASS。
-- M63_AD494_FULL_NATIVE_BOOTSTRAP_FAILED: 固定ad494完整native126PASS1FAIL，import-admission.spec65初始authenticateOnly五秒未见saved；截图401本机会话未建立。原bootstrap响应未采，具体原因UNKNOWN。新独立UI诊断子任务又被automatic安全检查中止(possible cybersecurity risk)，未完成/未重启/未转派该探针；已有代码与截图静态核验不当复现成功。完整Python仍运行，M6.3未验收/未发布。
-- M63_SESSION_BOOTSTRAP_CONSENT_CONTRACT_GAP: A1945必需consent_id，但唯一Provider preview仅现持久tutor/authoring job/provider，不能授未来Codex输入。已审375e本地控制准备/单次许可/状态/未知读回最窄提案，三新增路径未采纳/未实现；用户async决定待回，不因预选推荐视批准。现控制GET不受此语义缺口影响。 追加：所有者明确批准375e55c0，已纳入唯一规范v3.0.14；新合同尚待实现/实际受限控制验收，不再是待授权阻塞。
+- M63_AD494_FULL_NATIVE_BOOTSTRAP_FAILED: 固定ad494完整native126PASS1FAIL，import-admission.spec65初始authenticateOnly五秒未见saved；截图401本机会话未建立。原bootstrap响应未采，具体原因UNKNOWN。旧独立UI诊断被automatic安全检查中止(possible cybersecurity risk)，NOT_RUN，未重启/转派；静态现有证据不当复现成功。该固定完整Python亦已终态3633PASS2ENVSKIP1setupERROR/exit1。新bootstrap尚未整合完整验收，历史两失败均保留。
+- M63_SESSION_BOOTSTRAP_CONSENT_CONTRACT_GAP: 375e55c0已明确批准并纳入唯一规范v3.0.14；许可取得合同缺口已解决。三新增准备路径及两个session路径已在隔离固定366实际注册，但后端仍中间候选，完整runtime/HTTP/真实thread待验收。不是待授权阻塞；UI5d07与root合成备份测试分别通过，不等于整个M6.3完成。
 - M63_AD494_FULL_PYTHON_FIXTURE_SETUP_ERROR: generated_group assessment fixture after worker.run_once returned true: authoring.read remains running; actual error_code None. Original tamper test body not reached; root cause not established. Original fixed full gate exit1 preserved; no single-case or subset override. Bounded unchanged-source diagnosis supports legitimate lost-lease refusal and fresh-owner recovery with one original Provider dispatch; no production defect established. Host timing mechanism unresolved; full gate stillERROR.
+- M63_BOOTSTRAP_OWNER_FILE_ADMISSION: 固定366独立静态P2：session POST在当前准入和原ACK回放前创建未登记owner文件；不是第二CLI或DB写。作者已在WIP调整锁获取顺序，需固定delta和永久反例复核，当前不报修复完成。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。

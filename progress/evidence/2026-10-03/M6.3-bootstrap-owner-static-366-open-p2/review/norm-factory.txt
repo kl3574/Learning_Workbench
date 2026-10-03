@@ -1,0 +1,8 @@
+1016: 目标开发机为 Linux/Ubuntu 桌面，Python 3.12、Node 24 起始系列；Mac/Windows 暂非必需验收平台但不硬编码个人绝对路径。M0 核对维护状态、依赖 engine 和工具许可，写入 lockfiles。默认数据在工作区外的用户数据目录，可通过 `LEARNING_DATA_DIR` 显式配置，不能写进项目根目录后提交。
+1017: 
+1018: 必须实现以下稳定命令：`make setup`（锁定依赖安装）、`make dev`（前后端本机开发）、`make build`、`make start`（单同源生产服务）、`make lint`、`make typecheck`、`make test`、`make test-e2e`、`make verify-spec`、`make backup`。README 从实际命令生成运行说明，不列不存在脚本。测试不依赖真实 API key，真实提供商另用显式 opt-in 命令。
+1019: 
+1020: 生产端由 FastAPI 同源托管编译后静态页面及 `/api/v1`；开发端 Vite 通过代理访问，不开放任意 Origin。固定健康检查 `/health` 不返回敏感数据；`/api/v1/readiness` 返回 schema_version、迁移状态、worker状态、提供商是否配置（不验证密钥）。迁移前在线备份，worker和API启动前检查 schema兼容；不自动破坏性降级。SQLite WAL 模式备份用 online backup API 或等价一致性快照，不直接复制活跃 .db 忽略 WAL。
+1021: 
+1022: 首次本机访问使用 launcher 生成的一次性随机 bootstrap code，经浏览器 fragment 交给同源 POST `/api/v1/session/bootstrap`，成功后建立 HttpOnly、SameSite=Strict 会话 cookie，并清除 fragment。code 不在访问日志、URL query或公库中，过期/重复使用拒绝。Host/Origin 限制与 CSRF 同时生效；默认不让远程网页访问 localhost 启动会话。所有配置和许可操作使用可信 SessionIdentity 的 workspace/actor/role，客户端不能自报权限。应用模块导入、factory 和 OpenAPI 生成不创建数据库、秘密文件、后台任务，不读取凭据或探测外网；仅显式运行生命周期初始化本机存储。
+1023: 
