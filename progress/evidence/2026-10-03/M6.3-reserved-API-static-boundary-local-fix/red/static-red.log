@@ -1,0 +1,39 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+rootdir: $HOME/.cache/learning-workbench-acceptance/m63-backend-boundary-fix-oct04
+configfile: pyproject.toml
+plugins: anyio-4.15.1
+collected 2 items
+
+tests/security/test_local_boundary.py .F                                 [100%]
+
+=================================== FAILURES ===================================
+____________ test_payload_budget_and_unimplemented_routes[with-ui] _____________
+
+routing_runtime = (<fastapi.applications.FastAPI object at 0x7c79de334fb0>, <starlette.testclient.TestClient object at 0x7c79fc496c00>, ...52428800, max_block_characters=400000, max_package_bytes=209715200, max_package_files=2000, max_compression_ratio=100))
+
+    def test_payload_budget_and_unimplemented_routes(routing_runtime):
+        application, client, settings = routing_runtime
+        headers = login(application, client, settings)
+        assert client.post("/api/v1/session/logout", content=b"x" * (settings.max_request_bytes + 1), headers=headers).status_code == 413
+        # v3.0.14 implements POST session bootstrap, but no session list or turns.
+        # Unsupported methods/routes remain JSON errors instead of serving the SPA.
+        response = client.get("/api/v1/codex/sessions")
+>       assert response.status_code == 405
+E       assert 200 == 405
+E        +  where 200 = <Response [200 OK]>.status_code
+
+tests/security/test_local_boundary.py:223: AssertionError
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  $HOME/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  $HOME/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/security/test_local_boundary.py::test_payload_budget_and_unimplemented_routes[with-ui]
+=================== 1 failed, 1 passed, 2 warnings in 2.31s ====================
