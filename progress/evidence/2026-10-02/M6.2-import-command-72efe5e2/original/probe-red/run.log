@@ -1,0 +1,39 @@
+
+Running 1 test using 1 worker
+
+(node:2388072) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/e2e/import-policy-probe.spec.ts:6:1 › original grading recovery import command while real Policy response is held (10.3s)
+
+
+  1) tests/e2e/import-policy-probe.spec.ts:6:1 › original grading recovery import command while real Policy response is held 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByText('当前测试策略限制此操作。可返回自己的测试、提交或明确放弃。', { exact: true })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByText('当前测试策略限制此操作。可返回自己的测试、提交或明确放弃。', { exact: true }) with timeout 5000ms
+      - waiting for getByText('当前测试策略限制此操作。可返回自己的测试、提交或明确放弃。', { exact: true })
+
+
+      28 |     let rejected: unknown
+      29 |     const importing = importAssessmentPackage(page, fixture).catch(error => { rejected = error; return null })
+    > 30 |     await expect(page.getByText('当前测试策略限制此操作。可返回自己的测试、提交或明确放弃。', { exact: true })).toBeVisible()
+         |                                                                                    ^
+      31 |     facts.original_palette_click_rejected = true
+      32 |     releaseGate()
+      33 |     await expect(page.getByText('正在核验服务端测试策略；尚未向模型提供任何内容。', { exact: true })).toHaveCount(0)
+        at $HOME/.cache/learning-workbench-acceptance/m62-import-policy-entry-oct02/tests/e2e/import-policy-probe.spec.ts:30:84
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-import-policy-entry-evidence-oct02/probe-red-output/import-policy-probe-origin-3e071-eal-Policy-response-is-held/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m62-import-policy-entry-evidence-oct02/probe-red-output/import-policy-probe-origin-3e071-eal-Policy-response-is-held/error-context.md
+
+  1 failed
+    tests/e2e/import-policy-probe.spec.ts:6:1 › original grading recovery import command while real Policy response is held 

@@ -1,0 +1,75 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_ test_edit_na_uses_current_body_while_retaining_exact_historical_formula_base _
+
+case = SyntheticDraftEditCase()
+
+    def test_edit_na_uses_current_body_while_retaining_exact_historical_formula_base(case):
+        database, identity, _, service, _, _ = case
+        content = ContentService(database)
+        raw = b'Synthetic old formula: \\begin{equation*}x=1\\end{equation*}\n'
+        block = dm.ContentBlock(id='synthetic_formula_base', revision=1, kind='text', title='Old synthetic text',
+            body_path='content/synthetic-formula-base.md', body_sha256=sha256_bytes(raw))
+        base = content.publish(identity.workspace_id, [block], {block.body_path: raw})[0]
+        later = b'Different later published synthetic text.\n'
+        content.publish(identity.workspace_id, [block.model_copy(update={'revision': 2, 'body_sha256': sha256_bytes(later)})],
+                        {block.body_path: later})
+        create_body = DraftCreateWrite(kind='block', base_ref=base, title='Synthetic edited prose')
+        created = service.create(identity, create_body, 'formula-base')
+        prose = 'Synthetic historical note with no mathematical content.\n'
+        service.patch(identity, created.draft_id, patch(text=prose), 'remove-formula')
+        current = service.read(identity, created.draft_id, 2)
+        assert current.base.ref == base and current.base.body_markdown.encode() == raw
+        assert current.payload.body_markdown == prose
+        registry = DraftCandidates({'authoring_edit': service})
+        reviews = ReviewService(database, registry, ReviewNumeric(registry, {}), {})
+        create_review = request(current.candidate)
+        job = reviews.create(identity, created.draft_id, create_review, 'prose-review')
+        assert ReviewWorker(reviews).run_once()
+        machine = reviews.read(identity, job.id)
+        assert machine.mathematical == machine.sources == machine.independent_pedagogy == 'NOT_RUN'
+        reason = 'Synthetic human fixture: this edited candidate contains historical prose only; no real approval.'
+        human = decision(machine, mathematical='NOT_APPLICABLE', reason=reason)
+>       accepted = reviews.decide(identity, job.id, human, 'synthetic-na-prose')
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_draft_edit_integrity.py:145: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/api/app/application/review_service.py:200: in decide
+    self._decision_applicability(material, body)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+material = CheckedReviewMaterial(), request = ReviewDecisionWrite()
+
+    @staticmethod
+    def _decision_applicability(material: CheckedReviewMaterial, request: ReviewDecisionWrite) -> None:
+        if request.mathematical == 'NOT_APPLICABLE':
+            def declares_math(value: object) -> bool:
+                if isinstance(value, dict):
+                    if (value.get('kind') in {'worked_example', 'theorem', 'proof', 'formula', 'numeric', 'expression', 'calculation'}
+                            or value.get('numeric_plan') is not None or bool(value.get('symbols'))):
+                        return True
+                    for key, item in value.items():
+                        if isinstance(item, str) and ('markdown' in key or key in {'formula', 'proof'}):
+                            if re.search(r'\\(?:\(|\[|begin\{(?:equation|align|math|gather)\*?\})|\$[^$]+\$', item):
+                                return True
+                    return any(declares_math(item) for item in value.values())
+                return isinstance(value, list) and any(declares_math(item) for item in value)
+            if declares_math(material.payload.model_dump(mode='python', warnings='error')):
+>               raise ApiError(409, 'MATHEMATICAL_REVIEW_REQUIRED', '原材料包含数学结构或数值计划，不能标为数学审校不适用。')
+E               services.api.app.application.errors.ApiError: (409, 'MATHEMATICAL_REVIEW_REQUIRED', '原材料包含数学结构或数值计划，不能标为数学审校不适用。')
+
+services/api/app/application/review_service.py:145: ApiError
+=============================== warnings summary ===============================
+../m62-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../m62-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_draft_edit_integrity.py::test_edit_na_uses_current_body_while_retaining_exact_historical_formula_base
+1 failed, 2 warnings in 1.51s

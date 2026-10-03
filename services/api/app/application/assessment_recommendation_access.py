@@ -16,7 +16,7 @@ from ..infrastructure.grading_repository import GradeAudit, GradingRepository
 from ..infrastructure.security import guard_subject_access
 from .assessment import AssessmentService
 from .assessment_content import AssessmentContent
-from .content_learning_access import evidence_applicability
+from .evidence_applicability import current_evidence_applicability
 from .errors import ApiError
 from .evidence import latest_checked_observations
 from .grading_rule_models import RULES_VERSION, Outcome
@@ -150,7 +150,7 @@ No error is inferred from a score, a blank answer or a human-assigned score.
             else:
                 origins[item_key] = ('unknown', None)
     return [RecommendationObservation(source=source,
-        applicability=evidence_applicability(connection, workspace_id, source.question_ref, source.concept_ref),
+        applicability=current_evidence_applicability(connection, workspace_id, source.evidence.id),
         grading_origin=origins[(source.attempt_id, source.grading_revision, source.question_ref.model_dump_json())][0],
         outcome=origins[(source.attempt_id, source.grading_revision, source.question_ref.model_dump_json())][1])
         for source in sources]

@@ -1,0 +1,37 @@
+
+Running 1 test using 1 worker
+
+  ✘  1 tests/e2e/draft-review.spec.ts:17:1 › real imported candidate review keeps original ACK, authenticated report bytes and explicit rejected decision across reload (9.9s)
+
+
+  1) tests/e2e/draft-review.spec.ts:17:1 › real imported candidate review keeps original ACK, authenticated report bytes and explicit rejected decision across reload 
+
+    Error: expect(locator).toHaveValue(expected) failed
+
+    Locator: getByRole('dialog', { name: '导入', exact: true }).getByRole('region', { name: '候选审核与原命令恢复', exact: true }).getByRole('region', { name: '明确人工审核决定', exact: true }).getByLabel('审核理由', { exact: true })
+    Expected: "原创合成拒绝：尚未进行真实数学、来源或独立教学验收。"
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toHaveValue" getByRole('dialog', { name: '导入', exact: true }).getByRole('region', { name: '候选审核与原命令恢复', exact: true }).getByRole('region', { name: '明确人工审核决定', exact: true }).getByLabel('审核理由', { exact: true }) with timeout 5000ms
+      - waiting for getByRole('dialog', { name: '导入', exact: true }).getByRole('region', { name: '候选审核与原命令恢复', exact: true }).getByRole('region', { name: '明确人工审核决定', exact: true }).getByLabel('审核理由', { exact: true })
+
+
+      86 |     await dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
+      87 |     await page.getByRole('dialog', { name: '保留审核原命令', exact: true }).getByRole('button', { name: '返回导入与审核', exact: true }).click()
+    > 88 |     await expect(decision.getByLabel('审核理由', { exact: true })).toHaveValue(reason)
+         |                                                                ^
+      89 |     await expect(decision.getByRole('button', { name: '明确保存这次人工审核决定', exact: true })).toBeDisabled()
+      90 |     const decisions: { key: string; body: unknown }[] = []
+      91 |     let decided!: StoredReviewReceipt, droppedDecision = false
+        at [REVIEW_UI_WORKTREE]/tests/e2e/draft-review.spec.ts:88:64
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-review-ui-development-v1/native-output-v2/draft-review-real-imported-5a31a-cted-decision-across-reload/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m62-review-ui-development-v1/native-output-v2/draft-review-real-imported-5a31a-cted-decision-across-reload/error-context.md
+
+  1 failed
+    tests/e2e/draft-review.spec.ts:17:1 › real imported candidate review keeps original ACK, authenticated report bytes and explicit rejected decision across reload 

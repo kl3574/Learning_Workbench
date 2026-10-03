@@ -1,0 +1,140 @@
+{
+  "task_id": "M6.2",
+  "requirement_ids": [
+    "R-21",
+    "R-22",
+    "R-24",
+    "R-38"
+  ],
+  "spec_sha256": "2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d",
+  "implementation_commit": "6dee4b3c437b39c3a07d420230033cd684a21d3a",
+  "reviewed_candidate_commit": "d419562f7ec26c7919e9fa12973b4b8cf30bbac1",
+  "scope": "Typed review requests and isolated Jobs-owned internal lifecycle, no Quality workflow registration.",
+  "changed_paths": [
+    "services/api/app/application/review_models.py",
+    "services/api/app/infrastructure/authoring_job_repository.py",
+    "services/api/app/infrastructure/review_job_repository.py",
+    "services/api/app/review_dto.py",
+    "tests/contract/test_review_requests.py",
+    "tests/integration/test_review_job_lifecycle.py"
+  ],
+  "commands": [
+    {
+      "id": "atomic-green",
+      "code_commit": "d419562f7ec26c7919e9fa12973b4b8cf30bbac1",
+      "command": [
+        ".venv/bin/pytest",
+        "-q",
+        "tests/integration/test_review_job_lifecycle.py",
+        "-k",
+        "no_autocommit_review_read_or_transition or caught_wrong_consumer_transition or caught_invalid_transition"
+      ],
+      "start": "2026-09-22T08:26:45.411280+00:00",
+      "finish": "2026-09-22T08:26:49.683670+00:00",
+      "exit_code": 0,
+      "seconds": 4.310454922000645,
+      "source_count": 959,
+      "source_unchanged": true,
+      "log_sha256": "aa0ff09681b8abf59d049903e31dd190ecea9f3815bfbb357de97d328ae8c3e3"
+    },
+    {
+      "id": "new-final",
+      "code_commit": "d419562f7ec26c7919e9fa12973b4b8cf30bbac1",
+      "command": [
+        ".venv/bin/pytest",
+        "-q",
+        "tests/contract/test_review_requests.py",
+        "tests/integration/test_review_job_lifecycle.py"
+      ],
+      "start": "2026-09-22T08:26:45.477582+00:00",
+      "finish": "2026-09-22T08:26:57.266029+00:00",
+      "exit_code": 0,
+      "seconds": 11.827581252997334,
+      "source_count": 959,
+      "source_unchanged": true,
+      "log_sha256": "1ddabe36793e1198565b2e932d3b7afd20e2d3d4fbea482682d70c337792c57c"
+    },
+    {
+      "id": "regression-final",
+      "code_commit": "d419562f7ec26c7919e9fa12973b4b8cf30bbac1",
+      "command": [
+        ".venv/bin/pytest",
+        "-q",
+        "tests/integration/test_authoring_numeric_worker.py",
+        "tests/integration/test_authoring_group_numeric_worker.py",
+        "tests/integration/test_authoring_generation_integrity.py",
+        "tests/integration/test_review_numeric_observations.py"
+      ],
+      "start": "2026-09-22T08:26:45.450272+00:00",
+      "finish": "2026-09-22T08:27:40.038539+00:00",
+      "exit_code": 0,
+      "seconds": 54.632313150999835,
+      "source_count": 959,
+      "source_unchanged": true,
+      "log_sha256": "f4b8971a5303c67612b82cfab25be961f4fad222f60d45299ab023b6fe3341dd"
+    },
+    {
+      "id": "ruff-final",
+      "code_commit": "d419562f7ec26c7919e9fa12973b4b8cf30bbac1",
+      "command": [
+        ".venv/bin/ruff",
+        "check",
+        "."
+      ],
+      "start": "2026-09-22T08:26:45.468568+00:00",
+      "finish": "2026-09-22T08:26:45.484614+00:00",
+      "exit_code": 0,
+      "seconds": 0.057149485997797456,
+      "source_count": 959,
+      "source_unchanged": true,
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    {
+      "id": "mypy-final",
+      "code_commit": "d419562f7ec26c7919e9fa12973b4b8cf30bbac1",
+      "command": [
+        ".venv/bin/mypy",
+        "services/api"
+      ],
+      "start": "2026-09-22T08:26:45.426620+00:00",
+      "finish": "2026-09-22T08:26:45.590639+00:00",
+      "exit_code": 0,
+      "seconds": 0.2048028230019554,
+      "source_count": 959,
+      "source_unchanged": true,
+      "log_sha256": "65638be1b18ffeafcffbbb3243e3cc2c739a82ed3b00bca512594205965022a3"
+    }
+  ],
+  "exit_codes": {
+    "atomic-green": 0,
+    "new-final": 0,
+    "regression-final": 0,
+    "ruff-final": 0,
+    "mypy-final": 0
+  },
+  "test_summary": "Actual7RED at abab63e then7GREEN, included in42 new request/lifecycle checks. Separate50 related integration pass; Ruff/mypy186 pass. These final gates ran on d419562; original35/50 gates preceded repairs and are not presented as final. Full combined-source gate is pending.",
+  "screenshot_paths": [],
+  "migrations": [],
+  "security_review": {
+    "isolation": "Existing Authoring two kinds and initial/allowed states preserved; new adapter accepts only draft_review and no approval-wait state.",
+    "atomicity": "Require transaction for input/load/mutation, reload exact current owned row before transition, savepoint rolls back invalid result/lease even if outer caller catches and commits. Independent actual SQLite probes preserve unrelated outer writes and prevent foreign consumer mutation.",
+    "privacy": "Strict request/input models inherit safe repr and hidden validation inputs. Human DTO cannot set machine status, reviewer or raw evidence paths.",
+    "evidence": "131 raw aliases/64 public files, includes original7FAIL and initial P1 findings, hashes and literal path replay checked by root."
+  },
+  "not_run": [
+    "Quality repository/migration/worker/report/HTTP/human decision",
+    "Any mathematical or source approval",
+    "Publication/versions/impact/restoration",
+    "Platform vendor/Codex/independent pedagogy",
+    "Full current combined engineering gate"
+  ],
+  "blockers": [
+    "Root full-suite Tutor cancel lease failure remains under separate repair",
+    "Tutor browser CI unresolved",
+    "Production input proof and numeric sandbox remain blocked"
+  ],
+  "next_task_id": "M6.2",
+  "evidence_paths": [
+    "progress/evidence/2026-09-22/M6.2-review-job-lifecycle/manifest.json"
+  ]
+}

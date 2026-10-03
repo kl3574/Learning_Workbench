@@ -1,0 +1,83 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/api/sessionAccess.test.ts
+
+
+ RUN  v5.0.0 $HOME/.cache/learning-workbench-acceptance/m62-evidence-applicability-role-race-oct02/apps/web
+
+ ❯ src/api/sessionAccess.test.ts (7 tests | 6 failed) 11ms
+   × a fresh session cannot be admitted during a pending role change to author 6ms
+   × a fresh session cannot be admitted during a pending role change to learner 1ms
+   × two pending access mutations keep session reads fenced while safe job controls remain usable 1ms
+   × failed network mutation releases the fence and requires an actual fresh session response 1ms
+   × failed abort mutation releases the fence and requires an actual fresh session response 1ms
+   × failed http mutation releases the fence and requires an actual fresh session response 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 6 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/api/sessionAccess.test.ts > a fresh session cannot be admitted during a pending role change to author
+ FAIL  src/api/sessionAccess.test.ts > a fresh session cannot be admitted during a pending role change to learner
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ src/api/sessionAccess.test.ts:11:73
+      9|   const mutation = request('POST /api/v1/session/role', { role }, { 'I…
+     10|   const read = request('GET /api/v1/session', undefined)
+     11|   try { await Promise.resolve(); await Promise.resolve(); expect(reads…
+       |                                                                         ^
+     12|   finally { gate.resolve(response(role)); await mutation; await read }
+     13|   expect(reads).toBe(1); expect((await read).role).toBe(role)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  src/api/sessionAccess.test.ts > two pending access mutations keep session reads fenced while safe job controls remain usable
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ src/api/sessionAccess.test.ts:28:65
+     26|     expect((await request('GET /api/v1/jobs/{id}', undefined, undefine…
+     27|     await request('POST /api/v1/jobs/{id}/cancel', undefined, { 'Idemp…
+     28|     first.resolve(response('author')); await one; expect(reads).toBe(0)
+       |                                                                 ^
+     29|   } finally { first.resolve(response('author')); second.resolve(respon…
+     30|   expect(reads).toBe(1)
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  src/api/sessionAccess.test.ts > failed network mutation releases the fence and requires an actual fresh session response
+ FAIL  src/api/sessionAccess.test.ts > failed abort mutation releases the fence and requires an actual fresh session response
+ FAIL  src/api/sessionAccess.test.ts > failed http mutation releases the fence and requires an actual fresh session response
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ src/api/sessionAccess.test.ts:37:48
+     35|   const mutation = request('POST /api/v1/session/role', { role: 'learn…
+     36|   const read = request('GET /api/v1/session', undefined)
+     37|   try { await Promise.resolve(); expect(reads).toBe(0) }
+       |                                                ^
+     38|   finally {
+     39|     if (mode === 'http') gate.resolve(new Response(JSON.stringify({ er…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  6 failed | 1 passed (7)
+   Start at  23:42:37
+   Duration  356ms (environment 78%, transform 14%, tests 4%, import 3%, worker 1%)
+

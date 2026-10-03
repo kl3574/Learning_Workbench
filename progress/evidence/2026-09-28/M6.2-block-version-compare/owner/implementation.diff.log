@@ -1,0 +1,610 @@
+diff --git a/apps/web/src/features/reader/ReaderDocument.tsx b/apps/web/src/features/reader/ReaderDocument.tsx
+index 764b80b..7cdb59e 100644
+--- a/apps/web/src/features/reader/ReaderDocument.tsx
++++ b/apps/web/src/features/reader/ReaderDocument.tsx
+@@ -8,6 +8,7 @@ import { contextTarget, sameRef, type ReaderTarget } from './target'
+ import { readBlock, readCourse, readLesson, readProgress, type LoadedBlock } from './contentClient'
+ import { selectionFromDOM, selectionFromSource } from './selection'
+ import { SourcePanel } from './SourcePanel'
++import { BlockVersionCompare } from './versionCompare/BlockVersionCompare'
+ import './reader.css'
+ const Markdown = lazy(() => import('../../shared/Markdown').then(value => ({ default: value.Markdown })))
+ type DocumentData = { targetKey: string; course: Course; lesson: Lesson; blocks: LoadedBlock[]; stale: boolean }
+@@ -116,7 +117,7 @@ export function ReaderDocument({ session, workspace, onOpen, onScroll, onSelect,
+     {!active ? <div className="empty-content"><div className="eyebrow">知径 / {session.navigation === 'route' ? '学习路线' : '教材'}</div><h1>{session.navigation === 'route' ? '从一个学习目标开始' : '选择一节，开始阅读'}</h1><p>从课程切换中选择已导入教材，或导入自己的材料。浏览正文不会自动记为已读。</p><div className="empty-actions"><button className="primary-button" onClick={() => onAux('课程切换')}>选择已导入课程</button><button onClick={() => onAux('导入')}>导入资料</button><button onClick={loadSynthetic}>浏览合成示例课程 →</button></div></div> : !target ? <div className="empty-content"><h1>阅读引用待解析</h1><p>此标签缺少精确课程或章节所属关系，原始引用与草稿仍保留。</p></div> : error ? <div className="empty-content" role="alert"><h1>暂时无法打开这个对象</h1><p>{error}</p><p>{active.context.active_ref.id} · 修订 {active.context.active_ref.revision}</p><button onClick={() => setVersion(value => value + 1)}>重试读取准确修订</button></div> : !data ? <p role="status" className="empty-content">正在读取准确修订与正文…</p> : <article className="reader-content real-reader" onFocusCapture={event => { const key = (event.target as HTMLElement).dataset.focusKey; if (key && restoration.current.ready) { view.current.focusKey = key; saveView() } }}>
+       <div className="breadcrumbs">{data.course.title} › {data.course.sections?.find(section => section.lesson_ids.includes(data.lesson.id))?.title ?? '课程'} › {data.lesson.title}</div><h1>{data.lesson.title}</h1><div className="reader-meta">教材修订 {target.course.revision} · 小节修订 {target.lesson.revision} · 尚未审校 · 未诊断</div>{data.stale && <p className="stale-notice">正在阅读旧修订。旧正文、选文与笔记引用保留；未自动改为当前版本。</p>}
+       <div className="reader-actions"><button disabled={busy || !progress} onClick={() => void action('read_marked', !read)}>{read ? '撤销本节已读标记' : '明确标记本节已读'}</button><button disabled={busy || !progress} onClick={() => void action('bookmark_set', !bookmarked)}>{bookmarked ? '移除此对象书签' : '为此对象添加书签'}</button><button disabled={!active.context.selection} onClick={() => active.context.selection && onNote(active.context.selection)}>为当前选文记笔记</button><button onClick={() => onAux('笔记')}>查看笔记</button><button onClick={() => practice(target)}>本节习题</button></div>{warning && <p className="stale-notice" role="status">{warning}</p>}
+-      <Suspense fallback={<p role="status">正在加载本地数学排版…</p>}>{data.blocks.map(block => <section className={`reader-block block-${block.block.kind}`} id={`block-${block.block.id}-r${block.block.revision}`} key={block.block.id} data-block-ref={JSON.stringify(block.block_ref)}><h2>{block.block.kind === 'worked_example' ? '例题 · ' : ''}{block.block.title}</h2><div className="reader-markdown" data-reader-block={block.block.id}><Markdown sourceKey={`${block.block.id}-r${block.block.revision}`}>{block.body}</Markdown></div><details data-view-key={`original-${block.block.id}`} className="reader-original"><summary data-focus-key={`original-${block.block.id}`}>原始 Markdown 与精确选文</summary><p>这里显示服务端保存的原文。渲染文本或公式无法对应时，可以在原文中选择范围；不猜测偏移。</p><textarea readOnly aria-label={`原始 Markdown：${block.block.title}`} value={block.body} onSelect={event => { const element = event.currentTarget; const result = selectionFromSource(block.block_ref, block.body, element.selectionStart, element.selectionEnd); if (result.kind === 'selected') { onSelect(result.selection); setWarning('已从原始 Markdown 建立准确选文。') } else if (result.kind === 'rejected') setWarning(result.message) }} /></details><SourcePanel value={block} refresh={() => setVersion(value => value + 1)} /></section>)}<ReaderReady onReady={restore} /></Suspense>
++      <Suspense fallback={<p role="status">正在加载本地数学排版…</p>}>{data.blocks.map(block => <section className={`reader-block block-${block.block.kind}`} id={`block-${block.block.id}-r${block.block.revision}`} key={block.block.id} data-block-ref={JSON.stringify(block.block_ref)}><h2>{block.block.kind === 'worked_example' ? '例题 · ' : ''}{block.block.title}</h2><div className="reader-markdown" data-reader-block={block.block.id}><Markdown sourceKey={`${block.block.id}-r${block.block.revision}`}>{block.body}</Markdown></div><details data-view-key={`original-${block.block.id}`} className="reader-original"><summary data-focus-key={`original-${block.block.id}`}>原始 Markdown 与精确选文</summary><p>这里显示服务端保存的原文。渲染文本或公式无法对应时，可以在原文中选择范围；不猜测偏移。</p><textarea readOnly aria-label={`原始 Markdown：${block.block.title}`} value={block.body} onSelect={event => { const element = event.currentTarget; const result = selectionFromSource(block.block_ref, block.body, element.selectionStart, element.selectionEnd); if (result.kind === 'selected') { onSelect(result.selection); setWarning('已从原始 Markdown 建立准确选文。') } else if (result.kind === 'rejected') setWarning(result.message) }} /></details><SourcePanel value={block} refresh={() => setVersion(value => value + 1)} /><BlockVersionCompare workspace={workspace} blockRef={block.block_ref} /></section>)}<ReaderReady onReady={restore} /></Suspense>
+       <div className="reader-pagination"><button data-focus-key="reader-previous" disabled={position <= 0} onClick={() => onOpen({ course: target.course, lesson: data.course.lesson_refs[position - 1] })}>← 上一节</button><button data-focus-key="reader-next" disabled={position < 0 || position >= data.course.lesson_refs.length - 1} onClick={() => onOpen({ course: target.course, lesson: data.course.lesson_refs[position + 1] })}>下一节 →</button></div>
+     </article>}
+   </div>
+diff --git a/apps/web/src/features/reader/versionCompare/BlockVersionCompare.test.tsx b/apps/web/src/features/reader/versionCompare/BlockVersionCompare.test.tsx
+new file mode 100644
+index 0000000..17c0b2a
+--- /dev/null
++++ b/apps/web/src/features/reader/versionCompare/BlockVersionCompare.test.tsx
+@@ -0,0 +1,116 @@
++import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
++import { afterEach, expect, test, vi } from 'vitest'
++import { BlockVersionCompare } from './BlockVersionCompare'
++import type { ComparePort } from './compareClient'
++import { versions } from './fixtures'
++import { request } from '../../../api/client'
++import type { LoadedBlock } from '../contentClient'
++
++const workspace = 'workspace_compare'
++function api(): ComparePort {
++  return {
++    session: vi.fn(async () => ({ workspace_id: workspace, role: 'learner' as const, csrf_token: 'synthetic-comparison-csrf', active_independent_attempt_id: null, active_open_book_attempt_id: null })),
++    history: vi.fn(async () => ({ items: [...versions].reverse().map(value => ({ ref: value.ref, created_at: '2026-09-28T00:00:00Z', review_state: 'unreviewed' as const, lifecycle: 'active' as const })), next_cursor: null })),
++    block: vi.fn(async ref => { const value = versions.find(item => item.ref.sha256 === ref.sha256); if (!value) throw new Error('Unknown synthetic ref'); return { ...value.data, body: value.body } }),
++  }
++}
++afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals() })
++async function selectBoth() {
++  fireEvent.click(screen.getByRole('button', { name: '比较此块的两个修订' }))
++  await screen.findAllByRole('option', { name: /修订 1/ })
++  fireEvent.change(screen.getByLabelText('左侧修订'), { target: { value: versions[0].ref.sha256 } })
++  fireEvent.change(screen.getByLabelText('右侧修订'), { target: { value: versions[1].ref.sha256 } })
++}
++test('two explicit historical selections read exact bodies and survive panel closure and a changed current ref', async () => {
++  const port = api(), view = render(<BlockVersionCompare workspace={workspace} blockRef={versions[0].ref} port={port} />)
++  expect(port.history).not.toHaveBeenCalled()
++  await selectBoth()
++  expect(port.block).not.toHaveBeenCalled()
++  fireEvent.click(screen.getByRole('button', { name: '读取所选两个修订' }))
++  await waitFor(() => expect(screen.getByLabelText('左侧完整原文').textContent).toBe('old α\nshared\n'))
++  expect(screen.getByLabelText('右侧完整原文').textContent).toBe('new α\nshared\n')
++  expect(screen.getByText(/文字差异不证明数学或语义等价/)).toBeTruthy()
++  view.rerender(<BlockVersionCompare workspace={workspace} blockRef={{ ...versions[1].ref, revision: 3, sha256: 'c'.repeat(64) }} port={port} />)
++  expect((screen.getByLabelText('左侧修订') as HTMLSelectElement).value).toBe(versions[0].ref.sha256)
++  fireEvent.click(screen.getByRole('button', { name: '收起修订比较' }))
++  fireEvent.click(screen.getByRole('button', { name: '比较此块的两个修订' }))
++  expect((screen.getByLabelText('右侧修订') as HTMLSelectElement).value).toBe(versions[1].ref.sha256)
++  expect(port.block).toHaveBeenCalledTimes(2)
++})
++
++function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done }); return { promise, resolve } }
++test('no default pair, and the same exact revision cannot be submitted as two versions', async () => {
++  const port = api(); render(<BlockVersionCompare workspace={workspace} blockRef={versions[0].ref} port={port} />)
++  fireEvent.click(screen.getByRole('button', { name: '比较此块的两个修订' }))
++  await screen.findAllByRole('option', { name: /修订 1/ })
++  expect((screen.getByLabelText('左侧修订') as HTMLSelectElement).value).toBe('')
++  expect((screen.getByRole('button', { name: '读取所选两个修订' }) as HTMLButtonElement).disabled).toBe(true)
++  for (const label of ['左侧修订', '右侧修订']) fireEvent.change(screen.getByLabelText(label), { target: { value: versions[0].ref.sha256 } })
++  expect((screen.getByRole('button', { name: '读取所选两个修订' }) as HTMLButtonElement).disabled).toBe(true)
++  expect(port.block).not.toHaveBeenCalled()
++})
++test.each(['selection', 'workspace', 'target', 'close'])('late body responses cannot repopulate the old comparison after %s changes', async change => {
++  const port = api(), pending = deferred<LoadedBlock>(), read = port.block
++  port.block = vi.fn(ref => ref.revision === 1 ? pending.promise : read(ref))
++  const view = render(<BlockVersionCompare workspace={workspace} blockRef={versions[0].ref} port={port} />)
++  await selectBoth(); fireEvent.click(screen.getByRole('button', { name: '读取所选两个修订' }))
++  await waitFor(() => expect(port.block).toHaveBeenCalledTimes(2))
++  if (change === 'selection') fireEvent.change(screen.getByLabelText('左侧修订'), { target: { value: versions[1].ref.sha256 } })
++  else if (change === 'close') fireEvent.click(screen.getByRole('button', { name: '收起修订比较' }))
++  else view.rerender(<BlockVersionCompare workspace={change === 'workspace' ? 'workspace_other' : workspace} blockRef={change === 'target' ? { ...versions[0].ref, id: 'block_other' } : versions[0].ref} port={port} />)
++  await act(async () => pending.resolve({ ...versions[0].data, body: versions[0].body }))
++  expect(screen.queryByLabelText('左侧完整原文')).toBeNull()
++  expect(screen.queryByText('old α', { exact: false })).toBeNull()
++})
++test('a real access-generation change immediately removes loaded bodies and suppresses late results', async () => {
++  const port = api(); render(<BlockVersionCompare workspace={workspace} blockRef={versions[0].ref} port={port} />)
++  await selectBoth(); fireEvent.click(screen.getByRole('button', { name: '读取所选两个修订' }))
++  await screen.findByLabelText('左侧完整原文')
++  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(await port.session()))))
++  await act(async () => { await request('POST /api/v1/session/role', { role: 'learner' }, { 'Idempotency-Key': 'synthetic-access-change' }) })
++  expect(screen.queryByLabelText('左侧完整原文')).toBeNull()
++  expect(screen.queryByText('old α', { exact: false })).toBeNull()
++})
++test('current Policy is checked after body completion even without a local access notification', async () => {
++  const port = api(), pending = deferred<LoadedBlock>(), read = port.block
++  port.block = vi.fn(ref => ref.revision === 1 ? pending.promise : read(ref))
++  render(<BlockVersionCompare workspace={workspace} blockRef={versions[0].ref} port={port} />)
++  await selectBoth(); fireEvent.click(screen.getByRole('button', { name: '读取所选两个修订' }))
++  await waitFor(() => expect(port.block).toHaveBeenCalledTimes(2))
++  vi.mocked(port.session).mockResolvedValue({ workspace_id: workspace, role: 'learner', csrf_token: 'synthetic-csrf', active_independent_attempt_id: 'attempt_active', active_open_book_attempt_id: null })
++  await act(async () => pending.resolve({ ...versions[0].data, body: versions[0].body }))
++  expect(await screen.findByRole('alert')).toHaveProperty('textContent', '当前工作区或测试策略不允许读取比较内容。')
++  expect(screen.queryByLabelText('左侧完整原文')).toBeNull()
++})
++test('failed reads retain exact choices for an explicit retry, without selecting latest', async () => {
++  const port = api(), read = port.block
++  port.block = vi.fn(async () => { throw new Error('Synthetic transport unavailable') })
++  render(<BlockVersionCompare workspace={workspace} blockRef={versions[0].ref} port={port} />)
++  await selectBoth(); fireEvent.click(screen.getByRole('button', { name: '读取所选两个修订' }))
++  await screen.findByRole('alert')
++  expect((screen.getByLabelText('左侧修订') as HTMLSelectElement).value).toBe(versions[0].ref.sha256)
++  port.block = read
++  fireEvent.click(screen.getByRole('button', { name: '读取所选两个修订' }))
++  await screen.findByLabelText('左侧完整原文')
++})
++
++test('a role change outside this page cannot retain the old role-dependent provenance projection', async () => {
++  const port = api(), pending = deferred<LoadedBlock>(), read = port.block
++  vi.mocked(port.session).mockResolvedValue({ workspace_id: workspace, role: 'author', csrf_token: 'synthetic-csrf', active_independent_attempt_id: null, active_open_book_attempt_id: null })
++  port.block = vi.fn(ref => ref.revision === 1 ? pending.promise : read(ref))
++  render(<BlockVersionCompare workspace={workspace} blockRef={versions[0].ref} port={port} />)
++  await selectBoth(); fireEvent.click(screen.getByRole('button', { name: '读取所选两个修订' }))
++  await waitFor(() => expect(port.block).toHaveBeenCalledTimes(2))
++  vi.mocked(port.session).mockResolvedValue({ workspace_id: workspace, role: 'learner', csrf_token: 'synthetic-csrf', active_independent_attempt_id: null, active_open_book_attempt_id: null })
++  await act(async () => pending.resolve({ ...versions[0].data, body: versions[0].body }))
++  expect(screen.queryByLabelText('左侧完整原文')).toBeNull()
++  expect(screen.getByRole('alert').textContent).toContain('读取期间权限发生变化')
++})
++
++test('already displayed bodies are cleared when a later current Policy read detects another profile test', async () => {
++  const port = api(); render(<BlockVersionCompare workspace={workspace} blockRef={versions[0].ref} port={port} />)
++  await selectBoth(); fireEvent.click(screen.getByRole('button', { name: '读取所选两个修订' }))
++  await screen.findByLabelText('左侧完整原文')
++  vi.mocked(port.session).mockResolvedValue({ workspace_id: workspace, role: 'learner', csrf_token: 'synthetic-csrf', active_independent_attempt_id: 'attempt_other_profile', active_open_book_attempt_id: null })
++  await waitFor(() => expect(screen.queryByLabelText('左侧完整原文')).toBeNull(), { timeout: 2500 })
++})
+diff --git a/apps/web/src/features/reader/versionCompare/BlockVersionCompare.tsx b/apps/web/src/features/reader/versionCompare/BlockVersionCompare.tsx
+new file mode 100644
+index 0000000..cac8e24
+--- /dev/null
++++ b/apps/web/src/features/reader/versionCompare/BlockVersionCompare.tsx
+@@ -0,0 +1,40 @@
++import { useMemo } from 'react'
++import type { ContentRef } from '../../../../../../packages/contracts/generated/api-types'
++import { canonical } from '../../retrieval/retrievalModel'
++import type { LoadedBlock } from '../contentClient'
++import { compareClient, type ComparePort } from './compareClient'
++import { boundedLineDiff } from './boundedDiff'
++import { useVersionCompare } from './useVersionCompare'
++import './versionCompare.css'
++
++const fields = ['kind', 'title', 'body_path', 'body_sha256', 'concepts', 'citations', 'depends_on'] as const
++const labels = { kind: '块类型', title: '标题', body_path: '正文逻辑路径', body_sha256: '正文 SHA-256', concepts: '概念 ID', citations: '引用 ID', depends_on: '精确依赖' }
++function SourceScope({ value }: { value: LoadedBlock }) {
++  return <div className="compare-source"><p>元数据 SHA-256：<code>{value.block_ref.sha256}</code></p><p>正文 SHA-256：<code>{value.block.body_sha256}</code></p>
++    {value.original_source ? <p>原件绑定：{value.original_source.source.media_type} · <code>{value.original_source.source.sha256}</code>；{value.original_source.original_access === 'allowed' ? '当前允许读取原件' : value.original_source.original_access === 'author_required' ? '原件需作者权限' : '原件不可读取'}</p> : <p>无已解析原件绑定。</p>}
++    <p>已解析引用 {value.citations.length} 条；未解析引用 {value.unresolved_citation_ids.length} 条。来源记录不等于独立核实。</p>
++    {value.citations.map(item => <p key={item.citation.id}>{item.citation.id} · {item.citation.title} · {item.citation.locator} · {item.citation.verification}</p>)}
++    {value.unresolved_citation_ids.length > 0 && <p>未解析 ID：{value.unresolved_citation_ids.join('、')}</p>}
++    {value.warnings.map((warning, index) => <p key={index}>{warning.code} · {warning.message}</p>)}
++  </div>
++}
++export function BlockVersionCompare({ workspace, blockRef, port = compareClient }: { workspace: string | null; blockRef: ContentRef; port?: ComparePort }) {
++  const state = useVersionCompare(workspace, blockRef.id, port)
++  const diff = useMemo(() => state.result ? boundedLineDiff(state.result[0].body, state.result[1].body) : null, [state.result])
++  const refs = [...state.items.map(item => item.ref)]
++  for (const selected of [state.left, state.right]) if (selected && !refs.some(ref => ref.sha256 === selected.sha256)) refs.push(selected)
++  return <section className="block-version-compare" aria-label="块修订比较">
++    <button disabled={!workspace || blockRef.entity !== 'block'} aria-expanded={state.open} onClick={state.open ? state.close : state.show}>{state.open ? '收起修订比较' : '比较此块的两个修订'}</button>
++    {state.open && <div className="compare-content"><h3>比较同一块的两个精确修订</h3><p>明确选择两侧修订。仅比较原文与字段；文字差异不证明数学或语义等价，不批准、发布或恢复内容。</p><p>收起保留本页选择，正文重新读取；切到其他块或刷新页面需重新选择。</p>
++      <div className="compare-controls">{(['left', 'right'] as const).map(side => <label key={side}>{side === 'left' ? '左侧修订' : '右侧修订'}<select value={state[side]?.sha256 ?? ''} onChange={event => state.choose(side, event.target.value)}><option value="">请选择准确修订</option>{refs.map(ref => <option key={ref.sha256} value={ref.sha256}>修订 {ref.revision} · {ref.sha256.slice(0, 12)}</option>)}</select></label>)}</div>
++      <div className="compare-actions"><button disabled={state.busy} onClick={() => void state.history()}>重新读取历史列表</button>{state.cursor && <button disabled={state.busy || state.items.length >= 200} onClick={() => void state.history(true)}>加载更多修订</button>}<button disabled={state.busy || !state.left || !state.right || state.left.sha256 === state.right.sha256} onClick={() => void state.read()}>读取所选两个修订</button></div>
++      {state.cursor && state.items.length >= 200 && <p>本次历史列表最多保留 200 项，尚有历史未列出；没有用当前版本替代所选修订。</p>}
++      {state.busy && <p role="status">正在核对权限和准确修订…</p>}{state.error && <p role="alert">{state.error}</p>}
++      {state.result && <><div className="compare-columns">{state.result.map((value, index) => <section key={index} aria-label={index ? '右侧版本' : '左侧版本'}><h4>{index ? '右侧' : '左侧'} · 修订 {value.block_ref.revision}</h4><p><code>{value.block_ref.id}</code> · {value.block.title}</p><SourceScope value={value} /></section>)}</div>
++        <h4>字段差异</h4>{fields.filter(field => canonical(state.result![0].block[field]) !== canonical(state.result![1].block[field])).map(field => <div className="compare-field" key={field}><strong>{labels[field]}</strong><div className="compare-columns"><pre aria-label={`左侧${labels[field]}`}>{JSON.stringify(state.result![0].block[field], null, 2)}</pre><pre aria-label={`右侧${labels[field]}`}>{JSON.stringify(state.result![1].block[field], null, 2)}</pre></div></div>)}
++        <h4>原文差异</h4>{diff?.kind === 'parallel' ? <p role="status">{diff.reason}</p> : <><p>按完整行保留相同的开头和结尾；变化的中段整体标记增删，未推断公式含义。</p><div className="compare-diff" aria-label="逐行文字差异">{diff?.changes.map((change, index) => <div className={`compare-${change.kind}`} key={index}><strong>{change.kind === 'added' ? '右侧新增' : change.kind === 'removed' ? '左侧删除' : '相同行'}</strong><pre>{change.text}</pre></div>)}</div></>}
++        <div className="compare-columns compare-originals">{state.result.map((value, index) => <section key={index}><h4>{index ? '右侧' : '左侧'}完整原文</h4><pre tabIndex={0} aria-label={index ? '右侧完整原文' : '左侧完整原文'}>{value.body}</pre></section>)}</div>
++      </>}
++    </div>}
++  </section>
++}
+diff --git a/apps/web/src/features/reader/versionCompare/boundedDiff.test.ts b/apps/web/src/features/reader/versionCompare/boundedDiff.test.ts
+new file mode 100644
+index 0000000..f3c2cd6
+--- /dev/null
++++ b/apps/web/src/features/reader/versionCompare/boundedDiff.test.ts
+@@ -0,0 +1,13 @@
++import { expect, test } from 'vitest'
++import { boundedLineDiff } from './boundedDiff'
++
++test('compares exact lines without trimming Unicode, mathematical symbols or the final newline', () => {
++  expect(boundedLineDiff('common\nα ≤ β\nend', 'common\nα < β\nend')).toEqual({ kind: 'diff', changes: [
++    { kind: 'same', text: 'common\n' }, { kind: 'removed', text: 'α ≤ β\n' }, { kind: 'added', text: 'α < β\n' }, { kind: 'same', text: 'end' },
++  ] })
++  expect(boundedLineDiff('α\n', 'α')).toEqual({ kind: 'diff', changes: [{ kind: 'removed', text: 'α\n' }, { kind: 'added', text: 'α' }] })
++})
++test('bounded work falls back to original parallel text for either excessive characters or lines', () => {
++  expect(boundedLineDiff('x'.repeat(100001), 'x').kind).toBe('parallel')
++  expect(boundedLineDiff('x\n'.repeat(2001), 'y').kind).toBe('parallel')
++})
+diff --git a/apps/web/src/features/reader/versionCompare/boundedDiff.ts b/apps/web/src/features/reader/versionCompare/boundedDiff.ts
+new file mode 100644
+index 0000000..c8a0292
+--- /dev/null
++++ b/apps/web/src/features/reader/versionCompare/boundedDiff.ts
+@@ -0,0 +1,21 @@
++export type LineChange = { kind: 'same' | 'removed' | 'added'; text: string }
++export type LineComparison = { kind: 'diff'; changes: LineChange[] } | { kind: 'parallel'; reason: string }
++/** Linear prefix/suffix line comparison; the changed middle is shown whole, not
++ * claimed to be a minimum edit or semantic comparison. UTF-16 length is a
++ * conservative work budget; no Unicode normalization or newline trimming. */
++export function boundedLineDiff(left: string, right: string): LineComparison {
++  const fallback: LineComparison = { kind: 'parallel', reason: '超过差异标记上限（两侧合计 100,000 字符单位或 2,000 行），以下完整原文并列保留。' }
++  if (left.length + right.length > 100000) return fallback
++  const a = left ? left.split(/(?<=\n)/u) : [], b = right ? right.split(/(?<=\n)/u) : []
++  if (a.length + b.length > 2000) return fallback
++  let start = 0, end = 0
++  while (start < a.length && start < b.length && a[start] === b[start]) start++
++  while (end < a.length - start && end < b.length - start && a[a.length - 1 - end] === b[b.length - 1 - end]) end++
++  const changes: LineChange[] = [
++    { kind: 'same', text: a.slice(0, start).join('') },
++    { kind: 'removed', text: a.slice(start, a.length - end).join('') },
++    { kind: 'added', text: b.slice(start, b.length - end).join('') },
++    { kind: 'same', text: end ? a.slice(a.length - end).join('') : '' },
++  ]
++  return { kind: 'diff', changes: changes.filter(change => change.text !== '') }
++}
+diff --git a/apps/web/src/features/reader/versionCompare/compareClient.test.ts b/apps/web/src/features/reader/versionCompare/compareClient.test.ts
+new file mode 100644
+index 0000000..873e681
+--- /dev/null
++++ b/apps/web/src/features/reader/versionCompare/compareClient.test.ts
+@@ -0,0 +1,51 @@
++import { afterEach, expect, test, vi } from 'vitest'
++import { compareClient } from './compareClient'
++import { versions } from './fixtures'
++
++afterEach(() => vi.unstubAllGlobals())
++test('reads the selected exact revision with real generated GET paths and verifies body bytes', async () => {
++  const selected = versions[0], calls: { path: string; init: RequestInit }[] = []
++  vi.stubGlobal('fetch', vi.fn(async (path: string, init: RequestInit) => {
++    calls.push({ path, init })
++    return path.includes('/body?')
++      ? new Response(selected.body, { headers: { ETag: `"${selected.data.block.body_sha256}"` } })
++      : new Response(JSON.stringify(selected.data), { headers: { ETag: `"${selected.ref.sha256}"` } })
++  }))
++  const result = await compareClient.block(selected.ref)
++  expect(result.body).toBe('old α\nshared\n')
++  expect(result.block_ref).toEqual(selected.ref)
++  expect(calls.map(call => call.path)).toEqual(['/api/v1/blocks/block_compare?include_provenance=true&revision=1', '/api/v1/blocks/block_compare/body?revision=1'])
++  expect(calls.every(call => call.init.method === 'GET' && call.init.credentials === 'same-origin')).toBe(true)
++})
++
++test.each(['changed-title', 'extra-field'])('rejects %s even with a matching ETag and body', async fault => {
++  const selected = versions[0]
++  const data = structuredClone(selected.data)
++  if (fault === 'changed-title') data.block.title = 'Changed metadata without changed reference'
++  else Object.assign(data, { unregistered_payload: 'synthetic unexpected field' })
++  vi.stubGlobal('fetch', vi.fn(async (path: string) => path.includes('/body?')
++    ? new Response(selected.body, { headers: { ETag: `"${selected.data.block.body_sha256}"` } })
++    : new Response(JSON.stringify(data), { headers: { ETag: `"${selected.ref.sha256}"` } })))
++  await expect(compareClient.block(selected.ref)).rejects.toThrow()
++})
++
++test.each(['body-hash', 'etag', 'projection-ref', 'missing-default', 'unsafe-revision'])('rejects %s without rendering a fallback version', async fault => {
++  const selected = versions[0], data = structuredClone(selected.data)
++  if (fault === 'projection-ref') data.block_ref = versions[1].ref
++  if (fault === 'missing-default') delete data.block.concepts
++  if (fault === 'unsafe-revision') data.block.revision = 9007199254740992
++  vi.stubGlobal('fetch', vi.fn(async (path: string) => path.includes('/body?')
++    ? new Response(fault === 'body-hash' ? 'altered body' : selected.body, { headers: { ETag: `"${data.block.body_sha256}"` } })
++    : new Response(JSON.stringify(data), { headers: { ETag: fault === 'etag' ? `W/"${selected.ref.sha256}"` : `"${selected.ref.sha256}"` } })))
++  await expect(compareClient.block(selected.ref)).rejects.toThrow()
++})
++test.each(['other-id', 'duplicate-revision', 'unknown-field', 'boolean-revision'])('history rejects %s rather than manufacturing a usable option', async fault => {
++  const row = { ref: versions[0].ref, created_at: '2026-09-28T00:00:00Z', review_state: 'unreviewed', lifecycle: 'active' }
++  const page = { items: [structuredClone(row)], next_cursor: null }
++  if (fault === 'other-id') page.items[0].ref.id = 'block_other'
++  if (fault === 'duplicate-revision') page.items.push(structuredClone(row))
++  if (fault === 'unknown-field') Object.assign(page, { unsafe_extra: 'unexpected' })
++  if (fault === 'boolean-revision') Object.assign(page.items[0].ref, { revision: true })
++  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(page))))
++  await expect(compareClient.history('block_compare', null)).rejects.toThrow()
++})
+diff --git a/apps/web/src/features/reader/versionCompare/compareClient.ts b/apps/web/src/features/reader/versionCompare/compareClient.ts
+new file mode 100644
+index 0000000..263c933
+--- /dev/null
++++ b/apps/web/src/features/reader/versionCompare/compareClient.ts
+@@ -0,0 +1,41 @@
++import type { BlockProvenanceResponse, ContentRef, PageRevision, SessionResponse } from '../../../../../../packages/contracts/generated/api-types'
++import { request, requestWithMetadata } from '../../../api/client'
++import { checkedShape } from '../../retrieval/retrievalSchema'
++import { canonical, digest } from '../../retrieval/retrievalModel'
++import { verifyMetadata, type LoadedBlock } from '../contentClient'
++import { sameRef } from '../target'
++
++function checked<T>(name: string, value: unknown): T {
++  try { return checkedShape<T>(name, value) }
++  catch { throw new Error('修订比较响应不符合当前契约，未采用其内容。') }
++}
++export type ComparePort = {
++  session(): Promise<SessionResponse>
++  history(id: string, cursor: string | null): Promise<PageRevision>
++  block(ref: ContentRef): Promise<LoadedBlock>
++}
++export const compareClient: ComparePort = {
++  session: async () => checked('SessionResponse', await request('GET /api/v1/session', undefined)),
++  history: async (id, cursor) => {
++    const page = checked<PageRevision>('PageRevision', await request('GET /api/v1/objects/{id}/revisions', undefined, undefined, { path: { id }, query: { limit: 20, ...(cursor ? { cursor } : {}) } }))
++    if (page.items.length > 20 || page.items.some((item, index) => item.ref.entity !== 'block' || item.ref.id !== id
++      || index > 0 && item.ref.revision >= page.items[index - 1].ref.revision)
++      || page.next_cursor !== null && (!page.next_cursor || page.next_cursor.length > 1024 || !page.items.length)) throw new Error('历史分页与此内容块不符，未采用其修订。')
++    return page
++  },
++  block: async selected => {
++    const ref = checked<ContentRef>('ContentRef', selected)
++    if (ref.entity !== 'block') throw new Error('只比较同一内容块的精确修订。')
++    const result = await requestWithMetadata('GET /api/v1/blocks/{id}', undefined, undefined, { path: { id: ref.id }, query: { revision: ref.revision, include_provenance: true } })
++    const projection = checked<BlockProvenanceResponse>('BlockProvenanceResponse', result.data)
++    verifyMetadata(ref, projection.block, result.etag)
++    // This narrow closed ContentBlock tree has only fixed ASCII keys and safe integer
++    // revisions. No generic Python/JS float or arbitrary Unicode-key equivalence is claimed.
++    // Missing model-default fields also fail the full persisted metadata hash.
++    if (!sameRef(ref, projection.block_ref) || digest(canonical(projection.block)) !== ref.sha256) throw new Error('完整块元数据与所选修订哈希不符，未显示比较内容。')
++    const body = await requestWithMetadata('GET /api/v1/blocks/{id}/body', undefined, undefined, { path: { id: ref.id }, query: { revision: ref.revision } })
++    if (typeof body.data !== 'string' || body.etag !== `"${projection.block.body_sha256}"`
++      || digest(body.data) !== projection.block.body_sha256) throw new Error('正文 UTF-8 与所选块的哈希不符，未显示比较内容。')
++    return { ...projection, body: body.data }
++  },
++}
+diff --git a/apps/web/src/features/reader/versionCompare/fixtures.ts b/apps/web/src/features/reader/versionCompare/fixtures.ts
+new file mode 100644
+index 0000000..014696d
+--- /dev/null
++++ b/apps/web/src/features/reader/versionCompare/fixtures.ts
+@@ -0,0 +1,72 @@
++// Synthetic wire values computed once with the actual Python ContentBlock owner schema.
++import type { BlockProvenanceResponse, ContentRef } from '../../../../../../packages/contracts/generated/api-types'
++export const versions: { ref: ContentRef; data: BlockProvenanceResponse; body: string }[] = [
++  {
++    "ref": {
++      "entity": "block",
++      "id": "block_compare",
++      "revision": 1,
++      "sha256": "90516b5f4a29e522171e7027d13f933d13fc0164228e87372637a06d768f66f8"
++    },
++    "data": {
++      "block": {
++        "schema_version": "3.0.0",
++        "id": "block_compare",
++        "revision": 1,
++        "entity": "block",
++        "kind": "text",
++        "title": "Synthetic comparison",
++        "body_path": "content/block_compare.md",
++        "body_sha256": "de98ede458bc0217a3a01fda076a4971289f84755d176e2e84f505af67c0bcd5",
++        "concepts": [],
++        "citations": [],
++        "depends_on": []
++      },
++      "block_ref": {
++        "entity": "block",
++        "id": "block_compare",
++        "revision": 1,
++        "sha256": "90516b5f4a29e522171e7027d13f933d13fc0164228e87372637a06d768f66f8"
++      },
++      "original_source": null,
++      "citations": [],
++      "unresolved_citation_ids": [],
++      "warnings": []
++    },
++    "body": "old α\nshared\n"
++  },
++  {
++    "ref": {
++      "entity": "block",
++      "id": "block_compare",
++      "revision": 2,
++      "sha256": "4f34126913866ab2ab8466dc70623564ab71a8f8b25ad1570d6c10702cc7cd25"
++    },
++    "data": {
++      "block": {
++        "schema_version": "3.0.0",
++        "id": "block_compare",
++        "revision": 2,
++        "entity": "block",
++        "kind": "text",
++        "title": "Synthetic comparison",
++        "body_path": "content/block_compare.md",
++        "body_sha256": "7c7dc0ecc1825c9ae159d49770623ec3389b62b47aecd6ca8ac00f85179a9a6d",
++        "concepts": [],
++        "citations": [],
++        "depends_on": []
++      },
++      "block_ref": {
++        "entity": "block",
++        "id": "block_compare",
++        "revision": 2,
++        "sha256": "4f34126913866ab2ab8466dc70623564ab71a8f8b25ad1570d6c10702cc7cd25"
++      },
++      "original_source": null,
++      "citations": [],
++      "unresolved_citation_ids": [],
++      "warnings": []
++    },
++    "body": "new α\nshared\n"
++  }
++]
+diff --git a/apps/web/src/features/reader/versionCompare/useVersionCompare.ts b/apps/web/src/features/reader/versionCompare/useVersionCompare.ts
+new file mode 100644
+index 0000000..c2176da
+--- /dev/null
++++ b/apps/web/src/features/reader/versionCompare/useVersionCompare.ts
+@@ -0,0 +1,90 @@
++import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
++import type { ContentRef, RevisionSummary } from '../../../../../../packages/contracts/generated/api-types'
++import { getSessionGeneration, subscribeSessionAccess } from '../../../api/client'
++import type { LoadedBlock } from '../contentClient'
++import type { ComparePort } from './compareClient'
++
++type State = { key: string; access: number; open: boolean; items: RevisionSummary[]; cursor: string | null; left: ContentRef | null; right: ContentRef | null; result: [LoadedBlock, LoadedBlock] | null; permission: string | null; busy: boolean; error: string }
++const empty = (key: string, access: number): State => ({ key, access, open: false, items: [], cursor: null, left: null, right: null, result: null, permission: null, busy: false, error: '' })
++export function useVersionCompare(workspace: string | null, id: string, port: ComparePort) {
++  const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
++  const key = JSON.stringify([workspace, id])
++  const owner = useRef({ key, access, sequence: 0 })
++  if (owner.current.key !== key || owner.current.access !== access) owner.current = { key, access, sequence: owner.current.sequence + 1 }
++  const [stored, setStored] = useState(() => empty(key, access))
++  const state = stored.key === key && stored.access === access ? stored : empty(key, access)
++  const patch = (changes: Partial<State>) => setStored(old => ({ ...(old.key === key && old.access === access ? old : empty(key, access)), ...changes }))
++  useEffect(() => () => { owner.current.sequence++ }, [])
++  useEffect(() => { setStored(old => old.key === key && old.access === access ? old : empty(key, access)) }, [key, access])
++  useEffect(() => {
++    const clear = () => { owner.current.sequence++; patch({ result: null, busy: false, error: '读取权限需要重新核对，请明确重新读取所选修订。' }) }
++    const visibility = () => { if (document.visibilityState !== 'visible') clear() }
++    window.addEventListener('focus', clear); document.addEventListener('visibilitychange', visibility)
++    return () => { window.removeEventListener('focus', clear); document.removeEventListener('visibilitychange', visibility) }
++  }, [key, access])
++  const begin = () => {
++    const sequence = ++owner.current.sequence
++    patch({ busy: true, error: '', result: null })
++    return () => owner.current.key === key && owner.current.access === access && owner.current.sequence === sequence && getSessionGeneration() === access
++  }
++  const permitted = async () => {
++    const session = await port.session()
++    if (!workspace || session.workspace_id !== workspace || session.active_independent_attempt_id !== null) throw new Error('当前工作区或测试策略不允许读取比较内容。')
++    return JSON.stringify([session.workspace_id, session.role, session.active_independent_attempt_id, session.active_open_book_attempt_id])
++  }
++  useEffect(() => {
++    if (!state.open || !state.result || !state.permission) return
++    let live = true, timer = 0, deadline = 0
++    const sequence = owner.current.sequence
++    const valid = () => live && owner.current.key === key && owner.current.access === access && owner.current.sequence === sequence && getSessionGeneration() === access
++    const revoke = (message: string) => {
++      if (!valid()) return
++      owner.current.sequence++
++      patch({ result: null, permission: null, busy: false, error: message })
++    }
++    const poll = async () => {
++      if (!valid()) return
++      deadline = window.setTimeout(() => revoke('当前权限未能及时确认，比较正文已清除，请重新读取。'), 2000)
++      try {
++        if (await permitted() !== state.permission) revoke('读取期间权限发生变化，请重新读取准确修订。')
++      } catch { revoke('当前权限不可确认，比较正文已清除，请重新读取。') }
++      finally { window.clearTimeout(deadline); if (valid()) timer = window.setTimeout(() => void poll(), 2000) }
++    }
++    timer = window.setTimeout(() => void poll(), 2000)
++    return () => { live = false; window.clearTimeout(timer); window.clearTimeout(deadline) }
++  }, [state.open, state.result, state.permission, key, access, port])
++  const history = async (more = false) => {
++    if (!workspace || more && (!state.cursor || state.items.length >= 200)) return
++    const valid = begin(), cursor = more ? state.cursor : null
++    try {
++      const permission = await permitted(); if (!valid()) return
++      const page = await port.history(id, cursor)
++      if (!valid()) return
++      if (await permitted() !== permission) throw new Error('读取期间权限发生变化，请重新读取准确修订。')
++      if (!valid()) return
++      if (more && (page.next_cursor === cursor || page.items.some(item => item.ref.revision >= state.items.at(-1)!.ref.revision))) throw new Error('历史分页重复或冲突，请重新读取历史列表。')
++      patch({ items: more ? [...state.items, ...page.items] : page.items, cursor: page.next_cursor })
++    } catch (error) { if (valid()) patch({ error: (error as Error).message, result: null }) }
++    finally { if (valid()) patch({ busy: false }) }
++  }
++  const show = () => { patch({ open: true }); if (!state.items.length) void history() }
++  const close = () => { owner.current.sequence++; patch({ open: false, busy: false, result: null, error: '' }) }
++  const choose = (side: 'left' | 'right', sha: string) => {
++    owner.current.sequence++
++    patch({ [side]: state.items.find(item => item.ref.sha256 === sha)?.ref ?? null, result: null, busy: false, error: '' })
++  }
++  const read = async () => {
++    if (!state.left || !state.right || state.left.sha256 === state.right.sha256) return
++    const left = state.left, right = state.right, valid = begin()
++    try {
++      const permission = await permitted(); if (!valid()) return
++      const pair = await Promise.all([port.block(left), port.block(right)])
++      if (!valid()) return
++      if (await permitted() !== permission) throw new Error('读取期间权限发生变化，请重新读取准确修订。')
++      if (!valid()) return
++      patch({ result: pair, permission })
++    } catch (error) { if (valid()) patch({ error: (error as Error).message, result: null }) }
++    finally { if (valid()) patch({ busy: false }) }
++  }
++  return { ...state, show, close, choose, history, read }
++}
+diff --git a/apps/web/src/features/reader/versionCompare/versionCompare.css b/apps/web/src/features/reader/versionCompare/versionCompare.css
+new file mode 100644
+index 0000000..c39dde4
+--- /dev/null
++++ b/apps/web/src/features/reader/versionCompare/versionCompare.css
+@@ -0,0 +1,13 @@
++.block-version-compare { margin: 1rem 0; max-width: 100%; min-width: 0; }
++.block-version-compare .compare-content { border-top: 1px solid #cfd5db; padding-top: .8rem; min-width: 0; }
++.block-version-compare .compare-controls, .block-version-compare .compare-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; min-width: 0; }
++.block-version-compare .compare-controls label { display: grid; gap: .4rem; min-width: 0; }
++.block-version-compare select { width: 100%; min-width: 0; }
++.block-version-compare .compare-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .8rem 0; }
++.block-version-compare .compare-columns > *, .block-version-compare .compare-field, .block-version-compare .compare-diff { min-width: 0; max-width: 100%; }
++.block-version-compare pre { white-space: pre; overflow-x: auto; max-width: 100%; margin: .4rem 0; padding: .65rem; background: #f7f8fa; border: 1px solid #d8dee5; font-size: .85rem; line-height: 1.65; }
++.block-version-compare code, .block-version-compare p { overflow-wrap: anywhere; }
++.block-version-compare .compare-source { font-size: .85rem; }
++.block-version-compare .compare-removed > pre { background: #fff4f2; border-left: 3px solid #a73e34; }
++.block-version-compare .compare-added > pre { background: #eff8f2; border-left: 3px solid #367548; }
++@media (max-width: 700px) { .block-version-compare .compare-columns, .block-version-compare .compare-controls { grid-template-columns: minmax(0, 1fr); } }
+diff --git a/docs/adr/0031-block-version-compare.md b/docs/adr/0031-block-version-compare.md
+new file mode 100644
+index 0000000..d43d17b
+--- /dev/null
++++ b/docs/adr/0031-block-version-compare.md
+@@ -0,0 +1,11 @@
++# ADR 0031: Read-only exact block revision comparison
++
++PRODUCT_DESIGN.md §§6/15.2, 20.1 and Appendix A require immutable references and meaningful version comparison. This narrow Reader feature compares two explicitly selected historical revisions of one actual block. It does not edit, approve, publish, restore, or derive semantic equivalence. Four main navigation entries and existing Reader/note actions are unchanged.
++
++Only already-registered session, history, exact metadata/provenance and body GETs are used through the generated client. Current OpenAPI shape validation is reused; the feature checks block identity, exact ETag and projection reference, actual complete ContentBlock metadata hash and UTF-8 re-encoded body hash. Metadata canonicalization is restricted to this closed fixed-ASCII-key model and safe integer revisions, including all persisted default fields. It is not a general cross-language float canonicalizer. The existing text transport exposes decoded text, not an independent original-byte download; decoding changes (including BOM loss) fail hash checking. Provenance's ETag identifies block metadata only, so provenance remains the current authorized server projection, not independently signed approval. No new review_state vocabulary is introduced.
++
++Selection ownership is workspace+block ID, distinct from that block's current revision. Explicit choices survive collapse within the mounted page; body results are discarded on collapse, selection change, error, target/workspace/access change or visibility/focus invalidation. A current session/Policy basis (without storing credentials) is checked before and after reads. Displayed results alone use sequential two-second permission checks; a check still unresolved after two seconds clears content, as do failure and changed role/Policy. Late asynchronous completion cannot repopulate another owner/selection/access generation. A browser profile outside the access broadcast is observed by these actual permission reads; instantaneous remote push notification is not claimed. Current protection is enforced by the server for every GET.
++
++The comparison computes common complete-line prefix/suffix and marks the entire changed middle. Runtime and memory are linear, no quadratic LCS. Above a total 100,000 UTF-16 units or 2,000 lines, only intact original text is displayed side by side. No trim, Unicode normalization or mathematical simplification is performed. Long source lines scroll within their container. History paging is explicit and bounded to 200 options per current listing, with remaining history clearly noted; this is not a claim of complete history when truncated.
++
++Behavior tests distinguish transport/shape/hash rejection, explicit selection, asynchronous owner changes, current Policy and bounded text changes. The permanent native case imports existing synthetic r1/r2 Reader history through the actual Import application, then compares over real HTTP and checks desktop/narrow containment and no learning/domain mutation. Synthetic reference import is not human mathematical approval. Each actual execution and any retained failure is recorded separately in private evidence; this ADR does not claim gates have passed.
+diff --git a/tests/e2e/block-version-compare.spec.ts b/tests/e2e/block-version-compare.spec.ts
+new file mode 100644
+index 0000000..0a457bb
+--- /dev/null
++++ b/tests/e2e/block-version-compare.spec.ts
+@@ -0,0 +1,55 @@
++import { expect, test } from '../../apps/web/node_modules/@playwright/test/index.mjs'
++import { bootstrap } from './helpers'
++import { importReaderPackage, originalReaderPackage } from './readerTestData'
++
++test('actual historical block r1/r2 comparison is read-only and remains contained at desktop and narrow widths', async ({ page }, info) => {
++  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
++  await bootstrap(page)
++  const current = originalReaderPackage('nativecompare', 2, true), old = originalReaderPackage('nativecompare', 1)
++  const imported = await importReaderPackage(page, current)
++  await imported.dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
++  await page.goto(`/?reader=${encodeURIComponent(JSON.stringify({ course: current.course, lesson: current.lessons[0], block: current.blocks[0], view: 'lesson' }))}`)
++  const block = page.locator(`#block-${current.blocks[0].id}-r2`)
++  await expect(block.locator('.reader-markdown')).toContainText('第二修订选文')
++  const requests: { method: string; path: string }[] = []
++  page.on('request', request => { const path = new URL(request.url()).pathname; if (path.startsWith('/api/v1/')) requests.push({ method: request.method(), path }) })
++  const before = await page.request.get('/api/v1/learning/progress').then(response => response.json())
++  const panel = block.getByRole('region', { name: '块修订比较', exact: true })
++  await panel.getByRole('button', { name: '比较此块的两个修订', exact: true }).click()
++  await expect(panel.getByRole('option', { name: /修订 1/ }).first()).toBeAttached()
++  await expect(panel.getByRole('button', { name: '读取所选两个修订', exact: true })).toBeDisabled()
++  await panel.getByRole('combobox', { name: '左侧修订', exact: true }).selectOption(old.blocks[0].sha256)
++  await panel.getByRole('combobox', { name: '右侧修订', exact: true }).selectOption(current.blocks[0].sha256)
++  await panel.getByRole('button', { name: '读取所选两个修订', exact: true }).click()
++  const left = panel.getByLabel('左侧完整原文', { exact: true }), right = panel.getByLabel('右侧完整原文', { exact: true })
++  await expect(left).toHaveText(old.bodies[old.blocks[0].id], { useInnerText: false })
++  await expect(right).toHaveText(current.bodies[current.blocks[0].id], { useInnerText: false })
++  expect(await left.textContent()).toBe(old.bodies[old.blocks[0].id])
++  expect(await right.textContent()).toBe(current.bodies[current.blocks[0].id])
++  await expect(panel.getByLabel('逐行文字差异')).toContainText('选文甲')
++  await expect(panel.getByLabel('逐行文字差异')).toContainText('第二修订选文')
++  await expect(panel).toContainText(old.blocks[0].sha256)
++  await expect(panel).toContainText(current.blocks[0].sha256)
++  const geometry = async () => panel.evaluate(node => ({ width: node.clientWidth, scroll: node.scrollWidth, readerWidth: node.closest('.reader-scroll')!.clientWidth, readerScroll: node.closest('.reader-scroll')!.scrollWidth }))
++  const desktop = await geometry(); expect(desktop.scroll).toBeLessThanOrEqual(desktop.width + 1); expect(desktop.readerScroll).toBeLessThanOrEqual(desktop.readerWidth + 1)
++  await panel.screenshot({ path: info.outputPath('block-compare-1440.png') })
++  await page.setViewportSize({ width: 390, height: 844 })
++  const narrow = await geometry(); expect(narrow.scroll).toBeLessThanOrEqual(narrow.width + 1); expect(narrow.readerScroll).toBeLessThanOrEqual(narrow.readerWidth + 1)
++  await panel.getByRole('button', { name: '收起修订比较', exact: true }).scrollIntoViewIfNeeded()
++  await page.screenshot({ path: info.outputPath('block-compare-controls-390.png') })
++  await left.scrollIntoViewIfNeeded()
++  expect(await left.evaluate(node => getComputedStyle(node).overflowX)).toBe('auto')
++  expect(await left.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true)
++  await page.screenshot({ path: info.outputPath('block-compare-original-390.png') })
++  await panel.getByRole('button', { name: '收起修订比较', exact: true }).click()
++  await panel.getByRole('button', { name: '比较此块的两个修订', exact: true }).click()
++  await expect(panel.getByRole('combobox', { name: '左侧修订', exact: true })).toHaveValue(old.blocks[0].sha256)
++  await expect(panel.getByRole('combobox', { name: '右侧修订', exact: true })).toHaveValue(current.blocks[0].sha256)
++  expect(await page.request.get('/api/v1/learning/progress').then(response => response.json())).toEqual(before)
++  const contentReads = requests.filter(request => request.path.includes(`/blocks/${old.blocks[0].id}`) || request.path === `/api/v1/objects/${old.blocks[0].id}/revisions`)
++  expect(contentReads.length).toBeGreaterThanOrEqual(5)
++  expect(contentReads.every(request => request.method === 'GET')).toBe(true)
++  expect(requests.filter(request => request.method !== 'GET' && !request.path.startsWith('/api/v1/workbench/'))).toEqual([])
++  await info.attach('comparison-http-readback', { body: JSON.stringify({ old: old.blocks[0], current: current.blocks[0], desktop, narrow, contentReads, learningUnchanged: true }), contentType: 'application/json' })
++  expect(errors).toEqual([])
++})

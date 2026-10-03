@@ -1,0 +1,1692 @@
+{
+  "RestoreNumericSourceSpan": {
+    "additionalProperties": false,
+    "properties": {
+      "start_codepoint": {
+        "maximum": 399999,
+        "minimum": 0,
+        "title": "Start Codepoint",
+        "type": "integer"
+      },
+      "end_codepoint": {
+        "maximum": 400000,
+        "minimum": 1,
+        "title": "End Codepoint",
+        "type": "integer"
+      },
+      "quote": {
+        "maxLength": 512,
+        "minLength": 1,
+        "title": "Quote",
+        "type": "string"
+      }
+    },
+    "required": [
+      "start_codepoint",
+      "end_codepoint",
+      "quote"
+    ],
+    "title": "RestoreNumericSourceSpan",
+    "type": "object"
+  },
+  "RestoreNumericVariableBinding": {
+    "$defs": {
+      "RestoreNumericSourceSpan": {
+        "additionalProperties": false,
+        "properties": {
+          "start_codepoint": {
+            "maximum": 399999,
+            "minimum": 0,
+            "title": "Start Codepoint",
+            "type": "integer"
+          },
+          "end_codepoint": {
+            "maximum": 400000,
+            "minimum": 1,
+            "title": "End Codepoint",
+            "type": "integer"
+          },
+          "quote": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Quote",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start_codepoint",
+          "end_codepoint",
+          "quote"
+        ],
+        "title": "RestoreNumericSourceSpan",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "variable_name": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+        "title": "Variable Name",
+        "type": "string"
+      },
+      "value_source": {
+        "$ref": "#/$defs/RestoreNumericSourceSpan"
+      }
+    },
+    "required": [
+      "variable_name",
+      "value_source"
+    ],
+    "title": "RestoreNumericVariableBinding",
+    "type": "object"
+  },
+  "RestoreNumericAssertionBinding": {
+    "$defs": {
+      "RestoreNumericSourceSpan": {
+        "additionalProperties": false,
+        "properties": {
+          "start_codepoint": {
+            "maximum": 399999,
+            "minimum": 0,
+            "title": "Start Codepoint",
+            "type": "integer"
+          },
+          "end_codepoint": {
+            "maximum": 400000,
+            "minimum": 1,
+            "title": "End Codepoint",
+            "type": "integer"
+          },
+          "quote": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Quote",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start_codepoint",
+          "end_codepoint",
+          "quote"
+        ],
+        "title": "RestoreNumericSourceSpan",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "assertion_id": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+        "title": "Assertion Id",
+        "type": "string"
+      },
+      "expression_source": {
+        "$ref": "#/$defs/RestoreNumericSourceSpan"
+      },
+      "expected_source": {
+        "$ref": "#/$defs/RestoreNumericSourceSpan"
+      }
+    },
+    "required": [
+      "assertion_id",
+      "expression_source",
+      "expected_source"
+    ],
+    "title": "RestoreNumericAssertionBinding",
+    "type": "object"
+  },
+  "RestoreNumericMaterialWrite": {
+    "$defs": {
+      "NumericAssertion": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "expression": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Expression",
+            "type": "string"
+          },
+          "expected": {
+            "title": "Expected",
+            "type": "number"
+          },
+          "atol": {
+            "minimum": 0,
+            "title": "Atol",
+            "type": "number"
+          },
+          "rtol": {
+            "minimum": 0,
+            "title": "Rtol",
+            "type": "number"
+          },
+          "unit": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "expression",
+          "expected",
+          "atol",
+          "rtol",
+          "unit"
+        ],
+        "title": "NumericAssertion",
+        "type": "object"
+      },
+      "NumericPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "const": "finite-arithmetic-v1",
+            "title": "Version",
+            "type": "string"
+          },
+          "variables": {
+            "items": {
+              "$ref": "#/$defs/NumericVariable"
+            },
+            "maxItems": 32,
+            "title": "Variables",
+            "type": "array"
+          },
+          "assertions": {
+            "items": {
+              "$ref": "#/$defs/NumericAssertion"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Assertions",
+            "type": "array"
+          },
+          "seed": {
+            "title": "Seed",
+            "type": "null"
+          }
+        },
+        "required": [
+          "version",
+          "variables",
+          "assertions",
+          "seed"
+        ],
+        "title": "NumericPlan",
+        "type": "object"
+      },
+      "NumericVariable": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          },
+          "unit": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "value",
+          "unit"
+        ],
+        "title": "NumericVariable",
+        "type": "object"
+      },
+      "RestoreNumericAssertionBinding": {
+        "additionalProperties": false,
+        "properties": {
+          "assertion_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Assertion Id",
+            "type": "string"
+          },
+          "expression_source": {
+            "$ref": "#/$defs/RestoreNumericSourceSpan"
+          },
+          "expected_source": {
+            "$ref": "#/$defs/RestoreNumericSourceSpan"
+          }
+        },
+        "required": [
+          "assertion_id",
+          "expression_source",
+          "expected_source"
+        ],
+        "title": "RestoreNumericAssertionBinding",
+        "type": "object"
+      },
+      "RestoreNumericSourceSpan": {
+        "additionalProperties": false,
+        "properties": {
+          "start_codepoint": {
+            "maximum": 399999,
+            "minimum": 0,
+            "title": "Start Codepoint",
+            "type": "integer"
+          },
+          "end_codepoint": {
+            "maximum": 400000,
+            "minimum": 1,
+            "title": "End Codepoint",
+            "type": "integer"
+          },
+          "quote": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Quote",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start_codepoint",
+          "end_codepoint",
+          "quote"
+        ],
+        "title": "RestoreNumericSourceSpan",
+        "type": "object"
+      },
+      "RestoreNumericVariableBinding": {
+        "additionalProperties": false,
+        "properties": {
+          "variable_name": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+            "title": "Variable Name",
+            "type": "string"
+          },
+          "value_source": {
+            "$ref": "#/$defs/RestoreNumericSourceSpan"
+          }
+        },
+        "required": [
+          "variable_name",
+          "value_source"
+        ],
+        "title": "RestoreNumericVariableBinding",
+        "type": "object"
+      },
+      "WorkedExampleSymbol": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "tex": {
+            "minLength": 1,
+            "title": "Tex",
+            "type": "string"
+          },
+          "domain": {
+            "minLength": 1,
+            "title": "Domain",
+            "type": "string"
+          },
+          "dimension": {
+            "minLength": 1,
+            "title": "Dimension",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "tex",
+          "domain",
+          "dimension"
+        ],
+        "title": "WorkedExampleSymbol",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "version": {
+        "const": "restore-numeric-material-v1",
+        "title": "Version",
+        "type": "string"
+      },
+      "symbols": {
+        "items": {
+          "$ref": "#/$defs/WorkedExampleSymbol"
+        },
+        "maxItems": 64,
+        "minItems": 1,
+        "title": "Symbols",
+        "type": "array"
+      },
+      "plan": {
+        "$ref": "#/$defs/NumericPlan"
+      },
+      "variable_bindings": {
+        "items": {
+          "$ref": "#/$defs/RestoreNumericVariableBinding"
+        },
+        "maxItems": 32,
+        "title": "Variable Bindings",
+        "type": "array"
+      },
+      "assertion_bindings": {
+        "items": {
+          "$ref": "#/$defs/RestoreNumericAssertionBinding"
+        },
+        "maxItems": 32,
+        "minItems": 1,
+        "title": "Assertion Bindings",
+        "type": "array"
+      },
+      "reason": {
+        "maxLength": 2000,
+        "minLength": 1,
+        "title": "Reason",
+        "type": "string"
+      }
+    },
+    "required": [
+      "version",
+      "symbols",
+      "plan",
+      "variable_bindings",
+      "assertion_bindings",
+      "reason"
+    ],
+    "title": "RestoreNumericMaterialWrite",
+    "type": "object"
+  },
+  "RestoreNumericMaterialView": {
+    "$defs": {
+      "AuthoringBlockRef": {
+        "additionalProperties": false,
+        "properties": {
+          "entity": {
+            "const": "block",
+            "title": "Entity",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity",
+          "id",
+          "revision",
+          "sha256"
+        ],
+        "title": "AuthoringBlockRef",
+        "type": "object"
+      },
+      "AuthoringCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "draft_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Draft Id",
+            "type": "string"
+          },
+          "draft_revision": {
+            "minimum": 1,
+            "title": "Draft Revision",
+            "type": "integer"
+          },
+          "entity": {
+            "const": "block",
+            "title": "Entity",
+            "type": "string"
+          },
+          "candidate_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Candidate Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft_id",
+          "draft_revision",
+          "entity",
+          "candidate_sha256"
+        ],
+        "title": "AuthoringCandidate",
+        "type": "object"
+      },
+      "NumericAssertion": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "expression": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Expression",
+            "type": "string"
+          },
+          "expected": {
+            "title": "Expected",
+            "type": "number"
+          },
+          "atol": {
+            "minimum": 0,
+            "title": "Atol",
+            "type": "number"
+          },
+          "rtol": {
+            "minimum": 0,
+            "title": "Rtol",
+            "type": "number"
+          },
+          "unit": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "expression",
+          "expected",
+          "atol",
+          "rtol",
+          "unit"
+        ],
+        "title": "NumericAssertion",
+        "type": "object"
+      },
+      "NumericPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "const": "finite-arithmetic-v1",
+            "title": "Version",
+            "type": "string"
+          },
+          "variables": {
+            "items": {
+              "$ref": "#/$defs/NumericVariable"
+            },
+            "maxItems": 32,
+            "title": "Variables",
+            "type": "array"
+          },
+          "assertions": {
+            "items": {
+              "$ref": "#/$defs/NumericAssertion"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Assertions",
+            "type": "array"
+          },
+          "seed": {
+            "title": "Seed",
+            "type": "null"
+          }
+        },
+        "required": [
+          "version",
+          "variables",
+          "assertions",
+          "seed"
+        ],
+        "title": "NumericPlan",
+        "type": "object"
+      },
+      "NumericVariable": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          },
+          "unit": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "value",
+          "unit"
+        ],
+        "title": "NumericVariable",
+        "type": "object"
+      },
+      "RestoreNumericAssertionBinding": {
+        "additionalProperties": false,
+        "properties": {
+          "assertion_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Assertion Id",
+            "type": "string"
+          },
+          "expression_source": {
+            "$ref": "#/$defs/RestoreNumericSourceSpan"
+          },
+          "expected_source": {
+            "$ref": "#/$defs/RestoreNumericSourceSpan"
+          }
+        },
+        "required": [
+          "assertion_id",
+          "expression_source",
+          "expected_source"
+        ],
+        "title": "RestoreNumericAssertionBinding",
+        "type": "object"
+      },
+      "RestoreNumericMaterialWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "const": "restore-numeric-material-v1",
+            "title": "Version",
+            "type": "string"
+          },
+          "symbols": {
+            "items": {
+              "$ref": "#/$defs/WorkedExampleSymbol"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Symbols",
+            "type": "array"
+          },
+          "plan": {
+            "$ref": "#/$defs/NumericPlan"
+          },
+          "variable_bindings": {
+            "items": {
+              "$ref": "#/$defs/RestoreNumericVariableBinding"
+            },
+            "maxItems": 32,
+            "title": "Variable Bindings",
+            "type": "array"
+          },
+          "assertion_bindings": {
+            "items": {
+              "$ref": "#/$defs/RestoreNumericAssertionBinding"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Assertion Bindings",
+            "type": "array"
+          },
+          "reason": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "symbols",
+          "plan",
+          "variable_bindings",
+          "assertion_bindings",
+          "reason"
+        ],
+        "title": "RestoreNumericMaterialWrite",
+        "type": "object"
+      },
+      "RestoreNumericSourceSpan": {
+        "additionalProperties": false,
+        "properties": {
+          "start_codepoint": {
+            "maximum": 399999,
+            "minimum": 0,
+            "title": "Start Codepoint",
+            "type": "integer"
+          },
+          "end_codepoint": {
+            "maximum": 400000,
+            "minimum": 1,
+            "title": "End Codepoint",
+            "type": "integer"
+          },
+          "quote": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Quote",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start_codepoint",
+          "end_codepoint",
+          "quote"
+        ],
+        "title": "RestoreNumericSourceSpan",
+        "type": "object"
+      },
+      "RestoreNumericVariableBinding": {
+        "additionalProperties": false,
+        "properties": {
+          "variable_name": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+            "title": "Variable Name",
+            "type": "string"
+          },
+          "value_source": {
+            "$ref": "#/$defs/RestoreNumericSourceSpan"
+          }
+        },
+        "required": [
+          "variable_name",
+          "value_source"
+        ],
+        "title": "RestoreNumericVariableBinding",
+        "type": "object"
+      },
+      "WorkedExampleSymbol": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "tex": {
+            "minLength": 1,
+            "title": "Tex",
+            "type": "string"
+          },
+          "domain": {
+            "minLength": 1,
+            "title": "Domain",
+            "type": "string"
+          },
+          "dimension": {
+            "minLength": 1,
+            "title": "Dimension",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "tex",
+          "domain",
+          "dimension"
+        ],
+        "title": "WorkedExampleSymbol",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "owner": {
+        "const": "authoring_restore",
+        "title": "Owner",
+        "type": "string"
+      },
+      "candidate": {
+        "$ref": "#/$defs/AuthoringCandidate"
+      },
+      "restore_record_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Restore Record Sha256",
+        "type": "string"
+      },
+      "source_ref": {
+        "$ref": "#/$defs/AuthoringBlockRef"
+      },
+      "source_material_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Source Material Sha256",
+        "type": "string"
+      },
+      "body_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Body Sha256",
+        "type": "string"
+      },
+      "material": {
+        "$ref": "#/$defs/RestoreNumericMaterialWrite"
+      },
+      "numeric_material_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Numeric Material Sha256",
+        "type": "string"
+      }
+    },
+    "required": [
+      "owner",
+      "candidate",
+      "restore_record_sha256",
+      "source_ref",
+      "source_material_sha256",
+      "body_sha256",
+      "material",
+      "numeric_material_sha256"
+    ],
+    "title": "RestoreNumericMaterialView",
+    "type": "object"
+  },
+  "RestoreNumericCheckPreviewWrite": {
+    "$defs": {
+      "AuthoringCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "draft_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Draft Id",
+            "type": "string"
+          },
+          "draft_revision": {
+            "minimum": 1,
+            "title": "Draft Revision",
+            "type": "integer"
+          },
+          "entity": {
+            "const": "block",
+            "title": "Entity",
+            "type": "string"
+          },
+          "candidate_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Candidate Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft_id",
+          "draft_revision",
+          "entity",
+          "candidate_sha256"
+        ],
+        "title": "AuthoringCandidate",
+        "type": "object"
+      },
+      "NumericAssertion": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "expression": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Expression",
+            "type": "string"
+          },
+          "expected": {
+            "title": "Expected",
+            "type": "number"
+          },
+          "atol": {
+            "minimum": 0,
+            "title": "Atol",
+            "type": "number"
+          },
+          "rtol": {
+            "minimum": 0,
+            "title": "Rtol",
+            "type": "number"
+          },
+          "unit": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "expression",
+          "expected",
+          "atol",
+          "rtol",
+          "unit"
+        ],
+        "title": "NumericAssertion",
+        "type": "object"
+      },
+      "NumericPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "const": "finite-arithmetic-v1",
+            "title": "Version",
+            "type": "string"
+          },
+          "variables": {
+            "items": {
+              "$ref": "#/$defs/NumericVariable"
+            },
+            "maxItems": 32,
+            "title": "Variables",
+            "type": "array"
+          },
+          "assertions": {
+            "items": {
+              "$ref": "#/$defs/NumericAssertion"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Assertions",
+            "type": "array"
+          },
+          "seed": {
+            "title": "Seed",
+            "type": "null"
+          }
+        },
+        "required": [
+          "version",
+          "variables",
+          "assertions",
+          "seed"
+        ],
+        "title": "NumericPlan",
+        "type": "object"
+      },
+      "NumericVariable": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          },
+          "unit": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "value",
+          "unit"
+        ],
+        "title": "NumericVariable",
+        "type": "object"
+      },
+      "RestoreNumericAssertionBinding": {
+        "additionalProperties": false,
+        "properties": {
+          "assertion_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Assertion Id",
+            "type": "string"
+          },
+          "expression_source": {
+            "$ref": "#/$defs/RestoreNumericSourceSpan"
+          },
+          "expected_source": {
+            "$ref": "#/$defs/RestoreNumericSourceSpan"
+          }
+        },
+        "required": [
+          "assertion_id",
+          "expression_source",
+          "expected_source"
+        ],
+        "title": "RestoreNumericAssertionBinding",
+        "type": "object"
+      },
+      "RestoreNumericMaterialWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "const": "restore-numeric-material-v1",
+            "title": "Version",
+            "type": "string"
+          },
+          "symbols": {
+            "items": {
+              "$ref": "#/$defs/WorkedExampleSymbol"
+            },
+            "maxItems": 64,
+            "minItems": 1,
+            "title": "Symbols",
+            "type": "array"
+          },
+          "plan": {
+            "$ref": "#/$defs/NumericPlan"
+          },
+          "variable_bindings": {
+            "items": {
+              "$ref": "#/$defs/RestoreNumericVariableBinding"
+            },
+            "maxItems": 32,
+            "title": "Variable Bindings",
+            "type": "array"
+          },
+          "assertion_bindings": {
+            "items": {
+              "$ref": "#/$defs/RestoreNumericAssertionBinding"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Assertion Bindings",
+            "type": "array"
+          },
+          "reason": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "symbols",
+          "plan",
+          "variable_bindings",
+          "assertion_bindings",
+          "reason"
+        ],
+        "title": "RestoreNumericMaterialWrite",
+        "type": "object"
+      },
+      "RestoreNumericSourceSpan": {
+        "additionalProperties": false,
+        "properties": {
+          "start_codepoint": {
+            "maximum": 399999,
+            "minimum": 0,
+            "title": "Start Codepoint",
+            "type": "integer"
+          },
+          "end_codepoint": {
+            "maximum": 400000,
+            "minimum": 1,
+            "title": "End Codepoint",
+            "type": "integer"
+          },
+          "quote": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Quote",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start_codepoint",
+          "end_codepoint",
+          "quote"
+        ],
+        "title": "RestoreNumericSourceSpan",
+        "type": "object"
+      },
+      "RestoreNumericVariableBinding": {
+        "additionalProperties": false,
+        "properties": {
+          "variable_name": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+            "title": "Variable Name",
+            "type": "string"
+          },
+          "value_source": {
+            "$ref": "#/$defs/RestoreNumericSourceSpan"
+          }
+        },
+        "required": [
+          "variable_name",
+          "value_source"
+        ],
+        "title": "RestoreNumericVariableBinding",
+        "type": "object"
+      },
+      "WorkedExampleSymbol": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "tex": {
+            "minLength": 1,
+            "title": "Tex",
+            "type": "string"
+          },
+          "domain": {
+            "minLength": 1,
+            "title": "Domain",
+            "type": "string"
+          },
+          "dimension": {
+            "minLength": 1,
+            "title": "Dimension",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "tex",
+          "domain",
+          "dimension"
+        ],
+        "title": "WorkedExampleSymbol",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "candidate": {
+        "$ref": "#/$defs/AuthoringCandidate"
+      },
+      "material": {
+        "$ref": "#/$defs/RestoreNumericMaterialWrite"
+      }
+    },
+    "required": [
+      "candidate",
+      "material"
+    ],
+    "title": "RestoreNumericCheckPreviewWrite",
+    "type": "object"
+  },
+  "RestoreNumericCheckView": {
+    "$defs": {
+      "AuthoringCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "draft_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Draft Id",
+            "type": "string"
+          },
+          "draft_revision": {
+            "minimum": 1,
+            "title": "Draft Revision",
+            "type": "integer"
+          },
+          "entity": {
+            "const": "block",
+            "title": "Entity",
+            "type": "string"
+          },
+          "candidate_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Candidate Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft_id",
+          "draft_revision",
+          "entity",
+          "candidate_sha256"
+        ],
+        "title": "AuthoringCandidate",
+        "type": "object"
+      },
+      "JobRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "awaiting_approval",
+              "completed",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status"
+        ],
+        "title": "JobRef",
+        "type": "object"
+      },
+      "NumericAssertion": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "expression": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Expression",
+            "type": "string"
+          },
+          "expected": {
+            "title": "Expected",
+            "type": "number"
+          },
+          "atol": {
+            "minimum": 0,
+            "title": "Atol",
+            "type": "number"
+          },
+          "rtol": {
+            "minimum": 0,
+            "title": "Rtol",
+            "type": "number"
+          },
+          "unit": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "expression",
+          "expected",
+          "atol",
+          "rtol",
+          "unit"
+        ],
+        "title": "NumericAssertion",
+        "type": "object"
+      },
+      "NumericAssertionResult": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "actual": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "NUMERIC_DOMAIN_ERROR",
+                  "NUMERIC_NONFINITE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          }
+        },
+        "required": [
+          "id",
+          "actual",
+          "passed",
+          "error_code"
+        ],
+        "title": "NumericAssertionResult",
+        "type": "object"
+      },
+      "NumericCheckResult": {
+        "additionalProperties": false,
+        "properties": {
+          "job_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "input_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Input Sha256",
+            "type": "string"
+          },
+          "operation_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Operation Sha256",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "passed",
+              "mismatch",
+              "evaluation_error",
+              "timeout",
+              "resource_limit",
+              "cancelled",
+              "environment_unavailable",
+              "outcome_unknown"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "BLOCKED"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Finished At",
+            "type": "string"
+          },
+          "exit_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exit Code"
+          },
+          "assertions": {
+            "items": {
+              "$ref": "#/$defs/NumericAssertionResult"
+            },
+            "maxItems": 32,
+            "title": "Assertions",
+            "type": "array"
+          },
+          "output_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Sha256"
+          },
+          "result_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Result Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "input_sha256",
+          "operation_sha256",
+          "outcome",
+          "verdict",
+          "started_at",
+          "finished_at",
+          "exit_code",
+          "assertions",
+          "output_sha256",
+          "result_sha256"
+        ],
+        "title": "NumericCheckResult",
+        "type": "object"
+      },
+      "NumericPlan": {
+        "additionalProperties": false,
+        "properties": {
+          "version": {
+            "const": "finite-arithmetic-v1",
+            "title": "Version",
+            "type": "string"
+          },
+          "variables": {
+            "items": {
+              "$ref": "#/$defs/NumericVariable"
+            },
+            "maxItems": 32,
+            "title": "Variables",
+            "type": "array"
+          },
+          "assertions": {
+            "items": {
+              "$ref": "#/$defs/NumericAssertion"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Assertions",
+            "type": "array"
+          },
+          "seed": {
+            "title": "Seed",
+            "type": "null"
+          }
+        },
+        "required": [
+          "version",
+          "variables",
+          "assertions",
+          "seed"
+        ],
+        "title": "NumericPlan",
+        "type": "object"
+      },
+      "NumericRuntimeProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "evaluator_version": {
+            "const": "finite-arithmetic-v1",
+            "title": "Evaluator Version",
+            "type": "string"
+          },
+          "evaluator_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Evaluator Sha256",
+            "type": "string"
+          },
+          "runtime_manifest_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Runtime Manifest Sha256",
+            "type": "string"
+          },
+          "python_version": {
+            "minLength": 1,
+            "title": "Python Version",
+            "type": "string"
+          },
+          "sandbox_version": {
+            "minLength": 1,
+            "title": "Sandbox Version",
+            "type": "string"
+          },
+          "wall_seconds": {
+            "const": 5,
+            "title": "Wall Seconds",
+            "type": "integer"
+          },
+          "cpu_seconds": {
+            "const": 2,
+            "title": "Cpu Seconds",
+            "type": "integer"
+          },
+          "memory_bytes": {
+            "const": 268435456,
+            "title": "Memory Bytes",
+            "type": "integer"
+          },
+          "output_bytes": {
+            "const": 65536,
+            "title": "Output Bytes",
+            "type": "integer"
+          },
+          "evaluator_process_limit": {
+            "const": 1,
+            "title": "Evaluator Process Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "evaluator_version",
+          "evaluator_sha256",
+          "runtime_manifest_sha256",
+          "python_version",
+          "sandbox_version",
+          "wall_seconds",
+          "cpu_seconds",
+          "memory_bytes",
+          "output_bytes",
+          "evaluator_process_limit"
+        ],
+        "title": "NumericRuntimeProfile",
+        "type": "object"
+      },
+      "NumericVariable": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_]{0,31}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          },
+          "unit": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "value",
+          "unit"
+        ],
+        "title": "NumericVariable",
+        "type": "object"
+      },
+      "Warning": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "locator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Locator"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "warning",
+              "error"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "severity"
+        ],
+        "title": "Warning",
+        "type": "object"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+        "title": "Id",
+        "type": "string"
+      },
+      "revision": {
+        "minimum": 1,
+        "title": "Revision",
+        "type": "integer"
+      },
+      "candidate": {
+        "$ref": "#/$defs/AuthoringCandidate"
+      },
+      "plan": {
+        "$ref": "#/$defs/NumericPlan"
+      },
+      "runtime": {
+        "$ref": "#/$defs/NumericRuntimeProfile"
+      },
+      "operation_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Operation Sha256",
+        "type": "string"
+      },
+      "decision": {
+        "enum": [
+          "pending",
+          "approve_once",
+          "decline"
+        ],
+        "title": "Decision",
+        "type": "string"
+      },
+      "created_at": {
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+        "title": "Created At",
+        "type": "string"
+      },
+      "expires_at": {
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+        "title": "Expires At",
+        "type": "string"
+      },
+      "expired": {
+        "title": "Expired",
+        "type": "boolean"
+      },
+      "job": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/JobRef"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "job_revision": {
+        "anyOf": [
+          {
+            "minimum": 1,
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "title": "Job Revision"
+      },
+      "result": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/NumericCheckResult"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "warnings": {
+        "items": {
+          "$ref": "#/$defs/Warning"
+        },
+        "title": "Warnings",
+        "type": "array"
+      },
+      "owner": {
+        "const": "authoring_restore",
+        "title": "Owner",
+        "type": "string"
+      },
+      "numeric_material_sha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "title": "Numeric Material Sha256",
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "revision",
+      "candidate",
+      "plan",
+      "runtime",
+      "operation_sha256",
+      "decision",
+      "created_at",
+      "expires_at",
+      "expired",
+      "job",
+      "job_revision",
+      "result",
+      "warnings",
+      "owner",
+      "numeric_material_sha256"
+    ],
+    "title": "RestoreNumericCheckView",
+    "type": "object"
+  }
+}

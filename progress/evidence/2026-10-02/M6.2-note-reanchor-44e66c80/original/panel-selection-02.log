@@ -1,0 +1,98 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/notes/NotesPanelReanchor.test.tsx src/features/reader/selection.test.ts
+
+
+ RUN  v5.0.0 $HOME/.cache/learning-workbench-acceptance/m62-note-reanchor-native-oct02/apps/web
+
+ ❯ src/features/notes/NotesPanelReanchor.test.tsx (2 tests | 1 failed) 1274ms
+   × an actual IndexedDB quota failure retains adopted anchor plus unsaved text, marks close unsafe, and recovers both after unmount 1109ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/notes/NotesPanelReanchor.test.tsx > an actual IndexedDB quota failure retains adopted anchor plus unsaved text, marks close unsafe, and recovers both after unmount
+AssertionError: expected { entity: 'block', …(3) } to deeply equal { entity: 'block', …(3) }
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div />[39m
+    [36m<div>[39m
+      [36m<div[39m
+        [33mclass[39m=[32m"notes-panel"[39m
+      [36m>[39m
+        [36m<p>[39m
+          [0m笔记绑定准确内容块、修订与原文范围。它不属于已认证学习证据。[0m
+        [36m</p>[39m
+        [36m<button[39m
+          [33mdisabled[39m=[32m""[39m
+        [36m>[39m
+          [0m用当前选文新建笔记[0m
+        [36m</button>[39m
+        [36m<p>[39m
+          [0m先在正文或原始 Markdown 中选取范围，再新建笔记。[0m
+        [36m</p>[39m
+        [36m<label>[39m
+          [0m笔记范围[0m
+          [36m<select>[39m
+            [36m<option[39m
+              [33mvalue[39m=[32m"all"[39m
+            [36m>[39m
+              [0m工作区全部笔记[0m
+            [36m</option>[39m
+          [36m</select>[39m
+        [36m</label>[39m
+        [36m<ul[39m
+          [33mclass[39m=[32m"note-list"[39m
+        [36m>[39m
+          [36m<li>[39m
+            [36m<button>[39m
+              [0m已保存的原笔记[0m
+              [0m [0m
+              [36m<small>[39m
+                [0m修订 [0m
+                [0m2[0m
+                [0m · [0m
+                [0mstale[0m
+              [36m</small>[39m
+            [36m</button>[39m
+          [36m</li>[39m
+        [36m</ul>[39m
+        [36m<button>[39m
+          [0m恢复本机笔记草稿 [0m
+          [0mnote_reanchor[0m
+        [36m</button>[39m
+      [36m</div>[39m
+    [36m</div>[39m
+  [36m</body>[39m
+[36m</html>[39m
+
+- Expected
++ Received
+
+  {
+    "entity": "block",
+    "id": "block_compare",
+-   "revision": 2,
+-   "sha256": "4f34126913866ab2ab8466dc70623564ab71a8f8b25ad1570d6c10702cc7cd25",
++   "revision": 1,
++   "sha256": "90516b5f4a29e522171e7027d13f933d13fc0164228e87372637a06d768f66f8",
+  }
+
+ ❯ src/features/notes/NotesPanelReanchor.test.tsx:89:83
+     87|   const unload = new Event('beforeunload', { cancelable: true }); wind…
+     88|   f.unmount(); render(<NotesPanel {...f.props} />)
+     89|   await waitFor(async () => expect((await localCandidate()).candidate.…
+       |                                                                                   ^
+     90|   fireEvent.click(await screen.findByRole('button', { name: /恢复本机笔记草稿/…
+     91|   await waitFor(() => expect((screen.getByLabelText('笔记正文') as HTMLTex…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 39 passed (40)
+   Start at  20:56:29
+   Duration  1.81s (tests 65%, environment 20%, transform 9%, import 6%)
+

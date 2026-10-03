@@ -1,0 +1,32 @@
+
+Running 1 test using 1 worker
+
+(node:2264896) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/e2e/restore-numeric.spec.ts:8:1 › actual Restore numeric UI freezes manually anchored material, requires separate execution approval and preserves actual sandbox outcome (13.6s)
+
+
+  1) tests/e2e/restore-numeric.spec.ts:8:1 › actual Restore numeric UI freezes manually anchored material, requires separate execution approval and preserves actual sandbox outcome 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "PUBLISH_NUMERIC_REQUIRED"
+    Received: undefined
+
+      113 |     const publishResponse = await publishing, publishOutcome = { status: publishResponse.status(), body: await publishResponse.json() }
+      114 |     if (actual.result!.verdict === 'BLOCKED') {
+    > 115 |       expect(publishOutcome.status).toBe(409); expect(publishOutcome.body.code).toBe('PUBLISH_NUMERIC_REQUIRED')
+          |                                                                                 ^
+      116 |       await expect(publication.getByText('服务端拒绝，原发布基准保留', { exact: true })).toBeVisible()
+      117 |       expect(await page.request.get(`/api/v1/objects/${id}/current`).then(response => response.json())).toEqual(current.blocks[2])
+      118 |       const unchanged = await page.request.get(`/api/v1/content/restore-drafts/${draftId}`).then(response => response.json())
+        at $HOME/.cache/learning-workbench-acceptance/m62-restore-numeric-ui-oct02/tests/e2e/restore-numeric.spec.ts:115:81
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-restore-numeric-ui-evidence-oct02/numeric-native-review-01-output/restore-numeric-actual-Res-ba346-rves-actual-sandbox-outcome/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m62-restore-numeric-ui-evidence-oct02/numeric-native-review-01-output/restore-numeric-actual-Res-ba346-rves-actual-sandbox-outcome/error-context.md
+
+  1 failed
+    tests/e2e/restore-numeric.spec.ts:8:1 › actual Restore numeric UI freezes manually anchored material, requires separate execution approval and preserves actual sandbox outcome 

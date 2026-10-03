@@ -1,0 +1,105 @@
+......................................................FF......           [100%]
+=================================== FAILURES ===================================
+_ test_generated_owner_history_preserves_exact_numeric_observation_without_running_it[assessment] _
+
+tmp_path = PosixPath('<PYTEST_ROOT>/pytest-194/test_generated_owner_history_p1')
+kind = 'assessment'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x72231e7c1cd0>
+
+    @pytest.mark.parametrize('kind', ['single', 'assessment'])
+    def test_generated_owner_history_preserves_exact_numeric_observation_without_running_it(tmp_path, kind, monkeypatch):
+        from tests.integration.test_authoring_numeric_service import generated as single_fixture
+        from tests.integration.test_authoring_group_numeric_service import generated_group
+        from tests.integration.test_review_job_lifecycle import PreparedReviewFixture
+    
+        # Existing producers use explicit controlled loopback model bytes. This is
+        # neither a vendor request nor mathematical review or numeric execution.
+        state = single_fixture.__wrapped__(tmp_path) if kind == 'single' else generated_group(tmp_path, kind)
+>       database, identity, owner, numeric, candidate, runtime = state
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       ValueError: too many values to unpack (expected 6)
+
+tests/integration/test_review_history.py:303: ValueError
+__ test_running_cancel_original_ack_survives_later_terminal_and_terminal_noop __
+
+prepared = PreparedReviewFixture()
+
+    def test_running_cancel_original_ack_survives_later_terminal_and_terminal_noop(prepared):
+        database, identity, value = prepared
+        with database.transaction() as connection:
+            create = create_job(connection, identity.workspace_id, value)
+            repo = ReviewRepository(connection, identity.workspace_id)
+            repo.bind(value, create)
+            jobs = ReviewJobRepository(connection, identity.workspace_id)
+            jobs.claim(value.review_id)
+            ack = jobs.cancel(value.review_id, 2)
+            original = ReviewCancelCommand(workspace_id=identity.workspace_id, actor_id=identity.id,
+                route=f'POST /jobs/{value.review_id}/cancel', command_key='synthetic_running_cancel',
+                review_id=value.review_id, basis_revision=2, resulting_revision=3, recorded_at=utc_now(),
+                command_kind='cancel', request={'expected_revision': 2}, ack=ack.model_dump())
+            repo.record_cancel(original)
+>           jobs.transition(jobs.load(value.review_id), 'cancelled')
+
+tests/integration/test_review_history.py:342: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/api/app/infrastructure/review_job_repository.py:66: in transition
+    super().transition(current, status, result=result, cancel=cancel, owner=owner, until=until)
+services/api/app/infrastructure/authoring_job_repository.py:180: in transition
+    self.load(row['id'])
+services/api/app/infrastructure/review_job_repository.py:46: in load
+    row = super().load(identifier)
+          ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.review_job_repository.ReviewJobRepository object at 0x72231e7c5a60>
+identifier = 'review_synthetic'
+
+    def load(self, identifier: str) -> sqlite3.Row:
+        row = self.conn.execute('SELECT * FROM jobs WHERE id=? AND workspace_id=?',
+                                (identifier, self.workspace_id)).fetchone()
+        if row is None or row['kind'] not in self.kinds:
+            raise ApiError(404, 'JOB_MISSING', '任务不存在或不可访问。')
+        try:
+            checked(row['input_json'], row['input_sha256'])
+            TypeAdapter(dm.Id).validate_python(row['id'])
+            events = self.conn.execute('SELECT * FROM job_events WHERE job_id=? ORDER BY seq', (identifier,)).fetchall()
+            if not events or len(events) != row['revision']:
+                raise integrity()
+            previous = None
+            previous_time = ''
+            cancel = False
+            for seq, event in enumerate(events, 1):
+                payload = strict_json(event['payload_json'])
+                if (set(payload) != {'revision', 'status', 'cancel_requested', 'kind', 'input_sha256', 'result_sha256'}
+                        or canonical_bytes(payload).decode() != event['payload_json']
+                        or payload['revision'] != seq or type(payload['revision']) is not int or event['seq'] != seq
+                        or payload['kind'] != row['kind'] or payload['input_sha256'] != row['input_sha256']
+                        or type(payload['cancel_requested']) is not bool or cancel and not payload['cancel_requested']
+                        or payload['status'] != event['type'] or previous in TERMINAL
+                        or previous is not None and event['type'] not in self.transitions[previous]):
+                    raise integrity()
+                if seq == 1 and event['type'] != self.initial_status(row['kind']):
+                    raise integrity()
+                TypeAdapter(dm.UTC).validate_python(event['occurred_at'])
+                if event['occurred_at'] < previous_time:
+                    raise integrity()
+                previous, previous_time, cancel = event['type'], event['occurred_at'], payload['cancel_requested']
+                if (event['type'] in TERMINAL) != (payload['result_sha256'] is not None):
+>                   raise integrity()
+E                   services.api.app.application.errors.ApiError: (409, 'AUTHORING_INTEGRITY_ERROR', '创作持久记录未通过完整性校验。')
+
+services/api/app/infrastructure/authoring_job_repository.py:114: ApiError
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_review_history.py::test_generated_owner_history_preserves_exact_numeric_observation_without_running_it[assessment] - ValueError: too many values to unpack (expected 6)
+FAILED tests/integration/test_review_history.py::test_running_cancel_original_ack_survives_later_terminal_and_terminal_noop - services.api.app.application.errors.ApiError: (409, 'AUTHORING_INTEGRITY_ERROR', '创作持久记录未通过完整性校验。')
+2 failed, 60 passed, 2 warnings in 29.81s

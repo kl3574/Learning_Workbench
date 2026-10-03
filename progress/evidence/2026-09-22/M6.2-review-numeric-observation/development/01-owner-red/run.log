@@ -1,0 +1,38 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__ test_real_numeric_owner_reads_all_checks_without_writes_or_runtime[single] __
+
+generated = <controlled single Provider-history case; no identity repr>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71eecbe69550>
+
+    def test_real_numeric_owner_reads_all_checks_without_writes_or_runtime(generated, monkeypatch):
+        case = generated
+        first = case.preview('first')
+        second = case.preview('second')
+        before = table_hashes(case.database)
+        with case.database.transaction(immediate=False) as conn:
+            conn.execute('PRAGMA query_only=ON')
+            def forbidden(*args, **kwargs):
+                pytest.fail('numeric review must not open another connection or invoke runtime')
+            with monkeypatch.context() as patch:
+                patch.setattr(case.database, 'connect', forbidden)
+                for method in ['prepare', 'check', 'manifest_document', 'run_checked']:
+                    patch.setattr(case.runtime, method, forbidden, raising=False)
+>               observation = case.numeric.read_review_numeric(conn, case.identity, case.candidate)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               AttributeError: 'NumericService' object has no attribute 'read_review_numeric'
+
+tests/integration/test_review_numeric_observations.py:28: AttributeError
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_review_numeric_observations.py::test_real_numeric_owner_reads_all_checks_without_writes_or_runtime[single]
+1 failed, 2 warnings in 1.60s

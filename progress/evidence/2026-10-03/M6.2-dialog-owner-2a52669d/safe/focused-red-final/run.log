@@ -1,0 +1,124 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/workbench/DialogPointer.test.tsx
+
+
+ RUN  v5.0.0 <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-dialog-pointer-boundary-oct03/apps/web
+
+ ❯ src/workbench/DialogPointer.test.tsx (12 tests | 9 failed) 165ms
+   × keeps the dialog when a content press ends with a click retargeted to its backdrop 82ms
+   × keeps the dialog for released on content 9ms
+   × keeps the dialog for captured release inside box 8ms
+   × keeps the dialog for different pointer 7ms
+   × keeps the dialog for cancelled 7ms
+   × keeps the dialog for secondary 9ms
+   × keeps the dialog for no press 6ms
+   × keeps the dialog for dialog interior 6ms
+   × consumes a background gesture once even when the caller retains an unsaved dialog 4ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/workbench/DialogPointer.test.tsx > keeps the dialog when a content press ends with a click retargeted to its backdrop
+AssertionError: expected null to be <dialog class …(1)>…(1)</dialog> // Object.is equality
+
+- Expected:
+<dialog
+  aria-label="Pointer example"
+  class=""
+>
+  <div
+    class="dialog-inner"
+  >
+    <header>
+      <h2>
+        Pointer example
+      </h2>
+      <button
+        aria-label="关闭Pointer example"
+      >
+        ×
+      </button>
+    </header>
+    <button>
+      Read details
+    </button>
+  </div>
+</dialog>
+
++ Received:
+null
+
+ ❯ src/workbench/DialogPointer.test.tsx:23:40
+     21|   fireEvent.pointerUp(dialog, { pointerId: 1, isPrimary: true, button:…
+     22|   fireEvent.click(dialog)
+     23|   expect(screen.queryByRole('dialog')).toBe(dialog)
+       |                                        ^
+     24| })
+     25|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  src/workbench/DialogPointer.test.tsx > keeps the dialog for released on content
+ FAIL  src/workbench/DialogPointer.test.tsx > keeps the dialog for captured release inside box
+ FAIL  src/workbench/DialogPointer.test.tsx > keeps the dialog for different pointer
+ FAIL  src/workbench/DialogPointer.test.tsx > keeps the dialog for cancelled
+ FAIL  src/workbench/DialogPointer.test.tsx > keeps the dialog for secondary
+ FAIL  src/workbench/DialogPointer.test.tsx > keeps the dialog for no press
+ FAIL  src/workbench/DialogPointer.test.tsx > keeps the dialog for dialog interior
+AssertionError: expected null to be <dialog class …(1)>…(1)</dialog> // Object.is equality
+
+- Expected:
+<dialog
+  aria-label="Pointer example"
+  class=""
+>
+  <div
+    class="dialog-inner"
+  >
+    <header>
+      <h2>
+        Pointer example
+      </h2>
+      <button
+        aria-label="关闭Pointer example"
+      >
+        ×
+      </button>
+    </header>
+    <button>
+      Read details
+    </button>
+  </div>
+</dialog>
+
++ Received:
+null
+
+ ❯ src/workbench/DialogPointer.test.tsx:48:40
+     46|     mode === 'captured release inside box' ? { ...outside, clientX: 12…
+     47|   fireEvent.click(dialog)
+     48|   expect(screen.queryByRole('dialog')).toBe(dialog)
+       |                                        ^
+     49| })
+     50|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  src/workbench/DialogPointer.test.tsx > consumes a background gesture once even when the caller retains an unsaved dialog
+AssertionError: expected "vi.fn()" to be called 1 times, but got 2 times
+ ❯ src/workbench/DialogPointer.test.tsx:58:17
+     56|   expect(close).toHaveBeenCalledTimes(1)
+     57|   fireEvent.click(dialog)
+     58|   expect(close).toHaveBeenCalledTimes(1)
+       |                 ^
+     59|   expect(screen.getByText('Unsaved text remains with the caller.')).to…
+     60| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  9 failed | 3 passed (12)
+   Start at  07:41:51
+   Duration  534ms (environment 46%, tests 38%, import 10%, transform 6%)
+

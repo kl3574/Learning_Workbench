@@ -1,4 +1,4 @@
-import type { ApprovalDecision, AuthoringGroupPrepareWrite, AuthoringGroupNumericPreviewWrite, AuthoringGroupNumericCheckView, AuthoringPrepareWrite, JobRef, JobSnapshot, NumericCheckDecisionAck, NumericCheckPreviewWrite, NumericCheckView } from '../../../../../packages/contracts/generated/api-types'
+import type { ApprovalDecision, AuthoringDraftView, AuthoringGroupPrepareWrite, AuthoringGroupNumericPreviewWrite, AuthoringGroupNumericCheckView, AuthoringPrepareWrite, JobRef, JobSnapshot, NumericCheckDecisionAck, NumericCheckPreviewWrite, NumericCheckView } from '../../../../../packages/contracts/generated/api-types'
 import { assertDraftWriteAllowed, DraftStore, type DraftRecord, type DraftWriteGuard } from '../../workbench/DraftStore'
 import { checkedProvider, exactObject, sameValue, validIdentity } from '../providers/providerSchema'
 type Identity = { version: 1; workspace_id: string; command_id: string; rejection: { status: number; code: string | null } | null }
@@ -16,7 +16,14 @@ export type AuthoringCommandInput = Input<AuthoringCommand>
 export const authoringCommandStore = new DraftStore({ name: 'learning-workbench.authoring-commands.v1' })
 export const authoringControlStore = new DraftStore({ name: 'learning-workbench.authoring-controls.v1' })
 export function checkedAuthoring<T>(name: string, value: unknown): T {
-  try { return checkedProvider<T>(name, value) } catch { throw new Error('创作记录不符合当前生成契约；原命令保留。') }
+  try {
+    const checked = checkedProvider<T>(name, value)
+    if (name === 'AuthoringDraftView') {
+      const draft = checked as AuthoringDraftView
+      if ((draft.state === 'published') !== (draft.published_ref !== null)) throw new Error('发布态与精确结果引用不一致。')
+    }
+    return checked
+  } catch { throw new Error('创作记录不符合当前生成契约；原命令保留。') }
 }
 export function decodeAuthoringCommand(raw: string, workspace: string): AuthoringCommand {
   const v = JSON.parse(raw) as AuthoringCommand

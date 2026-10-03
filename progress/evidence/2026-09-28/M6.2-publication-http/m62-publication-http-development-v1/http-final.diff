@@ -1,0 +1,574 @@
+diff --git a/packages/contracts/generated/api-client.ts b/packages/contracts/generated/api-client.ts
+index d891061..f0a1176 100644
+--- a/packages/contracts/generated/api-client.ts
++++ b/packages/contracts/generated/api-client.ts
+@@ -1,6 +1,6 @@
+ // Generated from PRODUCT_DESIGN.md v3.0.7 and actual runtime OpenAPI; do not edit.
+ // spec_sha256: 2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d
+-import type { ApprovalDecision, AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, AuthoringDraftView, AuthoringGroupDraftView, AuthoringGroupNumericCheckView, AuthoringGroupNumericPreviewWrite, AuthoringGroupPrepareWrite, AuthoringJobPage, AuthoringJobReadView, AuthoringPrepareWrite, AuthoringPrivateSolutionView, BlockReadResponse, BootstrapRequest, BootstrapResponse, ConceptStateResponse, ConsentCreate, ConsentCreateAck, ConsentPage, ConsentPreviewWrite, ConsentProposalView, ConsentRevoke, ContentRef, Course, DirectorySearchResponse, DraftReviewWrite, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearnerProfile, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, NumericCheckDecisionAck, NumericCheckPreviewWrite, NumericCheckView, OutlineResponse, PageAssessment, PageCourse, PageEvidence, PageNote, PagePracticeSet, PageRevision, PageRoute, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ProfileWrite, ProviderCapabilitiesResponse, ProviderConfigAck, ProviderConfigView, ProviderConfigWrite, ProviderSecretAck, ProviderSecretWrite, ReadinessResponse, RecommendationDecisionWrite, RecommendationPage, RegradeRequest, ResponsesWrite, RetrievalIndexOverview, RetrievalIndexRebuildWrite, RetrievalIndexScopeStatus, RetrievalQueryView, RetrievalQueryWrite, ReviewDecisionWrite, ReviewJobAck, RoleRequest, Route, RouteCompletionRequest, SessionResponse, SourceResponse, StoredReviewReceipt, TutorAnswerDeltaEvent, TutorApprovalRequiredEvent, TutorCancelledEvent, TutorCitationEvent, TutorCompletedEvent, TutorContextReadyEvent, TutorFailedEvent, TutorMessagePage, TutorQueuedEvent, TutorRetrievalCompletedEvent, TutorRunCancel, TutorRunControlView, TutorRunCreate, TutorRunView, TutorThreadCreate, TutorThreadPage, TutorThreadView, TutorUsageEvent, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
++import type { ApprovalDecision, AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, AuthoringDraftView, AuthoringGroupDraftView, AuthoringGroupNumericCheckView, AuthoringGroupNumericPreviewWrite, AuthoringGroupPrepareWrite, AuthoringJobPage, AuthoringJobReadView, AuthoringPrepareWrite, AuthoringPrivateSolutionView, BlockReadResponse, BootstrapRequest, BootstrapResponse, ConceptStateResponse, ConsentCreate, ConsentCreateAck, ConsentPage, ConsentPreviewWrite, ConsentProposalView, ConsentRevoke, ContentRef, Course, DirectorySearchResponse, DraftPublishWrite, DraftReviewWrite, EmptyRequest, HealthResponse, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearnerProfile, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, NumericCheckDecisionAck, NumericCheckPreviewWrite, NumericCheckView, OutlineResponse, PageAssessment, PageCourse, PageEvidence, PageNote, PagePracticeSet, PageRevision, PageRoute, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ProfileWrite, ProviderCapabilitiesResponse, ProviderConfigAck, ProviderConfigView, ProviderConfigWrite, ProviderSecretAck, ProviderSecretWrite, ReadinessResponse, RecommendationDecisionWrite, RecommendationPage, RegradeRequest, ResponsesWrite, RetrievalIndexOverview, RetrievalIndexRebuildWrite, RetrievalIndexScopeStatus, RetrievalQueryView, RetrievalQueryWrite, ReviewDecisionWrite, ReviewJobAck, RoleRequest, Route, RouteCompletionRequest, SessionResponse, SourceResponse, StoredReviewReceipt, TutorAnswerDeltaEvent, TutorApprovalRequiredEvent, TutorCancelledEvent, TutorCitationEvent, TutorCompletedEvent, TutorContextReadyEvent, TutorFailedEvent, TutorMessagePage, TutorQueuedEvent, TutorRetrievalCompletedEvent, TutorRunCancel, TutorRunControlView, TutorRunCreate, TutorRunView, TutorThreadCreate, TutorThreadPage, TutorThreadView, TutorUsageEvent, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
+ 
+ import type { RetrievalIndexStatusQuery } from "./retrieval-ports-binding";
+ export interface ApiEndpointMap {
+@@ -39,6 +39,7 @@ export interface ApiEndpointMap {
+   "GET /api/v1/courses/{id}/directory-search": { request: undefined; response: DirectorySearchResponse; headers: null; parameters: { path: { "id": string }; query: { "limit"?: number; "q": string; "revision": number } }; parametersRequired: true };
+   "GET /api/v1/courses/{id}/outline": { request: undefined; response: OutlineResponse; headers: null; parameters: { path: { "id": string }; query: { "revision": number } }; parametersRequired: true };
+   "GET /api/v1/drafts/{id}": { request: undefined; response: ImportDraftSnapshot; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
++  "POST /api/v1/drafts/{id}/publish": { request: DraftPublishWrite; response: ContentRef; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
+   "POST /api/v1/drafts/{id}/review": { request: DraftReviewWrite; response: ReviewJobAck; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
+   "POST /api/v1/imports": { request: ImportUpload; response: ImportStaged; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
+   "GET /api/v1/imports/{id}": { request: undefined; response: ImportPreview; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
+@@ -709,6 +710,21 @@ export const API_ENDPOINTS = {
+     ],
+     "queryParameters": []
+   },
++  "POST /api/v1/drafts/{id}/publish": {
++    "method": "POST",
++    "path": "/api/v1/drafts/{id}/publish",
++    "responseKind": "json",
++    "requestKind": "json",
++    "multipartFields": [],
++    "pathParameters": [
++      {
++        "name": "id",
++        "required": true,
++        "type": "string"
++      }
++    ],
++    "queryParameters": []
++  },
+   "POST /api/v1/drafts/{id}/review": {
+     "method": "POST",
+     "path": "/api/v1/drafts/{id}/review",
+diff --git a/packages/contracts/generated/api-types.ts b/packages/contracts/generated/api-types.ts
+index 9d4d9d5..d3d3004 100644
+--- a/packages/contracts/generated/api-types.ts
++++ b/packages/contracts/generated/api-types.ts
+@@ -741,6 +741,13 @@ export type DraftCandidate = {
+   "candidate_sha256": string;
+ };
+ 
++export type DraftPublishWrite = {
++  "expected_revision": number;
++  "expected_content_sha256": string;
++  "review_receipt_id": string;
++  "acknowledged_warning_codes": Array<string>;
++};
++
+ export type DraftReviewWrite = {
+   "expected_revision": number;
+   "checks": Array<"structure" | "sources" | "mathematics" | "numerical_examples">;
+diff --git a/packages/contracts/generated/openapi.json b/packages/contracts/generated/openapi.json
+index 602eb24..849586a 100644
+--- a/packages/contracts/generated/openapi.json
++++ b/packages/contracts/generated/openapi.json
+@@ -4482,6 +4482,41 @@
+         "title": "DraftCandidate",
+         "type": "object"
+       },
++      "DraftPublishWrite": {
++        "additionalProperties": false,
++        "properties": {
++          "acknowledged_warning_codes": {
++            "items": {
++              "type": "string"
++            },
++            "title": "Acknowledged Warning Codes",
++            "type": "array"
++          },
++          "expected_content_sha256": {
++            "pattern": "^[a-f0-9]{64}$",
++            "title": "Expected Content Sha256",
++            "type": "string"
++          },
++          "expected_revision": {
++            "minimum": 1.0,
++            "title": "Expected Revision",
++            "type": "integer"
++          },
++          "review_receipt_id": {
++            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
++            "title": "Review Receipt Id",
++            "type": "string"
++          }
++        },
++        "required": [
++          "expected_revision",
++          "expected_content_sha256",
++          "review_receipt_id",
++          "acknowledged_warning_codes"
++        ],
++        "title": "DraftPublishWrite",
++        "type": "object"
++      },
+       "DraftReviewWrite": {
+         "additionalProperties": false,
+         "properties": {
+@@ -19517,6 +19552,191 @@
+         ]
+       }
+     },
++    "/api/v1/drafts/{id}/publish": {
++      "post": {
++        "operationId": "publish_api_v1_drafts__id__publish_post",
++        "parameters": [
++          {
++            "in": "path",
++            "name": "id",
++            "required": true,
++            "schema": {
++              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
++              "title": "Id",
++              "type": "string"
++            }
++          },
++          {
++            "in": "header",
++            "name": "Origin",
++            "required": true,
++            "schema": {
++              "title": "Origin",
++              "type": "string"
++            }
++          },
++          {
++            "in": "header",
++            "name": "X-CSRF-Token",
++            "required": true,
++            "schema": {
++              "title": "X-Csrf-Token",
++              "type": "string"
++            }
++          },
++          {
++            "in": "header",
++            "name": "Idempotency-Key",
++            "required": true,
++            "schema": {
++              "pattern": "^[A-Za-z0-9_-]{1,128}$",
++              "type": "string"
++            }
++          }
++        ],
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/DraftPublishWrite"
++              }
++            }
++          },
++          "required": true
++        },
++        "responses": {
++          "201": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ContentRef"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "400": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Bad Request"
++          },
++          "401": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Unauthorized"
++          },
++          "403": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Forbidden"
++          },
++          "404": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Not Found"
++          },
++          "405": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Method Not Allowed"
++          },
++          "409": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Conflict"
++          },
++          "412": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Precondition Failed"
++          },
++          "413": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Request Entity Too Large"
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Unprocessable Entity"
++          },
++          "500": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Internal Server Error"
++          },
++          "503": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ErrorEnvelope"
++                }
++              }
++            },
++            "description": "Service Unavailable"
++          }
++        },
++        "security": [
++          {
++            "LocalSession": []
++          }
++        ],
++        "summary": "Publish",
++        "tags": [
++          "quality"
++        ]
++      }
++    },
+     "/api/v1/drafts/{id}/review": {
+       "post": {
+         "operationId": "create_api_v1_drafts__id__review_post",
+diff --git a/packages/contracts/generated/runtime-route-coverage.json b/packages/contracts/generated/runtime-route-coverage.json
+index 6af231d..6a2cada 100644
+--- a/packages/contracts/generated/runtime-route-coverage.json
++++ b/packages/contracts/generated/runtime-route-coverage.json
+@@ -17,7 +17,6 @@
+     "POST /api/v1/deletions/commit",
+     "POST /api/v1/deletions/preview",
+     "POST /api/v1/drafts",
+-    "POST /api/v1/drafts/{id}/publish",
+     "POST /api/v1/exports",
+     "POST /api/v1/feedback",
+     "POST /api/v1/imports/progress-commit",
+@@ -92,6 +91,7 @@
+     "POST /api/v1/consents",
+     "POST /api/v1/consents/preview",
+     "POST /api/v1/consents/{id}/revoke",
++    "POST /api/v1/drafts/{id}/publish",
+     "POST /api/v1/drafts/{id}/review",
+     "POST /api/v1/imports",
+     "POST /api/v1/imports/{id}/cancel",
+diff --git a/services/api/app/interfaces/publication_http.py b/services/api/app/interfaces/publication_http.py
+new file mode 100644
+index 0000000..ddb61ef
+--- /dev/null
++++ b/services/api/app/interfaces/publication_http.py
+@@ -0,0 +1,26 @@
++"""Explicit publication intent; the owning service commits and verifies real results."""
++from typing import TYPE_CHECKING
++
++from fastapi import APIRouter, Depends, Request
++from packages.contracts import domain_models as dm
++from ..application.publication_admission_models import DraftPublishWrite
++from .authoring_http import query_fields
++from .http import current_identity, verify_write
++from .practice_http import private_response
++from .tutor_http import COMMAND_PARAMETER, command_key, unique_headers
++
++if TYPE_CHECKING:
++    from ..application.draft_publication import DraftPublicationService
++
++
++def create_publication_router(service: 'DraftPublicationService') -> APIRouter:
++    router = APIRouter(prefix='/api/v1', tags=['quality'], dependencies=[
++        Depends(current_identity), Depends(unique_headers), Depends(private_response)])
++
++    @router.post('/drafts/{id}/publish', response_model=dm.ContentRef, status_code=201,
++                 dependencies=[Depends(verify_write)], openapi_extra={'parameters': [COMMAND_PARAMETER]})
++    def publish(id: dm.Id, body: DraftPublishWrite, request: Request) -> dm.ContentRef:
++        query_fields(request, set())
++        return service.publish(request.state.identity, id, body, command_key(request))
++
++    return router
+diff --git a/services/api/app/main.py b/services/api/app/main.py
+index cd71c02..b60aea0 100644
+--- a/services/api/app/main.py
++++ b/services/api/app/main.py
+@@ -15,6 +15,7 @@ from .application.draft_candidates import DraftCandidates
+ from .application.review_numeric import ReviewNumeric
+ from .application.review_service import ReviewService
+ from .application.review_worker import ReviewWorker
++from .application.draft_publication import DraftPublicationService
+ from .application.consents import ConsentsService
+ from .application.provider_budget import ProofRegistry, RequestPreparer
+ from .application.provider_dispatch import CheckedDispatch
+@@ -57,6 +58,7 @@ from .interfaces.tutor_http import create_tutor_router
+ from .interfaces.authoring_http import create_authoring_router
+ from .interfaces.authoring_group_http import create_authoring_group_router
+ from .interfaces.review_http import create_review_router
++from .interfaces.publication_http import create_publication_router
+ from .infrastructure.import_worker import ImportWorker
+ from .infrastructure.provider_secret_store import preferred_secret_store
+ from .infrastructure.authoring_numeric_runtime import NumericRuntime
+@@ -101,6 +103,7 @@ def create_app(settings: Settings | None = None, *,
+         ReviewNumeric(candidates, {'authoring_single': numeric_service, 'authoring_group': group_numeric_service}),
+         {(profile, 'import'): import_service for profile in IMPORT_ARTIFACT_PROFILES})
+     review_worker = ReviewWorker(review_service)
++    publication_service = DraftPublicationService(database, review_service, import_service)
+     artifacts = ArtifactsService(database, review_service.readers())
+     jobs = JobService(database, review=review_service)
+ 
+@@ -159,6 +162,7 @@ def create_app(settings: Settings | None = None, *,
+     application.state.group_numeric_worker = group_numeric_worker
+     application.state.review_service = review_service
+     application.state.review_worker = review_worker
++    application.state.publication_service = publication_service
+     application.state.artifacts_service = artifacts
+     application.state.outbound_sources = provider_sources
+     application.state.request_preparer = provider_preparer
+@@ -179,6 +183,7 @@ def create_app(settings: Settings | None = None, *,
+     application.include_router(create_authoring_router(authoring_service, numeric_service, authoring_group_service))
+     application.include_router(create_authoring_group_router(authoring_group_service, group_numeric_service))
+     application.include_router(create_review_router(review_service))
++    application.include_router(create_publication_router(publication_service))
+     if settings.static_dir.is_dir():
+         application.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="workbench")
+     return application
+diff --git a/tests/contract/test_api_projection.py b/tests/contract/test_api_projection.py
+index 6e24d80..2101e3b 100644
+--- a/tests/contract/test_api_projection.py
++++ b/tests/contract/test_api_projection.py
+@@ -59,8 +59,9 @@ def test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec():
+     assert authoring <= projection
+     assert {('POST', '/api/v1/drafts/{id}/review'), ('GET', '/api/v1/reviews/{id}'),
+             ('POST', '/api/v1/reviews/{id}/decision')} <= projection
+-    assert len(projection) == 96
+-    assert len(SPEC_ROUTES - projection) == 23
++    assert ('POST', '/api/v1/drafts/{id}/publish') in projection
++    assert len(projection) == 97
++    assert len(SPEC_ROUTES - projection) == 22
+ 
+ 
+ OPERATIONS = [(path, method, operation) for path, methods in create_app().openapi()["paths"].items()
+diff --git a/tests/integration/test_draft_publication_http.py b/tests/integration/test_draft_publication_http.py
+new file mode 100644
+index 0000000..78646f6
+--- /dev/null
++++ b/tests/integration/test_draft_publication_http.py
+@@ -0,0 +1,158 @@
++"""Actual HTTP publication of synthetic reviewed input; no real academic approval."""
++import pytest
++
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import metadata_sha256
++from tests.integration.test_authoring_http import command
++from tests.integration.test_authoring_numeric_provider_history import table_hashes
++from tests.integration.test_review_http import prepared_review_http as prepared_review_http
++
++
++def approve_for_publication(case):
++    candidate = case.candidate
++    created = case.client.post('/api/v1/drafts/' + candidate['draft_id'] + '/review',
++        json={'expected_revision': candidate['draft_revision'],
++              'checks': ['structure', 'numerical_examples', 'mathematics', 'sources'],
++              'reviewer_note': 'Synthetic HTTP publication protocol only; no actual content approval.'},
++        headers=command(case.headers, 'publish-review'))
++    assert created.status_code == 202, created.text
++    assert case.app.state.review_worker.run_once()
++    path = '/api/v1/reviews/' + created.json()['id']
++    machine = case.client.get(path)
++    assert machine.status_code == 200, machine.text
++    assert machine.json()['structural'] == 'PASS'
++    decided = case.client.post(path + '/decision', json={
++        'expected_revision': machine.json()['revision'],
++        'candidate_sha256': candidate['candidate_sha256'],
++        'mathematical': 'NOT_APPLICABLE', 'sources': 'APPROVED',
++        'reason': 'Synthetic plain text fixture; explicit protocol choice, not real source certification.',
++        'evidence_artifact_ids': []}, headers=command(case.headers, 'publish-human'))
++    assert decided.status_code == 200, decided.text
++    draft = case.client.get('/api/v1/drafts/' + candidate['draft_id'])
++    assert draft.status_code == 200, draft.text
++    body = {'expected_revision': candidate['draft_revision'],
++        'expected_content_sha256': candidate['candidate_sha256'],
++        'review_receipt_id': created.json()['id'],
++        'acknowledged_warning_codes': sorted({warning['code'] for warning in draft.json()['warnings']
++                                            if warning['severity'] == 'warning'})}
++    return body, draft.json(), decided.json()
++
++
++def test_actual_http_publish_returns_persisted_ref_and_original_201_on_replay(prepared_review_http):
++    case = prepared_review_http
++    body, original_draft, original_human = approve_for_publication(case)
++    path = '/api/v1/drafts/' + case.candidate['draft_id'] + '/publish'
++    response = case.client.post(path, json=body, headers=command(case.headers, 'publish-once'))
++    assert response.status_code == 201, response.text
++    ref = dm.ContentRef.model_validate_json(response.content)
++    assert ref.entity == 'block' and ref.revision == 1
++    assert response.headers['cache-control'] == 'no-store'
++    metadata = case.client.get(f'/api/v1/blocks/{ref.id}?revision={ref.revision}')
++    assert metadata.status_code == 200, metadata.text
++    assert metadata_sha256(dm.ContentBlock.model_validate_json(metadata.content)) == ref.sha256
++    text = case.client.get(f'/api/v1/blocks/{ref.id}/body?revision={ref.revision}')
++    assert text.status_code == 200
++    assert text.content == original_draft['payload']['body_markdown'].encode('utf-8')
++    replay = case.client.post(path, json=body, headers=command(case.headers, 'publish-once'))
++    assert replay.status_code == 201 and replay.json() == response.json()
++    assert case.client.get('/api/v1/drafts/' + case.candidate['draft_id']).json() == original_draft
++    assert case.client.get('/api/v1/reviews/' + body['review_receipt_id']).json() == original_human
++    assert case.client.get('/api/v1/courses').json()['items'] == []
++    with case.database.connect() as connection:
++        assert connection.execute('SELECT count(*) FROM objects').fetchone()[0] == 1
++        assert connection.execute('SELECT count(*) FROM revisions').fetchone()[0] == 1
++        assert connection.execute('SELECT count(*) FROM review_revisions').fetchone()[0] == 2
++
++
++def test_new_publication_requires_current_human_approval_and_keeps_machine_history(prepared_review_http):
++    case = prepared_review_http
++    body, _, human = approve_for_publication(case)
++    rejected = case.client.post('/api/v1/reviews/' + body['review_receipt_id'] + '/decision', json={
++        'expected_revision': human['revision'], 'candidate_sha256': case.candidate['candidate_sha256'],
++        'mathematical': 'REJECTED', 'sources': 'REJECTED',
++        'reason': 'Synthetic later rejection before publication.', 'evidence_artifact_ids': []},
++        headers=command(case.headers, 'reject-before-publish'))
++    assert rejected.status_code == 200, rejected.text
++    response = case.client.post('/api/v1/drafts/' + case.candidate['draft_id'] + '/publish',
++        json=body, headers=command(case.headers, 'publish-rejected'))
++    assert response.status_code == 409, response.text
++    assert case.client.get('/api/v1/reviews/' + body['review_receipt_id']).json() == rejected.json()
++    with case.database.connect() as connection:
++        assert connection.execute('SELECT count(*) FROM objects').fetchone()[0] == 0
++        assert connection.execute('SELECT count(*) FROM review_revisions').fetchone()[0] == 3
++
++
++def test_committed_publication_ack_is_historical_after_later_review_rejection(prepared_review_http):
++    case = prepared_review_http
++    body, _, human = approve_for_publication(case)
++    path = '/api/v1/drafts/' + case.candidate['draft_id'] + '/publish'
++    first = case.client.post(path, json=body, headers=command(case.headers, 'historical-publish'))
++    assert first.status_code == 201, first.text
++    rejected = case.client.post('/api/v1/reviews/' + body['review_receipt_id'] + '/decision', json={
++        'expected_revision': human['revision'], 'candidate_sha256': case.candidate['candidate_sha256'],
++        'mathematical': 'REJECTED', 'sources': 'REJECTED',
++        'reason': 'Synthetic later decision; original publication is a historical fact.',
++        'evidence_artifact_ids': []}, headers=command(case.headers, 'reject-after-publish'))
++    assert rejected.status_code == 200, rejected.text
++    replay = case.client.post(path, json=body, headers=command(case.headers, 'historical-publish'))
++    assert replay.status_code == 201 and replay.json() == first.json()
++    other = case.client.post(path, json=body, headers=command(case.headers, 'new-publish-after-reject'))
++    assert other.status_code == 409, other.text
++    assert case.client.get('/api/v1/reviews/' + body['review_receipt_id']).json() == rejected.json()
++    with case.database.connect() as connection:
++        assert connection.execute('SELECT count(*) FROM revisions').fetchone()[0] == 1
++
++
++@pytest.mark.parametrize('fault', ['missing_key', 'invalid_key', 'csrf', 'origin', 'extra_body',
++                                  'bool_revision', 'unknown_query', 'duplicate_key', 'duplicate_csrf'])
++def test_publication_transport_rejects_ambiguous_or_unauthorized_writes_before_mutation(prepared_review_http, fault):
++    case = prepared_review_http
++    body, _, _ = approve_for_publication(case)
++    path = '/api/v1/drafts/' + case.candidate['draft_id'] + '/publish'
++    headers = command(case.headers, 'guarded-publication')
++    expected = 400
++    if fault == 'missing_key':
++        headers.pop('Idempotency-Key')
++    elif fault == 'invalid_key':
++        headers['Idempotency-Key'] = 'invalid key'
++    elif fault in {'csrf', 'origin'}:
++        headers['X-CSRF-Token' if fault == 'csrf' else 'Origin'] = (
++            'synthetic-invalid' if fault == 'csrf' else 'https://invalid.example')
++        expected = 403
++    elif fault == 'extra_body':
++        body['reviewer'] = 'client-claimed-actor'
++        expected = 422
++    elif fault == 'bool_revision':
++        body['expected_revision'] = True
++        expected = 422
++    elif fault == 'unknown_query':
++        path += '?reuse=true'
++        expected = 422
++    actual_headers = list(headers.items())
++    if fault.startswith('duplicate_'):
++        actual_headers.append(('Idempotency-Key', 'second-command') if fault == 'duplicate_key'
++                              else ('X-CSRF-Token', headers['X-CSRF-Token']))
++    before = table_hashes(case.database)
++    response = case.client.post(path, json=body, headers=actual_headers)
++    assert response.status_code == expected, response.text
++    assert 'client-claimed-actor' not in response.text and 'synthetic-invalid' not in response.text
++    assert table_hashes(case.database) == before
++
++
++@pytest.mark.parametrize('change', ['role', 'logout'])
++def test_original_publication_ack_requires_current_session_authority(prepared_review_http, change):
++    case = prepared_review_http
++    body, _, _ = approve_for_publication(case)
++    path = '/api/v1/drafts/' + case.candidate['draft_id'] + '/publish'
++    original = case.client.post(path, json=body, headers=command(case.headers, 'access-publish'))
++    assert original.status_code == 201, original.text
++    if change == 'role':
++        switched = case.client.post('/api/v1/session/role', json={'role': 'learner'},
++                                    headers=command(case.headers, 'switch-learner'))
++        assert switched.status_code == 200
++    else:
++        case.client.cookies.clear()
++    before = table_hashes(case.database)
++    replay = case.client.post(path, json=body, headers=command(case.headers, 'access-publish'))
++    assert replay.status_code == (403 if change == 'role' else 401), replay.text
++    assert table_hashes(case.database) == before

@@ -1,0 +1,85 @@
+F...F.                                                                   [100%]
+=================================== FAILURES ===================================
+____ test_all_legacy_owner_shapes_and_foreign_keys_survive_forward_rebuild _____
+
+tmp_path = PosixPath('<PYTEST_ROOT>/pytest-192/test_all_legacy_owner_shapes_a0')
+
+    def test_all_legacy_owner_shapes_and_foreign_keys_survive_forward_rebuild(tmp_path):
+        """Synthetic persisted shapes only; these are not authenticated Provider results."""
+        from tests.integration.test_draft_candidate_migration import database_before_migration, source_candidate, legacy_review
+        database, workspace = database_before_migration(tmp_path)
+        with database.transaction() as conn:
+            for index, (source, entity) in enumerate([('import', 'concept'), ('authoring_single', 'block'),
+                    ('authoring_group', 'lesson'), ('authoring_group', 'practice_set'), ('authoring_group', 'assessment')]):
+                candidate = source_candidate(conn, workspace, f'draft_shape_{index}', source, entity=entity)
+>               legacy_review(conn, workspace, candidate, identifier=f'review_shape_{index}')
+
+tests/integration/test_draft_edit_migration.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7790a6e4c5e0>
+workspace = 'workspace_0991309cd92a480e9181c89c11919279'
+candidate = {'draft_id': 'draft_shape_1', 'draft_revision': 1, 'entity': 'block', 'candidate_sha256': '6b05fb6e87d3aa782632dbebbee298406590b5464af5b3fb12dba58c5a221c3a'}
+identifier = 'review_shape_1', session = True
+
+    def legacy_review(connection, workspace, candidate, *, identifier='review_original', session=True):
+        session_id = 'session_' + identifier if session else None
+        if session_id:
+            connection.execute(
+                'INSERT INTO local_sessions(id,workspace_id,token_hash,csrf_hash,role,expires_at) '
+                "VALUES(?,?,?,?,'author','2099-01-01T00:00:00Z')",
+                (session_id, workspace, sha256_bytes(session_id.encode()), 'd' * 64),
+            )
+        receipt = {'id': identifier, 'revision': 1, 'candidate': candidate, 'structural': 'NOT_RUN',
+                   'mathematical': 'NOT_RUN', 'sources': 'NOT_RUN', 'independent_pedagogy': 'NOT_RUN',
+                   'reviewer': 'synthetic historical fixture', 'created_at': STAMP, 'evidence_paths': [],
+                   'decision_reason': 'Preserve this historical receipt, never approve it.'}
+        raw = json.dumps(receipt, indent=3, ensure_ascii=False) + '\n'
+>       connection.execute('INSERT INTO reviews VALUES(?,?,?,?,?,?,?,?)',
+                           (identifier, candidate['draft_id'], candidate['draft_revision'], candidate['candidate_sha256'],
+                            1, raw, session_id, STAMP))
+E       sqlite3.IntegrityError: FOREIGN KEY constraint failed
+
+tests/integration/test_draft_candidate_migration.py:119: IntegrityError
+_ test_real_published_bases_outside_first_scope_create_no_edit[foreign_workspace] _
+
+case = SyntheticDraftEditCase(), scope = 'foreign_workspace'
+
+    @pytest.mark.parametrize('scope', ['kind', 'concept', 'dependency', 'foreign_workspace'])
+    def test_real_published_bases_outside_first_scope_create_no_edit(case, scope):
+        database, identity, base, service, _, _ = case
+        content = ContentService(database)
+        original = content.read(identity.workspace_id, 'block', base.id, base.revision)
+        raw = content.body(identity.workspace_id, base.id, base.revision)[0]
+        changes = {'id': 'synthetic_scope', 'citations': []}
+        values = []
+        workspace = identity.workspace_id
+        if scope == 'kind':
+            changes['kind'] = 'worked_example'
+        elif scope == 'concept':
+            concept = dm.Concept(id='synthetic_concept', revision=1, title='Synthetic concept')
+            values.append(concept)
+            changes['concepts'] = [concept.id]
+        elif scope == 'dependency':
+            changes['depends_on'] = [base]
+        else:
+            workspace = 'synthetic_other_workspace'
+            with database.transaction() as conn:
+>               conn.execute("INSERT INTO workspace VALUES(?,'Synthetic other','2026-09-28T00:00:00Z')", (workspace,))
+E               sqlite3.OperationalError: table workspace has 5 columns but 3 values were supplied
+
+tests/integration/test_draft_edit_integrity.py:204: OperationalError
+=============================== warnings summary ===============================
+../m62-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../m62-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_draft_edit_migration.py::test_all_legacy_owner_shapes_and_foreign_keys_survive_forward_rebuild
+FAILED tests/integration/test_draft_edit_integrity.py::test_real_published_bases_outside_first_scope_create_no_edit[foreign_workspace]
+2 failed, 4 passed, 2 warnings in 3.95s

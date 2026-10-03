@@ -13,11 +13,12 @@ from ..infrastructure.content_repository import ContentRepository
 from ..infrastructure.database import Database
 from ..infrastructure.security import guard_subject_access
 from .concept_state_rules import derive_concept_state, observation_order
-from .content_learning_access import evidence_applicability, learning_scope, participation_in_scope
+from .content_learning_access import learning_scope, participation_in_scope
 from .eligibility_models import Skill
 from .errors import ApiError
 from .evidence import latest_checked_observations
-from .learning_state_models import EvidenceApplicability, PracticeHelpActivity, SubmissionActivity
+from .evidence_applicability import current_evidence_applicability
+from .learning_state_models import PracticeHelpActivity, SubmissionActivity
 from .practice_activity_access import practice_participation
 from .profile import read_profile
 from .question_qualification import QuestionQualificationFacts, question_qualification_facts
@@ -78,16 +79,12 @@ class ConceptStateService:
         # Validate the full successful history before the user's course/skill filters.
         observations = latest_checked_observations(connection, workspace_id)
         evidence: dict[RowKey, list[ConceptStateSource]] = defaultdict(list)
-        applicability: dict[tuple[RefKey, RefKey], EvidenceApplicability] = {}
         for observation in observations:
             concept_key = ref_key(observation.concept_ref)
             if concept_key not in concepts or not included(observation.assessment_ref):
                 continue
-            key = (ref_key(observation.question_ref), concept_key)
-            if key not in applicability:
-                applicability[key] = evidence_applicability(connection, workspace_id,
-                    observation.question_ref, observation.concept_ref)
-            source = ConceptStateSource(**observation.model_dump(mode='json'), applicability=applicability[key])
+            applicability = current_evidence_applicability(connection, workspace_id, observation.evidence.id)
+            source = ConceptStateSource(**observation.model_dump(mode='json'), applicability=applicability)
             evidence[concept_key, source.evidence.skill].append(source)
             skills[concept_key].add(source.evidence.skill)
 

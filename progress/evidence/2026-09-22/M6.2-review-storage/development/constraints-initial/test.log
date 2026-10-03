@@ -1,0 +1,1760 @@
+.............FFFFFFF.FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF.. [ 93%]
+.F...                                                                    [100%]
+=================================== FAILURES ===================================
+_______ test_history_retains_exact_predecessor_hash_and_decision_command _______
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465c94f0>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_ee82481854dc428dbe37941da7740057', 'owner': 'import', 'source_kind': 'import', ...})
+
+    def test_history_retains_exact_predecessor_hash_and_decision_command(storage):
+>       database, registered, first = populated(storage)
+                                      ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:162: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46726f20>
+workspace = 'workspace_ee82481854dc428dbe37941da7740057'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_________________ test_broken_revision_chain_is_rejected[gap] __________________
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465c9c10>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_7871a214c0e749b0bcc0b6ad603b9fb9', 'owner': 'import', 'source_kind': 'import', ...})
+damage = 'gap'
+
+    @pytest.mark.parametrize('damage', ['gap', 'wrong_hash', 'wrong_review', 'missing_previous', 'machine_again', 'first_human'])
+    def test_broken_revision_chain_is_rejected(storage, damage):
+>       database, registered, first = populated(storage)
+                                      ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:177: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46726e30>
+workspace = 'workspace_7871a214c0e749b0bcc0b6ad603b9fb9'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+______________ test_broken_revision_chain_is_rejected[wrong_hash] ______________
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465ca090>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_25fd8ae796e44deaa3906f692778d208', 'owner': 'import', 'source_kind': 'import', ...})
+damage = 'wrong_hash'
+
+    @pytest.mark.parametrize('damage', ['gap', 'wrong_hash', 'wrong_review', 'missing_previous', 'machine_again', 'first_human'])
+    def test_broken_revision_chain_is_rejected(storage, damage):
+>       database, registered, first = populated(storage)
+                                      ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:177: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b467276a0>
+workspace = 'workspace_25fd8ae796e44deaa3906f692778d208'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_____________ test_broken_revision_chain_is_rejected[wrong_review] _____________
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465dd6a0>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_8bcc0797d1e9497cabf53ccb5c4f54da', 'owner': 'import', 'source_kind': 'import', ...})
+damage = 'wrong_review'
+
+    @pytest.mark.parametrize('damage', ['gap', 'wrong_hash', 'wrong_review', 'missing_previous', 'machine_again', 'first_human'])
+    def test_broken_revision_chain_is_rejected(storage, damage):
+>       database, registered, first = populated(storage)
+                                      ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:177: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46727a60>
+workspace = 'workspace_8bcc0797d1e9497cabf53ccb5c4f54da'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+___________ test_broken_revision_chain_is_rejected[missing_previous] ___________
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465df530>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_9d1e6ada999a4f5caecb5956e417cbe8', 'owner': 'import', 'source_kind': 'import', ...})
+damage = 'missing_previous'
+
+    @pytest.mark.parametrize('damage', ['gap', 'wrong_hash', 'wrong_review', 'missing_previous', 'machine_again', 'first_human'])
+    def test_broken_revision_chain_is_rejected(storage, damage):
+>       database, registered, first = populated(storage)
+                                      ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:177: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46727f10>
+workspace = 'workspace_9d1e6ada999a4f5caecb5956e417cbe8'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+____________ test_broken_revision_chain_is_rejected[machine_again] _____________
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465ca9f0>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_343f8220f89e4e89a7605724d8f62b60', 'owner': 'import', 'source_kind': 'import', ...})
+damage = 'machine_again'
+
+    @pytest.mark.parametrize('damage', ['gap', 'wrong_hash', 'wrong_review', 'missing_previous', 'machine_again', 'first_human'])
+    def test_broken_revision_chain_is_rejected(storage, damage):
+>       database, registered, first = populated(storage)
+                                      ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:177: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b467265c0>
+workspace = 'workspace_343f8220f89e4e89a7605724d8f62b60'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_____________ test_broken_revision_chain_is_rejected[first_human] ______________
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465ca2a0>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_d863a90edc194836b47a6b08b70637e2', 'owner': 'import', 'source_kind': 'import', ...})
+damage = 'first_human'
+
+    @pytest.mark.parametrize('damage', ['gap', 'wrong_hash', 'wrong_review', 'missing_previous', 'machine_again', 'first_human'])
+    def test_broken_revision_chain_is_rejected(storage, damage):
+>       database, registered, first = populated(storage)
+                                      ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:177: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46727100>
+workspace = 'workspace_d863a90edc194836b47a6b08b70637e2'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_artifact_binding_requires_real_artifact_workspace_blob_and_history[artifact_id-absent_artifact] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465dc5f0>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_2b5f367a7d234a9ea7af198a5c86e8a3', 'owner': 'import', 'source_kind': 'import', ...})
+field = 'artifact_id', value = 'absent_artifact'
+
+    @pytest.mark.parametrize(('field', 'value'), [
+        ('artifact_id', 'absent_artifact'), ('workspace_id', 'workspace_other'), ('artifact_sha256', 'f' * 64),
+        ('review_id', 'absent_review'), ('review_revision', 2), ('ordinal', -1), ('artifact_owner', 'provider'),
+    ])
+    def test_artifact_binding_requires_real_artifact_workspace_blob_and_history(storage, field, value):
+>       database, registered, _ = populated(storage)
+                                  ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:217: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46726f20>
+workspace = 'workspace_2b5f367a7d234a9ea7af198a5c86e8a3'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_artifact_binding_requires_real_artifact_workspace_blob_and_history[workspace_id-workspace_other] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465df5c0>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_e0a1bf28e1644f59b23942c2907700e9', 'owner': 'import', 'source_kind': 'import', ...})
+field = 'workspace_id', value = 'workspace_other'
+
+    @pytest.mark.parametrize(('field', 'value'), [
+        ('artifact_id', 'absent_artifact'), ('workspace_id', 'workspace_other'), ('artifact_sha256', 'f' * 64),
+        ('review_id', 'absent_review'), ('review_revision', 2), ('ordinal', -1), ('artifact_owner', 'provider'),
+    ])
+    def test_artifact_binding_requires_real_artifact_workspace_blob_and_history(storage, field, value):
+>       database, registered, _ = populated(storage)
+                                  ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:217: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46474220>
+workspace = 'workspace_e0a1bf28e1644f59b23942c2907700e9'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_artifact_binding_requires_real_artifact_workspace_blob_and_history[artifact_sha256-ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465dcf80>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_fa1e54f889f94a87b8ab8384eff8280d', 'owner': 'import', 'source_kind': 'import', ...})
+field = 'artifact_sha256'
+value = 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+
+    @pytest.mark.parametrize(('field', 'value'), [
+        ('artifact_id', 'absent_artifact'), ('workspace_id', 'workspace_other'), ('artifact_sha256', 'f' * 64),
+        ('review_id', 'absent_review'), ('review_revision', 2), ('ordinal', -1), ('artifact_owner', 'provider'),
+    ])
+    def test_artifact_binding_requires_real_artifact_workspace_blob_and_history(storage, field, value):
+>       database, registered, _ = populated(storage)
+                                  ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:217: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b464746d0>
+workspace = 'workspace_fa1e54f889f94a87b8ab8384eff8280d'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_artifact_binding_requires_real_artifact_workspace_blob_and_history[review_id-absent_review] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465de750>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_18e5a72999e14246a12fc4088f1c3b76', 'owner': 'import', 'source_kind': 'import', ...})
+field = 'review_id', value = 'absent_review'
+
+    @pytest.mark.parametrize(('field', 'value'), [
+        ('artifact_id', 'absent_artifact'), ('workspace_id', 'workspace_other'), ('artifact_sha256', 'f' * 64),
+        ('review_id', 'absent_review'), ('review_revision', 2), ('ordinal', -1), ('artifact_owner', 'provider'),
+    ])
+    def test_artifact_binding_requires_real_artifact_workspace_blob_and_history(storage, field, value):
+>       database, registered, _ = populated(storage)
+                                  ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:217: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46474b80>
+workspace = 'workspace_18e5a72999e14246a12fc4088f1c3b76'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_artifact_binding_requires_real_artifact_workspace_blob_and_history[review_revision-2] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465dd430>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_ea51873156ea4f2ca8eb980ed1c3945b', 'owner': 'import', 'source_kind': 'import', ...})
+field = 'review_revision', value = 2
+
+    @pytest.mark.parametrize(('field', 'value'), [
+        ('artifact_id', 'absent_artifact'), ('workspace_id', 'workspace_other'), ('artifact_sha256', 'f' * 64),
+        ('review_id', 'absent_review'), ('review_revision', 2), ('ordinal', -1), ('artifact_owner', 'provider'),
+    ])
+    def test_artifact_binding_requires_real_artifact_workspace_blob_and_history(storage, field, value):
+>       database, registered, _ = populated(storage)
+                                  ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:217: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46474f40>
+workspace = 'workspace_ea51873156ea4f2ca8eb980ed1c3945b'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_artifact_binding_requires_real_artifact_workspace_blob_and_history[ordinal--1] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b46601310>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_c45ffd68f0304194a604d39867bb9b64', 'owner': 'import', 'source_kind': 'import', ...})
+field = 'ordinal', value = -1
+
+    @pytest.mark.parametrize(('field', 'value'), [
+        ('artifact_id', 'absent_artifact'), ('workspace_id', 'workspace_other'), ('artifact_sha256', 'f' * 64),
+        ('review_id', 'absent_review'), ('review_revision', 2), ('ordinal', -1), ('artifact_owner', 'provider'),
+    ])
+    def test_artifact_binding_requires_real_artifact_workspace_blob_and_history(storage, field, value):
+>       database, registered, _ = populated(storage)
+                                  ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:217: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46475300>
+workspace = 'workspace_c45ffd68f0304194a604d39867bb9b64'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_artifact_binding_requires_real_artifact_workspace_blob_and_history[artifact_owner-provider] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b46603320>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_027f367c48b54de1a5c40ef4cc22c488', 'owner': 'import', 'source_kind': 'import', ...})
+field = 'artifact_owner', value = 'provider'
+
+    @pytest.mark.parametrize(('field', 'value'), [
+        ('artifact_id', 'absent_artifact'), ('workspace_id', 'workspace_other'), ('artifact_sha256', 'f' * 64),
+        ('review_id', 'absent_review'), ('review_revision', 2), ('ordinal', -1), ('artifact_owner', 'provider'),
+    ])
+    def test_artifact_binding_requires_real_artifact_workspace_blob_and_history(storage, field, value):
+>       database, registered, _ = populated(storage)
+                                  ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:217: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b464756c0>
+workspace = 'workspace_027f367c48b54de1a5c40ef4cc22c488'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+__________ test_existing_cross_workspace_artifact_cannot_be_attached ___________
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b46603740>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_69ab3311904c4fd78f308f6a6fe9281d', 'owner': 'import', 'source_kind': 'import', ...})
+
+    def test_existing_cross_workspace_artifact_cannot_be_attached(storage):
+>       database, registered, _ = populated(storage)
+                                  ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:223: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46475a80>
+workspace = 'workspace_69ab3311904c4fd78f308f6a6fe9281d'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+___ test_history_cannot_be_updated_deleted_or_replaced[0-UPDATE-review_jobs] ___
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b46601cd0>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_928522650f6d4b07b55fe639a6794eea', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_jobs', operation = 'UPDATE', recursive = 0
+
+    @pytest.mark.parametrize('table', TABLES)
+    @pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+    @pytest.mark.parametrize('recursive', [0, 1])
+    def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+>       database, _, _ = populated(storage)
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46475e40>
+workspace = 'workspace_928522650f6d4b07b55fe639a6794eea'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_history_cannot_be_updated_deleted_or_replaced[0-UPDATE-review_revisions] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b46600e30>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_0216a87485cd47dabe0fc1eea1dccb16', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_revisions', operation = 'UPDATE', recursive = 0
+
+    @pytest.mark.parametrize('table', TABLES)
+    @pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+    @pytest.mark.parametrize('recursive', [0, 1])
+    def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+>       database, _, _ = populated(storage)
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46476200>
+workspace = 'workspace_0216a87485cd47dabe0fc1eea1dccb16'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_history_cannot_be_updated_deleted_or_replaced[0-UPDATE-review_artifact_bindings] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465dfcb0>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_130fa5f104244794bca0ad001efc5c4e', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_artifact_bindings', operation = 'UPDATE', recursive = 0
+
+    @pytest.mark.parametrize('table', TABLES)
+    @pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+    @pytest.mark.parametrize('recursive', [0, 1])
+    def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+>       database, _, _ = populated(storage)
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b467264d0>
+workspace = 'workspace_130fa5f104244794bca0ad001efc5c4e'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_history_cannot_be_updated_deleted_or_replaced[0-UPDATE-review_commands] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465de6c0>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_b2bca1b2e98146179d0794ecd3bbf1ed', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_commands', operation = 'UPDATE', recursive = 0
+
+    @pytest.mark.parametrize('table', TABLES)
+    @pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+    @pytest.mark.parametrize('recursive', [0, 1])
+    def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+>       database, _, _ = populated(storage)
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46726e30>
+workspace = 'workspace_b2bca1b2e98146179d0794ecd3bbf1ed'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+___ test_history_cannot_be_updated_deleted_or_replaced[0-DELETE-review_jobs] ___
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465dfc50>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_0e41ad5cffd74bd89480cb745c1a598e', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_jobs', operation = 'DELETE', recursive = 0
+
+    @pytest.mark.parametrize('table', TABLES)
+    @pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+    @pytest.mark.parametrize('recursive', [0, 1])
+    def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+>       database, _, _ = populated(storage)
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b467271f0>
+workspace = 'workspace_0e41ad5cffd74bd89480cb745c1a598e'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_history_cannot_be_updated_deleted_or_replaced[0-DELETE-review_revisions] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465dc710>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_2cdccc8fbef84306bff7b772a35e1f96', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_revisions', operation = 'DELETE', recursive = 0
+
+    @pytest.mark.parametrize('table', TABLES)
+    @pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+    @pytest.mark.parametrize('recursive', [0, 1])
+    def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+>       database, _, _ = populated(storage)
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46476020>
+workspace = 'workspace_2cdccc8fbef84306bff7b772a35e1f96'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_history_cannot_be_updated_deleted_or_replaced[0-DELETE-review_artifact_bindings] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b466017c0>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_5f6fc4abc70a47818f6e2430e4e8fe93', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_artifact_bindings', operation = 'DELETE', recursive = 0
+
+    @pytest.mark.parametrize('table', TABLES)
+    @pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+    @pytest.mark.parametrize('recursive', [0, 1])
+    def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+>       database, _, _ = populated(storage)
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46475e40>
+workspace = 'workspace_5f6fc4abc70a47818f6e2430e4e8fe93'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_history_cannot_be_updated_deleted_or_replaced[0-DELETE-review_commands] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b466024b0>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_c659217e98f345ba99b1e245a4dcf474', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_commands', operation = 'DELETE', recursive = 0
+
+    @pytest.mark.parametrize('table', TABLES)
+    @pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+    @pytest.mark.parametrize('recursive', [0, 1])
+    def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+>       database, _, _ = populated(storage)
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46475a80>
+workspace = 'workspace_c659217e98f345ba99b1e245a4dcf474'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+__ test_history_cannot_be_updated_deleted_or_replaced[0-REPLACE-review_jobs] ___
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b46600110>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_4b0ce411ea664d599e860357b12168d8', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_jobs', operation = 'REPLACE', recursive = 0
+
+    @pytest.mark.parametrize('table', TABLES)
+    @pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+    @pytest.mark.parametrize('recursive', [0, 1])
+    def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+>       database, _, _ = populated(storage)
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b464756c0>
+workspace = 'workspace_4b0ce411ea664d599e860357b12168d8'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_history_cannot_be_updated_deleted_or_replaced[0-REPLACE-review_revisions] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b46600e90>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_904badf2fb81404cabb73deb2a158bf4', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_revisions', operation = 'REPLACE', recursive = 0
+
+    @pytest.mark.parametrize('table', TABLES)
+    @pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+    @pytest.mark.parametrize('recursive', [0, 1])
+    def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+>       database, _, _ = populated(storage)
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46475300>
+workspace = 'workspace_904badf2fb81404cabb73deb2a158bf4'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_history_cannot_be_updated_deleted_or_replaced[0-REPLACE-review_artifact_bindings] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b4662b200>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_18bb800176ab46978fe3e1152fb3e0bc', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_artifact_bindings', operation = 'REPLACE', recursive = 0
+
+    @pytest.mark.parametrize('table', TABLES)
+    @pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+    @pytest.mark.parametrize('recursive', [0, 1])
+    def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+>       database, _, _ = populated(storage)
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46474f40>
+workspace = 'workspace_18bb800176ab46978fe3e1152fb3e0bc'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_history_cannot_be_updated_deleted_or_replaced[0-REPLACE-review_commands] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b4662bd40>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_2ab5b9d7ba7d463f8c2d064b89d1e4ac', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_commands', operation = 'REPLACE', recursive = 0
+
+    @pytest.mark.parametrize('table', TABLES)
+    @pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+    @pytest.mark.parametrize('recursive', [0, 1])
+    def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+>       database, _, _ = populated(storage)
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46474b80>
+workspace = 'workspace_2ab5b9d7ba7d463f8c2d064b89d1e4ac'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+___ test_history_cannot_be_updated_deleted_or_replaced[1-UPDATE-review_jobs] ___
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b4662b110>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_467e91809ca041bcbde555be5ddd6c75', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_jobs', operation = 'UPDATE', recursive = 1
+
+    @pytest.mark.parametrize('table', TABLES)
+    @pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+    @pytest.mark.parametrize('recursive', [0, 1])
+    def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+>       database, _, _ = populated(storage)
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b464746d0>
+workspace = 'workspace_467e91809ca041bcbde555be5ddd6c75'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_history_cannot_be_updated_deleted_or_replaced[1-UPDATE-review_revisions] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b46629a60>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_49705b8188c244a6b626f91aef245d70', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_revisions', operation = 'UPDATE', recursive = 1
+
+    @pytest.mark.parametrize('table', TABLES)
+    @pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+    @pytest.mark.parametrize('recursive', [0, 1])
+    def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+>       database, _, _ = populated(storage)
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b464764d0>
+workspace = 'workspace_49705b8188c244a6b626f91aef245d70'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_history_cannot_be_updated_deleted_or_replaced[1-UPDATE-review_artifact_bindings] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b46603590>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_c9ef0fd00d474ea3b229af1a338254dc', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_artifact_bindings', operation = 'UPDATE', recursive = 1
+
+    @pytest.mark.parametrize('table', TABLES)
+    @pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+    @pytest.mark.parametrize('recursive', [0, 1])
+    def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+>       database, _, _ = populated(storage)
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46726f20>
+workspace = 'workspace_c9ef0fd00d474ea3b229af1a338254dc'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_history_cannot_be_updated_deleted_or_replaced[1-UPDATE-review_commands] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b46600fe0>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_17d307b6e78b4a21ac190563fe5aced8', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_commands', operation = 'UPDATE', recursive = 1
+
+    @pytest.mark.parametrize('table', TABLES)
+    @pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+    @pytest.mark.parametrize('recursive', [0, 1])
+    def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+>       database, _, _ = populated(storage)
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46727100>
+workspace = 'workspace_17d307b6e78b4a21ac190563fe5aced8'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+___ test_history_cannot_be_updated_deleted_or_replaced[1-DELETE-review_jobs] ___
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b46600680>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_c71da67b16e34a02af04d6ee4d0b71f2', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_jobs', operation = 'DELETE', recursive = 1
+
+    @pytest.mark.parametrize('table', TABLES)
+    @pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+    @pytest.mark.parametrize('recursive', [0, 1])
+    def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+>       database, _, _ = populated(storage)
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b467264d0>
+workspace = 'workspace_c71da67b16e34a02af04d6ee4d0b71f2'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_history_cannot_be_updated_deleted_or_replaced[1-DELETE-review_revisions] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465dec00>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_d1f8870039684af4a57fd1e18098a445', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_revisions', operation = 'DELETE', recursive = 1
+
+    @pytest.mark.parametrize('table', TABLES)
+    @pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+    @pytest.mark.parametrize('recursive', [0, 1])
+    def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+>       database, _, _ = populated(storage)
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46474220>
+workspace = 'workspace_d1f8870039684af4a57fd1e18098a445'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_history_cannot_be_updated_deleted_or_replaced[1-DELETE-review_artifact_bindings] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465ddd60>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_d75736d30f0646e984818c0d20356791', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_artifact_bindings', operation = 'DELETE', recursive = 1
+
+    @pytest.mark.parametrize('table', TABLES)
+    @pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+    @pytest.mark.parametrize('recursive', [0, 1])
+    def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+>       database, _, _ = populated(storage)
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b464746d0>
+workspace = 'workspace_d75736d30f0646e984818c0d20356791'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_history_cannot_be_updated_deleted_or_replaced[1-DELETE-review_commands] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b46628890>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_fe1df5de02b944f49ae1b0fa37801e39', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_commands', operation = 'DELETE', recursive = 1
+
+    @pytest.mark.parametrize('table', TABLES)
+    @pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+    @pytest.mark.parametrize('recursive', [0, 1])
+    def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+>       database, _, _ = populated(storage)
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46474b80>
+workspace = 'workspace_fe1df5de02b944f49ae1b0fa37801e39'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+__ test_history_cannot_be_updated_deleted_or_replaced[1-REPLACE-review_jobs] ___
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b4662b4a0>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_dab9a0c3dcfc4a2faee1e5d6f05840a5', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_jobs', operation = 'REPLACE', recursive = 1
+
+    @pytest.mark.parametrize('table', TABLES)
+    @pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+    @pytest.mark.parametrize('recursive', [0, 1])
+    def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+>       database, _, _ = populated(storage)
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46474f40>
+workspace = 'workspace_dab9a0c3dcfc4a2faee1e5d6f05840a5'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_history_cannot_be_updated_deleted_or_replaced[1-REPLACE-review_revisions] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b46629af0>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_9ae00bbf1c1344c9a25a597a26724a03', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_revisions', operation = 'REPLACE', recursive = 1
+
+    @pytest.mark.parametrize('table', TABLES)
+    @pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+    @pytest.mark.parametrize('recursive', [0, 1])
+    def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+>       database, _, _ = populated(storage)
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46475300>
+workspace = 'workspace_9ae00bbf1c1344c9a25a597a26724a03'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_history_cannot_be_updated_deleted_or_replaced[1-REPLACE-review_artifact_bindings] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465ce990>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_d925a161740142d0b8bfbd99cc65af46', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_artifact_bindings', operation = 'REPLACE', recursive = 1
+
+    @pytest.mark.parametrize('table', TABLES)
+    @pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+    @pytest.mark.parametrize('recursive', [0, 1])
+    def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+>       database, _, _ = populated(storage)
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b464756c0>
+workspace = 'workspace_d925a161740142d0b8bfbd99cc65af46'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_history_cannot_be_updated_deleted_or_replaced[1-REPLACE-review_commands] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465cf860>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_8c20b67b846a4be0a5b9561f48cde5f3', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_commands', operation = 'REPLACE', recursive = 1
+
+    @pytest.mark.parametrize('table', TABLES)
+    @pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+    @pytest.mark.parametrize('recursive', [0, 1])
+    def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+>       database, _, _ = populated(storage)
+                         ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46475a80>
+workspace = 'workspace_8c20b67b846a4be0a5b9561f48cde5f3'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_artifact_replace_guards_both_distinct_unique_constraints[ordinal_pk-0] __
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465ceb10>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_702ee92019c34873be9cfb469188184f', 'owner': 'import', 'source_kind': 'import', ...})
+recursive = 0, conflict = 'ordinal_pk'
+
+    @pytest.mark.parametrize('recursive', [0, 1])
+    @pytest.mark.parametrize('conflict', ['ordinal_pk', 'artifact_unique'])
+    def test_artifact_replace_guards_both_distinct_unique_constraints(storage, recursive, conflict):
+>       database, registered, _ = populated(storage)
+                                  ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:251: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46475e40>
+workspace = 'workspace_702ee92019c34873be9cfb469188184f'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_artifact_replace_guards_both_distinct_unique_constraints[ordinal_pk-1] __
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465cfef0>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_06ed34f8ce8747789111f6234d78778a', 'owner': 'import', 'source_kind': 'import', ...})
+recursive = 1, conflict = 'ordinal_pk'
+
+    @pytest.mark.parametrize('recursive', [0, 1])
+    @pytest.mark.parametrize('conflict', ['ordinal_pk', 'artifact_unique'])
+    def test_artifact_replace_guards_both_distinct_unique_constraints(storage, recursive, conflict):
+>       database, registered, _ = populated(storage)
+                                  ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:251: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46476890>
+workspace = 'workspace_06ed34f8ce8747789111f6234d78778a'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_artifact_replace_guards_both_distinct_unique_constraints[artifact_unique-0] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b46628ec0>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_84b9b55f2756406cb1fe932ab00ec793', 'owner': 'import', 'source_kind': 'import', ...})
+recursive = 0, conflict = 'artifact_unique'
+
+    @pytest.mark.parametrize('recursive', [0, 1])
+    @pytest.mark.parametrize('conflict', ['ordinal_pk', 'artifact_unique'])
+    def test_artifact_replace_guards_both_distinct_unique_constraints(storage, recursive, conflict):
+>       database, registered, _ = populated(storage)
+                                  ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:251: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b467276a0>
+workspace = 'workspace_84b9b55f2756406cb1fe932ab00ec793'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_artifact_replace_guards_both_distinct_unique_constraints[artifact_unique-1] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465c9dc0>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_657326f22439495485b8898e04386349', 'owner': 'import', 'source_kind': 'import', ...})
+recursive = 1, conflict = 'artifact_unique'
+
+    @pytest.mark.parametrize('recursive', [0, 1])
+    @pytest.mark.parametrize('conflict', ['ordinal_pk', 'artifact_unique'])
+    def test_artifact_replace_guards_both_distinct_unique_constraints(storage, recursive, conflict):
+>       database, registered, _ = populated(storage)
+                                  ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:251: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46726e30>
+workspace = 'workspace_657326f22439495485b8898e04386349'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_command_cannot_rebind_original_route_owner_or_revision_domain[create-workspace_id-workspace_other] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b466032c0>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_6031671a08c64dcfbe9dde56cba6a103', 'owner': 'import', 'source_kind': 'import', ...})
+kind = 'create', field = 'workspace_id', value = 'workspace_other'
+
+    @pytest.mark.parametrize(('kind', 'field', 'value'), [
+        ('create', 'workspace_id', 'workspace_other'), ('create', 'actor_id', 'different_actor'),
+        ('create', 'review_id', 'absent_review'), ('create', 'route', 'POST /drafts/other/review'),
+        ('create', 'basis_revision', 2), ('create', 'resulting_revision', 2),
+        ('decision', 'route', 'POST /reviews/other/decision'), ('decision', 'basis_revision', 2),
+        ('decision', 'resulting_revision', 3), ('cancel', 'route', 'POST /jobs/other/cancel'),
+        ('cancel', 'basis_revision', 20), ('cancel', 'resulting_revision', 2),
+    ])
+    def test_command_cannot_rebind_original_route_owner_or_revision_domain(storage, kind, field, value):
+>       database, registered, first = populated(storage)
+                                      ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:273: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46727790>
+workspace = 'workspace_6031671a08c64dcfbe9dde56cba6a103'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_command_cannot_rebind_original_route_owner_or_revision_domain[create-actor_id-different_actor] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b466293d0>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_385c152b58e448ada6e12ce7c609f765', 'owner': 'import', 'source_kind': 'import', ...})
+kind = 'create', field = 'actor_id', value = 'different_actor'
+
+    @pytest.mark.parametrize(('kind', 'field', 'value'), [
+        ('create', 'workspace_id', 'workspace_other'), ('create', 'actor_id', 'different_actor'),
+        ('create', 'review_id', 'absent_review'), ('create', 'route', 'POST /drafts/other/review'),
+        ('create', 'basis_revision', 2), ('create', 'resulting_revision', 2),
+        ('decision', 'route', 'POST /reviews/other/decision'), ('decision', 'basis_revision', 2),
+        ('decision', 'resulting_revision', 3), ('cancel', 'route', 'POST /jobs/other/cancel'),
+        ('cancel', 'basis_revision', 20), ('cancel', 'resulting_revision', 2),
+    ])
+    def test_command_cannot_rebind_original_route_owner_or_revision_domain(storage, kind, field, value):
+>       database, registered, first = populated(storage)
+                                      ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:273: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46476020>
+workspace = 'workspace_385c152b58e448ada6e12ce7c609f765'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_command_cannot_rebind_original_route_owner_or_revision_domain[create-review_id-absent_review] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b46601ac0>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_44437be02c5145a3832d3f9d23bda338', 'owner': 'import', 'source_kind': 'import', ...})
+kind = 'create', field = 'review_id', value = 'absent_review'
+
+    @pytest.mark.parametrize(('kind', 'field', 'value'), [
+        ('create', 'workspace_id', 'workspace_other'), ('create', 'actor_id', 'different_actor'),
+        ('create', 'review_id', 'absent_review'), ('create', 'route', 'POST /drafts/other/review'),
+        ('create', 'basis_revision', 2), ('create', 'resulting_revision', 2),
+        ('decision', 'route', 'POST /reviews/other/decision'), ('decision', 'basis_revision', 2),
+        ('decision', 'resulting_revision', 3), ('cancel', 'route', 'POST /jobs/other/cancel'),
+        ('cancel', 'basis_revision', 20), ('cancel', 'resulting_revision', 2),
+    ])
+    def test_command_cannot_rebind_original_route_owner_or_revision_domain(storage, kind, field, value):
+>       database, registered, first = populated(storage)
+                                      ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:273: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46475e40>
+workspace = 'workspace_44437be02c5145a3832d3f9d23bda338'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_command_cannot_rebind_original_route_owner_or_revision_domain[create-route-POST /drafts/other/review] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465cee40>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_799f93db5dff4200854ad651062d8919', 'owner': 'import', 'source_kind': 'import', ...})
+kind = 'create', field = 'route', value = 'POST /drafts/other/review'
+
+    @pytest.mark.parametrize(('kind', 'field', 'value'), [
+        ('create', 'workspace_id', 'workspace_other'), ('create', 'actor_id', 'different_actor'),
+        ('create', 'review_id', 'absent_review'), ('create', 'route', 'POST /drafts/other/review'),
+        ('create', 'basis_revision', 2), ('create', 'resulting_revision', 2),
+        ('decision', 'route', 'POST /reviews/other/decision'), ('decision', 'basis_revision', 2),
+        ('decision', 'resulting_revision', 3), ('cancel', 'route', 'POST /jobs/other/cancel'),
+        ('cancel', 'basis_revision', 20), ('cancel', 'resulting_revision', 2),
+    ])
+    def test_command_cannot_rebind_original_route_owner_or_revision_domain(storage, kind, field, value):
+>       database, registered, first = populated(storage)
+                                      ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:273: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46475a80>
+workspace = 'workspace_799f93db5dff4200854ad651062d8919'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_command_cannot_rebind_original_route_owner_or_revision_domain[create-basis_revision-2] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465cc200>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_fbe6bafb0ac54ff88404fb1d6244814c', 'owner': 'import', 'source_kind': 'import', ...})
+kind = 'create', field = 'basis_revision', value = 2
+
+    @pytest.mark.parametrize(('kind', 'field', 'value'), [
+        ('create', 'workspace_id', 'workspace_other'), ('create', 'actor_id', 'different_actor'),
+        ('create', 'review_id', 'absent_review'), ('create', 'route', 'POST /drafts/other/review'),
+        ('create', 'basis_revision', 2), ('create', 'resulting_revision', 2),
+        ('decision', 'route', 'POST /reviews/other/decision'), ('decision', 'basis_revision', 2),
+        ('decision', 'resulting_revision', 3), ('cancel', 'route', 'POST /jobs/other/cancel'),
+        ('cancel', 'basis_revision', 20), ('cancel', 'resulting_revision', 2),
+    ])
+    def test_command_cannot_rebind_original_route_owner_or_revision_domain(storage, kind, field, value):
+>       database, registered, first = populated(storage)
+                                      ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:273: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b464756c0>
+workspace = 'workspace_fbe6bafb0ac54ff88404fb1d6244814c'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_command_cannot_rebind_original_route_owner_or_revision_domain[create-resulting_revision-2] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465cc4a0>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_5d8c517709ed4f33aeff0d08d039d6e5', 'owner': 'import', 'source_kind': 'import', ...})
+kind = 'create', field = 'resulting_revision', value = 2
+
+    @pytest.mark.parametrize(('kind', 'field', 'value'), [
+        ('create', 'workspace_id', 'workspace_other'), ('create', 'actor_id', 'different_actor'),
+        ('create', 'review_id', 'absent_review'), ('create', 'route', 'POST /drafts/other/review'),
+        ('create', 'basis_revision', 2), ('create', 'resulting_revision', 2),
+        ('decision', 'route', 'POST /reviews/other/decision'), ('decision', 'basis_revision', 2),
+        ('decision', 'resulting_revision', 3), ('cancel', 'route', 'POST /jobs/other/cancel'),
+        ('cancel', 'basis_revision', 20), ('cancel', 'resulting_revision', 2),
+    ])
+    def test_command_cannot_rebind_original_route_owner_or_revision_domain(storage, kind, field, value):
+>       database, registered, first = populated(storage)
+                                      ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:273: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46475300>
+workspace = 'workspace_5d8c517709ed4f33aeff0d08d039d6e5'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_command_cannot_rebind_original_route_owner_or_revision_domain[decision-route-POST /reviews/other/decision] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b464b0470>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_371d2c4be4ea460ab84793ada1f4a987', 'owner': 'import', 'source_kind': 'import', ...})
+kind = 'decision', field = 'route', value = 'POST /reviews/other/decision'
+
+    @pytest.mark.parametrize(('kind', 'field', 'value'), [
+        ('create', 'workspace_id', 'workspace_other'), ('create', 'actor_id', 'different_actor'),
+        ('create', 'review_id', 'absent_review'), ('create', 'route', 'POST /drafts/other/review'),
+        ('create', 'basis_revision', 2), ('create', 'resulting_revision', 2),
+        ('decision', 'route', 'POST /reviews/other/decision'), ('decision', 'basis_revision', 2),
+        ('decision', 'resulting_revision', 3), ('cancel', 'route', 'POST /jobs/other/cancel'),
+        ('cancel', 'basis_revision', 20), ('cancel', 'resulting_revision', 2),
+    ])
+    def test_command_cannot_rebind_original_route_owner_or_revision_domain(storage, kind, field, value):
+>       database, registered, first = populated(storage)
+                                      ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:273: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46474f40>
+workspace = 'workspace_371d2c4be4ea460ab84793ada1f4a987'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_command_cannot_rebind_original_route_owner_or_revision_domain[decision-basis_revision-2] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b464b3650>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_c0bbb8fd6fd74fa3bbd1a43d9e9546bb', 'owner': 'import', 'source_kind': 'import', ...})
+kind = 'decision', field = 'basis_revision', value = 2
+
+    @pytest.mark.parametrize(('kind', 'field', 'value'), [
+        ('create', 'workspace_id', 'workspace_other'), ('create', 'actor_id', 'different_actor'),
+        ('create', 'review_id', 'absent_review'), ('create', 'route', 'POST /drafts/other/review'),
+        ('create', 'basis_revision', 2), ('create', 'resulting_revision', 2),
+        ('decision', 'route', 'POST /reviews/other/decision'), ('decision', 'basis_revision', 2),
+        ('decision', 'resulting_revision', 3), ('cancel', 'route', 'POST /jobs/other/cancel'),
+        ('cancel', 'basis_revision', 20), ('cancel', 'resulting_revision', 2),
+    ])
+    def test_command_cannot_rebind_original_route_owner_or_revision_domain(storage, kind, field, value):
+>       database, registered, first = populated(storage)
+                                      ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:273: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46474b80>
+workspace = 'workspace_c0bbb8fd6fd74fa3bbd1a43d9e9546bb'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_command_cannot_rebind_original_route_owner_or_revision_domain[decision-resulting_revision-3] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b464b0380>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_8cd4a25e97194a678e0357e9004f095e', 'owner': 'import', 'source_kind': 'import', ...})
+kind = 'decision', field = 'resulting_revision', value = 3
+
+    @pytest.mark.parametrize(('kind', 'field', 'value'), [
+        ('create', 'workspace_id', 'workspace_other'), ('create', 'actor_id', 'different_actor'),
+        ('create', 'review_id', 'absent_review'), ('create', 'route', 'POST /drafts/other/review'),
+        ('create', 'basis_revision', 2), ('create', 'resulting_revision', 2),
+        ('decision', 'route', 'POST /reviews/other/decision'), ('decision', 'basis_revision', 2),
+        ('decision', 'resulting_revision', 3), ('cancel', 'route', 'POST /jobs/other/cancel'),
+        ('cancel', 'basis_revision', 20), ('cancel', 'resulting_revision', 2),
+    ])
+    def test_command_cannot_rebind_original_route_owner_or_revision_domain(storage, kind, field, value):
+>       database, registered, first = populated(storage)
+                                      ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:273: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b464746d0>
+workspace = 'workspace_8cd4a25e97194a678e0357e9004f095e'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_command_cannot_rebind_original_route_owner_or_revision_domain[cancel-route-POST /jobs/other/cancel] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b464b3020>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_b52af95be7284155892eed7cf51e9e1d', 'owner': 'import', 'source_kind': 'import', ...})
+kind = 'cancel', field = 'route', value = 'POST /jobs/other/cancel'
+
+    @pytest.mark.parametrize(('kind', 'field', 'value'), [
+        ('create', 'workspace_id', 'workspace_other'), ('create', 'actor_id', 'different_actor'),
+        ('create', 'review_id', 'absent_review'), ('create', 'route', 'POST /drafts/other/review'),
+        ('create', 'basis_revision', 2), ('create', 'resulting_revision', 2),
+        ('decision', 'route', 'POST /reviews/other/decision'), ('decision', 'basis_revision', 2),
+        ('decision', 'resulting_revision', 3), ('cancel', 'route', 'POST /jobs/other/cancel'),
+        ('cancel', 'basis_revision', 20), ('cancel', 'resulting_revision', 2),
+    ])
+    def test_command_cannot_rebind_original_route_owner_or_revision_domain(storage, kind, field, value):
+>       database, registered, first = populated(storage)
+                                      ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:273: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46476c50>
+workspace = 'workspace_b52af95be7284155892eed7cf51e9e1d'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_command_cannot_rebind_original_route_owner_or_revision_domain[cancel-basis_revision-20] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465cc080>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_80b1b64c70f244459c7d37dca111a6f4', 'owner': 'import', 'source_kind': 'import', ...})
+kind = 'cancel', field = 'basis_revision', value = 20
+
+    @pytest.mark.parametrize(('kind', 'field', 'value'), [
+        ('create', 'workspace_id', 'workspace_other'), ('create', 'actor_id', 'different_actor'),
+        ('create', 'review_id', 'absent_review'), ('create', 'route', 'POST /drafts/other/review'),
+        ('create', 'basis_revision', 2), ('create', 'resulting_revision', 2),
+        ('decision', 'route', 'POST /reviews/other/decision'), ('decision', 'basis_revision', 2),
+        ('decision', 'resulting_revision', 3), ('cancel', 'route', 'POST /jobs/other/cancel'),
+        ('cancel', 'basis_revision', 20), ('cancel', 'resulting_revision', 2),
+    ])
+    def test_command_cannot_rebind_original_route_owner_or_revision_domain(storage, kind, field, value):
+>       database, registered, first = populated(storage)
+                                      ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:273: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b467264d0>
+workspace = 'workspace_80b1b64c70f244459c7d37dca111a6f4'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_command_cannot_rebind_original_route_owner_or_revision_domain[cancel-resulting_revision-2] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465cc200>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_431563421a76462ea013f6b8fdccea60', 'owner': 'import', 'source_kind': 'import', ...})
+kind = 'cancel', field = 'resulting_revision', value = 2
+
+    @pytest.mark.parametrize(('kind', 'field', 'value'), [
+        ('create', 'workspace_id', 'workspace_other'), ('create', 'actor_id', 'different_actor'),
+        ('create', 'review_id', 'absent_review'), ('create', 'route', 'POST /drafts/other/review'),
+        ('create', 'basis_revision', 2), ('create', 'resulting_revision', 2),
+        ('decision', 'route', 'POST /reviews/other/decision'), ('decision', 'basis_revision', 2),
+        ('decision', 'resulting_revision', 3), ('cancel', 'route', 'POST /jobs/other/cancel'),
+        ('cancel', 'basis_revision', 20), ('cancel', 'resulting_revision', 2),
+    ])
+    def test_command_cannot_rebind_original_route_owner_or_revision_domain(storage, kind, field, value):
+>       database, registered, first = populated(storage)
+                                      ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:273: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46727100>
+workspace = 'workspace_431563421a76462ea013f6b8fdccea60'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+______ test_same_original_command_key_cannot_be_reused_for_another_review ______
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b465ccb60>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_d6885abfe9f74e869fc8fe35ba400431', 'owner': 'import', 'source_kind': 'import', ...})
+
+    def test_same_original_command_key_cannot_be_reused_for_another_review(storage):
+>       database, registered, _ = populated(storage)
+                                  ^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_review_storage_constraints.py:281: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_review_storage_constraints.py:113: in populated
+    artifact(connection, registered['workspace_id'])
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b467276a0>
+workspace = 'workspace_d6885abfe9f74e869fc8fe35ba400431'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+_ test_invalid_json_is_rejected_without_claiming_json_authenticates_history[review_artifact_bindings-binding_json] _
+
+storage = (<services.api.app.infrastructure.database.Database object at 0x7a7b4662acc0>, {'review_id': 'review_fixture', 'workspace_id': 'workspace_4c527cecbde94f6395c158a9ba4ce9f2', 'owner': 'import', 'source_kind': 'import', ...})
+table = 'review_artifact_bindings', field = 'binding_json'
+
+    @pytest.mark.parametrize(('table', 'field'), [
+        ('review_jobs', 'input_json'), ('review_revisions', 'receipt_json'), ('review_revisions', 'record_json'),
+        ('review_artifact_bindings', 'binding_json'), ('review_commands', 'request_json'), ('review_commands', 'ack_json'),
+    ])
+    def test_invalid_json_is_rejected_without_claiming_json_authenticates_history(storage, table, field):
+        database, registered = storage
+        with database.transaction() as connection:
+            revision = None
+            if table != 'review_jobs':
+                insert(connection, 'review_jobs', registered)
+                revision = receipt(connection, registered)
+            if table == 'review_artifact_bindings':
+                insert(connection, 'review_revisions', revision)
+>               artifact(connection, registered['workspace_id'])
+
+tests/integration/test_review_storage_constraints.py:303: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+connection = <sqlite3.Connection object at 0x7a7b46474220>
+workspace = 'workspace_4c527cecbde94f6395c158a9ba4ce9f2'
+identifier = 'artifact_fixture'
+blob = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+>       connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+                           "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+E       sqlite3.OperationalError: table content_blobs has no column named media_type
+
+tests/integration/test_review_storage_constraints.py:71: OperationalError
+=========================== short test summary info ============================
+FAILED tests/integration/test_review_storage_constraints.py::test_history_retains_exact_predecessor_hash_and_decision_command
+FAILED tests/integration/test_review_storage_constraints.py::test_broken_revision_chain_is_rejected[gap]
+FAILED tests/integration/test_review_storage_constraints.py::test_broken_revision_chain_is_rejected[wrong_hash]
+FAILED tests/integration/test_review_storage_constraints.py::test_broken_revision_chain_is_rejected[wrong_review]
+FAILED tests/integration/test_review_storage_constraints.py::test_broken_revision_chain_is_rejected[missing_previous]
+FAILED tests/integration/test_review_storage_constraints.py::test_broken_revision_chain_is_rejected[machine_again]
+FAILED tests/integration/test_review_storage_constraints.py::test_broken_revision_chain_is_rejected[first_human]
+FAILED tests/integration/test_review_storage_constraints.py::test_artifact_binding_requires_real_artifact_workspace_blob_and_history[artifact_id-absent_artifact]
+FAILED tests/integration/test_review_storage_constraints.py::test_artifact_binding_requires_real_artifact_workspace_blob_and_history[workspace_id-workspace_other]
+FAILED tests/integration/test_review_storage_constraints.py::test_artifact_binding_requires_real_artifact_workspace_blob_and_history[artifact_sha256-ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff]
+FAILED tests/integration/test_review_storage_constraints.py::test_artifact_binding_requires_real_artifact_workspace_blob_and_history[review_id-absent_review]
+FAILED tests/integration/test_review_storage_constraints.py::test_artifact_binding_requires_real_artifact_workspace_blob_and_history[review_revision-2]
+FAILED tests/integration/test_review_storage_constraints.py::test_artifact_binding_requires_real_artifact_workspace_blob_and_history[ordinal--1]
+FAILED tests/integration/test_review_storage_constraints.py::test_artifact_binding_requires_real_artifact_workspace_blob_and_history[artifact_owner-provider]
+FAILED tests/integration/test_review_storage_constraints.py::test_existing_cross_workspace_artifact_cannot_be_attached
+FAILED tests/integration/test_review_storage_constraints.py::test_history_cannot_be_updated_deleted_or_replaced[0-UPDATE-review_jobs]
+FAILED tests/integration/test_review_storage_constraints.py::test_history_cannot_be_updated_deleted_or_replaced[0-UPDATE-review_revisions]
+FAILED tests/integration/test_review_storage_constraints.py::test_history_cannot_be_updated_deleted_or_replaced[0-UPDATE-review_artifact_bindings]
+FAILED tests/integration/test_review_storage_constraints.py::test_history_cannot_be_updated_deleted_or_replaced[0-UPDATE-review_commands]
+FAILED tests/integration/test_review_storage_constraints.py::test_history_cannot_be_updated_deleted_or_replaced[0-DELETE-review_jobs]
+FAILED tests/integration/test_review_storage_constraints.py::test_history_cannot_be_updated_deleted_or_replaced[0-DELETE-review_revisions]
+FAILED tests/integration/test_review_storage_constraints.py::test_history_cannot_be_updated_deleted_or_replaced[0-DELETE-review_artifact_bindings]
+FAILED tests/integration/test_review_storage_constraints.py::test_history_cannot_be_updated_deleted_or_replaced[0-DELETE-review_commands]
+FAILED tests/integration/test_review_storage_constraints.py::test_history_cannot_be_updated_deleted_or_replaced[0-REPLACE-review_jobs]
+FAILED tests/integration/test_review_storage_constraints.py::test_history_cannot_be_updated_deleted_or_replaced[0-REPLACE-review_revisions]
+FAILED tests/integration/test_review_storage_constraints.py::test_history_cannot_be_updated_deleted_or_replaced[0-REPLACE-review_artifact_bindings]
+FAILED tests/integration/test_review_storage_constraints.py::test_history_cannot_be_updated_deleted_or_replaced[0-REPLACE-review_commands]
+FAILED tests/integration/test_review_storage_constraints.py::test_history_cannot_be_updated_deleted_or_replaced[1-UPDATE-review_jobs]
+FAILED tests/integration/test_review_storage_constraints.py::test_history_cannot_be_updated_deleted_or_replaced[1-UPDATE-review_revisions]
+FAILED tests/integration/test_review_storage_constraints.py::test_history_cannot_be_updated_deleted_or_replaced[1-UPDATE-review_artifact_bindings]
+FAILED tests/integration/test_review_storage_constraints.py::test_history_cannot_be_updated_deleted_or_replaced[1-UPDATE-review_commands]
+FAILED tests/integration/test_review_storage_constraints.py::test_history_cannot_be_updated_deleted_or_replaced[1-DELETE-review_jobs]
+FAILED tests/integration/test_review_storage_constraints.py::test_history_cannot_be_updated_deleted_or_replaced[1-DELETE-review_revisions]
+FAILED tests/integration/test_review_storage_constraints.py::test_history_cannot_be_updated_deleted_or_replaced[1-DELETE-review_artifact_bindings]
+FAILED tests/integration/test_review_storage_constraints.py::test_history_cannot_be_updated_deleted_or_replaced[1-DELETE-review_commands]
+FAILED tests/integration/test_review_storage_constraints.py::test_history_cannot_be_updated_deleted_or_replaced[1-REPLACE-review_jobs]
+FAILED tests/integration/test_review_storage_constraints.py::test_history_cannot_be_updated_deleted_or_replaced[1-REPLACE-review_revisions]
+FAILED tests/integration/test_review_storage_constraints.py::test_history_cannot_be_updated_deleted_or_replaced[1-REPLACE-review_artifact_bindings]
+FAILED tests/integration/test_review_storage_constraints.py::test_history_cannot_be_updated_deleted_or_replaced[1-REPLACE-review_commands]
+FAILED tests/integration/test_review_storage_constraints.py::test_artifact_replace_guards_both_distinct_unique_constraints[ordinal_pk-0]
+FAILED tests/integration/test_review_storage_constraints.py::test_artifact_replace_guards_both_distinct_unique_constraints[ordinal_pk-1]
+FAILED tests/integration/test_review_storage_constraints.py::test_artifact_replace_guards_both_distinct_unique_constraints[artifact_unique-0]
+FAILED tests/integration/test_review_storage_constraints.py::test_artifact_replace_guards_both_distinct_unique_constraints[artifact_unique-1]
+FAILED tests/integration/test_review_storage_constraints.py::test_command_cannot_rebind_original_route_owner_or_revision_domain[create-workspace_id-workspace_other]
+FAILED tests/integration/test_review_storage_constraints.py::test_command_cannot_rebind_original_route_owner_or_revision_domain[create-actor_id-different_actor]
+FAILED tests/integration/test_review_storage_constraints.py::test_command_cannot_rebind_original_route_owner_or_revision_domain[create-review_id-absent_review]
+FAILED tests/integration/test_review_storage_constraints.py::test_command_cannot_rebind_original_route_owner_or_revision_domain[create-route-POST /drafts/other/review]
+FAILED tests/integration/test_review_storage_constraints.py::test_command_cannot_rebind_original_route_owner_or_revision_domain[create-basis_revision-2]
+FAILED tests/integration/test_review_storage_constraints.py::test_command_cannot_rebind_original_route_owner_or_revision_domain[create-resulting_revision-2]
+FAILED tests/integration/test_review_storage_constraints.py::test_command_cannot_rebind_original_route_owner_or_revision_domain[decision-route-POST /reviews/other/decision]
+FAILED tests/integration/test_review_storage_constraints.py::test_command_cannot_rebind_original_route_owner_or_revision_domain[decision-basis_revision-2]
+FAILED tests/integration/test_review_storage_constraints.py::test_command_cannot_rebind_original_route_owner_or_revision_domain[decision-resulting_revision-3]
+FAILED tests/integration/test_review_storage_constraints.py::test_command_cannot_rebind_original_route_owner_or_revision_domain[cancel-route-POST /jobs/other/cancel]
+FAILED tests/integration/test_review_storage_constraints.py::test_command_cannot_rebind_original_route_owner_or_revision_domain[cancel-basis_revision-20]
+FAILED tests/integration/test_review_storage_constraints.py::test_command_cannot_rebind_original_route_owner_or_revision_domain[cancel-resulting_revision-2]
+FAILED tests/integration/test_review_storage_constraints.py::test_same_original_command_key_cannot_be_reused_for_another_review
+FAILED tests/integration/test_review_storage_constraints.py::test_invalid_json_is_rejected_without_claiming_json_authenticates_history[review_artifact_bindings-binding_json]
+57 failed, 20 passed in 1.89s

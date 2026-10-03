@@ -44,6 +44,7 @@ class RoleRequest(StrictModel):
 
 class SessionResponse(StrictModel):
     workspace_id: Id
+    actor_session_id: Id
     role: Literal["learner", "author"]
     csrf_token: str
     active_independent_attempt_id: Id | None

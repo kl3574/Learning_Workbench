@@ -1,0 +1,2 @@
+import { defineConfig } from '<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-active/apps/web/node_modules/@playwright/test/index.mjs'
+export default defineConfig({testDir: '<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-active/tests/e2e',testMatch:'draft-review.spec.ts',workers:1,fullyParallel:false,retries:0,timeout:30000,reporter:[['list']],outputDir:'<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-ui-integration-v1/native-output',use:{headless:true,trace:'off',screenshot:'only-on-failure'}})

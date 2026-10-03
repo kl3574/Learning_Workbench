@@ -3,6 +3,10 @@
 from dataclasses import dataclass
 from datetime import datetime
 import sqlite3
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .review_service import ReviewService
 
 
 @dataclass(frozen=True)
@@ -38,6 +42,14 @@ def outbound_source_kind(connection: sqlite3.Connection, workspace_id: str, job_
     return str(row['kind'])
 
 
+def artifact_job_kind(connection: sqlite3.Connection, workspace_id: str, job_id: str) -> str:
+    """Jobs-owned kind fact for an artifact; never a content permission grant."""
+    from .errors import ApiError
+    if not connection.in_transaction:
+        raise ApiError(409, 'TRANSACTION_REQUIRED', '附件任务核验需要有效事务。')
+    return outbound_source_kind(connection, workspace_id, job_id)
+
+
 def outbound_lease_active(connection: sqlite3.Connection, workspace_id: str, job_id: str, now: str) -> bool:
     """A live owner lease excludes recovery, even after cancellation was requested.
 
@@ -65,10 +77,42 @@ def outbound_lease_active(connection: sqlite3.Connection, workspace_id: str, job
         raise ApiError(503, 'JOB_LEASE_INVALID', '任务租约完整性无法确认。') from None
 
 
+@dataclass(frozen=True)
+class ImportConfirmationState:
+    status: str
+    cancel_requested: bool
+
+
+def import_confirmation_state(connection: sqlite3.Connection, workspace_id: str,
+                              job_id: str, input_sha256: str) -> ImportConfirmationState:
+    """Jobs-owned origin facts, including after a legitimate cancellation/commit."""
+    from .errors import ApiError
+    if not connection.in_transaction:
+        raise ApiError(409, 'TRANSACTION_REQUIRED', '导入任务核验需要当前事务。')
+    row = connection.execute('SELECT kind,status,cancel_requested,input_sha256 FROM jobs '
+                             'WHERE id=? AND workspace_id=?', (job_id, workspace_id)).fetchone()
+    if (row is None or row['kind'] != 'import' or row['input_sha256'] != input_sha256
+            or row['status'] not in {'queued', 'running', 'awaiting_approval', 'completed', 'failed', 'cancelled'}
+            or row['cancel_requested'] not in (0, 1)):
+        raise ApiError(409, 'PUBLICATION_IMPORT_JOB_INVALID', '导入任务的原始身份和输入无法核验。')
+    return ImportConfirmationState(row['status'], bool(row['cancel_requested']))
+
+
+def require_pending_import_confirmation(connection: sqlite3.Connection, workspace_id: str,
+                                        job_id: str, input_sha256: str) -> None:
+    """Current eligibility for a new command; not the historical ACK read gate."""
+    from .errors import ApiError
+    state = import_confirmation_state(connection, workspace_id, job_id, input_sha256)
+    if state.status != 'awaiting_approval' or state.cancel_requested:
+        raise ApiError(409, 'PUBLICATION_IMPORT_NOT_PENDING', '导入任务当前不能新发布候选。')
+
+
 class JobService:
     """Dispatch only implemented job kinds to their owning application service."""
-    def __init__(self, database):
+    def __init__(self, database, review: 'ReviewService | None' = None, restore_numeric=None):
         self.database = database
+        self.review = review
+        self.restore_numeric = restore_numeric
 
     def _owner(self, identity, identifier):
         from .errors import ApiError
@@ -78,6 +122,8 @@ class JobService:
             row = connection.execute("SELECT kind FROM jobs WHERE id=? AND workspace_id=?", (identifier, identity.workspace_id)).fetchone()
         if row is None:
             raise ApiError(404, "JOB_MISSING", "任务不存在或不可访问。")
+        if row['kind'] == 'draft_review' and self.review is not None:
+            return self.review
         if row["kind"] == "assessment_grading":
             return GradingService(self.database)
         if row["kind"] == "import":
@@ -102,6 +148,10 @@ class JobService:
             from ..infrastructure.authoring_job_repository import AuthoringJobRepository
             with self.database.transaction(immediate=False) as conn:
                 version = AuthoringJobRepository(conn, identity.workspace_id).input_version(identifier)
+            if version == 'restore-numeric-job-v1':
+                if self.restore_numeric is None:
+                    raise ApiError(503, 'NUMERIC_OWNER_UNAVAILABLE', '恢复数值安全控制服务当前不可用。')
+                return self.restore_numeric
             if version == 'authoring-group-numeric-job-v1':
                 from .authoring_group_context import AuthoringGroupContext
                 from .authoring_group_numeric_service import GroupNumericService
@@ -114,11 +164,16 @@ class JobService:
         raise ApiError(409, "JOB_KIND_UNAVAILABLE", "此任务类型尚未实现受控读取。")
 
     def job(self, identity, identifier):
-        return self._owner(identity, identifier).job(identity, identifier)
+        owner = self._owner(identity, identifier)
+        if self.review is not None and owner is self.review:
+            return self.review.read_job(identity, identifier)
+        return owner.job(identity, identifier)
 
     def cancel(self, identity, identifier, request, key):
         from .grading import GradingService
         owner = self._owner(identity, identifier)
+        if self.review is not None and owner is self.review:
+            return self.review.cancel(identity, identifier, request, key)
         if isinstance(owner, GradingService):
             return owner.cancel(identity, identifier, request, key)
         return owner.cancel_job(identity, identifier, request, key)

@@ -1,0 +1,47 @@
+
+Running 1 test using 1 worker
+
+(node:2680707) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/e2e/text-edit-dependencies.spec.ts:34:1 › native text edit preserves ordered original dependency refs after source current advances (2.7s)
+
+
+  1) tests/e2e/text-edit-dependencies.spec.ts:34:1 › native text edit preserves ordered original dependency refs after source current advances 
+
+    Error: browserType.launchPersistentContext: Target page, context or browser has been closed
+    Browser logs:
+
+    <launching> /usr/bin/google-chrome --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --user-data-dir=$HOME/.cache/learning-workbench-acceptance/m62-text-edit-dependencies-native-evidence-oct02/tmp/learning-workbench-reader-restart-browser-yAPMmN --remote-debugging-pipe about:blank
+    <launched> pid=2680805
+    [pid=2680805][err] [2680805:2680805:1002/235258.855202:FATAL:chrome/browser/process_singleton_posix.cc:313] Socket path too long: $HOME/.cache/learning-workbench-acceptance/m62-text-edit-dependencies-native-evidence-oct02/tmp/com.google.Chrome.enUaVB/SingletonSocket.
+    [pid=2680805] <process did exit: exitCode=null, signal=SIGABRT>
+    [pid=2680805] starting temporary directories cleanup
+    Call log:
+      - <launching> /usr/bin/google-chrome --disable-field-trial-config --disable-background-networking --disable-background-timer-throttling --disable-backgrounding-occluded-windows --disable-back-forward-cache --disable-breakpad --disable-client-side-phishing-detection --disable-component-extensions-with-background-pages --disable-component-update --no-default-browser-check --disable-default-apps --disable-dev-shm-usage --disable-edgeupdater --disable-extensions --disable-features=AvoidUnnecessaryBeforeUnloadCheckSync,DestroyProfileOnBrowserClose,DialMediaRouteProvider,GlobalMediaControls,HttpsUpgrades,LensOverlay,MediaRouter,PaintHolding,ThirdPartyStoragePartitioning,BlockOriginHeaderModificationOnRedirect,Translate,AutoDeElevate,OptimizationHints,msForceBrowserSignIn,msEdgeUpdateLaunchServicesPreferredVersion --enable-features=CDPScreenshotNewSurface --allow-pre-commit-input --disable-hang-monitor --disable-ipc-flooding-protection --disable-popup-blocking --disable-prompt-on-repost --disable-renderer-backgrounding --disable-updater-scheduler --force-color-profile=srgb --metrics-recording-only --no-first-run --password-store=basic --use-mock-keychain --no-service-autorun --export-tagged-pdf --disable-search-engine-choice-screen --unsafely-disable-devtools-self-xss-warnings --edge-skip-compat-layer-relaunch --disable-infobars --disable-search-engine-choice-screen --disable-sync --enable-unsafe-swiftshader --headless --hide-scrollbars --mute-audio --blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4 --no-sandbox --user-data-dir=$HOME/.cache/learning-workbench-acceptance/m62-text-edit-dependencies-native-evidence-oct02/tmp/learning-workbench-reader-restart-browser-yAPMmN --remote-debugging-pipe about:blank
+      - <launched> pid=2680805
+      - [pid=2680805][err] [2680805:2680805:1002/235258.855202:FATAL:chrome/browser/process_singleton_posix.cc:313] Socket path too long: $HOME/.cache/learning-workbench-acceptance/m62-text-edit-dependencies-native-evidence-oct02/tmp/com.google.Chrome.enUaVB/SingletonSocket.
+      - [pid=2680805] <process did exit: exitCode=null, signal=SIGABRT>
+      - [pid=2680805] starting temporary directories cleanup
+      - [pid=2680805] finished temporary directories cleanup
+      - [pid=2680805] <gracefully close start>
+      - [pid=2680805] <kill>
+      - [pid=2680805] <skipped force kill spawnedProcess.killed=false processClosed=true>
+      - [pid=2680805] <gracefully close end>
+
+
+       at restartRuntime.ts:111
+
+      109 |   async openBrowser(browserType: BrowserType) {
+      110 |     if (this.context) throw new Error('Close the actual previous browser before reopening')
+    > 111 |     this.context = await browserType.launchPersistentContext(this.profile, {
+          |                    ^
+      112 |       headless: true, viewport: { width: 1440, height: 900 }, baseURL: this.origin,
+      113 |       ...(existsSync('/usr/bin/google-chrome') ? { executablePath: '/usr/bin/google-chrome' } : {}),
+      114 |     })
+        at RestartRuntime.openBrowser ($HOME/.cache/learning-workbench-acceptance/m62-text-edit-dependencies-native-oct02/tests/e2e/restartRuntime.ts:111:20)
+        at $HOME/.cache/learning-workbench-acceptance/m62-text-edit-dependencies-native-oct02/tests/e2e/text-edit-dependencies.spec.ts:38:21
+
+    Error Context: ../m62-text-edit-dependencies-native-evidence-oct02/native-output/text-edit-dependencies-nat-8f008-ter-source-current-advances/error-context.md
+
+  1 failed
+    tests/e2e/text-edit-dependencies.spec.ts:34:1 › native text edit preserves ordered original dependency refs after source current advances 

@@ -1,0 +1,27 @@
+diff --git a/tests/integration/test_review_storage_constraints.py b/tests/integration/test_review_storage_constraints.py
+index 6a76764..d63a8b2 100644
+--- a/tests/integration/test_review_storage_constraints.py
++++ b/tests/integration/test_review_storage_constraints.py
+@@ -68,8 +68,8 @@ def receipt(connection, registered, revision=1, previous=None):
+ 
+ 
+ def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+-    connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,media_type,created_at) '
+-                       "VALUES(?,0,?,'text/plain',?)", (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
++    connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,created_at) '
++                       'VALUES(?,0,?,?)', (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+     insert(connection, 'artifacts', {'id': identifier, 'workspace_id': workspace, 'job_id': None,
+         'blob_sha256': blob, 'profile': 'synthetic_schema_fixture', 'manifest_json': '{}',
+         'visibility': 'author_private', 'created_at': STAMP})
+@@ -215,8 +215,10 @@ def test_history_rejects_a_projection_for_another_valid_candidate(storage):
+ ])
+ def test_artifact_binding_requires_real_artifact_workspace_blob_and_history(storage, field, value):
+     database, registered, _ = populated(storage)
++    with database.transaction() as connection:
++        artifact(connection, registered['workspace_id'], 'artifact_new')
+     with pytest.raises(sqlite3.IntegrityError), database.transaction() as connection:
+-        insert(connection, 'review_artifact_bindings', {**binding(registered, ordinal=1), field: value})
++        insert(connection, 'review_artifact_bindings', {**binding(registered, 'artifact_new', 1), field: value})
+ 
+ 
+ def test_existing_cross_workspace_artifact_cannot_be_attached(storage):

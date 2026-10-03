@@ -1,0 +1,29 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+______ test_repeated_unsafe_reads_and_writes_do_not_leak_file_descriptors ______
+
+tmp_path = PosixPath('<PYTEST_ROOT>/pytest-180/test_repeated_unsafe_reads_and0')
+
+    def test_repeated_unsafe_reads_and_writes_do_not_leak_file_descriptors(tmp_path):
+        store = BlobStore(tmp_path)
+        info = store.write(b"data")
+        path = tmp_path / info.relative_path
+        path.unlink()
+        path.mkdir(mode=0o700)
+        before = len(os.listdir("/proc/self/fd"))
+        for _ in range(10):
+            assert_error(lambda: store.read(info.sha256), 503, "BLOB_STORAGE_UNAVAILABLE")
+            assert_error(lambda: store.write(b"data"), 503, "BLOB_STORAGE_UNAVAILABLE")
+>       assert len(os.listdir("/proc/self/fd")) == before
+E       AssertionError: assert 13 == 14
+E        +  where 13 = len(['0', '1', '2', '3', '4', '5', ...])
+E        +    where ['0', '1', '2', '3', '4', '5', ...] = <built-in function listdir>('/proc/self/fd')
+E        +      where <built-in function listdir> = os.listdir
+
+tests/unit/test_content_store.py:232: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_content_store.py::test_repeated_unsafe_reads_and_writes_do_not_leak_file_descriptors - AssertionError: assert 13 == 14
+ +  where 13 = len(['0', '1', '2', '3', '4', '5', ...])
+ +    where ['0', '1', '2', '3', '4', '5', ...] = <built-in function listdir>('/proc/self/fd')
+ +      where <built-in function listdir> = os.listdir
+1 failed in 0.05s

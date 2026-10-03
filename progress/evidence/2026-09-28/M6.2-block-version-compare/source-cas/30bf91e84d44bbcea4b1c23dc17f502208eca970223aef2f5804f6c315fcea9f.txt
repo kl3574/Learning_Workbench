@@ -1,0 +1,7 @@
+import { request } from '../../../api/client'
+import { readBlock } from '../contentClient'
+export const compareClient = {
+  session: () => request('GET /api/v1/session', undefined),
+  history: (id: string, cursor: string | null) => request('GET /api/v1/objects/{id}/revisions', undefined, undefined, { path: { id }, query: { limit: 20, ...(cursor ? { cursor } : {}) } }),
+  block: readBlock,
+}

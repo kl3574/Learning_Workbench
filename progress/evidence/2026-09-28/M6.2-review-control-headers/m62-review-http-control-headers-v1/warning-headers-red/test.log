@@ -1,0 +1,130 @@
+FFFF                                                                     [100%]
+=================================== FAILURES ===================================
+_ test_review_control_and_report_reject_duplicate_headers[Idempotency-Key-cancel] _
+
+prepared_review_http = <tests.integration.test_review_http.ReviewHttpCase object at 0x77ab4ed34320>
+operation = 'cancel', header = 'Idempotency-Key'
+
+    @pytest.mark.parametrize('operation', ['cancel', 'download'])
+    @pytest.mark.parametrize('header', ['Idempotency-Key', 'X-CSRF-Token'])
+    def test_review_control_and_report_reject_duplicate_headers(prepared_review_http, operation, header):
+        case = prepared_review_http
+        _, _, review_path = review_create(case)
+        identifier = review_path.rsplit('/', 1)[1]
+        if operation == 'download':
+            assert case.app.state.review_worker.run_once()
+            path = case.client.get(review_path).json()['evidence_paths'][0]
+        else:
+            path = '/api/v1/jobs/' + identifier + '/cancel'
+        headers = [*command(case.headers, 'control').items(), (header, 'synthetic-conflict')]
+        before = table_hashes(case.database)
+        response = (case.client.get(path, headers=headers) if operation == 'download' else
+                    case.client.post(path, json={'expected_revision': 1}, headers=headers))
+>       assert response.status_code == 400, response.text
+E       AssertionError: {"id":"review_6948aa7042d84e7981f2485ba3edbac6","workspace_id":"workspace_d662ec791ed445dbabbee07797e6e9f5","kind":"draft_review","status":"cancelled","revision":2,"created_at":"2026-09-28T01:44:36.753385Z","updated_at":"2026-09-28T01:44:36.776545Z","progress":{"completed":0,"total":null,"label":"cancelled"},"result_refs":[],"warnings":[],"error":null}
+E       assert 200 == 400
+E        +  where 200 = <Response [200 OK]>.status_code
+
+tests/integration/test_review_control_headers.py:24: AssertionError
+_ test_review_control_and_report_reject_duplicate_headers[Idempotency-Key-download] _
+
+prepared_review_http = <tests.integration.test_review_http.ReviewHttpCase object at 0x77ab4d75ae70>
+operation = 'download', header = 'Idempotency-Key'
+
+    @pytest.mark.parametrize('operation', ['cancel', 'download'])
+    @pytest.mark.parametrize('header', ['Idempotency-Key', 'X-CSRF-Token'])
+    def test_review_control_and_report_reject_duplicate_headers(prepared_review_http, operation, header):
+        case = prepared_review_http
+        _, _, review_path = review_create(case)
+        identifier = review_path.rsplit('/', 1)[1]
+        if operation == 'download':
+            assert case.app.state.review_worker.run_once()
+            path = case.client.get(review_path).json()['evidence_paths'][0]
+        else:
+            path = '/api/v1/jobs/' + identifier + '/cancel'
+        headers = [*command(case.headers, 'control').items(), (header, 'synthetic-conflict')]
+        before = table_hashes(case.database)
+        response = (case.client.get(path, headers=headers) if operation == 'download' else
+                    case.client.post(path, json={'expected_revision': 1}, headers=headers))
+>       assert response.status_code == 400, response.text
+E       AssertionError: {"candidate":{"candidate_sha256":"879d93403d21d26b508887a2b7f5fa5bf1eb5fb768deedb007c99f91f51171f3","draft_id":"draft_c6a62afabfae4383a4779de54b2c23ee","draft_revision":1,"entity":"block"},"independent_pedagogy":"NOT_RUN","input_sha256":"44bdd87fee5f30da9b05f99c89ad91aba106dbca40f491a880c5a82011a42071","material_descriptor_sha256":"3f8f5c16a5a5f8efef910bb254fd9e8afc051bb081bd5c6d0c0000728548e915","mathematical":"NOT_RUN","numeric_observation":{"candidate":{"candidate_sha256":"879d93403d21d26b508887a2b7f5fa5bf1eb5fb768deedb007c99f91f51171f3","draft_id":"draft_c6a62afabfae4383a4779de54b2c23ee","draft_revision":1,"entity":"block"},"candidate_record_sha256":null,"checks":[],"coverage":"no_numeric_owner_pipeline","descriptor_sha256":"bebde25094ba1520af7828e9f38a82c72d2858d725ecc8acb0a06c17b579f376","observed_at":"2026-09-28T01:44:37.511044Z","provider_receipt_id":null,"source_job_id":null,"source_kind":"import","version":"review-numeric-observation-v1","workspace_id":"workspace_fe4e91c3cebf445d85c11e34e54ebea1"},"numerical_examples_requested":false,"review_id":"review_4a84e168eeca4fb4883c4417c3da0267","scope":"Only declared structure and existing numeric history; no new execution or mathematical/source/pedagogical verification.","sources":"NOT_RUN","structure":{"candidate":{"candidate_sha256":"879d93403d21d26b508887a2b7f5fa5bf1eb5fb768deedb007c99f91f51171f3","draft_id":"draft_c6a62afabfae4383a4779de54b2c23ee","draft_revision":1,"entity":"block"},"checks":[{"code":"material_schema","detail_code":"typed_material_revalidated","status":"PASS"},{"code":"candidate_byte_binding","detail_code":"candidate_and_body_hashes_revalidated","status":"PASS"},{"code":"declared_source_membership","detail_code":"no_authoring_declaration_schema","status":"NOT_RUN"},{"code":"declared_symbol_consistency","detail_code":"no_authoring_declaration_schema","status":"NOT_RUN"}],"material_descriptor_sha256":"3f8f5c16a5a5f8efef910bb254fd9e8afc051bb081bd5c6d0c0000728548e915","requested":true,"structural":"PASS","version":"review-structure-report-v1"},"version":"quality-review-report-v1"}
+E       assert 200 == 400
+E        +  where 200 = <Response [200 OK]>.status_code
+
+tests/integration/test_review_control_headers.py:24: AssertionError
+_ test_review_control_and_report_reject_duplicate_headers[X-CSRF-Token-cancel] _
+
+prepared_review_http = <tests.integration.test_review_http.ReviewHttpCase object at 0x77ab4d4cf800>
+operation = 'cancel', header = 'X-CSRF-Token'
+
+    @pytest.mark.parametrize('operation', ['cancel', 'download'])
+    @pytest.mark.parametrize('header', ['Idempotency-Key', 'X-CSRF-Token'])
+    def test_review_control_and_report_reject_duplicate_headers(prepared_review_http, operation, header):
+        case = prepared_review_http
+        _, _, review_path = review_create(case)
+        identifier = review_path.rsplit('/', 1)[1]
+        if operation == 'download':
+            assert case.app.state.review_worker.run_once()
+            path = case.client.get(review_path).json()['evidence_paths'][0]
+        else:
+            path = '/api/v1/jobs/' + identifier + '/cancel'
+        headers = [*command(case.headers, 'control').items(), (header, 'synthetic-conflict')]
+        before = table_hashes(case.database)
+        response = (case.client.get(path, headers=headers) if operation == 'download' else
+                    case.client.post(path, json={'expected_revision': 1}, headers=headers))
+>       assert response.status_code == 400, response.text
+E       AssertionError: {"id":"review_e6d421ec5bdd43e7ae218e3ab8183747","workspace_id":"workspace_f5ab7b7f87a44bb1a2e9ee6b9c079532","kind":"draft_review","status":"cancelled","revision":2,"created_at":"2026-09-28T01:44:38.231746Z","updated_at":"2026-09-28T01:44:38.253846Z","progress":{"completed":0,"total":null,"label":"cancelled"},"result_refs":[],"warnings":[],"error":null}
+E       assert 200 == 400
+E        +  where 200 = <Response [200 OK]>.status_code
+
+tests/integration/test_review_control_headers.py:24: AssertionError
+_ test_review_control_and_report_reject_duplicate_headers[X-CSRF-Token-download] _
+
+prepared_review_http = <tests.integration.test_review_http.ReviewHttpCase object at 0x77ab4d5c6f00>
+operation = 'download', header = 'X-CSRF-Token'
+
+    @pytest.mark.parametrize('operation', ['cancel', 'download'])
+    @pytest.mark.parametrize('header', ['Idempotency-Key', 'X-CSRF-Token'])
+    def test_review_control_and_report_reject_duplicate_headers(prepared_review_http, operation, header):
+        case = prepared_review_http
+        _, _, review_path = review_create(case)
+        identifier = review_path.rsplit('/', 1)[1]
+        if operation == 'download':
+            assert case.app.state.review_worker.run_once()
+            path = case.client.get(review_path).json()['evidence_paths'][0]
+        else:
+            path = '/api/v1/jobs/' + identifier + '/cancel'
+        headers = [*command(case.headers, 'control').items(), (header, 'synthetic-conflict')]
+        before = table_hashes(case.database)
+        response = (case.client.get(path, headers=headers) if operation == 'download' else
+                    case.client.post(path, json={'expected_revision': 1}, headers=headers))
+>       assert response.status_code == 400, response.text
+E       AssertionError: {"candidate":{"candidate_sha256":"ff9e952aaa2a4459583f8695f61576658e0261c3a8d2a02f1f951bc73d2ab2ba","draft_id":"draft_fd145678d3724bc3b18d0c45d7b16756","draft_revision":1,"entity":"block"},"independent_pedagogy":"NOT_RUN","input_sha256":"6a090cb16a15343e5c8fc39aa08c59c2b22f4226e37c4e92fd758f4fbb7bbe8d","material_descriptor_sha256":"997a84d94de1a2dac84b8624918ef9f5c9f60c506941a6d2c3ec58c7a9e40aee","mathematical":"NOT_RUN","numeric_observation":{"candidate":{"candidate_sha256":"ff9e952aaa2a4459583f8695f61576658e0261c3a8d2a02f1f951bc73d2ab2ba","draft_id":"draft_fd145678d3724bc3b18d0c45d7b16756","draft_revision":1,"entity":"block"},"candidate_record_sha256":null,"checks":[],"coverage":"no_numeric_owner_pipeline","descriptor_sha256":"306c0d64828ed07d7342556fb58678e1d0718a70baf41f8b20fbc087325ce9ba","observed_at":"2026-09-28T01:44:38.923755Z","provider_receipt_id":null,"source_job_id":null,"source_kind":"import","version":"review-numeric-observation-v1","workspace_id":"workspace_508c12bd9e114fa6bad238560dfcf3c4"},"numerical_examples_requested":false,"review_id":"review_d6adfc8ae9b5455aa0552637d3265d10","scope":"Only declared structure and existing numeric history; no new execution or mathematical/source/pedagogical verification.","sources":"NOT_RUN","structure":{"candidate":{"candidate_sha256":"ff9e952aaa2a4459583f8695f61576658e0261c3a8d2a02f1f951bc73d2ab2ba","draft_id":"draft_fd145678d3724bc3b18d0c45d7b16756","draft_revision":1,"entity":"block"},"checks":[{"code":"material_schema","detail_code":"typed_material_revalidated","status":"PASS"},{"code":"candidate_byte_binding","detail_code":"candidate_and_body_hashes_revalidated","status":"PASS"},{"code":"declared_source_membership","detail_code":"no_authoring_declaration_schema","status":"NOT_RUN"},{"code":"declared_symbol_consistency","detail_code":"no_authoring_declaration_schema","status":"NOT_RUN"}],"material_descriptor_sha256":"997a84d94de1a2dac84b8624918ef9f5c9f60c506941a6d2c3ec58c7a9e40aee","requested":true,"structural":"PASS","version":"review-structure-report-v1"},"version":"quality-review-report-v1"}
+E       assert 200 == 400
+E        +  where 200 = <Response [200 OK]>.status_code
+
+tests/integration/test_review_control_headers.py:24: AssertionError
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_review_control_headers.py::test_review_control_and_report_reject_duplicate_headers[Idempotency-Key-cancel] - AssertionError: {"id":"review_6948aa7042d84e7981f2485ba3edbac6","workspace_id":"workspace_d662ec791ed445dbabbee07797e6e9f5","kind":"draft_review","status":"cancelled","revision":2,"created_at":"2026-09-28T01:44:36.753385Z","updated_at":"2026-09-28T01:44:36.776545Z","progress":{"completed":0,"total":null,"label":"cancelled"},"result_refs":[],"warnings":[],"error":null}
+assert 200 == 400
+ +  where 200 = <Response [200 OK]>.status_code
+FAILED tests/integration/test_review_control_headers.py::test_review_control_and_report_reject_duplicate_headers[Idempotency-Key-download] - AssertionError: {"candidate":{"candidate_sha256":"879d93403d21d26b508887a2b7f5fa5bf1eb5fb768deedb007c99f91f51171f3","draft_id":"draft_c6a62afabfae4383a4779de54b2c23ee","draft_revision":1,"entity":"block"},"independent_pedagogy":"NOT_RUN","input_sha256":"44bdd87fee5f30da9b05f99c89ad91aba106dbca40f491a880c5a82011a42071","material_descriptor_sha256":"3f8f5c16a5a5f8efef910bb254fd9e8afc051bb081bd5c6d0c0000728548e915","mathematical":"NOT_RUN","numeric_observation":{"candidate":{"candidate_sha256":"879d93403d21d26b508887a2b7f5fa5bf1eb5fb768deedb007c99f91f51171f3","draft_id":"draft_c6a62afabfae4383a4779de54b2c23ee","draft_revision":1,"entity":"block"},"candidate_record_sha256":null,"checks":[],"coverage":"no_numeric_owner_pipeline","descriptor_sha256":"bebde25094ba1520af7828e9f38a82c72d2858d725ecc8acb0a06c17b579f376","observed_at":"2026-09-28T01:44:37.511044Z","provider_receipt_id":null,"source_job_id":null,"source_kind":"import","version":"review-numeric-observation-v1","workspace_id":"workspace_fe4e91c3cebf445d85c11e34e54ebea1"},"numerical_examples_requested":false,"review_id":"review_4a84e168eeca4fb4883c4417c3da0267","scope":"Only declared structure and existing numeric history; no new execution or mathematical/source/pedagogical verification.","sources":"NOT_RUN","structure":{"candidate":{"candidate_sha256":"879d93403d21d26b508887a2b7f5fa5bf1eb5fb768deedb007c99f91f51171f3","draft_id":"draft_c6a62afabfae4383a4779de54b2c23ee","draft_revision":1,"entity":"block"},"checks":[{"code":"material_schema","detail_code":"typed_material_revalidated","status":"PASS"},{"code":"candidate_byte_binding","detail_code":"candidate_and_body_hashes_revalidated","status":"PASS"},{"code":"declared_source_membership","detail_code":"no_authoring_declaration_schema","status":"NOT_RUN"},{"code":"declared_symbol_consistency","detail_code":"no_authoring_declaration_schema","status":"NOT_RUN"}],"material_descriptor_sha256":"3f8f5c16a5a5f8efef910bb254fd9e8afc051bb081bd5c6d0c0000728548e915","requested":true,"structural":"PASS","version":"review-structure-report-v1"},"version":"quality-review-report-v1"}
+assert 200 == 400
+ +  where 200 = <Response [200 OK]>.status_code
+FAILED tests/integration/test_review_control_headers.py::test_review_control_and_report_reject_duplicate_headers[X-CSRF-Token-cancel] - AssertionError: {"id":"review_e6d421ec5bdd43e7ae218e3ab8183747","workspace_id":"workspace_f5ab7b7f87a44bb1a2e9ee6b9c079532","kind":"draft_review","status":"cancelled","revision":2,"created_at":"2026-09-28T01:44:38.231746Z","updated_at":"2026-09-28T01:44:38.253846Z","progress":{"completed":0,"total":null,"label":"cancelled"},"result_refs":[],"warnings":[],"error":null}
+assert 200 == 400
+ +  where 200 = <Response [200 OK]>.status_code
+FAILED tests/integration/test_review_control_headers.py::test_review_control_and_report_reject_duplicate_headers[X-CSRF-Token-download] - AssertionError: {"candidate":{"candidate_sha256":"ff9e952aaa2a4459583f8695f61576658e0261c3a8d2a02f1f951bc73d2ab2ba","draft_id":"draft_fd145678d3724bc3b18d0c45d7b16756","draft_revision":1,"entity":"block"},"independent_pedagogy":"NOT_RUN","input_sha256":"6a090cb16a15343e5c8fc39aa08c59c2b22f4226e37c4e92fd758f4fbb7bbe8d","material_descriptor_sha256":"997a84d94de1a2dac84b8624918ef9f5c9f60c506941a6d2c3ec58c7a9e40aee","mathematical":"NOT_RUN","numeric_observation":{"candidate":{"candidate_sha256":"ff9e952aaa2a4459583f8695f61576658e0261c3a8d2a02f1f951bc73d2ab2ba","draft_id":"draft_fd145678d3724bc3b18d0c45d7b16756","draft_revision":1,"entity":"block"},"candidate_record_sha256":null,"checks":[],"coverage":"no_numeric_owner_pipeline","descriptor_sha256":"306c0d64828ed07d7342556fb58678e1d0718a70baf41f8b20fbc087325ce9ba","observed_at":"2026-09-28T01:44:38.923755Z","provider_receipt_id":null,"source_job_id":null,"source_kind":"import","version":"review-numeric-observation-v1","workspace_id":"workspace_508c12bd9e114fa6bad238560dfcf3c4"},"numerical_examples_requested":false,"review_id":"review_d6adfc8ae9b5455aa0552637d3265d10","scope":"Only declared structure and existing numeric history; no new execution or mathematical/source/pedagogical verification.","sources":"NOT_RUN","structure":{"candidate":{"candidate_sha256":"ff9e952aaa2a4459583f8695f61576658e0261c3a8d2a02f1f951bc73d2ab2ba","draft_id":"draft_fd145678d3724bc3b18d0c45d7b16756","draft_revision":1,"entity":"block"},"checks":[{"code":"material_schema","detail_code":"typed_material_revalidated","status":"PASS"},{"code":"candidate_byte_binding","detail_code":"candidate_and_body_hashes_revalidated","status":"PASS"},{"code":"declared_source_membership","detail_code":"no_authoring_declaration_schema","status":"NOT_RUN"},{"code":"declared_symbol_consistency","detail_code":"no_authoring_declaration_schema","status":"NOT_RUN"}],"material_descriptor_sha256":"997a84d94de1a2dac84b8624918ef9f5c9f60c506941a6d2c3ec58c7a9e40aee","requested":true,"structural":"PASS","version":"review-structure-report-v1"},"version":"quality-review-report-v1"}
+assert 200 == 400
+ +  where 200 = <Response [200 OK]>.status_code
+4 failed, 2 warnings in 3.50s

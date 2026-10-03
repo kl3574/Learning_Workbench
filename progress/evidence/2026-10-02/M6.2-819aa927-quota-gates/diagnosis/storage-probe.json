@@ -1,0 +1,77 @@
+{
+  "df -hT /tmp $HOME/.cache/learning-workbench-acceptance/m62-python-retry-diagnosis-oct02 /dev/shm": {
+    "exit_code": 0,
+    "stdout": "Filesystem                        Type   Size  Used Avail Use% Mounted on\ntmpfs                             tmpfs   16G   13G  3.1G  80% /tmp\n/dev/mapper/ubuntu--vg-ubuntu--lv ext4   935G  375G  514G  43% /\ntmpfs                             tmpfs   16G   11M   16G   1% /dev/shm\n",
+    "stderr": ""
+  },
+  "df -i /tmp $HOME/.cache/learning-workbench-acceptance/m62-python-retry-diagnosis-oct02 /dev/shm": {
+    "exit_code": 0,
+    "stdout": "Filesystem                          Inodes   IUsed    IFree IUse% Mounted on\ntmpfs                              1048576  264282   784294   26% /tmp\n/dev/mapper/ubuntu--vg-ubuntu--lv 62316544 4822572 57493972    8% /\ntmpfs                              3965263      48  3965215    1% /dev/shm\n",
+    "stderr": ""
+  },
+  "findmnt -T /tmp": {
+    "exit_code": 0,
+    "stdout": "TARGET SOURCE FSTYPE OPTIONS\n/tmp   tmpfs  tmpfs  rw,nosuid,nodev,size=15861056k,nr_inodes=1048576,inode64,usrquota\n",
+    "stderr": ""
+  },
+  "findmnt -T $HOME/.cache/learning-workbench-acceptance/m62-python-retry-diagnosis-oct02": {
+    "exit_code": 0,
+    "stdout": "TARGET SOURCE                            FSTYPE OPTIONS\n/      /dev/mapper/ubuntu--vg-ubuntu--lv ext4   rw,relatime\n",
+    "stderr": ""
+  },
+  "quota /tmp": {
+    "return": 0,
+    "errno": 0,
+    "error": null,
+    "fields": {
+      "bhardlimit": 12688844,
+      "bsoftlimit": 12688844,
+      "curspace": 12993376256,
+      "ihardlimit": 0,
+      "isoftlimit": 0,
+      "curinodes": 264157,
+      "btime": 0,
+      "itime": 0,
+      "valid": 63
+    },
+    "limits_unit_bytes": 1024,
+    "curspace_unit_bytes": 1
+  },
+  "quota $HOME/.cache/learning-workbench-acceptance/m62-python-retry-diagnosis-oct02": {
+    "return": -1,
+    "errno": 3,
+    "error": "No such process",
+    "fields": {
+      "bhardlimit": 0,
+      "bsoftlimit": 0,
+      "curspace": 0,
+      "ihardlimit": 0,
+      "isoftlimit": 0,
+      "curinodes": 0,
+      "btime": 0,
+      "itime": 0,
+      "valid": 0
+    },
+    "limits_unit_bytes": 1024,
+    "curspace_unit_bytes": 1
+  },
+  "write /tmp": {
+    "path": "/tmp/m62-quota-probe-e1aee294-bb1c-47e6-903f-5f38eb80ba6f.bin",
+    "errno": 122,
+    "error": "[Errno 122] Disk quota exceeded",
+    "result": "FAIL"
+  },
+  "write $HOME/.cache/learning-workbench-acceptance/m62-python-retry-diagnosis-oct02": {
+    "path": "$HOME/.cache/learning-workbench-acceptance/m62-python-retry-diagnosis-oct02/m62-quota-probe-a50219bc-d7c6-4a7b-af1c-bcc95a59210a.bin",
+    "write_bytes": 4096,
+    "result": "PASS"
+  },
+  "tls_fixture_sizes": {
+    "/tmp/pytest-of-lkx/pytest-210/test_real_tls_requires_trusted2/generated-test-cert.pem": 0,
+    "/tmp/pytest-of-lkx/pytest-210/test_real_tls_requires_trusted2/generated-test-key.pem": 0,
+    "/tmp/pytest-of-lkx/pytest-210/test_real_tls_requires_trusted1/generated-test-cert.pem": 0,
+    "/tmp/pytest-of-lkx/pytest-210/test_real_tls_requires_trusted1/generated-test-key.pem": 0,
+    "/tmp/pytest-of-lkx/pytest-210/test_real_tls_requires_trusted0/generated-test-cert.pem": 0,
+    "/tmp/pytest-of-lkx/pytest-210/test_real_tls_requires_trusted0/generated-test-key.pem": 0
+  }
+}

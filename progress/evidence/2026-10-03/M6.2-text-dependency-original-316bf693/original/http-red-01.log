@@ -1,0 +1,32 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+rootdir: $HOME/.cache/learning-workbench-acceptance/m62-text-edit-dependencies-oct02
+configfile: pyproject.toml
+plugins: anyio-4.15.1
+collected 1 item
+
+tests/integration/test_edit_publication_dependencies.py F                [100%]
+
+=================================== FAILURES ===================================
+_ test_exact_dependency_order_survives_http_edit_review_publication_and_later_source_current _
+tests/integration/test_edit_publication_dependencies.py:66: in test_exact_dependency_order_survives_http_edit_review_publication_and_later_source_current
+    identifier, create, created, patch, patched, snapshot = draft(case, base)
+                                                            ^^^^^^^^^^^^^^^^^
+tests/integration/test_edit_publication_dependencies.py:27: in draft
+    assert created.status_code == 201, created.text
+E   AssertionError: {"error":{"code":"DRAFT_EDIT_SCOPE_UNSUPPORTED","message":"当前只支持从精确公开文本块修订创建并编辑标题和正文。","request_id":"request_dfbcad6d5cb84f359006e3a6f7f2f296","retryable":false,"details":[]}}
+E   assert 409 == 201
+E    +  where 409 = <Response [409 Conflict]>.status_code
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  $HOME/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  $HOME/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_edit_publication_dependencies.py::test_exact_dependency_order_survives_http_edit_review_publication_and_later_source_current
+======================== 1 failed, 2 warnings in 2.24s =========================

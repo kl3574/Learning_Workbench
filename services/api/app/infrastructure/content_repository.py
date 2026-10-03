@@ -126,6 +126,13 @@ class ContentRepository:
             raise damaged()
         return value
 
+    def require_absent(self, object_id: str) -> None:
+        """New-object publication CAS, including shells and other workspaces."""
+        if not self.connection.in_transaction:
+            raise ApiError(409, 'TRANSACTION_REQUIRED', '新对象发布需要当前事务。')
+        if self.connection.execute('SELECT 1 FROM objects WHERE id=?', (object_id,)).fetchone() is not None:
+            raise ApiError(409, 'PUBLICATION_ID_UNAVAILABLE', '候选对象 ID 已被使用，不能作为新对象发布。')
+
     def ensure_new(self, values: list[PublishedModel]) -> None:
         for value in values:
             row = self.connection.execute("SELECT * FROM objects WHERE id=?", (value.id,)).fetchone()
@@ -203,11 +210,17 @@ class ContentRepository:
             "new_ref": reference(value).model_dump(mode="json"),
             "affected_ids": [row["id"] for row in affected], "reason": "content_revision_published",
         }
+        event_raw = canonical_bytes(payload)
         # Durable invalidation intent; no worker/index rebuild or downstream completion is claimed.
         self.connection.execute("INSERT INTO outbox(id,event_type,payload_json) VALUES(?,?,?)",
-                                (f"outbox_{uuid4().hex}", "content.published", canonical_bytes(payload).decode()))
+                                (f"outbox_{uuid4().hex}", "content.published", event_raw.decode()))
         if old is not None:
+            event_id = f"outbox_{uuid4().hex}"
             self.connection.execute("INSERT INTO outbox(id,event_type,payload_json) VALUES(?,?,?)",
-                                    (f"outbox_{uuid4().hex}", "content.dependencies_invalidated", canonical_bytes(payload).decode()))
+                                    (event_id, "content.dependencies_invalidated", event_raw.decode()))
+            from ..application.content_impact import freeze_impact_event
+            freeze_impact_event(ContentRepository(self.connection, self.workspace_id, allow_notes=True),
+                                event_id, event_raw, reference(old), reference(value),
+                                tuple(row["id"] for row in affected))
         from .retrieval_repository import RetrievalInvalidation
         RetrievalInvalidation(self.connection, self.workspace_id).changed('content.published')

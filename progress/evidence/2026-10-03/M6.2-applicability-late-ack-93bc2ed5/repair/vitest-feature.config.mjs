@@ -1,0 +1,3 @@
+import { defineConfig } from '$HOME/.cache/learning-workbench-acceptance/m62-public-safe-oct02/apps/web/node_modules/vitest/dist/config.js'
+import react from '$HOME/.cache/learning-workbench-acceptance/m62-public-safe-oct02/apps/web/node_modules/@vitejs/plugin-react/dist/index.js'
+export default defineConfig({ root: '$HOME/.cache/learning-workbench-acceptance/m62-applicability-late-ack-fix-oct02/apps/web', cacheDir: '$HOME/.cache/learning-workbench-acceptance/m62-applicability-late-ack-fix-evidence-oct02/vite-cache', plugins: [react()], test: { environment: 'jsdom', include: ['src/features/evidenceApplicability/*.test.{ts,tsx}'] } })

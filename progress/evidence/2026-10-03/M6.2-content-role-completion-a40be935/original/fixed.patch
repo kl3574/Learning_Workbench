@@ -1,0 +1,21 @@
+commit a40be93575830f7584986af2be23444a31752ed6
+Author:     Kangxin Liu <robinliu97@outlook.com>
+AuthorDate: Sat Oct 3 07:41:50 2026 +0800
+Commit:     Kangxin Liu <robinliu97@outlook.com>
+CommitDate: Sat Oct 3 07:41:50 2026 +0800
+
+    test(content): await confirmed role before impact reread
+
+diff --git a/tests/e2e/content-impacts.spec.ts b/tests/e2e/content-impacts.spec.ts
+index 74f1cd57..8642f061 100644
+--- a/tests/e2e/content-impacts.spec.ts
++++ b/tests/e2e/content-impacts.spec.ts
+@@ -83,7 +83,7 @@ test('native edit publication discovers actual impacts and preserves human decis
+     await panel(restored).getByText(new RegExp(`原决定回执已保存.*${commands[0].key}`)).click(); await expect(panel(restored).getByRole('button', { name: `按原提交内容重试 ${commands[0].key}`, exact: true })).toBeDisabled()
+     expect(await restored.request.get(`/api/v1/lessons/${target}?revision=1`).then(r => r.json())).toEqual(parentBefore)
+     await panel(restored).getByRole('button', { name: `查看影响详情 ${event}`, exact: true }).click(); await expect(panel(restored).getByRole('region', { name: '本次读取的内容影响详情', exact: true })).toBeVisible()
+-    const policyPage = await next.newPage(); await policyPage.goto(runtime.origin); const assessment = originalAssessmentPackage('impactpolicy'); const imported = await importAssessmentPackage(policyPage, assessment); await imported.dialog.getByRole('button', { name: '切换为作者角色', exact: true }).click(); await imported.dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
++    const policyPage = await next.newPage(); await policyPage.goto(runtime.origin); const assessment = originalAssessmentPackage('impactpolicy'); const imported = await importAssessmentPackage(policyPage, assessment); await imported.dialog.getByRole('button', { name: '切换为作者角色', exact: true }).click(); await expect(imported.dialog.getByText('操作角色：作者', { exact: true })).toBeVisible(); await imported.dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
+     await panel(restored).getByRole('button', { name: '重新核验内容复核权限', exact: true }).click(); await list(restored, block); await panel(restored).getByRole('button', { name: `查看影响详情 ${event}`, exact: true }).click(); await expect(panel(restored).getByRole('region', { name: '本次读取的内容影响详情', exact: true })).toBeVisible()
+     expect((await restored.request.get('/api/v1/session').then(r => r.json())).role).toBe('author')
+     const href = `${runtime.origin}/?assessment=${encodeURIComponent(JSON.stringify({ assessment_ref: assessment.assessment, course_ref: assessment.course }))}`; await policyPage.goto(href)

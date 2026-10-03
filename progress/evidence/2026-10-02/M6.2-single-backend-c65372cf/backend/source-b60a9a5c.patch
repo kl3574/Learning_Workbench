@@ -1,0 +1,1113 @@
+commit b60a9a5cd6b9bcedba20242ddcfd008a2f962765
+Author:     Kangxin Liu <robinliu97@outlook.com>
+AuthorDate: Fri Oct 2 22:38:36 2026 +0800
+Commit:     Kangxin Liu <robinliu97@outlook.com>
+CommitDate: Fri Oct 2 22:38:36 2026 +0800
+
+    feat: publish generated single examples with checked historical readback
+
+diff --git a/migrations/0026_single_publications.sql b/migrations/0026_single_publications.sql
+new file mode 100644
+index 00000000..222ece34
+--- /dev/null
++++ b/migrations/0026_single_publications.sql
+@@ -0,0 +1,18 @@
++-- Publication-owned terminal association. Original Authoring snapshots stay unchanged.
++CREATE TABLE single_publication_bindings(
++ workspace_id TEXT NOT NULL REFERENCES workspace(id),
++ draft_id TEXT NOT NULL,
++ draft_revision INTEGER NOT NULL CHECK(draft_revision=1),
++ candidate_sha256 TEXT NOT NULL CHECK(length(candidate_sha256)=64),
++ publication_id TEXT NOT NULL UNIQUE REFERENCES draft_publication_results(publication_id),
++ record_sha256 TEXT NOT NULL CHECK(length(record_sha256)=64),
++ PRIMARY KEY(workspace_id,draft_id,draft_revision)
++);
++CREATE TRIGGER single_publication_bindings_no_replace BEFORE INSERT ON single_publication_bindings
++ WHEN EXISTS(SELECT 1 FROM single_publication_bindings WHERE publication_id=NEW.publication_id
++ OR (workspace_id=NEW.workspace_id AND draft_id=NEW.draft_id AND draft_revision=NEW.draft_revision))
++ BEGIN SELECT RAISE(ABORT,'single publication immutable'); END;
++CREATE TRIGGER single_publication_bindings_no_update BEFORE UPDATE ON single_publication_bindings
++ BEGIN SELECT RAISE(ABORT,'single publication immutable'); END;
++CREATE TRIGGER single_publication_bindings_no_delete BEFORE DELETE ON single_publication_bindings
++ BEGIN SELECT RAISE(ABORT,'single publication immutable'); END;
+diff --git a/services/api/app/application/authoring.py b/services/api/app/application/authoring.py
+index 46d7df2f..cc6c1f6e 100644
+--- a/services/api/app/application/authoring.py
++++ b/services/api/app/application/authoring.py
+@@ -4,9 +4,11 @@ import hashlib
+ import hmac
+ import secrets
+ import sqlite3
++from collections.abc import Callable
+ from typing import TYPE_CHECKING
+ if TYPE_CHECKING:
+     from .restore_numeric_service import RestoreNumericService
++    from .publication_models import PublicationHistory
+ from uuid import uuid4
+ 
+ from packages.contracts import domain_models as dm
+@@ -16,6 +18,7 @@ from ..import_dto import JobCancelRequest, JobSnapshot
+ from ..infrastructure.authoring_job_repository import integrity
+ from ..infrastructure.authoring_repository import AuthoringRepository, AuthoringRecord
+ from ..infrastructure.database import Database
++from ..infrastructure.publication_repository import PublicationRepository
+ from ..infrastructure.security import SessionIdentity, author_execution_identity
+ from .authoring_context import AuthoringContext
+ from .authoring_models import AuthoringCandidateRecord, AuthoringJobInput
+@@ -34,6 +37,7 @@ class AuthoringService:
+         self.context = context or AuthoringContext(database)
+         self.provider = provider
+         self.restore_numeric: RestoreNumericService | None = None
++        self.verify_publication: Callable[[sqlite3.Connection, SessionIdentity, 'PublicationHistory'], dm.ContentRef] | None = None
+         self._cursor_key = secrets.token_bytes(32)
+ 
+     def resolve_candidate(self, connection: sqlite3.Connection, identity: SessionIdentity,
+@@ -143,8 +147,36 @@ class AuthoringService:
+                 raise integrity()
+             for check_id in result.numeric_check_ids:
+                 numeric.current(check_id)
++            published = self.published_ref_in_transaction(conn, identity,
++                dm.DraftCandidate.model_validate(result.candidate.model_dump()))
++            if published is not None:
++                result = AuthoringDraftView.model_validate({**result.model_dump(), 'state': 'published',
++                    'published_ref': published.model_dump(), 'warnings': [
++                        {**warning.model_dump(), 'message': '原生成阶段未执行数学、来源或教学审核；当前发布以绑定的发布记录为准。'}
++                        if warning.code == 'AUTHORING_REVIEW_NOT_RUN' else warning.model_dump()
++                        for warning in result.warnings]})
+             return result
+ 
++    def published_ref_in_transaction(self, conn: sqlite3.Connection, identity: SessionIdentity,
++                                     candidate: dm.DraftCandidate) -> dm.ContentRef | None:
++        """Current Single projection; source, publication and actual Content stay checked."""
++        from .publication_models import SinglePublicationRecord
++        resolved, _, _ = self._candidate_history(conn, identity, candidate)
++        publication = PublicationRepository(conn, identity.workspace_id).single_for_candidate(resolved.candidate)
++        if publication is None:
++            return None
++        if not isinstance(publication.record, SinglePublicationRecord):
++            raise integrity()
++        if self.verify_publication is None:
++            raise ApiError(503, 'PUBLICATION_OWNER_UNAVAILABLE', '生成候选的真实发布记录当前无法核验。')
++        return self.verify_publication(conn, identity, publication)
++
++    def require_unpublished_candidate(self, conn: sqlite3.Connection, identity: SessionIdentity,
++                                      candidate: dm.DraftCandidate) -> None:
++        """Call in the same write transaction as new preview/approval/start permission."""
++        if self.published_ref_in_transaction(conn, identity, candidate) is not None:
++            raise ApiError(409, 'DRAFT_ALREADY_PUBLISHED', '此生成候选已发布，不能新增数值批准或启动许可。')
++
+     def job(self, identity: SessionIdentity, identifier: str) -> JobSnapshot:
+         with self.database.transaction(immediate=False) as conn:
+             return self._control(conn, identity, identifier)
+diff --git a/services/api/app/application/authoring_numeric_service.py b/services/api/app/application/authoring_numeric_service.py
+index 4a0eb5ae..dc2b23b7 100644
+--- a/services/api/app/application/authoring_numeric_service.py
++++ b/services/api/app/application/authoring_numeric_service.py
+@@ -55,6 +55,9 @@ class NumericService:
+             previous = repo.replay(identity, route, key, body, NumericCheckView)
+             if previous is not None:
+                 return previous
++            assert self.authoring is not None
++            self.authoring.require_unpublished_candidate(conn, identity,
++                dm.DraftCandidate.model_validate(original.candidate.model_dump()))
+             if (body.candidate.draft_id != draft_id or body.candidate.entity != original.candidate.entity):
+                 raise ApiError(409, 'NUMERIC_CANDIDATE_MISMATCH', '数值检查必须使用该原候选的完整身份。')
+             if body.candidate.draft_revision != original.candidate.draft_revision:
+@@ -112,6 +115,9 @@ class NumericService:
+             if body.operation_sha256 != record.view.operation_sha256:
+                 raise ApiError(409, 'NUMERIC_OPERATION_MISMATCH', '待批准操作身份不匹配。')
+             if body.decision == 'approve_once':
++                assert self.authoring is not None
++                self.authoring.require_unpublished_candidate(conn, identity,
++                    dm.DraftCandidate.model_validate(record.view.candidate.model_dump()))
+                 if record.view.expires_at <= utc_now():
+                     raise ApiError(409, 'NUMERIC_APPROVAL_EXPIRED', '数值预览已过期，请明确新建预览。')
+                 try:
+diff --git a/services/api/app/application/authoring_numeric_worker.py b/services/api/app/application/authoring_numeric_worker.py
+index 42502ac3..2f2606e6 100644
+--- a/services/api/app/application/authoring_numeric_worker.py
++++ b/services/api/app/application/authoring_numeric_worker.py
+@@ -2,6 +2,8 @@
+ import sqlite3
+ import threading
+ 
++from packages.contracts import domain_models as dm
++
+ from ..authoring_dto import NumericCheckResult, numeric_result_sha256
+ from ..infrastructure.authoring_job_repository import AuthoringLease, integrity
+ from ..infrastructure.authoring_numeric_repository import NumericRepository
+@@ -144,6 +146,10 @@ class NumericWorker:
+             self.runtime.check(value.runtime)
+             with self.database.transaction() as conn:
+                 repo = self._access(conn, lease, value, actor)
++                assert self.authoring is not None
++                self.authoring.require_unpublished_candidate(conn,
++                    author_execution_identity(conn, lease.workspace_id, actor),
++                    dm.DraftCandidate.model_validate(value.candidate.model_dump()))
+                 admitted = repo.begin(lease, utc_now())
+             if not admitted:
+                 self._blocked(lease, value, 'outcome_unknown')
+@@ -154,7 +160,7 @@ class NumericWorker:
+         except NumericRuntimeError:
+             self._blocked(lease, value, 'environment_unavailable')
+         except ApiError as error:
+-            if error.code not in {'POLICY_DENIED', 'ASSESSMENT_ACTIVE', 'ASSESSMENT_ANSWER_PROTECTED', 'AUTHORING_LEASE_LOST'}:
++            if error.code not in {'POLICY_DENIED', 'ASSESSMENT_ACTIVE', 'ASSESSMENT_ANSWER_PROTECTED', 'AUTHORING_LEASE_LOST', 'DRAFT_ALREADY_PUBLISHED'}:
+                 raise
+             self._blocked(lease, value, 'cancelled')
+ 
+diff --git a/services/api/app/application/draft_publication.py b/services/api/app/application/draft_publication.py
+index 763dff5a..ff78291d 100644
+--- a/services/api/app/application/draft_publication.py
++++ b/services/api/app/application/draft_publication.py
+@@ -4,6 +4,7 @@ from uuid import uuid4
+ 
+ from pydantic import TypeAdapter
+ from packages.contracts import domain_models as dm
++from packages.contracts.budgets import ImportBudgets
+ from packages.contracts.canonical import metadata_sha256
+ from ..infrastructure.database import Database, utc_now
+ from ..infrastructure.publication_repository import PublicationRepository
+@@ -14,6 +15,7 @@ from .draft_edits import DraftEditService
+ from .edit_publication import EditBlockPublication
+ from .content_restore import ContentRestoreService
+ from .restore_publication import RestoreBlockPublication
++from .single_publication import SingleBlockPublication
+ from .errors import ApiError
+ from .import_publication import ImportBlockPublication, unsupported
+ from .imports import ImportService
+@@ -21,9 +23,9 @@ from .providers import validate_key
+ from .publication_admission import PublicationAdmissionService
+ from .publication_admission_models import PublicationAdmission
+ from .publication_admission_models import DraftPublishWrite
+-from .publication_models import PublicationHistory, PublicationRecord, EditPublicationRecord, RestorePublicationRecord, integrity, validated
++from .publication_models import PublicationHistory, PublicationRecord, EditPublicationRecord, RestorePublicationRecord, SinglePublicationRecord, integrity, validated
+ from .review_history_models import ReviewDecisionRecord, ReviewMachineRecord
+-from .review_material_models import ImportReviewMaterial, EditReviewMaterial, RestoreReviewMaterial, CheckedReviewMaterial
++from .review_material_models import ImportReviewMaterial, EditReviewMaterial, RestoreReviewMaterial, SingleReviewMaterial, CheckedReviewMaterial
+ from .review_service import ReviewService
+ 
+ 
+@@ -34,6 +36,7 @@ class DraftPublicationService:
+         self.admission = PublicationAdmissionService(reviews)
+         self.edit_owner = EditBlockPublication(DraftEditService(database))
+         self.restore_owner = RestoreBlockPublication(ContentRestoreService(database))
++        self.single_owner = SingleBlockPublication(reviews.candidates)
+ 
+     @staticmethod
+     def _access(conn: sqlite3.Connection, identity: SessionIdentity) -> SessionIdentity:
+@@ -60,7 +63,10 @@ class DraftPublicationService:
+                 or machine.structural_report.structural != 'PASS'
+                 or machine.numeric.descriptor_sha256 != record.admission.numeric_observation_sha256):
+             raise integrity()
+-        if isinstance(record, RestorePublicationRecord):
++        if isinstance(record, SinglePublicationRecord):
++            generated = self.single_owner.verify(conn, identity, record)
++            expected_block, expected_body = generated.block, generated.body
++        elif isinstance(record, RestorePublicationRecord):
+             restored = self.restore_owner.verify(conn, identity, record)
+             expected_block, expected_body = restored.payload.proposed_block, restored.payload.source.body_markdown.encode()
+         elif isinstance(record, EditPublicationRecord):
+@@ -132,6 +138,34 @@ class DraftPublicationService:
+             payload=p, block=p.proposed_block, source=source, result=result, adopted_at=adopted, published_at=utc_now())
+         return self._verify(conn, current, repo.finish(record))
+ 
++    def _publish_single(self, conn: sqlite3.Connection, current: SessionIdentity, repo: PublicationRepository,
++                        material: CheckedReviewMaterial, body: DraftPublishWrite, key: str) -> dm.ContentRef:
++        repo.single_for_candidate(material.candidate)
++        repo.require_unpublished_draft(material.candidate.draft_id)
++        prepared = self.single_owner.prepare(conn, current, material.candidate)
++        if prepared.material != material or not isinstance(material.payload, SingleReviewMaterial):
++            raise integrity()
++        identifier, adopted = 'publication_' + uuid4().hex, utc_now()
++        repo.adopt(identifier, material.candidate, adopted, owner='authoring')
++        repo.advance(identifier, 1, 'draft', 'in_review', utc_now())
++        admission = self.admission.check(conn, current, material.candidate.draft_id, body)
++        history, checked_material = self.reviews.read_publication_basis(conn, current, body.review_receipt_id)
++        human = history.records[-1]
++        if checked_material != material or not isinstance(human, ReviewDecisionRecord):
++            raise integrity()
++        repo.advance(identifier, 2, 'in_review', 'approved', utc_now())
++        result = self.content.publish_new_block_in_transaction(conn, current.workspace_id,
++            prepared.block, prepared.body, ImportBudgets())
++        assert isinstance(admission, PublicationAdmission)
++        original = material.payload.record
++        record = SinglePublicationRecord(version='single-worked-example-publication-v1', id=identifier,
++            workspace_id=current.workspace_id, owner='authoring', candidate=material.candidate, actor_id=current.id,
++            route=f'POST /drafts/{material.candidate.draft_id}/publish', command_key=key, request=body,
++            admission=admission, human_record_sha256=metadata_sha256(human),
++            generation_record_sha256=metadata_sha256(original), source_job_id=original.source_job_id,
++            payload=original.payload, block=prepared.block, result=result, adopted_at=adopted, published_at=utc_now())
++        return self._verify(conn, current, repo.finish(record))
++
+     def publish(self, identity: SessionIdentity, draft_id: str, body: DraftPublishWrite, key: str) -> dm.ContentRef:
+         key, body = validate_key(key), validated(DraftPublishWrite, body)
+         try:
+@@ -154,6 +188,8 @@ class DraftPublicationService:
+                     return self._publish_restore(conn, current, repo, material, body, key)
+                 if isinstance(material.payload, EditReviewMaterial):
+                     return self._publish_edit(conn, current, repo, material, body, key)
++                if isinstance(material.payload, SingleReviewMaterial):
++                    return self._publish_single(conn, current, repo, material, body, key)
+                 if not isinstance(material.payload, ImportReviewMaterial):
+                     raise unsupported()
+                 prepared = self.owner.prepare(conn, current, material.candidate)
+diff --git a/services/api/app/application/publication_admission.py b/services/api/app/application/publication_admission.py
+index 12442ab1..7c2d4fd0 100644
+--- a/services/api/app/application/publication_admission.py
++++ b/services/api/app/application/publication_admission.py
+@@ -86,6 +86,8 @@ class PublicationAdmissionService:
+             raise blocked('PUBLISH_HUMAN_REVIEW_REQUIRED', '发布准入需要绑定此候选的明确人工审核决定。')
+         if isinstance(material.payload, RestoreReviewMaterial) and material.payload.record.payload.proposed_block.kind == 'worked_example':
+             self.reviews.numeric.require_current_restore_observation(connection, identity, history.records[0].numeric)
++        if isinstance(material.payload, SingleReviewMaterial):
++            self.reviews.numeric.require_current_single_observation(connection, identity, history.records[0].numeric)
+         return self._evaluate(material, history.records[0], history.records[-1], draft_id, body)
+ 
+     def verify_recorded(self, connection: sqlite3.Connection, identity: SessionIdentity,
+diff --git a/services/api/app/application/publication_models.py b/services/api/app/application/publication_models.py
+index a177c7ab..95cc09e8 100644
+--- a/services/api/app/application/publication_models.py
++++ b/services/api/app/application/publication_models.py
+@@ -5,8 +5,8 @@ from typing import Annotated, Literal, Self, TypeVar
+ from pydantic import BaseModel, Field, model_validator
+ from packages.contracts import domain_models as dm
+ from packages.contracts.budgets import ImportBudgets
+-from packages.contracts.canonical import metadata_sha256
+-from ..authoring_dto import AuthoringModel
++from packages.contracts.canonical import metadata_sha256, sha256_bytes
++from ..authoring_dto import AuthoringModel, WorkedExamplePayload
+ from ..infrastructure.provenance_repository import FrozenProvenance
+ from .errors import ApiError
+ from .draft_edit_models import DraftBaseMaterial, DraftEditPayload
+@@ -162,13 +162,61 @@ class RestorePublicationRecord(AuthoringModel):
+         return self
+ 
+ 
+-def publication_record(value: object) -> PublicationRecord | EditPublicationRecord | RestorePublicationRecord:
++def single_block(payload: WorkedExamplePayload, identifier: str) -> dm.ContentBlock:
++    """The complete §20.15 mapping; the caller owns the new stable identity."""
++    return dm.ContentBlock(id=identifier, revision=1, kind='worked_example', title=payload.title,
++        body_path=f'content/{identifier}.r1.md', body_sha256=sha256_bytes(payload.body_markdown.encode()),
++        concepts=[], citations=[], depends_on=[dm.ContentRef.model_validate(ref.model_dump())
++                                               for ref in payload.declared_source_refs])
++
++
++class SinglePublicationRecord(AuthoringModel):
++    version: Literal['single-worked-example-publication-v1']
++    id: dm.Id
++    workspace_id: dm.Id
++    owner: Literal['authoring']
++    candidate: dm.DraftCandidate
++    actor_id: dm.Id
++    route: str
++    command_key: str
++    request: DraftPublishWrite
++    admission: PublicationAdmission
++    human_record_sha256: dm.Sha256
++    generation_record_sha256: dm.Sha256
++    source_job_id: dm.Id
++    payload: WorkedExamplePayload
++    block: dm.ContentBlock
++    result: dm.ContentRef
++    adopted_at: dm.UTC
++    published_at: dm.UTC
++
++    @model_validator(mode='after')
++    def exact_bindings(self) -> Self:
++        c, a, r = self.candidate, self.admission, self.request
++        if (self.route != f'POST /drafts/{c.draft_id}/publish' or not self.command_key
++                or c.entity != 'block' or c.draft_revision != 1 or r.expected_revision != 1
++                or c.candidate_sha256 != metadata_sha256(self.payload)
++                or r.expected_content_sha256 != c.candidate_sha256
++                or a.workspace_id != self.workspace_id or a.candidate != c
++                or a.review_receipt_id != r.review_receipt_id
++                or a.acknowledged_warning_codes != r.acknowledged_warning_codes
++                or a.numeric_coverage != 'complete' or len(a.numeric_check_ids) != 1
++                or self.block != single_block(self.payload, self.block.id)
++                or self.result != dm.ContentRef(entity='block', id=self.block.id, revision=1,
++                                                sha256=metadata_sha256(self.block))):
++            raise ValueError('Single publication must preserve its exact generated example and numeric admission')
++        return self
++
++
++def publication_record(value: object) -> PublicationRecord | EditPublicationRecord | RestorePublicationRecord | SinglePublicationRecord:
+     if isinstance(value, PublicationRecord):
+         return validated(PublicationRecord, value)
+     if isinstance(value, EditPublicationRecord):
+         return validated(EditPublicationRecord, value)
+     if isinstance(value, RestorePublicationRecord):
+         return validated(RestorePublicationRecord, value)
++    if isinstance(value, SinglePublicationRecord):
++        return validated(SinglePublicationRecord, value)
+     if isinstance(value, dict):
+         if value.get('version') == 'draft-publication-v1':
+             return validated(PublicationRecord, value)
+@@ -176,6 +224,8 @@ def publication_record(value: object) -> PublicationRecord | EditPublicationReco
+             return validated(RestorePublicationRecord, value)
+         if value.get('version') == 'edit-publication-v1':
+             return validated(EditPublicationRecord, value)
++        if value.get('version') == 'single-worked-example-publication-v1':
++            return validated(SinglePublicationRecord, value)
+     raise integrity()
+ 
+ 
+@@ -191,7 +241,7 @@ class PublicationEvent(AuthoringModel):
+ 
+ 
+ class PublicationHistory(AuthoringModel):
+-    record: Annotated[PublicationRecord | EditPublicationRecord | RestorePublicationRecord, Field(discriminator='version')]
++    record: Annotated[PublicationRecord | EditPublicationRecord | RestorePublicationRecord | SinglePublicationRecord, Field(discriminator='version')]
+     events: list[PublicationEvent]
+ 
+     @model_validator(mode='after')
+diff --git a/services/api/app/application/review_numeric.py b/services/api/app/application/review_numeric.py
+index 76e93206..e0742cd4 100644
+--- a/services/api/app/application/review_numeric.py
++++ b/services/api/app/application/review_numeric.py
+@@ -212,3 +212,19 @@ class ReviewNumeric:
+         current = self.restore_owner.read_review_numeric(connection, identity, observation.candidate)
+         if not same_endpoint(current, observation):
+             raise ApiError(409, 'PUBLISH_NUMERIC_OBSERVATION_STALE', '数值账本已变化，需要新的 Review 与明确人工决定。')
++
++    def require_current_single_observation(self, connection, identity, observation):
++        """First publication uses the complete ledger endpoint, not a valid old prefix."""
++        if not isinstance(observation, ReviewNumericObservation) or observation.source_kind != 'authoring_single':
++            raise ApiError(409, 'PUBLISH_NUMERIC_COVERAGE_UNAVAILABLE', '此审核没有单块候选的完整数值观察。')
++        current = self.read_review_numeric(connection, identity, observation.candidate.draft_id,
++                                           observation.candidate.draft_revision)
++
++        def facts(value):
++            raw = value.model_dump(mode='json', exclude={'observed_at', 'descriptor_sha256'})
++            for check in raw['checks']:
++                check['view'].pop('expired')
++            return raw
++
++        if facts(current) != facts(observation):
++            raise ApiError(409, 'PUBLISH_NUMERIC_OBSERVATION_STALE', '数值账本已变化，需要新的 Review 与明确人工决定。')
+diff --git a/services/api/app/application/single_publication.py b/services/api/app/application/single_publication.py
+new file mode 100644
+index 00000000..4f5b12a9
+--- /dev/null
++++ b/services/api/app/application/single_publication.py
+@@ -0,0 +1,42 @@
++"""Single generation publication through the registered Authoring owner only."""
++from dataclasses import dataclass
++from uuid import uuid4
++
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import metadata_sha256
++from .draft_candidates import DraftCandidates
++from .publication_models import SinglePublicationRecord, integrity, single_block, validated
++from .review_material_models import CheckedReviewMaterial, SingleReviewMaterial
++
++
++@dataclass(frozen=True, repr=False)
++class PreparedSingleBlock:
++    material: CheckedReviewMaterial
++    block: dm.ContentBlock
++    body: bytes
++
++
++class SingleBlockPublication:
++    def __init__(self, candidates: DraftCandidates):
++        self.candidates = candidates
++
++    def prepare(self, conn, identity, candidate, identifier: str | None = None) -> PreparedSingleBlock:
++        material = self.candidates.read_review_material(conn, identity, candidate.draft_id, candidate.draft_revision)
++        if (material.source_kind != 'authoring_single' or material.candidate != candidate
++                or not isinstance(material.payload, SingleReviewMaterial)):
++            raise integrity()
++        payload = material.payload.record.payload
++        block = single_block(payload, identifier or 'generated_' + uuid4().hex)
++        return PreparedSingleBlock(material, block, payload.body_markdown.encode())
++
++    def verify(self, conn, identity, record: SinglePublicationRecord) -> PreparedSingleBlock:
++        record = validated(SinglePublicationRecord, record)
++        actual = self.prepare(conn, identity, record.candidate, record.block.id)
++        assert isinstance(actual.material.payload, SingleReviewMaterial)
++        original = actual.material.payload.record
++        if (record.payload != original.payload or record.block != actual.block
++                or record.generation_record_sha256 != metadata_sha256(original)
++                or record.source_job_id != original.source_job_id
++                or record.admission.material_descriptor_sha256 != actual.material.descriptor_sha256):
++            raise integrity()
++        return actual
+diff --git a/services/api/app/infrastructure/authoring_repository.py b/services/api/app/infrastructure/authoring_repository.py
+index b3b2f91f..3a3ba76b 100644
+--- a/services/api/app/infrastructure/authoring_repository.py
++++ b/services/api/app/infrastructure/authoring_repository.py
+@@ -171,7 +171,7 @@ class AuthoringRepository:
+         checks = self.conn.execute('SELECT check_id FROM authoring_numeric_checks WHERE draft_id=? AND workspace_id=? ORDER BY rowid',
+                                    (identifier, self.workspace_id)).fetchall()
+         return AuthoringDraftView(owner='authoring', candidate=candidate.candidate,
+-            source_job_id=candidate.source_job_id, state='draft', base_ref=None, body_sha256=candidate.body_sha256,
++            source_job_id=candidate.source_job_id, state='draft', published_ref=None, base_ref=None, body_sha256=candidate.body_sha256,
+             payload=candidate.payload, validation=candidate.validation, numeric_check_ids=[row[0] for row in checks],
+             warnings=[dm.Warning(code='AUTHORING_REVIEW_NOT_RUN', severity='warning',
+                 message='当前为草稿；数学、来源、教学审核与发布均未完成。')])
+diff --git a/services/api/app/infrastructure/publication_repository.py b/services/api/app/infrastructure/publication_repository.py
+index 11d02516..5ef634fb 100644
+--- a/services/api/app/infrastructure/publication_repository.py
++++ b/services/api/app/infrastructure/publication_repository.py
+@@ -6,7 +6,7 @@ from packages.contracts.canonical import canonical_bytes, sha256_bytes, strict_j
+ from ..application.errors import ApiError
+ from ..application.publication_admission_models import DraftPublishWrite
+ from ..application.publication_models import (
+-    PublicationEvent, PublicationHistory, PublicationRecord, EditPublicationRecord, RestorePublicationRecord, PublicationState, integrity, validated, publication_record,
++    PublicationEvent, PublicationHistory, PublicationRecord, EditPublicationRecord, RestorePublicationRecord, SinglePublicationRecord, PublicationState, integrity, validated, publication_record,
+ )
+ 
+ 
+@@ -52,6 +52,12 @@ class PublicationRepository:
+         if (len(commands) != 1 or tuple(commands[0]) != (record.workspace_id, record.actor_id, record.route,
+                                                        record.command_key, record.id)):
+             raise integrity()
++        if isinstance(record, SinglePublicationRecord):
++            binding = self.conn.execute('SELECT * FROM single_publication_bindings WHERE publication_id=?',
++                                        (identifier,)).fetchone()
++            if binding is None or tuple(binding) != (record.workspace_id, candidate.draft_id,
++                    candidate.draft_revision, candidate.candidate_sha256, record.id, result['sha256']):
++                raise integrity()
+         return validated(PublicationHistory, dict(record=record, events=events))
+ 
+     def replay(self, actor_id: str, route: str, key: str, body: DraftPublishWrite) -> PublicationHistory | None:
+@@ -85,6 +91,21 @@ class PublicationRepository:
+                 return True
+         return False
+ 
++    def single_for_candidate(self, candidate: dm.DraftCandidate) -> PublicationHistory | None:
++        """A lost terminal association is corruption, never a fresh draft projection."""
++        history = self.for_candidate(candidate)
++        bindings = self.conn.execute('SELECT publication_id FROM single_publication_bindings '
++            'WHERE workspace_id=? AND draft_id=?', (self.workspace_id, candidate.draft_id)).fetchall()
++        results = self.conn.execute("SELECT publication_id FROM draft_publication_results WHERE "
++            "json_extract(record_json,'$.version')='single-worked-example-publication-v1' AND "
++            "json_extract(record_json,'$.workspace_id')=? AND json_extract(record_json,'$.candidate.draft_id')=?",
++            (self.workspace_id, candidate.draft_id)).fetchall()
++        expected = [] if history is None else [history.record.id]
++        if ([row[0] for row in bindings] != expected or [row[0] for row in results] != expected
++                or (history is not None and not isinstance(history.record, SinglePublicationRecord))):
++            raise integrity()
++        return history
++
+     def require_unpublished_draft(self, draft_id: str) -> None:
+         """A committed publication is terminal for new commands on this producer Draft."""
+         row = self.conn.execute('SELECT id FROM draft_publications WHERE workspace_id=? AND draft_id=? LIMIT 1',
+@@ -119,13 +140,17 @@ class PublicationRepository:
+             raise ApiError(409, 'PUBLICATION_STATE_CONFLICT', '发布内部状态已经改变。')
+         self._event(identifier, expected_revision + 1, state, now)
+ 
+-    def finish(self, record: PublicationRecord | EditPublicationRecord | RestorePublicationRecord) -> PublicationHistory:
++    def finish(self, record: PublicationRecord | EditPublicationRecord | RestorePublicationRecord | SinglePublicationRecord) -> PublicationHistory:
+         record = publication_record(record)
+         if record.workspace_id != self.workspace_id:
+             raise integrity()
+         raw = canonical_bytes(record)
+         self.conn.execute('INSERT INTO draft_publication_results VALUES(?,?,?)',
+                           (record.id, raw.decode(), sha256_bytes(raw)))
++        if isinstance(record, SinglePublicationRecord):
++            self.conn.execute('INSERT INTO single_publication_bindings VALUES(?,?,?,?,?,?)',
++                (self.workspace_id, record.candidate.draft_id, record.candidate.draft_revision,
++                 record.candidate.candidate_sha256, record.id, sha256_bytes(raw)))
+         self.conn.execute('INSERT INTO draft_publication_commands VALUES(?,?,?,?,?)',
+                           (self.workspace_id, record.actor_id, record.route, record.command_key, record.id))
+         self.advance(record.id, 3, 'approved', 'published', record.published_at)
+diff --git a/services/api/app/main.py b/services/api/app/main.py
+index 7e97e287..59c624a4 100644
+--- a/services/api/app/main.py
++++ b/services/api/app/main.py
+@@ -123,6 +123,7 @@ def create_app(settings: Settings | None = None, *,
+     review_worker = ReviewWorker(review_service)
+     publication_service = DraftPublicationService(database, review_service, import_service)
+     content_restores.verify_publication = publication_service.verify_recorded
++    authoring_service.verify_publication = publication_service.verify_recorded
+     artifacts = ArtifactsService(database, review_service.readers())
+     content_impacts = ContentImpactDecisionService(database, artifacts)
+     jobs = JobService(database, review=review_service, restore_numeric=restore_numeric_service)
+diff --git a/tests/integration/test_single_publication.py b/tests/integration/test_single_publication.py
+new file mode 100644
+index 00000000..4abe2d79
+--- /dev/null
++++ b/tests/integration/test_single_publication.py
+@@ -0,0 +1,213 @@
++"""Actual Single/Review/Content owners with explicitly synthetic numeric facts.
++
++The loopback Provider is controlled; LedgerRuntime never executes a process.
++These cases establish publication contracts, not physical numeric or content PASS.
++"""
++import pytest
++
++from services.api.app.application.errors import ApiError
++from services.api.app.application.content import ContentService
++from services.api.app.application.draft_publication import DraftPublicationService
++from services.api.app.application.imports import ImportService
++from services.api.app.infrastructure.authoring_numeric_repository import NumericRepository
++from services.api.app.infrastructure.database import utc_now
++from tests.integration.test_publication_admission import (
++    generated_case, publish_request, reviewed, synthetic_numeric,
++)
++from tests.integration.test_authoring_numeric_provider_history import table_hashes
++from tests.integration.test_authoring_numeric_service import decision
++
++
++def ready_single(tmp_path):
++    case, reviews = generated_case(tmp_path, 'single')
++    service = DraftPublicationService(case.database, reviews, ImportService(case.database))
++    case.authoring.verify_publication = service.verify_recorded
++    synthetic_numeric(case, 'synthetic-numeric')
++    receipt = reviewed(case.database, case.identity, case.candidate, reviews)
++    body = publish_request(case.database, case.identity, case.candidate, reviews, receipt)
++    return case, reviews, service, body
++
++
++def test_generated_example_publishes_original_bytes_and_independently_reads_its_exact_ref(tmp_path):
++    case, _, publication, intent = ready_single(tmp_path)
++    original = case.authoring.draft(case.identity, case.candidate.draft_id)
++    generation = case.authoring.read(case.identity, original.source_job_id)
++    result = publication.publish(case.identity, case.candidate.draft_id, intent, 'publish-single')
++    content = ContentService(case.database)
++    block = content.read(case.identity.workspace_id, 'block', result.id, result.revision)
++    assert result.entity == 'block' and result.revision == 1
++    assert result.id != case.candidate.draft_id and result.sha256 != case.candidate.candidate_sha256
++    assert block.kind == 'worked_example' and block.title == original.payload.title
++    assert block.concepts == block.citations == block.depends_on == []
++    assert content.body(case.identity.workspace_id, result.id, 1)[0] == original.payload.body_markdown.encode()
++    current = case.authoring.draft(case.identity, case.candidate.draft_id)
++    assert current.state == 'published' and current.published_ref.model_dump() == result.model_dump()
++    assert current.payload == original.payload and current.source_job_id == original.source_job_id
++    assert case.authoring.read(case.identity, original.source_job_id) == generation
++    assert publication.publish(case.identity, case.candidate.draft_id, intent, 'publish-single') == result
++
++
++def test_review_of_old_pass_cannot_publish_after_a_new_numeric_preview(tmp_path):
++    case, _, publication, intent = ready_single(tmp_path)
++    case.preview('new-preview-after-review')
++    before = table_hashes(case.database)
++    with pytest.raises(ApiError) as caught:
++        publication.publish(case.identity, case.candidate.draft_id, intent, 'stale-publication')
++    assert caught.value.code == 'PUBLISH_NUMERIC_OBSERVATION_STALE'
++    assert table_hashes(case.database) == before
++
++
++def test_publication_blocks_new_preview_and_approval_but_preserves_original_acks(tmp_path):
++    case, reviews = generated_case(tmp_path, 'single')
++    publication = DraftPublicationService(case.database, reviews, ImportService(case.database))
++    case.authoring.verify_publication = publication.verify_recorded
++    pending = case.preview('pending-before-pass')
++    passed = synthetic_numeric(case, 'latest-pass')
++    original_approval = case.numeric.decide(case.identity, passed.id, decision(passed), 'latest-pass-approve')
++    receipt = reviewed(case.database, case.identity, case.candidate, reviews)
++    intent = publish_request(case.database, case.identity, case.candidate, reviews, receipt)
++    publication.publish(case.identity, case.candidate.draft_id, intent, 'publish')
++    before = table_hashes(case.database)
++    assert case.preview('pending-before-pass') == pending
++    assert case.numeric.decide(case.identity, passed.id, decision(passed), 'latest-pass-approve') == original_approval
++    for operation in (lambda: case.preview('new-preview'),
++                      lambda: case.numeric.decide(case.identity, pending.id, decision(pending), 'new-approval')):
++        with pytest.raises(ApiError) as caught:
++            operation()
++        assert caught.value.code == 'DRAFT_ALREADY_PUBLISHED'
++    assert table_hashes(case.database) == before
++
++
++def test_older_queued_a_cannot_start_after_newer_b_pass_and_publication(tmp_path):
++    case, reviews = generated_case(tmp_path, 'single')
++    publication = DraftPublicationService(case.database, reviews, ImportService(case.database))
++    case.authoring.verify_publication = publication.verify_recorded
++    first = case.preview('A')
++    first_ack = case.numeric.decide(case.identity, first.id, decision(first), 'A-approve')
++    synthetic_numeric(case, 'B')
++    receipt = reviewed(case.database, case.identity, case.candidate, reviews)
++    intent = publish_request(case.database, case.identity, case.candidate, reviews, receipt)
++    published = publication.publish(case.identity, case.candidate.draft_id, intent, 'publish')
++    # LedgerRuntime has no executor. Any attempted execution is a test failure.
++    assert case.worker().run_once()
++    current = case.numeric.read(case.identity, first.id)
++    assert current.job.id == first_ack.job.id and current.job.status == 'cancelled'
++    assert current.result.outcome == 'cancelled' and current.result.started_at is None
++    assert current.result.output_sha256 is None
++    assert publication.publish(case.identity, case.candidate.draft_id, intent, 'publish') == published
++    assert case.authoring.draft(case.identity, case.candidate.draft_id).state == 'published'
++
++
++def test_missing_publication_association_never_projects_unpublished(tmp_path):
++    case, _, publication, intent = ready_single(tmp_path)
++    publication.publish(case.identity, case.candidate.draft_id, intent, 'publish')
++    # An explicit corruption fixture, not a supported delete path.
++    with case.database.connect() as conn:
++        conn.execute('PRAGMA foreign_keys=OFF')
++        conn.execute('DROP TRIGGER draft_publications_no_delete')
++        conn.execute('DELETE FROM draft_publications')
++    before = table_hashes(case.database)
++    with pytest.raises(ApiError):
++        case.authoring.draft(case.identity, case.candidate.draft_id)
++    with pytest.raises(ApiError):
++        case.preview('must-not-resurrect-numeric')
++    assert table_hashes(case.database) == before
++
++
++@pytest.mark.parametrize('actual_started', [False, True])
++def test_existing_durable_start_survives_publication_and_recovers_unknown_without_reexecution(tmp_path, actual_started):
++    case, reviews = generated_case(tmp_path, 'single')
++    publication = DraftPublicationService(case.database, reviews, ImportService(case.database))
++    case.authoring.verify_publication = publication.verify_recorded
++    first = case.preview('A')
++    ack = case.numeric.decide(case.identity, first.id, decision(first), 'A-approve')
++    worker = case.worker()
++    work = worker.claim()
++    assert work[0].job_id == ack.job.id
++    with case.database.transaction() as conn:
++        repo = NumericRepository(conn, case.identity.workspace_id)
++        assert repo.begin(work[0], utc_now())
++        if actual_started:
++            repo.mark_started(work[0], utc_now())
++        original_start, _ = repo.execution_state(ack.job.id)
++    synthetic_numeric(case, 'B')
++    receipt = reviewed(case.database, case.identity, case.candidate, reviews)
++    intent = publish_request(case.database, case.identity, case.candidate, reviews, receipt)
++    result = publication.publish(case.identity, case.candidate.draft_id, intent, 'publish')
++    worker.process(*work)
++    current = case.numeric.read(case.identity, first.id)
++    assert current.result.outcome == 'outcome_unknown'
++    assert current.result.started_at == original_start.actual_started_at
++    with case.database.transaction(immediate=False) as conn:
++        start, end = NumericRepository(conn, case.identity.workspace_id).execution_state(ack.job.id)
++        assert start == original_start and end.result == current.result
++    assert publication.publish(case.identity, case.candidate.draft_id, intent, 'publish') == result
++    assert case.authoring.draft(case.identity, case.candidate.draft_id).published_ref.id == result.id
++
++
++def test_start_permission_without_job_revision_change_invalidates_prior_review(tmp_path):
++    case, reviews = generated_case(tmp_path, 'single')
++    publication = DraftPublicationService(case.database, reviews, ImportService(case.database))
++    case.authoring.verify_publication = publication.verify_recorded
++    first = case.preview('A')
++    case.numeric.decide(case.identity, first.id, decision(first), 'A-approve')
++    work = case.worker().claim()
++    synthetic_numeric(case, 'B')
++    receipt = reviewed(case.database, case.identity, case.candidate, reviews)
++    intent = publish_request(case.database, case.identity, case.candidate, reviews, receipt)
++    previous = case.numeric.job(case.identity, work[0].job_id)
++    with case.database.transaction() as conn:
++        assert NumericRepository(conn, case.identity.workspace_id).begin(work[0], utc_now())
++    assert case.numeric.job(case.identity, work[0].job_id) == previous
++    before = table_hashes(case.database)
++    with pytest.raises(ApiError) as caught:
++        publication.publish(case.identity, case.candidate.draft_id, intent, 'stale')
++    assert caught.value.code == 'PUBLISH_NUMERIC_OBSERVATION_STALE'
++    assert table_hashes(case.database) == before
++
++
++@pytest.mark.parametrize('table,condition', [
++    ('revisions', '1'), ('single_publication_bindings', '1'), ('draft_publication_results', '1'),
++    ('draft_publication_commands', '1'), ('draft_publication_events', 'NEW.revision=4'),
++])
++def test_faults_rollback_single_mapping_content_current_outbox_and_ack(tmp_path, table, condition):
++    case, _, publication, intent = ready_single(tmp_path)
++    with case.database.transaction() as conn:
++        conn.execute(f"CREATE TRIGGER synthetic_single_failure AFTER INSERT ON {table} WHEN {condition} "
++                     "BEGIN SELECT RAISE(ABORT,'synthetic single publication failure'); END")
++    before = table_hashes(case.database)
++    with pytest.raises(ApiError) as caught:
++        publication.publish(case.identity, case.candidate.draft_id, intent, 'publish')
++    assert caught.value.code == 'PUBLICATION_STORAGE_UNAVAILABLE'
++    assert table_hashes(case.database) == before
++    assert case.authoring.draft(case.identity, case.candidate.draft_id).published_ref is None
++    with case.database.transaction() as conn:
++        conn.execute('DROP TRIGGER synthetic_single_failure')
++    assert publication.publish(case.identity, case.candidate.draft_id, intent, 'publish').revision == 1
++
++
++@pytest.mark.parametrize('same_key', [False, True])
++def test_two_real_writers_create_one_single_identity_and_command(tmp_path, same_key):
++    from concurrent.futures import ThreadPoolExecutor
++    from threading import Barrier
++    case, _, publication, intent = ready_single(tmp_path)
++    barrier = Barrier(2)
++
++    def publish(key):
++        barrier.wait(timeout=15)
++        try:
++            return publication.publish(case.identity, case.candidate.draft_id, intent, key)
++        except ApiError as error:
++            return error.code
++
++    with ThreadPoolExecutor(max_workers=2) as pool:
++        results = list(pool.map(publish, ['first', 'first' if same_key else 'second']))
++    refs = [item for item in results if not isinstance(item, str)]
++    assert len(refs) == (2 if same_key else 1) and all(item == refs[0] for item in refs)
++    if not same_key:
++        assert 'DRAFT_ALREADY_PUBLISHED' in results
++    with case.database.connect() as conn:
++        for table in ['objects', 'revisions', 'single_publication_bindings', 'draft_publication_results',
++                      'draft_publication_commands']:
++            assert conn.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0] == 1
++        assert conn.execute("SELECT COUNT(*) FROM outbox WHERE event_type='content.published'").fetchone()[0] == 1
+diff --git a/tests/integration/test_single_publication_http.py b/tests/integration/test_single_publication_http.py
+new file mode 100644
+index 00000000..0f1694c6
+--- /dev/null
++++ b/tests/integration/test_single_publication_http.py
+@@ -0,0 +1,63 @@
++"""Real HTTP composition/restart with controlled original Provider and synthetic ledger."""
++from dataclasses import replace
++
++from fastapi.testclient import TestClient
++from services.api.app.application.sessions import SessionService
++from services.api.app.dto import RoleRequest
++from services.api.app.infrastructure.security import COOKIE_NAME, consume_bootstrap, issue_bootstrap_code
++from services.api.app.main import create_app
++from tests.integration.test_authoring_http import command
++from tests.integration.test_authoring_numeric_provider_history import table_hashes
++from tests.integration.test_single_publication import ready_single
++
++
++def test_named_http_publication_then_fresh_app_get_is_no_store_readonly_and_current_guarded(tmp_path):
++    case, _, _, intent = ready_single(tmp_path)
++    token, learner = consume_bootstrap(case.database, issue_bootstrap_code(case.database))
++    SessionService(case.database).switch_role(learner, RoleRequest(role='author'), 'http-author')
++    identity = replace(learner, role='author')
++    headers = {'Origin': case.database.settings.origin, 'X-CSRF-Token': identity.csrf_token}
++    path = '/api/v1/authoring/drafts/' + case.candidate.draft_id
++    publish_path = '/api/v1/drafts/' + case.candidate.draft_id + '/publish'
++    original = case.authoring.draft(case.identity, case.candidate.draft_id)
++    for restart in (False, True):
++        app = create_app(case.database.settings)
++        client = TestClient(app, base_url=case.database.settings.origin)
++        client.cookies.set(COOKIE_NAME, token)
++        try:
++            before = table_hashes(case.database)
++            draft = client.get(path)
++            assert draft.status_code == 200 and draft.headers['cache-control'] == 'no-store'
++            assert table_hashes(case.database) == before
++            assert draft.json()['state'] == ('published' if restart else 'draft')
++            assert (draft.json()['published_ref'] is not None) == restart
++            response = client.post(publish_path, json=intent.model_dump(), headers=command(headers, 'http-publish'))
++            assert response.status_code == 201, response.text
++            assert response.headers['cache-control'] == 'no-store'
++            result = response.json()
++            current = client.get(path)
++            assert current.status_code == 200 and current.json()['published_ref'] == result
++            assert current.json()['payload'] == original.payload.model_dump(mode='json')
++            assert current.json()['validation'] == original.validation.model_dump(mode='json')
++            assert client.get('/api/v1/drafts/' + case.candidate.draft_id).status_code == 404
++            body = client.get(f"/api/v1/blocks/{result['id']}/body?revision=1")
++            assert body.status_code == 200 and body.content == original.payload.body_markdown.encode()
++            before = table_hashes(case.database)
++            refused = client.post(path + '/numeric-checks', json={'candidate': case.candidate.model_dump()},
++                                  headers=command(headers, 'new-after-publication'))
++            assert refused.status_code == 409 and refused.json()['error']['code'] == 'DRAFT_ALREADY_PUBLISHED'
++            assert table_hashes(case.database) == before
++        finally:
++            client.close()
++    SessionService(case.database).switch_role(identity, RoleRequest(role='learner'), 'return-to-learner')
++    app = create_app(case.database.settings)
++    client = TestClient(app, base_url=case.database.settings.origin)
++    client.cookies.set(COOKIE_NAME, token)
++    try:
++        before = table_hashes(case.database)
++        denied = client.get(path)
++        assert denied.status_code == 403 and 'published_ref' not in denied.text
++        assert original.payload.title not in denied.text
++        assert table_hashes(case.database) == before
++    finally:
++        client.close()
+diff --git a/tests/integration/test_single_publication_integrity.py b/tests/integration/test_single_publication_integrity.py
+new file mode 100644
+index 00000000..03030df8
+--- /dev/null
++++ b/tests/integration/test_single_publication_integrity.py
+@@ -0,0 +1,93 @@
++"""Fault fixtures over real owners; numeric facts are explicitly synthetic."""
++import pytest
++
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import sha256_bytes
++from services.api.app.application.content import ContentService
++from services.api.app.application.errors import ApiError
++from services.api.app.infrastructure.publication_repository import PublicationRepository
++from tests.integration.test_authoring_numeric_provider_history import table_hashes
++from tests.integration.test_single_publication import ready_single
++
++
++@pytest.mark.parametrize('damage', ['provider', 'body', 'report', 'review_command', 'publication_event',
++    'publication_command', 'publication_result', 'binding', 'candidate', 'numeric_output', 'numeric_membership', 'role', 'revoked'])
++def test_published_get_and_original_ack_fail_closed_without_writes(tmp_path, damage):
++    case, _, publication, intent = ready_single(tmp_path)
++    result = publication.publish(case.identity, case.candidate.draft_id, intent, 'publish')
++    if damage == 'provider':
++        case.damage_original_artifact()
++    elif damage == 'publication_result':
++        with case.database.connect() as conn:
++            conn.execute('PRAGMA foreign_keys=OFF')
++            conn.execute('DROP TRIGGER draft_publication_results_no_delete')
++            conn.execute('DELETE FROM draft_publication_results')
++    else:
++        with case.database.transaction() as conn:
++            if damage in {'body', 'report'}:
++                if damage == 'body':
++                    row = conn.execute('SELECT b.relative_path FROM block_bodies r JOIN content_blobs b '
++                        'ON b.sha256=r.body_sha256 WHERE r.block_id=?', (result.id,)).fetchone()
++                else:
++                    row = conn.execute("SELECT b.relative_path FROM artifacts a JOIN content_blobs b "
++                        "ON b.sha256=a.blob_sha256 WHERE a.profile='quality_review_report'").fetchone()
++                (case.database.settings.data_dir / row[0]).write_bytes(b'SYNTHETIC_CORRUPTED_BYTES')
++            elif damage == 'review_command':
++                conn.execute('DROP TRIGGER review_commands_no_delete')
++                conn.execute('DELETE FROM review_commands')
++            elif damage == 'publication_event':
++                conn.execute('DROP TRIGGER draft_publication_events_no_delete')
++                conn.execute('DELETE FROM draft_publication_events WHERE revision=2')
++            elif damage == 'publication_command':
++                conn.execute('DROP TRIGGER draft_publication_commands_no_delete')
++                conn.execute('DELETE FROM draft_publication_commands')
++            elif damage == 'binding':
++                conn.execute('DROP TRIGGER single_publication_bindings_no_delete')
++                conn.execute('DELETE FROM single_publication_bindings')
++            elif damage == 'candidate':
++                conn.execute("UPDATE authoring_candidates SET record_sha256=?", ('0'*64,))
++            elif damage == 'numeric_output':
++                conn.execute("UPDATE authoring_numeric_executions SET end_sha256=?", ('0'*64,))
++            elif damage == 'numeric_membership':
++                conn.execute('DELETE FROM authoring_numeric_checks')
++            elif damage == 'role':
++                conn.execute("UPDATE local_sessions SET role='learner'")
++            elif damage == 'revoked':
++                conn.execute("UPDATE local_sessions SET revoked_at='2000-01-01T00:00:00Z'")
++    before = table_hashes(case.database)
++    for read in (lambda: publication.publish(case.identity, case.candidate.draft_id, intent, 'publish'),
++                 lambda: case.authoring.draft(case.identity, case.candidate.draft_id)):
++        with pytest.raises(ApiError):
++            read()
++        assert table_hashes(case.database) == before
++
++
++def test_newer_content_and_later_human_rejection_preserve_original_ref_and_immutable_bytes(tmp_path):
++    from tests.integration.test_review_workflow import decision
++    case, reviews, publication, intent = ready_single(tmp_path)
++    result = publication.publish(case.identity, case.candidate.draft_id, intent, 'publish')
++    content = ContentService(case.database)
++    block = content.read(case.identity.workspace_id, 'block', result.id, 1)
++    raw = b'Synthetic later revision; original published ref stays r1.\n'
++    revised = block.model_copy(update={'revision': 2, 'body_path': f'content/{result.id}.r2.md',
++                                       'body_sha256': sha256_bytes(raw)})
++    assert content.publish(case.identity.workspace_id, [revised], {revised.body_path: raw})[0].revision == 2
++    receipt = reviews.read(case.identity, intent.review_receipt_id)
++    reviews.decide(case.identity, receipt.id, decision(receipt, mathematical='REJECTED'), 'later-rejection')
++    before = table_hashes(case.database)
++    assert publication.publish(case.identity, case.candidate.draft_id, intent, 'publish') == result
++    projected = case.authoring.draft(case.identity, case.candidate.draft_id)
++    assert projected.state == 'published' and projected.published_ref.model_dump() == result.model_dump()
++    with pytest.raises(ApiError) as caught:
++        publication.publish(case.identity, case.candidate.draft_id, intent, 'new-key')
++    assert caught.value.code == 'DRAFT_ALREADY_PUBLISHED'
++    with pytest.raises(ApiError) as caught:
++        publication.publish(case.identity, case.candidate.draft_id,
++            intent.model_copy(update={'acknowledged_warning_codes': []}), 'publish')
++    assert caught.value.code == 'IDEMPOTENCY_CONFLICT'
++    with case.database.transaction(immediate=False) as conn:
++        conn.execute('PRAGMA query_only=ON')
++        history = PublicationRepository(conn, case.identity.workspace_id).single_for_candidate(
++            dm.DraftCandidate.model_validate(projected.candidate.model_dump()))
++        assert publication.verify_recorded(conn, case.identity, history) == result
++    assert table_hashes(case.database) == before
+diff --git a/tests/integration/test_single_publication_races.py b/tests/integration/test_single_publication_races.py
+new file mode 100644
+index 00000000..7fef5ad4
+--- /dev/null
++++ b/tests/integration/test_single_publication_races.py
+@@ -0,0 +1,98 @@
++"""Real worker/write transactions with a deliberately nonexecuting runtime boundary."""
++from concurrent.futures import ThreadPoolExecutor
++from threading import Event
++
++import pytest
++from packages.contracts.canonical import sha256_bytes
++from services.api.app.application.content import ContentService
++from services.api.app.application.draft_publication import DraftPublicationService
++from services.api.app.application.errors import ApiError
++from services.api.app.application.imports import ImportService
++from services.api.app.infrastructure.authoring_numeric_repository import NumericRepository
++from services.api.app.infrastructure.authoring_numeric_runtime import NumericRuntimeError
++from tests.integration.test_authoring_numeric_provider_history import table_hashes
++from tests.integration.test_authoring_numeric_service import decision
++from tests.integration.test_publication_admission import generated_case, publish_request, reviewed, synthetic_numeric
++from tests.integration.test_single_publication import ready_single
++
++
++class PausedNonexecutingRuntime:
++    """Synchronization at the external runtime seam; never claims a process started."""
++    def __init__(self, after_permit):
++        self.after_permit = after_permit
++        self.reached, self.release = Event(), Event()
++        self.launch_requests = 0
++
++    def pause(self):
++        self.reached.set()
++        assert self.release.wait(timeout=30)
++
++    def check(self, profile):
++        if not self.after_permit:
++            self.pause()
++
++    def run_checked(self, value, cancelled, on_started):
++        self.launch_requests += 1
++        assert self.after_permit, 'Published candidate received a new runtime request'
++        self.pause()
++        raise NumericRuntimeError('BLOCKED_ENVIRONMENT')
++
++
++@pytest.mark.parametrize('permit_first', [False, True])
++def test_publication_and_actual_worker_start_permission_serialize_on_one_writer_transaction(tmp_path, permit_first):
++    case, reviews = generated_case(tmp_path, 'single')
++    publication = DraftPublicationService(case.database, reviews, ImportService(case.database))
++    case.authoring.verify_publication = publication.verify_recorded
++    first = case.preview('A')
++    case.numeric.decide(case.identity, first.id, decision(first), 'A-approval')
++    worker = case.worker()
++    work = worker.claim()
++    synthetic_numeric(case, 'B')
++    receipt = reviewed(case.database, case.identity, case.candidate, reviews)
++    intent = publish_request(case.database, case.identity, case.candidate, reviews, receipt)
++    runtime = PausedNonexecutingRuntime(permit_first)
++    worker.runtime = runtime
++    with ThreadPoolExecutor(max_workers=1) as pool:
++        running = pool.submit(worker.process, *work)
++        try:
++            assert runtime.reached.wait(timeout=30)
++            if permit_first:
++                before = table_hashes(case.database)
++                with pytest.raises(ApiError) as caught:
++                    publication.publish(case.identity, case.candidate.draft_id, intent, 'publish')
++                assert caught.value.code == 'PUBLISH_NUMERIC_OBSERVATION_STALE'
++                assert table_hashes(case.database) == before
++            else:
++                result = publication.publish(case.identity, case.candidate.draft_id, intent, 'publish')
++        finally:
++            runtime.release.set()
++        running.result(timeout=30)
++    with case.database.transaction(immediate=False) as conn:
++        start, end = NumericRepository(conn, case.identity.workspace_id).execution_state(work[0].job_id)
++        assert (start.admitted_at is not None) == permit_first
++        assert start.actual_started_at is None and end.result.started_at is None
++    assert runtime.launch_requests == int(permit_first)
++    if not permit_first:
++        assert end.result.outcome == 'cancelled'
++        assert publication.publish(case.identity, case.candidate.draft_id, intent, 'publish') == result
++
++
++def test_allocated_id_collision_is_absent_current_cas_not_revision_two(tmp_path, monkeypatch):
++    from uuid import UUID
++    from packages.contracts import domain_models as dm
++    import services.api.app.application.single_publication as owner
++    case, _, publication, intent = ready_single(tmp_path)
++    fixed = UUID('01234567-89ab-cdef-0123-456789abcdef')
++    identifier = 'generated_' + fixed.hex
++    raw = b'Already occupied, synthetic content.\n'
++    block = dm.ContentBlock(id=identifier, revision=1, kind='text', title='Occupied',
++        body_path='content/occupied.md', body_sha256=sha256_bytes(raw))
++    content = ContentService(case.database)
++    old = content.publish(case.identity.workspace_id, [block], {block.body_path: raw})[0]
++    monkeypatch.setattr(owner, 'uuid4', lambda: fixed)
++    before = table_hashes(case.database)
++    with pytest.raises(ApiError) as caught:
++        publication.publish(case.identity, case.candidate.draft_id, intent, 'publish')
++    assert caught.value.code == 'PUBLICATION_ID_UNAVAILABLE'
++    assert table_hashes(case.database) == before
++    assert content.current(case.identity.workspace_id, identifier) == old
+diff --git a/tests/integration/test_single_publication_sources.py b/tests/integration/test_single_publication_sources.py
+new file mode 100644
+index 00000000..f51b1b8b
+--- /dev/null
++++ b/tests/integration/test_single_publication_sources.py
+@@ -0,0 +1,89 @@
++"""Controlled Provider bytes, real source pins and synthetic numeric execution facts."""
++import asyncio
++
++import pytest
++from packages.contracts.canonical import canonical_bytes
++from services.api.app.application.authoring_numeric_service import NumericService
++from services.api.app.application.content import ContentService
++from services.api.app.application.draft_candidates import DraftCandidates
++from services.api.app.application.draft_publication import DraftPublicationService
++from services.api.app.application.errors import ApiError
++from services.api.app.application.imports import ImportService
++from services.api.app.application.reader import ReaderService
++from services.api.app.application.review_numeric import ReviewNumeric
++from services.api.app.application.review_service import ReviewService
++from services.api.app.infrastructure.content_repository import reference
++from services.api.app.infrastructure.security import expires_after
++from services.api.app.provider_dto import ConsentCreate, ConsentPreviewWrite, OutboundBudget
++from tests.integration.test_authoring_context import request
++from tests.integration.test_authoring_numeric_provider_history import ProviderHistoryCase, table_hashes
++from tests.integration.test_authoring_numeric_service import Generated, LedgerRuntime
++from tests.integration.test_authoring_provider import configured, payload
++from tests.integration.test_publication_admission import publish_request, reviewed, synthetic_numeric
++from tests.integration.test_retrieval import publish_small
++from tests.provider_protocol_fixture import chat_stream, local_provider
++
++
++def source_case(tmp_path):
++    async def build():
++        response = bytearray()
++        async with local_provider(payload=response) as server:
++            state = configured(tmp_path, server.base_url)
++            database, identity, authoring, worker, consents, _ = state
++            blocks, lesson, course = publish_small(database, identity, 'source', ['来源甲。\n', '来源乙。\n'])
++            refs = [reference(blocks[1]), reference(blocks[0])]
++            candidate_payload = payload()
++            candidate_payload.update(title=' 标题保留 ', body_markdown='\n原始公式：17+25=42。\n\n',
++                                     declared_source_refs=[ref.model_dump() for ref in refs])
++            response.extend(chat_stream(canonical_bytes(candidate_payload).decode()))
++            job = authoring.prepare(identity, request(refs), 'generation')
++            preview = consents.preview(identity, ConsentPreviewWrite(job_id=job.id, expected_job_revision=1,
++                provider_id='test_provider', expected_provider_revision=2, expires_at=expires_after(300),
++                budget=OutboundBudget(max_input_tokens=20000, max_output_tokens=5000, max_provider_calls=1,
++                    max_search_calls=0, max_tool_calls=0, timeout_seconds=10, max_cost_usd=None)), 'consent-preview')
++            consents.grant(identity, ConsentCreate(proposal_id=preview.id, proposal_sha256=preview.proposal_sha256), 'consent-grant')
++            assert await asyncio.to_thread(worker.run_once)
++            candidate = authoring.read(identity, job.id).summary.candidate
++            assert candidate is not None and len(server.requests) == 1
++            runtime = LedgerRuntime()
++            numeric = NumericService(database, authoring.context, runtime, authoring=authoring)
++            case = ProviderHistoryCase('single', Generated((database, identity, authoring, numeric, candidate, runtime)))
++            catalog = DraftCandidates({'authoring_single': authoring})
++            reviews = ReviewService(database, catalog, ReviewNumeric(catalog, {'authoring_single': numeric}), {})
++            publication = DraftPublicationService(database, reviews, ImportService(database))
++            authoring.verify_publication = publication.verify_recorded
++            return case, reviews, publication, refs, lesson, course
++    return asyncio.run(build())
++
++
++@pytest.mark.parametrize('damage_source', [False, True])
++def test_exact_dependency_order_no_invented_citations_and_parent_pins_never_change(tmp_path, damage_source):
++    case, reviews, publication, refs, lesson, course = source_case(tmp_path)
++    original = case.authoring.draft(case.identity, case.candidate.draft_id)
++    synthetic_numeric(case, 'synthetic-numeric')
++    receipt = reviewed(case.database, case.identity, case.candidate, reviews)
++    intent = publish_request(case.database, case.identity, case.candidate, reviews, receipt)
++    result = publication.publish(case.identity, case.candidate.draft_id, intent, 'publish')
++    content = ContentService(case.database)
++    block = content.read(case.identity.workspace_id, 'block', result.id, 1)
++    assert block.depends_on == refs and block.citations == block.concepts == []
++    assert block.title == original.payload.title == ' 标题保留 '
++    assert content.body(case.identity.workspace_id, result.id, 1)[0] == original.payload.body_markdown.encode()
++    assert content.read(case.identity.workspace_id, 'lesson', lesson.id, 1) == lesson
++    assert content.read(case.identity.workspace_id, 'course', course.id, 1) == course
++    assert content.current(case.identity.workspace_id, lesson.id) == reference(lesson)
++    assert content.current(case.identity.workspace_id, course.id) == reference(course)
++    provenance = ReaderService(case.database).block(case.identity, result.id, 1)
++    assert provenance.original_source is None and provenance.citations == []
++    assert [warning.code for warning in provenance.warnings] == ['PROVENANCE_UNRESOLVED']
++    if damage_source:
++        with case.database.connect() as conn:
++            row = conn.execute('SELECT relative_path FROM content_blobs WHERE sha256=?',
++                (content.read(case.identity.workspace_id, 'block', refs[0].id, 1).body_sha256,)).fetchone()
++        (case.database.settings.data_dir / row[0]).write_bytes(b'SYNTHETIC_CHANGED_SOURCE_BYTES')
++        before = table_hashes(case.database)
++        for read in (lambda: case.authoring.draft(case.identity, case.candidate.draft_id),
++                     lambda: publication.publish(case.identity, case.candidate.draft_id, intent, 'publish')):
++            with pytest.raises(ApiError):
++                read()
++        assert table_hashes(case.database) == before

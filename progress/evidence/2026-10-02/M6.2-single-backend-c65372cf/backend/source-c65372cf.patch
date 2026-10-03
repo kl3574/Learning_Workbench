@@ -1,0 +1,49 @@
+commit c65372cfe5c2469dac3ad396eec62aa59efe2c75
+Author:     Kangxin Liu <robinliu97@outlook.com>
+AuthorDate: Fri Oct 2 22:56:57 2026 +0800
+Commit:     Kangxin Liu <robinliu97@outlook.com>
+CommitDate: Fri Oct 2 22:56:57 2026 +0800
+
+    fix: retain single source applicability in publication history
+
+diff --git a/services/api/app/application/draft_publication.py b/services/api/app/application/draft_publication.py
+index ff78291d..cb1e06bd 100644
+--- a/services/api/app/application/draft_publication.py
++++ b/services/api/app/application/draft_publication.py
+@@ -56,10 +56,12 @@ class DraftPublicationService:
+         machine = history.records[0]
+         humans = [item for item in history.records if isinstance(item, ReviewDecisionRecord)
+                   and item.receipt.revision == record.admission.review_revision]
++        # Single source applicability is rechecked by its recorded admission;
++        # an empty source selection may retain the existing NOT_APPLICABLE choice.
+         if (len(humans) != 1 or metadata_sha256(humans[0]) != record.human_record_sha256
+                 or metadata_sha256(humans[0].receipt) != record.admission.receipt_sha256
+                 or (isinstance(record, PublicationRecord) and humans[0].receipt.mathematical != 'NOT_APPLICABLE')
+-                or humans[0].receipt.sources != 'APPROVED'
++                or (not isinstance(record, SinglePublicationRecord) and humans[0].receipt.sources != 'APPROVED')
+                 or machine.structural_report.structural != 'PASS'
+                 or machine.numeric.descriptor_sha256 != record.admission.numeric_observation_sha256):
+             raise integrity()
+diff --git a/tests/integration/test_single_publication_continuity.py b/tests/integration/test_single_publication_continuity.py
+index 42eaaefe..d6b0968a 100644
+--- a/tests/integration/test_single_publication_continuity.py
++++ b/tests/integration/test_single_publication_continuity.py
+@@ -49,6 +49,18 @@ def test_derived_expiry_alone_does_not_make_the_complete_numeric_endpoint_stale(
+     assert publication.publish(case.identity, case.candidate.draft_id, intent, 'publish').revision == 1
+ 
+ 
++def test_no_source_single_preserves_existing_not_applicable_source_admission(tmp_path):
++    case, reviews = generated_case(tmp_path, 'single')
++    publication = DraftPublicationService(case.database, reviews, ImportService(case.database))
++    case.authoring.verify_publication = publication.verify_recorded
++    synthetic_numeric(case, 'synthetic-numeric')
++    receipt = reviewed(case.database, case.identity, case.candidate, reviews, sources='NOT_APPLICABLE')
++    intent = publish_request(case.database, case.identity, case.candidate, reviews, receipt)
++    result = publication.publish(case.identity, case.candidate.draft_id, intent, 'publish')
++    assert case.authoring.draft(case.identity, case.candidate.draft_id).published_ref.id == result.id
++    assert publication.publish(case.identity, case.candidate.draft_id, intent, 'publish') == result
++
++
+ def test_pending_preview_can_be_declined_after_publication_without_invalidating_old_ack(tmp_path):
+     case, reviews = generated_case(tmp_path, 'single')
+     publication = DraftPublicationService(case.database, reviews, ImportService(case.database))

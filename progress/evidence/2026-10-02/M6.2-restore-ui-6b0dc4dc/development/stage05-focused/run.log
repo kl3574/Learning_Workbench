@@ -1,0 +1,111 @@
+
+ RUN  v5.0.0 $HOME/.cache/learning-workbench-acceptance/m62-restore-ui-oct02/apps/web
+
+ ❯ src/features/contentRestore/RestorePanel.test.tsx (1 test | 1 failed) 1151ms
+   × a failed first journal write preserves the exact form and held command; policy hiding and unmount retain close protection until explicit memory save 1151ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/contentRestore/RestorePanel.test.tsx > a failed first journal write preserves the exact form and held command; policy hiding and unmount retain close protection until explicit memory save
+AssertionError: expected <p role="alert"></p> to be null
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div />[39m
+    [36m<div>[39m
+      [36m<section[39m
+        [33maria-label[39m=[32m"历史内容块恢复与审核"[39m
+        [33mclass[39m=[32m"restore-panel"[39m
+      [36m>[39m
+        [36m<h3>[39m
+          [0m将历史公开块恢复为新修订[0m
+        [36m</h3>[39m
+        [36m<p>[39m
+          [0m仅恢复同一块的完整历史字段和正文，建立独立待审恢复稿。旧审核和数值结果不转授；不会回滚旧题、私解、作答或成绩，也不更新 Lesson/Course 的原精确引用。[0m
+        [36m</p>[39m
+        [36m<p[39m
+          [33mrole[39m=[32m"alert"[39m
+        [36m>[39m
+          [0m本次恢复操作未确认或记录无法核验。原 body 与 key 保留，不自动重发或创建新命令。[0m
+        [36m</p>[39m
+        [36m<p[39m
+          [33mrole[39m=[32m"alert"[39m
+        [36m>[39m
+          [0m恢复创建命令或 ACK 尚未落盘，隔离保留在本页内存。请保持页面打开，恢复原会话后只保存原记录。[0m
+        [36m</p>[39m
+        [36m<button>[39m
+          [0m放弃未落盘恢复创建记录[0m
+        [36m</button>[39m
+        [36m<button>[39m
+          [0m保存原会话的恢复创建内存记录[0m
+        [36m</button>[39m
+        [36m<p>[39m
+          [0m比较中明确选定的来源：[0m
+          [0mblock_restore_synthetic[0m
+          [0m · r[0m
+          [0m1[0m
+          [0m · [0m
+          [36m<code>[39m
+            [0mbbba12f144660f14d89217cc88b28187086af6ffea4ddcd8673a8b44d692ee3e[0m
+          [36m</code>[39m
+        [36m</p>[39m
+        [36m<button[39m
+          [33mdisabled[39m=[32m""[39m
+        [36m>[39m
+          [0m重新读取当前基准并核验所选历史原件[0m
+        [36m</button>[39m
+        [36m<label>[39m
+          [0m读取已有恢复稿 ID[0m
+          [36m<input[39m
+            [33mvalue[39m=[32m""[39m
+          [36m/>[39m
+        [36m</label>[39m
+        [36m<button[39m
+          [33mdisabled[39m=[32m""[39m
+        [36m>[39m
+          [0m另行读取准确恢复稿[0m
+        [36m</button>[39m
+        [36m<button>[39m
+          [0m打开恢复审核与发布恢复[0m
+        [36m</button>[39m
+        [36m<button[39m
+          [33mdisabled[39m=[32m""[39m
+        [36m>[39m
+          [0m重新核对恢复权限与原记录[0m
+        [36m</button>[39m
+      [36m</section>[39m
+    [36m</div>[39m
+  [36m</body>[39m
+[36m</html>[39m
+
+- Expected:
+null
+
++ Received:
+<p
+  role="alert"
+>
+  恢复创建命令或 ACK 尚未落盘，隔离保留在本页内存。请保持页面打开，恢复原会话后只保存原记录。
+</p>
+
+ ❯ src/features/contentRestore/RestorePanel.test.tsx:37:70
+     35|   render(<RestorePanel {...props} />)
+     36|   const save = await screen.findByRole('button', { name: '保存原会话的恢复创建内存…
+     37|   await waitFor(() => expect(screen.queryByText(/恢复创建命令或 ACK 尚未落盘/)).t…
+       |                                                                      ^
+     38|   expect(port.create).not.toHaveBeenCalled()
+     39|   const records = Object.values(await restoreCreateCommandStore.load(w…
+ ❯ runWithExpensiveErrorDiagnosticsDisabled node_modules/@testing-library/dom/dist/config.js:47:12
+ ❯ checkCallback node_modules/@testing-library/dom/dist/wait-for.js:124:77
+ ❯ Timeout.checkRealTimersCallback node_modules/@testing-library/dom/dist/wait-for.js:118:16
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 12 passed (13)
+      Tests  1 failed | 94 passed (95)
+   Start at  17:43:14
+   Duration  3.52s (tests 50%, environment 26%, transform 16%, import 8%)
+

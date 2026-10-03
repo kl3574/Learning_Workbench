@@ -1,0 +1,16 @@
+--- stage10/usePublication.ts
++++ stage11/usePublication.ts
+@@ -98,11 +98,12 @@
+   }
+   const publish = async (selectedWarnings: number[]) => {
+     if (!current() || working.current || !basis) return
++    const selectedAt = sequence.current
+     try {
+       // Re-read the ledger: another panel must not be silently replaced by a
+       // second key. Server owns cross-page transactions and candidate uniqueness.
+       const values = await load()
+-      if (!current() || working.current) return
++      if (!current() || working.current || sequence.current !== selectedAt) return
+       setCommands(values)
+       if (values.some(value => sameValue(value.basis.candidate, basis.candidate) && !value.rejection)) {
+         setError('已有同候选原发布命令。保留原 key、结果和基准；请使用原命令恢复，不创建第二次发布。'); return

@@ -17,7 +17,7 @@ ALLOWED_ROOTS = {"PRODUCT_DESIGN.md", "README.md", "AGENTS.md", "Makefile", ".gi
                  "migrations", "scripts", "tests", "fixtures", "progress", "docs", ".github"}
 SUSPECT = [rb"gh[pousr]_[A-Za-z0-9]{30,}", rb"github_pat_[A-Za-z0-9_]{40,}",
            rb"sk-[A-Za-z0-9_-]{24,}", rb"AKIA[A-Z0-9]{16}", rb"-----BEGIN [A-Z ]*PRIVATE KEY-----",
-           rb"/home/[A-Za-z0-9_.-]+/", rb"[?&#]bootstrap=[A-Za-z0-9_-]{20,}"]
+           rb"/home/[A-Za-z0-9_.-]+", rb"[?&#]bootstrap=[A-Za-z0-9_-]{20,}"]
 FORBIDDEN = {"node_modules", ".venv", ".toolchain", ".local_data", "backups", "personal-notes", "secrets"}
 
 

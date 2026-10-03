@@ -1,0 +1,395 @@
+{
+  "base_commit": "e58abaaf4baa5b06d27bd1db1f06c8a13c1c730a",
+  "blockers": [
+    "Original17ff still permitted new PATCH after publication; separately repaired in a60",
+    "Original full setup lacks pinned Node24 and web dependencies; exact six traces retained"
+  ],
+  "changed_paths": [
+    "docs/adr/0034-edit-block-publication.md",
+    "migrations/0020_edit_publications.sql",
+    "services/api/app/application/content.py",
+    "services/api/app/application/draft_edits.py",
+    "services/api/app/application/draft_publication.py",
+    "services/api/app/application/edit_publication.py",
+    "services/api/app/application/publication_admission.py",
+    "services/api/app/application/publication_models.py",
+    "services/api/app/infrastructure/publication_repository.py",
+    "tests/integration/test_draft_edit_integrity.py",
+    "tests/integration/test_edit_publication.py",
+    "tests/integration/test_edit_publication_atomic.py",
+    "tests/integration/test_edit_publication_http.py",
+    "tests/integration/test_edit_publication_migration.py"
+  ],
+  "commands": [
+    {
+      "actual_head": "e58abaaf4baa5b06d27bd1db1f06c8a13c1c730a",
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/integration/test_edit_publication.py",
+        "-q"
+      ],
+      "exit_code": 1,
+      "log_sha256": "808b70227e0e3ba186bfa40046f8fda5287d22535196c725234e8e2c5c5642e9",
+      "stage": "01-edit-publish-red"
+    },
+    {
+      "actual_head": "e58abaaf4baa5b06d27bd1db1f06c8a13c1c730a",
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/integration/test_edit_publication.py",
+        "-q"
+      ],
+      "exit_code": 0,
+      "log_sha256": "5aec7d669338e8412a06da85d72ff58bcc053757d62e21fdef3b9f0b099566e3",
+      "stage": "02-edit-publish-green"
+    },
+    {
+      "actual_head": "e58abaaf4baa5b06d27bd1db1f06c8a13c1c730a",
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/integration/test_edit_publication.py",
+        "-q"
+      ],
+      "exit_code": 1,
+      "log_sha256": "c843e2b2da630f818f8a9a3839fe73e95090fdd0eac63eb73ade1ce285027e20",
+      "stage": "03-history-reader-boundaries"
+    },
+    {
+      "actual_head": "e58abaaf4baa5b06d27bd1db1f06c8a13c1c730a",
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/integration/test_edit_publication.py",
+        "tests/integration/test_edit_publication_atomic.py",
+        "-q"
+      ],
+      "exit_code": 1,
+      "log_sha256": "08a99a3ad16efee321c085b2012771eea603644dd67e85ba5bef5678b5c6ba3b",
+      "stage": "04-atomic-history"
+    },
+    {
+      "actual_head": "e58abaaf4baa5b06d27bd1db1f06c8a13c1c730a",
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/integration/test_edit_publication.py",
+        "tests/integration/test_edit_publication_atomic.py",
+        "tests/integration/test_edit_publication_migration.py",
+        "-q"
+      ],
+      "exit_code": 0,
+      "log_sha256": "298d3b39cbaf7655d628bbf9b44d58e1787010ccbf6afee9a254a650a19562a7",
+      "stage": "05-atomic-migration"
+    },
+    {
+      "actual_head": "e58abaaf4baa5b06d27bd1db1f06c8a13c1c730a",
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/integration/test_edit_publication.py",
+        "tests/integration/test_edit_publication_atomic.py",
+        "tests/integration/test_edit_publication_migration.py",
+        "tests/integration/test_edit_publication_http.py",
+        "-q"
+      ],
+      "exit_code": 0,
+      "log_sha256": "9c9f95ad75079cf78f147098aa13fdcca1948e819404f6fc26472efe1ca36730",
+      "stage": "06-real-http-concurrency"
+    },
+    {
+      "actual_head": "e58abaaf4baa5b06d27bd1db1f06c8a13c1c730a",
+      "command": [
+        ".venv/bin/ruff",
+        "check",
+        "."
+      ],
+      "exit_code": 1,
+      "log_sha256": "e17822fd1287dc952006fdcb306cda1bc721b05183f05180b573a5fca53c4d06",
+      "stage": "07-ruff"
+    },
+    {
+      "actual_head": "e58abaaf4baa5b06d27bd1db1f06c8a13c1c730a",
+      "command": [
+        ".venv/bin/mypy"
+      ],
+      "exit_code": 0,
+      "log_sha256": "7eb4120d06ce3e4d6b76e8fe90d6ce47493cbd73fb2053133e2f25fdac418fdb",
+      "stage": "08-mypy"
+    },
+    {
+      "actual_head": "e58abaaf4baa5b06d27bd1db1f06c8a13c1c730a",
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/integration/test_edit_publication.py",
+        "tests/integration/test_edit_publication_atomic.py",
+        "tests/integration/test_edit_publication_migration.py",
+        "tests/integration/test_edit_publication_http.py",
+        "-q"
+      ],
+      "exit_code": 0,
+      "log_sha256": "ef2f8ac9ca4481a163f2aa8b88cfe37e68c5536ffd92b64c3bc23c37173e23e0",
+      "stage": "09-focused-final"
+    },
+    {
+      "actual_head": "e58abaaf4baa5b06d27bd1db1f06c8a13c1c730a",
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/integration/test_draft_publication.py",
+        "tests/integration/test_draft_publication_atomic.py",
+        "tests/integration/test_draft_publication_integrity.py",
+        "tests/integration/test_draft_publication_scope.py",
+        "tests/integration/test_draft_publication_http.py",
+        "tests/integration/test_draft_edit_migration.py",
+        "tests/integration/test_draft_edits.py",
+        "tests/integration/test_draft_edit_boundaries.py",
+        "tests/integration/test_draft_edit_integrity.py",
+        "tests/integration/test_draft_edit_http.py",
+        "tests/unit/test_content_store.py",
+        "-q"
+      ],
+      "exit_code": 1,
+      "log_sha256": "42d6145df8f8a5a8c67ece4a7a8c438e3f58af1c48d57b462a6f18d7b1c0702a",
+      "stage": "10-related-regression"
+    },
+    {
+      "actual_head": "e58abaaf4baa5b06d27bd1db1f06c8a13c1c730a",
+      "command": [
+        ".venv/bin/ruff",
+        "check",
+        "."
+      ],
+      "exit_code": 0,
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "stage": "11-ruff-final"
+    },
+    {
+      "actual_head": "e58abaaf4baa5b06d27bd1db1f06c8a13c1c730a",
+      "command": [
+        ".venv/bin/python",
+        "scripts/verify_spec.py"
+      ],
+      "exit_code": 0,
+      "log_sha256": "01a68f12c2440da91fef280d88f8a6aa7179d17cd05457f0e73cefc4656c7c48",
+      "stage": "12-spec"
+    },
+    {
+      "actual_head": "e58abaaf4baa5b06d27bd1db1f06c8a13c1c730a",
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/integration/test_draft_publication.py",
+        "tests/integration/test_draft_publication_atomic.py",
+        "tests/integration/test_draft_publication_integrity.py",
+        "tests/integration/test_draft_publication_scope.py",
+        "tests/integration/test_draft_publication_http.py",
+        "tests/integration/test_draft_edit_migration.py",
+        "tests/integration/test_draft_edits.py",
+        "tests/integration/test_draft_edit_boundaries.py",
+        "tests/integration/test_draft_edit_integrity.py",
+        "tests/integration/test_draft_edit_http.py",
+        "tests/unit/test_content_store.py",
+        "-q"
+      ],
+      "exit_code": 0,
+      "log_sha256": "0b45b61000316837052c27de9ff44c73c2483d0abac9e42eadd3a2c63896ed0b",
+      "stage": "13-related-corrected"
+    },
+    {
+      "actual_head": "7ab80860c09a68a29b068c834244ddf3d62bdd45",
+      "command": [
+        ".venv/bin/ruff",
+        "check",
+        "."
+      ],
+      "exit_code": 0,
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "stage": "14-fixed-ruff"
+    },
+    {
+      "actual_head": "7ab80860c09a68a29b068c834244ddf3d62bdd45",
+      "command": [
+        ".venv/bin/mypy"
+      ],
+      "exit_code": 0,
+      "log_sha256": "7eb4120d06ce3e4d6b76e8fe90d6ce47493cbd73fb2053133e2f25fdac418fdb",
+      "stage": "15-fixed-mypy"
+    },
+    {
+      "actual_head": "7ab80860c09a68a29b068c834244ddf3d62bdd45",
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/integration/test_edit_publication.py::test_edit_without_citations_still_requires_review_of_its_actual_base_before_content_write",
+        "-q"
+      ],
+      "exit_code": 0,
+      "log_sha256": "5aec7d669338e8412a06da85d72ff58bcc053757d62e21fdef3b9f0b099566e3",
+      "stage": "16-uncited-source-admission"
+    },
+    {
+      "actual_head": "17ff439c3b7e6fce704fcc8ec2afbbb607079a0e",
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/integration/test_edit_publication.py",
+        "tests/integration/test_edit_publication_atomic.py",
+        "tests/integration/test_edit_publication_http.py",
+        "tests/integration/test_edit_publication_migration.py",
+        "-q"
+      ],
+      "exit_code": 0,
+      "log_sha256": "712e6c181d1c8c6092c6171d51a99a19ccd23e2c7840a06ed09525671564868e",
+      "stage": "17-fixed-edit-suite"
+    },
+    {
+      "actual_head": "17ff439c3b7e6fce704fcc8ec2afbbb607079a0e",
+      "command": [
+        ".venv/bin/ruff",
+        "check",
+        "."
+      ],
+      "exit_code": 0,
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "stage": "18-fixed-final-ruff"
+    },
+    {
+      "actual_head": "17ff439c3b7e6fce704fcc8ec2afbbb607079a0e",
+      "command": [
+        ".venv/bin/mypy"
+      ],
+      "exit_code": 0,
+      "log_sha256": "7eb4120d06ce3e4d6b76e8fe90d6ce47493cbd73fb2053133e2f25fdac418fdb",
+      "stage": "19-fixed-final-mypy"
+    },
+    {
+      "actual_head": "17ff439c3b7e6fce704fcc8ec2afbbb607079a0e",
+      "command": [
+        ".venv/bin/python",
+        "scripts/spec_check.py"
+      ],
+      "exit_code": 2,
+      "log_sha256": "dd8a858fe560d28014b9920d3eabafe99467463696541dfb986b7ea912a5c53d",
+      "stage": "20-fixed-final-spec"
+    },
+    {
+      "actual_head": "17ff439c3b7e6fce704fcc8ec2afbbb607079a0e",
+      "command": [
+        ".venv/bin/python",
+        "scripts/verify_spec.py"
+      ],
+      "exit_code": 0,
+      "log_sha256": "01a68f12c2440da91fef280d88f8a6aa7179d17cd05457f0e73cefc4656c7c48",
+      "stage": "21-fixed-final-spec-corrected"
+    },
+    {
+      "actual_head": "17ff439c3b7e6fce704fcc8ec2afbbb607079a0e",
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "-q"
+      ],
+      "exit_code": 1,
+      "log_sha256": "6a07e5c4272e024eb3a23e63a4074eab27037e8f599078d05bca47d183660d1a",
+      "stage": "22-fixed-full-python"
+    },
+    {
+      "actual_head": "17ff439c3b7e6fce704fcc8ec2afbbb607079a0e",
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "--collect-only",
+        "-q"
+      ],
+      "exit_code": 0,
+      "log_sha256": "c47287c4b615e0783b2153e495804e089ceb736cc6efcb5bb2c5ad1dd508cf5c",
+      "stage": "23-fixed-collection"
+    },
+    {
+      "actual_head": "17ff439c3b7e6fce704fcc8ec2afbbb607079a0e",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "node",
+        "--version"
+      ],
+      "exit_code": 1,
+      "log_sha256": "5b2582d1c5f7b76ba49921d1636bba97eedd40077b9a3a325536cb27dd6c30c9",
+      "stage": "24-original-node-environment-probe"
+    }
+  ],
+  "exit_codes": {
+    "01-edit-publish-red": 1,
+    "02-edit-publish-green": 0,
+    "03-history-reader-boundaries": 1,
+    "04-atomic-history": 1,
+    "05-atomic-migration": 0,
+    "06-real-http-concurrency": 0,
+    "07-ruff": 1,
+    "08-mypy": 0,
+    "09-focused-final": 0,
+    "10-related-regression": 1,
+    "11-ruff-final": 0,
+    "12-spec": 0,
+    "13-related-corrected": 0,
+    "14-fixed-ruff": 0,
+    "15-fixed-mypy": 0,
+    "16-uncited-source-admission": 0,
+    "17-fixed-edit-suite": 0,
+    "18-fixed-final-ruff": 0,
+    "19-fixed-final-mypy": 0,
+    "20-fixed-final-spec": 2,
+    "21-fixed-final-spec-corrected": 0,
+    "22-fixed-full-python": 1,
+    "23-fixed-collection": 0,
+    "24-original-node-environment-probe": 1
+  },
+  "implementation_commit": "17ff439c3b7e6fce704fcc8ec2afbbb607079a0e",
+  "migrations": [
+    "0020_edit_publications.sql"
+  ],
+  "next_task_id": "M6.2-edit-publication-terminal",
+  "not_run": [
+    "real vendor acceptance",
+    "native edit/publish UI",
+    "real mathematical/source/pedagogical approval",
+    "actual numeric calculator PASS",
+    "full M6.2 product acceptance"
+  ],
+  "requirement_ids": [
+    "R-19",
+    "R-21",
+    "R-24",
+    "R-26",
+    "R-29"
+  ],
+  "screenshot_paths": [],
+  "security_review": "Actual identity/Policy/current-base/corruption/atomic rollback tests performed; final independent review not claimed. Private logs require sanitization before public use.",
+  "spec_sha256": "2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d",
+  "status": "SUPERSEDED_ORIGINAL_EVIDENCE_FULL_FAIL_RETAINED",
+  "task_id": "M6.2-edit-publication-original",
+  "test_summary": {
+    "all_early_failures": "preserved; REPORT distinguishes genuine product RED, fixture/setup, and formatting failures",
+    "fixed_focused": "39 PASS, 2 dependency warnings",
+    "fixed_full": "6 FAIL, 3024 PASS, 1 actual numeric ENV SKIP, 2 dependency warnings",
+    "fixed_static": "Ruff PASS; mypy211 PASS; spec structural baseline PASS",
+    "related_prior": "231 PASS, 2 dependency warnings; one test source later expanded for source N/A"
+  }
+}

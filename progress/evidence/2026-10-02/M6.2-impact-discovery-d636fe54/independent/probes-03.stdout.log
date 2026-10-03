@@ -1,0 +1,130 @@
+FF.........F..                                                           [100%]
+=================================== FAILURES ===================================
+________ test_missing_current_target_revision_is_integrity_error[False] ________
+
+case = Case(database=<services.api.app.infrastructure.database.Database object at 0x71da89a08a70>, identity=SessionIdentity(i...i.app.application.content.ContentService object at 0x71da8912b470>, event_id='outbox_b7901451f8d1403fac65025e0a25e9d1')
+filtered = False
+
+    @pytest.mark.parametrize('filtered', [False, True])
+    def test_missing_current_target_revision_is_integrity_error(case, filtered):
+        # A retained exact target and its historical ref remain intact; its current
+        # pointer now names absent storage. This is not a caller-supplied missing ID.
+        fault(case, "UPDATE objects SET current_revision=999 WHERE id='lesson'")
+>       unchanged(case, 409, **({'changed_object_id': 'unknown'} if filtered else {}))
+
+../evidence/test_independent_discovery.py:34: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+case = Case(database=<services.api.app.infrastructure.database.Database object at 0x71da89a08a70>, identity=SessionIdentity(i...i.app.application.content.ContentService object at 0x71da8912b470>, event_id='outbox_b7901451f8d1403fac65025e0a25e9d1')
+expected = 409, params = {}
+
+    def unchanged(case, expected, **params):
+        before = table_hashes(case.database)
+        response = case.client.get(PATH, params=params)
+        assert table_hashes(case.database) == before
+        assert response.headers['cache-control'] == 'no-store'
+>       assert response.status_code == expected, response.text
+E       AssertionError: {"error":{"code":"REFERENCE_MISSING","message":"指定内容修订不存在或不可访问。","request_id":"request_571dd7db40704ce3b5d8ab0d79768a13","retryable":false,"details":[]}}
+E       assert 404 == 409
+E        +  where 404 = <Response [404 Not Found]>.status_code
+
+../evidence/test_independent_discovery.py:25: AssertionError
+________ test_missing_current_target_revision_is_integrity_error[True] _________
+
+case = Case(database=<services.api.app.infrastructure.database.Database object at 0x71da88663a70>, identity=SessionIdentity(i...i.app.application.content.ContentService object at 0x71da8858eb40>, event_id='outbox_bf2b57b7ab8e499f8e23fadfbb77d0be')
+filtered = True
+
+    @pytest.mark.parametrize('filtered', [False, True])
+    def test_missing_current_target_revision_is_integrity_error(case, filtered):
+        # A retained exact target and its historical ref remain intact; its current
+        # pointer now names absent storage. This is not a caller-supplied missing ID.
+        fault(case, "UPDATE objects SET current_revision=999 WHERE id='lesson'")
+>       unchanged(case, 409, **({'changed_object_id': 'unknown'} if filtered else {}))
+
+../evidence/test_independent_discovery.py:34: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+case = Case(database=<services.api.app.infrastructure.database.Database object at 0x71da88663a70>, identity=SessionIdentity(i...i.app.application.content.ContentService object at 0x71da8858eb40>, event_id='outbox_bf2b57b7ab8e499f8e23fadfbb77d0be')
+expected = 409, params = {'changed_object_id': 'unknown'}
+
+    def unchanged(case, expected, **params):
+        before = table_hashes(case.database)
+        response = case.client.get(PATH, params=params)
+        assert table_hashes(case.database) == before
+        assert response.headers['cache-control'] == 'no-store'
+>       assert response.status_code == expected, response.text
+E       AssertionError: {"error":{"code":"REFERENCE_MISSING","message":"指定内容修订不存在或不可访问。","request_id":"request_38c21cbc87854bd3b352f2d5b5b049ae","retryable":false,"details":[]}}
+E       assert 404 == 409
+E        +  where 404 = <Response [404 Not Found]>.status_code
+
+../evidence/test_independent_discovery.py:25: AssertionError
+_____________ test_genuine_pre0021_migration_list_detail_readonly ______________
+
+tmp_path = PosixPath('/tmp/pytest-of-lkx/pytest-193/test_genuine_pre0021_migration0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x71da884cd430>
+
+    def test_genuine_pre0021_migration_list_detail_readonly(tmp_path, monkeypatch):
+        from dataclasses import replace
+        from types import SimpleNamespace
+        import shutil
+        from fastapi.testclient import TestClient
+        from services.api.app.application import content_impact as module
+        from services.api.app.application.content import ContentService
+        from services.api.app.application.sessions import SessionService
+        from services.api.app.dto import RoleRequest
+        from services.api.app.infrastructure.config import Settings
+        from services.api.app.infrastructure.database import Database
+        from services.api.app.infrastructure.security import COOKIE_NAME, consume_bootstrap, issue_bootstrap_code
+        from services.api.app.main import create_app
+        settings=Settings(data_dir=tmp_path/'legacy')
+        migrations=tmp_path/'migrations';migrations.mkdir()
+        for path in settings.migrations_dir.glob('*.sql'):
+            if path.name<'0021': shutil.copyfile(path,migrations/path.name)
+        old=Database(replace(settings,migrations_dir=migrations));workspace=old.initialize()
+        service=ContentService(old);values,bodies=tree();service.publish(workspace,values,bodies)
+        with monkeypatch.context() as patch:
+            patch.setattr(module,'freeze_impact_event',lambda *args:None)
+            service.publish(workspace,[values[1].model_copy(update={'revision':2,'title':'Genuine pre-migration synthetic'})],{})
+        database=Database(settings);assert database.initialize()==workspace
+        token,learner=consume_bootstrap(database,issue_bootstrap_code(database))
+        SessionService(database).switch_role(learner,RoleRequest(role='author'),'author')
+        with TestClient(create_app(settings),base_url=settings.origin) as client:
+            client.cookies.set(COOKIE_NAME,token)
+            proxy=SimpleNamespace(client=client,database=database)
+>           summary=get(proxy)['items'][0]
+                    ^^^^^^^^^^
+
+../evidence/test_independent_discovery.py:150: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+case = namespace(client=<starlette.testclient.TestClient object at 0x71da83065940>, database=<services.api.app.infrastructure.database.Database object at 0x71da830f7770>)
+params = {}
+
+    def get(case, **params):
+        before = table_hashes(case.database)
+        response = case.client.get(PATH, params=params)
+>       assert table_hashes(case.database) == before
+E       AssertionError: assert {'approvals':...202b945', ...} == {'approvals':...202b945', ...}
+E         
+E         Omitting 138 identical items, use -vv to show
+E         Differing items:
+E         {'recommendation_projection_state': 'bc6769d32c02470c6fad183301d316626a0d2404a0a347aedd11670fdb5726c9'} != {'recommendation_projection_state': '1f3be343fdf4a1b8697719927fc53397dc98f40953d5e485b5011aa92afa615e'}
+E         {'recommendation_snapshots': '8efe8772d8ce7ef26d2233ddf275f3848759ef4e18d08d8fdf43238ede4e02ec'} != {'recommendation_snapshots': '4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945'}
+E         Use -v to get more diff
+
+tests/integration/test_content_impact_discovery_http.py:17: AssertionError
+=============================== warnings summary ===============================
+../../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  $HOME/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  $HOME/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ::test_missing_current_target_revision_is_integrity_error[False] - Ass...
+FAILED ::test_missing_current_target_revision_is_integrity_error[True] - Asse...
+FAILED ::test_genuine_pre0021_migration_list_detail_readonly - AssertionError...
+3 failed, 11 passed, 2 warnings in 5.35s

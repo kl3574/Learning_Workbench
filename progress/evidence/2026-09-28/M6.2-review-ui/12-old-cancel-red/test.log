@@ -1,0 +1,41 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/draftReview/useReview.test.tsx -t unknown old-page cancel
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m[REVIEW_UI_WORKTREE]/apps/web[39m
+
+ [31m❯[39m src/features/draftReview/useReview.test.tsx [2m([22m[2m12 tests[22m[2m | [22m[31m1 failed[39m[2m | [22m[33m11 skipped[39m[2m)[22m[32m 69[2mms[22m[39m
+   [2m[90m↓[39m[22m lost ACK retains one original key/body and permits only explicit same-page replay
+   [2m[90m↓[39m[22m storage failure stops before any HTTP write
+   [2m[90m↓[39m[22m real session access notification discards a late ACK and makes the durable original command read-only
+   [2m[90m↓[39m[22m a prior page command is read-only after reload while known job and receipt remain readable
+   [2m[90m↓[39m[22m Policy pause discards a late create ACK without persisting private acknowledgement
+   [2m[90m↓[39m[22m late protected receipt cannot enter a different workspace or paused view
+   [2m[90m↓[39m[22m foreign or non-review safe job cannot be remembered as review recovery
+   [2m[90m↓[39m[22m report bytes require actual ETag and a second unchanged currently authorized receipt
+   [2m[90m↓[39m[22m artifact Policy rejection clears already displayed private receipt and stored command projection
+   [2m[90m↓[39m[22m stale decision preserves the original CAS and requires a fresh receipt before another command
+   [2m[90m↓[39m[22m learner can recover and cancel safe known review work without reading academic commands
+[31m   [31m×[31m an unknown old-page cancel never prevents a new explicit current-Job cancellation[39m[32m 68[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m src/features/draftReview/useReview.test.tsx[2m > [22man unknown old-page cancel never prevents a new explicit current-Job cancellation
+[31m[1mAssertionError[22m: expected "vi.fn()" to be called 1 times, but got 0 times[39m
+[36m [2m❯[22m src/features/draftReview/useReview.test.tsx:[2m208:23[22m[39m
+    [90m206|[39m   expect(port.cancel).not.toHaveBeenCalled()
+    [90m207|[39m   await act(() => hook.result.current.cancel())
+    [90m208|[39m   expect(port.cancel).toHaveBeenCalledTimes(1)
+    [90m   |[39m                       [31m^[39m
+    [90m209|[39m   const [id, body, key] = vi.mocked(port.cancel).mock.calls[0]
+    [90m210|[39m   expect(id).toBe(machineReceipt.id); expect(body).toEqual({ expected_…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[33m11 skipped[39m[90m (12)[39m
+[2m   Start at [22m 10:11:09
+[2m   Duration [22m 548ms[2m (environment 42%, transform 27%, import 16%, tests 15%)[22m
+

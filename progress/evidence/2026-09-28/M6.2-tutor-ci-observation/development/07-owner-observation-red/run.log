@@ -1,0 +1,49 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+____ test_terminal_observer_is_after_actual_commit_and_cannot_change_result ____
+
+tutor = (<services.api.app.infrastructure.database.Database object at 0x74dc1e1733b0>, SessionIdentity(id='<SYNTHETIC_SESSION_ID_PREFIX>...efs=[], selection=None, attempt_id=None), binding=TutorContextBinding(practice=None, assessment=None), title='原创测试对话'))
+
+    def test_terminal_observer_is_after_actual_commit_and_cannot_change_result(tutor):
+        database, identity, service, _ = tutor
+        _, _, ack = started(tutor)
+        seen = []
+        def observe(run_id, status):
+            # A separate connection can read this terminal: not an in-TX notification.
+            current = service.read(identity, run_id)
+            assert current.run.status == status == 'failed'
+            seen.append((run_id, status))
+            raise ValueError('SYNTHETIC_OBSERVER_FAILURE')
+>       worker = TutorWorker(database, service.context, NoTransport(), build_material, terminal_observer=observe)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: TutorWorker.__init__() got an unexpected keyword argument 'terminal_observer'
+
+tests/integration/test_tutor_observation.py:20: TypeError
+_______________ test_failed_transaction_emits_no_terminal_commit _______________
+
+tutor = (<services.api.app.infrastructure.database.Database object at 0x74dc1d977110>, SessionIdentity(id='<SYNTHETIC_SESSION_ID_PREFIX>...efs=[], selection=None, attempt_id=None), binding=TutorContextBinding(practice=None, assessment=None), title='原创测试对话'))
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x74dc1d95e000>
+
+    def test_failed_transaction_emits_no_terminal_commit(tutor, monkeypatch):
+        database, identity, service, _ = tutor
+        started(tutor)
+        seen = []
+>       worker = TutorWorker(database, service.context, NoTransport(), build_material, terminal_observer=lambda *x: seen.append(x))
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: TutorWorker.__init__() got an unexpected keyword argument 'terminal_observer'
+
+tests/integration/test_tutor_observation.py:33: TypeError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-tutor-ci-observation-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-tutor-ci-observation-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_tutor_observation.py::test_terminal_observer_is_after_actual_commit_and_cannot_change_result
+FAILED tests/integration/test_tutor_observation.py::test_failed_transaction_emits_no_terminal_commit
+2 failed, 2 warnings in 0.68s

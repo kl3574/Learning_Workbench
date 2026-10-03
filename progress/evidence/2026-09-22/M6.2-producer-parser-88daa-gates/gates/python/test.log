@@ -1,0 +1,174 @@
+........................................................................ [  3%]
+........................................................................ [  6%]
+........................................................................ [  9%]
+........................................................................ [ 12%]
+........................................................................ [ 15%]
+........................................................................ [ 18%]
+........................................................................ [ 21%]
+........................................................................ [ 25%]
+........................................................................ [ 28%]
+........................................................................ [ 31%]
+.............................s.......................................... [ 34%]
+........................................................................ [ 37%]
+........................................................................ [ 40%]
+........................................................................ [ 43%]
+.........................F.............................................. [ 47%]
+...............................................................FF....... [ 50%]
+........................................................................ [ 53%]
+........................................................................ [ 56%]
+........................................................................ [ 59%]
+........................................................................ [ 62%]
+........................................................................ [ 65%]
+........................................................................ [ 69%]
+........................................................................ [ 72%]
+........................................................................ [ 75%]
+........................................................................ [ 78%]
+........................................................................ [ 81%]
+........................................................................ [ 84%]
+........................................................................ [ 87%]
+........................................................................ [ 91%]
+........................................................................ [ 94%]
+........................................................................ [ 97%]
+..............................................................           [100%]
+=================================== FAILURES ===================================
+_ test_late_legacy_binding_failure_rolls_back_and_does_not_starve_safe_import_or_other_grades _
+
+tmp_path = PosixPath('<PYTEST_ROOT>/pytest-15/test_late_legacy_binding_failu0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x73137442fb00>
+
+    def test_late_legacy_binding_failure_rolls_back_and_does_not_starve_safe_import_or_other_grades(tmp_path, monkeypatch):
+        # Real six-migration submit/score/review records, then the actual seventh
+        # migration. The fixture disables only the not-yet-installed M3.4 hooks.
+>       storage, _, _, _, original, _ = legacy_storage(tmp_path, monkeypatch, two=True)
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_evidence_independent_review.py:156: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_learning_evidence.py:275: in legacy_storage
+    import_fixture(database, identity, fixture, 'legacy-import')
+tests/integration/test_assessment_attempts.py:36: in import_fixture
+    assert worker.run_once()
+           ^^^^^^^^^^^^^^^^^
+services/api/app/infrastructure/import_worker.py:315: in run_once
+    self.complete_preview(lease, parsed)
+services/api/app/infrastructure/import_worker.py:237: in complete_preview
+    DraftCandidateRepository(connection).register(ResolvedDraftCandidate(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.draft_candidate_repository.DraftCandidateRepository object at 0x73137433d700>
+value = ResolvedDraftCandidate(workspace_id='workspace_976cd64dd84d423daa65893149a95121', owner='import', source_kind='import'...draft_revision=1, entity='block', candidate_sha256='2778b8dc16ad044ef3d2ae2225a280476fd1d5331c378c39a668cf1ad92fef61'))
+
+    def register(self, value: ResolvedDraftCandidate) -> None:
+        """Called only after the source owner verified this candidate in this transaction.
+    
+        Existing catalog facts never authenticate source payloads or approve content.
+        An exact retry performs no UPDATE/REPLACE and retains all older revisions.
+        """
+        candidate = value.candidate
+        expected = (candidate.draft_id, value.workspace_id, value.owner,
+                    value.source_kind, candidate.entity)
+>       row = self.connection.execute(
+            'SELECT draft_id,workspace_id,owner,source_kind,entity '
+            'FROM draft_candidate_identities WHERE draft_id=?', (candidate.draft_id,),
+        ).fetchone()
+E       sqlite3.OperationalError: no such table: draft_candidate_identities
+
+services/api/app/infrastructure/draft_candidate_repository.py:71: OperationalError
+_ test_migration_marks_only_old_submissions_legacy_and_recovery_never_rewrites_grades _
+
+tmp_path = PosixPath('<PYTEST_ROOT>/pytest-15/test_migration_marks_only_old_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x731373fd0c50>
+
+    def test_migration_marks_only_old_submissions_legacy_and_recovery_never_rewrites_grades(tmp_path, monkeypatch):
+>       storage, old, _, active, immutable, submissions = legacy_storage(tmp_path, monkeypatch)
+                                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_learning_evidence.py:294: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_learning_evidence.py:275: in legacy_storage
+    import_fixture(database, identity, fixture, 'legacy-import')
+tests/integration/test_assessment_attempts.py:36: in import_fixture
+    assert worker.run_once()
+           ^^^^^^^^^^^^^^^^^
+services/api/app/infrastructure/import_worker.py:315: in run_once
+    self.complete_preview(lease, parsed)
+services/api/app/infrastructure/import_worker.py:237: in complete_preview
+    DraftCandidateRepository(connection).register(ResolvedDraftCandidate(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.draft_candidate_repository.DraftCandidateRepository object at 0x7313750851c0>
+value = ResolvedDraftCandidate(workspace_id='workspace_6e2f9d2befcd4bb190d7cb36257f3c70', owner='import', source_kind='import'...draft_revision=1, entity='block', candidate_sha256='2778b8dc16ad044ef3d2ae2225a280476fd1d5331c378c39a668cf1ad92fef61'))
+
+    def register(self, value: ResolvedDraftCandidate) -> None:
+        """Called only after the source owner verified this candidate in this transaction.
+    
+        Existing catalog facts never authenticate source payloads or approve content.
+        An exact retry performs no UPDATE/REPLACE and retains all older revisions.
+        """
+        candidate = value.candidate
+        expected = (candidate.draft_id, value.workspace_id, value.owner,
+                    value.source_kind, candidate.entity)
+>       row = self.connection.execute(
+            'SELECT draft_id,workspace_id,owner,source_kind,entity '
+            'FROM draft_candidate_identities WHERE draft_id=?', (candidate.draft_id,),
+        ).fetchone()
+E       sqlite3.OperationalError: no such table: draft_candidate_identities
+
+services/api/app/infrastructure/draft_candidate_repository.py:71: OperationalError
+_ test_corrupt_legacy_grade_is_quarantined_without_starving_valid_grade_or_safe_import _
+
+tmp_path = PosixPath('<PYTEST_ROOT>/pytest-15/test_corrupt_legacy_grade_is_q0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x73137457ba10>
+
+    def test_corrupt_legacy_grade_is_quarantined_without_starving_valid_grade_or_safe_import(tmp_path, monkeypatch):
+>       storage, old, _, active, _, _ = legacy_storage(tmp_path, monkeypatch)
+                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_learning_evidence.py:329: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_learning_evidence.py:275: in legacy_storage
+    import_fixture(database, identity, fixture, 'legacy-import')
+tests/integration/test_assessment_attempts.py:36: in import_fixture
+    assert worker.run_once()
+           ^^^^^^^^^^^^^^^^^
+services/api/app/infrastructure/import_worker.py:315: in run_once
+    self.complete_preview(lease, parsed)
+services/api/app/infrastructure/import_worker.py:237: in complete_preview
+    DraftCandidateRepository(connection).register(ResolvedDraftCandidate(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.draft_candidate_repository.DraftCandidateRepository object at 0x73137382dc40>
+value = ResolvedDraftCandidate(workspace_id='workspace_4ba55eab4af84119b39b5230ba12c748', owner='import', source_kind='import'...draft_revision=1, entity='block', candidate_sha256='2778b8dc16ad044ef3d2ae2225a280476fd1d5331c378c39a668cf1ad92fef61'))
+
+    def register(self, value: ResolvedDraftCandidate) -> None:
+        """Called only after the source owner verified this candidate in this transaction.
+    
+        Existing catalog facts never authenticate source payloads or approve content.
+        An exact retry performs no UPDATE/REPLACE and retains all older revisions.
+        """
+        candidate = value.candidate
+        expected = (candidate.draft_id, value.workspace_id, value.owner,
+                    value.source_kind, candidate.entity)
+>       row = self.connection.execute(
+            'SELECT draft_id,workspace_id,owner,source_kind,entity '
+            'FROM draft_candidate_identities WHERE draft_id=?', (candidate.draft_id,),
+        ).fetchone()
+E       sqlite3.OperationalError: no such table: draft_candidate_identities
+
+services/api/app/infrastructure/draft_candidate_repository.py:71: OperationalError
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/integration/test_authoring_numeric_runtime.py:46: BLOCKED_ENVIRONMENT: real sealed runtime did not execute the calculator; original FAIL retained
+FAILED tests/integration/test_evidence_independent_review.py::test_late_legacy_binding_failure_rolls_back_and_does_not_starve_safe_import_or_other_grades - sqlite3.OperationalError: no such table: draft_candidate_identities
+FAILED tests/integration/test_learning_evidence.py::test_migration_marks_only_old_submissions_legacy_and_recovery_never_rewrites_grades - sqlite3.OperationalError: no such table: draft_candidate_identities
+FAILED tests/integration/test_learning_evidence.py::test_corrupt_legacy_grade_is_quarantined_without_starving_valid_grade_or_safe_import - sqlite3.OperationalError: no such table: draft_candidate_identities
+3 failed, 2290 passed, 1 skipped, 2 warnings in 579.95s (0:09:39)

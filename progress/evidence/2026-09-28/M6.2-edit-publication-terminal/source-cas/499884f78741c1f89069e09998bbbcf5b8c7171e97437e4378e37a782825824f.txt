@@ -1,0 +1,68 @@
+"""Real local edit-to-publication protocol; all human approval is synthetic."""
+import pytest
+
+from packages.contracts import domain_models as dm
+from packages.contracts.canonical import metadata_sha256
+from services.api.app.application.content import ContentService
+from services.api.app.application.draft_candidates import DraftCandidates
+from services.api.app.application.draft_edits import DraftEditService
+from services.api.app.application.draft_publication import DraftPublicationService
+from services.api.app.application.imports import ImportService
+from services.api.app.application.publication_admission_models import DraftPublishWrite
+from services.api.app.application.review_numeric import ReviewNumeric
+from services.api.app.application.review_service import ReviewService
+from services.api.app.application.review_worker import ReviewWorker
+from services.api.app.draft_dto import DraftCreateWrite, DraftPatchWrite, DraftPatch
+from services.api.app.infrastructure.database import Database
+from tests.integration.test_draft_edit_migration import previous as previous
+from tests.integration.test_review_workflow import request, decision
+
+
+@pytest.fixture
+def editing(previous):
+    _, settings, identity, _, _, _, base = previous
+    database = Database(settings)
+    database.initialize()
+    edits = DraftEditService(database)
+    created = edits.create(identity, DraftCreateWrite(kind='block', base_ref=base, title='Synthetic revised title'), 'edit-create')
+    edits.patch(identity, created.draft_id, DraftPatchWrite(expected_revision=1,
+        patches=[DraftPatch(field='body_markdown', value='Synthetic edited prose.\n')]), 'edit-patch')
+    registry = DraftCandidates({'authoring_edit': edits})
+    reviews = ReviewService(database, registry, ReviewNumeric(registry, {}), {})
+    return database, identity, base, edits, created, reviews
+
+
+def approved(editing, revision=2, key='review'):
+    database, identity, _, edits, created, reviews = editing
+    record = edits.read(identity, created.draft_id, revision)
+    job = reviews.create(identity, created.draft_id, request(record.candidate), key)
+    assert ReviewWorker(reviews).run_once()
+    machine = reviews.read(identity, job.id)
+    assert machine.mathematical == machine.sources == machine.independent_pedagogy == 'NOT_RUN'
+    receipt = reviews.decide(identity, job.id, decision(machine, mathematical='NOT_APPLICABLE', sources='APPROVED'), key+'-synthetic-human')
+    body = DraftPublishWrite(expected_revision=revision, expected_content_sha256=record.candidate.candidate_sha256,
+        review_receipt_id=receipt.id, acknowledged_warning_codes=sorted({w.code for w in record.warnings if w.severity=='warning'}))
+    return record, receipt, body
+
+
+def publisher(editing):
+    database, _, _, _, _, reviews = editing
+    return DraftPublicationService(database, reviews, ImportService(database))
+
+
+def test_reviewed_edit_publishes_next_exact_content_revision_without_rewriting_base(editing):
+    database, identity, base, edits, created, reviews = editing
+    record, receipt, body = approved(editing)
+    content = ContentService(database)
+    original = content.body(identity.workspace_id, base.id, base.revision)
+    result = publisher(editing).publish(identity, created.draft_id, body, 'publish-edit')
+    expected = record.base.metadata.model_copy(update={'revision': base.revision+1,
+        'title': 'Synthetic revised title', 'body_sha256': record.payload.body_sha256})
+    assert result == dm.ContentRef(entity='block', id=base.id, revision=base.revision+1, sha256=metadata_sha256(expected))
+    assert result.sha256 != record.candidate.candidate_sha256
+    assert content.current(identity.workspace_id, base.id) == result
+    assert content.body(identity.workspace_id, base.id, result.revision)[0] == b'Synthetic edited prose.\n'
+    assert content.body(identity.workspace_id, base.id, base.revision) == original
+    assert edits.read(identity, created.draft_id, 2) == record
+    assert reviews.read(identity, receipt.id) == receipt
+    assert publisher(editing).publish(identity, created.draft_id, body, 'publish-edit') == result

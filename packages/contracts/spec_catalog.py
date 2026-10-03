@@ -103,6 +103,11 @@ def route_task(path: str) -> str:
         return "M3.2"
     if path.startswith(("/retrieval", "/index")):
         return "M5.2"
+    if path.startswith(("/content/impacts/", "/content/restore-drafts", "/content/restore-numeric-checks")) or path in {
+        "/content/impacts",
+        "/learning/evidence/{id}/applicability", "/learning/evidence/{id}/applicability-decisions"
+    }:
+        return "M6.2"
     if path.startswith(("/learning", "/learner")):
         return "M4.1"
     if path.startswith("/recommendations"):
@@ -111,7 +116,7 @@ def route_task(path: str) -> str:
         return "M5.1"
     if path.startswith("/authoring"):
         return "M6.1"
-    if path.startswith(("/drafts", "/reviews")):
+    if path.startswith(("/drafts", "/draft-edits", "/reviews")):
         return "M6.2"
     if path.startswith("/codex"):
         return "M6.3"

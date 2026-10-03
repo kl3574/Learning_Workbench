@@ -1,0 +1,28 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+___ test_machine_revision_preserves_complete_inputs_and_checked_job_terminal ___
+
+prepared = PreparedReviewFixture()
+
+    def test_machine_revision_preserves_complete_inputs_and_checked_job_terminal(prepared):
+        database, identity, value = prepared
+        with database.transaction() as connection:
+            repo, record, create = complete_machine(prepared, connection)
+>           assert repo.load(value.review_id).state == 'pending'
+                   ^^^^^^^^^
+E           AttributeError: 'ReviewRepository' object has no attribute 'load'
+
+tests/integration/test_review_repository.py:182: AttributeError
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_review_repository.py::test_machine_revision_preserves_complete_inputs_and_checked_job_terminal - AttributeError: 'ReviewRepository' object has no attribute 'load'
+1 failed, 9 deselected, 2 warnings in 1.28s

@@ -1,0 +1,95 @@
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, expect, test, vi } from 'vitest'
+import { BlockVersionCompare } from './BlockVersionCompare'
+import type { ComparePort } from './compareClient'
+import { versions } from './fixtures'
+import { request } from '../../../api/client'
+import type { LoadedBlock } from '../contentClient'
+
+const workspace = 'workspace_compare'
+function api(): ComparePort {
+  return {
+    session: vi.fn(async () => ({ workspace_id: workspace, role: 'learner', csrf_token: 'synthetic-comparison-csrf', active_independent_attempt_id: null, active_open_book_attempt_id: null })),
+    history: vi.fn(async () => ({ items: [...versions].reverse().map(value => ({ ref: value.ref, created_at: '2026-09-28T00:00:00Z', review_state: 'unreviewed', lifecycle: 'active' })), next_cursor: null })),
+    block: vi.fn(async ref => { const value = versions.find(item => item.ref.sha256 === ref.sha256); if (!value) throw new Error('Unknown synthetic ref'); return { ...value.data, body: value.body } }),
+  }
+}
+afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+async function selectBoth() {
+  fireEvent.click(screen.getByRole('button', { name: '比较此块的两个修订' }))
+  await screen.findAllByRole('option', { name: /修订 1/ })
+  fireEvent.change(screen.getByLabelText('左侧修订'), { target: { value: versions[0].ref.sha256 } })
+  fireEvent.change(screen.getByLabelText('右侧修订'), { target: { value: versions[1].ref.sha256 } })
+}
+test('two explicit historical selections read exact bodies and survive panel closure and a changed current ref', async () => {
+  const port = api(), view = render(<BlockVersionCompare workspace={workspace} blockRef={versions[0].ref} port={port} />)
+  expect(port.history).not.toHaveBeenCalled()
+  await selectBoth()
+  expect(port.block).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: '读取所选两个修订' }))
+  await waitFor(() => expect(screen.getByLabelText('左侧完整原文').textContent).toBe('old α\nshared\n'))
+  expect(screen.getByLabelText('右侧完整原文').textContent).toBe('new α\nshared\n')
+  expect(screen.getByText(/文字差异不证明数学或语义等价/)).toBeTruthy()
+  view.rerender(<BlockVersionCompare workspace={workspace} blockRef={{ ...versions[1].ref, revision: 3, sha256: 'c'.repeat(64) }} port={port} />)
+  expect((screen.getByLabelText('左侧修订') as HTMLSelectElement).value).toBe(versions[0].ref.sha256)
+  fireEvent.click(screen.getByRole('button', { name: '收起修订比较' }))
+  fireEvent.click(screen.getByRole('button', { name: '比较此块的两个修订' }))
+  expect((screen.getByLabelText('右侧修订') as HTMLSelectElement).value).toBe(versions[1].ref.sha256)
+  expect(port.block).toHaveBeenCalledTimes(2)
+})
+
+function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(done => { resolve = done }); return { promise, resolve } }
+test('no default pair, and the same exact revision cannot be submitted as two versions', async () => {
+  const port = api(); render(<BlockVersionCompare workspace={workspace} blockRef={versions[0].ref} port={port} />)
+  fireEvent.click(screen.getByRole('button', { name: '比较此块的两个修订' }))
+  await screen.findAllByRole('option', { name: /修订 1/ })
+  expect((screen.getByLabelText('左侧修订') as HTMLSelectElement).value).toBe('')
+  expect((screen.getByRole('button', { name: '读取所选两个修订' }) as HTMLButtonElement).disabled).toBe(true)
+  for (const label of ['左侧修订', '右侧修订']) fireEvent.change(screen.getByLabelText(label), { target: { value: versions[0].ref.sha256 } })
+  expect((screen.getByRole('button', { name: '读取所选两个修订' }) as HTMLButtonElement).disabled).toBe(true)
+  expect(port.block).not.toHaveBeenCalled()
+})
+test.each(['selection', 'workspace', 'target', 'close'])('late body responses cannot repopulate the old comparison after %s changes', async change => {
+  const port = api(), pending = deferred<LoadedBlock>(), read = port.block
+  port.block = vi.fn(ref => ref.revision === 1 ? pending.promise : read(ref))
+  const view = render(<BlockVersionCompare workspace={workspace} blockRef={versions[0].ref} port={port} />)
+  await selectBoth(); fireEvent.click(screen.getByRole('button', { name: '读取所选两个修订' }))
+  await waitFor(() => expect(port.block).toHaveBeenCalledTimes(2))
+  if (change === 'selection') fireEvent.change(screen.getByLabelText('左侧修订'), { target: { value: versions[1].ref.sha256 } })
+  else if (change === 'close') fireEvent.click(screen.getByRole('button', { name: '收起修订比较' }))
+  else view.rerender(<BlockVersionCompare workspace={change === 'workspace' ? 'workspace_other' : workspace} blockRef={change === 'target' ? { ...versions[0].ref, id: 'block_other' } : versions[0].ref} port={port} />)
+  await act(async () => pending.resolve({ ...versions[0].data, body: versions[0].body }))
+  expect(screen.queryByLabelText('左侧完整原文')).toBeNull()
+  expect(screen.queryByText('old α', { exact: false })).toBeNull()
+})
+test('a real access-generation change immediately removes loaded bodies and suppresses late results', async () => {
+  const port = api(); render(<BlockVersionCompare workspace={workspace} blockRef={versions[0].ref} port={port} />)
+  await selectBoth(); fireEvent.click(screen.getByRole('button', { name: '读取所选两个修订' }))
+  await screen.findByLabelText('左侧完整原文')
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(await port.session()))))
+  await act(async () => { await request('POST /api/v1/session/role', { role: 'learner' }, { 'Idempotency-Key': 'synthetic-access-change' }) })
+  expect(screen.queryByLabelText('左侧完整原文')).toBeNull()
+  expect(screen.queryByText('old α', { exact: false })).toBeNull()
+})
+test('current Policy is checked after body completion even without a local access notification', async () => {
+  const port = api(), pending = deferred<LoadedBlock>(), read = port.block
+  port.block = vi.fn(ref => ref.revision === 1 ? pending.promise : read(ref))
+  render(<BlockVersionCompare workspace={workspace} blockRef={versions[0].ref} port={port} />)
+  await selectBoth(); fireEvent.click(screen.getByRole('button', { name: '读取所选两个修订' }))
+  await waitFor(() => expect(port.block).toHaveBeenCalledTimes(2))
+  vi.mocked(port.session).mockResolvedValue({ workspace_id: workspace, role: 'learner', csrf_token: 'synthetic-csrf', active_independent_attempt_id: 'attempt_active', active_open_book_attempt_id: null })
+  await act(async () => pending.resolve({ ...versions[0].data, body: versions[0].body }))
+  expect(await screen.findByRole('alert')).toHaveProperty('textContent', '当前工作区或测试策略不允许读取比较内容。')
+  expect(screen.queryByLabelText('左侧完整原文')).toBeNull()
+})
+test('failed reads retain exact choices for an explicit retry, without selecting latest', async () => {
+  const port = api(), read = port.block
+  port.block = vi.fn(async () => { throw new Error('Synthetic transport unavailable') })
+  render(<BlockVersionCompare workspace={workspace} blockRef={versions[0].ref} port={port} />)
+  await selectBoth(); fireEvent.click(screen.getByRole('button', { name: '读取所选两个修订' }))
+  await screen.findByRole('alert')
+  expect((screen.getByLabelText('左侧修订') as HTMLSelectElement).value).toBe(versions[0].ref.sha256)
+  port.block = read
+  fireEvent.click(screen.getByRole('button', { name: '读取所选两个修订' }))
+  await screen.findByLabelText('左侧完整原文')
+})

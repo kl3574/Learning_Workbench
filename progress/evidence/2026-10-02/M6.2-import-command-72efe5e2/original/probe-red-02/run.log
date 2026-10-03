@@ -1,0 +1,41 @@
+
+Running 1 test using 1 worker
+
+(node:2389798) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/e2e/import-policy-probe.spec.ts:6:1 › original grading recovery import command while real Policy response is held (7.8s)
+
+
+  1) tests/e2e/import-policy-probe.spec.ts:6:1 › original grading recovery import command while real Policy response is held 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('dialog', { name: '导入', exact: true }).getByText(/操作角色：(作者|学习者)$/)
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('dialog', { name: '导入', exact: true }).getByText(/操作角色：(作者|学习者)$/) with timeout 5000ms
+      - waiting for getByRole('dialog', { name: '导入', exact: true }).getByText(/操作角色：(作者|学习者)$/)
+
+
+       at practiceTestData.ts:26
+
+      24 |   await page.getByRole('dialog', { name: '命令面板', exact: true }).getByRole('button', { name: /^导入/ }).click()
+      25 |   const dialog = page.getByRole('dialog', { name: '导入', exact: true })
+    > 26 |   await expect(dialog.getByText(/操作角色：(作者|学习者)$/)).toBeVisible()
+         |                                                    ^
+      27 |   const desiredRole = value.profile === 'author' ? '作者' : '学习者'
+      28 |   const switchRole = dialog.getByRole('button', { name: `切换为${desiredRole}角色`, exact: true })
+      29 |   if (await switchRole.count()) await switchRole.click()
+        at importPracticePackage ($HOME/.cache/learning-workbench-acceptance/m62-import-policy-entry-oct02/tests/e2e/practiceTestData.ts:26:52)
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-import-policy-entry-evidence-oct02/probe-red-02-output/import-policy-probe-origin-3e071-eal-Policy-response-is-held/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m62-import-policy-entry-evidence-oct02/probe-red-02-output/import-policy-probe-origin-3e071-eal-Policy-response-is-held/error-context.md
+
+  1 failed
+    tests/e2e/import-policy-probe.spec.ts:6:1 › original grading recovery import command while real Policy response is held 

@@ -1,5 +1,7 @@
 """Tutor-owned durable conversations, original commands and ordered Run events."""
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 import re
 import sqlite3
@@ -24,6 +26,7 @@ from .tutor_job_repository import TERMINAL, TutorJobRepository, TutorLease, inte
 
 M = TypeVar('M', bound=BaseModel)
 events_adapter: TypeAdapter[TutorSSEEvent] = TypeAdapter(TutorSSEEvent)
+LoadedRun = tuple[sqlite3.Row, dict, dm.RunSnapshot, TutorResultSummary]
 
 
 def digest(value: object) -> str:
@@ -60,6 +63,22 @@ class TutorRepository:
     def __init__(self, connection: sqlite3.Connection, workspace_id: str):
         self.connection, self.workspace_id = connection, workspace_id
         self.jobs = TutorJobRepository(connection, workspace_id)
+        self._checked_runs: dict[str, tuple[int, LoadedRun]] | None = None
+
+    @contextmanager
+    def _read_snapshot(self) -> Iterator[None]:
+        # These synchronous read methods share one SQLite snapshot. Validate
+        # every owned Run fully once during this call, including nested thread
+        # and message checks. Never retain validation across calls/transactions,
+        # nor reuse it for an untransactional read or after a local write.
+        owns = self._checked_runs is None and self.connection.in_transaction
+        if owns:
+            self._checked_runs = {}
+        try:
+            yield
+        finally:
+            if owns:
+                self._checked_runs = None
 
     def _write(self) -> None:
         if not self.connection.in_transaction:
@@ -75,72 +94,74 @@ class TutorRepository:
         return TutorThreadView(id=identifier, scope=body.scope, binding=body.binding, title=body.title, revision=1, created_at=now)
 
     def thread(self, identifier: str, *, commands: bool = True) -> TutorThreadView:
-        row = self.connection.execute('SELECT t.*,s.binding_json,s.revision,s.create_json,s.create_sha256 FROM threads t JOIN tutor_threads s ON s.thread_id=t.id AND s.workspace_id=t.workspace_id WHERE t.id=? AND t.workspace_id=?',
-                                      (identifier, self.workspace_id)).fetchone()
-        if row is None:
-            raise ApiError(404, 'THREAD_MISSING', '对话不存在或不可访问。')
-        body = checked(TutorThreadCreate, row['create_json'], row['create_sha256'])
-        if canonical_bytes(body.scope).decode() != row['scope_json'] or canonical_bytes(body.binding).decode() != row['binding_json'] or body.title != row['title']:
-            raise integrity()
-        view = TutorThreadView(id=identifier, scope=body.scope, binding=body.binding, title=body.title,
-                               revision=row['revision'], created_at=row['created_at'])
-        if commands:
-            original = self.connection.execute("SELECT * FROM tutor_commands WHERE workspace_id=? AND thread_id=? AND route='POST /threads'", (self.workspace_id, identifier)).fetchall()
-            if len(original) != 1 or original[0]['request_json'] != row['create_json'] or original[0]['request_sha256'] != row['create_sha256']:
+        with self._read_snapshot():
+            row = self.connection.execute('SELECT t.*,s.binding_json,s.revision,s.create_json,s.create_sha256 FROM threads t JOIN tutor_threads s ON s.thread_id=t.id AND s.workspace_id=t.workspace_id WHERE t.id=? AND t.workspace_id=?',
+                                          (identifier, self.workspace_id)).fetchone()
+            if row is None:
+                raise ApiError(404, 'THREAD_MISSING', '对话不存在或不可访问。')
+            body = checked(TutorThreadCreate, row['create_json'], row['create_sha256'])
+            if canonical_bytes(body.scope).decode() != row['scope_json'] or canonical_bytes(body.binding).decode() != row['binding_json'] or body.title != row['title']:
                 raise integrity()
-            ack = checked(TutorThreadView, original[0]['ack_json'], original[0]['ack_sha256'])
-            if ack != view.model_copy(update={'revision': 1}) or original[0]['run_id'] is not None:
-                raise integrity()
-            runs = self.connection.execute('SELECT run_id FROM tutor_runs WHERE workspace_id=? AND thread_id=? ORDER BY thread_revision', (self.workspace_id, identifier)).fetchall()
-            revision, active = 1, 0
-            for entry in runs:
-                job, record, _, _ = self._load(entry['run_id'])
-                revision += 1
-                if record['thread_revision'] != revision:
+            view = TutorThreadView(id=identifier, scope=body.scope, binding=body.binding, title=body.title,
+                                   revision=row['revision'], created_at=row['created_at'])
+            if commands:
+                original = self.connection.execute("SELECT * FROM tutor_commands WHERE workspace_id=? AND thread_id=? AND route='POST /threads'", (self.workspace_id, identifier)).fetchall()
+                if len(original) != 1 or original[0]['request_json'] != row['create_json'] or original[0]['request_sha256'] != row['create_sha256']:
                     raise integrity()
-                revision += int(job['status'] in TERMINAL)
-                active += job['status'] not in TERMINAL
-            if revision != view.revision or active > 1:
-                raise integrity()
-        return view
+                ack = checked(TutorThreadView, original[0]['ack_json'], original[0]['ack_sha256'])
+                if ack != view.model_copy(update={'revision': 1}) or original[0]['run_id'] is not None:
+                    raise integrity()
+                runs = self.connection.execute('SELECT run_id FROM tutor_runs WHERE workspace_id=? AND thread_id=? ORDER BY thread_revision', (self.workspace_id, identifier)).fetchall()
+                revision, active = 1, 0
+                for entry in runs:
+                    job, record, _, _ = self._load(entry['run_id'])
+                    revision += 1
+                    if record['thread_revision'] != revision:
+                        raise integrity()
+                    revision += int(job['status'] in TERMINAL)
+                    active += job['status'] not in TERMINAL
+                if revision != view.revision or active > 1:
+                    raise integrity()
+            return view
 
     def thread_ids(self) -> list[str]:
         return [row['id'] for row in self.connection.execute('SELECT t.id FROM threads t JOIN tutor_threads s ON s.thread_id=t.id WHERE t.workspace_id=? ORDER BY t.created_at,t.id', (self.workspace_id,))]
 
     def messages(self, thread_id: str) -> list[TutorMessage]:
-        self.thread(thread_id)
-        records = self.connection.execute('SELECT m.*,s.seq,s.message_json,s.message_sha256 FROM messages m JOIN tutor_messages s ON s.message_id=m.id AND s.thread_id=m.thread_id WHERE m.thread_id=? ORDER BY s.seq', (thread_id,)).fetchall()
-        if len(records) != self.connection.execute('SELECT COUNT(*) FROM messages WHERE thread_id=?', (thread_id,)).fetchone()[0]:
-            raise integrity()
-        values = []
-        for seq, row in enumerate(records, 1):
-            value = checked(TutorMessage, row['message_json'], row['message_sha256'])
-            if (row['seq'] != seq or value.seq != seq or value.id != row['id'] or value.run_id != row['run_id']
-                    or value.role != row['role'] or value.status != row['status'] or value.content_markdown != row['content_markdown']
-                    or value.context_snapshot_id != row['context_snapshot_id'] or canonical_bytes(value.citations).decode() != row['citations_json']
-                    or value.created_at != row['created_at']):
+        with self._read_snapshot():
+            self.thread(thread_id)
+            records = self.connection.execute('SELECT m.*,s.seq,s.message_json,s.message_sha256 FROM messages m JOIN tutor_messages s ON s.message_id=m.id AND s.thread_id=m.thread_id WHERE m.thread_id=? ORDER BY s.seq', (thread_id,)).fetchall()
+            if len(records) != self.connection.execute('SELECT COUNT(*) FROM messages WHERE thread_id=?', (thread_id,)).fetchone()[0]:
                 raise integrity()
-            job, record, snapshot, result = self._load(value.run_id)
-            if record['thread_id'] != thread_id:
-                raise integrity()
-            original = checked(TutorJobInput, job['input_json'], job['input_sha256'])
-            if value.role == 'user':
-                if value.content_markdown != original.request.request.message or value.channel is not None or value.status != 'stored' or value.citations or value.context_snapshot_id is not None:
+            values = []
+            for seq, row in enumerate(records, 1):
+                value = checked(TutorMessage, row['message_json'], row['message_sha256'])
+                if (row['seq'] != seq or value.seq != seq or value.id != row['id'] or value.run_id != row['run_id']
+                        or value.role != row['role'] or value.status != row['status'] or value.content_markdown != row['content_markdown']
+                        or value.context_snapshot_id != row['context_snapshot_id'] or canonical_bytes(value.citations).decode() != row['citations_json']
+                        or value.created_at != row['created_at']):
                     raise integrity()
-            elif (job['status'] not in TERMINAL or value.status != job['status'] or value.context_snapshot_id != snapshot.context_snapshot_id
-                  or value.citations != snapshot.citations or value.content_markdown != (snapshot.answer_markdown if value.channel == 'answer' else result.refusal_markdown)):
-                raise integrity()
-            values.append(value)
-        for entry in self.connection.execute('SELECT run_id FROM tutor_runs WHERE workspace_id=? AND thread_id=?', (self.workspace_id, thread_id)):
-            _, _, snapshot, result = self._load(entry['run_id'])
-            group = [value for value in values if value.run_id == entry['run_id']]
-            if len([value for value in group if value.role == 'user']) != 1:
-                raise integrity()
-            expected = ([('answer', snapshot.answer_markdown)] if snapshot.answer_markdown else []) + ([('refusal', result.refusal_markdown)] if result.refusal_markdown else [])
-            actual = [(value.channel, value.content_markdown) for value in group if value.role == 'assistant']
-            if actual != (expected if snapshot.status in TERMINAL else []):
-                raise integrity()
-        return values
+                job, record, snapshot, result = self._load(value.run_id)
+                if record['thread_id'] != thread_id:
+                    raise integrity()
+                original = checked(TutorJobInput, job['input_json'], job['input_sha256'])
+                if value.role == 'user':
+                    if value.content_markdown != original.request.request.message or value.channel is not None or value.status != 'stored' or value.citations or value.context_snapshot_id is not None:
+                        raise integrity()
+                elif (job['status'] not in TERMINAL or value.status != job['status'] or value.context_snapshot_id != snapshot.context_snapshot_id
+                      or value.citations != snapshot.citations or value.content_markdown != (snapshot.answer_markdown if value.channel == 'answer' else result.refusal_markdown)):
+                    raise integrity()
+                values.append(value)
+            for entry in self.connection.execute('SELECT run_id FROM tutor_runs WHERE workspace_id=? AND thread_id=?', (self.workspace_id, thread_id)):
+                _, _, snapshot, result = self._load(entry['run_id'])
+                group = [value for value in values if value.run_id == entry['run_id']]
+                if len([value for value in group if value.role == 'user']) != 1:
+                    raise integrity()
+                expected = ([('answer', snapshot.answer_markdown)] if snapshot.answer_markdown else []) + ([('refusal', result.refusal_markdown)] if result.refusal_markdown else [])
+                actual = [(value.channel, value.content_markdown) for value in group if value.role == 'assistant']
+                if actual != (expected if snapshot.status in TERMINAL else []):
+                    raise integrity()
+            return values
 
     def history(self, thread_id: str) -> list[TutorFrozenHistoryItem]:
         values = self.messages(thread_id)
@@ -175,7 +196,17 @@ class TutorRepository:
             (record['context_json'], record['prepared_input_sha256'], record['latest_proposal_id'], record['consent_id'],
              record['result_json'], record['integrity_sha256'], record['run_id'], self.workspace_id))
 
-    def _load(self, identifier: str) -> tuple[sqlite3.Row, dict, dm.RunSnapshot, TutorResultSummary]:
+    def _load(self, identifier: str) -> LoadedRun:
+        reads = self._checked_runs if self.connection.in_transaction else None
+        changes = self.connection.total_changes
+        if reads is not None and identifier in reads and reads[identifier][0] == changes:
+            return reads[identifier][1]
+        value = self._load_checked(identifier)
+        if reads is not None:
+            reads[identifier] = (changes, value)
+        return value
+
+    def _load_checked(self, identifier: str) -> LoadedRun:
         job = self.jobs.load(identifier)
         row = self.connection.execute('SELECT * FROM tutor_runs WHERE run_id=? AND workspace_id=?', (identifier, self.workspace_id)).fetchone()
         base = self.connection.execute('SELECT * FROM runs WHERE id=?', (identifier,)).fetchone()
@@ -288,23 +319,25 @@ class TutorRepository:
         return view
 
     def view(self, identifier: str) -> TutorRunView:
-        job, row, snapshot, result = self._load(identifier)
-        thread = self.thread(row['thread_id'])
-        return TutorRunView(run=snapshot, job_revision=job['revision'], thread_revision=thread.revision,
-            context=checked(TutorContextSummary, row['context_json']) if row['context_json'] is not None else None,
-            latest_proposal_id=row['latest_proposal_id'], consent_id=row['consent_id'], result=result)
+        with self._read_snapshot():
+            job, row, snapshot, result = self._load(identifier)
+            thread = self.thread(row['thread_id'])
+            return TutorRunView(run=snapshot, job_revision=job['revision'], thread_revision=thread.revision,
+                context=checked(TutorContextSummary, row['context_json']) if row['context_json'] is not None else None,
+                latest_proposal_id=row['latest_proposal_id'], consent_id=row['consent_id'], result=result)
 
     def source_state(self, identifier: str) -> TutorSourceState:
-        job, row, snapshot, _ = self._load(identifier)
-        # Worker/Provider admission must verify the same original conversation
-        # as a user read; a valid job hash alone cannot replace missing messages
-        # or the original thread creation receipt.
-        self.messages(row['thread_id'])
-        value = checked(TutorJobInput, job['input_json'], job['input_sha256'])
-        context = checked(TutorContextSummary, row['context_json']) if row['context_json'] is not None else None
-        return TutorSourceState(value, job['input_sha256'], job['revision'], job['status'], bool(job['cancel_requested']),
-            job['lease_owner'], job['lease_until'], snapshot.context_snapshot_id, context.snapshot.snapshot_sha256 if context else None,
-            row['prepared_input_sha256'], row['latest_proposal_id'], row['consent_id'])
+        with self._read_snapshot():
+            job, row, snapshot, _ = self._load(identifier)
+            # Worker/Provider admission must verify the same original conversation
+            # as a user read; a valid job hash alone cannot replace missing messages
+            # or the original thread creation receipt.
+            self.messages(row['thread_id'])
+            value = checked(TutorJobInput, job['input_json'], job['input_sha256'])
+            context = checked(TutorContextSummary, row['context_json']) if row['context_json'] is not None else None
+            return TutorSourceState(value, job['input_sha256'], job['revision'], job['status'], bool(job['cancel_requested']),
+                job['lease_owner'], job['lease_until'], snapshot.context_snapshot_id, context.snapshot.snapshot_sha256 if context else None,
+                row['prepared_input_sha256'], row['latest_proposal_id'], row['consent_id'])
 
     def events_raw(self, identifier: str) -> list[TutorSSEEvent]:
         events = []

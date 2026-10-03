@@ -57,8 +57,26 @@ def test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec():
         ('POST', '/api/v1/authoring/group-numeric-checks/{id}/decision'),
     }
     assert authoring <= projection
-    assert len(projection) == 93
-    assert len(SPEC_ROUTES - projection) == 26
+    assert {('POST', '/api/v1/drafts/{id}/review'), ('GET', '/api/v1/reviews/{id}'),
+            ('POST', '/api/v1/reviews/{id}/decision')} <= projection
+    assert ('POST', '/api/v1/drafts/{id}/publish') in projection
+    assert {('POST', '/api/v1/drafts'), ('PATCH', '/api/v1/drafts/{id}'),
+            ('GET', '/api/v1/draft-edits/{id}')} <= projection
+    assert {
+        ('GET', '/api/v1/content/impacts'),
+        ('GET', '/api/v1/content/impacts/{event_id}'),
+        ('POST', '/api/v1/content/impacts/{event_id}/decisions'),
+        ('GET', '/api/v1/learning/evidence/{id}/applicability'),
+        ('POST', '/api/v1/learning/evidence/{id}/applicability-decisions'),
+        ('POST', '/api/v1/content/restore-drafts'),
+        ('GET', '/api/v1/content/restore-drafts/{id}'),
+        ('POST', '/api/v1/content/restore-drafts/{id}/numeric-checks'),
+        ('GET', '/api/v1/content/restore-numeric-checks/{id}'),
+        ('POST', '/api/v1/content/restore-numeric-checks/{id}/decision'),
+    } <= projection
+    assert len(projection) == 110
+    assert len(SPEC_ROUTES) == 130
+    assert len(SPEC_ROUTES - projection) == 20
 
 
 OPERATIONS = [(path, method, operation) for path, methods in create_app().openapi()["paths"].items()
@@ -74,6 +92,14 @@ def test_implemented_route_is_in_spec_and_has_strict_openapi_contract(path, meth
         if schema.get("type") == "object":
             assert schema["additionalProperties"] is False
         else:
+            if schema.get("title") == "DraftJsonValue":
+                ref = {"$ref": "#/components/schemas/DraftJsonValue"}
+                assert schema == {"title": "DraftJsonValue", "anyOf": [
+                    {"type": "boolean"}, {"type": "integer"}, {"type": "number"},
+                    {"type": "string"}, {"type": "array", "items": ref},
+                    {"type": "object", "additionalProperties": ref}, {"type": "null"},
+                ]}
+                continue
             # Only these specified named unions may replace a concrete object.
             unions = {
                 "BlockReadResponse": ("anyOf", ["ContentBlock", "BlockProvenanceResponse"]),

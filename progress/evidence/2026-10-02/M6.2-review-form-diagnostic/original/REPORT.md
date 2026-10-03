@@ -1,0 +1,11 @@
+# Review form failure observation
+
+Original c2 PR CI failed the unchanged five-second recovered-note assertion. The prior artifact omitted full panel and HTTP trace; root cause remains UNKNOWN. A fixed c2 local run passed, which does not close the original CI failure.
+
+Final source d7025bbf7cc8de532d82edc654207f57032eb4a6 adds only a bounded post-failure synthetic diagnostic and one CI basename. Root integration is 4f666c40. It retains the original assertion/error, records no session response, credentials or command journal, and requires a fresh author/non-Assessment session before page-memory observation. DOM is sampled earlier than the fresh session and memory read, so neither is an atomic or original failure-time snapshot. Timeout/errors cannot replace the original assertion failure. Independent read-only review found no blocker within this synthetic-fixture boundary.
+
+Original c2 test passed17.0s. The first diagnostic self-check attempted one DOM textarea corruption, but React restored the value before the original assertion: it passed16.0s and did not validate the diagnostic. A separate deliberate expected-value mismatch retained the original five-second timeout and failed as designed; the diagnostic showed matching synthetic notes in recovered DOM and same-actor original page memory. This is an instrumentation self-check, not reproduction of the CI data-loss failure. The deliberately wrong expectation was restored under a SHA guard. The original assertion then passed14.6s; the final committed source independently passed14.6s, all1239 engineering inputs matching Git and unchanged before/after. None of these passes proves the original CI cause fixed.
+
+Strict helper TypeScript passed. An initial .mjs type-only import produced TS7016/TS7006; switching the erased import to the declared package entry corrected that check. Initial private Playwright .ts configuration failed CJS/import.meta loading before the target case; the corrected .mts private configuration used the original browser/assertion settings. Both original harness failures remain recorded. Failure artifact upload semantics are unchanged except the one exact JSON basename; the existing Restore numeric outcome retention remains intact.
+
+No product change, provider call, numerical execution, academic approval, source push or successful remote CI is claimed here.

@@ -1,0 +1,258 @@
+FFFF                                                                     [100%]
+=================================== FAILURES ===================================
+_ test_actual_assessment_policy_precedes_existing_identity_retry[single-independent] _
+
+generated_history = <controlled single Provider-history case; no identity repr>
+mode = 'independent'
+
+    @pytest.mark.parametrize('mode', ['independent', 'open_book'])
+    def test_actual_assessment_policy_precedes_existing_identity_retry(generated_history, mode):
+        from services.api.app.application.assessment import AssessmentService
+        from services.api.app.assessment_dto import AssessmentAttemptCreate
+        from services.api.app.infrastructure.content_repository import reference
+        from tests.assessment_fixtures import assessment_fixture
+        from tests.integration.test_assessment_attempts import import_fixture
+    
+        case = generated_history
+        admit(case)
+        fixture = assessment_fixture('candidateguard')
+        import_fixture(case.database, case.identity, fixture, 'guard-material')
+        assessment = AssessmentService(case.database)
+        attempt = assessment.create_attempt(case.identity, fixture.assessment.id,
+            AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode=mode), 'guard-attempt')
+>       assert attempt.attempt.status == 'active'
+               ^^^^^^^^^^^^^^^
+
+tests/integration/test_draft_candidate_owners.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = AttemptSnapshot(id='attempt_893244c4a18a4b10afcddf78ea16efc6', workspace_id='workspace_f892c7ba70bf4d39a3bcd4aa71978e3...en', reason_codes=[])]), startable=True, start_block_reason_codes=[]), grading_revision=0, grading_status='not_graded')
+item = 'attempt'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra and item in pydantic_extra:
+                return pydantic_extra[item]
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'AttemptSnapshot' object has no attribute 'attempt'
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/pydantic/main.py:1042: AttributeError
+_ test_actual_assessment_policy_precedes_existing_identity_retry[single-open_book] _
+
+generated_history = <controlled single Provider-history case; no identity repr>
+mode = 'open_book'
+
+    @pytest.mark.parametrize('mode', ['independent', 'open_book'])
+    def test_actual_assessment_policy_precedes_existing_identity_retry(generated_history, mode):
+        from services.api.app.application.assessment import AssessmentService
+        from services.api.app.assessment_dto import AssessmentAttemptCreate
+        from services.api.app.infrastructure.content_repository import reference
+        from tests.assessment_fixtures import assessment_fixture
+        from tests.integration.test_assessment_attempts import import_fixture
+    
+        case = generated_history
+        admit(case)
+        fixture = assessment_fixture('candidateguard')
+        import_fixture(case.database, case.identity, fixture, 'guard-material')
+        assessment = AssessmentService(case.database)
+        attempt = assessment.create_attempt(case.identity, fixture.assessment.id,
+            AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode=mode), 'guard-attempt')
+>       assert attempt.attempt.status == 'active'
+               ^^^^^^^^^^^^^^^
+
+tests/integration/test_draft_candidate_owners.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = AttemptSnapshot(id='attempt_e8d3d47408c349c3adff0d2740baf11a', workspace_id='workspace_3f48f8c81b2946a09a68335373bdcd4...en', reason_codes=[])]), startable=True, start_block_reason_codes=[]), grading_revision=0, grading_status='not_graded')
+item = 'attempt'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra and item in pydantic_extra:
+                return pydantic_extra[item]
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'AttemptSnapshot' object has no attribute 'attempt'
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/pydantic/main.py:1042: AttributeError
+_ test_actual_assessment_policy_precedes_existing_identity_retry[group-independent] _
+
+generated_history = <controlled group Provider-history case; no identity repr>
+mode = 'independent'
+
+    @pytest.mark.parametrize('mode', ['independent', 'open_book'])
+    def test_actual_assessment_policy_precedes_existing_identity_retry(generated_history, mode):
+        from services.api.app.application.assessment import AssessmentService
+        from services.api.app.assessment_dto import AssessmentAttemptCreate
+        from services.api.app.infrastructure.content_repository import reference
+        from tests.assessment_fixtures import assessment_fixture
+        from tests.integration.test_assessment_attempts import import_fixture
+    
+        case = generated_history
+        admit(case)
+        fixture = assessment_fixture('candidateguard')
+        import_fixture(case.database, case.identity, fixture, 'guard-material')
+        assessment = AssessmentService(case.database)
+        attempt = assessment.create_attempt(case.identity, fixture.assessment.id,
+            AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode=mode), 'guard-attempt')
+>       assert attempt.attempt.status == 'active'
+               ^^^^^^^^^^^^^^^
+
+tests/integration/test_draft_candidate_owners.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = AttemptSnapshot(id='attempt_df94de95cf8e4db7bd229717bdba396f', workspace_id='workspace_784faa4fbdcd4687a5c3adc09a0cca3...en', reason_codes=[])]), startable=True, start_block_reason_codes=[]), grading_revision=0, grading_status='not_graded')
+item = 'attempt'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra and item in pydantic_extra:
+                return pydantic_extra[item]
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'AttemptSnapshot' object has no attribute 'attempt'
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/pydantic/main.py:1042: AttributeError
+_ test_actual_assessment_policy_precedes_existing_identity_retry[group-open_book] _
+
+generated_history = <controlled group Provider-history case; no identity repr>
+mode = 'open_book'
+
+    @pytest.mark.parametrize('mode', ['independent', 'open_book'])
+    def test_actual_assessment_policy_precedes_existing_identity_retry(generated_history, mode):
+        from services.api.app.application.assessment import AssessmentService
+        from services.api.app.assessment_dto import AssessmentAttemptCreate
+        from services.api.app.infrastructure.content_repository import reference
+        from tests.assessment_fixtures import assessment_fixture
+        from tests.integration.test_assessment_attempts import import_fixture
+    
+        case = generated_history
+        admit(case)
+        fixture = assessment_fixture('candidateguard')
+        import_fixture(case.database, case.identity, fixture, 'guard-material')
+        assessment = AssessmentService(case.database)
+        attempt = assessment.create_attempt(case.identity, fixture.assessment.id,
+            AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode=mode), 'guard-attempt')
+>       assert attempt.attempt.status == 'active'
+               ^^^^^^^^^^^^^^^
+
+tests/integration/test_draft_candidate_owners.py:167: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = AttemptSnapshot(id='attempt_63fb82c5eb53475e938ff363577febcf', workspace_id='workspace_008d9abfe12742c5b289a7c59b6cbf2...en', reason_codes=[])]), startable=True, start_block_reason_codes=[]), grading_revision=0, grading_status='not_graded')
+item = 'attempt'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra and item in pydantic_extra:
+                return pydantic_extra[item]
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'AttemptSnapshot' object has no attribute 'attempt'
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/pydantic/main.py:1042: AttributeError
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <USER_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <USER_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_draft_candidate_owners.py::test_actual_assessment_policy_precedes_existing_identity_retry[single-independent]
+FAILED tests/integration/test_draft_candidate_owners.py::test_actual_assessment_policy_precedes_existing_identity_retry[single-open_book]
+FAILED tests/integration/test_draft_candidate_owners.py::test_actual_assessment_policy_precedes_existing_identity_retry[group-independent]
+FAILED tests/integration/test_draft_candidate_owners.py::test_actual_assessment_policy_precedes_existing_identity_retry[group-open_book]
+4 failed, 32 deselected, 2 warnings in 4.62s

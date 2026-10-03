@@ -86,3 +86,15 @@ def completed_grade_keys(connection: sqlite3.Connection, workspace_id: str,
         for row in connection.execute("SELECT g.attempt_id,g.grading_revision FROM grades g JOIN attempts a ON a.id=g.attempt_id "
             "WHERE a.workspace_id=? AND (? IS NULL OR a.id=?) ORDER BY g.attempt_id,g.grading_revision",
             (workspace_id, attempt_id, attempt_id)))
+
+
+def verify_applicability_pins(connection: sqlite3.Connection, workspace_id: str,
+                              attempt_id: str) -> SubmissionWitness:
+    """Verify every original private pin with Content; return metadata only."""
+    from .assessment_content import AssessmentContent
+
+    witness = submission_witness(connection, workspace_id, attempt_id)
+    content = AssessmentContent(connection, workspace_id)
+    for pin in witness.private_pins:
+        content.solution(pin)
+    return witness

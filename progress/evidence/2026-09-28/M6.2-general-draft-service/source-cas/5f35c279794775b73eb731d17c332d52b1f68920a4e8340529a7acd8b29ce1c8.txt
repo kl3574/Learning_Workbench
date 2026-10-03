@@ -1,0 +1,105 @@
+"""Actual nonempty owner histories survive an editing-owner forward migration."""
+from dataclasses import replace
+from pathlib import Path
+import shutil
+import sqlite3
+
+import pytest
+
+from packages.contracts import domain_models as dm
+from services.api.app.application.draft_candidates import DraftCandidates
+from services.api.app.application.draft_publication import DraftPublicationService
+from services.api.app.application.imports import ImportService, IMPORT_ARTIFACT_PROFILES
+from services.api.app.application.review_numeric import ReviewNumeric
+from services.api.app.application.review_service import ReviewService
+from services.api.app.application.sessions import SessionService
+from services.api.app.dto import RoleRequest
+from services.api.app.infrastructure.config import Settings
+from services.api.app.infrastructure.database import Database
+from services.api.app.infrastructure.import_worker import ImportWorker
+from services.api.app.infrastructure.security import consume_bootstrap, issue_bootstrap_code
+from tests.integration.test_authoring_numeric_provider_history import table_hashes
+from tests.integration.test_publication_admission import reviewed, publish_request
+
+MIGRATION = '0019_draft_edits.sql'
+
+
+def owners(database):
+    imports = ImportService(database)
+    candidates = DraftCandidates({'import': imports})
+    reviews = ReviewService(database, candidates, ReviewNumeric(candidates, {}),
+        {(profile, 'import'): imports for profile in IMPORT_ARTIFACT_PROFILES})
+    return imports, reviews, DraftPublicationService(database, reviews, imports)
+
+
+@pytest.fixture
+def previous(tmp_path):
+    settings = Settings(data_dir=tmp_path / 'data')
+    prior = tmp_path / 'prior'
+    prior.mkdir()
+    for path in settings.migrations_dir.glob('*.sql'):
+        if path.name < '0019':
+            shutil.copyfile(path, prior / path.name)
+    database = Database(replace(settings, migrations_dir=prior))
+    database.initialize()
+    _, learner = consume_bootstrap(database, issue_bootstrap_code(database))
+    SessionService(database).switch_role(learner, RoleRequest(role='author'), 'role')
+    identity = replace(learner, role='author')
+    imports, reviews, publication = owners(database)
+    worker = ImportWorker(database)
+    try:
+        staged = imports.stage(identity, data=b'Synthetic source for local editing.\n', kind='markdown',
+            filename='synthetic.md', key='source')
+        assert worker.run_once()
+    finally:
+        worker.stop()
+    draft = next(d for d in (imports.draft(identity, item) for item in imports.preview(identity, staged.import_id).preview_refs)
+                 if d.kind == 'block')
+    candidate = dm.DraftCandidate(draft_id=draft.id, draft_revision=1, entity='block', candidate_sha256=draft.candidate_sha256)
+    receipt = reviewed(database, identity, candidate, reviews, math='NOT_APPLICABLE')
+    request = publish_request(database, identity, candidate, reviews, receipt)
+    ref = publication.publish(identity, candidate.draft_id, request, 'publication')
+    return database, settings, identity, candidate, receipt, request, ref
+
+
+def test_real_review_publication_history_survives_edit_owner_schema(previous):
+    old, settings, identity, candidate, receipt, request, ref = previous
+    before = table_hashes(old)
+    upgraded = Database(settings)
+    upgraded.initialize()
+    after = table_hashes(upgraded)
+    assert {k: after[k] for k in before if k != 'schema_migrations'} == {k: v for k, v in before.items() if k != 'schema_migrations'}
+    imports, reviews, publication = owners(upgraded)
+    assert reviews.read(identity, receipt.id) == receipt
+    assert publication.publish(identity, candidate.draft_id, request, 'publication') == ref
+    with upgraded.transaction() as conn:
+        assert conn.execute('PRAGMA foreign_key_check').fetchall() == []
+        conn.execute("INSERT INTO draft_candidate_identities VALUES('draft_synthetic_edit',?,'authoring','authoring_edit','block')",
+                     (identity.workspace_id,))
+        assert conn.execute("SELECT name FROM sqlite_master WHERE name='draft_edit_versions'").fetchone()
+    upgraded.initialize()
+    assert list((settings.data_dir / 'backups').glob('*.sqlite3'))
+
+
+@pytest.mark.parametrize('failure', ['after_schema', 'after_history'])
+def test_forward_failure_restores_original_schema_and_history(previous, tmp_path, failure):
+    old, settings, identity, candidate, receipt, request, ref = previous
+    before = table_hashes(old)
+    with old.connect() as conn:
+        original_schema = [tuple(r) for r in conn.execute('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name')]
+    broken = tmp_path / 'broken'
+    shutil.copytree(settings.migrations_dir, broken)
+    target = broken / MIGRATION
+    text = target.read_text()
+    marker = '-- EDIT_SCHEMA_REBUILT' if failure == 'after_schema' else '-- EDIT_HISTORY_RESTORED'
+    assert marker in text
+    target.write_text(text.replace(marker, 'SELECT * FROM synthetic_missing_migration_table;\n' + marker))
+    with pytest.raises(sqlite3.Error):
+        Database(replace(settings, migrations_dir=broken)).initialize()
+    assert table_hashes(old) == before
+    with old.connect() as conn:
+        assert [tuple(r) for r in conn.execute('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name')] == original_schema
+        assert conn.execute('PRAGMA foreign_key_check').fetchall() == []
+    _, reviews, publication = owners(old)
+    assert reviews.read(identity, receipt.id) == receipt
+    assert publication.publish(identity, candidate.draft_id, request, 'publication') == ref

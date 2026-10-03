@@ -1,0 +1,83 @@
+.................F.....                                                  [100%]
+=================================== FAILURES ===================================
+___________ test_complete_lesson_requires_every_exact_numeric_member ___________
+
+tmp_path = PosixPath('<PYTEST_ROOT>/pytest-44/test_complete_lesson_requires_0')
+
+    def test_complete_lesson_requires_every_exact_numeric_member(tmp_path):
+        case, reviews = generated_case(tmp_path, 'lesson')
+        draft = case.authoring.draft(case.identity, case.candidate.draft_id)
+        first, second = [target for target in draft.root.blocks if target.member_key != 'lesson_text']
+        one = synthetic_numeric(case, 'first', target=first)
+        partial = reviewed(case.database, case.identity, case.candidate, reviews, key='partial')
+        with pytest.raises(ApiError):
+            admit(case.database, case.identity, case.candidate, reviews,
+                  publish_request(case.database, case.identity, case.candidate, reviews, partial))
+        two = synthetic_numeric(case, 'second', target=second)
+        full = reviewed(case.database, case.identity, case.candidate, reviews, key='full')
+>       result = admit(case.database, case.identity, case.candidate, reviews,
+            publish_request(case.database, case.identity, case.candidate, reviews, full))
+
+tests/integration/test_publication_admission.py:205: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/integration/test_publication_admission.py:54: in admit
+    return PublicationAdmissionService(reviews).check(conn, identity, candidate.draft_id, body)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.application.publication_admission.PublicationAdmissionService object at 0x713ef594f860>
+connection = <sqlite3.Connection object at 0x713ef5da75b0>
+identity = SessionIdentity(id='<SYNTHETIC_SESSION_ID>', workspace_id='workspace_4850660a78dc438cb4078ec47c06297...srf_token='<SYNTHETIC_CSRF_DISPLAY>', expires_at='2026-09-28T13:48:18.013846Z')
+draft_id = 'authoring_group_3188e2a343f54439959a8c477edc389b'
+body = DraftPublishWrite()
+
+    def check(self, connection: sqlite3.Connection, identity: SessionIdentity,
+              draft_id: str, body: DraftPublishWrite) -> PublicationAdmission:
+        body = validated(DraftPublishWrite, body)
+        history, material = self.reviews.read_publication_basis(connection, identity, body.review_receipt_id)
+        candidate = material.candidate
+        if (candidate.draft_id != draft_id or candidate.draft_revision != body.expected_revision
+                or candidate.candidate_sha256 != body.expected_content_sha256):
+            raise ApiError(412, 'PUBLISH_CANDIDATE_MISMATCH', '发布请求与审核的精确候选版本不一致。')
+        if (not history.records or not isinstance(history.records[0], ReviewMachineRecord)
+                or not isinstance(history.records[-1], ReviewDecisionRecord)):
+            raise blocked('PUBLISH_HUMAN_REVIEW_REQUIRED', '发布准入需要绑定此候选的明确人工审核决定。')
+        machine, human = history.records[0], history.records[-1]
+        if machine.structural_report.structural != 'PASS':
+            raise blocked('PUBLISH_STRUCTURE_REQUIRED', '结构检查尚未通过，不能准入发布。')
+        if human.receipt.mathematical not in {'APPROVED', 'NOT_APPLICABLE'} or human.receipt.sources not in {'APPROVED', 'NOT_APPLICABLE'}:
+            raise blocked('PUBLISH_HUMAN_REVIEW_REQUIRED', '数学与来源的适用审核尚未批准。')
+        # Mathematical applicability was already checked against actual material
+        # by the Quality owner while authenticating this exact human history.
+        if human.receipt.sources == 'NOT_APPLICABLE' and (
+                isinstance(material.payload, ImportReviewMaterial) or material.source_refs):
+            raise blocked('PUBLISH_SOURCE_REVIEW_REQUIRED', '材料存在真实来源，不能以来源不适用替代审核。')
+        plans = self._plans(material)
+        selected: list[str] = []
+        for target, plan in plans:
+            matches = [check for check in machine.numeric.checks if self._matching(check, target, plan)]
+            # Original owner order is persisted SQLite insertion order, verified
+            # by ReviewNumeric's exact prefix checks, not wall-clock ordering.
+            # A new check cannot make us reuse an earlier preferred PASS.
+            if not matches or not self._passed(matches[-1]):
+>               raise blocked('PUBLISH_NUMERIC_REQUIRED', '审核所记录的数值历史缺少全部所需成员的完整通过结果。')
+E               services.api.app.application.errors.ApiError: (409, 'PUBLISH_NUMERIC_REQUIRED', '审核所记录的数值历史缺少全部所需成员的完整通过结果。')
+
+services/api/app/application/publication_admission.py:99: ApiError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-state-owner-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-state-owner-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+tests/integration/test_publication_admission.py::test_request_has_only_the_four_specified_fields_and_serialization_failure_is_private
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-state-owner-active/tests/integration/test_publication_admission.py:217: PydanticDeprecatedSince211: Accessing the 'model_fields' attribute on the instance is deprecated. Instead, you should access this attribute from the model class. Deprecated in Pydantic V2.11 to be removed in V3.0.
+    assert set(body.model_fields) == {'expected_revision', 'expected_content_sha256', 'review_receipt_id', 'acknowledged_warning_codes'}
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_publication_admission.py::test_complete_lesson_requires_every_exact_numeric_member
+1 failed, 22 passed, 3 warnings in 28.67s

@@ -1,0 +1,165 @@
+{
+  "task_id": "M6.2-review-import-close-test-diagnosis",
+  "requirement_ids": [
+    "PRODUCT_DESIGN section 4.3",
+    "PRODUCT_DESIGN section 19.3",
+    "PRODUCT_DESIGN section 20.8 existing unsaved close protection"
+  ],
+  "spec_sha256": "2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d",
+  "implementation_commit": "36b501cf8da071909fbb5628b7354de70d5d1825",
+  "changed_paths": [
+    "apps/web/src/features/draftReview/ReviewImportShell.test.tsx"
+  ],
+  "commands": [
+    {
+      "stage": "01-original-focused",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "test",
+        "--",
+        "src/features/draftReview/ReviewImportShell.test.tsx",
+        "-t",
+        "^actual Import and Shell preserve review reason until explicit close without submitting import or review$"
+      ]
+    },
+    {
+      "stage": "02-publication-ledger-red",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "test",
+        "--",
+        "src/features/draftReview/ReviewImportShell.diagnostic.test.tsx",
+        "-t",
+        "^actual Import and Shell preserve review reason until explicit close without submitting import or review$"
+      ]
+    },
+    {
+      "stage": "03-publication-ledger-enabled-control",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "test",
+        "--",
+        "src/features/draftReview/ReviewImportShell.diagnostic.test.tsx",
+        "-t",
+        "^actual Import and Shell preserve review reason until explicit close without submitting import or review$"
+      ]
+    },
+    {
+      "stage": "04-fixed-shell-behavior",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "test",
+        "--",
+        "src/features/draftReview/ReviewImportShell.test.tsx"
+      ]
+    },
+    {
+      "stage": "05-strict-lint",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "lint"
+      ]
+    },
+    {
+      "stage": "06-dirty-shell-guard",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "test",
+        "--",
+        "src/features/draftReview/ReviewImportShell.test.tsx"
+      ]
+    },
+    {
+      "stage": "07-related-final",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "test",
+        "--",
+        "src/features/draftReview",
+        "src/features/draftPublication"
+      ]
+    },
+    {
+      "stage": "08-strict-final",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "lint"
+      ]
+    }
+  ],
+  "exit_codes": {
+    "01-original-focused": 0,
+    "02-publication-ledger-red": 1,
+    "03-publication-ledger-enabled-control": 0,
+    "04-fixed-shell-behavior": 1,
+    "05-strict-lint": 0,
+    "06-dirty-shell-guard": 0,
+    "07-related-final": 0,
+    "08-strict-final": 0
+  },
+  "test_summary": {
+    "01-original-focused": "1 PASS, 1 filtered/skipped; original failure not reproduced",
+    "02-publication-ledger-red": "1 FAIL, 1 filtered/skipped; controlled disabled click leaves Import open",
+    "03-publication-ledger-enabled-control": "1 PASS, 1 filtered/skipped; release then enabled click closes",
+    "04-fixed-shell-behavior": "2 PASS, 1 FAIL; new no-dirty probe closed before confirmation, different scope",
+    "05-strict-lint": "PASS; strict TypeScript on stage04 source",
+    "06-dirty-shell-guard": "3 PASS; dirty form guard regression",
+    "07-related-final": "49 PASS, 9 files; final fixed Review and Publication tests",
+    "08-strict-final": "PASS; final strict TypeScript including noUnused checks"
+  },
+  "screenshot_paths": [],
+  "migrations": [],
+  "security_review": "No product, API, Policy, actor, secret, provider, main-tree or remote changes. Actual publication command store load is delayed then delegated; mock restored after each case. Independent review pending.",
+  "not_run": [
+    "No new full frontend suite",
+    "No backend or native browser suite",
+    "No remote CI retry/dispatch",
+    "No live provider calls",
+    "No historical CI click-time trace available"
+  ],
+  "blockers": [
+    "Historical remote failure mechanism remains supported candidate, not established uniquely; original CI failure preserved.",
+    "Stage04 no-dirty parent notification window is a separate observation, not fixed or certified by this test-only change."
+  ],
+  "next_task_id": "Independent review of 36b501c and evidence; parent decides integration. Separate no-dirty window assessment if warranted."
+}

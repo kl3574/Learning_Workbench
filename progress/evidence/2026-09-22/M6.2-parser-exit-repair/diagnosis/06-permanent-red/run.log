@@ -1,0 +1,56 @@
+F..                                                                      [100%]
+=================================== FAILURES ===================================
+________ test_exited_parser_retains_scan_error_ocr_original_and_restart ________
+
+tmp_path = PosixPath('<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-pdf-ci-diagnosis-v1/06-permanent-red<PYTEST_ROOT>/pytest-0/test_exited_parser_retains_sca0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7c0cd60ec110>
+
+    def test_exited_parser_retains_scan_error_ocr_original_and_restart(tmp_path, monkeypatch):
+        trace = schedule_exit_after_poll(monkeypatch)
+        # Reuse every original HTTP/SQLite/restart assertion, including exact source
+        # bytes, OCR/page warnings, typed failure and zero published content.
+>       check_failed_document(tmp_path, "pdf", pdf_scan_fixture, True)
+
+tests/integration/test_import_parser_exit_race.py:85: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tmp_path = PosixPath('<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-pdf-ci-diagnosis-v1/06-permanent-red<PYTEST_ROOT>/pytest-0/test_exited_parser_retains_sca0')
+kind = 'pdf', factory = <function pdf_scan_fixture at 0x7c0cd67d63e0>
+scan = True
+
+    @pytest.mark.parametrize('kind,factory,scan', [
+        ('pdf', pdf_scan_fixture, True), ('pdf', pdf_malformed_fixture, False),
+        ('pdf', pdf_encrypted_fixture, False), ('docx', docx_malformed_fixture, False),
+    ])
+    def test_failed_documents_report_safe_failure_and_retain_exact_original_without_formal_content(tmp_path, kind, factory, scan):
+        settings = Settings(data_dir=tmp_path / 'data')
+        original = factory()
+        with application_client(settings) as (app, client):
+            staged, preview = staged_document(client, settings, original, kind)
+            assert preview['status'] == 'failed', preview
+            assert preview['preview_refs'] == []
+            denied = confirm(client, settings, preview, acknowledge=True)
+            assert denied.status_code == (403 if kind == 'docx' else 409), denied.text
+            job = client.get('/api/v1/jobs/' + staged['job']['id']).json()
+            assert job['status'] == 'failed' and job['result_refs'] == []
+>           assert job['error']['code'] != 'IMPORT_PARSE_FAILED', job
+E           AssertionError: {'id': 'job_891abdd2d9de4b1393d5c617c4442208', 'workspace_id': 'workspace_582c7e5aa00341c8b601d5136a54805c', 'kind': 'import', 'status': 'failed', ...}
+E           assert 'IMPORT_PARSE_FAILED' != 'IMPORT_PARSE_FAILED'
+
+tests/integration/test_document_http.py:169: AssertionError
+----------------------------- Captured stderr call -----------------------------
+<LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_import_parser_exit_race.py::test_exited_parser_retains_scan_error_ocr_original_and_restart
+1 failed, 2 passed, 2 warnings in 2.98s

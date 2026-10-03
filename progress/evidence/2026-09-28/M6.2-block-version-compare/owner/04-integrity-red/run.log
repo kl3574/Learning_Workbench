@@ -1,0 +1,114 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/reader/versionCompare/compareClient.test.ts
+
+
+ RUN  v5.0.0 <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-block-version-compare-active/apps/web
+
+ ❯ src/features/reader/versionCompare/compareClient.test.ts (3 tests | 2 failed) 11ms
+   × rejects changed-title even with a matching ETag and body 5ms
+   × rejects extra-field even with a matching ETag and body 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/reader/versionCompare/compareClient.test.ts > rejects changed-title even with a matching ETag and body
+AssertionError: promise resolved "{ block: { …(11) }, …(6) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "block": {
++     "body_path": "content/block_compare.md",
++     "body_sha256": "de98ede458bc0217a3a01fda076a4971289f84755d176e2e84f505af67c0bcd5",
++     "citations": [],
++     "concepts": [],
++     "depends_on": [],
++     "entity": "block",
++     "id": "block_compare",
++     "kind": "text",
++     "revision": 1,
++     "schema_version": "3.0.0",
++     "title": "Changed metadata without changed reference",
++   },
++   "block_ref": {
++     "entity": "block",
++     "id": "block_compare",
++     "revision": 1,
++     "sha256": "90516b5f4a29e522171e7027d13f933d13fc0164228e87372637a06d768f66f8",
++   },
++   "body": "old α
++ shared
++ ",
++   "citations": [],
++   "original_source": null,
++   "unresolved_citation_ids": [],
++   "warnings": [],
+  }
+
+ ❯ src/features/reader/versionCompare/compareClient.test.ts:29:50
+     27|     ? new Response(selected.body, { headers: { ETag: `"${selected.data…
+     28|     : new Response(JSON.stringify(data), { headers: { ETag: `"${select…
+     29|   await expect(compareClient.block(selected.ref)).rejects.toThrow()
+       |                                                  ^
+     30| })
+     31|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  src/features/reader/versionCompare/compareClient.test.ts > rejects extra-field even with a matching ETag and body
+AssertionError: promise resolved "{ block: { …(11) }, …(7) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "block": {
++     "body_path": "content/block_compare.md",
++     "body_sha256": "de98ede458bc0217a3a01fda076a4971289f84755d176e2e84f505af67c0bcd5",
++     "citations": [],
++     "concepts": [],
++     "depends_on": [],
++     "entity": "block",
++     "id": "block_compare",
++     "kind": "text",
++     "revision": 1,
++     "schema_version": "3.0.0",
++     "title": "Synthetic comparison",
++   },
++   "block_ref": {
++     "entity": "block",
++     "id": "block_compare",
++     "revision": 1,
++     "sha256": "90516b5f4a29e522171e7027d13f933d13fc0164228e87372637a06d768f66f8",
++   },
++   "body": "old α
++ shared
++ ",
++   "citations": [],
++   "original_source": null,
++   "unregistered_payload": "synthetic unexpected field",
++   "unresolved_citation_ids": [],
++   "warnings": [],
+  }
+
+ ❯ src/features/reader/versionCompare/compareClient.test.ts:29:50
+     27|     ? new Response(selected.body, { headers: { ETag: `"${selected.data…
+     28|     : new Response(JSON.stringify(data), { headers: { ETag: `"${select…
+     29|   await expect(compareClient.block(selected.ref)).rejects.toThrow()
+       |                                                  ^
+     30| })
+     31|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  12:00:48
+   Duration  390ms (environment 73%, transform 19%, import 4%, tests 4%, worker 1%)
+

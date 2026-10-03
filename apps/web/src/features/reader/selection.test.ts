@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import type { ContentRef } from '../../../../../packages/contracts/generated/types'
-import { selectionFromDOM, selectionFromSource, type SelectionResult } from './selection'
+import { selectionFromDOM, selectionFromSource, selectionFromTextarea, type SelectionResult } from './selection'
 
 const ref: ContentRef = { entity: 'block', id: 'block_selection', revision: 7, sha256: 'a'.repeat(64) }
 
@@ -186,5 +186,31 @@ describe('raw source selection bounds and generated anchor contract', () => {
     for (const invalid of [{ ...ref, revision: 0 }, { ...ref, sha256: 'latest' }, { ...ref, id: '../file' }, { ...ref, entity: 'lesson' as const }]) {
       expect(selectionFromSource(invalid, '甲', 0, 1).kind).toBe('rejected')
     }
+  })
+})
+
+describe('textarea normalization to original Note anchor bytes', () => {
+  it.each(['甲\r\n🧠e\u0301\r\n尾', '甲\r🧠e\u0301\r尾', '甲\n🧠e\u0301\n尾'])('maps the real textarea offsets back into %j', source => {
+    const input = document.createElement('textarea'); input.value = source
+    const start = input.value.indexOf('🧠'), end = input.value.indexOf('尾')
+    input.setSelectionRange(start, end)
+    const quote = source.slice(source.indexOf('🧠'), source.indexOf('尾'))
+    const prefix = source.slice(0, source.indexOf('🧠'))
+    expect(selected(selectionFromTextarea(ref, source, input.selectionStart, input.selectionEnd))).toEqual({ ref, exact_quote: quote, prefix, suffix: '尾', start_codepoint: Array.from(prefix).length, end_codepoint: Array.from(prefix + quote).length })
+  })
+
+  it('keeps forty original codepoints of context around the selected instance', () => {
+    const source = '🧠'.repeat(45) + '\r\n同句\r\n同句\r\n' + '尾'.repeat(45), input = document.createElement('textarea'); input.value = source
+    const start = input.value.lastIndexOf('同句'); input.setSelectionRange(start, start + 2)
+    const anchor = selected(selectionFromTextarea(ref, source, input.selectionStart, input.selectionEnd))
+    expect(anchor).toMatchObject({ exact_quote: '同句', start_codepoint: 51, end_codepoint: 53, prefix: '🧠'.repeat(34) + '\r\n同句\r\n', suffix: '\r\n' + '尾'.repeat(38) })
+  })
+
+  it('rejects normalized half-surrogate and out-of-range positions while treating a collapsed caret as empty', () => {
+    expect(selectionFromTextarea(ref, '甲\r\n🧠尾', 3, 4).kind).toBe('rejected')
+    expect(selectionFromTextarea(ref, '甲\r\n🧠尾', 2, 3).kind).toBe('rejected')
+    for (const [start, end] of [[-1, 1], [2, 1], [0.5, 1], [0, 9]]) expect(selectionFromTextarea(ref, '甲\r\n🧠尾', start, end).kind).toBe('rejected')
+    expect(selectionFromTextarea(ref, '甲\r\n🧠尾', 2, 2)).toEqual({ kind: 'empty' })
+    expect(selectionFromTextarea(ref, '甲\r\n🧠尾', 5, 5)).toEqual({ kind: 'empty' })
   })
 })

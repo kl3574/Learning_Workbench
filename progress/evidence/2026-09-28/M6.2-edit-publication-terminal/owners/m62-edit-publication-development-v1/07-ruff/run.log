@@ -1,0 +1,296 @@
+E701 Multiple statements on one line (colon)
+   --> tests/integration/test_edit_publication_atomic.py:102:12
+    |
+100 |     def publish():
+101 |         barrier.wait(timeout=10)
+102 |         try:return publisher(editing).publish(identity,created.draft_id,body,'publish')
+    |            ^
+103 |         except ApiError as error:return error.status
+104 |     def patch():
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/integration/test_edit_publication_atomic.py:103:33
+    |
+101 |         barrier.wait(timeout=10)
+102 |         try:return publisher(editing).publish(identity,created.draft_id,body,'publish')
+103 |         except ApiError as error:return error.status
+    |                                 ^
+104 |     def patch():
+105 |         barrier.wait(timeout=10)
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/integration/test_edit_publication_atomic.py:131:27
+    |
+129 |     barrier=Barrier(2)
+130 |     def execute(pair):
+131 |         draft_id,body=pair;barrier.wait(timeout=10)
+    |                           ^
+132 |         try:return publisher(editing).publish(identity,draft_id,body,'competing-publish')
+133 |         except ApiError as error:return error.code
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/integration/test_edit_publication_atomic.py:132:12
+    |
+130 |     def execute(pair):
+131 |         draft_id,body=pair;barrier.wait(timeout=10)
+132 |         try:return publisher(editing).publish(identity,draft_id,body,'competing-publish')
+    |            ^
+133 |         except ApiError as error:return error.code
+134 |     with ThreadPoolExecutor(max_workers=2) as pool:
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/integration/test_edit_publication_atomic.py:133:33
+    |
+131 |         draft_id,body=pair;barrier.wait(timeout=10)
+132 |         try:return publisher(editing).publish(identity,draft_id,body,'competing-publish')
+133 |         except ApiError as error:return error.code
+    |                                 ^
+134 |     with ThreadPoolExecutor(max_workers=2) as pool:
+135 |         results=list(pool.map(execute,[(first_record.candidate.draft_id,first_body),(created.draft_id,second_body)]))
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/integration/test_edit_publication_atomic.py:144:37
+    |
+142 |     from tests.integration.test_review_workflow import decision
+143 |     database,identity,base,_,created,reviews=editing
+144 |     _,receipt,body=approved(editing);barrier=Barrier(2)
+    |                                     ^
+145 |     def publish():
+146 |         barrier.wait(timeout=10)
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/integration/test_edit_publication_atomic.py:147:12
+    |
+145 |     def publish():
+146 |         barrier.wait(timeout=10)
+147 |         try:return publisher(editing).publish(identity,created.draft_id,body,'race-review')
+    |            ^
+148 |         except ApiError as error:return error.code
+149 |     def reject():
+    |
+
+E701 Multiple statements on one line (colon)
+   --> tests/integration/test_edit_publication_atomic.py:148:33
+    |
+146 |         barrier.wait(timeout=10)
+147 |         try:return publisher(editing).publish(identity,created.draft_id,body,'race-review')
+148 |         except ApiError as error:return error.code
+    |                                 ^
+149 |     def reject():
+150 |         barrier.wait(timeout=10)
+    |
+
+E702 Multiple statements on one line (semicolon)
+   --> tests/integration/test_edit_publication_atomic.py:153:62
+    |
+151 |         return reviews.decide(identity,receipt.id,decision(receipt,mathematical='REJECTED'),'later-rejection')
+152 |     with ThreadPoolExecutor(max_workers=2) as pool:
+153 |         first,second=pool.submit(publish),pool.submit(reject);published,rejected=first.result(),second.result()
+    |                                                              ^
+154 |     assert rejected.mathematical=='REJECTED'
+155 |     if isinstance(published,str):
+    |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/integration/test_edit_publication_http.py:26:48
+   |
+24 |     assert review.status_code==202,review.text
+25 |     assert case.app.state.review_worker.run_once()
+26 |     path='/api/v1/reviews/'+review.json()['id'];machine=case.client.get(path).json()
+   |                                                ^
+27 |     assert machine['mathematical']==machine['sources']==machine['independent_pedagogy']=='NOT_RUN'
+28 |     human=case.client.post(path+'/decision',json={'expected_revision':machine['revision'],
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/integration/test_edit_publication_http.py:39:30
+   |
+38 | def test_real_http_edit_publish_exact_body_etags_and_original_ack(prepared_review_http):
+39 |     case=prepared_review_http;base,identifier,text,body=ready(case)
+   |                              ^
+40 |     original=case.client.get(f'/api/v1/blocks/{base.id}/body?revision=1')
+41 |     path=f'/api/v1/drafts/{identifier}/publish'
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/integration/test_edit_publication_http.py:65:30
+   |
+63 | @pytest.mark.parametrize('fault,expected',[('missing_key',400),('duplicate_key',400),('csrf',403),('extra',422),('wrong_hash',412),('w…
+64 | def test_existing_publish_transport_and_admission_fail_without_mutation(prepared_review_http,fault,expected):
+65 |     case=prepared_review_http;_,identifier,_,body=ready(case);headers=command(case.headers,'publish-guard')
+   |                              ^
+66 |     if fault=='missing_key':headers.pop('Idempotency-Key')
+67 |     elif fault=='csrf':headers['X-CSRF-Token']='invalid-synthetic'
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/integration/test_edit_publication_http.py:65:62
+   |
+63 | @pytest.mark.parametrize('fault,expected',[('missing_key',400),('duplicate_key',400),('csrf',403),('extra',422),('wrong_hash',412),('w…
+64 | def test_existing_publish_transport_and_admission_fail_without_mutation(prepared_review_http,fault,expected):
+65 |     case=prepared_review_http;_,identifier,_,body=ready(case);headers=command(case.headers,'publish-guard')
+   |                                                              ^
+66 |     if fault=='missing_key':headers.pop('Idempotency-Key')
+67 |     elif fault=='csrf':headers['X-CSRF-Token']='invalid-synthetic'
+   |
+
+E701 Multiple statements on one line (colon)
+  --> tests/integration/test_edit_publication_http.py:66:28
+   |
+64 | def test_existing_publish_transport_and_admission_fail_without_mutation(prepared_review_http,fault,expected):
+65 |     case=prepared_review_http;_,identifier,_,body=ready(case);headers=command(case.headers,'publish-guard')
+66 |     if fault=='missing_key':headers.pop('Idempotency-Key')
+   |                            ^
+67 |     elif fault=='csrf':headers['X-CSRF-Token']='invalid-synthetic'
+68 |     elif fault=='extra':body['claimed_approval']=True
+   |
+
+E701 Multiple statements on one line (colon)
+  --> tests/integration/test_edit_publication_http.py:67:23
+   |
+65 |     case=prepared_review_http;_,identifier,_,body=ready(case);headers=command(case.headers,'publish-guard')
+66 |     if fault=='missing_key':headers.pop('Idempotency-Key')
+67 |     elif fault=='csrf':headers['X-CSRF-Token']='invalid-synthetic'
+   |                       ^
+68 |     elif fault=='extra':body['claimed_approval']=True
+69 |     elif fault=='wrong_hash':body['expected_content_sha256']='0'*64
+   |
+
+E701 Multiple statements on one line (colon)
+  --> tests/integration/test_edit_publication_http.py:68:24
+   |
+66 |     if fault=='missing_key':headers.pop('Idempotency-Key')
+67 |     elif fault=='csrf':headers['X-CSRF-Token']='invalid-synthetic'
+68 |     elif fault=='extra':body['claimed_approval']=True
+   |                        ^
+69 |     elif fault=='wrong_hash':body['expected_content_sha256']='0'*64
+70 |     elif fault=='warnings':body['acknowledged_warning_codes']=[]
+   |
+
+E701 Multiple statements on one line (colon)
+  --> tests/integration/test_edit_publication_http.py:69:29
+   |
+67 |     elif fault=='csrf':headers['X-CSRF-Token']='invalid-synthetic'
+68 |     elif fault=='extra':body['claimed_approval']=True
+69 |     elif fault=='wrong_hash':body['expected_content_sha256']='0'*64
+   |                             ^
+70 |     elif fault=='warnings':body['acknowledged_warning_codes']=[]
+71 |     values=list(headers.items())
+   |
+
+E701 Multiple statements on one line (colon)
+  --> tests/integration/test_edit_publication_http.py:70:27
+   |
+68 |     elif fault=='extra':body['claimed_approval']=True
+69 |     elif fault=='wrong_hash':body['expected_content_sha256']='0'*64
+70 |     elif fault=='warnings':body['acknowledged_warning_codes']=[]
+   |                           ^
+71 |     values=list(headers.items())
+72 |     if fault=='duplicate_key':values.append(('Idempotency-Key','another'))
+   |
+
+E701 Multiple statements on one line (colon)
+  --> tests/integration/test_edit_publication_http.py:72:30
+   |
+70 |     elif fault=='warnings':body['acknowledged_warning_codes']=[]
+71 |     values=list(headers.items())
+72 |     if fault=='duplicate_key':values.append(('Idempotency-Key','another'))
+   |                              ^
+73 |     before=table_hashes(case.database)
+74 |     response=case.client.post(f'/api/v1/drafts/{identifier}/publish',json=body,headers=values)
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/integration/test_edit_publication_migration.py:17:41
+   |
+15 | def prior_schema(previous,tmp_path):
+16 |     _,settings,identity,candidate,receipt,body,ref=previous
+17 |     folder=tmp_path/'through-edit-owner';folder.mkdir()
+   |                                         ^
+18 |     for path in settings.migrations_dir.glob('*.sql'):
+19 |         if path.name<'0020':shutil.copyfile(path,folder/path.name)
+   |
+
+E701 Multiple statements on one line (colon)
+  --> tests/integration/test_edit_publication_migration.py:19:28
+   |
+17 |     folder=tmp_path/'through-edit-owner';folder.mkdir()
+18 |     for path in settings.migrations_dir.glob('*.sql'):
+19 |         if path.name<'0020':shutil.copyfile(path,folder/path.name)
+   |                            ^
+20 |     database=Database(replace(settings,migrations_dir=folder));database.initialize()
+21 |     return database,settings,identity,candidate,receipt,body,ref
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/integration/test_edit_publication_migration.py:20:63
+   |
+18 |     for path in settings.migrations_dir.glob('*.sql'):
+19 |         if path.name<'0020':shutil.copyfile(path,folder/path.name)
+20 |     database=Database(replace(settings,migrations_dir=folder));database.initialize()
+   |                                                               ^
+21 |     return database,settings,identity,candidate,receipt,body,ref
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/integration/test_edit_publication_migration.py:30:32
+   |
+28 |         triggers={r['name']:r['sql'] for r in conn.execute("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name IN (?…
+29 |     before=table_hashes(old)
+30 |     upgraded=Database(settings);upgraded.initialize()
+   |                                ^
+31 |     with upgraded.connect() as conn:
+32 |         assert conn.execute('PRAGMA foreign_keys').fetchone()[0]==1
+   |
+
+E701 Multiple statements on one line (colon)
+  --> tests/integration/test_edit_publication_migration.py:36:51
+   |
+34 |         assert rows=={t:[tuple(x) for x in conn.execute(f'SELECT rowid,* FROM {t} ORDER BY rowid')] for t in TABLES}
+35 |         assert triggers=={r['name']:r['sql'] for r in conn.execute("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_na…
+36 |         with pytest.raises(sqlite3.IntegrityError):conn.execute("UPDATE draft_publication_results SET record_json='{}'")
+   |                                                   ^
+37 |     after=table_hashes(upgraded)
+38 |     assert {k:v for k,v in before.items() if k!='schema_migrations'}=={k:v for k,v in after.items() if k!='schema_migrations'}
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/integration/test_edit_publication_migration.py:50:62
+   |
+48 |     with old.connect() as conn:
+49 |         schema=[tuple(r) for r in conn.execute("SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name")]
+50 |     path=settings.migrations_dir/'0020_edit_publications.sql';text=path.read_text()
+   |                                                              ^
+51 |     marker='DROP TABLE draft_publications;' if location=='after_drop' else 'DROP TABLE edit_publication_copy_check;'
+52 |     text=text.replace(marker,marker+'\nSELECT synthetic_unavailable_function();',1)
+   |
+
+E702 Multiple statements on one line (semicolon)
+  --> tests/integration/test_edit_publication_migration.py:53:49
+   |
+51 |     marker='DROP TABLE draft_publications;' if location=='after_drop' else 'DROP TABLE edit_publication_copy_check;'
+52 |     text=text.replace(marker,marker+'\nSELECT synthetic_unavailable_function();',1)
+53 |     target=old.settings.migrations_dir/path.name;target.write_text(text)
+   |                                                 ^
+54 |     with pytest.raises(sqlite3.OperationalError):old.initialize()
+55 |     assert table_hashes(old)==before
+   |
+
+E701 Multiple statements on one line (colon)
+  --> tests/integration/test_edit_publication_migration.py:54:49
+   |
+52 |     text=text.replace(marker,marker+'\nSELECT synthetic_unavailable_function();',1)
+53 |     target=old.settings.migrations_dir/path.name;target.write_text(text)
+54 |     with pytest.raises(sqlite3.OperationalError):old.initialize()
+   |                                                 ^
+55 |     assert table_hashes(old)==before
+56 |     with old.connect() as conn:
+   |
+
+Found 27 errors.

@@ -1,0 +1,107 @@
+{
+  "task_id": "M6.2",
+  "requirement_ids": [
+    "R-21",
+    "R-22",
+    "R-24",
+    "R-27",
+    "R-29",
+    "R-36",
+    "R-38"
+  ],
+  "spec_sha256": "2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d",
+  "implementation_commit": "d1bc330611bc5a315957c07f8d3cee266a5a13e8",
+  "recorded_at": "2026-09-28T00:49:04.360965+00:00",
+  "changed_paths": [
+    "tests/blob_fd_probe.py",
+    "tests/unit/test_content_store.py"
+  ],
+  "commands": [
+    {
+      "stage": "controlled-red",
+      "code_commit": "72e4e64ce0e97b444146fe237efee9f199da16dc",
+      "command": [
+        ".venv/bin/pytest",
+        "-q",
+        "-p",
+        "fd_probe",
+        "tests/unit/test_content_store.py::test_repeated_unsafe_reads_and_writes_do_not_leak_file_descriptors"
+      ],
+      "start": "2026-09-22T09:30:14.634069+00:00",
+      "finish": "2026-09-22T09:30:14.848360+00:00",
+      "seconds": 0.2592266089995974,
+      "exit_code": 1,
+      "timeout": false,
+      "source_count": 964,
+      "source_unchanged": true,
+      "all_source_matches_git_before": true,
+      "all_source_matches_git_after": true,
+      "log_bytes": 1672,
+      "log_sha256": "87436292c1b3262232027d440a7a22e7ae94b1a94f82fd612e998b312516a153"
+    },
+    {
+      "stage": "python",
+      "code_commit": "d1bc330611bc5a315957c07f8d3cee266a5a13e8",
+      "command": [
+        ".venv/bin/pytest",
+        "-q",
+        "tests/unit/test_content_store.py"
+      ],
+      "start": "2026-09-22T09:32:00.869034+00:00",
+      "finish": "2026-09-22T09:32:01.283960+00:00",
+      "seconds": 0.45536108699889155,
+      "exit_code": 0,
+      "timeout": false,
+      "source_count": 965,
+      "source_unchanged": true,
+      "all_source_matches_git_before": true,
+      "all_source_matches_git_after": true,
+      "log_bytes": 99,
+      "log_sha256": "0789931433283cee26d72cb8a9c8c368b8bfd0b0bda3c42cd6dc46e6a0c36507"
+    },
+    {
+      "stage": "ruff",
+      "code_commit": "d1bc330611bc5a315957c07f8d3cee266a5a13e8",
+      "command": [
+        ".venv/bin/ruff",
+        "check",
+        "."
+      ],
+      "start": "2026-09-22T09:32:00.847710+00:00",
+      "finish": "2026-09-22T09:32:00.879477+00:00",
+      "seconds": 0.07065387800321332,
+      "exit_code": 0,
+      "timeout": false,
+      "source_count": 965,
+      "source_unchanged": true,
+      "all_source_matches_git_before": true,
+      "all_source_matches_git_after": true,
+      "log_bytes": 19,
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    }
+  ],
+  "exit_codes": {
+    "controlled-red": 1,
+    "python": 0,
+    "ruff": 0
+  },
+  "test_summary": "70 content-store tests and Ruff PASS; original whole-process descriptor assertion real RED under unrelated closure; exact child fd identity checks retain leak/closure/replacement failures. Original whole-suite failure preserved; its precise closed descriptor remains unknown.",
+  "screenshot_paths": [],
+  "migrations": [],
+  "security_review": "Exact candidate/history bindings, unchanged production error contracts and no real credential inputs. Public source/evidence scanned; raw/public path transformations replayed. Synthetic tests prove only their named behavior; no genuine human approval.",
+  "not_run": [
+    "Current main full combined gate",
+    "Review service/worker/HTTP/human approval/publication",
+    "Platform real DeepSeek Agent",
+    "Successful sealed numeric execution"
+  ],
+  "blockers": [
+    "Production input proof missing",
+    "Sealed numeric runtime unavailable",
+    "Original Tutor/group CI browser failures unresolved"
+  ],
+  "next_task_id": "M6.2",
+  "evidence_paths": [
+    "progress/evidence/2026-09-28/M6.2-blob-fd-test-repair/manifest.json"
+  ]
+}

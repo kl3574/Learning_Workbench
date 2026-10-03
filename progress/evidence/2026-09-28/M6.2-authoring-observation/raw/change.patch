@@ -1,0 +1,631 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index b370cea..73b39e3 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -114,6 +114,7 @@ jobs:
+             ${{ runner.temp }}/learning-workbench-e2e-results/**/test-failed*.png
+             ${{ runner.temp }}/learning-workbench-e2e-results/**/reader-load-diagnostic.json
+             ${{ runner.temp }}/learning-workbench-e2e-results/**/tutor-completion-diagnostic.json
++            ${{ runner.temp }}/learning-workbench-e2e-results/**/authoring-prepare-diagnostic.json
+           retention-days: 3
+           if-no-files-found: warn
+           include-hidden-files: false
+diff --git a/apps/web/src/features/authoring/authoringObservation.test.ts b/apps/web/src/features/authoring/authoringObservation.test.ts
+new file mode 100644
+index 0000000..1618b9c
+--- /dev/null
++++ b/apps/web/src/features/authoring/authoringObservation.test.ts
+@@ -0,0 +1,60 @@
++import { afterEach, expect, test, vi } from 'vitest'
++import { authoringMark, authoringObservationHandle, createAuthoringObservation, safeAuthoringObservation } from './authoringObservation'
++
++const facts = { operation: 1, list_sequence: 2, working: true }
++const settle = async () => { for (let index = 0; index < 8; index++) await Promise.resolve() }
++afterEach(() => { vi.unstubAllGlobals(); authoringObservationHandle(); delete (globalThis as { __authoringObservationSnapshot?: unknown }).__authoringObservationSnapshot })
++
++test('default off requires both explicit synthetic switch and sink; disabling keeps an earlier snapshot safe', () => {
++  const sink = vi.fn(), clock = vi.spyOn(performance, 'now')
++  expect(authoringObservationHandle()).toBeUndefined()
++  vi.stubGlobal('__authoringDiagnosticMechanism', sink)
++  expect(authoringObservationHandle()).toBeUndefined()
++  expect(clock).not.toHaveBeenCalled()
++  vi.stubGlobal('__authoringObservationEnabled', true)
++  const handle = authoringObservationHandle()
++  authoringMark(handle, 'list_requested', facts)
++  const snapshot = (globalThis as { __authoringObservationSnapshot?: () => unknown }).__authoringObservationSnapshot!
++  const before = snapshot()
++  vi.stubGlobal('__authoringObservationEnabled', false)
++  authoringMark(handle, 'list_returned', facts)
++  expect(authoringObservationHandle()).toBeUndefined()
++  expect(snapshot()).toEqual(before)
++  expect(sink).not.toHaveBeenCalled()
++  clock.mockRestore()
++})
++
++test('closed metadata rejects arbitrary text, headers, values, foreign handles and invalid clocks', () => {
++  const sink = vi.fn(), ring = createAuthoringObservation('synthetic', sink, () => 4), handle = ring.begin()
++  ring.record(handle, 'list_requested', facts)
++  const value = ring.snapshot().records[0]
++  for (const extra of [{ text: 'PRIVATE_BODY' }, { headers: 'PRIVATE_HEADER' }, { error: 'PRIVATE_ERROR' }, { job_count: -1 }, { working: 'PRIVATE_VALUE' }, { stage: 'PRIVATE_STAGE' }]) expect(safeAuthoringObservation({ ...value, ...extra })).toBe(false)
++  ring.record({ epoch: 'synthetic', hook: 1 }, 'list_requested', facts)
++  ring.record(handle, 'list_requested', { ...facts, text: 'PRIVATE_BODY' } as typeof facts)
++  const brokenClock = createAuthoringObservation('clock', sink, () => { throw new Error('PRIVATE_CLOCK') })
++  brokenClock.record(brokenClock.begin(), 'list_requested', facts)
++  expect(ring.snapshot().invalid).toBe(2); expect(brokenClock.snapshot().invalid).toBe(1)
++  expect(JSON.stringify(ring.snapshot())).not.toContain('PRIVATE_')
++  const copied = ring.snapshot(); copied.records[0].working = false; copied.records.pop()
++  expect(ring.snapshot().records).toEqual([value]); expect(value.working).toBe(true)
++  ring.dispose(); brokenClock.dispose()
++})
++
++test('bounded stalled delivery cannot block or grow beyond the explicit ring capacity', async () => {
++  const sink = vi.fn(() => new Promise(() => undefined)), ring = createAuthoringObservation('bounded', sink, () => 1, 2), handle = ring.begin()
++  for (let count = 0; count < 1000; count++) ring.record(handle, 'list_requested', facts)
++  await settle()
++  expect(sink).toHaveBeenCalledTimes(1)
++  expect(ring.snapshot()).toMatchObject({ omitted: 998, invalid: 0, delivery_pending: 2, delivery_failures: 0 })
++  expect(ring.snapshot().records).toHaveLength(2)
++  ring.dispose()
++})
++
++test.each(['throw', 'reject'] as const)('a %s sink never escapes and records its own failure without exception text', async mode => {
++  const ring = createAuthoringObservation('failure', () => { if (mode === 'throw') throw new Error('PRIVATE_SINK'); return Promise.reject(new Error('PRIVATE_SINK')) }, () => 1)
++  expect(() => ring.record(ring.begin(), 'list_requested', facts)).not.toThrow()
++  await settle()
++  expect(ring.snapshot()).toMatchObject({ delivery_failures: 1, delivery_pending: 0 })
++  expect(JSON.stringify(ring.snapshot())).not.toContain('PRIVATE_')
++  ring.dispose()
++})
+diff --git a/apps/web/src/features/authoring/authoringObservation.ts b/apps/web/src/features/authoring/authoringObservation.ts
+new file mode 100644
+index 0000000..8d552ca
+--- /dev/null
++++ b/apps/web/src/features/authoring/authoringObservation.ts
+@@ -0,0 +1,84 @@
++const stages = ['lifecycle_reset', 'lifecycle_cleanup', 'operation_started', 'operation_finally', 'operation_finished', 'operation_discarded',
++  'ack_received', 'ack_persisted', 'operation_error', 'list_requested', 'list_returned', 'list_accepted', 'list_discarded', 'list_error', 'list_finally', 'rendered'] as const
++type Stage = typeof stages[number]
++type Handle = Readonly<{ epoch: string; hook: number }>
++type Facts = { operation: number; list_sequence: number; working: boolean; basis_operation?: number; basis_list_sequence?: number;
++  busy?: boolean; ready?: boolean; academic?: boolean; job_count?: number; reason?: 'scope' | 'superseded' }
++export type AuthoringObservationRecord = Handle & Facts & { ordinal: number; source_ms: number; stage: Stage }
++export type AuthoringObservationSnapshot = { epoch: string; records: AuthoringObservationRecord[]; omitted: number; invalid: number; delivery_failures: number; delivery_pending: number }
++const integer = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
++const factKeys = ['operation', 'list_sequence', 'working', 'basis_operation', 'basis_list_sequence', 'busy', 'ready', 'academic', 'job_count', 'reason']
++
++/** Reject arbitrary caller fields before either retaining or delivering metadata. */
++export function safeAuthoringObservation(value: unknown): value is AuthoringObservationRecord {
++  try {
++    if (!value || typeof value !== 'object' || Array.isArray(value)) return false
++    const row = value as Record<string, unknown>
++    return Object.keys(row).every(key => ['epoch', 'hook', 'ordinal', 'source_ms', 'stage', ...factKeys].includes(key))
++      && typeof row.epoch === 'string' && /^[A-Za-z0-9_-]{1,96}$/.test(row.epoch)
++      && integer(row.hook) && row.hook > 0 && integer(row.ordinal) && row.ordinal > 0
++      && typeof row.source_ms === 'number' && Number.isFinite(row.source_ms) && row.source_ms >= 0
++      && stages.includes(row.stage as Stage) && integer(row.operation) && integer(row.list_sequence) && typeof row.working === 'boolean'
++      && ['basis_operation', 'basis_list_sequence', 'job_count'].every(key => row[key] === undefined || integer(row[key]))
++      && ['busy', 'ready', 'academic'].every(key => row[key] === undefined || typeof row[key] === 'boolean')
++      && (row.reason === undefined || row.reason === 'scope' || row.reason === 'superseded')
++  } catch { return false }
++}
++
++/** Fixed metadata budget; a stalled or throwing sink cannot block the original operation. */
++export function createAuthoringObservation(epoch: string, sink: (batch: AuthoringObservationRecord[]) => unknown,
++  clock: () => number = () => performance.now(), capacity = 512) {
++  const records: AuthoringObservationRecord[] = [], handles = new WeakSet<Handle>()
++  const limit = Number.isSafeInteger(capacity) ? Math.max(1, Math.min(512, capacity)) : 512
++  let serial = 0, omitted = 0, invalid = 0, failures = 0, delivered = 0, pending = false, inFlight = 0, active = true
++  const flush = () => {
++    if (!active || pending || delivered === records.length) return
++    pending = true
++    queueMicrotask(() => {
++      if (!active) { pending = false; return }
++      const batch = records.slice(delivered, delivered + 64).map(value => ({ ...value }))
++      delivered += batch.length; inFlight = batch.length
++      void (async () => { try { await sink(batch) } catch { failures++ }
++        finally { pending = false; inFlight = 0; flush() } })()
++    })
++  }
++  return {
++    begin(): Handle | undefined {
++      if (!active || !/^[A-Za-z0-9_-]{1,96}$/.test(epoch)) return
++      const handle = Object.freeze({ epoch, hook: ++serial }); handles.add(handle); return handle
++    },
++    record(handle: Handle | undefined, stage: Stage, facts: Facts) {
++      try {
++        if (!active || !handle) return
++        if (!handles.has(handle) || Object.keys(facts).some(key => !factKeys.includes(key))) { invalid++; return }
++        const value = { ...handle, ...facts, stage, source_ms: clock(), ordinal: records.length + 1 }
++        if (!safeAuthoringObservation(value)) { invalid++; return }
++        if (records.length === limit) { omitted++; return }
++        records.push(Object.freeze(value)); flush()
++      } catch { invalid++ }
++    },
++    snapshot(): AuthoringObservationSnapshot { return { epoch, records: records.map(value => ({ ...value })), omitted, invalid,
++      delivery_failures: failures, delivery_pending: records.length - delivered + inFlight } },
++    dispose() { active = false },
++  }
++}
++
++type Sink = (batch: AuthoringObservationRecord[]) => unknown
++type Host = { __authoringObservationEnabled?: boolean; __authoringDiagnosticMechanism?: Sink; __authoringObservationSnapshot?: () => AuthoringObservationSnapshot }
++let observer: ReturnType<typeof createAuthoringObservation> | undefined, installedSink: Sink | undefined
++function installed() {
++  try {
++    const host = globalThis as Host
++    if (host.__authoringObservationEnabled !== true || typeof host.__authoringDiagnosticMechanism !== 'function') {
++      observer?.dispose(); observer = undefined; installedSink = undefined; return
++    }
++    if (!observer || installedSink !== host.__authoringDiagnosticMechanism) {
++      observer?.dispose(); installedSink = host.__authoringDiagnosticMechanism
++      observer = createAuthoringObservation(crypto.randomUUID(), installedSink)
++      host.__authoringObservationSnapshot = observer.snapshot
++    }
++    return observer
++  } catch { return }
++}
++export const authoringObservationHandle = () => installed()?.begin()
++export function authoringMark(handle: Handle | undefined, stage: Stage, facts: Facts) { installed()?.record(handle, stage, facts) }
+diff --git a/apps/web/src/features/authoring/useAuthoring.ts b/apps/web/src/features/authoring/useAuthoring.ts
+index 27be606..36d993d 100644
+--- a/apps/web/src/features/authoring/useAuthoring.ts
++++ b/apps/web/src/features/authoring/useAuthoring.ts
+@@ -5,6 +5,7 @@ import { digest } from '../retrieval/retrievalModel'
+ import { sameValue } from '../providers/providerSchema'
+ import { authoringClient, type AuthoringPort } from './authoringClient'
+ import { authoringCommandStore, authoringControlStore, checkedAuthoring, makeAuthoringCommand, persistAuthoringCommand, readAuthoringCommand, type AuthoringCommand, type AuthoringCommandInput } from './authoringCommands'
++import { authoringMark, authoringObservationHandle } from './authoringObservation'
+ 
+ const policyDenied = (reason: unknown) => reason instanceof ApiError && (reason.status === 401 || reason.status === 403 || ['ASSESSMENT_ACTIVE', 'POLICY_DENIED', 'ASSESSMENT_ANSWER_PROTECTED'].includes(reason.code ?? ''))
+ 
+@@ -12,6 +13,10 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
+   const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
+   const owner = JSON.stringify([workspace, access]), scope = useRef({ owner, paused }); scope.current = { owner, paused }
+   const operation = useRef(0), listOperation = useRef(0), working = useRef(false)
++  const observation = useRef<ReturnType<typeof authoringObservationHandle>>(undefined)
++  if (!observation.current) observation.current = authoringObservationHandle()
++  const mark = (stage: Parameters<typeof authoringMark>[1], facts: Partial<Parameters<typeof authoringMark>[2]> = {}) =>
++    authoringMark(observation.current, stage, { operation: operation.current, list_sequence: listOperation.current, working: working.current, ...facts })
+   const subjectWrites = useRef(new Set<AbortController>())
+   const abortSubjectWrites = () => { for (const controller of subjectWrites.current) controller.abort() }
+   const [renderOwner, setRenderOwner] = useState(owner), [permission, setPermission] = useState(false), [denied, setDenied] = useState(false)
+@@ -44,16 +49,24 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
+   }
+   const loadList = async (more = false) => {
+     const sequence = ++listOperation.current
+-    const page = await port.list(more ? cursor ?? undefined : undefined)
+-    // Initial discovery can overlap a post-command refresh. Only the current
+-    // lifecycle's newest list may replace controls, including its cursor.
+-    if (!current() || sequence !== listOperation.current) return
+-    const values = page.items.map(checkedJob), combined = more ? [...jobs, ...values] : values
+-    if (new Set(combined.map(v => v.id)).size !== combined.length || more && cursor && page.next_cursor === cursor) throw new Error('Control pagination mismatch')
+-    if (current()) { setJobs(combined); setCursor(page.next_cursor) }
++    mark('list_requested', { basis_list_sequence: sequence })
++    try {
++      const page = await port.list(more ? cursor ?? undefined : undefined)
++      mark('list_returned', { basis_list_sequence: sequence })
++      // Initial discovery can overlap a post-command refresh. Only the current
++      // lifecycle's newest list may replace controls, including its cursor.
++      const inScope = current()
++      if (!inScope || sequence !== listOperation.current) { mark('list_discarded', { basis_list_sequence: sequence, reason: inScope ? 'superseded' : 'scope' }); return }
++      const values = page.items.map(checkedJob), combined = more ? [...jobs, ...values] : values
++      if (new Set(combined.map(v => v.id)).size !== combined.length || more && cursor && page.next_cursor === cursor) throw new Error('Control pagination mismatch')
++      if (current()) { setJobs(combined); setCursor(page.next_cursor); mark('list_accepted', { basis_list_sequence: sequence, job_count: combined.length }) }
++      else mark('list_discarded', { basis_list_sequence: sequence, reason: 'scope' })
++    } catch (reason) { mark('list_error', { basis_list_sequence: sequence }); throw reason }
++    finally { mark('list_finally', { basis_list_sequence: sequence }) }
+   }
+   useEffect(() => {
+     const sequence = ++operation.current; working.current = false; academicRef.current = false
++    mark('lifecycle_reset')
+     setRenderOwner(owner); setPermission(false); setDenied(false); clearSubject(); setJobs([]); setCursor(null); setCommands([]); setReady(false); setBusy(false); setError('')
+     if (!workspace) return
+     let live = true
+@@ -67,10 +80,15 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
+       setPermission(allowed)
+       if (allowed) { const values = await loadCommands(true); if (valid() && !scope.current.paused) { setCommands(values); setSubjectReady(true) } }
+     }).catch(failure => { if (valid()) fail(failure) })
+-    return () => { live = false; ++operation.current; ++listOperation.current; working.current = false; abortSubjectWrites() }
++    return () => { live = false; ++operation.current; ++listOperation.current; working.current = false; abortSubjectWrites(); mark('lifecycle_cleanup') }
+   }, [owner, paused, port])
+-  const begin = (subject: boolean) => { if (!current(subject) || working.current) return null; working.current = true; setBusy(true); setError(''); return ++operation.current }
+-  const finish = (sequence: number) => { if (current() && sequence === operation.current) { working.current = false; setBusy(false) } }
++  useEffect(() => { mark('rendered', { busy, ready, academic, job_count: jobs.length }) }, [busy, ready, academic, jobs])
++  const begin = (subject: boolean) => { if (!current(subject) || working.current) return null; working.current = true; setBusy(true); setError(''); const sequence = ++operation.current; mark('operation_started', { basis_operation: sequence }); return sequence }
++  const finish = (sequence: number) => {
++    mark('operation_finally', { basis_operation: sequence })
++    if (current() && sequence === operation.current) { working.current = false; setBusy(false); mark('operation_finished', { basis_operation: sequence }) }
++    else mark('operation_discarded', { basis_operation: sequence })
++  }
+   const refresh = async (more = false) => {
+     const sequence = begin(false); if (sequence === null) return
+     try {
+@@ -154,8 +172,10 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
+                   : await groupPort().decide(retained.check_id, retained.body, retained.command_id))
+       // Admit academic replies only while their original access scope is current.
+       // Safe control ACKs remain durable after a Policy change.
++      mark('ack_received', { basis_operation: sequence })
+       if (subject && (!current(true) || sequence !== operation.current)) return
+       await persistAuthoringCommand({ ...retained, rejection: null, ack } as AuthoringCommand, undefined, guard)
++      mark('ack_persisted', { basis_operation: sequence })
+       if (!current(subject) || sequence !== operation.current) return
+       const values = await loadCommands(academicRef.current && subjectReady)
+       if (!current(subject) || sequence !== operation.current) return
+@@ -164,6 +184,7 @@ export function useAuthoring(workspace: string, paused: boolean, port: Authoring
+     } catch (reason) {
+       // A Policy rejection invalidates subject writes before even persisting
+       // its error receipt. Original durable commands and safe controls remain.
++      mark('operation_error', { basis_operation: sequence })
+       if (policyDenied(reason) && current() && sequence === operation.current) fail(reason)
+       if (!policyDenied(reason) && reason instanceof ApiError && [400, 409, 412, 422].includes(reason.status)) {
+         try {
+diff --git a/apps/web/src/features/authoring/useAuthoringObservation.test.tsx b/apps/web/src/features/authoring/useAuthoringObservation.test.tsx
+new file mode 100644
+index 0000000..b565cab
+--- /dev/null
++++ b/apps/web/src/features/authoring/useAuthoringObservation.test.tsx
+@@ -0,0 +1,102 @@
++import 'fake-indexeddb/auto'
++import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
++import { afterEach, expect, test, vi } from 'vitest'
++import type { AuthoringGroupPrepareWrite, AuthoringJobPage, JobSnapshot, SessionResponse } from '../../../../../packages/contracts/generated/api-types'
++import type { AuthoringPort } from './authoringClient'
++import { useAuthoring } from './useAuthoring'
++
++type Observation = { stage: string; basis_list_sequence?: number; busy?: boolean; working: boolean; job_count?: number }
++afterEach(() => { cleanup(); vi.unstubAllGlobals() })
++
++function deferred<T>() {
++  let resolve!: (value: T) => void
++  const promise = new Promise<T>(done => { resolve = done })
++  return { promise, resolve }
++}
++
++function fixture() {
++  const workspace = `workspace_${crypto.randomUUID()}`, records: Observation[] = []
++  vi.stubGlobal('__authoringObservationEnabled', true)
++  vi.stubGlobal('__authoringDiagnosticMechanism', (batch: Observation[]) => { records.push(...batch) })
++  const job: JobSnapshot = { id: 'authoring_observed', workspace_id: workspace, kind: 'authoring', status: 'awaiting_approval', revision: 1, created_at: '2026-09-28T00:00:00Z', updated_at: '2026-09-28T00:00:00Z', progress: { completed: 0, total: null, label: '等待明确授权' }, result_refs: [], warnings: [], error: null }
++  const session: SessionResponse = { workspace_id: workspace, role: 'author', csrf_token: 'SYNTHETIC_PRIVATE_CSRF_NOT_OBSERVED', active_independent_attempt_id: null, active_open_book_attempt_id: null }
++  const body: AuthoringGroupPrepareWrite = { output_kind: 'practice_set', topic: 'SYNTHETIC_PRIVATE_TOPIC_NOT_OBSERVED', prerequisites: [], objectives: ['合成观察'], proof_policy: 'full', provider_id: 'provider_synthetic', source_refs: [], target_concept_refs: [{ entity: 'concept', id: 'concept_synthetic', revision: 1, sha256: 'a'.repeat(64) }], lesson_ref: { entity: 'lesson', id: 'lesson_synthetic', revision: 1, sha256: 'b'.repeat(64) } }
++  const unavailable = vi.fn(async (): Promise<never> => { throw new Error('Unexpected operation') })
++  const prepare = vi.fn<NonNullable<AuthoringPort['groups']>['prepare']>().mockRejectedValueOnce(new Error('SYNTHETIC_PRIVATE_LOST_ACK')).mockResolvedValue({ id: job.id, status: job.status })
++  const port: AuthoringPort = { session: vi.fn(async () => session), list: vi.fn(async () => ({ items: [job], next_cursor: null })), job: vi.fn(async () => job),
++    prepare: unavailable, read: unavailable, draft: unavailable, preview: unavailable, numeric: unavailable, decide: unavailable, cancel: unavailable,
++    groups: { prepare, draft: unavailable, solution: unavailable, preview: unavailable, numeric: unavailable, decide: unavailable } }
++  return { workspace, records, job, port, prepare, input: { kind: 'group_prepare' as const, body } }
++}
++
++test('observes a held list after the real original ACK persistence without inventing current controls or extra calls', async () => {
++  const f = fixture(), pending = deferred<AuthoringJobPage>()
++  f.port.list = vi.fn<AuthoringPort['list']>().mockResolvedValueOnce({ items: [], next_cursor: null }).mockReturnValueOnce(pending.promise)
++  const hook = renderHook(() => useAuthoring(f.workspace, false, f.port))
++  await waitFor(() => expect(hook.result.current.ready && hook.result.current.academic).toBe(true))
++  await act(() => hook.result.current.create(f.input))
++  const original = hook.result.current.commands[0]
++  let replay!: Promise<void>
++  act(() => { replay = hook.result.current.execute(original) })
++  try {
++    await waitFor(() => expect(hook.result.current.commands[0].ack).toEqual({ id: f.job.id, status: f.job.status }))
++    expect(hook.result.current.jobs).toEqual([]); expect(hook.result.current.busy).toBe(true)
++    await waitFor(() => expect(f.records.some(r => r.stage === 'list_requested' && r.basis_list_sequence === 2)).toBe(true))
++    expect(f.records.some(r => r.stage === 'ack_persisted')).toBe(true)
++    expect(f.records.some(r => r.stage === 'list_accepted' && r.basis_list_sequence === 2)).toBe(false)
++  } finally { await act(async () => { pending.resolve({ items: [f.job], next_cursor: null }); await replay }) }
++  expect(hook.result.current.jobs).toEqual([f.job]); expect(hook.result.current.busy).toBe(false)
++  await waitFor(() => expect(f.records.some(r => r.stage === 'rendered' && r.busy === false && r.job_count === 1)).toBe(true))
++  expect(f.records.some(r => r.stage === 'operation_finally')).toBe(true)
++  expect(f.records.some(r => r.stage === 'operation_error')).toBe(true)
++  expect(f.records.some(r => r.stage === 'ack_received')).toBe(true)
++  expect(f.prepare).toHaveBeenCalledTimes(2); expect(f.port.list).toHaveBeenCalledTimes(2)
++  expect(f.prepare).toHaveBeenNthCalledWith(2, original.body, original.command_id)
++  expect(JSON.stringify(f.records)).not.toContain('SYNTHETIC_PRIVATE_')
++  expect(JSON.stringify(f.records)).not.toContain(original.command_id)
++})
++
++test('observes the existing late-list discard while keeping the current result authoritative', async () => {
++  const f = fixture(), initial = deferred<AuthoringJobPage>()
++  f.port.list = vi.fn<AuthoringPort['list']>().mockReturnValueOnce(initial.promise).mockResolvedValue({ items: [f.job], next_cursor: null })
++  const hook = renderHook(() => useAuthoring(f.workspace, false, f.port))
++  await waitFor(() => expect(hook.result.current.ready && hook.result.current.academic).toBe(true))
++  await act(() => hook.result.current.refresh())
++  await act(async () => { initial.resolve({ items: [], next_cursor: null }); await initial.promise })
++  expect(hook.result.current.jobs).toEqual([f.job]); expect(hook.result.current.busy).toBe(false)
++  await waitFor(() => expect(f.records.some(r => r.stage === 'list_discarded' && r.basis_list_sequence === 1)).toBe(true))
++  expect(f.port.list).toHaveBeenCalledTimes(2); expect(f.prepare).not.toHaveBeenCalled()
++})
++
++test('observes list failure and finally without retaining its arbitrary exception or changing busy recovery', async () => {
++  const f = fixture()
++  f.port.list = vi.fn<AuthoringPort['list']>().mockResolvedValueOnce({ items: [f.job], next_cursor: null }).mockRejectedValue(new Error('SYNTHETIC_PRIVATE_EXCEPTION'))
++  const hook = renderHook(() => useAuthoring(f.workspace, false, f.port))
++  await waitFor(() => expect(hook.result.current.ready && hook.result.current.academic).toBe(true))
++  await act(() => hook.result.current.refresh())
++  expect(hook.result.current.jobs).toEqual([f.job]); expect(hook.result.current.busy).toBe(false)
++  await waitFor(() => expect(f.records.some(r => r.stage === 'list_error')).toBe(true))
++  expect(f.records.some(r => r.stage === 'list_finally')).toBe(true)
++  expect(JSON.stringify(f.records)).not.toContain('SYNTHETIC_PRIVATE_')
++  expect(f.port.list).toHaveBeenCalledTimes(2)
++})
++
++test.each(['off', 'blocked', 'throwing'] as const)('the %s observer preserves original replay, request counts and actual busy recovery', async mode => {
++  const f = fixture()
++  if (mode === 'off') vi.stubGlobal('__authoringObservationEnabled', false)
++  else vi.stubGlobal('__authoringDiagnosticMechanism', () => { if (mode === 'throwing') throw new Error('PRIVATE_SINK'); return new Promise(() => undefined) })
++  f.port.list = vi.fn<AuthoringPort['list']>().mockResolvedValueOnce({ items: [], next_cursor: null }).mockResolvedValue({ items: [f.job], next_cursor: null })
++  const hook = renderHook(() => useAuthoring(f.workspace, false, f.port))
++  await waitFor(() => expect(hook.result.current.ready && hook.result.current.academic).toBe(true))
++  await act(() => hook.result.current.create(f.input))
++  const original = hook.result.current.commands[0]
++  expect(original.ack).toBeNull(); expect(hook.result.current.busy).toBe(false)
++  await act(() => hook.result.current.execute(original))
++  expect(hook.result.current.commands[0].ack).toEqual({ id: f.job.id, status: f.job.status })
++  expect(hook.result.current.commands[0].command_id).toBe(original.command_id)
++  expect(hook.result.current.jobs).toEqual([f.job]); expect(hook.result.current.busy).toBe(false)
++  expect(f.prepare).toHaveBeenCalledTimes(2); expect(f.port.list).toHaveBeenCalledTimes(2); expect(f.port.session).toHaveBeenCalledTimes(1)
++  expect(f.prepare).toHaveBeenNthCalledWith(1, original.body, original.command_id)
++  expect(f.prepare).toHaveBeenNthCalledWith(2, original.body, original.command_id)
++  expect(f.records).toEqual([])
++})
+diff --git a/docs/adr/0020-authoring-candidate-and-numeric-check.md b/docs/adr/0020-authoring-candidate-and-numeric-check.md
+index b019b09..a8aad21 100644
+--- a/docs/adr/0020-authoring-candidate-and-numeric-check.md
++++ b/docs/adr/0020-authoring-candidate-and-numeric-check.md
+@@ -26,3 +26,13 @@ NumericRuntime 使用封存的文件描述符覆盖解释器、标准库、加
+ 前端采用生成的具名 DTO，复用 Provider 冻结授权和原命令存储。学科读取权限与安全取消入口分开判断；会话、工作区或策略变化废弃旧异步学科投影。新的数值预览需要与检查身份绑定的再次确认。辅助入口保留原关闭保护，不增加主导航。
+ 
+ 原始失败、独立反例和修后结果均保存在 progress/evidence/2026-09-16。受控本机 Provider、组件测试和纯算术测试分别证明其限定范围。本机封存执行实际被 AppArmor 拒绝，成功隔离计算和运行时资源限制未验收。生产 InputProof 仍为空；真实平台 DeepSeek、所有 M6.1 生成类型、人类数学/来源审核和教学效果均不能由此记录推定通过。
++
++## 合成 prepare ACK 回放的被动观察
++
++依据当前唯一规范 v3.0.7 §14、§17.3、§18.4、§20.8，507 的真实 PR 浏览器失败仍记录为原因 UNKNOWN：原 prepare ACK 回放后，详情按钮的原 10 秒 click 失败。确认回执、空列表及忙状态的截图不能证明列表请求已返回、已解析或已被当前 Hook 接受。
++
++默认关闭的 Authoring 观察环仅由合成 E2E 同时提供显式开关和接收函数后启用。它记录 Hook 实例、操作与列表序号、ACK 接收/落盘、列表返回/接受/丢弃/错误/finally、操作结束以及 React 实际提交的忙状态和任务数量；不记录正文、对象 ID、工作区、原命令、凭据或异常文本。每个页面 epoch 最多 512 条、每批最多 64 条、一次只允许一批投递；接收器失败或停滞不等待、不重试业务操作。
++
++原合成回放用例只在原详情 click 周围冻结观察，保持原 10 秒等待及原请求/断言。Node 使用实际 Playwright Request 对象分配唯一 ID，分别记录请求、响应状态、body 传输结束或失败；不读取 body、header 值或 query。Node 网络事件上限 2000，已投递 Hook 记录上限 1024。click 返回或抛错时同步冻结已收到记录，再以 250 毫秒上限保存诊断；保留原错误对象，诊断写入失败不改变业务断言。
++
++浏览器 epoch 的 source_ms 与 Node delivered_ms 各自独立，禁止相减或据其拼接跨钟因果；也不猜测并发同路径 HTTP 请求对应哪个 Hook 序号。未收到的记录、页面环溢出及未完成投递均属未知，不用零条记录声称某动作未发生。requestfinished 仅证明传输结束，不能证明 JSON 校验、当前权限检查或 UI 接受。受控 Hook 和真实浏览器观察器测试验证元数据边界、容量、忙状态、原错误与冻结时点；它们不重跑原 CI 直到绿，也不构成原失败根因或产品修复的验收。
+diff --git a/tests/e2e/authoring-diagnostic.spec.ts b/tests/e2e/authoring-diagnostic.spec.ts
+new file mode 100644
+index 0000000..6cd2302
+--- /dev/null
++++ b/tests/e2e/authoring-diagnostic.spec.ts
+@@ -0,0 +1,88 @@
++import { createServer, type ServerResponse } from 'node:http'
++import { readFile } from 'node:fs/promises'
++import { expect, test } from '../../apps/web/node_modules/@playwright/test/index.mjs'
++import { observeAuthoringPrepare } from './authoringDiagnostic'
++
++test('Authoring diagnostic preserves the original ten-second click error and excludes late deliveries and private text', async ({ page }, info) => {
++  page.setDefaultTimeout(10_000)
++  await page.setContent('<pre>PRIVATE_BODY</pre><input value="PRIVATE_CREDENTIAL">')
++  const observer = await observeAuthoringPrepare(page)
++  let original: unknown, caught: unknown
++  try {
++    await page.evaluate(async () => {
++      const sink = (globalThis as { __authoringDiagnosticMechanism?: (value: unknown) => Promise<void> }).__authoringDiagnosticMechanism!
++      const value = { epoch: 'synthetic', hook: 1, ordinal: 1, source_ms: 7, stage: 'rendered', operation: 3, list_sequence: 2, working: true, busy: true, ready: true, academic: true, job_count: 0 }
++      await sink([{ ...value, text: 'PRIVATE_BODY' }]); await sink([value])
++    })
++    try {
++      await observer.around(info, async () => {
++        try { await page.getByRole('button', { name: 'Absent prepared detail', exact: true }).click() }
++        catch (error) { original = error; throw error }
++      })
++    } catch (error) { caught = error }
++    expect(original).toBeInstanceOf(Error); expect(caught).toBe(original)
++    expect(String(caught)).toContain('10000ms')
++    const path = info.outputPath('authoring-prepare-diagnostic.json'), raw = await readFile(path, 'utf8'), value = JSON.parse(raw)
++    expect(raw).not.toContain('PRIVATE_')
++    expect(value.assertion.verdict).toBe('failed'); expect(value.assertion.original_click_timeout_ms).toBe(10000)
++    expect(value.frozen_observation.events).toEqual([])
++    expect(value.mechanism.invalid_deliveries).toBe(1)
++    expect(value.mechanism.frozen_browser_records).toHaveLength(1)
++    expect(value.mechanism.frozen_browser_records[0]).toMatchObject({ busy: true, job_count: 0, stage: 'rendered' })
++    expect(value.mechanism.frozen_browser_records[0].delivered_ms).toBeLessThanOrEqual(value.assertion.frozen_at_ms)
++    await page.evaluate(async () => { await (globalThis as { __authoringDiagnosticMechanism?: (value: unknown) => Promise<void> }).__authoringDiagnosticMechanism!([{ text: 'PRIVATE_LATE' }]) })
++    expect(await readFile(path, 'utf8')).toBe(raw)
++  } finally { observer.dispose() }
++})
++
++test('actual requests retain separate identities and distinguish response headers from body completion at the freeze', async ({ page }, info) => {
++  const responses = new Map<string, ServerResponse>()
++  const server = createServer((request, response) => {
++    if (!request.url?.startsWith('/api/v1/authoring/jobs')) { response.end('<button>Freeze</button>'); return }
++    responses.set(new URL(request.url, 'http://127.0.0.1').searchParams.get('which')!, response)
++    response.writeHead(200, { 'Content-Type': 'application/json', 'X-Synthetic-Private': 'PRIVATE_RESPONSE_HEADER' })
++    response.write('{"private":"PRIVATE_BODY')
++  })
++  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
++  const address = server.address()
++  if (!address || typeof address === 'string') throw new Error('Missing controlled server')
++  let observer: Awaited<ReturnType<typeof observeAuthoringPrepare>> | undefined
++  try {
++    await page.goto(`http://127.0.0.1:${address.port}`); page.setDefaultTimeout(10_000)
++    observer = await observeAuthoringPrepare(page)
++    const returned = Promise.all(['first', 'second'].map(name => page.waitForResponse(response => response.url().includes(`which=${name}`))))
++    await page.evaluate(() => {
++      for (const name of ['first', 'second']) void fetch(`/api/v1/authoring/jobs?which=${name}&cursor=PRIVATE_QUERY`, { headers: { 'X-Synthetic': 'PRIVATE_REQUEST_HEADER' } }).then(response => response.text())
++    })
++    await returned
++    expect(responses.size).toBe(2)
++    const bodyFinished = page.waitForEvent('requestfinished', { predicate: request => request.url().includes('which=first') })
++    responses.get('first')!.end('"}'); await bodyFinished
++    await observer.around(info, () => page.getByRole('button', { name: 'Freeze', exact: true }).click())
++    const path = info.outputPath('authoring-prepare-diagnostic.json'), raw = await readFile(path, 'utf8'), value = JSON.parse(raw)
++    const events = value.frozen_observation.events as Array<{ kind: string; id: number; path?: string; status?: number; elapsed_ms: number }>
++    const requests = events.filter(event => event.kind === 'request'), completions = events.filter(event => event.kind === 'finished')
++    expect(requests).toHaveLength(2); expect(new Set(requests.map(event => event.id)).size).toBe(2)
++    expect(requests.map(event => event.path)).toEqual(['/api/v1/authoring/jobs', '/api/v1/authoring/jobs'])
++    expect(events.filter(event => event.kind === 'response').map(event => event.status)).toEqual([200, 200])
++    expect(completions).toHaveLength(1); expect(requests.some(event => event.id === completions[0].id)).toBe(true)
++    expect(events.every(event => event.elapsed_ms <= value.assertion.frozen_at_ms)).toBe(true)
++    expect(value.assertion.verdict).toBe('passed'); expect(value.frozen_observation.observer_errors).toBe(0)
++    expect(value.mechanism.source_delivery_completeness).toBe('unknown'); expect(raw).not.toContain('PRIVATE_')
++    const lateFinished = page.waitForEvent('requestfinished', { predicate: request => request.url().includes('which=second') })
++    responses.get('second')!.end('"}'); await lateFinished
++    expect(await readFile(path, 'utf8')).toBe(raw); expect(responses.size).toBe(2)
++  } finally { observer?.dispose(); for (const response of responses.values()) response.end(); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())) }
++})
++
++test('diagnostic storage failure preserves both a successful assertion and the exact original failure', async ({ page }) => {
++  await page.setContent('<button>Available</button>')
++  const brokenInfo = { outputPath() { throw new Error('PRIVATE_STORAGE') } } as unknown as Parameters<Awaited<ReturnType<typeof observeAuthoringPrepare>>['around']>[0]
++  const first = await observeAuthoringPrepare(page)
++  await first.around(brokenInfo, () => page.getByRole('button', { name: 'Available', exact: true }).click())
++  first.dispose()
++  // A separate page keeps the one-binding-per-page observation contract explicit.
++  const other = await page.context().newPage(), second = await observeAuthoringPrepare(other), original = new Error('PRIVATE_ORIGINAL')
++  try { await expect(second.around(brokenInfo, async () => { throw original })).rejects.toBe(original) }
++  finally { second.dispose(); await other.close() }
++})
+diff --git a/tests/e2e/authoring-groups.spec.ts b/tests/e2e/authoring-groups.spec.ts
+index ee584fd..d64ecf9 100644
+--- a/tests/e2e/authoring-groups.spec.ts
++++ b/tests/e2e/authoring-groups.spec.ts
+@@ -2,6 +2,7 @@ import { writeFileSync } from 'node:fs'
+ import { expect, test, type BrowserType, type Locator, type Page, type TestInfo } from '../../apps/web/node_modules/@playwright/test/index.mjs'
+ import type { AuthoringGroupDraftView, AuthoringGroupJobView, AuthoringGroupNumericCheckView, AuthoringPrivateSolutionView, ConsentProposalView, JobRef, JobSnapshot, NumericCheckDecisionAck, SessionResponse } from '../../packages/contracts/generated/api-types'
+ import { AuthoringRuntime } from './authoringRuntime'
++import { observeAuthoringPrepare } from './authoringDiagnostic'
+ 
+ const providerId = 'provider_authoring_group_native'
+ const topic = '原创合成组合创作'
+@@ -43,9 +44,11 @@ async function form(page: Page, kind: 'lesson' | 'practice_set' | 'assessment')
+   }
+   return dialog
+ }
+-async function readPrepared(page: Page, dialog: Locator, ack: JobRef) {
++async function readPrepared(page: Page, dialog: Locator, ack: JobRef, diagnostic?: { observer: Awaited<ReturnType<typeof observeAuthoringPrepare>>; info: TestInfo }) {
+   expect(ack.status).toBe('awaiting_approval')
+-  await dialog.getByRole('button', { name: `读取创作详情 ${ack.id}`, exact: true }).click()
++  const click = () => dialog.getByRole('button', { name: `读取创作详情 ${ack.id}`, exact: true }).click()
++  if (diagnostic) await diagnostic.observer.around(diagnostic.info, click)
++  else await click()
+   await expect(dialog.getByRole('region', { name: '受保护创作详情', exact: true })).toBeVisible()
+   const result: AuthoringGroupJobView = await page.request.get(`/api/v1/authoring/jobs/${ack.id}`).then(value => value.json())
+   expect(result.variant).toBe('group'); expect(result.request.source_refs).toEqual([])
+@@ -294,8 +297,10 @@ test('native lesson group preserves its plan and formulas, then separately decli
+ test('native practice group replays its lost prepare ACK with one key and clears explicitly read private answers after permission changes', async ({ playwright }, info) => {
+   test.setTimeout(120_000)
+   const runtime = await AuthoringRuntime.start('practice_set', 'groups'), errors: string[] = []
++  let observer: Awaited<ReturnType<typeof observeAuthoringPrepare>> | undefined
+   try {
+     const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]
++    observer = await observeAuthoringPrepare(page)
+     page.on('pageerror', error => errors.push(error.message))
+     await runtime.authenticateOnly(page); await configure(page, runtime)
+     const dialog = await form(page, 'practice_set')
+@@ -319,7 +324,7 @@ test('native practice group replays its lost prepare ACK with one key and clears
+     const replay = await replaying; expect(replay.status()).toBe(202); expect(await replay.json()).toEqual(originalAck)
+     expect(attempts).toHaveLength(2); expect(attempts[1]).toEqual(attempts[0])
+     await page.unroute('**/api/v1/authoring/group-jobs')
+-    const prepared = await readPrepared(page, dialog, originalAck)
++    const prepared = await readPrepared(page, dialog, originalAck, { observer, info })
+     expect(prepared.preparation.targets.map(value => value.ref.entity)).toEqual(['lesson', 'concept'])
+     const { completed, draft, group, proposal } = await grant(page, dialog, originalAck)
+     expect(draft.root.entity).toBe('practice_set')
+@@ -343,7 +348,7 @@ test('native practice group replays its lost prepare ACK with one key and clears
+     const recovery = await restartAndReadOriginal(runtime, playwright.chromium, completed, draft, solution, errors)
+     expect(errors).toEqual([])
+     writeFileSync(info.outputPath('group-practice-actual.json'), JSON.stringify({ scope: 'Lost browser prepare response after actual server commit, then explicit identical original command replay. One original Job and one actual loopback model dispatch. Exact existing Content targets, public/private separation and real role change clearing without page reload. No review or publication.', prepare_attempts: attempts, original_prepare_ack: originalAck, prepared, completed, proposal_id: proposal.id, draft, solution, cancellation, recovery, runtime: recovery.provider_before, bounds: { wide, narrow }, page_errors: errors }, null, 2))
+-  } finally { await runtime.close() }
++  } finally { observer?.dispose(); await runtime.close() }
+ })
+ 
+ 
+diff --git a/tests/e2e/authoringDiagnostic.ts b/tests/e2e/authoringDiagnostic.ts
+new file mode 100644
+index 0000000..4b53bca
+--- /dev/null
++++ b/tests/e2e/authoringDiagnostic.ts
+@@ -0,0 +1,89 @@
++import { randomUUID } from 'node:crypto'
++import { performance } from 'node:perf_hooks'
++import { rename, writeFile } from 'node:fs/promises'
++import type { Page, Request, Response, TestInfo } from '../../apps/web/node_modules/@playwright/test/index.mjs'
++import { safeAuthoringObservation, type AuthoringObservationRecord } from '../../apps/web/src/features/authoring/authoringObservation'
++
++async function within<T>(operation: Promise<T>, milliseconds: number, fallback: T): Promise<T> {
++  let timer: ReturnType<typeof setTimeout> | undefined
++  try { return await Promise.race([operation, new Promise<T>(resolve => { timer = setTimeout(() => resolve(fallback), milliseconds) })]) }
++  finally { clearTimeout(timer) }
++}
++
++/** Explicitly installed only by synthetic E2E. No HTTP request, body read or header
++ * is added. The WeakMap joins only the same actual Playwright Request object. */
++export async function observeAuthoringPrepare(page: Page) {
++  const epoch = randomUUID(), started = performance.now(), startedAt = new Date().toISOString()
++  const requests = new WeakMap<Request, number>(), events: object[] = []
++  const records: Array<AuthoringObservationRecord & { delivered_ms: number }> = []
++  let serial = 0, active = true, used = false, omitted = 0, invalid = 0, deliveryOmitted = 0, observerErrors = 0
++  const elapsed = () => performance.now() - started
++  const add = (value: object) => { if (active) { if (events.length < 2000) events.push({ elapsed_ms: elapsed(), ...value }); else omitted++ } }
++  const safely = (action: () => void) => { try { action() } catch { if (active) observerErrors++ } }
++  const requested = (request: Request) => safely(() => {
++    if (!active || request.frame() !== page.mainFrame()) return
++    const pathname = new URL(request.url()).pathname, method = request.method()
++    const path = pathname === '/api/v1/authoring/jobs' ? '/api/v1/authoring/jobs'
++      : pathname === '/api/v1/authoring/group-jobs' ? '/api/v1/authoring/group-jobs'
++        : pathname === '/api/v1/session' ? '/api/v1/session'
++          : /^\/api\/v1\/authoring\/jobs\/[^/]+$/.test(pathname) ? '/api/v1/authoring/jobs/:id' : null
++    if (!path || !['GET', 'POST'].includes(method)) return
++    const id = ++serial; requests.set(request, id); add({ kind: 'request', id, method, path })
++  })
++  const responded = (response: Response) => safely(() => { const id = requests.get(response.request()); if (id !== undefined) add({ kind: 'response', id, status: response.status() }) })
++  const finished = (request: Request) => safely(() => { const id = requests.get(request); if (id !== undefined) add({ kind: 'finished', id }) })
++  const failed = (request: Request) => safely(() => {
++    const id = requests.get(request)
++    if (id === undefined) return
++    const raw = request.failure()?.errorText
++    add({ kind: 'failed', id, failure: raw === 'net::ERR_ABORTED' || raw === 'net::ERR_FAILED' ? raw : 'REQUEST_FAILED' })
++  })
++  page.on('request', requested); page.on('response', responded)
++  page.on('requestfinished', finished); page.on('requestfailed', failed)
++  const dispose = () => { active = false; page.off('request', requested); page.off('response', responded); page.off('requestfinished', finished); page.off('requestfailed', failed) }
++  try {
++    await page.exposeBinding('__authoringDiagnosticMechanism', (source, batch: unknown) => safely(() => {
++      if (!active) return
++      if (source.frame !== page.mainFrame() || !Array.isArray(batch) || batch.length > 64) { invalid++; return }
++      for (const item of batch) {
++        if (!safeAuthoringObservation(item)) { invalid++; continue }
++        if (records.length === 1024) { deliveryOmitted++; continue }
++        records.push({ ...item, delivered_ms: elapsed() })
++      }
++    }))
++    const install = () => { (globalThis as { __authoringObservationEnabled?: boolean }).__authoringObservationEnabled = true }
++    await page.addInitScript(install); await page.evaluate(install)
++  } catch { observerErrors++ }
++  return {
++    async around(info: TestInfo, assertion: () => Promise<unknown>) {
++      // A diagnostic is one assertion boundary, never an assertion retry.
++      if (used) { await assertion(); return }
++      used = true
++      const assertionStarted = elapsed()
++      let original: unknown, assertionFailed = false
++      try { await assertion() } catch (error) { original = error; assertionFailed = true }
++      // No await occurs between original completion and freezing delivered facts.
++      const frozenAt = elapsed(), frozenEvents = [...events], frozenRecords = [...records]
++      dispose()
++      try {
++        const record = { version: 1, started_at: startedAt, node_epoch: epoch,
++          assertion: { verdict: assertionFailed ? 'failed' : 'passed', started_ms: assertionStarted, frozen_at_ms: frozenAt, original_click_timeout_ms: 10000 },
++          frozen_observation: { events: frozenEvents, omitted_events: omitted, event_capacity: 2000, observer_errors: observerErrors },
++          mechanism: { frozen_browser_records: frozenRecords, invalid_deliveries: invalid, omitted_deliveries: deliveryOmitted,
++            node_record_capacity: 1024, browser_ring_capacity_per_epoch: 512, source_delivery_completeness: 'unknown' },
++          scope: 'Synthetic metadata only. No request/response bodies, header values, cookies, credentials, object IDs or query strings. Request finished means body transfer ended, not parsed or accepted. Hook records retain their own browser epoch and clock; delivered_ms and network events use only the Node clock. No guessed matching between HTTP requests and hook sequences. Missing or delayed deliveries remain unknown. No post-assertion reads or HTTP requests.' }
++        const target = info.outputPath('authoring-prepare-diagnostic.json'), pending = target + '.pending', abort = new AbortController()
++        const saved = await within((async () => {
++          await writeFile(pending, JSON.stringify(record, null, 2) + '\n', { signal: abort.signal })
++          if (abort.signal.aborted) return false
++          await rename(pending, target)
++          await info.attach('authoring-prepare-diagnostic', { path: target, contentType: 'application/json' })
++          return true
++        })().catch(() => false), 250, false)
++        if (!saved) { abort.abort(); console.error('Authoring prepare diagnostic incomplete; original assertion verdict is unchanged.') }
++      } catch { console.error('Authoring prepare diagnostic incomplete; original assertion verdict is unchanged.') }
++      finally { if (assertionFailed) throw original }
++    },
++    dispose,
++  }
++}

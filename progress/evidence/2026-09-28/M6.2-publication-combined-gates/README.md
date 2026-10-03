@@ -1,0 +1,9 @@
+# Fixed62118 combined publication backend and frontend gates
+
+Engineering source62118f823b03da6bc4c34ba335f736e20ea31df6 has1028 actual Git-bound inputs: ce42 plus9 Authoring observer files,16 independently reviewed publication service files and8 HTTP adapter/projection/test files. The exact composition was checked against the original source commits. An initial audit guard incorrectly counted progress-only differences when expecting engineering-only counts; its failure is preserved and corrected by explicit progress/ exclusion. No product tests ran during that failed audit guard and no engineering source was changed.
+
+One complete Python run started2026-09-28T03:50:29.663378Z and finished04:06:26.427932Z:2892 PASS,1 genuine numeric environment SKIP,2 dependency warnings,956.09s pytest (956.8061s runner), exit0. The sealed runtime did not execute the calculator; original environment failures remain. Full Web493 PASS/84files, strict TypeScript/build749modules, Ruff, mypy204 and structural specification validation passed on this same source. Original chunk-size and dependency warnings remain in complete logs.
+
+All seven stages retain full original logs/receipts and before/after inventories; all1028 inputs were independently checked against actual Git, and composition was reverified. The source was stable for the entire Python execution. No full native suite, publication UI, live Provider, true human content approval, numerical success or full M6.2 acceptance is inferred. The publication UI was developed separately after this code snapshot and has its own evidence; later integration must retain this source distinction.
+
+This package includes every file in the bounded completed gate cache. Exact literal personal/CI/pytest path aliases are the only transformation; no failure text or original result is removed. Use verify.py with --raw-base pointing at the cache parent and the actual literal --raw-home/--ci-home values for strict replay.

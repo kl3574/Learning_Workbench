@@ -1,0 +1,69 @@
+--- initial/services/api/app/application/review_numeric.py
++++ fix/services/api/app/application/review_numeric.py
+@@ -65,9 +65,8 @@
+         current = repo.jobs.snapshot(job_id)
+         revision = original.job.revision if original is not None and original.job is not None else current.revision
+         job = repo.jobs.snapshot(job_id, revision)
+-        rows = repo.conn.execute('SELECT * FROM job_events WHERE job_id=? AND seq<=? ORDER BY seq',
+-                                 (job_id, revision)).fetchall()
+-        events = [NumericReviewEvent.model_validate({key: row[key] for key in NumericReviewEvent.model_fields}) for row in rows]
++        events = [NumericReviewEvent(seq=event.seq, type=event.type, payload_json=event.payload_json,
++                                    occurred_at=event.occurred_at) for event in repo.jobs.event_prefix(job_id, revision)]
+         start, end = repo.execution_state(job_id)
+         if original is not None:
+             if original.start is None:
+--- initial/tests/integration/test_review_numeric_observations.py
++++ fix/tests/integration/test_review_numeric_observations.py
+@@ -1,5 +1,6 @@
+ """Read-only historical numeric observations from real SQLite owners and loopback generation."""
+ from dataclasses import replace
++import base64
+ import json
+ 
+ import pytest
+@@ -298,3 +299,45 @@
+         read(case)
+     assert (caught.value.status, caught.value.code) == (503, 'AUTHORING_OUTPUT_UNAVAILABLE')
+     assert table_hashes(case.database) == before
++
++
++def test_original_launch_observation_survives_later_callback_and_complete_blocked_output(generated):
++    """Controlled ledger callbacks, not a claim that any numeric process ran.
++
++The real worker/owner receives explicitly synthetic BLOCKED runtime facts. This
++isolates preservation of the appended callback and nonempty original streams.
++    """
++    from services.api.app.authoring_dto import NumericCheckResult, numeric_result_sha256
++    from services.api.app.infrastructure.authoring_numeric_runtime import NumericExecution
++
++    case = generated
++    preview = case.preview()
++    case.numeric.decide(case.identity, preview.id, decision(preview), 'approve')
++    worker = case.worker()
++    lease, value, _ = worker.claim()
++    with case.database.transaction() as conn:
++        assert repository(case, conn).begin(lease, utc_now())
++    admitted = read(case)
++    assert admitted.checks[0].start.actual_started_at is None
++    callback_at = utc_now()
++    worker._started(lease, callback_at)
++    callback = read(case)
++    assert callback.checks[0].start.actual_started_at == callback_at
++    stdout = b'synthetic ledger callback output; no numeric execution\n'
++    stderr = b'synthetic blocked runtime diagnostic\n'
++    raw = dict(job_id=lease.job_id, input_sha256=sha256_bytes(canonical_bytes(value)),
++        operation_sha256=value.operation_sha256, outcome='environment_unavailable', verdict='BLOCKED',
++        started_at=callback_at, finished_at=utc_now(), exit_code=1, assertions=[], output_sha256=sha256_bytes(stdout))
++    raw['result_sha256'] = numeric_result_sha256(raw)
++    execution = NumericExecution(result=NumericCheckResult.model_validate(raw), stdout=stdout, stderr=stderr,
++        output_complete=True, manifest=(), manifest_json=case.runtime.manifest_document())
++    worker._finish(lease, execution)
++    terminal = read(case)
++    assert base64.b64decode(terminal.checks[0].end.stdout_base64) == stdout
++    assert base64.b64decode(terminal.checks[0].end.stderr_base64) == stderr
++    assert terminal.checks[0].view.result == execution.result
++    before = table_hashes(case.database)
++    for original in [admitted, callback, terminal]:
++        verify(case, original)
++    assert admitted.checks[0].start.actual_started_at is None
++    assert table_hashes(case.database) == before

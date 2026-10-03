@@ -1,0 +1,66 @@
+..........F.........                                                     [100%]
+=================================== FAILURES ===================================
+_ test_corrupt_history_rejected_by_subject_snapshot_and_original_replay_without_writes[actor_workspace] _
+
+restored = <tests.integration.test_restore_numeric_service.Case object at 0x70b29cda12e0>
+fault = 'actor_workspace'
+
+    @pytest.mark.parametrize('fault', ['events_tail', 'events_all', 'head_missing', 'head_smaller', 'check_tail', 'check_all',
+        'command_tail', 'command_all', 'material_body', 'material_hash', 'actor_workspace', 'job_member', 'job_input',
+        'runtime_manifest', 'terminal_bytes', 'job_event_tail', 'job_terminal'])
+    def test_corrupt_history_rejected_by_subject_snapshot_and_original_replay_without_writes(restored, fault):
+        case = restored
+        view, ack, _, _ = executed(case)
+        preview(case, 'second')
+        def damage(conn):
+            if fault in {'events_tail', 'events_all'}:
+                conn.execute('DELETE FROM restore_numeric_events' + (' WHERE sequence=(SELECT max(sequence) FROM restore_numeric_events)' if fault.endswith('tail') else ''))
+            elif fault == 'head_missing':
+                conn.execute('DELETE FROM restore_numeric_heads')
+            elif fault == 'head_smaller':
+                conn.execute('UPDATE restore_numeric_heads SET sequence=sequence-1')
+            elif fault in {'check_tail', 'check_all'}:
+                conn.execute('DELETE FROM restore_numeric_checks' + (' WHERE ordinal=2' if fault.endswith('tail') else ''))
+            elif fault in {'command_tail', 'command_all'}:
+                conn.execute('DELETE FROM restore_numeric_commands' + (' WHERE sequence=(SELECT max(sequence) FROM restore_numeric_commands)' if fault.endswith('tail') else ''))
+            elif fault == 'material_body':
+                conn.execute("UPDATE restore_numeric_materials SET material_json=json_set(material_json,'$.body_sha256',?)", ('a' * 64,))
+            elif fault == 'material_hash':
+                conn.execute('UPDATE restore_numeric_materials SET material_sha256=?', ('a' * 64,))
+            elif fault == 'actor_workspace':
+                conn.execute('UPDATE local_sessions SET workspace_id=? WHERE id=?', ('workspace_foreign', case.identity.id))
+            elif fault == 'job_member':
+                conn.execute('DELETE FROM restore_numeric_jobs')
+            elif fault == 'job_input':
+                conn.execute("UPDATE jobs SET input_json=json_set(input_json,'$.version','authoring-numeric-job-v1') WHERE id=?", (ack.job.id,))
+            elif fault in {'runtime_manifest', 'terminal_bytes'}:
+                # A lone stored event column is damaged, without rewriting its head or original command.
+                kind = 'preview' if fault == 'runtime_manifest' else 'terminal'
+                conn.execute("UPDATE restore_numeric_events SET event_json=json_set(event_json,'$.payload_json','{}') WHERE json_extract(event_json,'$.kind')=?", (kind,))
+            elif fault == 'job_event_tail':
+                conn.execute('DELETE FROM job_events WHERE job_id=? AND seq=(SELECT max(seq) FROM job_events WHERE job_id=?)', (ack.job.id, ack.job.id))
+            else:
+                conn.execute('UPDATE jobs SET result_json=? WHERE id=?', ('{}', ack.job.id))
+        corrupt(case.database, damage)
+        before = table_hashes(case.database)
+        if fault == 'actor_workspace':
+            # Current identity fails authorization, with no payload or repair.
+            response = case.client.get('/api/v1/content/restore-drafts/' + case.identifier)
+>           assert response.status_code in {401, 403}
+E           assert 404 in {401, 403}
+E            +  where 404 = <Response [404 Not Found]>.status_code
+
+tests/integration/test_restore_numeric_integrity.py:70: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  $HOME/.cache/learning-workbench-acceptance/m62-restore-numeric-backend-oct02/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  $HOME/.cache/learning-workbench-acceptance/m62-restore-numeric-backend-oct02/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_restore_numeric_integrity.py::test_corrupt_history_rejected_by_subject_snapshot_and_original_replay_without_writes[actor_workspace]
+1 failed, 19 passed, 2 warnings in 17.89s

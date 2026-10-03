@@ -1,0 +1,114 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+__ test_bad_queue_scheduling_row_does_not_starve_a_healthy_review[created_at] __
+
+workflow = SyntheticReviewWorkflow(), field = 'created_at'
+
+    @pytest.mark.parametrize('field', ['created_at', 'id'])
+    def test_bad_queue_scheduling_row_does_not_starve_a_healthy_review(workflow, field):
+        database, identity, candidate, service, worker = workflow
+        first = service.create(identity, candidate.draft_id, request(candidate), 'damaged')
+        second = service.create(identity, candidate.draft_id, request(candidate), 'healthy')
+        # Simulate offline database damage, including broken FK membership. These
+        # values must never become a claimed lease or be repaired into valid input.
+        with database.connect() as conn:
+            conn.execute('PRAGMA foreign_keys=OFF')
+            if field == 'created_at':
+                conn.execute("UPDATE jobs SET created_at='invalid-time' WHERE id=?", (first.id,))
+            else:
+                conn.execute("UPDATE jobs SET id='!invalid-id' WHERE id=?", (first.id,))
+>       lease = worker.claim()
+                ^^^^^^^^^^^^^^
+
+tests/integration/test_review_workflow.py:530: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/api/app/application/review_worker.py:55: in claim
+    rows = list(repo.jobs.claimable_candidates(utc_now()))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.review_job_repository.ReviewJobRepository object at 0x7385ed0802f0>
+now = '2026-09-28T01:22:00.432260Z'
+
+    def claimable_candidates(self, now: str) -> tuple[ReviewQueueCandidate, ...]:
+        """Jobs-owned scheduling facts, never a lease or authority from input JSON.
+    
+        The consumer must load its full Quality history before Jobs.claim; a
+        damaged consumer record can then be skipped without hiding valid work.
+        """
+        self._transaction()
+        try:
+            TypeAdapter(dm.UTC).validate_python(now)
+            rows = self.conn.execute("SELECT created_at,id FROM jobs WHERE workspace_id=? AND kind='draft_review' "
+                "AND (status='queued' OR (status='running' AND lease_until<=?)) ORDER BY created_at,id",
+                (self.workspace_id, now)).fetchall()
+            return tuple(ReviewQueueCandidate(TypeAdapter(dm.UTC).validate_python(row['created_at']),
+                TypeAdapter(dm.Id).validate_python(row['id'])) for row in rows)
+        except (ValueError, TypeError):
+>           raise integrity() from None
+E           services.api.app.application.errors.ApiError: (409, 'AUTHORING_INTEGRITY_ERROR', '创作持久记录未通过完整性校验。')
+
+services/api/app/infrastructure/review_job_repository.py:51: ApiError
+______ test_bad_queue_scheduling_row_does_not_starve_a_healthy_review[id] ______
+
+workflow = SyntheticReviewWorkflow(), field = 'id'
+
+    @pytest.mark.parametrize('field', ['created_at', 'id'])
+    def test_bad_queue_scheduling_row_does_not_starve_a_healthy_review(workflow, field):
+        database, identity, candidate, service, worker = workflow
+        first = service.create(identity, candidate.draft_id, request(candidate), 'damaged')
+        second = service.create(identity, candidate.draft_id, request(candidate), 'healthy')
+        # Simulate offline database damage, including broken FK membership. These
+        # values must never become a claimed lease or be repaired into valid input.
+        with database.connect() as conn:
+            conn.execute('PRAGMA foreign_keys=OFF')
+            if field == 'created_at':
+                conn.execute("UPDATE jobs SET created_at='invalid-time' WHERE id=?", (first.id,))
+            else:
+                conn.execute("UPDATE jobs SET id='!invalid-id' WHERE id=?", (first.id,))
+>       lease = worker.claim()
+                ^^^^^^^^^^^^^^
+
+tests/integration/test_review_workflow.py:530: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/api/app/application/review_worker.py:55: in claim
+    rows = list(repo.jobs.claimable_candidates(utc_now()))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.review_job_repository.ReviewJobRepository object at 0x7385ecbc3470>
+now = '2026-09-28T01:22:00.903060Z'
+
+    def claimable_candidates(self, now: str) -> tuple[ReviewQueueCandidate, ...]:
+        """Jobs-owned scheduling facts, never a lease or authority from input JSON.
+    
+        The consumer must load its full Quality history before Jobs.claim; a
+        damaged consumer record can then be skipped without hiding valid work.
+        """
+        self._transaction()
+        try:
+            TypeAdapter(dm.UTC).validate_python(now)
+            rows = self.conn.execute("SELECT created_at,id FROM jobs WHERE workspace_id=? AND kind='draft_review' "
+                "AND (status='queued' OR (status='running' AND lease_until<=?)) ORDER BY created_at,id",
+                (self.workspace_id, now)).fetchall()
+            return tuple(ReviewQueueCandidate(TypeAdapter(dm.UTC).validate_python(row['created_at']),
+                TypeAdapter(dm.Id).validate_python(row['id'])) for row in rows)
+        except (ValueError, TypeError):
+>           raise integrity() from None
+E           services.api.app.application.errors.ApiError: (409, 'AUTHORING_INTEGRITY_ERROR', '创作持久记录未通过完整性校验。')
+
+services/api/app/infrastructure/review_job_repository.py:51: ApiError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-workflow-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-workflow-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_review_workflow.py::test_bad_queue_scheduling_row_does_not_starve_a_healthy_review[created_at]
+FAILED tests/integration/test_review_workflow.py::test_bad_queue_scheduling_row_does_not_starve_a_healthy_review[id]
+2 failed, 59 deselected, 2 warnings in 1.69s

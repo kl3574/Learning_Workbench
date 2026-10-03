@@ -1,0 +1,56 @@
+--- 09-owner-focused/services/api/app/infrastructure/draft_candidate_repository.py
++++ source-final/services/api/app/infrastructure/draft_candidate_repository.py
+@@ -32,6 +32,11 @@
+         ).fetchone()
+         if identity is None:
+             raise ApiError(404, 'DRAFT_CANDIDATE_UNREGISTERED', '草稿候选未登记或不可访问。')
++        # The core Revision contract has no upper bound. A larger valid integer
++        # cannot identify a SQLite INTEGER revision; do not overflow its binding
++        # or reveal another workspace's identity before the scoped lookup above.
++        if revision > 2**63 - 1:
++            raise ApiError(412, 'DRAFT_REVISION_MISMATCH', '草稿候选修订未登记，请重新读取。')
+         row = self.connection.execute(
+             'SELECT * FROM draft_candidate_revisions WHERE draft_id=? AND draft_revision=?',
+             (draft_id, revision),
+@@ -39,8 +44,8 @@
+         if row is None:
+             raise ApiError(412, 'DRAFT_REVISION_MISMATCH', '草稿候选修订未登记，请重新读取。')
+         try:
+-            owner = TypeAdapter(DraftOwner).validate_python(identity['owner'], strict=True)
+-            kind = TypeAdapter(DraftSourceKind).validate_python(identity['source_kind'], strict=True)
++            owner: DraftOwner = TypeAdapter(DraftOwner).validate_python(identity['owner'], strict=True)
++            kind: DraftSourceKind = TypeAdapter(DraftSourceKind).validate_python(identity['source_kind'], strict=True)
+             candidate = dm.DraftCandidate.model_validate(dict(
+                 draft_id=row['draft_id'], draft_revision=row['draft_revision'],
+                 entity=row['entity'], candidate_sha256=row['candidate_sha256']))
+--- 09-owner-focused/tests/integration/test_draft_candidate_catalog.py
++++ source-final/tests/integration/test_draft_candidate_catalog.py
+@@ -94,7 +94,9 @@
+ @pytest.mark.parametrize(('draft_id', 'revision', 'status', 'code'), [
+     (None, True, 422, 'SCHEMA_INVALID'), (None, 1.0, 422, 'SCHEMA_INVALID'),
+     (None, '1', 422, 'SCHEMA_INVALID'), (None, 0, 422, 'SCHEMA_INVALID'),
++    (None, 2**63, 412, 'DRAFT_REVISION_MISMATCH'), (None, 10**100, 412, 'DRAFT_REVISION_MISMATCH'),
+     (None, 2, 412, 'DRAFT_REVISION_MISMATCH'), ('missing', 1, 404, 'DRAFT_CANDIDATE_UNREGISTERED'),
++    ('missing', 2**63, 404, 'DRAFT_CANDIDATE_UNREGISTERED'),
+     ('', 1, 422, 'SCHEMA_INVALID'),
+ ])
+ def test_lookup_requires_exact_typed_identity(imported_candidate, draft_id, revision, status, code):
+@@ -125,7 +127,8 @@
+     assert table_hashes(database) == before
+ 
+ 
+-def test_lookup_cannot_locate_another_workspace_candidate(imported_candidate):
++@pytest.mark.parametrize('revision', [1, 2**63])
++def test_lookup_cannot_locate_another_workspace_candidate(imported_candidate, revision):
+     database, identity, service, _, _, candidate = imported_candidate
+     other = replace(identity, id='other_author', workspace_id='workspace_other', csrf_token='')
+     with database.transaction() as connection:
+@@ -136,7 +139,7 @@
+                            (other.id, other.workspace_id, expires_after(300)))
+     before = table_hashes(database)
+     with pytest.raises(ApiError) as caught, database.transaction(immediate=False) as connection:
+-        DraftCandidates({'import': service}).lookup(connection, other, candidate.draft_id, 1)
++        DraftCandidates({'import': service}).lookup(connection, other, candidate.draft_id, revision)
+     assert (caught.value.status, caught.value.code) == (404, 'DRAFT_CANDIDATE_UNREGISTERED')
+     assert table_hashes(database) == before
+ 

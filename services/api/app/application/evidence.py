@@ -7,6 +7,7 @@ import hmac
 import re
 import secrets
 import sqlite3
+from dataclasses import dataclass
 from uuid import uuid4
 
 from packages.contracts import domain_models as dm
@@ -215,6 +216,45 @@ def latest_checked_observations(connection: sqlite3.Connection, workspace_id: st
                     exposure_group=item.prerequisites.exposure_group, qualification_basis=binding.qualification_basis,
                     reason_codes=item.decision.reason_codes))
     return sorted(output, key=lambda value: value.evidence.id)
+
+
+@dataclass(frozen=True)
+class CheckedEvidenceOrigin:
+    observation: EvidenceObservation
+    binding_sha256: str
+    submission: SubmissionWitness
+
+
+def checked_evidence_origin(connection: sqlite3.Connection, workspace_id: str,
+                            evidence_id: str) -> CheckedEvidenceOrigin:
+    """Resolve one original Evidence, including superseded grades, through real owners."""
+    from .assessment_evidence_access import verify_applicability_pins
+
+    _transaction(connection)
+    guard_subject_access(connection, workspace_id)
+    row = connection.execute('SELECT attempt_id,grading_revision FROM evidence WHERE id=? AND workspace_id=?',
+                             (evidence_id, workspace_id)).fetchone()
+    if row is None:
+        raise ApiError(404, 'REFERENCE_MISSING', '学习证据不存在或不可访问。')
+    if row['attempt_id'] is None or row['grading_revision'] is None:
+        raise invalid_evidence()
+    try:
+        binding = _checked_binding(connection, workspace_id, row['attempt_id'], row['grading_revision'])
+        submission = verify_applicability_pins(connection, workspace_id, binding.attempt_id)
+    except ApiError as error:
+        if error.status == 404:
+            raise invalid_evidence() from None
+        raise
+    for item in binding.items:
+        for concept, evidence in zip(item.decision.concept_refs, item.evidence, strict=True):
+            if evidence.id == evidence_id:
+                observation = EvidenceObservation(evidence=evidence, question_ref=item.decision.question_ref,
+                    concept_ref=concept, assessment_ref=submission.assessment_ref, attempt_id=binding.attempt_id,
+                    grading_revision=binding.grading_revision, submitted_at=submission.submitted_at,
+                    exposure_group=item.prerequisites.exposure_group, qualification_basis=binding.qualification_basis,
+                    reason_codes=item.decision.reason_codes)
+                return CheckedEvidenceOrigin(observation, metadata_sha256(binding), submission)
+    raise invalid_evidence()
 
 
 class EvidenceService:

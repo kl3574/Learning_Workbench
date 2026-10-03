@@ -1,0 +1,420 @@
+{
+  "baseline_commit": "ce42bf8cae734e49166a1472184fd9c3fa875bc7",
+  "blockers": [],
+  "changed_paths": [
+    "docs/adr/0028-import-block-publication.md",
+    "migrations/0018_draft_publications.sql",
+    "services/api/app/application/content.py",
+    "services/api/app/application/draft_publication.py",
+    "services/api/app/application/import_publication.py",
+    "services/api/app/application/jobs.py",
+    "services/api/app/application/publication_admission.py",
+    "services/api/app/application/publication_models.py",
+    "services/api/app/application/publication_provenance.py",
+    "services/api/app/infrastructure/content_repository.py",
+    "services/api/app/infrastructure/provenance_repository.py",
+    "services/api/app/infrastructure/publication_repository.py",
+    "tests/integration/test_draft_publication.py",
+    "tests/integration/test_draft_publication_atomic.py",
+    "tests/integration/test_draft_publication_integrity.py",
+    "tests/integration/test_draft_publication_scope.py"
+  ],
+  "commands": [
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_draft_publication.py"
+      ],
+      "log": "01-first-publication-red/run.log",
+      "receipt": "01-first-publication-red/receipt.json",
+      "stage": "01-first-publication-red"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_draft_publication.py"
+      ],
+      "log": "02-first-publication/run.log",
+      "receipt": "02-first-publication/receipt.json",
+      "stage": "02-first-publication"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_draft_publication.py"
+      ],
+      "log": "03-terminal-and-history/run.log",
+      "receipt": "03-terminal-and-history/receipt.json",
+      "stage": "03-terminal-and-history"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_draft_publication_integrity.py"
+      ],
+      "log": "04-recorded-admission-red/run.log",
+      "receipt": "04-recorded-admission-red/receipt.json",
+      "stage": "04-recorded-admission-red"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_draft_publication.py",
+        "tests/integration/test_draft_publication_integrity.py",
+        "tests/integration/test_publication_admission.py"
+      ],
+      "log": "05-recorded-admission-green/run.log",
+      "receipt": "05-recorded-admission-green/receipt.json",
+      "stage": "05-recorded-admission-green"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_draft_publication.py",
+        "tests/integration/test_draft_publication_integrity.py",
+        "tests/integration/test_draft_publication_atomic.py"
+      ],
+      "log": "06-integrity-and-atomic/run.log",
+      "receipt": "06-integrity-and-atomic/receipt.json",
+      "stage": "06-integrity-and-atomic"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_draft_publication.py",
+        "tests/integration/test_draft_publication_integrity.py",
+        "tests/integration/test_draft_publication_atomic.py"
+      ],
+      "log": "07-integrity-fixture-corrected/run.log",
+      "receipt": "07-integrity-fixture-corrected/receipt.json",
+      "stage": "07-integrity-fixture-corrected"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "ruff",
+        "check",
+        "services/api/app/application/draft_publication.py",
+        "services/api/app/application/publication_models.py",
+        "services/api/app/application/import_publication.py",
+        "services/api/app/application/publication_provenance.py",
+        "services/api/app/application/publication_admission.py",
+        "services/api/app/application/content.py",
+        "services/api/app/application/jobs.py",
+        "services/api/app/infrastructure/publication_repository.py",
+        "services/api/app/infrastructure/content_repository.py",
+        "services/api/app/infrastructure/provenance_repository.py",
+        "tests/integration/test_draft_publication.py",
+        "tests/integration/test_draft_publication_integrity.py",
+        "tests/integration/test_draft_publication_atomic.py"
+      ],
+      "log": "08-first-ruff/run.log",
+      "receipt": "08-first-ruff/receipt.json",
+      "stage": "08-first-ruff"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "mypy",
+        "services/api/app/application/draft_publication.py",
+        "services/api/app/application/publication_models.py",
+        "services/api/app/application/import_publication.py",
+        "services/api/app/application/publication_provenance.py",
+        "services/api/app/application/publication_admission.py",
+        "services/api/app/application/content.py",
+        "services/api/app/application/jobs.py",
+        "services/api/app/infrastructure/publication_repository.py",
+        "services/api/app/infrastructure/content_repository.py",
+        "services/api/app/infrastructure/provenance_repository.py"
+      ],
+      "log": "09-first-mypy/run.log",
+      "receipt": "09-first-mypy/receipt.json",
+      "stage": "09-first-mypy"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_draft_publication_scope.py"
+      ],
+      "log": "10-owner-scope/run.log",
+      "receipt": "10-owner-scope/receipt.json",
+      "stage": "10-owner-scope"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_draft_publication_scope.py",
+        "tests/integration/test_draft_publication_atomic.py"
+      ],
+      "log": "11-scope-and-cas/run.log",
+      "receipt": "11-scope-and-cas/receipt.json",
+      "stage": "11-scope-and-cas"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_draft_publication_integrity.py::test_original_ack_still_checks_the_actual_import_job_input_binding"
+      ],
+      "log": "12-original-job-binding-red/run.log",
+      "receipt": "12-original-job-binding-red/receipt.json",
+      "stage": "12-original-job-binding-red"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_draft_publication.py",
+        "tests/integration/test_draft_publication_integrity.py",
+        "tests/integration/test_draft_publication_scope.py",
+        "tests/integration/test_draft_publication_atomic.py"
+      ],
+      "log": "13-original-job-binding-green/run.log",
+      "receipt": "13-original-job-binding-green/receipt.json",
+      "stage": "13-original-job-binding-green"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_draft_publication_atomic.py::test_forward_migration_preserves_actual_pending_import_and_review_before_publication",
+        "tests/integration/test_draft_publication_integrity.py::test_recursive_review_attachment_is_reverified_after_publication"
+      ],
+      "log": "14-upgrade-and-later-evidence/run.log",
+      "receipt": "14-upgrade-and-later-evidence/receipt.json",
+      "stage": "14-upgrade-and-later-evidence"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_draft_publication_atomic.py::test_current_review_rejection_and_publication_serialize_without_rewriting_old_ack"
+      ],
+      "log": "15-review-race/run.log",
+      "receipt": "15-review-race/receipt.json",
+      "stage": "15-review-race"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "mypy",
+        "services/api/app/application/draft_publication.py",
+        "services/api/app/application/publication_models.py",
+        "services/api/app/application/import_publication.py",
+        "services/api/app/application/publication_provenance.py",
+        "services/api/app/application/publication_admission.py",
+        "services/api/app/application/content.py",
+        "services/api/app/application/jobs.py",
+        "services/api/app/infrastructure/publication_repository.py",
+        "services/api/app/infrastructure/content_repository.py",
+        "services/api/app/infrastructure/provenance_repository.py"
+      ],
+      "log": "16-final-mypy/run.log",
+      "receipt": "16-final-mypy/receipt.json",
+      "stage": "16-final-mypy"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "ruff",
+        "check",
+        "services/api/app/application/draft_publication.py",
+        "services/api/app/application/publication_models.py",
+        "services/api/app/application/import_publication.py",
+        "services/api/app/application/publication_provenance.py",
+        "services/api/app/application/publication_admission.py",
+        "services/api/app/application/content.py",
+        "services/api/app/application/jobs.py",
+        "services/api/app/infrastructure/publication_repository.py",
+        "services/api/app/infrastructure/content_repository.py",
+        "services/api/app/infrastructure/provenance_repository.py",
+        "tests/integration/test_draft_publication.py",
+        "tests/integration/test_draft_publication_atomic.py",
+        "tests/integration/test_draft_publication_integrity.py",
+        "tests/integration/test_draft_publication_scope.py"
+      ],
+      "log": "17-final-ruff/run.log",
+      "receipt": "17-final-ruff/receipt.json",
+      "stage": "17-final-ruff"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_draft_publication.py",
+        "tests/integration/test_draft_publication_atomic.py",
+        "tests/integration/test_draft_publication_integrity.py",
+        "tests/integration/test_draft_publication_scope.py",
+        "tests/integration/test_publication_admission.py",
+        "tests/integration/test_review_workflow.py",
+        "tests/integration/test_import_repository.py",
+        "tests/integration/test_content_repository.py",
+        "tests/integration/test_reader_provenance.py",
+        "tests/integration/test_provenance_recovery_integrity.py",
+        "tests/integration/test_review_boundary_diagnostics.py"
+      ],
+      "log": "18-final-related/run.log",
+      "receipt": "18-final-related/receipt.json",
+      "stage": "18-final-related"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/unit/test_backend_database.py",
+        "tests/integration/test_draft_candidate_migration.py",
+        "tests/integration/test_review_storage_migration.py"
+      ],
+      "log": "19-migration-regression/run.log",
+      "receipt": "19-migration-regression/receipt.json",
+      "stage": "19-migration-regression"
+    }
+  ],
+  "exit_codes": {
+    "01-first-publication-red": 1,
+    "02-first-publication": 0,
+    "03-terminal-and-history": 0,
+    "04-recorded-admission-red": 1,
+    "05-recorded-admission-green": 0,
+    "06-integrity-and-atomic": 1,
+    "07-integrity-fixture-corrected": 0,
+    "08-first-ruff": 0,
+    "09-first-mypy": 1,
+    "10-owner-scope": 1,
+    "11-scope-and-cas": 0,
+    "12-original-job-binding-red": 1,
+    "13-original-job-binding-green": 0,
+    "14-upgrade-and-later-evidence": 0,
+    "15-review-race": 0,
+    "16-final-mypy": 0,
+    "17-final-ruff": 0,
+    "18-final-related": 0,
+    "19-migration-regression": 0
+  },
+  "implementation_commit": "dec1d937523f4596da4c39bcc27750d9132c752c",
+  "migrations": [
+    "migrations/0018_draft_publications.sql"
+  ],
+  "next_task_id": "M6.2-publication-service-independent-review-then-root-http-integration",
+  "not_run": [
+    "HTTP/main/generated registration and HTTP tests",
+    "browser publication UI",
+    "real Provider and numeric execution",
+    "actual user human approval",
+    "full platform suite",
+    "global lifecycle status/editing/needs_changes",
+    "mathematical/generated/question/group/private-solution publication",
+    "existing-object update publication",
+    "24-hour wall-clock soak"
+  ],
+  "pending_review": [
+    "fixed-source independent Spec and Standards axes"
+  ],
+  "requirement_ids": [
+    "§7 owner application ports",
+    "§9.3 atomic immutable Content",
+    "§15.1 Draft lifecycle",
+    "§19.3 task receipt",
+    "§20.1 exact candidate and hash",
+    "§20.2 current Policy",
+    "§20.3 applicable human approval",
+    "§20.8 command/CAS rules",
+    "Appendix A POST /drafts/{draft_id}/publish"
+  ],
+  "run_ledger": "run-ledger.json",
+  "screenshot_paths": [],
+  "security_review": {
+    "credentials": "not accessed",
+    "human_facts": "explicit synthetic fixture decisions only",
+    "independent_spec": "requested, pending",
+    "independent_standards": "requested, pending",
+    "self_check": "complete; actual access/Policy/history/bytes and corruption tests"
+  },
+  "source_pins": "final-source-pins.json",
+  "spec_sha256": "2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d",
+  "task_id": "M6.2-publication-service-narrow-import",
+  "test_summary": {
+    "all_final_gate_inputs_match_actual_git": 1021,
+    "final_related": "238 passed in 11 files; focused, not full suite",
+    "fixture_failures": [
+      "06-integrity-and-atomic",
+      "10-owner-scope"
+    ],
+    "initial_missing_feature": [
+      "01-first-publication-red"
+    ],
+    "migration_regression": "55 passed in 3 files",
+    "mypy": "10 changed sources passed",
+    "real_product_red_stages": [
+      "04-recorded-admission-red",
+      "12-original-job-binding-red"
+    ],
+    "ruff": "14 changed source/test files passed",
+    "static_failure": [
+      "09-first-mypy"
+    ]
+  },
+  "verification": "final-actual-git-verification.json"
+}

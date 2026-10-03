@@ -1,0 +1,95 @@
+
+Running 2 tests using 1 worker
+
+(node:2677736) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+$HOME/.cache/learning-workbench-acceptance/m62-evidence-applicability-role-race-oct02/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+  ✘  1 tests/e2e/evidence-applicability-role-probe.spec.ts:41:82 › controlled original evidence role boundary before_role_commit (23.4s)
+(node:2678626) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+$HOME/.cache/learning-workbench-acceptance/m62-evidence-applicability-role-race-oct02/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+  from starlette.testclient import TestClient as TestClient  # noqa
+  ✘  2 tests/e2e/evidence-applicability-role-probe.spec.ts:41:82 › controlled original evidence role boundary after_role_commit (23.1s)
+
+
+  1) tests/e2e/evidence-applicability-role-probe.spec.ts:41:82 › controlled original evidence role boundary before_role_commit 
+
+    Error: route.fetch: read ECONNRESET
+    Call log:
+      - → POST http://127.0.0.1:41981/api/v1/session/role
+        - user-agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/154.0.0.0 Safari/537.36
+        - accept: */*
+        - accept-encoding: gzip,deflate,br
+        - accept-language: en-US
+        - content-type: application/json
+[runtime credential header omitted]
+        - idempotency-key: 6ee7a306-4f2d-4ddb-bcae-83e3d4f4439a
+        - origin: http://127.0.0.1:41981
+        - referer: http://127.0.0.1:41981/?assessment=%7B%22assessment_ref%22%3A%7B%22entity%22%3A%22assessment%22%2C%22id%22%3A%22assessment_evidenceapplicabilitynative%22%2C%22revision%22%3A1%2C%22sha256%22%3A%2208f183578263c8f41901fcb460d47ecc9e359a1474c8e89eb75c5f5f4d87ebdb%22%7D%2C%22course_ref%22%3A%7B%22entity%22%3A%22course%22%2C%22id%22%3A%22course_evidenceapplicabilitynative%22%2C%22revision%22%3A1%2C%22sha256%22%3A%228ef997e4b2e10e087697e8f6bb096838aa00b4a0ac377c47b93d2693725fbf8e%22%7D%2C%22attempt_id%22%3A%22attempt_c70e4d84e593411ebb421a88635f734d%22%7D
+[runtime credential header omitted]
+        - sec-ch-ua: "Chromium";v="154", "Google Chrome";v="154", "Not A(Brand";v="99"
+        - sec-ch-ua-mobile: ?0
+        - sec-ch-ua-platform: "Linux"
+        - content-length: 18
+
+
+      80 |       record('learner_role_request_intercepted')
+      81 |       if (heldBoundary === 'before_role_commit') { observe(); await hold }
+    > 82 |       const response = await route.fetch(); record('actual_role_response_returned', { status: response.status(), role: (await response.json()).role })
+         |                                    ^
+      83 |       if (heldBoundary === 'after_role_commit') { observe(); await hold }
+      84 |       await route.fulfill({ response }); record('actual_role_response_delivered'); roleResponse()
+      85 |     })
+        at $HOME/.cache/learning-workbench-acceptance/m62-evidence-applicability-role-race-oct02/tests/e2e/evidence-applicability-role-probe.spec.ts:82:36
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-evidence-applicability-role-race-evidence-oct02/controlled-role-green-01/artifacts/evidence-applicability-rol-d432c-boundary-before-role-commit/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-evidence-applicability-role-race-evidence-oct02/controlled-role-green-01/artifacts/evidence-applicability-rol-d432c-boundary-before-role-commit/test-failed-2.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m62-evidence-applicability-role-race-evidence-oct02/controlled-role-green-01/artifacts/evidence-applicability-rol-d432c-boundary-before-role-commit/error-context.md
+
+  2) tests/e2e/evidence-applicability-role-probe.spec.ts:41:82 › controlled original evidence role boundary after_role_commit 
+
+    TimeoutError: locator.click: Timeout 10000ms exceeded.
+    Call log:
+      - waiting for getByRole('dialog', { name: '设置', exact: true }).getByRole('button', { name: '概念与技能证据', exact: true })
+        - locator resolved to <button disabled>概念与技能证据</button>
+      - attempting click action
+        2 × waiting for element to be visible, enabled and stable
+          - element is not enabled
+        - retrying click action
+        - waiting 20ms
+        2 × waiting for element to be visible, enabled and stable
+          - element is not enabled
+        - retrying click action
+          - waiting 100ms
+        19 × waiting for element to be visible, enabled and stable
+           - element is not enabled
+         - retrying click action
+           - waiting 500ms
+
+
+      11 | async function headers(page: Page, runtime: RestartRuntime, key: string) { const session = await page.request.get('/api/v1/session').then(r => r.json()); return { Origin: runtime.origin, 'X-CSRF-Token': session.csrf_token as string, 'Idempotency-Key': key } }
+      12 | async function view(page: Page, evidence: string, event?: string): Promise<View> { const response = await page.request.get(`/api/v1/learning/evidence/${evidence}/applicability${event ? `?event_id=${event}` : ''}`); expect(response.status()).toBe(200); return response.json() }
+    > 13 | async function open(page: Page) { await page.getByRole('button', { name: '设置', exact: true }).click(); await page.getByRole('dialog', { name: '设置', exact: true }).getByRole('button', { name: '概念与技能证据', exact: true }).click() }
+         |                                                                                                                                                                                                                          ^
+      14 | async function select(page: Page, evidence: string) {
+      15 |   const source = page.locator('.learning-source').filter({ has: page.getByRole('button', { name: `检查此原证据的适用性 ${evidence}`, exact: true, includeHidden: true }) }).first()
+      16 |   const group = source.locator('..'); if (await group.getAttribute('open') === null) await group.locator(':scope > summary').click()
+        at open ($HOME/.cache/learning-workbench-acceptance/m62-evidence-applicability-role-race-oct02/tests/e2e/evidence-applicability-role-probe.spec.ts:13:218)
+        at $HOME/.cache/learning-workbench-acceptance/m62-evidence-applicability-role-race-oct02/tests/e2e/evidence-applicability-role-probe.spec.ts:92:78
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-evidence-applicability-role-race-evidence-oct02/controlled-role-green-01/artifacts/evidence-applicability-rol-33470--boundary-after-role-commit/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m62-evidence-applicability-role-race-evidence-oct02/controlled-role-green-01/artifacts/evidence-applicability-rol-33470--boundary-after-role-commit/error-context.md
+
+  2 failed
+    tests/e2e/evidence-applicability-role-probe.spec.ts:41:82 › controlled original evidence role boundary before_role_commit 
+    tests/e2e/evidence-applicability-role-probe.spec.ts:41:82 › controlled original evidence role boundary after_role_commit 

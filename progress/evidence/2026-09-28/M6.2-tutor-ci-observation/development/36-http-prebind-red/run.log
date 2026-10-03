@@ -1,0 +1,37 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+____ test_http_preparation_does_not_capture_authorization_before_first_run _____
+
+http_tutor = (<services.api.app.infrastructure.database.Database object at 0x7b1bae6de600>, SessionIdentity(id='<SYNTHETIC_SESSION_ID_PREFIX>...in': 'http://127.0.0.1:8765', 'X-CSRF-Token': '<SYNTHETIC_CSRF_HEADER_VALUE>'}, ...)
+
+    def test_http_preparation_does_not_capture_authorization_before_first_run(http_tutor):
+        from tests.tutor_observation import TutorObservation, install_owner_observation
+        database, _, _, app, client, _, _, _ = http_tutor
+        recorder = TutorObservation()
+        install_owner_observation(app.state.tutor_service, app.state.tutor_worker, None, recorder)
+        # The real list HTTP route authorizes before any Run has been selected.
+        before = all_rows(database)
+        response = client.get('/api/v1/threads')
+        assert response.status_code == 200
+        assert all_rows(database) == before
+        snapshot = recorder.snapshot()
+>       assert snapshot['selected_run'] is None and snapshot['records'] == []
+E       AssertionError: assert (None is None and [{'epoch': 'd...turned', ...}] == []
+E         
+E         Left contains one more item: {'epoch': 'da0ebbcbb4194eea81beb045fd28f36c', 'ordinal': 1, 'source_ns': 124659422, 'stage': 'owner_authorize_returned', ...}
+E         Use -v to get more diff)
+
+tests/integration/test_tutor_observation.py:140: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-tutor-ci-observation-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-tutor-ci-observation-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_tutor_observation.py::test_http_preparation_does_not_capture_authorization_before_first_run
+1 failed, 2 warnings in 0.88s

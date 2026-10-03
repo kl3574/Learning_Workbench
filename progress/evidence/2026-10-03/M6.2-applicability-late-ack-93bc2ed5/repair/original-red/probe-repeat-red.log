@@ -1,0 +1,303 @@
+
+ RUN  v5.0.0 $HOME/.cache/learning-workbench-acceptance/m62-applicability-late-ack-probe-oct02/apps/web
+
+stdout | src/features/evidenceApplicability/independentLateAckProbe.test.tsx > late ACK after role generation change remains original-session save-only recoverable
+LATE_ACK_OBSERVATION {"kind":"role","received_ack":true,"retained_original_ack":false,"pending_after_ack":false,"other_session_retained":0,"original_role_save_available":false,"old_generation_replay_disabled":true,"decision_posts_before_save":1}
+
+ ✓ src/features/evidenceApplicability/independentLateAckProbe.test.tsx > control: same access generation saves a received ACK with exactly one decision POST 179ms
+stdout | src/features/evidenceApplicability/independentLateAckProbe.test.tsx > late ACK after policy generation change remains original-session save-only recoverable
+LATE_ACK_OBSERVATION {"kind":"policy","received_ack":true,"retained_original_ack":false,"pending_after_ack":false,"other_session_retained":0,"original_role_save_available":false,"old_generation_replay_disabled":true,"decision_posts_before_save":1}
+
+ × src/features/evidenceApplicability/independentLateAckProbe.test.tsx > late ACK after role generation change remains original-session save-only recoverable 86ms
+   → expected [] to deeply equal [ { version: 1, …(7) } ]
+   → expected false to be true // Object.is equality
+   → expected null to deeply equal { …(17) }
+ × src/features/evidenceApplicability/independentLateAckProbe.test.tsx > late ACK after policy generation change remains original-session save-only recoverable 74ms
+   → expected [] to deeply equal [ { version: 1, …(7) } ]
+   → expected false to be true // Object.is equality
+   → expected null to deeply equal { …(17) }
+ ✓ src/features/evidenceApplicability/independentLateAckProbe.test.tsx > control: a lost response without access change remains explicitly recoverable using the exact original key and body 60ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/evidenceApplicability/independentLateAckProbe.test.tsx > late ACK after role generation change remains original-session save-only recoverable
+AssertionError: expected [] to deeply equal [ { version: 1, …(7) } ]
+
+- Expected
++ Received
+
+- [
+-   {
+-     "ack": {
+-       "actor_session_id": "session_fixture_applicability",
+-       "attempt_id": "attempt_synthetic",
+-       "concept_ref": {
+-         "entity": "concept",
+-         "id": "concept_synthetic",
+-         "revision": 1,
+-         "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+-       },
+-       "current_basis_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+-       "decided_at": "2026-10-02T00:00:00Z",
+-       "decision": "usable",
+-       "decision_revision": 1,
+-       "event_id": "outbox_synthetic_one",
+-       "evidence_artifacts": [],
+-       "evidence_id": "evidence_synthetic_applicability",
+-       "grading_revision": 1,
+-       "original_evidence_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+-       "question_ref": {
+-         "entity": "question",
+-         "id": "question_synthetic",
+-         "revision": 1,
+-         "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+-       },
+-       "reason": "Synthetic original received ACK must survive an access transition",
+-       "receipt_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+-       "relevance": "exact_ref",
+-       "request_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+-     },
+-     "basis": {
+-       "event_id": "outbox_synthetic_one",
+-       "view": {
+-         "applicability": "pending_review",
+-         "attempt_id": "attempt_synthetic",
+-         "concept_ref": {
+-           "entity": "concept",
+-           "id": "concept_synthetic",
+-           "revision": 1,
+-           "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+-         },
+-         "current_basis_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+-         "decisions": [],
+-         "event_decision_head": 0,
+-         "evidence_id": "evidence_synthetic_applicability",
+-         "grading_revision": 1,
+-         "next_cursor": null,
+-         "original_evidence": {
+-           "concept_id": "concept_synthetic",
+-           "eligible": false,
+-           "event_id": "event_grade_synthetic",
+-           "freshness": "novel",
+-           "id": "evidence_synthetic_applicability",
+-           "independence": "independent",
+-           "reason": "Synthetic unreviewed source",
+-           "score": null,
+-           "skill": "compute",
+-         },
+-         "original_evidence_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+-         "question_ref": {
+-           "entity": "question",
+-           "id": "question_synthetic",
+-           "revision": 1,
+-           "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+-         },
+-         "reason_codes": [
+-           "EXACT_CONTENT_CHANGE_PENDING",
+-         ],
+-         "relevant_event_ids": [
+-           "outbox_synthetic_one",
+-           "outbox_synthetic_two",
+-         ],
+-       },
+-     },
+-     "body": {
+-       "decision": "usable",
+-       "event_id": "outbox_synthetic_one",
+-       "evidence_artifact_ids": [],
+-       "expected_current_basis_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+-       "expected_decision_revision": 0,
+-       "reason": "Synthetic original received ACK must survive an access transition",
+-     },
+-     "command_id": "evidencecmd_f182d685-3e7a-49f5-9ef4-c0d9bc8de5a0",
+-     "origin": {
+-       "access_generation": 0,
+-       "page_id": "page_3fcbc589-b905-4c14-8097-7559a296622b",
+-     },
+-     "rejection": null,
+-     "version": 1,
+-     "workspace_id": "workspace_049b53fd-4f2b-4006-ac69-e5d06d70defb",
+-   },
+- ]
++ []
+
+ ❯ src/features/evidenceApplicability/independentLateAckProbe.test.tsx:79:25
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/6]⎯
+
+ FAIL  src/features/evidenceApplicability/independentLateAckProbe.test.tsx > late ACK after role generation change remains original-session save-only recoverable
+ FAIL  src/features/evidenceApplicability/independentLateAckProbe.test.tsx > late ACK after policy generation change remains original-session save-only recoverable
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ src/features/evidenceApplicability/independentLateAckProbe.test.tsx:80:48
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/6]⎯
+
+ FAIL  src/features/evidenceApplicability/independentLateAckProbe.test.tsx > late ACK after role generation change remains original-session save-only recoverable
+ FAIL  src/features/evidenceApplicability/independentLateAckProbe.test.tsx > late ACK after policy generation change remains original-session save-only recoverable
+AssertionError: expected null to deeply equal { …(17) }
+
+- Expected:
+{
+  "actor_session_id": "session_fixture_applicability",
+  "attempt_id": "attempt_synthetic",
+  "concept_ref": {
+    "entity": "concept",
+    "id": "concept_synthetic",
+    "revision": 1,
+    "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  },
+  "current_basis_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "decided_at": "2026-10-02T00:00:00Z",
+  "decision": "usable",
+  "decision_revision": 1,
+  "event_id": "outbox_synthetic_one",
+  "evidence_artifacts": [],
+  "evidence_id": "evidence_synthetic_applicability",
+  "grading_revision": 1,
+  "original_evidence_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "question_ref": {
+    "entity": "question",
+    "id": "question_synthetic",
+    "revision": 1,
+    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  },
+  "reason": "Synthetic original received ACK must survive an access transition",
+  "receipt_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+  "relevance": "exact_ref",
+  "request_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+}
+
++ Received:
+null
+
+ ❯ src/features/evidenceApplicability/independentLateAckProbe.test.tsx:83:107
+     81|   expect(replay.disabled).toBe(true)
+     82|   if (save && !save.disabled) { fireEvent.click(save); await waitFor((…
+     83|   expect.soft(readCommand((await commandStore.load(f.workspace))[f.com…
+       |                                                                                                           ^
+     84|   expect(f.posts).toHaveLength(1)
+     85| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/6]⎯
+
+ FAIL  src/features/evidenceApplicability/independentLateAckProbe.test.tsx > late ACK after policy generation change remains original-session save-only recoverable
+AssertionError: expected [] to deeply equal [ { version: 1, …(7) } ]
+
+- Expected
++ Received
+
+- [
+-   {
+-     "ack": {
+-       "actor_session_id": "session_fixture_applicability",
+-       "attempt_id": "attempt_synthetic",
+-       "concept_ref": {
+-         "entity": "concept",
+-         "id": "concept_synthetic",
+-         "revision": 1,
+-         "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+-       },
+-       "current_basis_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+-       "decided_at": "2026-10-02T00:00:00Z",
+-       "decision": "usable",
+-       "decision_revision": 1,
+-       "event_id": "outbox_synthetic_one",
+-       "evidence_artifacts": [],
+-       "evidence_id": "evidence_synthetic_applicability",
+-       "grading_revision": 1,
+-       "original_evidence_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+-       "question_ref": {
+-         "entity": "question",
+-         "id": "question_synthetic",
+-         "revision": 1,
+-         "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+-       },
+-       "reason": "Synthetic original received ACK must survive an access transition",
+-       "receipt_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+-       "relevance": "exact_ref",
+-       "request_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+-     },
+-     "basis": {
+-       "event_id": "outbox_synthetic_one",
+-       "view": {
+-         "applicability": "pending_review",
+-         "attempt_id": "attempt_synthetic",
+-         "concept_ref": {
+-           "entity": "concept",
+-           "id": "concept_synthetic",
+-           "revision": 1,
+-           "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+-         },
+-         "current_basis_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+-         "decisions": [],
+-         "event_decision_head": 0,
+-         "evidence_id": "evidence_synthetic_applicability",
+-         "grading_revision": 1,
+-         "next_cursor": null,
+-         "original_evidence": {
+-           "concept_id": "concept_synthetic",
+-           "eligible": false,
+-           "event_id": "event_grade_synthetic",
+-           "freshness": "novel",
+-           "id": "evidence_synthetic_applicability",
+-           "independence": "independent",
+-           "reason": "Synthetic unreviewed source",
+-           "score": null,
+-           "skill": "compute",
+-         },
+-         "original_evidence_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+-         "question_ref": {
+-           "entity": "question",
+-           "id": "question_synthetic",
+-           "revision": 1,
+-           "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+-         },
+-         "reason_codes": [
+-           "EXACT_CONTENT_CHANGE_PENDING",
+-         ],
+-         "relevant_event_ids": [
+-           "outbox_synthetic_one",
+-           "outbox_synthetic_two",
+-         ],
+-       },
+-     },
+-     "body": {
+-       "decision": "usable",
+-       "event_id": "outbox_synthetic_one",
+-       "evidence_artifact_ids": [],
+-       "expected_current_basis_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+-       "expected_decision_revision": 0,
+-       "reason": "Synthetic original received ACK must survive an access transition",
+-     },
+-     "command_id": "evidencecmd_9b8be9fb-82b9-42bf-91af-854266c3efb9",
+-     "origin": {
+-       "access_generation": 4,
+-       "page_id": "page_3fcbc589-b905-4c14-8097-7559a296622b",
+-     },
+-     "rejection": null,
+-     "version": 1,
+-     "workspace_id": "workspace_e377899f-ca5b-40ef-a56e-3300ea6d7bb0",
+-   },
+- ]
++ []
+
+ ❯ src/features/evidenceApplicability/independentLateAckProbe.test.tsx:79:25
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/6]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 passed (4)
+   Start at  23:46:46
+   Duration  927ms (tests 47%, environment 23%, transform 20%, import 10%)
+

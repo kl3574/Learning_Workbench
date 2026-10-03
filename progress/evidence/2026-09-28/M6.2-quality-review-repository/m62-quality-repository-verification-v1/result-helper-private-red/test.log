@@ -1,0 +1,36 @@
+.F.                                                                      [100%]
+=================================== FAILURES ===================================
+_ test_revalidation_of_constructed_values_never_warns_private_input[machine_job_result] _
+
+prepared = PreparedReviewFixture(), entry = 'machine_job_result'
+
+    @pytest.mark.parametrize('entry', ['append_machine', 'machine_job_result', 'replay'])
+    def test_revalidation_of_constructed_values_never_warns_private_input(prepared, entry):
+        database, _, _ = prepared
+        with database.transaction() as connection:
+            repo, machine, _ = complete_machine(prepared, connection)
+            private = 'SYNTHETIC_PRIVATE_REVIEW_REVALIDATION_INPUT'
+            malformed = machine.model_copy(update={'material': {'private_synthetic_marker': private}})
+            if entry == 'replay':
+                repo.append_machine(machine)
+            before = quality_bytes(connection)
+            with warnings.catch_warnings(record=True) as emitted:
+                warnings.simplefilter('always')
+>               with pytest.raises(ApiError) as caught:
+                     ^^^^^^^^^^^^^^^^^^^^^^^
+E               Failed: DID NOT RAISE ApiError
+
+tests/integration/test_review_history.py:290: Failed
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_review_history.py::test_revalidation_of_constructed_values_never_warns_private_input[machine_job_result] - Failed: DID NOT RAISE ApiError
+1 failed, 2 passed, 48 deselected, 2 warnings in 2.18s

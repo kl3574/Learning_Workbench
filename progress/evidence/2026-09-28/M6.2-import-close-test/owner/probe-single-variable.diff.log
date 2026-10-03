@@ -1,0 +1,15 @@
+--- probe-publication-ledger-source.tsx
++++ probe-enabled-click-source.tsx
+@@ -66,10 +66,10 @@
+   console.log('[DEBUG-close-publication]', JSON.stringify({ point: 'before-original-click', heldLoads, discardDisabled: discard.disabled, reasonDisabled: (reason as HTMLTextAreaElement).disabled, discardConnected: discard.isConnected, sameReason: reason === screen.getByLabelText('审核理由') }))
+   expect(discard.disabled).toBe(true)
+   expect(discard.isConnected).toBe(true)
+-  fireEvent.click(discard)
+   release()
+   await waitFor(() => expect(discard.disabled).toBe(false))
+-  console.log('[DEBUG-close-publication]', JSON.stringify({ point: 'after-ledger-completes', heldLoads, discardDisabled: discard.disabled, dialogPresent: !!screen.queryByRole('dialog', { name: '导入' }), reason: (reason as HTMLTextAreaElement).value, writes: calls.filter(value => !value.startsWith('GET ')) }))
++  fireEvent.click(discard)
++  console.log('[DEBUG-close-publication]', JSON.stringify({ point: 'after-enabled-single-click', heldLoads, discardDisabled: discard.disabled, dialogPresent: !!screen.queryByRole('dialog', { name: '导入' }), reason: (reason as HTMLTextAreaElement).value, writes: calls.filter(value => !value.startsWith('GET ')) }))
+   await waitFor(() => expect(screen.queryByRole('dialog', { name: '导入' })).toBeNull())
+   expect(state.commit).not.toHaveBeenCalled(); expect(state.importConfirmed).toBe(false)
+   expect(calls.every(value => value.startsWith('GET '))).toBe(true)

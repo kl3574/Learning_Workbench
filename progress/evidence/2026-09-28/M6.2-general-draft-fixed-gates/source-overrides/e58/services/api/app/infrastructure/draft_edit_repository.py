@@ -1,0 +1,139 @@
+"""Edit-owned append-only versions, checked heads and permanent original commands."""
+import sqlite3
+from uuid import uuid4
+
+from packages.contracts.canonical import canonical_bytes, metadata_sha256, sha256_bytes, strict_json
+from ..application.draft_edit_models import (
+    DraftEditRecord, DraftEditCommand, MAX_VERSIONS, ack, apply_patch, checked, integrity,
+)
+from ..application.errors import ApiError
+from ..draft_dto import DraftCreateWrite, DraftPatchWrite
+
+
+class DraftEditRepository:
+    def __init__(self, conn: sqlite3.Connection, workspace_id: str):
+        if not conn.in_transaction:
+            raise ApiError(409, 'TRANSACTION_REQUIRED', '草稿操作需要当前事务。')
+        self.conn, self.workspace_id = conn, workspace_id
+
+    @staticmethod
+    def decode(model, row):
+        try:
+            value = checked(model, strict_json(row['record_json']))
+            if canonical_bytes(value).decode() != row['record_json'] or metadata_sha256(value) != row['record_sha256']:
+                raise integrity()
+            return value
+        except (ValueError, TypeError, AttributeError):
+            raise integrity() from None
+
+    def history(self, draft_id: str) -> list[DraftEditRecord]:
+        head = self.conn.execute('SELECT * FROM draft_edits WHERE draft_id=? AND workspace_id=?',
+                                 (draft_id, self.workspace_id)).fetchone()
+        if head is None:
+            raise ApiError(404, 'DRAFT_EDIT_UNAVAILABLE', '草稿不存在或不可访问。')
+        if type(head['revision']) is not int or not 1 <= head['revision'] <= MAX_VERSIONS:
+            raise integrity()
+        size = self.conn.execute('SELECT COALESCE(SUM(length(CAST(record_json AS BLOB))),0) FROM draft_edit_versions WHERE draft_id=?',
+                                 (draft_id,)).fetchone()[0]
+        if size > 32_000_000:
+            raise ApiError(413, 'DRAFT_HISTORY_BUDGET', '草稿历史超过当前完整核验字节上限。')
+        rows = self.conn.execute('SELECT * FROM draft_edit_versions WHERE draft_id=? ORDER BY revision LIMIT ?',
+                                 (draft_id, MAX_VERSIONS + 1)).fetchall()
+        if len(rows) != head['revision']:
+            raise integrity()
+        records: list[DraftEditRecord] = []
+        for ordinal, row in enumerate(rows, 1):
+            record = self.decode(DraftEditRecord, row)
+            c = record.candidate
+            if (c.draft_id != draft_id or c.draft_revision != ordinal or record.workspace_id != self.workspace_id
+                    or row['workspace_id'] != self.workspace_id or row['revision'] != ordinal
+                    or row['candidate_sha256'] != c.candidate_sha256 or row['created_at'] != record.created_at
+                    or row['parent_sha256'] != record.parent_sha256
+                    or canonical_bytes(record.base.ref).decode() != head['base_ref_json'] or head['kind'] != 'block'):
+                raise integrity()
+            if ordinal == 1:
+                if head['created_at'] != record.created_at:
+                    raise integrity()
+            else:
+                prior = records[-1]
+                if (record.base != prior.base or record.parent_sha256 != metadata_sha256(prior)
+                        or not isinstance(record.request, DraftPatchWrite)):
+                    raise integrity()
+                try:
+                    expected = apply_patch(prior.payload, record.request)
+                except ApiError:
+                    raise integrity() from None
+                if expected != record.payload:
+                    raise integrity()
+            commands = self.conn.execute('SELECT * FROM draft_edit_commands WHERE draft_id=? AND revision=?',
+                                          (draft_id, ordinal)).fetchall()
+            if len(commands) != (1 if record.command_key is not None else 0):
+                raise integrity()
+            if commands:
+                command = self.decode(DraftEditCommand, commands[0])
+                expected_route = 'POST /drafts' if ordinal == 1 else f'PATCH /drafts/{draft_id}'
+                expected_command = DraftEditCommand(workspace_id=self.workspace_id, actor_id=record.actor_id,
+                    route=expected_route, key=record.command_key, record_sha256=metadata_sha256(record),
+                    request=record.request, ack=ack(record))
+                if (command != expected_command or tuple(commands[0][key] for key in
+                        ('workspace_id', 'actor_id', 'route', 'command_key')) !=
+                        (self.workspace_id, record.actor_id, expected_route, record.command_key)):
+                    raise integrity()
+            records.append(record)
+        return records
+
+    def replay(self, actor_id: str, route: str, key: str, request: DraftCreateWrite | DraftPatchWrite) -> DraftEditRecord | None:
+        row = self.conn.execute('SELECT * FROM draft_edit_commands WHERE workspace_id=? AND actor_id=? AND route=? AND command_key=?',
+                                (self.workspace_id, actor_id, route, key)).fetchone()
+        if row is None:
+            return None
+        records = self.history(row['draft_id'])
+        revision = row['revision']
+        if type(revision) is not int or not 1 <= revision <= len(records):
+            raise integrity()
+        record = records[revision - 1]
+        if (record.actor_id != actor_id or record.command_key != key
+                or (route != 'POST /drafts' if revision == 1 else route != f'PATCH /drafts/{record.candidate.draft_id}')):
+            raise integrity()
+        if canonical_bytes(record.request) != canonical_bytes(request):
+            raise ApiError(409, 'IDEMPOTENCY_CONFLICT', '原草稿命令键已用于不同的完整请求。')
+        return record
+
+    def append(self, record: DraftEditRecord) -> None:
+        # Preserve atomicity even when an outer owner catches the SQL error.
+        savepoint = 'edit_append_' + uuid4().hex
+        self.conn.execute('SAVEPOINT ' + savepoint)
+        try:
+            self._append(record)
+            self.conn.execute('RELEASE ' + savepoint)
+        except BaseException:
+            self.conn.execute('ROLLBACK TO ' + savepoint)
+            self.conn.execute('RELEASE ' + savepoint)
+            raise
+
+    def _append(self, record: DraftEditRecord) -> None:
+        record = checked(DraftEditRecord, record)
+        c = record.candidate
+        if record.workspace_id != self.workspace_id:
+            raise integrity()
+        if c.draft_revision == 1:
+            self.conn.execute('INSERT INTO draft_edits VALUES(?,?,?,?,?,?)',
+                (c.draft_id, self.workspace_id, 'block', 1, canonical_bytes(record.base.ref).decode(), record.created_at))
+        else:
+            changed = self.conn.execute('UPDATE draft_edits SET revision=? WHERE draft_id=? AND workspace_id=? AND revision=?',
+                (c.draft_revision, c.draft_id, self.workspace_id, c.draft_revision - 1))
+            if changed.rowcount != 1:
+                raise ApiError(412, 'DRAFT_REVISION_MISMATCH', '草稿已变化，请重新读取当前修订。')
+        raw = canonical_bytes(record)
+        self.conn.execute('INSERT INTO draft_edit_versions(draft_id,workspace_id,revision,candidate_sha256,record_json,'
+            'record_sha256,parent_sha256,created_at) VALUES(?,?,?,?,?,?,?,?)',
+            (c.draft_id, self.workspace_id, c.draft_revision, c.candidate_sha256, raw.decode(), sha256_bytes(raw),
+             record.parent_sha256, record.created_at))
+        if record.command_key is not None:
+            command = DraftEditCommand(workspace_id=self.workspace_id, actor_id=record.actor_id,
+                route='POST /drafts' if c.draft_revision == 1 else f'PATCH /drafts/{c.draft_id}',
+                key=record.command_key, record_sha256=metadata_sha256(record), request=record.request, ack=ack(record))
+            raw = canonical_bytes(command)
+            self.conn.execute('INSERT INTO draft_edit_commands VALUES(?,?,?,?,?,?,?,?)',
+                (self.workspace_id, record.actor_id, command.route, command.key, c.draft_id, c.draft_revision,
+                 raw.decode(), sha256_bytes(raw)))

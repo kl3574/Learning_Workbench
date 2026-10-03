@@ -1,0 +1,32 @@
+
+Running 1 test using 1 worker
+
+(node:2358986) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/e2e/note-reanchor-publication.spec.ts:28:1 › actual UI edit publication stales the original Note, explicit new-source reanchor and old-scope rebuild preserve historical bytes and parent pins (17.0s)
+
+
+  1) tests/e2e/note-reanchor-publication.spec.ts:28:1 › actual UI edit publication stales the original Note, explicit new-source reanchor and old-scope rebuild preserve historical bytes and parent pins 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "no_match"
+    Received: "matched"
+
+      81 |     const secondRebuild = await rebuild(page, retrieval), historical = await query(page, retrieval, '冲突')
+      82 |     expect(historical.scope_refs).toEqual(initialQuery.scope_refs); expect(historical.hits[0].ref).toEqual(original.anchor.ref); expect(historical.hits[0].current_ref).toEqual(publication.published); expect(historical.hits[0].text).toBe(initialQuery.hits[0].text)
+    > 83 |     expect((await query(page, retrieval, '复核流程')).result_state).toBe('no_match')
+         |                                                                 ^
+      84 |     await expect(retrieval.getByText(/HISTORICAL_REVISION/).first()).toBeVisible(); await page.screenshot({ path: info.outputPath('old-scope-rebuilt-original-body.png') })
+      85 |     const parentResponse = await page.request.get(`/api/v1/lessons/${publication.fixture.lessons[0].id}?revision=1`); expect(parentResponse.status()).toBe(200); const parent = await parentResponse.json(); expect(parent.block_refs).toEqual(publication.fixture.blocks)
+      86 |     const evidenceAfter = await page.request.get('/api/v1/learning/evidence').then(r => r.json()); expect(evidenceAfter).toEqual(evidenceBefore)
+        at $HOME/.cache/learning-workbench-acceptance/m62-note-reanchor-native-oct02/tests/e2e/note-reanchor-publication.spec.ts:83:65
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-note-reanchor-native-evidence-oct02/green-output-01/note-reanchor-publication--72af0-rical-bytes-and-parent-pins/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m62-note-reanchor-native-evidence-oct02/green-output-01/note-reanchor-publication--72af0-rical-bytes-and-parent-pins/error-context.md
+
+  1 failed
+    tests/e2e/note-reanchor-publication.spec.ts:28:1 › actual UI edit publication stales the original Note, explicit new-source reanchor and old-scope rebuild preserve historical bytes and parent pins 

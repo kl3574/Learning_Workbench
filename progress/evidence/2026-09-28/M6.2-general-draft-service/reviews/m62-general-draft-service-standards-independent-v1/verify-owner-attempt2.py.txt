@@ -1,0 +1,97 @@
+"""Independent read-only evidence/source verification. No product imports or tests."""
+from pathlib import Path
+import hashlib,io,json,re,subprocess
+OUT=Path(__file__).resolve().parent
+OWNER=OUT.parent/'m62-general-draft-service-development-v1'
+REPO=OUT.parent/'m62-general-draft-service-active'
+HEAD='5c6d9959fee4ef7cf22fe2cca8e0f07fa524c18d'
+BASE='a944ebfbdb835a731393977a606db5b473846e98'
+def meta(raw):return {'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest()}
+def filemeta(path):return meta(path.read_bytes())
+def load(path):return json.loads(path.read_bytes())
+def git(*args):return subprocess.check_output(['git',*args],cwd=REPO)
+def save(name,value):(OUT/name).write_text(json.dumps(value,indent=2,sort_keys=True,ensure_ascii=False)+'\n')
+manifest=load(OWNER/'PRIVATE_MANIFEST.json')['members']
+assert len(manifest)==1180
+actual_files={p.relative_to(OWNER).as_posix() for p in OWNER.rglob('*') if p.is_file()}
+assert actual_files==set(manifest)|{'PRIVATE_MANIFEST.json'}
+for path,details in manifest.items():assert filemeta(OWNER/path)==details,path
+heads={BASE,HEAD}
+commit_trees={}
+for head in heads:
+ tree={}
+ for item in git('ls-tree','-r','-z',head).split(b'\0'):
+  if not item:continue
+  h,p=item.split(b'\t',1);mode,kind,oid=h.decode().split();name=p.decode()
+  if name.startswith('progress/'):continue
+  assert kind=='blob'
+  tree[name]=oid
+ commit_trees[head]=tree
+oids=sorted({oid for tree in commit_trees.values() for oid in tree.values()})
+result=subprocess.run(['git','cat-file','--batch'],cwd=REPO,input=('\n'.join(oids)+'\n').encode(),capture_output=True,check=True).stdout
+stream=io.BytesIO(result);blob_metas={}
+for oid in oids:
+ header=stream.readline().decode().split();assert header[:2]==[oid,'blob'];raw=stream.read(int(header[2]));assert stream.read(1)==b'\n';blob_metas[oid]=meta(raw)
+assert stream.read()==b''
+git_metas={head:{name:blob_metas[oid] for name,oid in tree.items()} for head,tree in commit_trees.items()}
+final=git_metas[HEAD];assert len(final)==1051
+assert git('rev-parse','HEAD').decode().strip()==HEAD
+save('live-worktree-status.json',{'head':HEAD,'status_porcelain':git('status','--porcelain').decode(),'scope':'Current uncommitted bytes excluded from pinned review'})
+changed=git('diff','--name-only',BASE,HEAD).decode().splitlines();assert len(changed)==21
+assert (OUT/'reviewed.diff').read_bytes()==(OWNER/'final-change.diff').read_bytes()==git('diff','--binary',BASE,HEAD)
+assert set(load(OWNER/'final-source-pins.json')['paths'])==set(changed)
+for name,details in load(OWNER/'final-source-pins.json')['paths'].items():
+ assert details==final[name]|{'git_blob':commit_trees[HEAD][name]}
+ assert filemeta(OUT/'source'/name)==final[name]
+for name,details in load(OUT/'context-pins.json')['paths'].items():
+ assert details==final[name]|{'git_blob':commit_trees[HEAD][name]}
+ assert filemeta(OUT/'context'/name)==final[name]
+pool=OWNER/'source-pool'
+for p in pool.iterdir():assert p.name==filemeta(p)['sha256']
+refs=set();rows=[];driver=filemeta(OWNER/'run.py')['sha256'];ledger=load(OWNER/'run-ledger.json')
+assert len(ledger)==25
+for row in ledger:
+ stage=row['stage'];root=OWNER/stage;r=load(root/'receipt.json');before=load(root/'inputs-before.json');after=load(root/'inputs-after.json')
+ assert before==after and r['unchanged'] and not r['changed_paths']
+ assert len(before)==r['input_count_before']==r['input_count_after']==row['input_count']
+ assert r['driver_sha256']==driver and r['actual_head']==row['actual_head']
+ assert filemeta(root/'run.log')=={'bytes':r['log_bytes'],'sha256':r['log_sha256']}==row['log_metadata']
+ assert filemeta(root/'receipt.json')==row['receipt_metadata']
+ assert filemeta(root/'inputs-before.json')==row['before'] and filemeta(root/'inputs-after.json')==row['after']
+ for name,details in before.items():assert filemeta(pool/details['sha256'])==details;refs.add(details['sha256'])
+ final_diff=sorted(name for name in set(before)|set(final) if before.get(name)!=final.get(name))
+ assert final_diff==row['changed_from_final'] and (not final_diff)==row['matches_final_engineering_git']
+ actual=git_metas[r['actual_head']]
+ dirty=sorted(name for name in set(before)|set(actual) if before.get(name)!=actual.get(name))
+ log=(root/'run.log').read_text()
+ assert row['terminal_line'] in log and row['exit_code']==r['exit_code']
+ rows.append({'stage':stage,'actual_head':r['actual_head'],'exit_code':r['exit_code'],'input_count':len(before),
+  'input_maps_equal':True,'all_input_cas_bytes_verified':True,'matches_recorded_git_count':sum(actual.get(n)==v for n,v in before.items()),
+  'recorded_git_mismatch_paths':dirty,'matches_final_git_count':sum(final.get(n)==v for n,v in before.items()),
+  'final_git_mismatch_paths':final_diff,'receipt':filemeta(root/'receipt.json'),'log':filemeta(root/'run.log'),
+  'command':r['command'],'terminal_line':row['terminal_line']})
+assert refs=={p.name for p in pool.iterdir()} and len(refs)==1065
+for row in rows[-4:]:assert row['actual_head']==HEAD and not row['recorded_git_mismatch_paths'] and row['input_count']==1051
+assert all(r['exit_code']==0 for r in rows[-3:])
+log=(OWNER/'25-final-related-restricted/run.log').read_text()
+passed=[line.split(' PASSED ')[0] for line in log.splitlines() if re.match(r'^tests/.* PASSED ',line)]
+assert len(passed)==450 and len(set(passed))==450
+new=[n for n in passed if n.startswith('tests/integration/test_draft_edit')]
+assert len(new)==83 and new==load(OWNER/'new-behavior-test-results.json')['nodeids']
+assert len({n.split('::')[0] for n in passed})==16
+ruff=load(OWNER/'24-final-ruff/receipt.json')['command'][2:]
+assert len(ruff)==19 and set(ruff)=={n for n in changed if n.endswith('.py')}
+assert load(OWNER/'23-final-mypy/receipt.json')['command'][-1]=='services/api/app'
+assert (OWNER/'23-final-mypy/run.log').read_text().strip()=='Success: no issues found in 208 source files'
+assert rows[21]['exit_code']==1 and 'KeyboardInterrupt' in (OWNER/'22-final-related/run.log').read_text()
+assert 'not generated_owner_history_preserves_exact_numeric_observation_without_running_it' not in ' '.join(rows[21]['command'])
+assert 'not generated_owner_history_preserves_exact_numeric_observation_without_running_it' in ' '.join(rows[24]['command'])
+failedfreeze=load(OWNER/'freeze-attempt-1-manifest.json')['members']
+freeze_differences={n:{'expected':d,'actual':filemeta(OWNER/n)} for n,d in failedfreeze.items() if d!=filemeta(OWNER/n)}
+assert freeze_differences==load(OWNER/'freeze-attempt-1-mismatch.json')['mismatches'] and set(freeze_differences)=={'freeze-run.log'}
+protected=[n for n in changed if n.startswith(('packages/contracts/','apps/web/','progress/','services/api/app/interfaces/')) or n in {'PRODUCT_DESIGN.md','services/api/app/main.py'} or n.startswith('migrations/') and n!='migrations/0019_draft_edits.sql']
+assert not protected
+save('stage-verification.json',rows)
+save('new-cases-verified.json',{'stage':'25-final-related-restricted','nodeids':new,'count':83,'passed_files':sorted({n.split('::')[0] for n in passed})})
+save('VERIFY.json',{'result':'PASS','kind':'independent_read_only_hash_and_actual_git_check_not_product_execution','candidate_commit':HEAD,'base_commit':BASE,'owner_manifest':filemeta(OWNER/'PRIVATE_MANIFEST.json'),'owner_members_verified':len(manifest),'owner_inventory_exact':True,'actual_git_heads':sorted(heads),'actual_git_unique_blobs_checked':len(oids),'final_git_engineering_inputs':len(final),'all_stages':len(rows),'cas_members_verified':len(refs),'all_before_after_equal':True,'final_21_through_25_equal_final_git':all(not r['final_git_mismatch_paths'] for r in rows[20:]),'final_22_through_25_actual_head_final':all(r['actual_head']==HEAD for r in rows[21:]),'changed_paths':changed,'context_copies':len(load(OUT/'context-pins.json')['paths']),'passed_selected_cases':450,'passed_new_cases':83,'selected_integration_files':16,'deselected':20,'warnings':2,'ruff_paths':19,'mypy_source_files':208,'stage22':'interrupted, not complete PASS; controlled fixture counts are owner transcription, no retained runtime DB','freeze_attempt1_mismatch':freeze_differences,'product_tests_executed_by_reviewer':0,'network_or_database_access_by_reviewer':False})
+print(json.dumps({'result':'PASS','members':len(manifest),'stages':len(rows),'final_inputs':len(final),'cas':len(refs),'passed_selected':450,'passed_new':83}))

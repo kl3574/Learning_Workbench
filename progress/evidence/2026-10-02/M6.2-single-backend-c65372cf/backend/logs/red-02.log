@@ -1,0 +1,104 @@
+.FFF                                                                     [100%]
+=================================== FAILURES ===================================
+______ test_review_of_old_pass_cannot_publish_after_a_new_numeric_preview ______
+
+tmp_path = PosixPath('$HOME/.cache/learning-workbench-acceptance/single-publication-runtime-oct02/pytest-red-02/test_review_of_old_pass_cannot0')
+
+    def test_review_of_old_pass_cannot_publish_after_a_new_numeric_preview(tmp_path):
+        case, _, publication, intent = ready_single(tmp_path)
+        case.preview('new-preview-after-review')
+        before = table_hashes(case.database)
+>       with pytest.raises(ApiError) as caught:
+             ^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ApiError
+
+tests/integration/test_single_publication.py:52: Failed
+_ test_publication_blocks_new_preview_and_approval_but_preserves_original_acks _
+
+tmp_path = PosixPath('$HOME/.cache/learning-workbench-acceptance/single-publication-runtime-oct02/pytest-red-02/test_publication_blocks_new_pr0')
+
+    def test_publication_blocks_new_preview_and_approval_but_preserves_original_acks(tmp_path):
+        case, reviews = generated_case(tmp_path, 'single')
+        publication = DraftPublicationService(case.database, reviews, ImportService(case.database))
+        case.authoring.verify_publication = publication.verify_recorded
+        pending = case.preview('pending-before-pass')
+        passed = synthetic_numeric(case, 'latest-pass')
+        original_approval = case.numeric.decide(case.identity, passed.id, decision(passed), 'latest-pass-approve')
+        receipt = reviewed(case.database, case.identity, case.candidate, reviews)
+        intent = publish_request(case.database, case.identity, case.candidate, reviews, receipt)
+        publication.publish(case.identity, case.candidate.draft_id, intent, 'publish')
+        before = table_hashes(case.database)
+        assert case.preview('pending-before-pass') == pending
+        assert case.numeric.decide(case.identity, passed.id, decision(passed), 'latest-pass-approve') == original_approval
+        for operation in (lambda: case.preview('new-preview'),
+                          lambda: case.numeric.decide(case.identity, pending.id, decision(pending), 'new-approval')):
+>           with pytest.raises(ApiError) as caught:
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: DID NOT RAISE ApiError
+
+tests/integration/test_single_publication.py:73: Failed
+_____ test_older_queued_a_cannot_start_after_newer_b_pass_and_publication ______
+
+tmp_path = PosixPath('$HOME/.cache/learning-workbench-acceptance/single-publication-runtime-oct02/pytest-red-02/test_older_queued_a_cannot_sta0')
+
+    def test_older_queued_a_cannot_start_after_newer_b_pass_and_publication(tmp_path):
+        case, reviews = generated_case(tmp_path, 'single')
+        publication = DraftPublicationService(case.database, reviews, ImportService(case.database))
+        case.authoring.verify_publication = publication.verify_recorded
+        first = case.preview('A')
+        first_ack = case.numeric.decide(case.identity, first.id, decision(first), 'A-approve')
+        synthetic_numeric(case, 'B')
+        receipt = reviewed(case.database, case.identity, case.candidate, reviews)
+        intent = publish_request(case.database, case.identity, case.candidate, reviews, receipt)
+        published = publication.publish(case.identity, case.candidate.draft_id, intent, 'publish')
+        # LedgerRuntime has no executor. Any attempted execution is a test failure.
+>       assert case.worker().run_once()
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_single_publication.py:90: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/api/app/application/authoring_numeric_worker.py:168: in run_once
+    self.process(*work)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.application.authoring_numeric_worker.NumericWorker object at 0x7a716ee3f6e0>
+lease = AuthoringLease(job_id='numeric_job_cbedf067f2554f5cbaf0825b6f8d7e92', workspace_id='workspace_e6255827da8749a2bf68640b258f9c8f', owner='lease_fde865133bf149768f4f1266d5517ce4', revision=2, expires_at='2026-10-02T14:23:13.034452Z')
+value = NumericJobInput(), actor = 'session_551e74b41cef4fcc93cb58e6f47a41bb'
+
+    def process(self, lease: AuthoringLease, value: NumericJobInput, actor: str) -> None:
+        with self.database.transaction(immediate=False) as conn:
+            start, _ = NumericRepository(conn, lease.workspace_id).execution_state(lease.job_id)
+        if start is not None:
+            self._blocked(lease, value, 'outcome_unknown')
+            return
+        try:
+            with self.database.transaction(immediate=False) as conn:
+                self._access(conn, lease, value, actor)
+            self.runtime.check(value.runtime)
+            with self.database.transaction() as conn:
+                repo = self._access(conn, lease, value, actor)
+                admitted = repo.begin(lease, utc_now())
+            if not admitted:
+                self._blocked(lease, value, 'outcome_unknown')
+                return
+>           execution = self.runtime.run_checked(value,
+                        ^^^^^^^^^^^^^^^^^^^^^^^^
+                lambda: not self._watch(lease, value, actor), on_started=lambda actual: self._started(lease, actual))
+E               AttributeError: 'LedgerRuntime' object has no attribute 'run_checked'
+
+services/api/app/application/authoring_numeric_worker.py:151: AttributeError
+=============================== warnings summary ===============================
+../m62-combined-final-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  $HOME/.cache/learning-workbench-acceptance/m62-combined-final-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../m62-combined-final-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  $HOME/.cache/learning-workbench-acceptance/m62-combined-final-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_single_publication.py::test_review_of_old_pass_cannot_publish_after_a_new_numeric_preview
+FAILED tests/integration/test_single_publication.py::test_publication_blocks_new_preview_and_approval_but_preserves_original_acks
+FAILED tests/integration/test_single_publication.py::test_older_queued_a_cannot_start_after_newer_b_pass_and_publication
+3 failed, 1 passed, 2 warnings in 13.36s

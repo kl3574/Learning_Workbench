@@ -1,0 +1,32 @@
+
+Running 1 test using 1 worker
+
+(node:1761513) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/e2e/edit-publication.spec.ts:42:1 › native saved edit enters Review, explicit synthetic decisions publish base+1, preserve parent pins, original ACK and restart recovery (18.7s)
+
+
+  1) tests/e2e/edit-publication.spec.ts:42:1 › native saved edit enters Review, explicit synthetic decisions publish base+1, preserve parent pins, original ACK and restart recovery 
+
+    TimeoutError: locator.fill: Timeout 10000ms exceeded.
+    Call log:
+      - waiting for getByRole('region', { name: '文本块编辑与恢复', exact: true }).getByRole('region', { name: '候选审核与原命令恢复', exact: true }).getByLabel('本次审核备注', { exact: true })
+
+
+      100 |     await expect(read).toBeEnabled()
+      101 |     writeFileSync(info.outputPath('probe-form-dom.json'), JSON.stringify(await page.locator('textarea').evaluateAll(elements => elements.map(element => ({ html: element.parentElement?.outerHTML, regions: Array.from((function* () { let ancestor: HTMLElement | null = element; while (ancestor) { if (ancestor.hasAttribute('aria-label')) yield ancestor.getAttribute('aria-label'); ancestor = ancestor.parentElement } })()) }))), null, 2))
+    > 102 |     await note.fill(''); await confirmation.uncheck(); await expect(source).toHaveAttribute('contenteditable', 'true')
+          |                ^
+      103 |     // Hold a real response after its successful server read. Review is unsafe
+      104 |     // only while the read is in flight; no fabricated receipt or product hook.
+      105 |     let releaseRead!: () => void, readHeld = false
+        at LOCAL_HOME/.cache/learning-workbench-acceptance/m62-codemirror-publication-combined-oct02/tests/e2e/edit-publication.spec.ts:102:16
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-codemirror-publication-combined-evidence-oct02/native-artifacts/edit-publication-native-sa-973b9-al-ACK-and-restart-recovery/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m62-codemirror-publication-combined-evidence-oct02/native-artifacts/edit-publication-native-sa-973b9-al-ACK-and-restart-recovery/error-context.md
+
+  1 failed
+    tests/e2e/edit-publication.spec.ts:42:1 › native saved edit enters Review, explicit synthetic decisions publish base+1, preserve parent pins, original ACK and restart recovery 

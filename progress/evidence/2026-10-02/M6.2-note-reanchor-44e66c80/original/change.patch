@@ -1,0 +1,542 @@
+diff --git a/apps/web/src/features/notes/NoteReanchor.test.tsx b/apps/web/src/features/notes/NoteReanchor.test.tsx
+new file mode 100644
+index 00000000..22f49a01
+--- /dev/null
++++ b/apps/web/src/features/notes/NoteReanchor.test.tsx
+@@ -0,0 +1,99 @@
++import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
++import { afterEach, expect, test, vi } from 'vitest'
++import type { SessionResponse } from '../../../../../packages/contracts/generated/api-types'
++import { request } from '../../api/client'
++import { digest } from '../retrieval/retrievalModel'
++import { versions } from '../reader/versionCompare/fixtures'
++import { NoteReanchor } from './NoteReanchor'
++
++afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals() })
++const deferred = <T,>() => { let resolve!: (value: T) => void; const promise = new Promise<T>(yes => { resolve = yes }); return { promise, resolve } }
++const raw = '🧠 前缀\r\ne\u0301 target\r\n后缀'
++function setup(role: SessionResponse['role'] = 'learner', openBook = false) {
++  const session: SessionResponse = { workspace_id: 'workspace_notes', actor_session_id: 'actor_notes', role, csrf_token: 'synthetic-session', active_independent_attempt_id: null, active_open_book_attempt_id: openBook ? 'attempt_open' : null }
++  const value = structuredClone(versions[1]), hash = digest(raw); value.body = raw; value.data.block.body_sha256 = hash
++  const calls: { path: string; method: string }[] = []
++  const response = (url: string) => {
++    if (url === '/api/v1/session') return new Response(JSON.stringify(session))
++    if (url.endsWith('/current')) return new Response(JSON.stringify(value.ref))
++    if (url.includes('/body?')) return new Response(value.body, { headers: { ETag: `"${hash}"` } })
++    return new Response(JSON.stringify(value.data), { headers: { ETag: `"${value.ref.sha256}"` } })
++  }
++  const fetch = vi.fn(async (url: string, init: RequestInit) => { calls.push({ path: url, method: init.method! }); return response(url) }); vi.stubGlobal('fetch', fetch)
++  const adopt = vi.fn(), props = { workspace: session.workspace_id, noteId: 'note_original', original: versions[0].ref, disabled: false, adopt }
++  const view = render(<NoteReanchor {...props} />)
++  return { session, value, calls, fetch, response, adopt, props, ...view }
++}
++async function read() { fireEvent.click(screen.getByRole('button', { name: '读取此块当前修订以手工重锚' })); return screen.findByLabelText('当前准确修订的完整原文') as Promise<HTMLTextAreaElement> }
++function select(input: HTMLTextAreaElement) { input.focus(); const start = input.value.indexOf('target'); input.setSelectionRange(start, start + 6); fireEvent.select(input) }
++test.each([['learner', false], ['author', false], ['learner', true]] as const)('explicit %s/open-book=%s exact source selection and local adoption never writes or changes parent references', async (role, openBook) => {
++  const f = setup(role, openBook); expect(f.fetch).not.toHaveBeenCalled()
++  const input = await read(); expect(input.value).toBe(raw.replaceAll('\r\n', '\n')); select(input)
++  expect(f.adopt).not.toHaveBeenCalled(); fireEvent.click(screen.getByRole('button', { name: '将这份准确新选文采用到本机笔记' }))
++  await waitFor(() => expect(f.adopt).toHaveBeenCalledWith({ ref: f.value.ref, exact_quote: 'target', prefix: '🧠 前缀\r\ne\u0301 ', suffix: '\r\n后缀', start_codepoint: 9, end_codepoint: 15 }))
++  expect(f.calls.every(call => call.method === 'GET')).toBe(true); expect(f.calls.filter(call => call.path === '/api/v1/session')).toHaveLength(3)
++})
++test.each(['independent', 'workspace', 'unknown', 'malformed'] as const)('unconfirmed or denied %s session cannot read current metadata or text', async fault => {
++  const f = setup()
++  if (fault === 'independent') f.session.active_independent_attempt_id = 'attempt_locked'
++  if (fault === 'workspace') f.session.workspace_id = 'workspace_other'
++  if (fault === 'unknown') f.fetch.mockRejectedValueOnce(new TypeError('offline'))
++  if (fault === 'malformed') f.fetch.mockResolvedValueOnce(new Response('{}'))
++  fireEvent.click(screen.getByRole('button', { name: '读取此块当前修订以手工重锚' })); await screen.findByRole('alert')
++  expect(f.calls.every(call => call.path === '/api/v1/session')).toBe(true); expect(screen.queryByLabelText('当前准确修订的完整原文')).toBeNull(); expect(f.adopt).not.toHaveBeenCalled()
++})
++test.each(['body', 'metadata', 'foreign_ref', 'actor_after_read'] as const)('bad %s cannot be shown or adopted as a verified new anchor', async fault => {
++  const f = setup(); let sessions = 0
++  f.fetch.mockImplementation(async (url, init) => {
++    f.calls.push({ path: url, method: init.method! })
++    if (fault === 'body' && url.includes('/body?')) return new Response('damaged source', { headers: { ETag: `"${digest(raw)}"` } })
++    if (fault === 'metadata' && url.includes('/blocks/') && !url.includes('/body?')) return new Response(JSON.stringify(f.value.data), { headers: { ETag: '"wrong"' } })
++    if (fault === 'foreign_ref' && url.endsWith('/current')) return new Response(JSON.stringify({ ...f.value.ref, id: 'block_foreign' }))
++    if (fault === 'actor_after_read' && url === '/api/v1/session' && ++sessions > 1) return new Response(JSON.stringify({ ...f.session, actor_session_id: 'another_actor' }))
++    return f.response(url)
++  })
++  fireEvent.click(screen.getByRole('button', { name: '读取此块当前修订以手工重锚' })); await screen.findByRole('alert')
++  expect(screen.queryByLabelText('当前准确修订的完整原文')).toBeNull(); expect(f.adopt).not.toHaveBeenCalled()
++})
++test.each(['current', 'body'] as const)('late %s response is hidden across Note/workspace/access/unmount boundaries', async stage => {
++  for (const change of ['note', 'workspace', 'access', 'unmount'] as const) {
++    const f = setup(), gate = deferred<Response>()
++    f.fetch.mockImplementation(async (url, init) => { f.calls.push({ path: url, method: init.method! }); return stage === 'current' ? url.endsWith('/current') ? gate.promise : f.response(url) : url.includes('/body?') ? gate.promise : f.response(url) })
++    fireEvent.click(screen.getByRole('button', { name: '读取此块当前修订以手工重锚' }))
++    await waitFor(() => expect(f.calls.some(call => stage === 'current' ? call.path.endsWith('/current') : call.path.includes('/body?'))).toBe(true))
++    if (change === 'note') f.rerender(<NoteReanchor {...f.props} noteId="note_other" />)
++    else if (change === 'workspace') f.rerender(<NoteReanchor {...f.props} workspace="workspace_other" />)
++    else if (change === 'access') await act(() => request('POST /api/v1/session/role', { role: 'author' }, { 'Idempotency-Key': 'synthetic_access_change' }))
++    else f.unmount()
++    await act(async () => { gate.resolve(f.response(stage === 'current' ? '/current' : '/body?')); await Promise.resolve() })
++    expect(screen.queryByLabelText('当前准确修订的完整原文')).toBeNull(); expect(f.adopt).not.toHaveBeenCalled(); f.unmount()
++  }
++})
++test.each(['disabled', 'actor', 'policy'] as const)('fresh adoption refuses %s changes and never dispatches a stale selection', async change => {
++  const f = setup(), input = await read(); select(input)
++  if (change === 'disabled') f.rerender(<NoteReanchor {...f.props} disabled />)
++  if (change === 'actor') f.session.actor_session_id = 'new_actor'
++  if (change === 'policy') f.session.active_independent_attempt_id = 'attempt_locked'
++  fireEvent.click(screen.getByRole('button', { name: '将这份准确新选文采用到本机笔记' })); if (change !== 'disabled') await screen.findByRole('alert')
++  expect(f.adopt).not.toHaveBeenCalled(); expect(f.calls.every(call => call.method === 'GET')).toBe(true)
++})
++test('polling permission loss and browser focus discard the read-only text and temporary selection', async () => {
++  const f = setup(), input = await read(); select(input); f.session.active_independent_attempt_id = 'attempt_locked'
++  await waitFor(() => expect(screen.queryByLabelText('当前准确修订的完整原文')).toBeNull(), { timeout: 3000 }); expect(f.adopt).not.toHaveBeenCalled()
++  f.session.active_independent_attempt_id = null; await read(); fireEvent(window, new Event('focus')); expect(screen.queryByLabelText('当前准确修订的完整原文')).toBeNull()
++})
++test('a fresh adoption permission timeout removes temporary payload and cannot accept its late successful response', async () => {
++  const f = setup(), input = await read(); select(input); const gate = deferred<Response>(); f.fetch.mockReturnValueOnce(gate.promise); vi.useFakeTimers()
++  fireEvent.click(screen.getByRole('button', { name: '将这份准确新选文采用到本机笔记' })); await act(async () => { await vi.advanceTimersByTimeAsync(2000) })
++  expect(screen.queryByLabelText('当前准确修订的完整原文')).toBeNull(); await act(async () => { gate.resolve(f.response('/api/v1/session')); await Promise.resolve() }); expect(f.adopt).not.toHaveBeenCalled()
++})
++test('a later current revision never silently substitutes the already verified exact source selection', async () => {
++  const f = setup(), input = await read(); select(input)
++  const frozen = structuredClone(f.value.ref), later = { ...f.value.ref, revision: 3, sha256: 'e'.repeat(64) }
++  f.fetch.mockImplementation(async (url, init) => { f.calls.push({ path: url, method: init.method! }); return url.endsWith('/current') ? new Response(JSON.stringify(later)) : f.response(url) })
++  expect(screen.getByText(/当前指针之后变化不会自动替换/)).toBeTruthy()
++  fireEvent.click(screen.getByRole('button', { name: '将这份准确新选文采用到本机笔记' }))
++  await waitFor(() => expect(f.adopt).toHaveBeenCalledWith(expect.objectContaining({ ref: frozen, exact_quote: 'target' })))
++  expect(f.calls.filter(call => call.path.endsWith('/current'))).toHaveLength(1)
++  expect(f.calls.every(call => call.method === 'GET')).toBe(true)
++})
+diff --git a/apps/web/src/features/notes/NoteReanchor.tsx b/apps/web/src/features/notes/NoteReanchor.tsx
+new file mode 100644
+index 00000000..886eee5d
+--- /dev/null
++++ b/apps/web/src/features/notes/NoteReanchor.tsx
+@@ -0,0 +1,91 @@
++import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
++import type { ContentRef, Selection, SessionResponse } from '../../../../../packages/contracts/generated/api-types'
++import { getSessionGeneration, request, subscribeSessionAccess } from '../../api/client'
++import { checkedProvider } from '../providers/providerSchema'
++import { readBlock, type LoadedBlock } from '../reader/contentClient'
++import { selectionFromTextarea } from '../reader/selection'
++import { sameRef } from '../reader/target'
++
++// Read-only preparation. Adoption changes the local Note draft; its owner
++// still performs the separate, explicit CAS save.
++export function NoteReanchor({ workspace, noteId, original, disabled, adopt }: {
++  workspace: string; noteId: string; original: ContentRef; disabled: boolean; adopt: (selection: Selection) => void
++}) {
++  const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
++  const key = JSON.stringify([workspace, noteId, original, access]), owner = useRef({ key, sequence: 0, disabled })
++  if (owner.current.key !== key) owner.current = { key, sequence: owner.current.sequence + 1, disabled }
++  owner.current.disabled = disabled
++  const empty = { key, block: null as LoadedBlock | null, permission: '', selected: null as Selection | null, busy: false, error: '' }
++  const [stored, setStored] = useState(empty), state = stored.key === key ? stored : empty
++  const patch = (change: Partial<typeof stored>) => setStored(old => ({ ...(old.key === key ? old : empty), ...change }))
++  const current = (sequence: number) => owner.current.key === key && owner.current.sequence === sequence && getSessionGeneration() === access
++  const clear = () => { owner.current.sequence++; patch({ block: null, selected: null, permission: '', busy: false, error: '当前读取权限需要重新核验；原笔记和本机草稿未改动。' }) }
++  useEffect(() => () => { owner.current.sequence++ }, [])
++  useEffect(() => {
++    const visibility = () => { if (document.visibilityState !== 'visible') clear() }
++    window.addEventListener('focus', clear); document.addEventListener('visibilitychange', visibility)
++    return () => { window.removeEventListener('focus', clear); document.removeEventListener('visibilitychange', visibility) }
++  }, [key])
++  const permission = async () => {
++    let deadline = 0
++    try {
++      const actual = await Promise.race([request('GET /api/v1/session', undefined), new Promise<never>((_resolve, reject) => { deadline = window.setTimeout(() => reject(new Error('权限读取超时。')), 2000) })])
++      const session = checkedProvider<SessionResponse>('SessionResponse', actual)
++      if (session.workspace_id !== workspace || session.active_independent_attempt_id !== null) throw new Error('当前工作区或测试策略不允许读取笔记材料。')
++      return JSON.stringify([session.workspace_id, session.actor_session_id, session.role, session.active_independent_attempt_id, session.active_open_book_attempt_id])
++    } finally { window.clearTimeout(deadline) }
++  }
++  useEffect(() => {
++    if (!state.block || !state.permission || state.busy) return
++    const sequence = owner.current.sequence; let live = true, timer = 0, deadline = 0
++    const valid = () => live && current(sequence)
++    const poll = async () => {
++      deadline = window.setTimeout(() => { if (valid()) clear() }, 2000)
++      try { if (await permission() !== state.permission && valid()) clear() } catch { if (valid()) clear() }
++      finally { window.clearTimeout(deadline); if (valid()) timer = window.setTimeout(() => void poll(), 2000) }
++    }
++    timer = window.setTimeout(() => void poll(), 2000)
++    return () => { live = false; window.clearTimeout(timer); window.clearTimeout(deadline) }
++  }, [key, state.block, state.permission, state.busy])
++  const read = async () => {
++    if (disabled || state.busy) return
++    const sequence = ++owner.current.sequence; patch({ block: null, selected: null, permission: '', busy: true, error: '' })
++    try {
++      const allowed = await permission(); if (!current(sequence) || owner.current.disabled) return
++      const ref = checkedProvider<ContentRef>('ContentRef', await request('GET /api/v1/objects/{id}/current', undefined, undefined, { path: { id: original.id } }))
++      if (!current(sequence) || owner.current.disabled) return
++      if (ref.entity !== 'block' || ref.id !== original.id) throw new Error('当前引用不属于原笔记的同一公开块。')
++      const block = await readBlock(ref); if (!current(sequence) || owner.current.disabled) return
++      if (await permission() !== allowed) throw new Error('读取期间会话或策略变化。')
++      if (current(sequence) && !owner.current.disabled) patch({ block, permission: allowed })
++    } catch { if (current(sequence)) patch({ block: null, selected: null, error: '无法确认当前块的权限、准确引用或原文字节；原笔记保持不变。' }) }
++    finally { if (current(sequence)) patch({ busy: false }) }
++  }
++  const apply = async () => {
++    if (disabled || state.busy || !state.selected || !state.block) return
++    const selection = state.selected, allowed = state.permission, sequence = ++owner.current.sequence; patch({ busy: true, error: '' })
++    try {
++      if (await permission() !== allowed) { if (current(sequence)) clear(); return }
++      if (!current(sequence) || owner.current.disabled) return
++      adopt(selection); patch({ block: null, selected: null, permission: '' })
++    } catch { if (current(sequence)) clear() }
++    finally { if (current(sequence)) patch({ busy: false }) }
++  }
++  return <section className="note-reanchor" aria-label="手工选择新的笔记锚点">
++    <p>旧锚点不会自动迁移。单独读取同一块的当前修订并选择原文，先采用到本机草稿，再明确保存笔记。教材父引用保持原样。</p>
++    <button disabled={disabled || state.busy} onClick={() => void read()}>读取此块当前修订以手工重锚</button>
++    {state.busy && <p role="status">正在核验准确原文与当前权限…</p>}{state.error && <p role="alert">{state.error}</p>}
++    {state.block && <><p>以下是此次读取并核验的准确修订；当前指针之后变化不会自动替换这份选文。</p><p>准确新依据：{state.block.block_ref.id} · 修订 {state.block.block_ref.revision} · <code>{state.block.block_ref.sha256}</code></p>
++      <p>完整正文 SHA256：<code>{state.block.block.body_sha256}</code></p>
++      {sameRef(state.block.block_ref, original) && <p>当前指针仍是原锚点修订；不会仅据读取清除 stale。</p>}
++      <details><summary>核对当前块完整元数据</summary><pre>{JSON.stringify(state.block.block, null, 2)}</pre></details>
++      <label>当前准确修订的完整原文<textarea readOnly disabled={disabled || state.busy} value={state.block.body} onSelect={event => {
++        if (disabled || state.busy || !state.block || owner.current.key !== key) return
++        const result = selectionFromTextarea(state.block.block_ref, state.block.body, event.currentTarget.selectionStart, event.currentTarget.selectionEnd)
++        patch({ selected: result.kind === 'selected' ? result.selection : null, error: result.kind === 'rejected' ? result.message : '' })
++      }} /></label>
++      {state.selected && <><p>新选文码点 [{state.selected.start_codepoint}, {state.selected.end_codepoint})，未提交到服务端。</p><blockquote>{state.selected.exact_quote}</blockquote></>}
++      <button disabled={disabled || state.busy || !state.selected} onClick={() => void apply()}>将这份准确新选文采用到本机笔记</button>
++    </>}
++  </section>
++}
+diff --git a/apps/web/src/features/notes/NotesPanel.tsx b/apps/web/src/features/notes/NotesPanel.tsx
+index 6519f6be..64cd2ea8 100644
+--- a/apps/web/src/features/notes/NotesPanel.tsx
++++ b/apps/web/src/features/notes/NotesPanel.tsx
+@@ -6,6 +6,7 @@ import type { DraftRecord } from '../../workbench/DraftStore'
+ import { DraftConflictPreview } from '../../workbench/DraftConflictPreview'
+ import { decodeNoteEnvelope, noteDirty, noteKey, type NoteEnvelope } from './noteDrafts'
+ import { useNoteDrafts } from './useNoteDrafts'
++import { NoteReanchor } from './NoteReanchor'
+ import './notes.css'
+ type Conflict = { base: Note | null; local: Note; remote: Note; remoteRef: ContentRef }
+ function previewCandidate(text: string, workspace: string): string { try { return decodeNoteEnvelope(text, workspace).candidate.markdown } catch { return '此候选无法安全解析，原记录保留。' } }
+@@ -136,9 +137,15 @@ export function NotesPanel({ workspace, selection, initialRefId, openAnchor, onS
+     } finally { if (live.current && owner === generation.current) setBusy(false) }
+   }
+   const recover = (record: DraftRecord) => { try { const value = decodeNoteEnvelope(record.text, workspace); if (value.base_note) void chooseNote(value.base_note); else { setConflict(null); edit(value, false) } } catch (reason) { setError((reason as Error).message) } }
++  const adoptAnchor = (noteId: string, anchor: Selection) => {
++    const current = editorRef.current
++    if (!current?.base_ref || current.candidate.id !== noteId || busy || localSaving || drafts.unsafe || conflict || localConflicts.length) return
++    edit({ ...current, candidate: { ...current.candidate, anchor, anchor_state: 'exact' } })
++  }
+   return <div className="notes-panel"><p>笔记绑定准确内容块、修订与原文范围。它不属于已认证学习证据。</p><button disabled={!selection || busy || localSaving} onClick={create}>用当前选文新建笔记</button>{!selection && <p>先在正文或原始 Markdown 中选取范围，再新建笔记。</p>}<label>笔记范围<select disabled={busy} value={filter ? 'current' : 'all'} onChange={event => setFilter(event.target.value === 'all' ? '' : initialRefId ?? selection?.ref.id ?? '')}><option value="all">工作区全部笔记</option>{(initialRefId || selection) && <option value="current">当前内容块的笔记</option>}</select></label>
+     <ul className="note-list">{notes.map(note => <li key={note.id}><button disabled={busy || drafts.unsafe} onClick={() => void chooseNote(note)}>{note.markdown.slice(0, 60)} <small>修订 {note.revision} · {note.anchor_state}</small></button></li>)}</ul>{cursor && <button onClick={() => void loadList(true)}>加载更多笔记</button>}{Object.entries(records).map(([key, record]) => { try { const value = decodeNoteEnvelope(record.text, workspace); return noteDirty(value) && value.candidate.id !== editor?.candidate.id ? <button key={key} disabled={busy} onClick={() => recover(record)}>恢复本机笔记草稿 {value.candidate.id}</button> : null } catch { return <p key={key}>一份本机草稿无法解析，原记录保留。</p> } })}
+     {editor && <section className="note-editor"><h3>编辑笔记</h3><p className="note-identity">{editor.candidate.id} · 修订 {editor.base_ref?.revision ?? '尚未创建'}</p><p>锚点：{editor.candidate.anchor.ref.id} · 修订 {editor.candidate.anchor.ref.revision} · {editor.candidate.anchor_state}</p><blockquote>{editor.candidate.anchor.exact_quote}</blockquote><p>Unicode 码点范围 [{editor.candidate.anchor.start_codepoint}, {editor.candidate.anchor.end_codepoint})</p><button onClick={() => openAnchor(editor.candidate.anchor)}>打开笔记的原始修订</button>{selection && editor.base_ref && <button disabled={busy || localSaving || !!conflict || localConflicts.length > 0} onClick={() => edit({ ...editor, candidate: { ...editor.candidate, anchor: structuredClone(selection), anchor_state: 'exact' } })}>将笔记重新绑定当前选文</button>}<label>笔记正文<textarea value={editor.candidate.markdown} disabled={busy || localConflicts.length > 0} onChange={event => edit({ ...editor, candidate: { ...editor.candidate, markdown: event.target.value } })} /></label><div className="note-buttons"><button className="primary-button" disabled={busy || localSaving || !!conflict || localConflicts.length > 0 || !editor.candidate.markdown.trim()} onClick={() => void save()}>保存笔记到服务端</button>{editor.base_ref && <button disabled={busy || localSaving} onClick={() => setDeleting(true)}>删除此笔记</button>}{localError && <button onClick={() => persist(editor)}>重试保存本机草稿</button>}</div>{localSaving ? <p role="status">本机笔记草稿保存中…</p> : noteDirty(editor) && !localError && <p role="status">本机草稿已保留；尚未同步为服务端笔记。</p>}</section>}
++    {editor?.base_ref && editor.candidate.anchor_state === 'stale' && <NoteReanchor key={JSON.stringify([workspace, editor.candidate.id, editor.base_ref])} workspace={workspace} noteId={editor.candidate.id} original={editor.candidate.anchor.ref} disabled={busy || localSaving || drafts.unsafe || !!conflict || localConflicts.length > 0} adopt={anchor => adoptAnchor(editor.candidate.id, anchor)} />}
+     {conflict && <section className="note-conflict" role="status"><h3>笔记版本冲突</h3><DraftConflictPreview base={conflict.base?.markdown ?? null} local={conflict.local.markdown} stored={conflict.remote.markdown} /><details><summary>比较锚点与准确引用</summary>{([{ label: '原基准', note: conflict.base }, { label: '本机候选', note: conflict.local }, { label: '服务端版本', note: conflict.remote }]).map(item => item.note && <div key={item.label}><p>{item.label}：{item.note.anchor.ref.id} · 修订 {item.note.anchor.ref.revision} · {item.note.anchor_state}</p><code>{item.note.anchor.ref.sha256}</code><blockquote>{item.note.anchor.exact_quote}</blockquote></div>)}</details><button onClick={() => resolveServer(true)}>保留本地内容并采用新基准</button><button onClick={() => resolveServer(false)}>采用服务端笔记</button></section>}
+     {localConflicts.length > 0 && editor && <section role="status"><h3>本机草稿版本冲突</h3><p>多个窗口的候选均保留，选择后再保存到服务端。</p>{[recordRef.current[noteKey(editor.candidate)]?.text, ...localConflicts].filter((text): text is string => !!text).map((text, index) => <div key={index}><pre>{previewCandidate(text, workspace)}</pre><button disabled={busy} onClick={() => void resolveLocal(text)}>采用本机候选 {index + 1}</button></div>)}</section>}
+     {deleting && <section role="alertdialog" aria-label="确认删除笔记"><p>从当前笔记列表软删除；保留历史版本和引用。本机未同步内容仍需自行保留。</p><button disabled={busy} onClick={() => void remove()}>确认软删除笔记</button><button onClick={() => setDeleting(false)}>取消删除</button></section>}
+diff --git a/apps/web/src/features/notes/NotesPanelReanchor.test.tsx b/apps/web/src/features/notes/NotesPanelReanchor.test.tsx
+new file mode 100644
+index 00000000..a6d227ee
+--- /dev/null
++++ b/apps/web/src/features/notes/NotesPanelReanchor.test.tsx
+@@ -0,0 +1,101 @@
++import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
++import { afterEach, beforeEach, expect, test, vi } from 'vitest'
++import { IDBFactory } from 'fake-indexeddb'
++import type { ContentRef, Note, SessionResponse } from '../../../../../packages/contracts/generated/api-types'
++import { DraftStore } from '../../workbench/DraftStore'
++import { canonical, digest } from '../retrieval/retrievalModel'
++import { versions } from '../reader/versionCompare/fixtures'
++
++const binding = vi.hoisted(() => ({ store: null as DraftStore | null }))
++vi.mock('./noteDrafts', async original => {
++  const actual = await original<typeof import('./noteDrafts')>()
++  return { ...actual, noteDraftStore: {
++    load: (...args: Parameters<DraftStore['load']>) => binding.store!.load(...args),
++    save: (...args: Parameters<DraftStore['save']>) => binding.store!.save(...args),
++    subscribe: (...args: Parameters<DraftStore['subscribe']>) => binding.store!.subscribe(...args),
++  } }
++})
++import { decodeNoteEnvelope } from './noteDrafts'
++import { NotesPanel } from './NotesPanel'
++
++let store: DraftStore, factory: IDBFactory, name: string, workspace: string
++beforeEach(async () => {
++  factory = new IDBFactory(); name = 'note-reanchor-' + crypto.randomUUID(); workspace = 'workspace_' + crypto.randomUUID().replaceAll('-', '')
++  store = new DraftStore({ name, factory }); binding.store = store; await store.load(workspace)
++})
++afterEach(async () => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); await store.close() })
++const deferred = <T,>() => { let resolve!: (value: T) => void; const promise = new Promise<T>(yes => { resolve = yes }); return { promise, resolve } }
++async function setup() {
++  const old = versions[0], newer = versions[1]
++  const note: Note = { schema_version: '3.0.0', entity: 'note', id: 'note_reanchor', workspace_id: workspace, revision: 2, markdown: '已保存的原笔记', anchor_state: 'stale', anchor: { ref: old.ref, exact_quote: old.body, start_codepoint: 0, end_codepoint: Array.from(old.body).length, prefix: '', suffix: '' } }
++  const ref: ContentRef = { entity: 'note', id: note.id, revision: 2, sha256: digest(canonical(note)) }
++  const session: SessionResponse = { workspace_id: workspace, actor_session_id: 'actor_synthetic', role: 'learner', csrf_token: 'synthetic', active_independent_attempt_id: null, active_open_book_attempt_id: null }
++  const response = (url: string) => {
++    if (url === '/api/v1/session') return new Response(JSON.stringify(session))
++    if (url.startsWith('/api/v1/notes')) return new Response(JSON.stringify({ items: [note], next_cursor: null }))
++    if (url.endsWith('/current')) return new Response(JSON.stringify(url.includes(note.id) ? ref : newer.ref))
++    if (url.includes('/body?')) return new Response(newer.body, { headers: { ETag: `"${newer.data.block.body_sha256}"` } })
++    return new Response(JSON.stringify(newer.data), { headers: { ETag: `"${newer.ref.sha256}"` } })
++  }
++  const fetch = vi.fn(async (url: string, _init: RequestInit) => response(url)); vi.stubGlobal('fetch', fetch)
++  const onState = vi.fn(), props = { workspace, selection: null, openAnchor: vi.fn(), onState, onSaved: vi.fn() }
++  const view = render(<NotesPanel {...props} />)
++  await waitFor(() => expect((screen.getByRole('button', { name: /已保存的原笔记/ }) as HTMLButtonElement).disabled).toBe(false))
++  fireEvent.click(screen.getByRole('button', { name: /已保存的原笔记/ })); await screen.findByLabelText('笔记正文')
++  return { note, ref, session, response, fetch, onState, props, ...view }
++}
++async function selectNewSource() {
++  fireEvent.click(screen.getByRole('button', { name: '读取此块当前修订以手工重锚' }))
++  const input = await screen.findByLabelText('当前准确修订的完整原文') as HTMLTextAreaElement
++  input.focus(); input.setSelectionRange(0, input.value.length); fireEvent.select(input)
++  await waitFor(() => expect((screen.getByRole('button', { name: '将这份准确新选文采用到本机笔记' }) as HTMLButtonElement).disabled).toBe(false))
++}
++async function localCandidate() { return decodeNoteEnvelope((await store.load(workspace))['note:note_reanchor'].text, workspace) }
++
++test('fresh adoption preserves text typed while permission is pending and persists the entire new anchor through remount without a server write', async () => {
++  const f = await setup(); await selectNewSource()
++  const gate = deferred<Response>(); f.fetch.mockReturnValueOnce(gate.promise)
++  fireEvent.click(screen.getByRole('button', { name: '将这份准确新选文采用到本机笔记' }))
++  const latest = '等待权限时的新笔记 🧠 e\u0301\n$\\alpha$ 保持原样'
++  fireEvent.change(screen.getByLabelText('笔记正文'), { target: { value: latest } })
++  await waitFor(async () => expect((await localCandidate()).candidate.markdown).toBe(latest))
++  await waitFor(() => expect(f.onState).toHaveBeenLastCalledWith({ dirty: true, safe: true }))
++  await act(async () => { gate.resolve(f.response('/api/v1/session')); await gate.promise })
++  await waitFor(async () => expect((await localCandidate()).candidate.anchor.ref).toEqual(versions[1].ref))
++  const saved = await localCandidate()
++  expect(saved).toMatchObject({ base_ref: f.ref, base_note: f.note, candidate: { markdown: latest, anchor_state: 'exact', anchor: { ref: versions[1].ref, exact_quote: versions[1].body } } })
++  expect((screen.getByLabelText('笔记正文') as HTMLTextAreaElement).value).toBe(latest)
++  f.unmount(); render(<NotesPanel {...f.props} />)
++  fireEvent.click(await screen.findByRole('button', { name: /恢复本机笔记草稿/ }))
++  await waitFor(() => expect((screen.getByLabelText('笔记正文') as HTMLTextAreaElement).value).toBe(latest))
++  expect(screen.getByText(/锚点：block_compare · 修订 2 · exact/)).toBeTruthy()
++  expect(f.fetch.mock.calls.every(([, init]) => init.method === 'GET')).toBe(true)
++})
++
++test('an actual IndexedDB quota failure retains adopted anchor plus unsaved text, marks close unsafe, and recovers both after unmount', async () => {
++  const f = await setup(), latest = '未发送正文 🧠 e\u0301\n第二行'
++  fireEvent.change(screen.getByLabelText('笔记正文'), { target: { value: latest } })
++  await waitFor(() => expect(f.onState).toHaveBeenLastCalledWith({ dirty: true, safe: true })); await selectNewSource()
++  const database = await new Promise<IDBDatabase>((resolve, reject) => { const request = factory.open(name); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error) })
++  const prototype: IDBObjectStore = Object.getPrototypeOf(database.transaction('drafts').objectStore('drafts'))
++  vi.spyOn(prototype, 'put').mockImplementationOnce(() => { throw new DOMException('synthetic quota', 'QuotaExceededError') })
++  fireEvent.click(screen.getByRole('button', { name: '将这份准确新选文采用到本机笔记' }))
++  await screen.findByText(/本机笔记草稿尚未保存/)
++  expect((screen.getByLabelText('笔记正文') as HTMLTextAreaElement).value).toBe(latest); expect(screen.getByText(/锚点：block_compare · 修订 2 · exact/)).toBeTruthy()
++  expect(f.onState).toHaveBeenLastCalledWith({ dirty: true, safe: false })
++  expect((await localCandidate()).candidate.anchor.ref).toEqual(versions[0].ref)
++  const unload = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(unload); expect(unload.defaultPrevented).toBe(true)
++  f.unmount(); render(<NotesPanel {...f.props} />)
++  await waitFor(async () => {
++    const record = (await store.load(workspace))['note:note_reanchor']
++    expect([record.text, ...record.conflicts.map(item => item.text)].map(text => decodeNoteEnvelope(text, workspace).candidate.anchor.ref)).toContainEqual(versions[1].ref)
++  })
++  fireEvent.click(await screen.findByRole('button', { name: /恢复本机笔记草稿/ }))
++  await waitFor(() => expect((screen.getByLabelText('笔记正文') as HTMLTextAreaElement).value).toBe(latest))
++  expect(screen.getByText(/锚点：block_compare · 修订 2 · exact/)).toBeTruthy()
++  expect(screen.getByRole('heading', { name: '本机草稿版本冲突' })).toBeTruthy()
++  fireEvent.click(screen.getByRole('button', { name: '采用本机候选 1' }))
++  await waitFor(async () => expect((await localCandidate()).candidate.anchor.ref).toEqual(versions[1].ref))
++  expect((await localCandidate()).candidate.anchor.exact_quote).toBe(versions[1].body)
++  expect(f.fetch.mock.calls.every(([, init]) => init.method === 'GET')).toBe(true); database.close()
++})
+diff --git a/apps/web/src/features/notes/notes.css b/apps/web/src/features/notes/notes.css
+index d97c4ab1..de041734 100644
+--- a/apps/web/src/features/notes/notes.css
++++ b/apps/web/src/features/notes/notes.css
+@@ -2,3 +2,5 @@
+ 
+ .notes-dialog{width:min(860px,96vw);overflow:hidden}.notes-dialog .dialog-inner{padding:0;display:flex;flex-direction:column;max-height:calc(90dvh - 2px);overflow:hidden}.notes-dialog .dialog-inner>header{flex:none;margin:0;padding:16px 22px;border-bottom:1px solid var(--border-subtle);background:var(--bg-surface)}.notes-dialog .notes-panel{overflow:auto;min-height:0;padding:22px;overscroll-behavior:contain}
+ @media(max-width:600px){.notes-dialog .notes-panel,.notes-dialog .dialog-inner>header{padding:14px}}
++
++.note-reanchor{border-top:1px solid var(--border-subtle);margin-top:20px;padding-top:16px}.note-reanchor>label{display:flex;flex-direction:column;gap:6px;margin:16px 0}.note-reanchor textarea{width:100%;min-height:200px;resize:vertical}.note-reanchor blockquote{white-space:pre-wrap;overflow-wrap:anywhere}.note-reanchor code{overflow-wrap:anywhere}
+diff --git a/apps/web/src/features/reader/selection.test.ts b/apps/web/src/features/reader/selection.test.ts
+index 9ec00e50..a6619497 100644
+--- a/apps/web/src/features/reader/selection.test.ts
++++ b/apps/web/src/features/reader/selection.test.ts
+@@ -1,6 +1,6 @@
+ import { afterEach, describe, expect, it } from 'vitest'
+ import type { ContentRef } from '../../../../../packages/contracts/generated/types'
+-import { selectionFromDOM, selectionFromSource, type SelectionResult } from './selection'
++import { selectionFromDOM, selectionFromSource, selectionFromTextarea, type SelectionResult } from './selection'
+ 
+ const ref: ContentRef = { entity: 'block', id: 'block_selection', revision: 7, sha256: 'a'.repeat(64) }
+ 
+@@ -188,3 +188,29 @@ describe('raw source selection bounds and generated anchor contract', () => {
+     }
+   })
+ })
++
++describe('textarea normalization to original Note anchor bytes', () => {
++  it.each(['甲\r\n🧠e\u0301\r\n尾', '甲\r🧠e\u0301\r尾', '甲\n🧠e\u0301\n尾'])('maps the real textarea offsets back into %j', source => {
++    const input = document.createElement('textarea'); input.value = source
++    const start = input.value.indexOf('🧠'), end = input.value.indexOf('尾')
++    input.setSelectionRange(start, end)
++    const quote = source.slice(source.indexOf('🧠'), source.indexOf('尾'))
++    const prefix = source.slice(0, source.indexOf('🧠'))
++    expect(selected(selectionFromTextarea(ref, source, input.selectionStart, input.selectionEnd))).toEqual({ ref, exact_quote: quote, prefix, suffix: '尾', start_codepoint: Array.from(prefix).length, end_codepoint: Array.from(prefix + quote).length })
++  })
++
++  it('keeps forty original codepoints of context around the selected instance', () => {
++    const source = '🧠'.repeat(45) + '\r\n同句\r\n同句\r\n' + '尾'.repeat(45), input = document.createElement('textarea'); input.value = source
++    const start = input.value.lastIndexOf('同句'); input.setSelectionRange(start, start + 2)
++    const anchor = selected(selectionFromTextarea(ref, source, input.selectionStart, input.selectionEnd))
++    expect(anchor).toMatchObject({ exact_quote: '同句', start_codepoint: 51, end_codepoint: 53, prefix: '🧠'.repeat(34) + '\r\n同句\r\n', suffix: '\r\n' + '尾'.repeat(38) })
++  })
++
++  it('rejects normalized half-surrogate and out-of-range positions while treating a collapsed caret as empty', () => {
++    expect(selectionFromTextarea(ref, '甲\r\n🧠尾', 3, 4).kind).toBe('rejected')
++    expect(selectionFromTextarea(ref, '甲\r\n🧠尾', 2, 3).kind).toBe('rejected')
++    for (const [start, end] of [[-1, 1], [2, 1], [0.5, 1], [0, 9]]) expect(selectionFromTextarea(ref, '甲\r\n🧠尾', start, end).kind).toBe('rejected')
++    expect(selectionFromTextarea(ref, '甲\r\n🧠尾', 2, 2)).toEqual({ kind: 'empty' })
++    expect(selectionFromTextarea(ref, '甲\r\n🧠尾', 5, 5)).toEqual({ kind: 'empty' })
++  })
++})
+diff --git a/apps/web/src/features/reader/selection.ts b/apps/web/src/features/reader/selection.ts
+index 3fad7ee7..cab4f1b0 100644
+--- a/apps/web/src/features/reader/selection.ts
++++ b/apps/web/src/features/reader/selection.ts
+@@ -58,6 +58,19 @@ export function selectionFromSource(ref: ContentRef, source: string, startUtf16:
+   return { kind: 'selected', selection: Object.freeze(selection) }
+ }
+ 
++/** Map LF-normalized textarea UTF-16 offsets back to the untouched source. */
++export function selectionFromTextarea(ref: ContentRef, source: string, start: number, end: number): SelectionResult {
++  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start) return rejected()
++  let original = 0, displayed = 0, originalStart = -1
++  while (displayed < end && original < source.length) {
++    if (displayed === start) originalStart = original
++    original += source[original] === '\r' && source[original + 1] === '\n' ? 2 : 1
++    displayed++
++  }
++  if (displayed !== end) return rejected()
++  return selectionFromSource(ref, source, start === end ? original : originalStart, original)
++}
++
+ function compare(document: Document, left: Node, leftOffset: number, right: Node, rightOffset: number): number {
+   const a = document.createRange(), b = document.createRange()
+   a.setStart(left, leftOffset); a.collapse(true)
+diff --git a/tests/e2e/contentImpactsData.ts b/tests/e2e/contentImpactsData.ts
+index 86d91a34..5664118a 100644
+--- a/tests/e2e/contentImpactsData.ts
++++ b/tests/e2e/contentImpactsData.ts
+@@ -25,12 +25,13 @@ print(json.dumps({'archive':base64.b64encode(f.getvalue()).decode(),'course':ref
+   return { ...value, bytes: Buffer.from(value.archive, 'base64') }
+ }
+ 
+-export async function publishEditedBlock(page: Page, runtime: RestartRuntime) {
++export async function publishEditedBlock(page: Page, runtime: RestartRuntime, beforeEdit?: (fixture: ReaderPackage) => Promise<void>, revisedBody = '原创合成内容影响发布正文，仅验证软件保存与复核流程。\n') {
+   const fixture = originalImpactPackage(), imported = await importReaderPackage(page, fixture)
+   await imported.dialog.getByRole('button', { name: '切换为作者角色', exact: true }).click()
+   await imported.dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
+   const href = `${runtime.origin}/?reader=${encodeURIComponent(JSON.stringify({ course: fixture.course, lesson: fixture.lessons[0], block: fixture.blocks[0], view: 'lesson' }))}`
+   await page.goto(href)
++  if (beforeEdit) await beforeEdit(fixture)
+   const editor = page.getByRole('region', { name: '文本块编辑与恢复', exact: true })
+   await editor.getByRole('button', { name: '编辑此精确文本块', exact: true }).click()
+   const creating = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/api/v1/drafts'))
+@@ -39,7 +40,7 @@ export async function publishEditedBlock(page: Page, runtime: RestartRuntime) {
+   await editor.getByLabel('读取已有编辑稿 ID', { exact: true }).fill(created.draft_id)
+   await editor.getByRole('button', { name: '另行读取服务端草稿头', exact: true }).click()
+   await editor.getByLabel('本机标题', { exact: true }).fill('发布后原创内容影响标题')
+-  await editor.getByLabel('本机正文', { exact: true }).fill('原创合成内容影响发布正文，仅验证软件保存与复核流程。\n')
++  await editor.getByLabel('本机正文', { exact: true }).fill(revisedBody)
+   const patch = page.waitForResponse(r => r.request().method() === 'PATCH' && r.url().endsWith(`/api/v1/drafts/${created.draft_id}`))
+   await editor.getByRole('button', { name: '明确提交本机标题与正文', exact: true }).click(); expect((await patch).status()).toBe(200)
+   await editor.getByRole('button', { name: '另行读取服务端草稿头', exact: true }).click()
+diff --git a/tests/e2e/note-reanchor-publication.spec.ts b/tests/e2e/note-reanchor-publication.spec.ts
+new file mode 100644
+index 00000000..08fb9579
+--- /dev/null
++++ b/tests/e2e/note-reanchor-publication.spec.ts
+@@ -0,0 +1,95 @@
++import { writeFileSync } from 'node:fs'
++import { expect, test, type Locator, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
++import type { ContentRef, Note, RetrievalQueryView } from '../../packages/contracts/generated/api-types'
++import { RestartRuntime } from './restartRuntime'
++import { publishEditedBlock } from './contentImpactsData'
++
++async function openRetrieval(page: Page) {
++  await page.keyboard.press('Control+Shift+P')
++  await page.getByRole('dialog', { name: '命令面板', exact: true }).getByRole('button', { name: '检索材料', exact: false }).click()
++  return page.getByRole('dialog', { name: '检索材料', exact: true })
++}
++async function query(page: Page, dialog: Locator, text: string): Promise<RetrievalQueryView> {
++  await dialog.getByLabel('检索词', { exact: true }).fill(text)
++  const reading = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/retrieval/query'))
++  await dialog.getByRole('button', { name: '查询所选材料', exact: true }).click(); const response = await reading; expect(response.status()).toBe(200); return response.json()
++}
++async function rebuild(page: Page, dialog: Locator) {
++  const writing = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/index/rebuild'))
++  await dialog.getByRole('button', { name: '明确按已读描述重建索引', exact: true }).click(); const response = await writing; expect(response.status()).toBe(202)
++  const ack = await response.json(); await expect(dialog.getByRole('region', { name: '所选范围索引状态' })).toContainText('索引已就绪', { timeout: 30_000 })
++  await expect(dialog.getByRole('region', { name: '实际索引任务' })).toContainText('任务当前读回：已完成'); return { body: response.request().postDataJSON(), ack }
++}
++async function note(page: Page, id: string): Promise<Note> {
++  const response = await page.request.get('/api/v1/notes?limit=100'); expect(response.status()).toBe(200)
++  const value = (await response.json()).items.find((item: Note) => item.id === id); expect(value).toBeTruthy(); return value
++}
++
++test('actual UI edit publication stales the original Note, explicit new-source reanchor and old-scope rebuild preserve historical bytes and parent pins', async ({ playwright }, info) => {
++  test.setTimeout(180_000)
++  const runtime = await RestartRuntime.start(), errors: string[] = [], writes: { method: string; path: string; body: unknown }[] = []
++  try {
++    const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]; await runtime.authenticateOnly(page)
++    page.on('pageerror', error => errors.push(error.message))
++    page.on('request', r => { const path = new URL(r.url()).pathname; if (['POST', 'PATCH'].includes(r.method()) && (/\/notes(?:\/[^/]+)?$/.test(path) || /\/drafts(?:\/[^/]+(?:\/review|\/publish)?)?$/.test(path) || /\/reviews\/[^/]+\/decision$/.test(path) || path.endsWith('/index/rebuild'))) writes.push({ method: r.method(), path, body: r.postDataJSON() }) })
++    const notes = page.getByRole('dialog', { name: '笔记', exact: true }), markdown = '旧笔记原文 🧠 e\u0301\n手工重锚只改准确引用，不改本文。'
++    let original!: Note, originalRef!: ContentRef, initialQuery!: RetrievalQueryView, initialRebuild!: Awaited<ReturnType<typeof rebuild>>
++    const evidenceBefore = await page.request.get('/api/v1/learning/evidence').then(r => r.json())
++    const publication = await publishEditedBlock(page, runtime, async fixture => {
++      const block = page.locator(`#block-${fixture.blocks[0].id}-r1`)
++      await block.getByText('原始 Markdown 与精确选文', { exact: true }).click()
++      const source = block.getByRole('textbox', { name: '原始 Markdown：原创合成编辑标题', exact: true }); await source.focus(); await page.keyboard.press('Control+A')
++      await page.getByRole('button', { name: '为当前选文记笔记', exact: true }).click(); await notes.getByRole('button', { name: '用当前选文新建笔记', exact: true }).click()
++      await notes.getByLabel('笔记正文').fill(markdown)
++      const writing = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/notes'))
++      await notes.getByRole('button', { name: '保存笔记到服务端', exact: true }).click(); const response = await writing; expect(response.status()).toBe(201); originalRef = await response.json()
++      await expect(notes.getByText('笔记已保存到服务端', { exact: true })).toBeVisible(); original = await note(page, originalRef.id)
++      expect(original.anchor.ref).toEqual(fixture.blocks[0]); expect(original.anchor.exact_quote).toBe(fixture.bodies[fixture.blocks[0].id]); expect(original.anchor_state).toBe('exact')
++      await notes.getByRole('button', { name: '关闭笔记', exact: true }).click()
++      const retrieval = await openRetrieval(page); await expect(retrieval.getByRole('radio', { name: /只查当前内容块/ })).toBeChecked()
++      initialRebuild = await rebuild(page, retrieval); initialQuery = await query(page, retrieval, '冲突')
++      expect(initialQuery.scope_refs).toEqual([fixture.blocks[0]]); expect(initialQuery.hits[0].text).toBe(fixture.bodies[fixture.blocks[0].id])
++      await retrieval.getByRole('button', { name: '关闭检索材料', exact: true }).click()
++    }, '原创合成内容影响发布正文，仅验证软件保存与复核流程。\nreanchornewevidenceonly 🧮 e\u0301\n')
++    const stale = await note(page, original.id)
++    expect(stale.anchor_state).toBe('stale'); expect(stale.anchor).toEqual(original.anchor); expect(stale.markdown).toBe(markdown); expect(stale.revision).toBe(original.revision + 1)
++    await page.getByRole('button', { name: '查看笔记', exact: true }).click()
++    await notes.getByRole('button', { name: new RegExp('旧笔记原文.*stale') }).click(); await expect(notes.getByText(`锚点：${original.anchor.ref.id} · 修订 1 · stale`, { exact: true })).toBeVisible()
++    const notePatchesBefore = writes.filter(w => w.method === 'PATCH' && /\/notes\//.test(w.path)).length
++    await notes.getByRole('button', { name: '读取此块当前修订以手工重锚', exact: true }).click()
++    const reanchor = notes.getByRole('region', { name: '手工选择新的笔记锚点', exact: true })
++    await expect(reanchor).toContainText(publication.published.sha256)
++    const newBody = await page.request.get(`/api/v1/blocks/${publication.published.id}/body?revision=2`).then(r => r.text())
++    const freshSource = reanchor.getByRole('textbox', { name: '当前准确修订的完整原文', exact: true }); await expect(freshSource).toHaveValue(newBody)
++    await freshSource.focus(); await page.keyboard.press('Control+A')
++    await expect(reanchor.getByRole('button', { name: '将这份准确新选文采用到本机笔记', exact: true })).toBeEnabled()
++    expect(await note(page, original.id)).toEqual(stale); expect(writes.filter(w => w.method === 'PATCH' && /\/notes\//.test(w.path))).toHaveLength(notePatchesBefore)
++    for (const width of [1440, 390]) { await page.setViewportSize({ width, height: 900 }); await reanchor.scrollIntoViewIfNeeded(); expect(await notes.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true); await page.screenshot({ path: info.outputPath(`note-new-source-selection-${width}.png`) }) }
++    await page.setViewportSize({ width: 1440, height: 900 })
++    await reanchor.getByRole('button', { name: '将这份准确新选文采用到本机笔记', exact: true }).click()
++    await expect(notes.getByText(`锚点：${original.anchor.ref.id} · 修订 2 · exact`, { exact: true })).toBeVisible()
++    expect(await note(page, original.id)).toEqual(stale)
++    const updating = page.waitForResponse(r => r.request().method() === 'PATCH' && r.url().endsWith(`/notes/${original.id}`))
++    await notes.getByRole('button', { name: '保存笔记到服务端', exact: true }).click(); const updatedResponse = await updating; expect(updatedResponse.status()).toBe(200)
++    await expect(notes.getByText('笔记已保存到服务端', { exact: true })).toBeVisible(); const updated = await note(page, original.id)
++    expect(updated.revision).toBe(stale.revision + 1); expect(updated.anchor.ref).toEqual(publication.published); expect(updated.anchor.exact_quote).toBe(newBody)
++    expect(updated.anchor.start_codepoint).toBe(0); expect(updated.anchor.end_codepoint).toBe([...newBody].length); expect(updated.anchor.prefix).toBe(''); expect(updated.anchor.suffix).toBe(''); expect(updated.markdown).toBe(markdown); expect(updated.anchor_state).toBe('exact')
++    for (const width of [1440, 390]) { await page.setViewportSize({ width, height: 900 }); expect(await notes.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true); await page.screenshot({ path: info.outputPath(`note-manual-reanchor-${width}.png`) }) }
++    await page.setViewportSize({ width: 1440, height: 900 }); await notes.getByRole('button', { name: '关闭笔记', exact: true }).click()
++    const retrieval = await openRetrieval(page); await retrieval.getByRole('button', { name: '刷新范围与任务', exact: true }).click()
++    await expect(retrieval.getByRole('region', { name: '所选范围索引状态' })).toContainText('原索引需要重新核验')
++    const staleQuery = await query(page, retrieval, '冲突'); expect(staleQuery.index_state).toBe('stale'); expect(staleQuery.hits).toEqual([]); expect(staleQuery.scope_refs).toEqual(initialQuery.scope_refs)
++    expect(writes.filter(w => w.path.endsWith('/index/rebuild'))).toHaveLength(1)
++    const secondRebuild = await rebuild(page, retrieval), historical = await query(page, retrieval, '冲突')
++    expect(historical.scope_refs).toEqual(initialQuery.scope_refs); expect(historical.hits[0].ref).toEqual(original.anchor.ref); expect(historical.hits[0].current_ref).toEqual(publication.published); expect(historical.hits[0].text).toBe(initialQuery.hits[0].text)
++    await expect(retrieval.getByText(/HISTORICAL_REVISION/).first()).toBeVisible(); await page.screenshot({ path: info.outputPath('old-scope-rebuilt-original-body.png') })
++    expect((await query(page, retrieval, 'reanchornewevidenceonly')).result_state).toBe('no_match')
++    const parentResponse = await page.request.get(`/api/v1/lessons/${publication.fixture.lessons[0].id}?revision=1`); expect(parentResponse.status()).toBe(200); const parent = await parentResponse.json(); expect(parent.block_refs).toEqual(publication.fixture.blocks)
++    const parentCurrent = await page.request.get(`/api/v1/objects/${publication.fixture.lessons[0].id}/current`).then(r => r.json()); expect(parentCurrent).toEqual(publication.fixture.lessons[0])
++    const courseCurrent = await page.request.get(`/api/v1/objects/${publication.fixture.course.id}/current`).then(r => r.json()); expect(courseCurrent).toEqual(publication.fixture.course)
++    const evidenceAfter = await page.request.get('/api/v1/learning/evidence').then(r => r.json()); expect(evidenceAfter).toEqual(evidenceBefore)
++    expect(await page.request.get(`/api/v1/blocks/${original.anchor.ref.id}/body?revision=1`).then(r => r.text())).toBe(original.anchor.exact_quote)
++    expect(errors).toEqual([])
++    writeFileSync(info.outputPath('note-reanchor-and-historical-retrieval.json'), JSON.stringify({ scope: 'Actual UI import, original Note and index, Edit/Review/explicit synthetic human decision/publication, immutable stale anchor readback, explicit fresh-source selection and local adoption then CAS Note PATCH, stale old scope and explicit rebuild retaining old ref/body. No SQL publication injection, no Provider. Synthetic pure text has no pre-existing grades/private answers; evidence remains empty, not a claim about a populated grading corpus.', publication, originalRef, original, stale, updated, initialRebuild, initialQuery, staleQuery, secondRebuild, historical, parent, parentCurrent, courseCurrent, evidenceBefore, evidenceAfter, writes, errors }, null, 2))
++  } finally { await runtime.close() }
++})

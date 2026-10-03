@@ -1,0 +1,39 @@
+
+Running 1 test using 1 worker
+
+(node:2904479) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/e2e/dialog-form-guard.spec.ts:6:1 › native rendered Content form is guarded before passive state propagation (15.3s)
+
+
+  1) tests/e2e/dialog-form-guard.spec.ts:6:1 › native rendered Content form is guarded before passive state propagation 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('dialog', { name: '保留创作原命令', exact: true })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('dialog', { name: '保留创作原命令', exact: true }) with timeout 5000ms
+      - waiting for getByRole('dialog', { name: '保留创作原命令', exact: true })
+
+
+      41 |     expect(observed).toEqual({ form_connected: true, close_clicks: 1, close_found: true })
+      42 |     const guard = page.getByRole('dialog', { name: '保留创作原命令', exact: true })
+    > 43 |     try { await expect(guard).toBeVisible() }
+         |                               ^
+      44 |     finally { writeFileSync(info.outputPath('rendered-form-guard.json'), JSON.stringify({ scope: 'Synthetic actual API/React form and native DOM; one programmatic close click at real form insertion, zero scheduling changes or sleeps.', observed, decision_posts: decisions }, null, 2)) }
+      45 |     await guard.getByRole('button', { name: '返回创作', exact: true }).click()
+      46 |     const form = panel.getByRole('group', { name: '本次人工内容决定', exact: true })
+        at $HOME/.cache/learning-workbench-acceptance/m62-dialog-pointer-independent-oct03/tests/e2e/dialog-form-guard.spec.ts:43:31
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-dialog-pointer-independent-evidence-oct03/native-guard-red-b358/artifacts/dialog-form-guard-native-r-76f01-e-passive-state-propagation/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m62-dialog-pointer-independent-evidence-oct03/native-guard-red-b358/artifacts/dialog-form-guard-native-r-76f01-e-passive-state-propagation/error-context.md
+
+  1 failed
+    tests/e2e/dialog-form-guard.spec.ts:6:1 › native rendered Content form is guarded before passive state propagation 

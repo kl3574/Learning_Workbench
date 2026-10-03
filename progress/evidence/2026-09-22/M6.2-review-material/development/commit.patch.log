@@ -1,0 +1,832 @@
+commit 93130a93be4b6097be8a4aafd23bbf139ba142fb
+Author:     Kangxin Liu <robinliu97@outlook.com>
+AuthorDate: Tue Sep 22 15:41:00 2026 +0800
+Commit:     Kangxin Liu <robinliu97@outlook.com>
+CommitDate: Tue Sep 22 15:41:00 2026 +0800
+
+    feat(M6.2): add owner-backed immutable review material readers
+
+diff --git a/services/api/app/application/authoring.py b/services/api/app/application/authoring.py
+index 6a0e5a9..bf700c9 100644
+--- a/services/api/app/application/authoring.py
++++ b/services/api/app/application/authoring.py
+@@ -13,14 +13,15 @@ from ..import_dto import JobCancelRequest, JobSnapshot
+ from ..infrastructure.authoring_job_repository import integrity
+ from ..infrastructure.authoring_repository import AuthoringRepository, AuthoringRecord
+ from ..infrastructure.database import Database
+-from ..infrastructure.security import SessionIdentity
++from ..infrastructure.security import SessionIdentity, author_execution_identity
+ from .authoring_context import AuthoringContext
+-from .authoring_models import AuthoringJobInput
++from .authoring_models import AuthoringCandidateRecord, AuthoringJobInput
+ from .authoring_source import build_outbound
+ from .errors import ApiError
+ from .draft_candidate_models import ResolvedDraftCandidate, match_candidate
+ from .provider_models import CheckedProviderFinished
+ from .tutor_worker import TutorProviderPort
++from .review_material_models import CheckedReviewMaterial, SingleReviewMaterial, checked_material
+ 
+ 
+ class AuthoringService:
+@@ -33,14 +34,29 @@ class AuthoringService:
+ 
+     def resolve_candidate(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                           candidate: dm.DraftCandidate) -> ResolvedDraftCandidate:
++        return self._candidate_history(connection, identity, candidate)[0]
++
++    def _candidate_history(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                           candidate: dm.DraftCandidate) -> tuple[ResolvedDraftCandidate, AuthoringCandidateRecord, AuthoringRecord]:
+         self.context.check_access(connection, identity)
+         repository = AuthoringRepository(connection, identity.workspace_id)
+         actual = repository.candidate(candidate.draft_id)
+-        self.verify_history(connection, identity, actual.source_job_id)
++        history = self.verify_history(connection, identity, actual.source_job_id)
+         expected = dm.DraftCandidate.model_validate(candidate.model_dump(mode='python'))
+         actual_identity = dm.DraftCandidate.model_validate(actual.candidate.model_dump(mode='python'))
+         match_candidate(expected, actual_identity)
+-        return ResolvedDraftCandidate(identity.workspace_id, 'authoring', 'authoring_single', actual_identity)
++        resolved = ResolvedDraftCandidate(identity.workspace_id, 'authoring', 'authoring_single', actual_identity)
++        return resolved, actual, history
++
++    def read_review_material(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                             candidate: dm.DraftCandidate) -> CheckedReviewMaterial:
++        self.context.check_access(connection, identity)
++        current = author_execution_identity(connection, identity.workspace_id, identity.id)
++        resolved, actual, history = self._candidate_history(connection, current, candidate)
++        context = self.context.read(connection, current, history.view.preparation.context_snapshot_id)
++        self.context.verify(connection, current, context)
++        return checked_material(resolved, SingleReviewMaterial(version='authoring-single-review-material-v1',
++            record=actual, input=history.input, context=context))
+ 
+     def verify_history(self, conn: sqlite3.Connection, identity: SessionIdentity, identifier: str) -> AuthoringRecord:
+         """Verify protected source and Provider history within the caller's transaction."""
+diff --git a/services/api/app/application/authoring_group.py b/services/api/app/application/authoring_group.py
+index d238804..bdeda7d 100644
+--- a/services/api/app/application/authoring_group.py
++++ b/services/api/app/application/authoring_group.py
+@@ -9,15 +9,16 @@ from ..import_dto import JobCancelRequest, JobSnapshot
+ from ..infrastructure.authoring_job_repository import integrity
+ from ..infrastructure.authoring_group_repository import AuthoringGroupRepository, AuthoringGroupRecord
+ from ..infrastructure.database import Database
+-from ..infrastructure.security import SessionIdentity
++from ..infrastructure.security import SessionIdentity, author_execution_identity
+ from .authoring_group_context import AuthoringGroupContext
+-from .authoring_group_models import AuthoringGroupJobInput
++from .authoring_group_models import AuthoringGroupCandidateRecord, AuthoringGroupJobInput
+ from .authoring_group_source import group_preparation
+ from .authoring_group_validation import group_private_solution_view
+ from .errors import ApiError
+ from .draft_candidate_models import ResolvedDraftCandidate, match_candidate
+ from .provider_models import CheckedProviderFinished
+ from .tutor_worker import TutorProviderPort
++from .review_material_models import CheckedReviewMaterial, GroupReviewMaterial, checked_material
+ 
+ 
+ class AuthoringGroupService:
+@@ -29,14 +30,33 @@ class AuthoringGroupService:
+ 
+     def resolve_candidate(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                           candidate: dm.DraftCandidate) -> ResolvedDraftCandidate:
++        return self._candidate_history(connection, identity, candidate)[0]
++
++    def _candidate_history(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                           candidate: dm.DraftCandidate) -> tuple[ResolvedDraftCandidate, AuthoringGroupCandidateRecord, AuthoringGroupRecord]:
+         self.context.check_access(connection, identity)
+         repository = AuthoringGroupRepository(connection, identity.workspace_id)
+         actual = repository.candidate(candidate.draft_id)
+-        self.verify_history(connection, identity, actual.source_job_id)
++        history = self.verify_history(connection, identity, actual.source_job_id)
+         expected = dm.DraftCandidate.model_validate(candidate.model_dump(mode='python'))
+         actual_identity = dm.DraftCandidate.model_validate(actual.candidate.model_dump(mode='python'))
+         match_candidate(expected, actual_identity)
+-        return ResolvedDraftCandidate(identity.workspace_id, 'authoring', 'authoring_group', actual_identity)
++        resolved = ResolvedDraftCandidate(identity.workspace_id, 'authoring', 'authoring_group', actual_identity)
++        return resolved, actual, history
++
++    def read_review_material(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                             candidate: dm.DraftCandidate) -> CheckedReviewMaterial:
++        self.context.check_access(connection, identity)
++        current = author_execution_identity(connection, identity.workspace_id, identity.id)
++        resolved, actual, history = self._candidate_history(connection, current, candidate)
++        context = self.context.read_group(connection, current, history.view.preparation.context_snapshot_id)
++        self.context.verify_group(connection, current, context)
++        plan = AuthoringGroupRepository(connection, current.workspace_id).validate_plan(history)
++        if plan is None:
++            raise integrity()
++        return checked_material(resolved, GroupReviewMaterial(version='authoring-group-review-material-v1',
++            record=actual, input=history.input, context=context, plan=plan,
++            private_solution_coverage='included_in_complete_root_sha'))
+ 
+     def verify_history(self, conn: sqlite3.Connection, identity: SessionIdentity, identifier: str) -> AuthoringGroupRecord:
+         """Verify protected source and Provider history within the caller's transaction."""
+diff --git a/services/api/app/application/draft_candidates.py b/services/api/app/application/draft_candidates.py
+index 51ec11a..a30393f 100644
+--- a/services/api/app/application/draft_candidates.py
++++ b/services/api/app/application/draft_candidates.py
+@@ -11,12 +11,16 @@ from ..infrastructure.security import SessionIdentity, author_execution_identity
+ from .authoring_context import AuthoringContext
+ from .draft_candidate_models import DraftSourceKind, ResolvedDraftCandidate
+ from .errors import ApiError
++from .review_material_models import CheckedReviewMaterial
+ 
+ 
+ class DraftCandidateOwner(Protocol):
+     def resolve_candidate(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                           candidate: dm.DraftCandidate) -> ResolvedDraftCandidate: ...
+ 
++    def read_review_material(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                             candidate: dm.DraftCandidate) -> CheckedReviewMaterial: ...
++
+ 
+ class DraftCandidates:
+     def __init__(self, owners: dict[DraftSourceKind, DraftCandidateOwner]):
+@@ -29,6 +33,14 @@ class DraftCandidates:
+         Missing registration is never repaired here, including for an otherwise
+         valid legacy candidate. No owner detection by ID prefix or fallback scan.
+         """
++        current, registered, owner = self._registered_owner(connection, identity, draft_id, expected_revision)
++        resolved = owner.resolve_candidate(connection, current, registered.candidate)
++        if resolved != registered:
++            raise ApiError(503, 'DRAFT_OWNER_INTEGRITY', '草稿所属记录当前无法核验。')
++        return resolved
++
++    def _registered_owner(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                          draft_id: str, expected_revision: int) -> tuple[SessionIdentity, ResolvedDraftCandidate, DraftCandidateOwner]:
+         AuthoringContext.check_access(connection, identity)
+         current = author_execution_identity(connection, identity.workspace_id, identity.id)
+         AuthoringContext.check_access(connection, current)
+@@ -37,10 +49,21 @@ class DraftCandidates:
+         owner = self._owners.get(registered.source_kind)
+         if owner is None:
+             raise ApiError(503, 'DRAFT_OWNER_UNAVAILABLE', '草稿所属服务当前无法核验。')
+-        resolved = owner.resolve_candidate(connection, current, registered.candidate)
+-        if resolved != registered:
+-            raise ApiError(503, 'DRAFT_OWNER_INTEGRITY', '草稿所属记录当前无法核验。')
+-        return resolved
++        return current, registered, owner
++
++    def read_review_material(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                             draft_id: str, expected_revision: int) -> CheckedReviewMaterial:
++        """Resolve exactly one registered owner; never register, repair or execute."""
++        current, registered, owner = self._registered_owner(connection, identity, draft_id, expected_revision)
++        result = owner.read_review_material(connection, current, registered.candidate)
++        try:
++            result = CheckedReviewMaterial.model_validate(result.model_dump(mode='python'))
++        except (ValidationError, ValueError, TypeError, AttributeError):
++            raise ApiError(503, 'DRAFT_OWNER_INTEGRITY', '审核材料当前无法完整核验。') from None
++        if (result.workspace_id != registered.workspace_id or result.owner != registered.owner
++                or result.source_kind != registered.source_kind or result.candidate != registered.candidate):
++            raise ApiError(503, 'DRAFT_OWNER_INTEGRITY', '审核材料当前无法完整核验。')
++        return result
+ 
+     def admit(self, connection: sqlite3.Connection, identity: SessionIdentity,
+               source_kind: DraftSourceKind, candidate: dm.DraftCandidate) -> ResolvedDraftCandidate:
+diff --git a/services/api/app/application/imports.py b/services/api/app/application/imports.py
+index e336998..7ba55f2 100644
+--- a/services/api/app/application/imports.py
++++ b/services/api/app/application/imports.py
+@@ -29,11 +29,12 @@ from ..infrastructure.idempotency import execute_idempotent
+ from ..infrastructure.import_mapping import object_key, remap_import
+ from ..infrastructure.import_repository import ImportRepository, identifier, json_object, json_text
+ from ..infrastructure.provenance_repository import ProvenanceRepository
+-from ..infrastructure.security import SessionIdentity, guard_subject_access
++from ..infrastructure.security import SessionIdentity, author_execution_identity, guard_subject_access
+ from .content import ContentService
+ from .errors import ApiError
+ from .draft_candidate_models import ResolvedDraftCandidate, match_candidate
+ from .policy import Policy
++from .review_material_models import CheckedReviewMaterial, ImportReviewMaterial, checked_material
+ 
+ 
+ def invalid() -> ApiError:
+@@ -108,6 +109,23 @@ class ImportService:
+         match_candidate(candidate, actual)
+         return ResolvedDraftCandidate(identity.workspace_id, 'import', 'import', actual)
+ 
++    def read_review_material(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                             candidate: dm.DraftCandidate) -> CheckedReviewMaterial:
++        from .authoring_context import AuthoringContext
++
++        AuthoringContext.check_access(connection, identity)
++        current = author_execution_identity(connection, identity.workspace_id, identity.id)
++        resolved = self.resolve_candidate(connection, current, candidate)
++        repository = ImportRepository(connection, current.workspace_id)
++        snapshot = self._draft_snapshot(repository, current, candidate.draft_id)
++        row = connection.execute('SELECT candidate_json FROM drafts WHERE id=? AND workspace_id=?',
++                                 (candidate.draft_id, current.workspace_id)).fetchone()
++        source = repository.load(json_object(row['candidate_json'])['import_id'])
++        payload = ImportReviewMaterial(version='import-review-material-v1', candidate=resolved.candidate,
++            import_id=source['id'], source_id=source['source_id'], original_input_sha256=source['input_sha256'],
++            payload=snapshot.payload, warnings=snapshot.warnings, private_solution_coverage='excluded')
++        return checked_material(resolved, payload)
++
+     @contextmanager
+     def _access(self, identity: SessionIdentity) -> Iterator[ImportRepository]:
+         try:
+@@ -311,36 +329,39 @@ class ImportService:
+ 
+     def draft(self, identity: SessionIdentity, id: str) -> ImportDraftSnapshot:
+         with self._access(identity) as repository:
+-            draft = repository.connection.execute("SELECT * FROM drafts WHERE id=? AND workspace_id=?", (id, identity.workspace_id)).fetchone()
+-            if draft is None:
+-                raise missing()
+-            candidate = json_object(draft["candidate_json"])
+-            row = repository.load(candidate["import_id"])
+-            self._private(identity, row)
+-            self._guard_preview(repository, identity, row)
+-            if id not in self._preview_data(row)["draft_ids"]:
+-                raise damaged()
+-            value = ENTITY_MODELS[draft["kind"]].model_validate(candidate["metadata"])
+-            if metadata_sha256(value) != draft["candidate_sha256"]:
++            return self._draft_snapshot(repository, identity, id)
++
++    def _draft_snapshot(self, repository: ImportRepository, identity: SessionIdentity, id: str) -> ImportDraftSnapshot:
++        draft = repository.connection.execute("SELECT * FROM drafts WHERE id=? AND workspace_id=?", (id, identity.workspace_id)).fetchone()
++        if draft is None:
++            raise missing()
++        candidate = json_object(draft["candidate_json"])
++        row = repository.load(candidate["import_id"])
++        self._private(identity, row)
++        self._guard_preview(repository, identity, row)
++        if id not in self._preview_data(row)["draft_ids"]:
++            raise damaged()
++        value = ENTITY_MODELS[draft["kind"]].model_validate(candidate["metadata"])
++        if metadata_sha256(value) != draft["candidate_sha256"]:
++            raise damaged()
++        payload: Any = value
++        warnings = [dm.Warning.model_validate(warning) for warning in self._preview_data(row)["warnings"]]
++        if isinstance(value, dm.ContentBlock):
++            info = repository.blob(value.body_sha256)
++            body = self.frozen_store(row).read(info.sha256, expected_size=info.size).decode("utf-8")
++            metadata = json_object(row["source_metadata"])
++            citations = [dm.Citation.model_validate(item) for item in metadata.get("citations", []) if item["id"] in value.citations]
++            if {citation.id for citation in citations} != set(value.citations) or len(citations) != len(set(value.citations)):
+                 raise damaged()
+-            payload: Any = value
+-            warnings = [dm.Warning.model_validate(warning) for warning in self._preview_data(row)["warnings"]]
+-            if isinstance(value, dm.ContentBlock):
+-                info = repository.blob(value.body_sha256)
+-                body = self.frozen_store(row).read(info.sha256, expected_size=info.size).decode("utf-8")
+-                metadata = json_object(row["source_metadata"])
+-                citations = [dm.Citation.model_validate(item) for item in metadata.get("citations", []) if item["id"] in value.citations]
+-                if {citation.id for citation in citations} != set(value.citations) or len(citations) != len(set(value.citations)):
+-                    raise damaged()
+-                locators = {citation.locator for citation in citations}
+-                warnings = [warning for warning in warnings if warning.locator is None
+-                            or warning.locator in {f"source:{row['source_id']}", f"source:{row['source_id']};docx:container"}
+-                            or warning.locator in locators
+-                            or any(locator.startswith(warning.locator + "/") for locator in locators)]
+-                payload = BlockDraftPayload(metadata=value, body_markdown=body, source_id=row["source_id"], citations=citations)
+-            return ImportDraftSnapshot(id=id, kind=value.entity, revision=draft["revision"], base_ref=None,
+-                state=draft["status"], candidate_sha256=draft["candidate_sha256"], payload=payload,
+-                warnings=warnings)
++            locators = {citation.locator for citation in citations}
++            warnings = [warning for warning in warnings if warning.locator is None
++                        or warning.locator in {f"source:{row['source_id']}", f"source:{row['source_id']};docx:container"}
++                        or warning.locator in locators
++                        or any(locator.startswith(warning.locator + "/") for locator in locators)]
++            payload = BlockDraftPayload(metadata=value, body_markdown=body, source_id=row["source_id"], citations=citations)
++        return ImportDraftSnapshot(id=id, kind=value.entity, revision=draft["revision"], base_ref=None,
++            state=draft["status"], candidate_sha256=draft["candidate_sha256"], payload=payload,
++            warnings=warnings)
+ 
+     def _artifact(self, repository: ImportRepository, identity: SessionIdentity, id: str) -> tuple[sqlite3.Row, DownloadArtifact]:
+         row = repository.connection.execute("SELECT * FROM artifacts WHERE id=? AND workspace_id=?", (id, identity.workspace_id)).fetchone()
+diff --git a/services/api/app/application/review_material_models.py b/services/api/app/application/review_material_models.py
+new file mode 100644
+index 0000000..5d623ee
+--- /dev/null
++++ b/services/api/app/application/review_material_models.py
+@@ -0,0 +1,139 @@
++"""Complete immutable review inputs; hashes describe bytes, never grant approval.
++
++Only a real owner may return these after checking current access and original
++history in the caller's transaction. Numeric observations and workflow state
++belong to separate ports and cannot change this material descriptor.
++"""
++from typing import Annotated, Literal, Self
++
++from pydantic import Field, model_validator
++
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import canonical_bytes, metadata_sha256, sha256_bytes
++from ..authoring_dto import AuthoringModel
++from ..import_dto import BlockDraftPayload, DraftPayload
++from .authoring_models import AuthoringCandidateRecord, AuthoringJobInput, PreparedAuthoringContext, context_sha256
++from .authoring_group_models import (
++    AuthoringContentPlanRecord, AuthoringGroupCandidateRecord, AuthoringGroupJobInput,
++    PreparedAuthoringGroupContext, group_context_sha256, validate_group_context_binding,
++)
++from .draft_candidate_models import DraftOwner, DraftSourceKind, ResolvedDraftCandidate
++
++
++class ImportReviewMaterial(AuthoringModel):
++    version: Literal['import-review-material-v1']
++    candidate: dm.DraftCandidate
++    import_id: dm.Id
++    source_id: dm.Id
++    original_input_sha256: dm.Sha256
++    payload: DraftPayload
++    warnings: list[dm.Warning]
++    private_solution_coverage: Literal['excluded']
++
++    @model_validator(mode='after')
++    def exact_payload(self) -> Self:
++        metadata = self.payload.metadata if isinstance(self.payload, BlockDraftPayload) else self.payload
++        if self.candidate.entity != metadata.entity or self.candidate.candidate_sha256 != metadata_sha256(metadata):
++            raise ValueError('Import review scope is the exact public candidate metadata')
++        if isinstance(self.payload, BlockDraftPayload):
++            if (self.payload.source_id != self.source_id
++                    or sha256_bytes(self.payload.body_markdown.encode()) != self.payload.metadata.body_sha256):
++                raise ValueError('Import block review requires its complete original body')
++        return self
++
++
++class SingleReviewMaterial(AuthoringModel):
++    version: Literal['authoring-single-review-material-v1']
++    record: AuthoringCandidateRecord
++    input: AuthoringJobInput
++    context: PreparedAuthoringContext
++
++    @model_validator(mode='after')
++    def exact_history(self) -> Self:
++        if (self.record.workspace_id != self.input.workspace_id
++                or self.record.source_job_id != self.input.job_id or self.context.job_id != self.input.job_id
++                or self.context.snapshot.request_sha256 != metadata_sha256(self.input.request)
++                or self.context.snapshot.snapshot_sha256 != context_sha256(self.context)):
++            raise ValueError('Single material must preserve its original candidate/input/context binding')
++        return self
++
++
++class GroupReviewMaterial(AuthoringModel):
++    version: Literal['authoring-group-review-material-v1']
++    record: AuthoringGroupCandidateRecord
++    input: AuthoringGroupJobInput
++    context: PreparedAuthoringGroupContext
++    plan: AuthoringContentPlanRecord
++    private_solution_coverage: Literal['included_in_complete_root_sha']
++
++    @model_validator(mode='after')
++    def exact_history(self) -> Self:
++        validate_group_context_binding(self.input, self.context)
++        if (self.record.workspace_id != self.input.workspace_id or self.plan.workspace_id != self.input.workspace_id
++                or self.record.source_job_id != self.input.job_id or self.plan.source_job_id != self.input.job_id
++                or self.plan.provider_receipt_id != self.record.provider_receipt_id
++                or self.plan.job_input_sha256 != metadata_sha256(self.input)
++                or self.plan.plan_ref != self.record.plan_ref or self.plan.plan != self.record.payload.content_plan
++                or self.context.snapshot.snapshot_sha256 != group_context_sha256(self.context)):
++            raise ValueError('Group material must preserve the complete original plan and candidate history')
++        return self
++
++
++ReviewPayload = Annotated[ImportReviewMaterial | SingleReviewMaterial | GroupReviewMaterial,
++                          Field(discriminator='version')]
++
++
++class CheckedReviewMaterial(AuthoringModel):
++    version: Literal['checked-review-material-v1']
++    workspace_id: dm.Id
++    owner: DraftOwner
++    source_kind: DraftSourceKind
++    candidate: dm.DraftCandidate
++    payload: ReviewPayload
++    owner_record_sha256: dm.Sha256
++    descriptor_sha256: dm.Sha256
++    source_refs: list[dm.ContentRef]
++    warnings: list[dm.Warning]
++
++    @model_validator(mode='after')
++    def complete_descriptor(self) -> Self:
++        if isinstance(self.payload, ImportReviewMaterial):
++            expected_owner, expected_kind = 'import', 'import'
++            candidate = self.payload.candidate
++            record_sha = metadata_sha256(self.payload)
++            refs: list[dm.ContentRef] = []
++        else:
++            expected_owner = 'authoring'
++            expected_kind = 'authoring_single' if isinstance(self.payload, SingleReviewMaterial) else 'authoring_group'
++            candidate = self.payload.record.candidate
++            record_sha = metadata_sha256(self.payload.record)
++            refs = self.payload.context.snapshot.resolved_refs
++            if self.workspace_id != self.payload.record.workspace_id:
++                raise ValueError('Review material belongs to another workspace')
++        if (self.owner != expected_owner or self.source_kind != expected_kind
++                or self.candidate.model_dump() != candidate.model_dump()
++                or self.owner_record_sha256 != record_sha or self.source_refs != refs):
++            raise ValueError('Review descriptor must bind the exact owner record and complete source order')
++        raw = self.model_dump(mode='json', exclude={'descriptor_sha256'})
++        if self.descriptor_sha256 != sha256_bytes(canonical_bytes(raw)):
++            raise ValueError('Review descriptor hash must cover every immutable material field')
++        return self
++
++
++def checked_material(identity: ResolvedDraftCandidate, payload: ReviewPayload) -> CheckedReviewMaterial:
++    """Package already checked owner bytes; this function performs no authorization."""
++    if isinstance(payload, ImportReviewMaterial):
++        record_sha = metadata_sha256(payload)
++        refs: list[dm.ContentRef] = []
++        warnings = payload.warnings
++    else:
++        record_sha = metadata_sha256(payload.record)
++        refs = payload.context.snapshot.resolved_refs
++        warnings = payload.context.warnings
++    raw = dict(version='checked-review-material-v1', workspace_id=identity.workspace_id,
++        owner=identity.owner, source_kind=identity.source_kind, candidate=identity.candidate.model_dump(mode='json'),
++        payload=payload.model_dump(mode='json'), owner_record_sha256=record_sha,
++        source_refs=[ref.model_dump(mode='json') for ref in refs],
++        warnings=[warning.model_dump(mode='json') for warning in warnings])
++    raw['descriptor_sha256'] = sha256_bytes(canonical_bytes(raw))
++    return CheckedReviewMaterial.model_validate(raw)
+diff --git a/tests/integration/test_review_materials.py b/tests/integration/test_review_materials.py
+new file mode 100644
+index 0000000..b238906
+--- /dev/null
++++ b/tests/integration/test_review_materials.py
+@@ -0,0 +1,387 @@
++"""Complete owner materials from actual producers; no review decision or vendor call."""
++
++from dataclasses import dataclass, replace
++import asyncio
++import json
++
++import pytest
++
++from packages.contracts.canonical import canonical_bytes, sha256_bytes
++from packages.contracts import domain_models as dm
++from services.api.app.application.draft_candidates import DraftCandidates
++from services.api.app.application.errors import ApiError
++from tests.integration.test_authoring_numeric_provider_history import ProviderHistoryCase, table_hashes
++from tests.integration.test_draft_candidate_owners import imported_candidate as import_fixture, remove_catalog_fixture
++from tests.integration.test_authoring_numeric_service import generated as single_fixture
++from tests.integration.test_authoring_group_numeric_service import generated_group
++
++
++class Imported(tuple):
++    def __repr__(self):
++        return '<synthetic Import material fixture; session values omitted>'
++
++
++@pytest.fixture
++def imported_candidate(tmp_path):
++    for value in import_fixture.__wrapped__(tmp_path):
++        yield Imported(value)
++
++
++def checked_read(database, identity, owner, source_kind, candidate, monkeypatch):
++    before = table_hashes(database)
++    with database.transaction(immediate=False) as conn:
++        conn.execute('PRAGMA query_only=ON')
++        changes = conn.total_changes
++        with monkeypatch.context() as patch:
++            def unexpected_connection():
++                pytest.fail('Review material must use the caller transaction')
++            patch.setattr(database, 'connect', unexpected_connection)
++            candidates = DraftCandidates({source_kind: owner})
++            resolved = candidates.lookup(conn, identity, candidate.draft_id, candidate.draft_revision)
++            material = candidates.read_review_material(conn, identity, candidate.draft_id, candidate.draft_revision)
++            assert material.candidate == resolved.candidate
++            assert conn.in_transaction and conn.total_changes == changes
++    assert table_hashes(database) == before
++    raw = material.model_dump(mode='json')
++    digest = raw.pop('descriptor_sha256')
++    assert sha256_bytes(canonical_bytes(raw)) == digest
++    return material
++
++
++def test_real_import_material_preserves_body_and_excludes_private_solutions(imported_candidate, monkeypatch):
++    database, identity, owner, staged, draft, candidate = imported_candidate
++    value = checked_read(database, identity, owner, 'import', candidate, monkeypatch)
++    assert value.payload.payload == draft.payload
++    assert value.payload.import_id == staged.import_id
++    assert value.payload.original_input_sha256 == staged.input_sha256
++    assert value.payload.private_solution_coverage == 'excluded'
++    # The selected candidate is the heading block, not the separate paragraph.
++    assert value.payload.payload.body_markdown == '# Synthetic source\n'
++    assert 'state' not in value.payload.model_dump()
++
++
++@pytest.mark.parametrize('kind', ['single', 'lesson', 'practice_set', 'assessment'])
++def test_real_generated_material_keeps_complete_plan_members_private_and_history(tmp_path, monkeypatch, kind):
++    state = single_fixture.__wrapped__(tmp_path) if kind == 'single' else generated_group(tmp_path, kind)
++    database, identity, owner, _, candidate, *_ = state
++    original = owner.draft(identity, candidate.draft_id)
++    source_kind = 'authoring_single' if kind == 'single' else 'authoring_group'
++    value = checked_read(database, identity, owner, source_kind, candidate, monkeypatch)
++    assert value.payload.record.source_job_id == original.source_job_id
++    assert value.payload.input.job_id == original.source_job_id
++    assert value.payload.context.job_id == original.source_job_id
++    table = 'authoring_candidates' if kind == 'single' else 'authoring_group_candidates'
++    with database.connect() as conn:
++        stored = conn.execute(f'SELECT record_sha256 FROM {table} WHERE draft_id=?', (candidate.draft_id,)).fetchone()
++    assert value.owner_record_sha256 == stored['record_sha256']
++    assert 'numeric_check_ids' not in value.payload.record.model_dump()
++    assert 'state' not in value.payload.record.model_dump()
++    if kind == 'single':
++        assert value.payload.record.payload == original.payload
++    else:
++        payload = value.payload.record.payload
++        assert payload.root == original.root
++        assert payload.blocks == original.blocks and payload.questions == original.questions
++        assert value.payload.plan.plan == payload.content_plan
++        assert value.payload.plan.plan_ref == value.payload.record.plan_ref
++        assert value.payload.private_solution_coverage == 'included_in_complete_root_sha'
++        for private, ref in zip(payload.private_solutions, original.private_solution_refs, strict=True):
++            assert private.question == ref.question
++            assert sha256_bytes(canonical_bytes(private)) == ref.solution_sha256
++            actual = owner.solution(identity, candidate.draft_id, ref.question.member_key)
++            assert actual.payload == private
++    # Existing numeric preview is independent; even this mutable ledger cannot
++    # change the frozen review material, and no numeric executor is invoked.
++    case = ProviderHistoryCase('single' if kind == 'single' else 'group', state)
++    case.preview()
++    after = checked_read(database, identity, owner, source_kind, candidate, monkeypatch)
++    assert after == value
++
++
++@dataclass(repr=False)
++class MaterialCase:
++    database: object
++    identity: object
++    owner: object
++    candidate: object
++    kind: str
++    state: object = None
++
++    def __repr__(self):
++        return f'<synthetic {self.kind} review fixture; session values omitted>'
++
++
++@pytest.fixture(params=['import', 'single', 'group'])
++def material_case(request, tmp_path):
++    if request.param == 'import':
++        for database, identity, owner, _, _, candidate in import_fixture.__wrapped__(tmp_path):
++            yield MaterialCase(database, identity, owner, candidate, 'import')
++    else:
++        state = single_fixture.__wrapped__(tmp_path) if request.param == 'single' else generated_group(tmp_path, 'assessment')
++        database, identity, owner, _, candidate, *_ = state
++        yield MaterialCase(database, identity, owner, candidate, 'authoring_' + request.param, state)
++
++
++def read_case(case, identity=None, *, direct=False):
++    identity = identity or case.identity
++    with case.database.transaction(immediate=False) as conn:
++        conn.execute('PRAGMA query_only=ON')
++        if direct:
++            return case.owner.read_review_material(conn, identity, case.candidate)
++        return DraftCandidates({case.kind: case.owner}).read_review_material(
++            conn, identity, case.candidate.draft_id, case.candidate.draft_revision)
++
++
++@pytest.mark.parametrize('damage', ['revoked', 'role', 'workspace'])
++def test_material_checks_actual_current_author_and_workspace_without_writes(material_case, damage):
++    case = material_case
++    assert read_case(case).candidate.model_dump() == case.candidate.model_dump()
++    identity = case.identity
++    if damage == 'workspace':
++        identity = replace(identity, workspace_id='workspace_missing')
++    else:
++        with case.database.transaction() as conn:
++            if damage == 'revoked':
++                conn.execute("UPDATE local_sessions SET revoked_at='2026-01-01T00:00:00Z' WHERE id=?", (identity.id,))
++            else:
++                conn.execute("UPDATE local_sessions SET role='learner' WHERE id=?", (identity.id,))
++    before = table_hashes(case.database)
++    for direct in [False, True]:
++        with pytest.raises(ApiError) as caught:
++            read_case(case, identity, direct=direct)
++        assert caught.value.status == 403
++    assert table_hashes(case.database) == before
++
++
++def test_missing_catalog_never_reconstructs_or_guesses_owner(material_case):
++    case = material_case
++    remove_catalog_fixture(case.database, case.candidate.draft_id)
++    before = table_hashes(case.database)
++    with pytest.raises(ApiError) as caught:
++        read_case(case)
++    assert (caught.value.status, caught.value.code) == (404, 'DRAFT_CANDIDATE_UNREGISTERED')
++    assert table_hashes(case.database) == before
++
++
++@pytest.mark.parametrize('mode', ['independent', 'open_book'])
++def test_material_rechecks_real_active_assessment_policy(material_case, mode):
++    from services.api.app.application.assessment import AssessmentService
++    from services.api.app.assessment_dto import AssessmentAttemptCreate
++    from services.api.app.infrastructure.content_repository import reference
++    from tests.assessment_fixtures import assessment_fixture
++    from tests.integration.test_assessment_attempts import import_fixture as import_assessment
++
++    case = material_case
++    fixture = assessment_fixture('reviewpolicy')
++    import_assessment(case.database, case.identity, fixture, 'review-policy-material')
++    attempt = AssessmentService(case.database).create_attempt(case.identity, fixture.assessment.id,
++        AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode=mode), 'review-policy-attempt')
++    assert attempt.status == 'active'
++    before = table_hashes(case.database)
++    with pytest.raises(ApiError) as caught:
++        read_case(case)
++    assert caught.value.code in {'ASSESSMENT_ACTIVE', 'ASSESSMENT_ANSWER_PROTECTED', 'POLICY_DENIED'}
++    assert table_hashes(case.database) == before
++
++
++@pytest.mark.parametrize('kind', ['single', 'assessment'])
++def test_material_rejects_corrupt_complete_provider_history(tmp_path, kind):
++    state = single_fixture.__wrapped__(tmp_path) if kind == 'single' else generated_group(tmp_path, kind)
++    original = ProviderHistoryCase('single' if kind == 'single' else 'group', state)
++    before = original.damage_original_artifact()
++    case = MaterialCase(original.database, original.identity, original.authoring, original.candidate,
++        'authoring_single' if kind == 'single' else 'authoring_group')
++    with pytest.raises(ApiError) as caught:
++        read_case(case)
++    assert (caught.value.status, caught.value.code) == (503, 'PROVIDER_INTEGRITY_INVALID')
++    assert table_hashes(case.database) == before
++
++
++@pytest.mark.parametrize('damage', ['source_missing', 'body_missing', 'membership', 'metadata'])
++def test_import_review_rejects_missing_original_bytes_or_changed_history(imported_candidate, damage):
++    database, identity, owner, staged, draft, candidate = imported_candidate
++    with database.transaction() as conn:
++        if damage.endswith('missing'):
++            digest = staged.input_sha256 if damage == 'source_missing' else draft.payload.metadata.body_sha256
++            row = conn.execute('SELECT relative_path FROM content_blobs WHERE sha256=?', (digest,)).fetchone()
++            (database.settings.data_dir / row['relative_path']).unlink()
++        else:
++            row = conn.execute('SELECT preview_json FROM ingestion_imports WHERE id=?', (staged.import_id,)).fetchone()
++            preview = json.loads(row['preview_json'])
++            if damage == 'membership':
++                preview['draft_ids'].remove(candidate.draft_id)
++            else:
++                next(item for item in preview['objects'] if item['id'] == draft.payload.metadata.id)['title'] = 'Tampered'
++            conn.execute('UPDATE ingestion_imports SET preview_json=? WHERE id=?', (canonical_bytes(preview).decode(), staged.import_id))
++    before = table_hashes(database)
++    with pytest.raises(ApiError):
++        read_case(MaterialCase(database, identity, owner, candidate, 'import'))
++    assert table_hashes(database) == before
++
++
++def test_import_question_material_explicitly_excludes_actual_unapproved_private_answer(imported_candidate, monkeypatch):
++    from services.api.app.infrastructure.import_worker import ImportWorker
++    from tests.assessment_fixtures import assessment_fixture
++
++    database, identity, owner, *_ = imported_candidate
++    fixture = assessment_fixture('reviewprivate')
++    staged = owner.stage(identity, data=fixture.archive, filename='synthetic.learnpack.zip',
++                         kind='learnpack', key='private-material')
++    worker = ImportWorker(database)
++    try:
++        assert worker.run_once()
++        preview = owner.preview(identity, staged.import_id)
++        draft = next(item for item in (owner.draft(identity, identifier) for identifier in preview.preview_refs)
++                     if item.kind == 'question')
++        candidate = dm.DraftCandidate(draft_id=draft.id, draft_revision=draft.revision,
++                                     entity='question', candidate_sha256=draft.candidate_sha256)
++        with database.connect() as conn:
++            raw = conn.execute('SELECT preview_json FROM ingestion_imports WHERE id=?', (staged.import_id,)).fetchone()[0]
++        solutions = [item for item in json.loads(raw)['solutions'] if item['question_ref']['id'] == draft.payload.id]
++        assert solutions and solutions[0]['solution_markdown']
++        material = checked_read(database, identity, owner, 'import', candidate, monkeypatch)
++        assert material.payload.payload == draft.payload
++        assert material.payload.private_solution_coverage == 'excluded'
++        assert 'solution_markdown' not in canonical_bytes(material).decode()
++        with database.connect() as conn:
++            assert conn.execute('SELECT preview_json FROM ingestion_imports WHERE id=?', (staged.import_id,)).fetchone()[0] == raw
++            for table in ['objects', 'revisions', 'solutions', 'reviews']:
++                assert conn.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0] == 0
++    finally:
++        worker.stop()
++
++
++def generated_with_sources(tmp_path, kind):
++    """Real producer and CheckedDispatch, selecting two complete public blocks."""
++    from services.api.app.infrastructure.content_repository import reference
++    from services.api.app.infrastructure.security import expires_after
++    from services.api.app.provider_dto import ConsentCreate, ConsentPreviewWrite, OutboundBudget
++    from tests.integration import test_authoring_provider as single
++    from tests.integration import test_authoring_group_provider as group
++    from tests.integration.test_retrieval import publish_small
++    from tests.provider_protocol_fixture import local_provider
++
++    generation = single if kind == 'single' else group
++
++    async def build():
++        async with local_provider(text=canonical_bytes(generation.payload()).decode()) as server:
++            state = generation.configured(tmp_path, server.base_url)
++            database, identity, owner, worker, consents, _ = state
++            blocks, _, _ = publish_small(database, identity, 'reviewsource', ['Complete source one.\n', 'Complete source two.\n'])
++            refs = [reference(blocks[1]), reference(blocks[0])]
++            original_body = generation.request()
++            raw_body = original_body.model_dump(mode='json')
++            raw_body['source_refs'] = [ref.model_dump(mode='json') for ref in refs]
++            body = type(original_body).model_validate(raw_body)
++            original = owner.prepare(identity, body, 'prepare-sources')
++            proposal = consents.preview(identity, ConsentPreviewWrite(job_id=original.id, expected_job_revision=1,
++                provider_id='test_provider', expected_provider_revision=2, expires_at=expires_after(300),
++                budget=OutboundBudget(max_input_tokens=20000, max_output_tokens=5000, max_provider_calls=1,
++                    max_search_calls=0, max_tool_calls=0, timeout_seconds=10, max_cost_usd=None)), 'preview-sources')
++            consents.grant(identity, ConsentCreate(proposal_id=proposal.id, proposal_sha256=proposal.proposal_sha256), 'grant-sources')
++            assert await asyncio.to_thread(worker.run_once)
++            result = owner.read(identity, original.id)
++            assert result.summary.status == 'completed' and len(server.requests) == 1
++            return MaterialCase(database, identity, owner, result.summary.candidate, 'authoring_' + kind), blocks, refs
++    return asyncio.run(build())
++
++
++@pytest.mark.parametrize('kind', ['single', 'group'])
++def test_material_preserves_ordered_complete_sources_and_rechecks_actual_missing_body(tmp_path, monkeypatch, kind):
++    case, blocks, refs = generated_with_sources(tmp_path, kind)
++    material = checked_read(case.database, case.identity, case.owner, case.kind, case.candidate, monkeypatch)
++    assert material.source_refs == refs
++    assert [item.text for item in material.payload.context.evidence] == ['Complete source two.\n', 'Complete source one.\n']
++    assert [item.ref.model_dump() for item in material.payload.context.materials] == [ref.model_dump() for ref in refs]
++    with case.database.connect() as conn:
++        row = conn.execute('SELECT relative_path FROM content_blobs WHERE sha256=?', (blocks[0].body_sha256,)).fetchone()
++    (case.database.settings.data_dir / row['relative_path']).unlink()
++    before = table_hashes(case.database)
++    with pytest.raises(ApiError):
++        read_case(case)
++    assert table_hashes(case.database) == before
++
++
++@pytest.mark.parametrize('damage', ['plan', 'root', 'question', 'private'])
++def test_group_material_rejects_actual_persisted_plan_and_complete_member_corruption(tmp_path, damage):
++    database, identity, owner, _, candidate, *_ = generated_group(tmp_path, 'assessment')
++    case = MaterialCase(database, identity, owner, candidate, 'authoring_group')
++    assert read_case(case).candidate.model_dump() == candidate.model_dump()
++    table = 'authoring_content_plans' if damage == 'plan' else 'authoring_group_candidates'
++    with database.transaction() as conn:
++        row = conn.execute(f'SELECT rowid,record_json FROM {table}').fetchone()
++        record = json.loads(row['record_json'])
++        if damage == 'plan':
++            record['plan']['topic'] += ' changed'
++        elif damage == 'root':
++            record['payload']['root']['title'] += ' changed'
++        elif damage == 'question':
++            record['payload']['questions'][0]['stem_markdown'] += ' changed'
++        else:
++            record['payload']['private_solutions'][0]['answer']['solution_markdown'] += ' changed'
++        raw = canonical_bytes(record)
++        # Recompute the storage envelope SHA: original owner/Provider bindings,
++        # not a stale outer digest, must still reject this persisted alteration.
++        conn.execute(f'UPDATE {table} SET record_json=?,record_sha256=? WHERE rowid=?',
++                     (raw.decode(), sha256_bytes(raw), row['rowid']))
++    before = table_hashes(database)
++    with pytest.raises(ApiError) as caught:
++        read_case(case)
++    assert (caught.value.status, caught.value.code) == (409, 'AUTHORING_INTEGRITY_ERROR')
++    assert table_hashes(database) == before
++
++
++@pytest.mark.parametrize('kind', ['single', 'assessment'])
++def test_material_rejects_missing_original_provider_artifact(tmp_path, kind):
++    state = single_fixture.__wrapped__(tmp_path) if kind == 'single' else generated_group(tmp_path, kind)
++    database, identity, owner, _, candidate, *_ = state
++    case = MaterialCase(database, identity, owner, candidate, 'authoring_single' if kind == 'single' else 'authoring_group')
++    assert read_case(case).candidate.model_dump() == candidate.model_dump()
++    with database.transaction() as conn:
++        assert conn.execute('SELECT COUNT(*) FROM provider_artifacts').fetchone()[0] == 1
++        conn.execute('DROP TRIGGER provider_artifacts_no_delete')
++        conn.execute('DELETE FROM provider_artifacts')
++    before = table_hashes(database)
++    with pytest.raises(ApiError) as caught:
++        read_case(case)
++    assert (caught.value.status, caught.value.code) == (503, 'PROVIDER_INTEGRITY_INVALID')
++    assert table_hashes(database) == before
++
++
++def test_review_port_requires_caller_transaction_and_exact_catalog_revision(imported_candidate):
++    database, identity, owner, _, _, candidate = imported_candidate
++    facade = DraftCandidates({'import': owner})
++    before = table_hashes(database)
++    with database.connect() as conn, pytest.raises(ApiError) as caught:
++        facade.read_review_material(conn, identity, candidate.draft_id, candidate.draft_revision)
++    assert caught.value.code == 'TRANSACTION_REQUIRED'
++    with database.transaction(immediate=False) as conn, pytest.raises(ApiError) as caught:
++        facade.read_review_material(conn, identity, candidate.draft_id, candidate.draft_revision + 1)
++    assert caught.value.status == 412
++    assert table_hashes(database) == before
++
++
++@pytest.mark.parametrize('representation', ['repr', 'validation_error'])
++def test_material_ordinary_representations_never_expand_academic_content(material_case, representation):
++    from pydantic import ValidationError
++
++    material = read_case(material_case)
++    if material_case.kind == 'import':
++        private_text = material.payload.payload.body_markdown
++    elif material_case.kind == 'authoring_single':
++        private_text = material.payload.record.payload.body_markdown
++    else:
++        private_text = material.payload.record.payload.private_solutions[0].answer.solution_markdown
++    private_text = private_text.splitlines()[0]
++    assert private_text
++    for item in [material, material.payload]:
++        if representation == 'repr':
++            assert private_text not in repr(item)
++            assert private_text not in str(item)
++        else:
++            raw = item.model_dump(mode='json')
++            sentinel = 'zz_private_review_error_sentinel'
++            raw['unexpected'] = sentinel
++            with pytest.raises(ValidationError) as caught:
++                type(item).model_validate(raw)
++            assert sentinel not in str(caught.value)

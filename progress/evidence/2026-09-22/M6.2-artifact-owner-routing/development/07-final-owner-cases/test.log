@@ -1,0 +1,89 @@
+........................FFF                                              [100%]
+=================================== FAILURES ===================================
+_ test_http_rechecks_identity_changed_after_cookie_authentication[revoked-401-SESSION_REQUIRED] _
+
+importing = (<fastapi.applications.FastAPI object at 0x72110c3c96d0>, <starlette.testclient.TestClient object at 0x721106ded3a0>, ...52428800, max_block_characters=400000, max_package_bytes=209715200, max_package_files=2000, max_compression_ratio=100))
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x721104586360>
+change = 'revoked', status = 401, code = 'SESSION_REQUIRED'
+
+    @pytest.mark.parametrize('change,status,code', [('revoked', 401, 'SESSION_REQUIRED'),
+                                                   ('expired', 401, 'SESSION_REQUIRED'),
+                                                   ('downgraded', 403, 'POLICY_DENIED')])
+    def test_http_rechecks_identity_changed_after_cookie_authentication(importing, monkeypatch, change, status, code):
+        from services.api.app.interfaces import http
+        from tests.integration.test_import_repository import FIXTURES
+        app, client, settings = importing
+        assert client.post('/api/v1/session/role', json={'role': 'author'}, headers=headers(client, settings)).status_code == 200
+        staged = upload(client, settings, (FIXTURES / 'course-author.learnpack.zip').read_bytes(),
+                        filename='private.learnpack.zip', kind='learnpack')
+        candidate = preview(client, staged['import_id'])
+        draft = block_preview(client, candidate)
+        artifact = client.get('/api/v1/sources/' + draft['payload']['source_id']).json()['artifact']
+>       authenticate = http.authenticate
+                       ^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'services.api.app.interfaces.http' has no attribute 'authenticate'
+
+tests/integration/test_artifact_owners.py:250: AttributeError
+_ test_http_rechecks_identity_changed_after_cookie_authentication[expired-401-SESSION_REQUIRED] _
+
+importing = (<fastapi.applications.FastAPI object at 0x7211045f4830>, <starlette.testclient.TestClient object at 0x7211073cd100>, ...52428800, max_block_characters=400000, max_package_bytes=209715200, max_package_files=2000, max_compression_ratio=100))
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x721107495b50>
+change = 'expired', status = 401, code = 'SESSION_REQUIRED'
+
+    @pytest.mark.parametrize('change,status,code', [('revoked', 401, 'SESSION_REQUIRED'),
+                                                   ('expired', 401, 'SESSION_REQUIRED'),
+                                                   ('downgraded', 403, 'POLICY_DENIED')])
+    def test_http_rechecks_identity_changed_after_cookie_authentication(importing, monkeypatch, change, status, code):
+        from services.api.app.interfaces import http
+        from tests.integration.test_import_repository import FIXTURES
+        app, client, settings = importing
+        assert client.post('/api/v1/session/role', json={'role': 'author'}, headers=headers(client, settings)).status_code == 200
+        staged = upload(client, settings, (FIXTURES / 'course-author.learnpack.zip').read_bytes(),
+                        filename='private.learnpack.zip', kind='learnpack')
+        candidate = preview(client, staged['import_id'])
+        draft = block_preview(client, candidate)
+        artifact = client.get('/api/v1/sources/' + draft['payload']['source_id']).json()['artifact']
+>       authenticate = http.authenticate
+                       ^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'services.api.app.interfaces.http' has no attribute 'authenticate'
+
+tests/integration/test_artifact_owners.py:250: AttributeError
+_ test_http_rechecks_identity_changed_after_cookie_authentication[downgraded-403-POLICY_DENIED] _
+
+importing = (<fastapi.applications.FastAPI object at 0x721107494b90>, <starlette.testclient.TestClient object at 0x7211046f2b40>, ...52428800, max_block_characters=400000, max_package_bytes=209715200, max_package_files=2000, max_compression_ratio=100))
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x721104c49e50>
+change = 'downgraded', status = 403, code = 'POLICY_DENIED'
+
+    @pytest.mark.parametrize('change,status,code', [('revoked', 401, 'SESSION_REQUIRED'),
+                                                   ('expired', 401, 'SESSION_REQUIRED'),
+                                                   ('downgraded', 403, 'POLICY_DENIED')])
+    def test_http_rechecks_identity_changed_after_cookie_authentication(importing, monkeypatch, change, status, code):
+        from services.api.app.interfaces import http
+        from tests.integration.test_import_repository import FIXTURES
+        app, client, settings = importing
+        assert client.post('/api/v1/session/role', json={'role': 'author'}, headers=headers(client, settings)).status_code == 200
+        staged = upload(client, settings, (FIXTURES / 'course-author.learnpack.zip').read_bytes(),
+                        filename='private.learnpack.zip', kind='learnpack')
+        candidate = preview(client, staged['import_id'])
+        draft = block_preview(client, candidate)
+        artifact = client.get('/api/v1/sources/' + draft['payload']['source_id']).json()['artifact']
+>       authenticate = http.authenticate
+                       ^^^^^^^^^^^^^^^^^
+E       AttributeError: module 'services.api.app.interfaces.http' has no attribute 'authenticate'
+
+tests/integration/test_artifact_owners.py:250: AttributeError
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_artifact_owners.py::test_http_rechecks_identity_changed_after_cookie_authentication[revoked-401-SESSION_REQUIRED]
+FAILED tests/integration/test_artifact_owners.py::test_http_rechecks_identity_changed_after_cookie_authentication[expired-401-SESSION_REQUIRED]
+FAILED tests/integration/test_artifact_owners.py::test_http_rechecks_identity_changed_after_cookie_authentication[downgraded-403-POLICY_DENIED]
+3 failed, 24 passed, 2 warnings in 23.01s

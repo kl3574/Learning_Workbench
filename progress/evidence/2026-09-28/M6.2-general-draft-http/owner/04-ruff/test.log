@@ -1,0 +1,14 @@
+E731 Do not assign a `lambda` expression, use a `def`
+  --> tests/contract/test_draft_edit_projection.py:12:5
+   |
+10 |     patch = openapi['paths']['/api/v1/drafts/{id}']['patch']
+11 |     legacy = openapi['paths']['/api/v1/drafts/{id}']['get']
+12 |     ref = lambda name: {'$ref': f'#/components/schemas/{name}'}
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+13 |     assert create['requestBody']['content']['application/json']['schema'] == ref('DraftCreateWrite')
+14 |     assert create['responses']['201']['content']['application/json']['schema'] == ref('DraftCreated')
+   |
+help: Rewrite `ref` as a `def`
+
+Found 1 error.
+No fixes available (1 hidden fix can be enabled with the `--unsafe-fixes` option).

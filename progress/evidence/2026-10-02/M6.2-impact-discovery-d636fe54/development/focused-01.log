@@ -1,0 +1,86 @@
+................FF....F.......                                           [100%]
+=================================== FAILURES ===================================
+_ test_bad_event_or_ledger_not_silently_filtered_and_lost_cursor_material_409[delete_first] _
+
+case = Case(database=<services.api.app.infrastructure.database.Database object at 0x70b73e6602c0>, identity=SessionIdentity(i...i.app.application.content.ContentService object at 0x70b73d2c6a80>, event_id='outbox_cd1efc3e403b46e3b5f648b425125924')
+damage = 'delete_first'
+
+    @pytest.mark.parametrize('damage', ['delete_first','delete_last','retype','owner_missing','owner_forged',
+        'snapshot','new_without_snapshot','history','head'])
+    def test_bad_event_or_ledger_not_silently_filtered_and_lost_cursor_material_409(case, damage):
+        assert case.decide(case.write()).status_code == 200
+        publish(case, 1, 3)
+        page = get(case, limit=1)
+        with case.database.transaction() as conn:
+            if damage in {'delete_first','delete_last'}:
+                order = 'ASC' if damage == 'delete_first' else 'DESC'
+                identifier = conn.execute("SELECT id FROM outbox WHERE event_type='content.dependencies_invalidated' ORDER BY rowid "+order+" LIMIT 1").fetchone()[0]
+>               conn.execute('DELETE FROM outbox WHERE id=?',(identifier,))
+E               sqlite3.IntegrityError: FOREIGN KEY constraint failed
+
+tests/integration/test_content_impact_discovery_http.py:121: IntegrityError
+_ test_bad_event_or_ledger_not_silently_filtered_and_lost_cursor_material_409[delete_last] _
+
+case = Case(database=<services.api.app.infrastructure.database.Database object at 0x70b73ca5e2a0>, identity=SessionIdentity(i...i.app.application.content.ContentService object at 0x70b73cae93a0>, event_id='outbox_2de3cb5084bc4d04a94e32b2b6bf3fbf')
+damage = 'delete_last'
+
+    @pytest.mark.parametrize('damage', ['delete_first','delete_last','retype','owner_missing','owner_forged',
+        'snapshot','new_without_snapshot','history','head'])
+    def test_bad_event_or_ledger_not_silently_filtered_and_lost_cursor_material_409(case, damage):
+        assert case.decide(case.write()).status_code == 200
+        publish(case, 1, 3)
+        page = get(case, limit=1)
+        with case.database.transaction() as conn:
+            if damage in {'delete_first','delete_last'}:
+                order = 'ASC' if damage == 'delete_first' else 'DESC'
+                identifier = conn.execute("SELECT id FROM outbox WHERE event_type='content.dependencies_invalidated' ORDER BY rowid "+order+" LIMIT 1").fetchone()[0]
+>               conn.execute('DELETE FROM outbox WHERE id=?',(identifier,))
+E               sqlite3.IntegrityError: FOREIGN KEY constraint failed
+
+tests/integration/test_content_impact_discovery_http.py:121: IntegrityError
+_ test_bad_event_or_ledger_not_silently_filtered_and_lost_cursor_material_409[new_without_snapshot] _
+
+case = Case(database=<services.api.app.infrastructure.database.Database object at 0x70b73c87e1b0>, identity=SessionIdentity(i...i.app.application.content.ContentService object at 0x70b73c9893a0>, event_id='outbox_d0bddb3709c1405085a9109d145c06e7')
+damage = 'new_without_snapshot'
+
+    @pytest.mark.parametrize('damage', ['delete_first','delete_last','retype','owner_missing','owner_forged',
+        'snapshot','new_without_snapshot','history','head'])
+    def test_bad_event_or_ledger_not_silently_filtered_and_lost_cursor_material_409(case, damage):
+        assert case.decide(case.write()).status_code == 200
+        publish(case, 1, 3)
+        page = get(case, limit=1)
+        with case.database.transaction() as conn:
+            if damage in {'delete_first','delete_last'}:
+                order = 'ASC' if damage == 'delete_first' else 'DESC'
+                identifier = conn.execute("SELECT id FROM outbox WHERE event_type='content.dependencies_invalidated' ORDER BY rowid "+order+" LIMIT 1").fetchone()[0]
+                conn.execute('DELETE FROM outbox WHERE id=?',(identifier,))
+            elif damage == 'retype':
+                conn.execute("UPDATE outbox SET event_type='content.other' WHERE id=?",(case.event_id,))
+            elif damage == 'owner_missing':
+                conn.execute("UPDATE outbox SET payload_json=json_remove(payload_json,'$.workspace_id') WHERE id=?",(case.event_id,))
+            elif damage == 'owner_forged':
+                conn.execute("UPDATE outbox SET payload_json=json_set(payload_json,'$.workspace_id','workspace_foreign') WHERE id=?",(case.event_id,))
+            elif damage == 'snapshot':
+                conn.execute('DROP TRIGGER content_impact_snapshot_no_update')
+                conn.execute("UPDATE content_impact_snapshots SET snapshot_sha256=? WHERE event_id=?",('0'*64,case.event_id))
+            elif damage == 'new_without_snapshot':
+                conn.execute('DROP TRIGGER content_impact_snapshot_no_delete')
+>               conn.execute('DELETE FROM content_impact_snapshots WHERE event_id=?',(case.event_id,))
+E               sqlite3.IntegrityError: FOREIGN KEY constraint failed
+
+tests/integration/test_content_impact_discovery_http.py:133: IntegrityError
+=============================== warnings summary ===============================
+../m62-combined-final-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  $HOME/.cache/learning-workbench-acceptance/m62-combined-final-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../m62-combined-final-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  $HOME/.cache/learning-workbench-acceptance/m62-combined-final-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_content_impact_discovery_http.py::test_bad_event_or_ledger_not_silently_filtered_and_lost_cursor_material_409[delete_first]
+FAILED tests/integration/test_content_impact_discovery_http.py::test_bad_event_or_ledger_not_silently_filtered_and_lost_cursor_material_409[delete_last]
+FAILED tests/integration/test_content_impact_discovery_http.py::test_bad_event_or_ledger_not_silently_filtered_and_lost_cursor_material_409[new_without_snapshot]
+3 failed, 27 passed, 2 warnings in 9.77s

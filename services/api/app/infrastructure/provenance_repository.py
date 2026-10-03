@@ -113,6 +113,18 @@ class ProvenanceRepository:
             raise ApiError(413, 'SCOPE_BUDGET_EXCEEDED', '所选范围超过本地检索资源预算。')
         return self.frozen(block)
 
+    def frozen_for_import(self, import_id: str, block: dm.ContentBlock) -> FrozenProvenance:
+        """Exact persisted origin membership, including its original Import owner."""
+        if not self.connection.in_transaction:
+            raise ApiError(409, 'TRANSACTION_REQUIRED', '来源回读需要当前事务。')
+        row = self.connection.execute('SELECT import_id FROM block_provenance WHERE workspace_id=? '
+            'AND block_id=? AND block_revision=? AND block_sha256=?',
+            (self.workspace_id, block.id, block.revision, metadata_sha256(block))).fetchone()
+        snapshot = self.frozen(block)
+        if row is None or row['import_id'] != import_id or snapshot is None:
+            raise damaged()
+        return snapshot
+
     def frozen(self, block: dm.ContentBlock) -> FrozenProvenance | None:
         row = self.connection.execute(
             'SELECT * FROM block_provenance WHERE workspace_id=? AND block_id=? AND block_revision=? AND block_sha256=?',
@@ -130,6 +142,51 @@ class ProvenanceRepository:
             return snapshot
         except (ValueError, TypeError, KeyError, ValidationError):
             raise damaged() from None
+
+    def verified_original(self, block: dm.ContentBlock, read_blob) -> FrozenProvenance | None:
+        """Verify a retained descriptor against its actual local source bytes; no external recheck."""
+        snapshot = self.bounded_frozen(block, max_bytes=2_000_000)
+        witness = self.connection.execute('SELECT source_id,import_id,snapshot_sha256 FROM block_provenance_witnesses '
+            'WHERE workspace_id=? AND block_id=? AND block_revision=? AND block_sha256=?',
+            (self.workspace_id, block.id, block.revision, metadata_sha256(block))).fetchone()
+        if snapshot is None:
+            from .publication_repository import PublicationRepository
+            # A wrong hash on an existing revision is corruption, not unresolved provenance.
+            if self.connection.execute('SELECT 1 FROM block_provenance WHERE workspace_id=? AND block_id=? AND block_revision=?',
+                    (self.workspace_id, block.id, block.revision)).fetchone() or witness is not None or PublicationRepository(
+                        self.connection, self.workspace_id).retained_source_claim(reference(block)):
+                raise damaged()
+            return None
+        source = self._source(snapshot.source.id)
+        try:
+            imported = self.connection.execute(
+                'SELECT i.source_id,i.input_sha256,i.id FROM block_provenance p JOIN ingestion_imports i ON i.id=p.import_id '
+                'WHERE p.workspace_id=? AND i.workspace_id=p.workspace_id AND p.block_id=? AND p.block_revision=?',
+                (self.workspace_id, block.id, block.revision)).fetchone()
+            if (source is None or self._snapshot(block, source) != snapshot or imported is None
+                    or witness is None or tuple(imported) != (snapshot.source.id, snapshot.source.sha256, witness['import_id'])
+                    or tuple(witness) != (snapshot.source.id, imported['id'], metadata_sha256(snapshot))):
+                raise damaged()
+        except (ValueError, TypeError, KeyError):
+            raise damaged() from None
+        raw = read_blob(snapshot.source.sha256, expected_size=snapshot.source.size)
+        if sha256_bytes(raw) != snapshot.source.sha256:
+            raise damaged()
+        return snapshot
+
+    def freeze_restored(self, source_block: dm.ContentBlock, restored: dm.ContentBlock, read_blob) -> FrozenProvenance | None:
+        """Copy verified original provenance to a new exact block; retain original import attribution."""
+        snapshot = self.verified_original(source_block, read_blob)
+        if snapshot is None:
+            return None
+        row = self.connection.execute('SELECT import_id FROM block_provenance WHERE workspace_id=? AND block_id=? AND block_revision=?',
+            (self.workspace_id, source_block.id, source_block.revision)).fetchone()
+        expected = source_block.model_copy(update={'revision': restored.revision})
+        if restored != expected or reference(ContentRepository(self.connection, self.workspace_id).load('block', restored.id, restored.revision).value) != reference(restored):
+            raise damaged()
+        new = FrozenProvenance(block_ref=reference(restored), source=snapshot.source, citations=snapshot.citations, warnings=snapshot.warnings)
+        self._insert(row['import_id'], new)
+        return new
 
     def original_access(self, identity: SessionIdentity, source: ProvenanceSource) -> Literal['allowed', 'author_required', 'unavailable']:
         row = self._source(source.id)

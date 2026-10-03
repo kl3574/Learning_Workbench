@@ -1,0 +1,116 @@
+diff --git a/apps/web/src/workbench/Shell.tsx b/apps/web/src/workbench/Shell.tsx
+index e734ecda..706f962d 100644
+--- a/apps/web/src/workbench/Shell.tsx
++++ b/apps/web/src/workbench/Shell.tsx
+@@ -237,7 +237,7 @@ export function Shell() {
+     </div>
+     <footer className="statusbar" role="status"><span className={status === 'saved' ? 'saved' : ''}>{status === 'saved' ? '✓ UI 会话已保存' : status === 'saving' ? '会话保存中…' : status === 'connecting' ? '连接本机服务…' : status === 'conflict' ? '会话版本冲突' : '离线 · UI 待同步'}</span><span>{active ? `内容修订 ${active.context.active_ref.revision}` : '尚未选择对象'}</span><span>{policy.independentId ? '独立测试进行中 · 工作区材料受限' : activeAssessment ? assessmentStates[active?.id ?? '']?.summary ?? '测试预览 · 尚未开始' : activePractice ? practiceStates[active?.id ?? '']?.summary ?? '练习预览 · 未作答' : loaded ? '合成示例 · 无学习证据' : '正常学习'} · 本机</span></footer>
+     {drawer && <Dialog title={drawer === 'nav' ? '课程目录' : 'Agent 助教'} className={`drawer drawer-${drawer}`} close={() => setDrawer(null)}>{drawer === 'nav' ? nav : tutor}</Dialog>}
+-    {dialog && <Dialog title={dialog} className={dialog === '导入' ? 'import-dialog' : dialog === '笔记' ? 'notes-dialog' : ['设置', '检索材料', '学习目标与基础', '知识画像', '创建路线', '编辑路线', '学习建议'].includes(dialog) ? 'learning-dialog' : ''} close={closeDialog}>{subjectLocked && !['设置', '快捷键', '命令面板', '导入', '创作', '学习目标与基础', '知识画像', '创建路线', '编辑路线', '学习建议'].includes(dialog) ? <p>当前测试策略限制此材料与操作。已有草稿保留；请先返回测试并明确提交或放弃。</p> : dialog === '导入' ? workspaceId ? <ImportWorkflow key={workspaceId} workspaceId={workspaceId} paused={subjectLocked} close={closeDialog} openCourse={ref => { if (!protectLearningDialog()) chooseCourse(ref) }} onState={setImportReviewState} /> : <p>工作区会话尚未连接。连接成功后可上传文件或恢复已有导入。</p> : dialog === '学习目标与基础' ? workspaceId ? <ProfilePanel key={workspaceId} workspace={workspaceId} paused={subjectLocked} port={profileClient} concepts={profileConcepts.value ? conceptChoices(profileConcepts.value) : []} conceptsError={profileConcepts.error} onState={setProfileState} saved={() => setLearningVersion(value => value + 1)} /> : <p>请先连接本机会话。</p> : dialog === '检索材料' ? workspaceId ? <RetrievalPanel key={`${workspaceId}:${active?.id ?? 'none'}`} workspace={workspaceId} paused={subjectLocked} choices={retrievalChoices} initial={retrievalInitial} onState={setRetrievalState} open={target => { if (subjectLocked || protectLearningDialog()) return; if (openReal(target, true)) setDialog(null) }} /> : <p>请先连接本机会话。</p> : dialog === '学习建议' ? workspaceId ? <RecommendationsPanel key={workspaceId} workspace={workspaceId} paused={subjectLocked} course={session.course_ref} port={recommendationClient} onState={setRecommendationState} open={openRecommendation} /> : <p>请先连接本机会话。</p> : dialog === '知识画像' ? workspaceId ? <ConceptStates workspace={workspaceId} paused={subjectLocked} course={session.course_ref} version={learningVersion} onState={setApplicabilityState} /> : <p>请先连接本机会话。</p> : dialog === '创建路线' || dialog === '编辑路线' ? workspaceId ? <RouteEditor key={`${workspaceId}:${dialog}:${dialog === '编辑路线' ? active?.id ?? '' : 'new'}`} workspace={workspaceId} initial={dialog === '编辑路线' ? routeRecord ?? null : null} paused={subjectLocked} onState={setRouteEditState} saved={ref => { setLearningVersion(value => value + 1); openLearningRoute(ref, true); setDialog(null) }} /> : <p>请先连接本机会话。</p> : dialog === '创作' ? workspaceId ? <AuthoringPanel key={workspaceId} workspace={workspaceId} paused={subjectLocked || !!policy.openBookId} currentBlock={!subjectLocked && !policy.openBookId && active?.context.active_ref.entity === 'block' && !activeAssessment && !activePractice && !!realTitles[active.id]?.resolved ? active.context.active_ref : null} onState={setAuthoringState} /> : <p>请先连接本机会话。</p> : dialog === '设置' ? <><button disabled={subjectLocked || !providerState.safe} onClick={() => openAux('学习目标与基础')}>学习目标与基础</button><button disabled={subjectLocked || !providerState.safe} onClick={() => openAux('知识画像')}>概念与技能证据</button>{workspaceId ? <ProviderSettings key={workspaceId} workspace={workspaceId} paused={subjectLocked} port={providerClient} onState={setProviderState} /> : <p>请先连接本机会话。</p>}{subjectLocked && <p>画像和授权摘要暂不可操作；配置、秘密控制和已有授权的撤销仍可使用。</p>}</> : dialog === '命令面板' ? <><label className="sr-only" htmlFor="command-search">筛选命令</label><input id="command-search" className="command-search" value={commandSearch} onChange={event => setCommandSearch(event.target.value)} placeholder="输入命令名称…" /><div className="command-list">{commands.filter(command => command.title.includes(commandSearch)).map(command => <button key={command.title} onClick={command.action}>{command.title}<span>↵</span></button>)}</div></> : dialog === '快捷键' ? <ul className="shortcut-list"><li>Ctrl / ⌘ + Shift + P：命令面板</li><li>分隔条：← / → 每次调整 16px</li><li>Home / End：到达宽度边界</li><li>Enter：折叠或恢复侧栏</li><li>Esc：关闭抽屉、对话框或退出专注</li><li>Tab / Shift + Tab：移动焦点</li></ul> : dialog === '笔记' ? workspaceId ? <NotesPanel workspace={workspaceId} selection={noteSelection} initialRefId={noteSelection?.ref.id ?? (active?.context.active_ref.entity === 'block' ? active.context.active_ref.id : undefined)} openAnchor={selection => void openNoteAnchor(selection)} onState={setNoteState} onSaved={() => setProgressVersion(value => value + 1)} /> : <p>请先连接本机会话。</p> : dialog === '本节习题' ? practiceLesson ? <LessonPracticeLinks target={practiceLesson} open={openExercise} /> : <p>请先打开真实教材小节。</p> : dialog === '教材修订' ? session.course_ref ? <CourseRevisions course={session.course_ref} choose={chooseCourse} /> : <p>请先选择教材。</p> : dialog === '课程切换' ? <CoursePicker choose={chooseCourse} loadSynthetic={loadFixture} /> : dialog === '打开对象' ? loaded ? <div className="command-list">{fixture.lessons.map(lesson => <button key={lesson.id} onClick={() => { openLesson(lesson, true); setDialog(null) }}>{lesson.title}</button>)}</div> : <CoursePicker choose={chooseCourse} loadSynthetic={loadFixture} /> : <><p>{auxiliaryText[dialog] ?? '此辅助能力尚未实现。'}</p><p className="muted">能力状态：未实现 · 没有执行业务写入。</p></>}</Dialog>}
++    {dialog && <Dialog title={dialog} className={dialog === '导入' ? 'import-dialog' : dialog === '笔记' ? 'notes-dialog' : ['设置', '检索材料', '学习目标与基础', '知识画像', '创建路线', '编辑路线', '学习建议'].includes(dialog) ? 'learning-dialog' : ''} close={closeDialog}>{subjectLocked && !['设置', '快捷键', '命令面板', '导入', '创作', '学习目标与基础', '知识画像', '创建路线', '编辑路线', '学习建议'].includes(dialog) ? <p>当前测试策略限制此材料与操作。已有草稿保留；请先返回测试并明确提交或放弃。</p> : dialog === '导入' ? workspaceId ? <ImportWorkflow key={workspaceId} workspaceId={workspaceId} paused={subjectLocked} close={closeDialog} openCourse={ref => { if (!protectLearningDialog()) chooseCourse(ref) }} onState={setImportReviewState} /> : <p>工作区会话尚未连接。连接成功后可上传文件或恢复已有导入。</p> : dialog === '学习目标与基础' ? workspaceId ? <ProfilePanel key={workspaceId} workspace={workspaceId} paused={subjectLocked} port={profileClient} concepts={profileConcepts.value ? conceptChoices(profileConcepts.value) : []} conceptsError={profileConcepts.error} onState={setProfileState} saved={() => setLearningVersion(value => value + 1)} /> : <p>请先连接本机会话。</p> : dialog === '检索材料' ? workspaceId ? <RetrievalPanel key={`${workspaceId}:${active?.id ?? 'none'}`} workspace={workspaceId} paused={subjectLocked} choices={retrievalChoices} initial={retrievalInitial} onState={setRetrievalState} open={target => { if (subjectLocked || protectLearningDialog()) return; if (openReal(target, true)) setDialog(null) }} /> : <p>请先连接本机会话。</p> : dialog === '学习建议' ? workspaceId ? <RecommendationsPanel key={workspaceId} workspace={workspaceId} paused={subjectLocked} course={session.course_ref} port={recommendationClient} onState={setRecommendationState} open={openRecommendation} /> : <p>请先连接本机会话。</p> : dialog === '知识画像' ? workspaceId ? <ConceptStates workspace={workspaceId} paused={subjectLocked} course={session.course_ref} version={learningVersion} onState={setApplicabilityState} /> : <p>请先连接本机会话。</p> : dialog === '创建路线' || dialog === '编辑路线' ? workspaceId ? <RouteEditor key={`${workspaceId}:${dialog}:${dialog === '编辑路线' ? active?.id ?? '' : 'new'}`} workspace={workspaceId} initial={dialog === '编辑路线' ? routeRecord ?? null : null} paused={subjectLocked} onState={setRouteEditState} saved={ref => { setLearningVersion(value => value + 1); openLearningRoute(ref, true); setDialog(null) }} /> : <p>请先连接本机会话。</p> : dialog === '创作' ? workspaceId ? <AuthoringPanel key={workspaceId} workspace={workspaceId} paused={subjectLocked || !!policy.openBookId} currentBlock={!subjectLocked && !policy.openBookId && active?.context.active_ref.entity === 'block' && !activeAssessment && !activePractice && !!realTitles[active.id]?.resolved ? active.context.active_ref : null} onState={setAuthoringState} /> : <p>请先连接本机会话。</p> : dialog === '设置' ? <><button disabled={subjectLocked || !providerState.safe} onClick={() => openAux('学习目标与基础')}>学习目标与基础</button><button disabled={subjectLocked || !providerState.safe} onClick={() => openAux('知识画像')}>概念与技能证据</button>{workspaceId ? <ProviderSettings key={workspaceId} workspace={workspaceId} paused={subjectLocked} port={providerClient} onState={setProviderState} /> : <p>请先连接本机会话。</p>}{subjectLocked && <p>画像和授权摘要暂不可操作；配置、秘密控制和已有授权的撤销仍可使用。</p>}</> : dialog === '命令面板' ? <><label className="sr-only" htmlFor="command-search">筛选命令</label><input id="command-search" className="command-search" value={commandSearch} onChange={event => setCommandSearch(event.target.value)} placeholder="输入命令名称…" /><div className="command-list">{commands.filter(command => command.title.includes(commandSearch)).map(command => <button key={command.title} disabled={command.title === '导入' && subjectLocked} onClick={command.action}>{command.title}<span>↵</span></button>)}</div></> : dialog === '快捷键' ? <ul className="shortcut-list"><li>Ctrl / ⌘ + Shift + P：命令面板</li><li>分隔条：← / → 每次调整 16px</li><li>Home / End：到达宽度边界</li><li>Enter：折叠或恢复侧栏</li><li>Esc：关闭抽屉、对话框或退出专注</li><li>Tab / Shift + Tab：移动焦点</li></ul> : dialog === '笔记' ? workspaceId ? <NotesPanel workspace={workspaceId} selection={noteSelection} initialRefId={noteSelection?.ref.id ?? (active?.context.active_ref.entity === 'block' ? active.context.active_ref.id : undefined)} openAnchor={selection => void openNoteAnchor(selection)} onState={setNoteState} onSaved={() => setProgressVersion(value => value + 1)} /> : <p>请先连接本机会话。</p> : dialog === '本节习题' ? practiceLesson ? <LessonPracticeLinks target={practiceLesson} open={openExercise} /> : <p>请先打开真实教材小节。</p> : dialog === '教材修订' ? session.course_ref ? <CourseRevisions course={session.course_ref} choose={chooseCourse} /> : <p>请先选择教材。</p> : dialog === '课程切换' ? <CoursePicker choose={chooseCourse} loadSynthetic={loadFixture} /> : dialog === '打开对象' ? loaded ? <div className="command-list">{fixture.lessons.map(lesson => <button key={lesson.id} onClick={() => { openLesson(lesson, true); setDialog(null) }}>{lesson.title}</button>)}</div> : <CoursePicker choose={chooseCourse} loadSynthetic={loadFixture} /> : <><p>{auxiliaryText[dialog] ?? '此辅助能力尚未实现。'}</p><p className="muted">能力状态：未实现 · 没有执行业务写入。</p></>}</Dialog>}
+     {closingApplicability && <Dialog title="保留适用性原命令" close={() => setClosingApplicability(false)}><p>关闭不会提交决定。已安全保存的原 key、依据和回执保留；未提交临时表单只在明确关闭后丢弃。</p><button disabled={!applicabilityState.safe} onClick={() => { setClosingApplicability(false); setDialog(null); setApplicabilityState({ dirty: false, safe: true, isolated: false, editing: false }) }}>保留原命令，丢弃临时表单并关闭</button>{applicabilityState.isolated && <><p>原命令或回执仍在本页面隔离内存，不能关闭浏览器。可明确前往角色控制，原会话恢复后再保存。</p><button onClick={() => { setClosingApplicability(false); setDialog('导入'); setApplicabilityState({ dirty: false, safe: true, isolated: false, editing: false }) }}>保留隔离内存，前往角色控制</button></>}<button onClick={() => setClosingApplicability(false)}>返回适用性决定</button></Dialog>}
+     {closingImportReview && <Dialog title="保留审核原命令" close={() => setClosingImportReview(false)}><p>尚有未提交的审核表单、发布确认或保留的原命令。明确关闭会丢弃临时表单；已经安全保存的原命令仍保留，关闭不会提交审核、批准或发布。</p><button disabled={!importReviewState.safe} onClick={() => { importReviewState.discardForms?.(); setClosingImportReview(false); setDialog(null) }}>保留审核原命令，明确丢弃临时表单并关闭</button><button onClick={() => setClosingImportReview(false)}>返回导入与审核</button>{!importReviewState.safe && <p role="alert">审核或发布命令仍在处理中或本机记录未安全读取，请保持页面打开。</p>}</Dialog>}
+     {closingAuthoring && <Dialog title="保留创作原命令" close={() => setClosingAuthoring(false)}><p>尚有临时教学要求或保留的原命令。返回可继续编辑；明确关闭会丢弃临时表单，已安全存入本机的原命令仍保留，关闭不会批准调用或执行数值检查。</p><button disabled={!authoringState.safe} onClick={() => { authoringState.discardForms?.(); setClosingAuthoring(false); if (workspaceId) discardImpactForms(workspaceId); setDialog(null) }}>保留原命令，明确丢弃临时表单并关闭</button><button onClick={() => setClosingAuthoring(false)}>返回创作</button>{authoringState.isolated && <button onClick={() => { authoringState.discardForms?.(); setClosingAuthoring(false); if (workspaceId) discardImpactForms(workspaceId); setDialog('导入') }}>保留内容决定隔离内存，丢弃临时表单并前往角色控制</button>}{!authoringState.safe && <p role="alert">命令仍在处理中或本机记录未安全读取，请保持页面打开。</p>}</Dialog>}
+diff --git a/tests/e2e/import-command-admission.spec.ts b/tests/e2e/import-command-admission.spec.ts
+new file mode 100644
+index 00000000..a9ddb01a
+--- /dev/null
++++ b/tests/e2e/import-command-admission.spec.ts
+@@ -0,0 +1,97 @@
++import { writeFileSync } from 'node:fs'
++import { expect, test, type Locator, type Page, type Route } from '../../apps/web/node_modules/@playwright/test/index.mjs'
++import type { AttemptSnapshot } from '../../packages/contracts/generated/api-types'
++import { RestartRuntime } from './restartRuntime'
++import { importAssessmentPackage, originalAssessmentPackage } from './assessmentTestData'
++
++async function paletteImport(page: Page) {
++  await page.keyboard.press('Control+Shift+P')
++  const palette = page.getByRole('dialog', { name: '命令面板', exact: true })
++  return { palette, button: palette.getByRole('button', { name: /^导入/ }) }
++}
++async function actualDisabledClick(page: Page, button: Locator) {
++  const box = await button.boundingBox(); expect(box).not.toBeNull()
++  await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2)
++}
++
++test('command import remains disabled while Policy is unknown after UI saved and original import helper works only after explicit admission', async ({ playwright }, info) => {
++  const runtime = await RestartRuntime.start(), fixture = originalAssessmentPackage('gradingrecover')
++  const facts: Record<string, unknown> = {}, deliveries: Promise<void>[] = []
++  let release!: () => void, released = false, requests = 0, held = 0, importWrites = 0
++  const gate = new Promise<void>(yes => { release = yes }), releaseGate = () => { released = true; release() }
++  try {
++    const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]
++    await runtime.authenticateOnly(page)
++    page.on('request', request => { if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/v1/imports') importWrites++ })
++    const handler = (route: Route) => {
++      const delivery = (async () => {
++        if (route.request().method() !== 'GET' || ++requests === 1 || released) { await route.continue(); return }
++        const response = await route.fetch(); expect(response.status()).toBe(200)
++        const actual = await response.json(); expect(actual.active_independent_attempt_id).toBeNull()
++        held++; await gate; await route.fulfill({ response })
++      })(); deliveries.push(delivery); return delivery
++    }
++    await page.route('**/api/v1/session', handler); await page.reload()
++    await expect(page.getByText('✓ UI 会话已保存', { exact: true })).toBeVisible()
++    await expect(page.getByText('正在核验服务端测试策略；尚未向模型提供任何内容。', { exact: true })).toBeVisible()
++    await expect.poll(() => held).toBeGreaterThan(0)
++    await expect(page.locator('.import-trigger')).toBeDisabled()
++    const { palette, button } = await paletteImport(page)
++    await expect(button).toBeDisabled()
++    await actualDisabledClick(page, button)
++    await expect(palette).toBeVisible(); await expect(page.getByRole('dialog', { name: '导入', exact: true })).toHaveCount(0)
++    expect(importWrites).toBe(0); facts.unknownPolicyDisabledActualClick = true
++    releaseGate(); await Promise.all(deliveries)
++    await expect(button).toBeEnabled(); await expect(page.locator('.import-trigger')).toBeEnabled()
++    await expect(page.getByRole('dialog', { name: '导入', exact: true })).toHaveCount(0); expect(importWrites).toBe(0)
++    facts.noAutomaticAdmissionAfterPermissionRecovery = true
++    await palette.getByRole('button', { name: '关闭命令面板', exact: true }).click()
++    const imported = await importAssessmentPackage(page, fixture)
++    expect(imported.receipt.course_refs).toContainEqual(fixture.course); expect(importWrites).toBe(1)
++    facts.originalFixtureAndUnchangedHelperSucceeded = true
++    await page.screenshot({ path: info.outputPath('explicit-command-import-after-policy.png') })
++  } finally {
++    releaseGate(); await Promise.allSettled(deliveries); facts.actualPolicyResponsesHeld = held
++    writeFileSync(info.outputPath('actual-command-unknown-policy.json'), JSON.stringify(facts, null, 2) + '\n')
++    await runtime.close()
++  }
++})
++
++test('command import keeps the actual independent attempt restriction and needs another explicit click after abandon', async ({ playwright }, info) => {
++  const runtime = await RestartRuntime.start(), fixture = originalAssessmentPackage('commandindependent')
++  const facts: Record<string, unknown> = {}
++  try {
++    const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]
++    await runtime.authenticateOnly(page); await expect(page.locator('.import-trigger')).toBeEnabled()
++    const imported = await importAssessmentPackage(page, fixture)
++    await imported.dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
++    await page.goto(`${runtime.origin}/?assessment=${encodeURIComponent(JSON.stringify({ assessment_ref: fixture.assessment, course_ref: fixture.course }))}`)
++    await page.getByRole('radio', { name: '独立测试', exact: true }).check()
++    await page.getByRole('checkbox', { name: '我已核对内容状态与模式，确认开始未评分测试', exact: true }).check()
++    const creating = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith(`/assessments/${fixture.assessment.id}/attempts`))
++    await page.getByRole('button', { name: '明确开始本次测试', exact: true }).click()
++    const response = await creating; expect(response.status()).toBe(201); const attempt: AttemptSnapshot = await response.json()
++    expect(attempt.policy.mode).toBe('independent'); await expect(page.getByText('服务端作答已保存', { exact: true })).toBeVisible()
++    const { palette, button } = await paletteImport(page)
++    await expect(button).toBeDisabled(); await expect(page.locator('.import-trigger')).toBeDisabled()
++    await expect(palette.getByRole('button', { name: /^查看快捷键/ })).toBeEnabled()
++    await actualDisabledClick(page, button); await expect(palette).toBeVisible()
++    await expect(page.getByRole('dialog', { name: '导入', exact: true })).toHaveCount(0)
++    expect((await page.request.get(`/api/v1/attempts/${attempt.id}`).then(r => r.json())).status).toBe('active')
++    facts.actualIndependentAttemptDisabledBothEntries = true
++    await palette.getByRole('button', { name: '关闭命令面板', exact: true }).click()
++    await page.getByRole('button', { name: '放弃本次测试', exact: true }).click()
++    const abandoning = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith(`/attempts/${attempt.id}/abandon`))
++    await page.getByRole('button', { name: '确认放弃并保留本机候选', exact: true }).click(); expect((await abandoning).status()).toBe(200)
++    await expect(page.locator('.import-trigger')).toBeEnabled()
++    await expect(page.getByRole('dialog', { name: '导入', exact: true })).toHaveCount(0)
++    const next = await paletteImport(page); await expect(next.button).toBeEnabled(); await next.button.click()
++    await expect(page.getByRole('dialog', { name: '导入', exact: true }).getByText(/操作角色：(作者|学习者)$/)).toBeVisible()
++    const final = await page.request.get(`/api/v1/attempts/${attempt.id}`).then(r => r.json())
++    expect(final.status).toBe('abandoned'); expect(final.grading_status).toBe('not_graded')
++    facts.explicitReadmissionOnlyAfterActualAbandon = true; facts.finalStatus = final.status
++  } finally {
++    writeFileSync(info.outputPath('actual-command-independent-policy.json'), JSON.stringify(facts, null, 2) + '\n')
++    await runtime.close()
++  }
++})

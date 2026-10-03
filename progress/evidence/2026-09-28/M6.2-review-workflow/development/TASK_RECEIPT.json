@@ -1,0 +1,953 @@
+{
+  "actual_base": "1391e8c87737d21ed8caf3af773040cfc96b4581",
+  "blockers": [
+    "M6.2 remains partial: root owns HTTP composition; draft status projection and publication lifecycle remain follow-up owner work."
+  ],
+  "changed_paths": [
+    "docs/adr/0025-review-application-and-report.md",
+    "services/api/app/application/review_artifacts.py",
+    "services/api/app/application/review_service.py",
+    "services/api/app/application/review_worker.py",
+    "services/api/app/infrastructure/artifact_repository.py",
+    "services/api/app/infrastructure/review_artifact_repository.py",
+    "services/api/app/infrastructure/review_job_repository.py",
+    "tests/integration/test_review_workflow.py"
+  ],
+  "commands": [
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py"
+      ],
+      "stage": "01-workflow-red"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py"
+      ],
+      "stage": "02-workflow-green"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py"
+      ],
+      "stage": "03-expanded-workflow"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "ruff",
+        "check",
+        "services/api/app/application/review_service.py",
+        "services/api/app/application/review_worker.py",
+        "services/api/app/application/review_artifacts.py",
+        "tests/integration/test_review_workflow.py"
+      ],
+      "stage": "04-workflow-ruff"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "mypy",
+        "services/api/app/application/review_service.py",
+        "services/api/app/application/review_worker.py",
+        "services/api/app/application/review_artifacts.py"
+      ],
+      "stage": "05-workflow-mypy"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py"
+      ],
+      "stage": "06-expanded-fixed"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py",
+        "tests/integration/test_review_boundary_diagnostics.py"
+      ],
+      "stage": "07-human-na-and-privacy"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py"
+      ],
+      "stage": "08-transaction-formula-tests"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py",
+        "-k",
+        "explicit_formula"
+      ],
+      "stage": "09-formula-fixed"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "mypy",
+        "services/api/app/application/review_service.py",
+        "services/api/app/application/review_worker.py",
+        "services/api/app/application/review_artifacts.py"
+      ],
+      "stage": "10-workflow-mypy"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py",
+        "tests/integration/test_review_boundary_diagnostics.py",
+        "tests/integration/test_review_repository.py",
+        "tests/integration/test_review_job_lifecycle.py",
+        "tests/integration/test_review_structure_checks.py",
+        "tests/integration/test_review_numeric_observations.py"
+      ],
+      "stage": "11-fixed-owner-regressions"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "ruff",
+        "check",
+        "services/api/app/application/review_service.py",
+        "services/api/app/application/review_worker.py",
+        "services/api/app/application/review_artifacts.py",
+        "tests/integration/test_review_workflow.py"
+      ],
+      "stage": "12-fixed-ruff"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "mypy",
+        "services/api/app/application/review_service.py",
+        "services/api/app/application/review_worker.py",
+        "services/api/app/application/review_artifacts.py"
+      ],
+      "stage": "13-fixed-mypy"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py",
+        "-k",
+        "explicit_formula or accepted_external"
+      ],
+      "stage": "14-review-findings-red"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py",
+        "-k",
+        "explicit_formula or accepted_external or plain_nonmathematical"
+      ],
+      "stage": "15-review-findings-green"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py",
+        "-k",
+        "created_at"
+      ],
+      "stage": "16-artifact-time-red"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py",
+        "-k",
+        "created_at"
+      ],
+      "stage": "17-artifact-time-green"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py",
+        "-k",
+        "real_create or accepted_external or created_at or recovery or cycle"
+      ],
+      "stage": "18-owner-ports"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py",
+        "-k",
+        "jobs_owned or artifacts_owned"
+      ],
+      "stage": "19-owner-boundary-regressions"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py",
+        "-k",
+        "bad_queue_scheduling"
+      ],
+      "stage": "20-bad-scheduling-row-red"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py",
+        "-k",
+        "bad_queue_scheduling or jobs_owned"
+      ],
+      "stage": "21-bad-scheduling-row-green"
+    },
+    {
+      "argv": [
+        ".venv/bin/ruff",
+        "check",
+        "services/api/app/application/review_service.py",
+        "services/api/app/application/review_worker.py",
+        "services/api/app/application/review_artifacts.py",
+        "services/api/app/infrastructure/review_artifact_repository.py",
+        "services/api/app/infrastructure/artifact_repository.py",
+        "services/api/app/infrastructure/review_job_repository.py",
+        "tests/integration/test_review_workflow.py"
+      ],
+      "stage": "22-increment-ruff"
+    },
+    {
+      "argv": [
+        ".venv/bin/mypy",
+        "--follow-imports=silent",
+        "services/api/app/application/review_service.py",
+        "services/api/app/application/review_worker.py",
+        "services/api/app/application/review_artifacts.py",
+        "services/api/app/infrastructure/review_artifact_repository.py",
+        "services/api/app/infrastructure/artifact_repository.py",
+        "services/api/app/infrastructure/review_job_repository.py"
+      ],
+      "stage": "23-increment-mypy"
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py",
+        "tests/integration/test_review_boundary_diagnostics.py",
+        "tests/integration/test_review_repository.py",
+        "tests/integration/test_review_job_lifecycle.py",
+        "tests/integration/test_review_structure_checks.py",
+        "tests/integration/test_review_numeric_observations.py",
+        "tests/integration/test_artifact_owners.py"
+      ],
+      "stage": "24-fixed-final-regressions"
+    }
+  ],
+  "evidence_boundary": "This private bundle is not publication sanitized. Earlier failures remain original and are not rewritten as passes.",
+  "exit_codes": [
+    {
+      "exit_code": 2,
+      "stage": "01-workflow-red"
+    },
+    {
+      "exit_code": 0,
+      "stage": "02-workflow-green"
+    },
+    {
+      "exit_code": 1,
+      "stage": "03-expanded-workflow"
+    },
+    {
+      "exit_code": 0,
+      "stage": "04-workflow-ruff"
+    },
+    {
+      "exit_code": 1,
+      "stage": "05-workflow-mypy"
+    },
+    {
+      "exit_code": 0,
+      "stage": "06-expanded-fixed"
+    },
+    {
+      "exit_code": 0,
+      "stage": "07-human-na-and-privacy"
+    },
+    {
+      "exit_code": 1,
+      "stage": "08-transaction-formula-tests"
+    },
+    {
+      "exit_code": 0,
+      "stage": "09-formula-fixed"
+    },
+    {
+      "exit_code": 0,
+      "stage": "10-workflow-mypy"
+    },
+    {
+      "exit_code": 0,
+      "stage": "11-fixed-owner-regressions"
+    },
+    {
+      "exit_code": 0,
+      "stage": "12-fixed-ruff"
+    },
+    {
+      "exit_code": 0,
+      "stage": "13-fixed-mypy"
+    },
+    {
+      "exit_code": 1,
+      "stage": "14-review-findings-red"
+    },
+    {
+      "exit_code": 0,
+      "stage": "15-review-findings-green"
+    },
+    {
+      "exit_code": 1,
+      "stage": "16-artifact-time-red"
+    },
+    {
+      "exit_code": 0,
+      "stage": "17-artifact-time-green"
+    },
+    {
+      "exit_code": 0,
+      "stage": "18-owner-ports"
+    },
+    {
+      "exit_code": 0,
+      "stage": "19-owner-boundary-regressions"
+    },
+    {
+      "exit_code": 1,
+      "stage": "20-bad-scheduling-row-red"
+    },
+    {
+      "exit_code": 0,
+      "stage": "21-bad-scheduling-row-green"
+    },
+    {
+      "exit_code": 0,
+      "stage": "22-increment-ruff"
+    },
+    {
+      "exit_code": 0,
+      "stage": "23-increment-mypy"
+    },
+    {
+      "exit_code": 0,
+      "stage": "24-fixed-final-regressions"
+    }
+  ],
+  "implementation_commit": "f5c80556a48e348cc6dbdebe6482ff54ad822693",
+  "implementation_commits": [
+    "e3fd9795c54b901e075015f168b1114ed7cb74e5",
+    "f5c80556a48e348cc6dbdebe6482ff54ad822693"
+  ],
+  "independent_review": {
+    "cache": "m62-review-workflow-independent-v1",
+    "manifest_sha256": "1daedd3eab70ae084c058599dfd40a90fe85c68addf8e7f731825369e5178e5c",
+    "report": "REPORT.md",
+    "report_sha256": "8548d31de6dfec6dd20ac10377076108d83026389445a54c9e4ebe39bdee9205",
+    "reviewer_reran_tests": false,
+    "spec_open": 0,
+    "standards_open": 0
+  },
+  "migrations": [],
+  "next_task_id": "M6.2-review-http-composition-and-draft-state-owner",
+  "not_run": [
+    "HTTP/CSRF/startup/generated bindings/Jobs routing composition in this slice",
+    "Draft in_review/approved projection, publication/version comparison/impact propagation/restore",
+    "Complete backend/frontend suite, browser acceptance and hosted CI on this candidate",
+    "Real provider/model calls, numeric sandbox execution, real expert mathematical/source approval or teaching evaluation",
+    "Remote push or release"
+  ],
+  "prerequisite_commits": [
+    "3995eb0",
+    "fa82a0b"
+  ],
+  "private_raw_index": "PRIVATE_RAW_INDEX.json",
+  "requirement_ids": [
+    "R-13",
+    "R-21",
+    "R-22",
+    "R-24",
+    "R-25",
+    "R-27",
+    "R-29"
+  ],
+  "screenshot_paths": [],
+  "security_review": [
+    "Current session, workspace, author and Policy rechecked for content and explicit decisions; safe Jobs controls retain stop access.",
+    "Same-transaction original ACK authentication, actual owner material/numeric history, full Review/Jobs history and physical report bytes.",
+    "External Import and recursive Quality evidence require current owner access and exact history; cycles rejected.",
+    "Report, receipt, history and terminal pointers commit together; expired lease or failure rolls DB back; immutable orphan bytes may remain.",
+    "Real author N/A with original reason preserved for non-math material; explicit formula/structure signals block bypass, never prove whole-text classification.",
+    "Malformed scheduling rows isolated and diagnosed, never granted leases or repaired.",
+    "No Provider, credential or numeric execution; human decisions and materials in tests are explicitly synthetic."
+  ],
+  "source_binding": "GIT_SOURCE_BINDINGS.json",
+  "spec_sha256": "2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d",
+  "task_id": "M6.2-review-application-worker-report-local",
+  "test_summary": [
+    {
+      "command": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py"
+      ],
+      "exit_code": 2,
+      "finished_at": "2026-09-28T00:45:24.201561+00:00",
+      "log_sha256": "03517b054c0b6ac5cec1db622c0267e38d849501d12830054cefdb5f2b176cb3",
+      "raw_receipt": "01-workflow-red/receipt.json",
+      "seconds": 0.5667806189999283,
+      "stage": "01-workflow-red",
+      "started_at": "2026-09-28T00:45:23.634781+00:00",
+      "summary": "1 error in 0.35s"
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-09-28T00:50:08.770097+00:00",
+      "log_sha256": "696033ea21cb7dd3566c382c9a27546f0d9abecfae3899fd2a34498800567d9d",
+      "raw_receipt": "02-workflow-green/receipt.json",
+      "seconds": 2.5822999179999897,
+      "stage": "02-workflow-green",
+      "started_at": "2026-09-28T00:50:06.187791+00:00",
+      "summary": "1 passed, 2 warnings in 2.05s"
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py"
+      ],
+      "exit_code": 1,
+      "finished_at": "2026-09-28T00:53:34.943798+00:00",
+      "log_sha256": "b76c1dceb01bf46717a0f54c7e4e24f5b3b84a2e58d1beeefeaf9463503f5891",
+      "raw_receipt": "03-expanded-workflow/receipt.json",
+      "seconds": 33.0833483639999,
+      "stage": "03-expanded-workflow",
+      "started_at": "2026-09-28T00:53:01.860449+00:00",
+      "summary": "1 failed, 40 passed, 3 warnings in 32.79s"
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "ruff",
+        "check",
+        "services/api/app/application/review_service.py",
+        "services/api/app/application/review_worker.py",
+        "services/api/app/application/review_artifacts.py",
+        "tests/integration/test_review_workflow.py"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-09-28T00:53:36.101602+00:00",
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "raw_receipt": "04-workflow-ruff/receipt.json",
+      "seconds": 0.0779372950000834,
+      "stage": "04-workflow-ruff",
+      "started_at": "2026-09-28T00:53:36.023666+00:00",
+      "summary": "All checks passed!"
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "mypy",
+        "services/api/app/application/review_service.py",
+        "services/api/app/application/review_worker.py",
+        "services/api/app/application/review_artifacts.py"
+      ],
+      "exit_code": 1,
+      "finished_at": "2026-09-28T00:53:39.048641+00:00",
+      "log_sha256": "230371bcc531ba5cb4d1aa835cf48206f8fc2540143be5adf2d431379f3aa10a",
+      "raw_receipt": "05-workflow-mypy/receipt.json",
+      "seconds": 3.026127195000072,
+      "stage": "05-workflow-mypy",
+      "started_at": "2026-09-28T00:53:36.022511+00:00",
+      "summary": "Found 1 error in 1 file (checked 3 source files)"
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-09-28T01:02:32.944089+00:00",
+      "log_sha256": "c5ae7867baec47eaebf83a15e4d978240e3d087cd02dcbe9ca5218da03a53a3e",
+      "raw_receipt": "06-expanded-fixed/receipt.json",
+      "seconds": 30.147133032000056,
+      "stage": "06-expanded-fixed",
+      "started_at": "2026-09-28T01:02:02.796957+00:00",
+      "summary": "41 passed, 2 warnings in 29.84s"
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py",
+        "tests/integration/test_review_boundary_diagnostics.py"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-09-28T01:03:57.632443+00:00",
+      "log_sha256": "930cc57b6823188156d20f5a91923f359e1c5e326a41e6efa206552759d00c20",
+      "raw_receipt": "07-human-na-and-privacy/receipt.json",
+      "seconds": 33.30847946800009,
+      "stage": "07-human-na-and-privacy",
+      "started_at": "2026-09-28T01:03:24.323966+00:00",
+      "summary": "48 passed, 2 warnings in 33.02s"
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py"
+      ],
+      "exit_code": 1,
+      "finished_at": "2026-09-28T01:06:04.480984+00:00",
+      "log_sha256": "9a2dc47a71ee4368b5acc4fc14b833c7eb54d8ef230bb374a3ec5214343d6da8",
+      "raw_receipt": "08-transaction-formula-tests/receipt.json",
+      "seconds": 32.86072502800016,
+      "stage": "08-transaction-formula-tests",
+      "started_at": "2026-09-28T01:05:31.620256+00:00",
+      "summary": "3 failed, 47 passed, 2 warnings in 32.57s"
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py",
+        "-k",
+        "explicit_formula"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-09-28T01:06:32.135193+00:00",
+      "log_sha256": "05420b50187b20f69c6bed1fe28e2859d126e715be40ca799c3e61070ad2cda8",
+      "raw_receipt": "09-formula-fixed/receipt.json",
+      "seconds": 2.5367937000000893,
+      "stage": "09-formula-fixed",
+      "started_at": "2026-09-28T01:06:29.598399+00:00",
+      "summary": "3 passed, 47 deselected, 2 warnings in 2.26s"
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "mypy",
+        "services/api/app/application/review_service.py",
+        "services/api/app/application/review_worker.py",
+        "services/api/app/application/review_artifacts.py"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-09-28T01:06:31.616925+00:00",
+      "log_sha256": "8228fcc5ce46d42d01caf3cd941f4e9c5f2bcc372bb5b147a2f0572d2dd675a8",
+      "raw_receipt": "10-workflow-mypy/receipt.json",
+      "seconds": 0.8526100259996383,
+      "stage": "10-workflow-mypy",
+      "started_at": "2026-09-28T01:06:30.764316+00:00",
+      "summary": "Success: no issues found in 3 source files"
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py",
+        "tests/integration/test_review_boundary_diagnostics.py",
+        "tests/integration/test_review_repository.py",
+        "tests/integration/test_review_job_lifecycle.py",
+        "tests/integration/test_review_structure_checks.py",
+        "tests/integration/test_review_numeric_observations.py"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-09-28T01:09:50.429598+00:00",
+      "log_sha256": "68fa8f121d8b53d409c66cb754b8d311d07590901b8b14e4d0f3b75cf2ff1a1d",
+      "raw_receipt": "11-fixed-owner-regressions/receipt.json",
+      "seconds": 145.48539312499997,
+      "stage": "11-fixed-owner-regressions",
+      "started_at": "2026-09-28T01:07:24.944202+00:00",
+      "summary": "196 passed, 2 warnings in 145.18s (0:02:25)"
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "ruff",
+        "check",
+        "services/api/app/application/review_service.py",
+        "services/api/app/application/review_worker.py",
+        "services/api/app/application/review_artifacts.py",
+        "tests/integration/test_review_workflow.py"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-09-28T01:08:28.993431+00:00",
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "raw_receipt": "12-fixed-ruff/receipt.json",
+      "seconds": 0.0796748379998462,
+      "stage": "12-fixed-ruff",
+      "started_at": "2026-09-28T01:08:28.913762+00:00",
+      "summary": "All checks passed!"
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "mypy",
+        "services/api/app/application/review_service.py",
+        "services/api/app/application/review_worker.py",
+        "services/api/app/application/review_artifacts.py"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-09-28T01:08:29.155421+00:00",
+      "log_sha256": "8228fcc5ce46d42d01caf3cd941f4e9c5f2bcc372bb5b147a2f0572d2dd675a8",
+      "raw_receipt": "13-fixed-mypy/receipt.json",
+      "seconds": 0.21991442399985317,
+      "stage": "13-fixed-mypy",
+      "started_at": "2026-09-28T01:08:28.935506+00:00",
+      "summary": "Success: no issues found in 3 source files"
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py",
+        "-k",
+        "explicit_formula or accepted_external"
+      ],
+      "exit_code": 1,
+      "finished_at": "2026-09-28T01:10:30.010009+00:00",
+      "log_sha256": "a064ca67a933473bc7929dd36c01494fef8b7f0d8439124d4b9bd4cbd4ec06c6",
+      "raw_receipt": "14-review-findings-red/receipt.json",
+      "seconds": 6.54146240099999,
+      "stage": "14-review-findings-red",
+      "started_at": "2026-09-28T01:10:23.468549+00:00",
+      "summary": "2 failed, 7 passed, 47 deselected, 2 warnings in 6.25s"
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py",
+        "-k",
+        "explicit_formula or accepted_external or plain_nonmathematical"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-09-28T01:11:27.242100+00:00",
+      "log_sha256": "7063e0acb7a882aabb06580017f1919744b843d662037418952c3a7a23893261",
+      "raw_receipt": "15-review-findings-green/receipt.json",
+      "seconds": 6.976209080999979,
+      "stage": "15-review-findings-green",
+      "started_at": "2026-09-28T01:11:20.265890+00:00",
+      "summary": "10 passed, 46 deselected, 2 warnings in 6.70s"
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py",
+        "-k",
+        "created_at"
+      ],
+      "exit_code": 1,
+      "finished_at": "2026-09-28T01:12:40.396264+00:00",
+      "log_sha256": "4addf4c4a8c85bc1dda118a848392c89b23ef93601a741fc8ad56a7a486cbb6f",
+      "raw_receipt": "16-artifact-time-red/receipt.json",
+      "seconds": 1.5691439930001252,
+      "stage": "16-artifact-time-red",
+      "started_at": "2026-09-28T01:12:38.827120+00:00",
+      "summary": "1 failed, 56 deselected, 2 warnings in 1.29s"
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py",
+        "-k",
+        "created_at"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-09-28T01:13:08.726700+00:00",
+      "log_sha256": "66b3739c9bf5301aad31870eb43bb8fe711b9100adcd198ed84577dbc8787e3e",
+      "raw_receipt": "17-artifact-time-green/receipt.json",
+      "seconds": 1.571342636999816,
+      "stage": "17-artifact-time-green",
+      "started_at": "2026-09-28T01:13:07.155356+00:00",
+      "summary": "1 passed, 56 deselected, 2 warnings in 1.29s"
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py",
+        "-k",
+        "real_create or accepted_external or created_at or recovery or cycle"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-09-28T01:17:00.330987+00:00",
+      "log_sha256": "ed04b45a65a4088cfe0f9945e29e02454066c108d0adb51e121c498ce29ecadf",
+      "raw_receipt": "18-owner-ports/receipt.json",
+      "seconds": 6.1799860629998875,
+      "stage": "18-owner-ports",
+      "started_at": "2026-09-28T01:16:54.151002+00:00",
+      "summary": "8 passed, 49 deselected, 2 warnings in 5.90s"
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py",
+        "-k",
+        "jobs_owned or artifacts_owned"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-09-28T01:17:56.786333+00:00",
+      "log_sha256": "6b326ab58929518903faad2762f177f3642f54533b5e23e4d350cdf0e80c3c5a",
+      "raw_receipt": "19-owner-boundary-regressions/receipt.json",
+      "seconds": 2.035431043999779,
+      "stage": "19-owner-boundary-regressions",
+      "started_at": "2026-09-28T01:17:54.750904+00:00",
+      "summary": "2 passed, 57 deselected, 2 warnings in 1.75s"
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py",
+        "-k",
+        "bad_queue_scheduling"
+      ],
+      "exit_code": 1,
+      "finished_at": "2026-09-28T01:22:01.080574+00:00",
+      "log_sha256": "35daf7b0d96177bcd383e0d0fdc3eb47032fc55d5b5c8605e34ac541c2e52c06",
+      "raw_receipt": "20-bad-scheduling-row-red/receipt.json",
+      "seconds": 1.9629193820001092,
+      "stage": "20-bad-scheduling-row-red",
+      "started_at": "2026-09-28T01:21:59.117655+00:00",
+      "summary": "2 failed, 59 deselected, 2 warnings in 1.69s"
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py",
+        "-k",
+        "bad_queue_scheduling or jobs_owned"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-09-28T01:22:55.505003+00:00",
+      "log_sha256": "f880af90ea12b80aaa83055baea61dc559f3e3fda56c46416e81583d128b8c75",
+      "raw_receipt": "21-bad-scheduling-row-green/receipt.json",
+      "seconds": 2.5723958169996877,
+      "stage": "21-bad-scheduling-row-green",
+      "started_at": "2026-09-28T01:22:52.932606+00:00",
+      "summary": "3 passed, 58 deselected, 2 warnings in 2.30s"
+    },
+    {
+      "command": [
+        ".venv/bin/ruff",
+        "check",
+        "services/api/app/application/review_service.py",
+        "services/api/app/application/review_worker.py",
+        "services/api/app/application/review_artifacts.py",
+        "services/api/app/infrastructure/review_artifact_repository.py",
+        "services/api/app/infrastructure/artifact_repository.py",
+        "services/api/app/infrastructure/review_job_repository.py",
+        "tests/integration/test_review_workflow.py"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-09-28T01:23:05.798976+00:00",
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "raw_receipt": "22-increment-ruff/receipt.json",
+      "seconds": 0.06183075300032215,
+      "stage": "22-increment-ruff",
+      "started_at": "2026-09-28T01:23:05.737147+00:00",
+      "summary": "All checks passed!"
+    },
+    {
+      "command": [
+        ".venv/bin/mypy",
+        "--follow-imports=silent",
+        "services/api/app/application/review_service.py",
+        "services/api/app/application/review_worker.py",
+        "services/api/app/application/review_artifacts.py",
+        "services/api/app/infrastructure/review_artifact_repository.py",
+        "services/api/app/infrastructure/artifact_repository.py",
+        "services/api/app/infrastructure/review_job_repository.py"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-09-28T01:23:07.724626+00:00",
+      "log_sha256": "ab35ee42183d4d6d3ba483825ab037d18a5a15622d03be01d82220b1564851ff",
+      "raw_receipt": "23-increment-mypy/receipt.json",
+      "seconds": 1.9796994060002362,
+      "stage": "23-increment-mypy",
+      "started_at": "2026-09-28T01:23:05.744928+00:00",
+      "summary": "Success: no issues found in 6 source files"
+    },
+    {
+      "command": [
+        ".venv/bin/python",
+        "-B",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/integration/test_review_workflow.py",
+        "tests/integration/test_review_boundary_diagnostics.py",
+        "tests/integration/test_review_repository.py",
+        "tests/integration/test_review_job_lifecycle.py",
+        "tests/integration/test_review_structure_checks.py",
+        "tests/integration/test_review_numeric_observations.py",
+        "tests/integration/test_artifact_owners.py"
+      ],
+      "exit_code": 0,
+      "finished_at": "2026-09-28T01:26:49.377207+00:00",
+      "log_sha256": "f3922ced77a1eecc2fff6c486a4073b8ddc1f8de14bcebdc5231141e53b3f5c4",
+      "raw_receipt": "24-fixed-final-regressions/receipt.json",
+      "seconds": 175.97729266700026,
+      "stage": "24-fixed-final-regressions",
+      "started_at": "2026-09-28T01:23:53.399913+00:00",
+      "summary": "234 passed, 2 warnings in 175.58s (0:02:55)"
+    }
+  ]
+}

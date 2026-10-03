@@ -19,3 +19,10 @@ test('expired previews can only be declined; raw operation hash and original rev
   expect(decide).toHaveBeenCalledWith({ decision: 'decline', expected_revision: 1, operation_sha256: 'd'.repeat(64) })
   expect(screen.getByText(/不检查维度相容/)).toBeTruthy()
 })
+test('published single candidate blocks new approval while explicit decline and historical reads remain available', () => {
+  const decide = vi.fn(), refresh = vi.fn(); render(<NumericCheckPanel value={value} busy={false} approvalBlocked decide={decide} refresh={refresh} />)
+  expect((screen.getByRole('checkbox') as HTMLInputElement).disabled).toBe(true)
+  expect((screen.getByRole('button', { name: '明确批准本次数值执行' }) as HTMLButtonElement).disabled).toBe(true)
+  fireEvent.click(screen.getByRole('button', { name: '明确拒绝本次数值执行' })); expect(decide).toHaveBeenCalledWith({ decision: 'decline', expected_revision: 1, operation_sha256: value.operation_sha256 })
+  fireEvent.click(screen.getByRole('button', { name: '另行读取数值检查当前状态' })); expect(refresh).toHaveBeenCalledTimes(1)
+})

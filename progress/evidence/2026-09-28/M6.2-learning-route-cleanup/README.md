@@ -1,0 +1,5 @@
+# Held route callback cleanup: bounded test fix
+
+Single-callsite e618f3d919656206c6428f1bb7a41f34c3fd6136, integrated440eb87: release gate, await page.unrouteAll({behavior:wait}), then close other page. No ignoreErrors, changed timeout/retry/assertion or product change. Source-bound actual finally block on real Chromium gives threeRED then threeGREEN. Both isolated original-case before/after runs pass; the original full-native second error (other-page independent text5s) remains UNKNOWN, as do the remaining eight failures.
+
+The first copied probe's external source was captured only afterward, explicitly retained as weaker evidence. Later actual-callsite probes include external source/config before and after. Root independently verified all481original manifest members and exact one-callsite source difference, rerunning no tests. This complete selected excerpt includes all six stage logs/receipts/input manifests, diagnostics and root review. The426duplicate stage/source snapshots and six native artifacts are explicitly excluded by hash; their originals stay private. No general native-success or historical timeout repair claim.

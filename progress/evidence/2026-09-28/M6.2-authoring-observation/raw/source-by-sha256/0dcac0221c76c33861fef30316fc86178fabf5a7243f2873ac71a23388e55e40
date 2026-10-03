@@ -1,0 +1,84 @@
+const stages = ['lifecycle_reset', 'lifecycle_cleanup', 'operation_started', 'operation_finally', 'operation_finished', 'operation_discarded',
+  'ack_persisted', 'list_requested', 'list_returned', 'list_accepted', 'list_discarded', 'list_error', 'list_finally', 'rendered'] as const
+type Stage = typeof stages[number]
+type Handle = Readonly<{ epoch: string; hook: number }>
+type Facts = { operation: number; list_sequence: number; working: boolean; basis_operation?: number; basis_list_sequence?: number;
+  busy?: boolean; ready?: boolean; academic?: boolean; job_count?: number; reason?: 'scope' | 'superseded' }
+export type AuthoringObservationRecord = Handle & Facts & { ordinal: number; source_ms: number; stage: Stage }
+export type AuthoringObservationSnapshot = { epoch: string; records: AuthoringObservationRecord[]; omitted: number; invalid: number; delivery_failures: number; delivery_pending: number }
+const integer = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+const factKeys = ['operation', 'list_sequence', 'working', 'basis_operation', 'basis_list_sequence', 'busy', 'ready', 'academic', 'job_count', 'reason']
+
+/** Reject arbitrary caller fields before either retaining or delivering metadata. */
+export function safeAuthoringObservation(value: unknown): value is AuthoringObservationRecord {
+  try {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+    const row = value as Record<string, unknown>
+    return Object.keys(row).every(key => ['epoch', 'hook', 'ordinal', 'source_ms', 'stage', ...factKeys].includes(key))
+      && typeof row.epoch === 'string' && /^[A-Za-z0-9_-]{1,96}$/.test(row.epoch)
+      && integer(row.hook) && row.hook > 0 && integer(row.ordinal) && row.ordinal > 0
+      && typeof row.source_ms === 'number' && Number.isFinite(row.source_ms) && row.source_ms >= 0
+      && stages.includes(row.stage as Stage) && integer(row.operation) && integer(row.list_sequence) && typeof row.working === 'boolean'
+      && ['basis_operation', 'basis_list_sequence', 'job_count'].every(key => row[key] === undefined || integer(row[key]))
+      && ['busy', 'ready', 'academic'].every(key => row[key] === undefined || typeof row[key] === 'boolean')
+      && (row.reason === undefined || row.reason === 'scope' || row.reason === 'superseded')
+  } catch { return false }
+}
+
+/** Fixed metadata budget; a stalled or throwing sink cannot block the original operation. */
+export function createAuthoringObservation(epoch: string, sink: (batch: AuthoringObservationRecord[]) => unknown,
+  clock: () => number = () => performance.now(), capacity = 512) {
+  const records: AuthoringObservationRecord[] = [], handles = new WeakSet<Handle>()
+  const limit = Number.isSafeInteger(capacity) ? Math.max(1, Math.min(512, capacity)) : 512
+  let serial = 0, omitted = 0, invalid = 0, failures = 0, delivered = 0, pending = false, inFlight = 0, active = true
+  const flush = () => {
+    if (!active || pending || delivered === records.length) return
+    pending = true
+    queueMicrotask(() => {
+      if (!active) { pending = false; return }
+      const batch = records.slice(delivered, delivered + 64).map(value => ({ ...value }))
+      delivered += batch.length; inFlight = batch.length
+      void (async () => { try { await sink(batch) } catch { failures++ }
+        finally { pending = false; inFlight = 0; flush() } })()
+    })
+  }
+  return {
+    begin(): Handle | undefined {
+      if (!active || !/^[A-Za-z0-9_-]{1,96}$/.test(epoch)) return
+      const handle = Object.freeze({ epoch, hook: ++serial }); handles.add(handle); return handle
+    },
+    record(handle: Handle | undefined, stage: Stage, facts: Facts) {
+      try {
+        if (!active || !handle) return
+        if (!handles.has(handle) || Object.keys(facts).some(key => !factKeys.includes(key))) { invalid++; return }
+        const value = { ...handle, ...facts, stage, source_ms: clock(), ordinal: records.length + 1 }
+        if (!safeAuthoringObservation(value)) { invalid++; return }
+        if (records.length === limit) { omitted++; return }
+        records.push(Object.freeze(value)); flush()
+      } catch { invalid++ }
+    },
+    snapshot(): AuthoringObservationSnapshot { return { epoch, records: records.map(value => ({ ...value })), omitted, invalid,
+      delivery_failures: failures, delivery_pending: records.length - delivered + inFlight } },
+    dispose() { active = false },
+  }
+}
+
+type Sink = (batch: AuthoringObservationRecord[]) => unknown
+type Host = { __authoringObservationEnabled?: boolean; __authoringDiagnosticMechanism?: Sink; __authoringObservationSnapshot?: () => AuthoringObservationSnapshot }
+let observer: ReturnType<typeof createAuthoringObservation> | undefined, installedSink: Sink | undefined
+function installed() {
+  try {
+    const host = globalThis as Host
+    if (host.__authoringObservationEnabled !== true || typeof host.__authoringDiagnosticMechanism !== 'function') {
+      observer?.dispose(); observer = undefined; installedSink = undefined; return
+    }
+    if (!observer || installedSink !== host.__authoringDiagnosticMechanism) {
+      observer?.dispose(); installedSink = host.__authoringDiagnosticMechanism
+      observer = createAuthoringObservation(crypto.randomUUID(), installedSink)
+      host.__authoringObservationSnapshot = () => observer!.snapshot()
+    }
+    return observer
+  } catch { return }
+}
+export const authoringObservationHandle = () => installed()?.begin()
+export function authoringMark(handle: Handle | undefined, stage: Stage, facts: Facts) { installed()?.record(handle, stage, facts) }

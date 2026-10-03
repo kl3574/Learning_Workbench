@@ -160,13 +160,18 @@ def validation():
             'mathematical': 'NOT_RUN', 'sources': 'NOT_RUN', 'independent_pedagogy': 'NOT_RUN'}
 
 
-def test_candidate_bytes_cannot_be_published_refs_or_gain_review_from_numeric_success():
+def draft_view():
     from packages.contracts.canonical import sha256_bytes
+    return {'owner': 'authoring', 'candidate': candidate(), 'source_job_id': 'job_authoring',
+             'state': 'draft', 'published_ref': None, 'base_ref': None,
+             'body_sha256': sha256_bytes(payload()['body_markdown'].encode()),
+             'payload': payload(), 'validation': validation(), 'numeric_check_ids': ['check_one'], 'warnings': []}
+
+
+def test_candidate_bytes_cannot_be_published_refs_or_gain_review_from_numeric_success():
     from services.api.app.authoring_dto import AuthoringDraftView
 
-    value = {'owner': 'authoring', 'candidate': candidate(), 'source_job_id': 'job_authoring',
-             'state': 'draft', 'base_ref': None, 'body_sha256': sha256_bytes(payload()['body_markdown'].encode()),
-             'payload': payload(), 'validation': validation(), 'numeric_check_ids': ['check_one'], 'warnings': []}
+    value = draft_view()
     assert AuthoringDraftView.model_validate(value).state == 'draft'
     for mutate in (
         lambda x: x.update(candidate=ref()), lambda x: x.update(state='published'),
@@ -181,6 +186,38 @@ def test_candidate_bytes_cannot_be_published_refs_or_gain_review_from_numeric_su
         mutate(broken)
         with pytest.raises(ValidationError):
             AuthoringDraftView.model_validate(broken)
+
+
+def test_single_publication_projection_preserves_candidate_and_requires_exact_block_shape():
+    from services.api.app.authoring_dto import AuthoringDraftView
+
+    draft = draft_view()
+    published = {**draft, 'state': 'published', 'published_ref': {**ref(), 'id': 'block_published'}}
+    parsed = AuthoringDraftView.model_validate(published)
+    assert parsed.model_dump(mode='json') == published
+    assert parsed.candidate.model_dump(mode='json') == draft['candidate']
+    assert parsed.payload.model_dump(mode='json') == draft['payload']
+    assert parsed.validation.mathematical == 'NOT_RUN'
+    assert AuthoringDraftView.model_validate(draft).published_ref is None
+    for mutate in (
+        lambda x: x.pop('published_ref'),
+        lambda x: x.update(published_ref=None),
+        lambda x: x.update(state='draft'),
+        lambda x: x.update(state=True),
+        lambda x: x.update(published_ref=x['candidate']),
+        lambda x: x['published_ref'].update(entity='lesson'),
+        lambda x: x['published_ref'].update(revision=True),
+        lambda x: x['published_ref'].update(sha256='invalid'),
+        lambda x: x['published_ref'].update(current=True),
+        lambda x: x.update(publication_receipt='undeclared'),
+    ):
+        broken = deepcopy(published)
+        mutate(broken)
+        with pytest.raises(ValidationError):
+            AuthoringDraftView.model_validate(broken)
+    del draft['published_ref']
+    with pytest.raises(ValidationError):
+        AuthoringDraftView.model_validate(draft)
 
 
 def job(kind='authoring'):
@@ -381,6 +418,12 @@ def test_named_schema_types_are_independent_but_http_binding_requires_real_route
     assert schemas['AuthoringCandidate']['properties']['entity']['const'] == 'block'
     assert 'raw_answer' in schemas['AuthoringJobView']['required']
     assert 'base_ref' in schemas['AuthoringDraftView']['required']
+    draft = schemas['AuthoringDraftView']
+    assert draft['additionalProperties'] is False
+    assert 'published_ref' in draft['required']
+    assert draft['properties']['state']['enum'] == ['draft', 'published']
+    assert draft['properties']['published_ref']['anyOf'] == [
+        {'$ref': '#/$defs/AuthoringBlockRef'}, {'type': 'null'}]
     assert schemas['NumericCheckView']['properties']['job']['anyOf'][-1] == {'type':'null'}
     assert 'AuthoringRuntimeDTOMap' not in artifacts['authoring-types.ts']
     assert 'ContentRef' in artifacts['authoring-types.ts']

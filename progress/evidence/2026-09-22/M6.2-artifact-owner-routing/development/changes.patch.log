@@ -1,0 +1,567 @@
+diff --git a/services/api/app/application/imports.py b/services/api/app/application/imports.py
+index 7ba55f2..c787214 100644
+--- a/services/api/app/application/imports.py
++++ b/services/api/app/application/imports.py
+@@ -29,13 +29,15 @@ from ..infrastructure.idempotency import execute_idempotent
+ from ..infrastructure.import_mapping import object_key, remap_import
+ from ..infrastructure.import_repository import ImportRepository, identifier, json_object, json_text
+ from ..infrastructure.provenance_repository import ProvenanceRepository
+-from ..infrastructure.security import SessionIdentity, author_execution_identity, guard_subject_access
++from ..infrastructure.security import SessionIdentity, author_execution_identity, current_session_identity, guard_subject_access
+ from .content import ContentService
+ from .errors import ApiError
+ from .draft_candidate_models import ResolvedDraftCandidate, match_candidate
+ from .policy import Policy
+ from .review_material_models import CheckedReviewMaterial, ImportReviewMaterial, checked_material
+ 
++IMPORT_ARTIFACT_PROFILES = frozenset({'import_original', 'import_asset', 'untrusted_quality_receipt', 'import_receipt'})
++
+ 
+ def invalid() -> ApiError:
+     return ApiError(422, "SCHEMA_INVALID", "导入请求或存储格式无效。")
+@@ -371,12 +373,18 @@ class ImportService:
+             raise ApiError(403, "POLICY_DENIED", "此作者私有附件需要作者角色。")
+         if row["visibility"] == "author_private":
+             Policy(repository.connection, identity.workspace_id).check("private_artifact")
+-        metadata = json_object(row["manifest_json"])
+-        info = repository.blob(row["blob_sha256"])
+-        if metadata.get("version") != 1 or metadata.get("sha256") != info.sha256 or metadata.get("size") != info.size:
+-            raise damaged()
+-        return row, DownloadArtifact(artifact_id=id, filename=metadata["filename"], media_type=metadata["media_type"],
+-                                      size=info.size, sha256=info.sha256, download_path=f"/api/v1/artifacts/{id}/download")
++        try:
++            metadata = json_object(row["manifest_json"])
++            info = repository.blob(row["blob_sha256"])
++            if (set(metadata) != {'version', 'filename', 'media_type', 'size', 'sha256'}
++                    or type(metadata['version']) is not int or metadata['version'] != 1
++                    or type(metadata['size']) is not int or metadata['size'] != info.size
++                    or metadata['sha256'] != info.sha256):
++                raise damaged()
++            return row, DownloadArtifact(artifact_id=id, filename=metadata["filename"], media_type=metadata["media_type"],
++                                          size=info.size, sha256=info.sha256, download_path=f"/api/v1/artifacts/{id}/download")
++        except (ValueError, TypeError, KeyError):
++            raise damaged() from None
+ 
+     def source(self, identity: SessionIdentity, id: str) -> SourceResponse:
+         with self._access(identity) as repository:
+@@ -392,10 +400,71 @@ class ImportService:
+                                   warnings=[dm.Warning.model_validate(value) for value in metadata.get("warnings", [])], artifact=artifact)
+ 
+     def download(self, identity: SessionIdentity, id: str) -> tuple[bytes, DownloadArtifact]:
++        """Compatibility port for existing trusted in-process Import callers.
++
++        HTTP and new owners must use read_artifact through ArtifactsService,
++        which revalidates the actual session in the caller transaction.
++        """
+         with self._access(identity) as repository:
+-            row, artifact = self._artifact(repository, identity, id)
+-            imported = repository.from_job(row["job_id"])
+-            return self.frozen_store(imported).read(artifact.sha256, expected_size=artifact.size), artifact
++            return self._download(repository, identity, id)
++
++    def read_artifact(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                      identifier: str) -> tuple[bytes, DownloadArtifact]:
++        current = current_session_identity(connection, identity)
++        ContentRepository(connection, current.workspace_id).require_workspace()
++        guard_subject_access(connection, current.workspace_id)
++        return self._download(ImportRepository(connection, current.workspace_id), current, identifier)
++
++    def _download(self, repository: ImportRepository, identity: SessionIdentity,
++                  identifier: str) -> tuple[bytes, DownloadArtifact]:
++        from .artifacts import unavailable_owner
++        from .jobs import artifact_job_kind
++        row, artifact = self._artifact(repository, identity, identifier)
++        if row['profile'] not in IMPORT_ARTIFACT_PROFILES or artifact_job_kind(
++                repository.connection, identity.workspace_id, row['job_id']) != 'import':
++            raise unavailable_owner()
++        imported = repository.from_job(row['job_id'])
++        self._artifact_origin(repository, imported, row, artifact)
++        return self.frozen_store(imported).read(artifact.sha256, expected_size=artifact.size), artifact
++
++    def _artifact_origin(self, repository: ImportRepository, imported: sqlite3.Row,
++                         row: sqlite3.Row, artifact: DownloadArtifact) -> None:
++        """Bind the real profile to its recorded Import source, never only a blob."""
++        try:
++            source = repository.connection.execute('SELECT id FROM sources WHERE id=? AND workspace_id=?',
++                (imported['source_id'], repository.workspace_id)).fetchone()
++            metadata, request = json_object(imported['source_metadata']), json_object(imported['input_json'])
++            if (source is None or request['source_id'] != imported['source_id']
++                    or imported['input_sha256'] != imported['blob_sha256']):
++                raise damaged()
++            profile = row['profile']
++            if profile == 'import_original':
++                if (metadata['artifact_id'] != artifact.artifact_id or imported['input_sha256'] != artifact.sha256
++                        or metadata['visibility'] != row['visibility'] or metadata['filename'] != artifact.filename
++                        or request['filename'] != artifact.filename or imported['media_type'] != artifact.media_type):
++                    raise damaged()
++            elif profile in {'import_asset', 'untrusted_quality_receipt'}:
++                expected = {'artifact_id': artifact.artifact_id, 'sha256': artifact.sha256, 'size': artifact.size}
++                if profile == 'import_asset':
++                    matches = [(path, value) for path, value in metadata['assets'].items()
++                               if value['artifact_id'] == artifact.artifact_id]
++                    if len(matches) != 1 or matches[0][1] != expected or safe_filename(matches[0][0]) != artifact.filename:
++                        raise damaged()
++                elif (metadata['untrusted_quality_receipt'] != expected or row['visibility'] != metadata['visibility']
++                        or artifact.filename != 'untrusted-quality-receipt.json' or artifact.media_type != 'application/json'):
++                    raise damaged()
++            elif profile == 'import_receipt':
++                preview = self._preview_data(imported)
++                result = json_object(imported['result_json'])
++                if (preview['commit_result']['migration_receipt_id'] != artifact.artifact_id
++                        or result['migration_receipt_id'] != artifact.artifact_id
++                        or row['visibility'] != preview_visibility(imported)
++                        or artifact.filename != 'import-receipt.json' or artifact.media_type != 'application/json'):
++                    raise damaged()
++            else:
++                raise damaged()
++        except (ValueError, TypeError, KeyError, AttributeError):
++            raise damaged() from None
+ 
+     def _body_payloads(self, repository: ImportRepository, row: sqlite3.Row, preview: dict[str, Any]) -> dict[str, bytes]:
+         output = {}
+diff --git a/services/api/app/application/jobs.py b/services/api/app/application/jobs.py
+index 5fbe658..72ca998 100644
+--- a/services/api/app/application/jobs.py
++++ b/services/api/app/application/jobs.py
+@@ -38,6 +38,14 @@ def outbound_source_kind(connection: sqlite3.Connection, workspace_id: str, job_
+     return str(row['kind'])
+ 
+ 
++def artifact_job_kind(connection: sqlite3.Connection, workspace_id: str, job_id: str) -> str:
++    """Jobs-owned kind fact for an artifact; never a content permission grant."""
++    from .errors import ApiError
++    if not connection.in_transaction:
++        raise ApiError(409, 'TRANSACTION_REQUIRED', '附件任务核验需要有效事务。')
++    return outbound_source_kind(connection, workspace_id, job_id)
++
++
+ def outbound_lease_active(connection: sqlite3.Connection, workspace_id: str, job_id: str, now: str) -> bool:
+     """A live owner lease excludes recovery, even after cancellation was requested.
+ 
+diff --git a/services/api/app/infrastructure/security.py b/services/api/app/infrastructure/security.py
+index 2ee3b1e..1383345 100644
+--- a/services/api/app/infrastructure/security.py
++++ b/services/api/app/infrastructure/security.py
+@@ -107,6 +107,23 @@ def author_execution_identity(connection: sqlite3.Connection, workspace_id: str,
+     return SessionIdentity(row['id'], row['workspace_id'], row['role'], '', row['expires_at'])
+ 
+ 
++def current_session_identity(connection: sqlite3.Connection, identity: SessionIdentity) -> SessionIdentity:
++    """Revalidate an authenticated caller in the transaction that reads material.
++
++    Identity is not authority to retain an old role or a revoked session. No
++    missing-session fallback or token/CSRF material is returned to the reader.
++    """
++    if not connection.in_transaction:
++        raise ApiError(409, 'TRANSACTION_REQUIRED', '当前身份核验需要有效事务。')
++    row = connection.execute(
++        'SELECT id,workspace_id,role,expires_at FROM local_sessions '
++        'WHERE id=? AND workspace_id=? AND revoked_at IS NULL AND expires_at>?',
++        (identity.id, identity.workspace_id, utc_now())).fetchone()
++    if row is None:
++        raise ApiError(401, 'SESSION_REQUIRED', '本机会话已失效，请重新使用启动器。')
++    return SessionIdentity(row['id'], row['workspace_id'], row['role'], '', row['expires_at'])
++
++
+ def active_independent_attempt(connection: sqlite3.Connection, workspace_id: str) -> str | None:
+     from ..application.assessment_access import AssessmentAccess
+     return AssessmentAccess(connection, workspace_id).active_independent()
+diff --git a/services/api/app/interfaces/import_http.py b/services/api/app/interfaces/import_http.py
+index a2d55bf..52070f9 100644
+--- a/services/api/app/interfaces/import_http.py
++++ b/services/api/app/interfaces/import_http.py
+@@ -9,6 +9,8 @@ from packages.contracts import domain_models as dm
+ 
+ from ..config import Settings
+ from ..application.jobs import JobService
++from ..application.artifacts import ArtifactsService
++from ..application.imports import IMPORT_ARTIFACT_PROFILES
+ from ..errors import ApiError
+ from ..import_dto import (
+     ImportUpload, ImportStaged, ImportPreview, ImportCommitRequest, ImportCommitResponse,
+@@ -34,6 +36,7 @@ async def strict_upload_fields(request: Request) -> None:
+ 
+ def create_import_router(settings: Settings, service: "ImportService") -> APIRouter:
+     jobs = JobService(service.database)
++    artifacts = ArtifactsService(service.database, {(profile, 'import'): service for profile in IMPORT_ARTIFACT_PROFILES})
+     router = APIRouter(prefix="/api/v1", tags=["imports"],
+                        dependencies=[Depends(current_identity), Depends(reject_query_fields)])
+ 
+@@ -81,7 +84,7 @@ def create_import_router(settings: Settings, service: "ImportService") -> APIRou
+                 responses={200: {"content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}},
+                                  "headers": {"ETag": {"schema": {"type": "string"}}, "Content-Disposition": {"schema": {"type": "string"}}}}})
+     def download(id: dm.Id, request: Request) -> Response:
+-        data, artifact = service.download(request.state.identity, id)
++        data, artifact = artifacts.download(request.state.identity, id)
+         disposition = "attachment; filename=download; filename*=UTF-8''" + quote(artifact.filename, safe="")
+         return Response(data, media_type="application/octet-stream", headers={
+             "Content-Disposition": disposition, "ETag": f'"{artifact.sha256}"',
+diff --git a/services/api/app/application/artifacts.py b/services/api/app/application/artifacts.py
+new file mode 100644
+index 0000000..5d08eed
+--- /dev/null
++++ b/services/api/app/application/artifacts.py
+@@ -0,0 +1,49 @@
++"""Explicit artifact readers: routing is not an authorization or blob-read grant.
++
++Only application composition supplies the registry. A future Quality reader must
++be implemented and registered explicitly; it cannot use Import's trusted legacy
++download method as a substitute for current-session, same-transaction admission.
++"""
++
++from collections.abc import Mapping
++import sqlite3
++from types import MappingProxyType
++from typing import Protocol
++
++from ..import_dto import DownloadArtifact
++from ..infrastructure.artifact_repository import ArtifactRepository
++from ..infrastructure.content_repository import ContentRepository
++from ..infrastructure.database import Database
++from ..infrastructure.security import SessionIdentity, current_session_identity, guard_subject_access
++from .errors import ApiError
++from .jobs import artifact_job_kind
++
++
++class ArtifactReader(Protocol):
++    def read_artifact(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                      identifier: str) -> tuple[bytes, DownloadArtifact]: ...
++
++
++def unavailable_owner() -> ApiError:
++    return ApiError(409, 'ARTIFACT_OWNER_UNAVAILABLE', '此附件没有已实现的受控读取所有者。')
++
++
++class ArtifactsService:
++    def __init__(self, database: Database, readers: Mapping[tuple[str, str], ArtifactReader]):
++        self.database, self.readers = database, MappingProxyType(dict(readers))
++
++    def download(self, identity: SessionIdentity, identifier: str) -> tuple[bytes, DownloadArtifact]:
++        try:
++            with self.database.transaction() as connection:
++                current = current_session_identity(connection, identity)
++                ContentRepository(connection, current.workspace_id).require_workspace()
++                guard_subject_access(connection, current.workspace_id)
++                binding = ArtifactRepository(connection, current.workspace_id).binding(identifier)
++                kind = artifact_job_kind(connection, current.workspace_id, binding.job_id)
++                owner = self.readers.get((binding.profile, kind))
++                if owner is None:
++                    raise unavailable_owner()
++                return owner.read_artifact(connection, current, identifier)
++        except sqlite3.Error:
++            # Preserve the existing download endpoint's storage error contract.
++            raise ApiError(503, 'IMPORT_STORAGE_UNAVAILABLE', '导入存储暂不可用。', True) from None
+diff --git a/services/api/app/infrastructure/artifact_repository.py b/services/api/app/infrastructure/artifact_repository.py
+new file mode 100644
+index 0000000..5023612
+--- /dev/null
++++ b/services/api/app/infrastructure/artifact_repository.py
+@@ -0,0 +1,32 @@
++"""Artifacts-owned routing facts; these facts grant no permission to read bytes."""
++
++from dataclasses import dataclass
++import sqlite3
++
++from ..application.errors import ApiError
++from .content_repository import damaged, missing
++
++
++@dataclass(frozen=True)
++class ArtifactBinding:
++    id: str
++    workspace_id: str
++    profile: str
++    job_id: str
++
++
++class ArtifactRepository:
++    def __init__(self, connection: sqlite3.Connection, workspace_id: str):
++        self.connection, self.workspace_id = connection, workspace_id
++
++    def binding(self, identifier: str) -> ArtifactBinding:
++        if not self.connection.in_transaction:
++            raise ApiError(409, 'TRANSACTION_REQUIRED', '附件归属核验需要当前事务。')
++        row = self.connection.execute(
++            'SELECT id,workspace_id,profile,job_id FROM artifacts WHERE id=? AND workspace_id=?',
++            (identifier, self.workspace_id)).fetchone()
++        if row is None:
++            raise missing()
++        if not isinstance(row['job_id'], str) or not row['job_id'] or not row['profile']:
++            raise damaged()
++        return ArtifactBinding(row['id'], row['workspace_id'], row['profile'], row['job_id'])
+diff --git a/tests/integration/test_artifact_owners.py b/tests/integration/test_artifact_owners.py
+new file mode 100644
+index 0000000..5bc83a5
+--- /dev/null
++++ b/tests/integration/test_artifact_owners.py
+@@ -0,0 +1,270 @@
++"""Existing download HTTP with actual Import production and closed owner routing."""
++
++from dataclasses import replace
++import json
++
++import pytest
++
++from services.api.app.application.errors import ApiError
++from services.api.app.application.imports import ImportService
++from services.api.app.infrastructure.security import SessionIdentity
++from tests.integration.test_import_http import headers
++
++from tests.integration.test_import_http import block_preview, importing as importing, preview, upload
++
++
++def imported_original(importing):
++    app, client, settings = importing
++    raw = b'# Synthetic artifact source\n\nExact original bytes.\n'
++    staged = upload(client, settings, raw)
++    candidate = preview(client, staged['import_id'])
++    assert candidate['status'] == 'preview_ready'
++    draft = block_preview(client, candidate)
++    source = client.get('/api/v1/sources/' + draft['payload']['source_id'])
++    assert source.status_code == 200
++    return app, client, settings, staged, candidate, source.json()['artifact'], raw
++
++
++def test_unregistered_artifact_profile_never_defaults_to_import(importing):
++    app, client, _, _, _, artifact, raw = imported_original(importing)
++    assert client.get(artifact['download_path']).content == raw
++    with app.state.database.transaction() as connection:
++        connection.execute("UPDATE artifacts SET profile='quality_report' WHERE id=?", (artifact['artifact_id'],))
++    response = client.get(artifact['download_path'])
++    assert response.status_code == 409
++    assert response.json()['error']['code'] == 'ARTIFACT_OWNER_UNAVAILABLE'
++    assert raw not in response.content
++    identity = current_test_identity(app)
++    with app.state.database.transaction(immediate=False) as connection:
++        with pytest.raises(ApiError) as direct:
++            ImportService(app.state.database).read_artifact(connection, identity, artifact['artifact_id'])
++        assert direct.value.code == 'ARTIFACT_OWNER_UNAVAILABLE'
++
++
++def current_test_identity(app):
++    with app.state.database.connect() as connection:
++        row = connection.execute('SELECT id,workspace_id,role,expires_at FROM local_sessions').fetchone()
++    return SessionIdentity(row['id'], row['workspace_id'], row['role'], '', row['expires_at'])
++
++
++@pytest.mark.parametrize('corruption', ['source_membership', 'job_kind', 'other_import_job', 'manifest_size',
++                                       'manifest_hash', 'manifest_filename', 'manifest_missing_field',
++                                       'manifest_extra_field', 'manifest_bool_version', 'bytes', 'file'])
++def test_registered_import_reader_rejects_corrupt_origin_and_bytes(importing, corruption):
++    app, client, settings, staged, _, artifact, _ = imported_original(importing)
++    with app.state.database.transaction() as connection:
++        row = connection.execute('SELECT * FROM artifacts WHERE id=?', (artifact['artifact_id'],)).fetchone()
++        if corruption == 'source_membership':
++            source = connection.execute('SELECT source_id FROM ingestion_imports WHERE id=?', (staged['import_id'],)).fetchone()[0]
++            metadata = json.loads(connection.execute('SELECT metadata_json FROM sources WHERE id=?', (source,)).fetchone()[0])
++            metadata['artifact_id'] = 'artifact_not_the_original'
++            connection.execute('UPDATE sources SET metadata_json=? WHERE id=?', (json.dumps(metadata), source))
++        elif corruption == 'job_kind':
++            connection.execute("UPDATE jobs SET kind='quality_gate' WHERE id=?", (staged['job']['id'],))
++        elif corruption == 'other_import_job':
++            pass
++        elif corruption.startswith('manifest_'):
++            manifest = json.loads(row['manifest_json'])
++            if corruption == 'manifest_size':
++                manifest['size'] += 1
++            if corruption == 'manifest_hash':
++                manifest['sha256'] = '0' * 64
++            if corruption == 'manifest_filename':
++                manifest['filename'] = '../PRIVATE_SENTINEL'
++            if corruption == 'manifest_missing_field':
++                del manifest['filename']
++            if corruption == 'manifest_extra_field':
++                manifest['unexpected'] = 'PRIVATE_SENTINEL'
++            if corruption == 'manifest_bool_version':
++                manifest['version'] = True
++            connection.execute('UPDATE artifacts SET manifest_json=? WHERE id=?', (json.dumps(manifest), artifact['artifact_id']))
++        else:
++            path = settings.data_dir / connection.execute('SELECT relative_path FROM content_blobs WHERE sha256=?',
++                                                         (row['blob_sha256'],)).fetchone()[0]
++            if corruption == 'bytes':
++                path.write_bytes(b'PRIVATE_SENTINEL')
++            else:
++                path.unlink()
++    if corruption == 'other_import_job':
++        other = upload(client, settings, b'# Another real source\n', key='another')
++        assert preview(client, other['import_id'])['status'] == 'preview_ready'
++        with app.state.database.transaction() as connection:
++            connection.execute('UPDATE artifacts SET job_id=? WHERE id=?', (other['job']['id'], artifact['artifact_id']))
++    response = client.get(artifact['download_path'])
++    expected = 'ARTIFACT_OWNER_UNAVAILABLE' if corruption == 'job_kind' else 'BLOB_STORAGE_UNAVAILABLE' if corruption == 'file' else 'CONTENT_HASH_MISMATCH'
++    assert response.status_code == (503 if corruption == 'file' else 409)
++    assert response.json()['error']['code'] == expected
++    assert 'PRIVATE_SENTINEL' not in response.text
++
++
++@pytest.mark.parametrize('change', ['revoked', 'expired', 'missing', 'different_workspace'])
++def test_owner_reloads_real_session_inside_the_callers_transaction(importing, change):
++    app, _, _, _, _, artifact, _ = imported_original(importing)
++    identity = current_test_identity(app)
++    with app.state.database.transaction() as connection:
++        if change == 'revoked':
++            connection.execute("UPDATE local_sessions SET revoked_at='2026-01-01T00:00:00Z'")
++        if change == 'expired':
++            connection.execute("UPDATE local_sessions SET expires_at='2000-01-01T00:00:00Z'")
++        if change == 'missing':
++            connection.execute('DELETE FROM local_sessions')
++        if change == 'different_workspace':
++            identity = replace(identity, workspace_id='workspace_unrelated')
++        with pytest.raises(ApiError) as rejected:
++            ImportService(app.state.database).read_artifact(connection, identity, artifact['artifact_id'])
++        assert rejected.value.code == 'SESSION_REQUIRED'
++
++
++def test_owner_read_uses_same_readonly_transaction_and_never_writes(importing, monkeypatch):
++    app, _, _, _, _, artifact, raw = imported_original(importing)
++    database = app.state.database
++    identity = current_test_identity(app)
++    owner = ImportService(database)
++    with database.transaction(immediate=False) as connection:
++        connection.execute('PRAGMA query_only=ON')
++        before = list(connection.iterdump())
++        def another_connection(*args, **kwargs):
++            raise AssertionError('Artifact owner must retain the caller transaction')
++        monkeypatch.setattr(database, 'connect', another_connection)
++        data, descriptor = owner.read_artifact(connection, identity, artifact['artifact_id'])
++        assert data == raw and descriptor.model_dump(mode='json') == artifact
++        assert list(connection.iterdump()) == before
++
++
++def test_empty_registry_and_quality_job_are_explicitly_unavailable(importing):
++    from services.api.app.application.artifacts import ArtifactsService
++    app, client, _, staged, _, artifact, _ = imported_original(importing)
++    identity = current_test_identity(app)
++    with pytest.raises(ApiError) as unavailable:
++        ArtifactsService(app.state.database, {}).download(identity, artifact['artifact_id'])
++    assert unavailable.value.code == 'ARTIFACT_OWNER_UNAVAILABLE'
++    # Corrupt only a real produced artifact/job; this is not a Quality producer.
++    with app.state.database.transaction() as connection:
++        connection.execute("UPDATE artifacts SET profile='quality_report' WHERE id=?", (artifact['artifact_id'],))
++        connection.execute("UPDATE jobs SET kind='quality_gate' WHERE id=?", (staged['job']['id'],))
++    response = client.get(artifact['download_path'])
++    assert response.status_code == 409
++    assert response.json()['error']['code'] == 'ARTIFACT_OWNER_UNAVAILABLE'
++
++
++@pytest.mark.parametrize('table,code', [('artifacts', 'REFERENCE_MISSING'), ('sources', 'CONTENT_HASH_MISMATCH'),
++                                      ('jobs', 'JOB_MISSING')])
++def test_foreign_workspace_binding_never_reads_the_known_blob(importing, table, code):
++    app, client, _, staged, _, artifact, raw = imported_original(importing)
++    with app.state.database.transaction() as connection:
++        workspace = dict(connection.execute('SELECT * FROM workspace').fetchone())
++        workspace['id'] = 'workspace_unrelated'
++        connection.execute('INSERT INTO workspace(' + ','.join(workspace) + ') VALUES(' +
++                           ','.join('?' for _ in workspace) + ')', tuple(workspace.values()))
++        if table == 'artifacts':
++            identifier = artifact['artifact_id']
++        elif table == 'jobs':
++            identifier = staged['job']['id']
++        else:
++            identifier = connection.execute('SELECT source_id FROM ingestion_imports WHERE id=?',
++                                              (staged['import_id'],)).fetchone()[0]
++        connection.execute(f"UPDATE {table} SET workspace_id='workspace_unrelated' WHERE id=?", (identifier,))
++    response = client.get(artifact['download_path'])
++    assert response.status_code == (409 if table == 'sources' else 404)
++    assert response.json()['error']['code'] == code
++    assert raw not in response.content
++
++
++def test_all_four_real_import_profiles_keep_http_bytes_and_headers(importing):
++    import hashlib
++    from tests.integration.test_import_http import confirm
++    from tests.integration.test_import_repository import package_bytes, synthetic_tree
++    app, client, settings = importing
++    values, bodies = synthetic_tree()
++    raw = package_bytes(values, bodies, asset=b'synthetic passive resource')
++    staged = upload(client, settings, raw, filename='assets.learnpack.zip', kind='learnpack')
++    candidate = preview(client, staged['import_id'])
++    assert candidate['status'] == 'preview_ready'
++    committed = confirm(client, settings, candidate)
++    assert committed.status_code == 200
++    with app.state.database.connect() as connection:
++        rows = connection.execute('SELECT id,profile FROM artifacts WHERE job_id=?', (staged['job']['id'],)).fetchall()
++    assert {row['profile'] for row in rows} == {'import_original', 'import_asset', 'untrusted_quality_receipt', 'import_receipt'}
++    identity = current_test_identity(app)
++    owner = ImportService(app.state.database)
++    for row in rows:
++        with app.state.database.transaction(immediate=False) as connection:
++            data, descriptor = owner.read_artifact(connection, identity, row['id'])
++        response = client.get(descriptor.download_path)
++        assert response.status_code == 200 and response.content == data
++        assert response.headers['content-type'] == 'application/octet-stream'
++        assert response.headers['content-disposition'].startswith('attachment;')
++        assert response.headers['etag'] == '"' + hashlib.sha256(data).hexdigest() + '"'
++        if row['profile'] == 'import_original':
++            assert data == raw
++        if row['profile'] == 'import_asset':
++            assert data == b'synthetic passive resource'
++        if row['profile'] == 'untrusted_quality_receipt':
++            assert data == b'{"mathematical":"APPROVED","fixture_only":true}'
++        if row['profile'] == 'import_receipt':
++            assert json.loads(data)['kind'] == 'import_migration_receipt'
++            assert json.loads(data)['mathematical'] == 'NOT_RUN'
++
++
++def test_private_original_reloads_downgraded_role_and_http_never_uses_legacy_port(importing, monkeypatch):
++    from tests.integration.test_import_repository import FIXTURES
++    app, client, settings = importing
++    assert client.post('/api/v1/session/role', json={'role': 'author'}, headers=headers(client, settings)).status_code == 200
++    raw = (FIXTURES / 'course-author.learnpack.zip').read_bytes()
++    staged = upload(client, settings, raw, filename='author.learnpack.zip', kind='learnpack')
++    candidate = preview(client, staged['import_id'])
++    draft = block_preview(client, candidate)
++    artifact = client.get('/api/v1/sources/' + draft['payload']['source_id']).json()['artifact']
++    old_identity = current_test_identity(app)
++    def legacy(*args, **kwargs):
++        raise AssertionError('HTTP must not call trusted legacy Import.download')
++    monkeypatch.setattr(ImportService, 'download', legacy)
++    assert client.get(artifact['download_path']).content == raw
++    assert client.post('/api/v1/session/role', json={'role': 'learner'}, headers=headers(client, settings)).status_code == 200
++    response = client.get(artifact['download_path'])
++    assert response.status_code == 403 and response.json()['error']['code'] == 'POLICY_DENIED'
++    with app.state.database.transaction(immediate=False) as connection:
++        with pytest.raises(ApiError) as rejected:
++            ImportService(app.state.database).read_artifact(connection, old_identity, artifact['artifact_id'])
++        assert rejected.value.code == 'POLICY_DENIED'
++
++
++def test_owner_requires_a_real_transaction(importing):
++    app, _, _, _, _, artifact, _ = imported_original(importing)
++    identity = current_test_identity(app)
++    with app.state.database.connect() as connection:
++        assert not connection.in_transaction
++        with pytest.raises(ApiError) as rejected:
++            ImportService(app.state.database).read_artifact(connection, identity, artifact['artifact_id'])
++        assert rejected.value.code == 'TRANSACTION_REQUIRED'
++
++
++@pytest.mark.parametrize('change,status,code', [('revoked', 401, 'SESSION_REQUIRED'),
++                                               ('expired', 401, 'SESSION_REQUIRED'),
++                                               ('downgraded', 403, 'POLICY_DENIED')])
++def test_http_rechecks_identity_changed_after_cookie_authentication(importing, monkeypatch, change, status, code):
++    from services.api.app.interfaces import boundary
++    from tests.integration.test_import_repository import FIXTURES
++    app, client, settings = importing
++    assert client.post('/api/v1/session/role', json={'role': 'author'}, headers=headers(client, settings)).status_code == 200
++    staged = upload(client, settings, (FIXTURES / 'course-author.learnpack.zip').read_bytes(),
++                    filename='private.learnpack.zip', kind='learnpack')
++    candidate = preview(client, staged['import_id'])
++    draft = block_preview(client, candidate)
++    artifact = client.get('/api/v1/sources/' + draft['payload']['source_id']).json()['artifact']
++    authenticate = boundary.authenticate
++    def changed_after_authentication(database, request):
++        actual = authenticate(database, request)
++        with database.transaction() as connection:
++            if change == 'revoked':
++                connection.execute("UPDATE local_sessions SET revoked_at='2026-01-01T00:00:00Z' WHERE id=?", (actual.id,))
++            elif change == 'expired':
++                connection.execute("UPDATE local_sessions SET expires_at='2000-01-01T00:00:00Z' WHERE id=?", (actual.id,))
++            else:
++                connection.execute("UPDATE local_sessions SET role='learner' WHERE id=?", (actual.id,))
++        return actual
++    monkeypatch.setattr(boundary, 'authenticate', changed_after_authentication)
++    response = client.get(artifact['download_path'])
++    assert response.status_code == status
++    assert response.json()['error']['code'] == code
++    assert 'etag' not in response.headers and 'content-disposition' not in response.headers

@@ -1,0 +1,155 @@
+FF.F.F                                                                   [100%]
+=================================== FAILURES ===================================
+_ test_material_ordinary_representations_never_expand_academic_content[import-repr] _
+
+material_case = <synthetic import review fixture; session values omitted>
+representation = 'repr'
+
+    @pytest.mark.parametrize('representation', ['repr', 'validation_error'])
+    def test_material_ordinary_representations_never_expand_academic_content(material_case, representation):
+        from pydantic import ValidationError
+    
+        material = read_case(material_case)
+        if material_case.kind == 'import':
+            private_text = material.payload.payload.body_markdown
+        elif material_case.kind == 'authoring_single':
+            private_text = material.payload.record.payload.body_markdown
+        else:
+            private_text = material.payload.record.payload.private_solutions[0].answer.solution_markdown
+        private_text = private_text.splitlines()[0]
+        assert private_text
+        for item in [material, material.payload]:
+            if representation == 'repr':
+>               assert private_text not in repr(item)
+E               assert '# Synthetic source' not in "CheckedRevi...'warning')])"
+E                 
+E                 '# Synthetic source' is contained here:
+E                   markdown='# Synthetic source\n', source_id='source_b0725ac1640b41dfb57257e4efe657e7', citations=[Citation(id='citation_de543ac2c46c4a5afc447ba60d9d37b0', title='source', url=None, locator='source:source_b0725ac1640b41dfb57257e4efe657e7;original-file;parsed-lines:1-1', source_sha256='53c7b0062fc09e8927a29fbc519bedc2757f1e7446bb0177a262873f2e057c5a', verification='user_supplied')]), warnings=[Warning(code='IMPORT_REVIEW_UNVERIFIED', message='确认解析结果不会认证材料的数学正确性或来源权利。', locator=None, severity='warning')], private_solution_coverage='excluded'...
+E                 
+E                 ...Full output truncated (2 lines hidden), use '-vv' to show
+
+tests/integration/test_review_materials.py:379: AssertionError
+_ test_material_ordinary_representations_never_expand_academic_content[import-validation_error] _
+
+material_case = <synthetic import review fixture; session values omitted>
+representation = 'validation_error'
+
+    @pytest.mark.parametrize('representation', ['repr', 'validation_error'])
+    def test_material_ordinary_representations_never_expand_academic_content(material_case, representation):
+        from pydantic import ValidationError
+    
+        material = read_case(material_case)
+        if material_case.kind == 'import':
+            private_text = material.payload.payload.body_markdown
+        elif material_case.kind == 'authoring_single':
+            private_text = material.payload.record.payload.body_markdown
+        else:
+            private_text = material.payload.record.payload.private_solutions[0].answer.solution_markdown
+        private_text = private_text.splitlines()[0]
+        assert private_text
+        for item in [material, material.payload]:
+            if representation == 'repr':
+                assert private_text not in repr(item)
+                assert private_text not in str(item)
+            else:
+                raw = item.model_dump(mode='json')
+                sentinel = 'zz_private_review_error_sentinel'
+                raw['unexpected'] = sentinel
+                with pytest.raises(ValidationError) as caught:
+                    type(item).model_validate(raw)
+>               assert sentinel not in str(caught.value)
+E               AssertionError: assert 'zz_private_...ror_sentinel' not in '1 validatio...ra_forbidden'
+E                 
+E                 'zz_private_review_error_sentinel' is contained here:
+E                   ut_value='zz_private_review_error_sentinel', input_type=str]
+E                       For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests/integration/test_review_materials.py:387: AssertionError
+_ test_material_ordinary_representations_never_expand_academic_content[single-validation_error] _
+
+material_case = <synthetic authoring_single review fixture; session values omitted>
+representation = 'validation_error'
+
+    @pytest.mark.parametrize('representation', ['repr', 'validation_error'])
+    def test_material_ordinary_representations_never_expand_academic_content(material_case, representation):
+        from pydantic import ValidationError
+    
+        material = read_case(material_case)
+        if material_case.kind == 'import':
+            private_text = material.payload.payload.body_markdown
+        elif material_case.kind == 'authoring_single':
+            private_text = material.payload.record.payload.body_markdown
+        else:
+            private_text = material.payload.record.payload.private_solutions[0].answer.solution_markdown
+        private_text = private_text.splitlines()[0]
+        assert private_text
+        for item in [material, material.payload]:
+            if representation == 'repr':
+                assert private_text not in repr(item)
+                assert private_text not in str(item)
+            else:
+                raw = item.model_dump(mode='json')
+                sentinel = 'zz_private_review_error_sentinel'
+                raw['unexpected'] = sentinel
+                with pytest.raises(ValidationError) as caught:
+                    type(item).model_validate(raw)
+>               assert sentinel not in str(caught.value)
+E               AssertionError: assert 'zz_private_...ror_sentinel' not in '1 validatio...ra_forbidden'
+E                 
+E                 'zz_private_review_error_sentinel' is contained here:
+E                   ut_value='zz_private_review_error_sentinel', input_type=str]
+E                       For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests/integration/test_review_materials.py:387: AssertionError
+_ test_material_ordinary_representations_never_expand_academic_content[group-validation_error] _
+
+material_case = <synthetic authoring_group review fixture; session values omitted>
+representation = 'validation_error'
+
+    @pytest.mark.parametrize('representation', ['repr', 'validation_error'])
+    def test_material_ordinary_representations_never_expand_academic_content(material_case, representation):
+        from pydantic import ValidationError
+    
+        material = read_case(material_case)
+        if material_case.kind == 'import':
+            private_text = material.payload.payload.body_markdown
+        elif material_case.kind == 'authoring_single':
+            private_text = material.payload.record.payload.body_markdown
+        else:
+            private_text = material.payload.record.payload.private_solutions[0].answer.solution_markdown
+        private_text = private_text.splitlines()[0]
+        assert private_text
+        for item in [material, material.payload]:
+            if representation == 'repr':
+                assert private_text not in repr(item)
+                assert private_text not in str(item)
+            else:
+                raw = item.model_dump(mode='json')
+                sentinel = 'zz_private_review_error_sentinel'
+                raw['unexpected'] = sentinel
+                with pytest.raises(ValidationError) as caught:
+                    type(item).model_validate(raw)
+>               assert sentinel not in str(caught.value)
+E               AssertionError: assert 'zz_private_...ror_sentinel' not in '1 validatio...ra_forbidden'
+E                 
+E                 'zz_private_review_error_sentinel' is contained here:
+E                   ut_value='zz_private_review_error_sentinel', input_type=str]
+E                       For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests/integration/test_review_materials.py:387: AssertionError
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_review_materials.py::test_material_ordinary_representations_never_expand_academic_content[import-repr]
+FAILED tests/integration/test_review_materials.py::test_material_ordinary_representations_never_expand_academic_content[import-validation_error]
+FAILED tests/integration/test_review_materials.py::test_material_ordinary_representations_never_expand_academic_content[single-validation_error]
+FAILED tests/integration/test_review_materials.py::test_material_ordinary_representations_never_expand_academic_content[group-validation_error]
+4 failed, 2 passed, 39 deselected, 2 warnings in 5.23s

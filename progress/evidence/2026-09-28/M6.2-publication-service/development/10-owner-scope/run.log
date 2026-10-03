@@ -1,0 +1,37 @@
+.......F...                                                              [100%]
+=================================== FAILURES ===================================
+_ test_jobs_owned_pending_gate_rejects_damaged_or_cancelling_original_job[job_workspace] _
+
+workflow = SyntheticReviewWorkflow(), change = 'job_workspace'
+
+    @pytest.mark.parametrize('change', ['cancel_requested', 'job_hash', 'job_kind', 'job_workspace'])
+    def test_jobs_owned_pending_gate_rejects_damaged_or_cancelling_original_job(workflow, change):
+        database, identity, candidate, _, _ = workflow
+        service, body, receipt = ready(workflow)
+        identifier = import_id(workflow, receipt)
+        with database.transaction() as conn:
+            job = conn.execute('SELECT job_id FROM ingestion_imports WHERE id=?', (identifier,)).fetchone()[0]
+            if change == 'cancel_requested':
+                conn.execute('UPDATE jobs SET cancel_requested=1 WHERE id=?', (job,))
+            elif change == 'job_hash':
+                conn.execute('UPDATE jobs SET input_sha256=? WHERE id=?', ('0'*64, job))
+            elif change == 'job_kind':
+                conn.execute("UPDATE jobs SET kind='draft_review' WHERE id=?", (job,))
+            else:
+>               conn.execute("INSERT INTO workspace(id,name) VALUES('other_workspace','Synthetic other')")
+E               sqlite3.OperationalError: table workspace has no column named name
+
+tests/integration/test_draft_publication_scope.py:81: OperationalError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-publication-service-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-publication-service-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_draft_publication_scope.py::test_jobs_owned_pending_gate_rejects_damaged_or_cancelling_original_job[job_workspace]
+1 failed, 10 passed, 2 warnings in 7.98s

@@ -1,0 +1,110 @@
+FF............F                                                          [100%]
+=================================== FAILURES ===================================
+________ test_missing_current_target_revision_is_integrity_error[False] ________
+
+case = Case(database=<services.api.app.infrastructure.database.Database object at 0x7d0456ff1cd0>, identity=SessionIdentity(i...i.app.application.content.ContentService object at 0x7d0456ff2900>, event_id='outbox_8ea94595e3ba43dd80086d5538432de8')
+filtered = False
+
+    @pytest.mark.parametrize('filtered', [False, True])
+    def test_missing_current_target_revision_is_integrity_error(case, filtered):
+        # A retained exact target and its historical ref remain intact; its current
+        # pointer now names absent storage. This is not a caller-supplied missing ID.
+        fault(case, "UPDATE objects SET current_revision=999 WHERE id='lesson'")
+>       unchanged(case, 409, **({'changed_object_id': 'unknown'} if filtered else {}))
+
+../evidence/test_independent_discovery.py:34: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+case = Case(database=<services.api.app.infrastructure.database.Database object at 0x7d0456ff1cd0>, identity=SessionIdentity(i...i.app.application.content.ContentService object at 0x7d0456ff2900>, event_id='outbox_8ea94595e3ba43dd80086d5538432de8')
+expected = 409, params = {}
+
+    def unchanged(case, expected, **params):
+        before = table_hashes(case.database)
+        response = case.client.get(PATH, params=params)
+        assert table_hashes(case.database) == before
+        assert response.headers['cache-control'] == 'no-store'
+>       assert response.status_code == expected, response.text
+E       AssertionError: {"error":{"code":"REFERENCE_MISSING","message":"指定内容修订不存在或不可访问。","request_id":"request_79bb4b5cb57a42b59d8ed2a8f3a62793","retryable":false,"details":[]}}
+E       assert 404 == 409
+E        +  where 404 = <Response [404 Not Found]>.status_code
+
+../evidence/test_independent_discovery.py:25: AssertionError
+________ test_missing_current_target_revision_is_integrity_error[True] _________
+
+case = Case(database=<services.api.app.infrastructure.database.Database object at 0x7d045571fa70>, identity=SessionIdentity(i...i.app.application.content.ContentService object at 0x7d04555a2c90>, event_id='outbox_faeedf66ec3641ee9b0c326d1f840fe1')
+filtered = True
+
+    @pytest.mark.parametrize('filtered', [False, True])
+    def test_missing_current_target_revision_is_integrity_error(case, filtered):
+        # A retained exact target and its historical ref remain intact; its current
+        # pointer now names absent storage. This is not a caller-supplied missing ID.
+        fault(case, "UPDATE objects SET current_revision=999 WHERE id='lesson'")
+>       unchanged(case, 409, **({'changed_object_id': 'unknown'} if filtered else {}))
+
+../evidence/test_independent_discovery.py:34: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+case = Case(database=<services.api.app.infrastructure.database.Database object at 0x7d045571fa70>, identity=SessionIdentity(i...i.app.application.content.ContentService object at 0x7d04555a2c90>, event_id='outbox_faeedf66ec3641ee9b0c326d1f840fe1')
+expected = 409, params = {'changed_object_id': 'unknown'}
+
+    def unchanged(case, expected, **params):
+        before = table_hashes(case.database)
+        response = case.client.get(PATH, params=params)
+        assert table_hashes(case.database) == before
+        assert response.headers['cache-control'] == 'no-store'
+>       assert response.status_code == expected, response.text
+E       AssertionError: {"error":{"code":"REFERENCE_MISSING","message":"指定内容修订不存在或不可访问。","request_id":"request_0c32320618a44c2da95ad7589fbd885a","retryable":false,"details":[]}}
+E       assert 404 == 409
+E        +  where 404 = <Response [404 Not Found]>.status_code
+
+../evidence/test_independent_discovery.py:25: AssertionError
+__________ test_orphaned_known_pure_id_candidate_not_silently_dropped __________
+
+case = Case(database=<services.api.app.infrastructure.database.Database object at 0x7d045533d430>, identity=SessionIdentity(i...i.app.application.content.ContentService object at 0x7d0456d5f920>, event_id='outbox_2abac28a017a49639fb4eda96a2c95ae')
+
+    def test_orphaned_known_pure_id_candidate_not_silently_dropped(case):
+        # Candidate's only relation to this event is ID-only. Its surviving published
+        # Content revision proves a deleted objects row is broken storage, not a new
+        # unknown owner identity. Normal foreign keys prevent this deletion.
+        import sqlite3
+        with case.database.transaction() as conn:
+            with pytest.raises(sqlite3.IntegrityError):
+                conn.execute("DELETE FROM objects WHERE id='lesson_candidate'")
+        with case.database.connect() as conn:
+            conn.execute('PRAGMA foreign_keys=OFF');conn.execute('BEGIN IMMEDIATE')
+            conn.execute("DELETE FROM objects WHERE id='lesson_candidate'");conn.commit()
+            assert conn.execute("SELECT COUNT(*) FROM revisions WHERE object_id='lesson_candidate'").fetchone()[0]==1
+>       unchanged(case,409,changed_object_id='unknown')
+
+../evidence/test_independent_discovery.py:183: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+case = Case(database=<services.api.app.infrastructure.database.Database object at 0x7d045533d430>, identity=SessionIdentity(i...i.app.application.content.ContentService object at 0x7d0456d5f920>, event_id='outbox_2abac28a017a49639fb4eda96a2c95ae')
+expected = 409, params = {'changed_object_id': 'unknown'}
+
+    def unchanged(case, expected, **params):
+        before = table_hashes(case.database)
+        response = case.client.get(PATH, params=params)
+        assert table_hashes(case.database) == before
+        assert response.headers['cache-control'] == 'no-store'
+>       assert response.status_code == expected, response.text
+E       AssertionError: {"items":[],"next_cursor":null}
+E       assert 200 == 409
+E        +  where 200 = <Response [200 OK]>.status_code
+
+../evidence/test_independent_discovery.py:25: AssertionError
+=============================== warnings summary ===============================
+../../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  $HOME/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  $HOME/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED ::test_missing_current_target_revision_is_integrity_error[False] - Ass...
+FAILED ::test_missing_current_target_revision_is_integrity_error[True] - Asse...
+FAILED ::test_orphaned_known_pure_id_candidate_not_silently_dropped - Asserti...
+3 failed, 12 passed, 2 warnings in 5.40s

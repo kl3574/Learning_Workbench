@@ -1,0 +1,306 @@
+.F.F..FFFF.......                                                        [100%]
+=================================== FAILURES ===================================
+_ test_registered_import_reader_rejects_corrupt_origin_and_bytes[source_membership] _
+
+importing = (<fastapi.applications.FastAPI object at 0x7e2ac8492ab0>, <starlette.testclient.TestClient object at 0x7e2ac9c849e0>, ...52428800, max_block_characters=400000, max_package_bytes=209715200, max_package_files=2000, max_compression_ratio=100))
+corruption = 'source_membership'
+
+    @pytest.mark.parametrize('corruption', ['source_membership', 'job_kind', 'other_import_job', 'manifest_size',
+                                           'manifest_hash', 'manifest_filename', 'manifest_missing_field',
+                                           'manifest_extra_field', 'manifest_bool_version', 'bytes', 'file'])
+    def test_registered_import_reader_rejects_corrupt_origin_and_bytes(importing, corruption):
+        app, client, settings, staged, _, artifact, _ = imported_original(importing)
+        with app.state.database.transaction() as connection:
+            row = connection.execute('SELECT * FROM artifacts WHERE id=?', (artifact['artifact_id'],)).fetchone()
+            if corruption == 'source_membership':
+                source = connection.execute('SELECT source_id FROM ingestion_imports WHERE id=?', (staged['import_id'],)).fetchone()[0]
+                metadata = json.loads(connection.execute('SELECT metadata_json FROM sources WHERE id=?', (source,)).fetchone()[0])
+                metadata['artifact_id'] = 'artifact_not_the_original'
+                connection.execute('UPDATE sources SET metadata_json=? WHERE id=?', (json.dumps(metadata), source))
+            elif corruption == 'job_kind':
+                connection.execute("UPDATE jobs SET kind='quality_gate' WHERE id=?", (staged['job']['id'],))
+            elif corruption == 'other_import_job':
+                pass
+            elif corruption.startswith('manifest_'):
+                manifest = json.loads(row['manifest_json'])
+                if corruption == 'manifest_size': manifest['size'] += 1
+                if corruption == 'manifest_hash': manifest['sha256'] = '0' * 64
+                if corruption == 'manifest_filename': manifest['filename'] = '../PRIVATE_SENTINEL'
+                if corruption == 'manifest_missing_field': del manifest['filename']
+                if corruption == 'manifest_extra_field': manifest['unexpected'] = 'PRIVATE_SENTINEL'
+                if corruption == 'manifest_bool_version': manifest['version'] = True
+                connection.execute('UPDATE artifacts SET manifest_json=? WHERE id=?', (json.dumps(manifest), artifact['artifact_id']))
+            else:
+                path = settings.data_dir / connection.execute('SELECT relative_path FROM content_blobs WHERE sha256=?',
+                                                             (row['blob_sha256'],)).fetchone()[0]
+                if corruption == 'bytes': path.write_bytes(b'PRIVATE_SENTINEL')
+                else: path.unlink()
+        if corruption == 'other_import_job':
+            other = upload(client, settings, b'# Another real source\n', key='another')
+            assert preview(client, other['import_id'])['status'] == 'preview_ready'
+            with app.state.database.transaction() as connection:
+                connection.execute('UPDATE artifacts SET job_id=? WHERE id=?', (other['job']['id'], artifact['artifact_id']))
+        response = client.get(artifact['download_path'])
+        expected = 'ARTIFACT_OWNER_UNAVAILABLE' if corruption == 'job_kind' else 'BLOB_STORAGE_UNAVAILABLE' if corruption == 'file' else 'CONTENT_HASH_MISMATCH'
+>       assert response.status_code == (503 if corruption == 'file' else 409)
+E       assert 200 == 409
+E        +  where 200 = <Response [200 OK]>.status_code
+
+tests/integration/test_artifact_owners.py:82: AssertionError
+_ test_registered_import_reader_rejects_corrupt_origin_and_bytes[other_import_job] _
+
+importing = (<fastapi.applications.FastAPI object at 0x7e2acb9d4380>, <starlette.testclient.TestClient object at 0x7e2acac28cb0>, ...52428800, max_block_characters=400000, max_package_bytes=209715200, max_package_files=2000, max_compression_ratio=100))
+corruption = 'other_import_job'
+
+    @pytest.mark.parametrize('corruption', ['source_membership', 'job_kind', 'other_import_job', 'manifest_size',
+                                           'manifest_hash', 'manifest_filename', 'manifest_missing_field',
+                                           'manifest_extra_field', 'manifest_bool_version', 'bytes', 'file'])
+    def test_registered_import_reader_rejects_corrupt_origin_and_bytes(importing, corruption):
+        app, client, settings, staged, _, artifact, _ = imported_original(importing)
+        with app.state.database.transaction() as connection:
+            row = connection.execute('SELECT * FROM artifacts WHERE id=?', (artifact['artifact_id'],)).fetchone()
+            if corruption == 'source_membership':
+                source = connection.execute('SELECT source_id FROM ingestion_imports WHERE id=?', (staged['import_id'],)).fetchone()[0]
+                metadata = json.loads(connection.execute('SELECT metadata_json FROM sources WHERE id=?', (source,)).fetchone()[0])
+                metadata['artifact_id'] = 'artifact_not_the_original'
+                connection.execute('UPDATE sources SET metadata_json=? WHERE id=?', (json.dumps(metadata), source))
+            elif corruption == 'job_kind':
+                connection.execute("UPDATE jobs SET kind='quality_gate' WHERE id=?", (staged['job']['id'],))
+            elif corruption == 'other_import_job':
+                pass
+            elif corruption.startswith('manifest_'):
+                manifest = json.loads(row['manifest_json'])
+                if corruption == 'manifest_size': manifest['size'] += 1
+                if corruption == 'manifest_hash': manifest['sha256'] = '0' * 64
+                if corruption == 'manifest_filename': manifest['filename'] = '../PRIVATE_SENTINEL'
+                if corruption == 'manifest_missing_field': del manifest['filename']
+                if corruption == 'manifest_extra_field': manifest['unexpected'] = 'PRIVATE_SENTINEL'
+                if corruption == 'manifest_bool_version': manifest['version'] = True
+                connection.execute('UPDATE artifacts SET manifest_json=? WHERE id=?', (json.dumps(manifest), artifact['artifact_id']))
+            else:
+                path = settings.data_dir / connection.execute('SELECT relative_path FROM content_blobs WHERE sha256=?',
+                                                             (row['blob_sha256'],)).fetchone()[0]
+                if corruption == 'bytes': path.write_bytes(b'PRIVATE_SENTINEL')
+                else: path.unlink()
+        if corruption == 'other_import_job':
+            other = upload(client, settings, b'# Another real source\n', key='another')
+            assert preview(client, other['import_id'])['status'] == 'preview_ready'
+            with app.state.database.transaction() as connection:
+                connection.execute('UPDATE artifacts SET job_id=? WHERE id=?', (other['job']['id'], artifact['artifact_id']))
+        response = client.get(artifact['download_path'])
+        expected = 'ARTIFACT_OWNER_UNAVAILABLE' if corruption == 'job_kind' else 'BLOB_STORAGE_UNAVAILABLE' if corruption == 'file' else 'CONTENT_HASH_MISMATCH'
+>       assert response.status_code == (503 if corruption == 'file' else 409)
+E       assert 200 == 409
+E        +  where 200 = <Response [200 OK]>.status_code
+
+tests/integration/test_artifact_owners.py:82: AssertionError
+_ test_registered_import_reader_rejects_corrupt_origin_and_bytes[manifest_filename] _
+
+importing = (<fastapi.applications.FastAPI object at 0x7e2acaa41d60>, <starlette.testclient.TestClient object at 0x7e2acac98140>, ...52428800, max_block_characters=400000, max_package_bytes=209715200, max_package_files=2000, max_compression_ratio=100))
+corruption = 'manifest_filename'
+
+    @pytest.mark.parametrize('corruption', ['source_membership', 'job_kind', 'other_import_job', 'manifest_size',
+                                           'manifest_hash', 'manifest_filename', 'manifest_missing_field',
+                                           'manifest_extra_field', 'manifest_bool_version', 'bytes', 'file'])
+    def test_registered_import_reader_rejects_corrupt_origin_and_bytes(importing, corruption):
+        app, client, settings, staged, _, artifact, _ = imported_original(importing)
+        with app.state.database.transaction() as connection:
+            row = connection.execute('SELECT * FROM artifacts WHERE id=?', (artifact['artifact_id'],)).fetchone()
+            if corruption == 'source_membership':
+                source = connection.execute('SELECT source_id FROM ingestion_imports WHERE id=?', (staged['import_id'],)).fetchone()[0]
+                metadata = json.loads(connection.execute('SELECT metadata_json FROM sources WHERE id=?', (source,)).fetchone()[0])
+                metadata['artifact_id'] = 'artifact_not_the_original'
+                connection.execute('UPDATE sources SET metadata_json=? WHERE id=?', (json.dumps(metadata), source))
+            elif corruption == 'job_kind':
+                connection.execute("UPDATE jobs SET kind='quality_gate' WHERE id=?", (staged['job']['id'],))
+            elif corruption == 'other_import_job':
+                pass
+            elif corruption.startswith('manifest_'):
+                manifest = json.loads(row['manifest_json'])
+                if corruption == 'manifest_size': manifest['size'] += 1
+                if corruption == 'manifest_hash': manifest['sha256'] = '0' * 64
+                if corruption == 'manifest_filename': manifest['filename'] = '../PRIVATE_SENTINEL'
+                if corruption == 'manifest_missing_field': del manifest['filename']
+                if corruption == 'manifest_extra_field': manifest['unexpected'] = 'PRIVATE_SENTINEL'
+                if corruption == 'manifest_bool_version': manifest['version'] = True
+                connection.execute('UPDATE artifacts SET manifest_json=? WHERE id=?', (json.dumps(manifest), artifact['artifact_id']))
+            else:
+                path = settings.data_dir / connection.execute('SELECT relative_path FROM content_blobs WHERE sha256=?',
+                                                             (row['blob_sha256'],)).fetchone()[0]
+                if corruption == 'bytes': path.write_bytes(b'PRIVATE_SENTINEL')
+                else: path.unlink()
+        if corruption == 'other_import_job':
+            other = upload(client, settings, b'# Another real source\n', key='another')
+            assert preview(client, other['import_id'])['status'] == 'preview_ready'
+            with app.state.database.transaction() as connection:
+                connection.execute('UPDATE artifacts SET job_id=? WHERE id=?', (other['job']['id'], artifact['artifact_id']))
+        response = client.get(artifact['download_path'])
+        expected = 'ARTIFACT_OWNER_UNAVAILABLE' if corruption == 'job_kind' else 'BLOB_STORAGE_UNAVAILABLE' if corruption == 'file' else 'CONTENT_HASH_MISMATCH'
+>       assert response.status_code == (503 if corruption == 'file' else 409)
+E       assert 500 == 409
+E        +  where 500 = <Response [500 Internal Server Error]>.status_code
+
+tests/integration/test_artifact_owners.py:82: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    learning_workbench.api:boundary.py:69 request_failed request_id=request_80f9c5f592e84484b1e43c4c042fecd7
+_ test_registered_import_reader_rejects_corrupt_origin_and_bytes[manifest_missing_field] _
+
+importing = (<fastapi.applications.FastAPI object at 0x7e2acacc6b40>, <starlette.testclient.TestClient object at 0x7e2acb7e0d40>, ...52428800, max_block_characters=400000, max_package_bytes=209715200, max_package_files=2000, max_compression_ratio=100))
+corruption = 'manifest_missing_field'
+
+    @pytest.mark.parametrize('corruption', ['source_membership', 'job_kind', 'other_import_job', 'manifest_size',
+                                           'manifest_hash', 'manifest_filename', 'manifest_missing_field',
+                                           'manifest_extra_field', 'manifest_bool_version', 'bytes', 'file'])
+    def test_registered_import_reader_rejects_corrupt_origin_and_bytes(importing, corruption):
+        app, client, settings, staged, _, artifact, _ = imported_original(importing)
+        with app.state.database.transaction() as connection:
+            row = connection.execute('SELECT * FROM artifacts WHERE id=?', (artifact['artifact_id'],)).fetchone()
+            if corruption == 'source_membership':
+                source = connection.execute('SELECT source_id FROM ingestion_imports WHERE id=?', (staged['import_id'],)).fetchone()[0]
+                metadata = json.loads(connection.execute('SELECT metadata_json FROM sources WHERE id=?', (source,)).fetchone()[0])
+                metadata['artifact_id'] = 'artifact_not_the_original'
+                connection.execute('UPDATE sources SET metadata_json=? WHERE id=?', (json.dumps(metadata), source))
+            elif corruption == 'job_kind':
+                connection.execute("UPDATE jobs SET kind='quality_gate' WHERE id=?", (staged['job']['id'],))
+            elif corruption == 'other_import_job':
+                pass
+            elif corruption.startswith('manifest_'):
+                manifest = json.loads(row['manifest_json'])
+                if corruption == 'manifest_size': manifest['size'] += 1
+                if corruption == 'manifest_hash': manifest['sha256'] = '0' * 64
+                if corruption == 'manifest_filename': manifest['filename'] = '../PRIVATE_SENTINEL'
+                if corruption == 'manifest_missing_field': del manifest['filename']
+                if corruption == 'manifest_extra_field': manifest['unexpected'] = 'PRIVATE_SENTINEL'
+                if corruption == 'manifest_bool_version': manifest['version'] = True
+                connection.execute('UPDATE artifacts SET manifest_json=? WHERE id=?', (json.dumps(manifest), artifact['artifact_id']))
+            else:
+                path = settings.data_dir / connection.execute('SELECT relative_path FROM content_blobs WHERE sha256=?',
+                                                             (row['blob_sha256'],)).fetchone()[0]
+                if corruption == 'bytes': path.write_bytes(b'PRIVATE_SENTINEL')
+                else: path.unlink()
+        if corruption == 'other_import_job':
+            other = upload(client, settings, b'# Another real source\n', key='another')
+            assert preview(client, other['import_id'])['status'] == 'preview_ready'
+            with app.state.database.transaction() as connection:
+                connection.execute('UPDATE artifacts SET job_id=? WHERE id=?', (other['job']['id'], artifact['artifact_id']))
+        response = client.get(artifact['download_path'])
+        expected = 'ARTIFACT_OWNER_UNAVAILABLE' if corruption == 'job_kind' else 'BLOB_STORAGE_UNAVAILABLE' if corruption == 'file' else 'CONTENT_HASH_MISMATCH'
+>       assert response.status_code == (503 if corruption == 'file' else 409)
+E       assert 500 == 409
+E        +  where 500 = <Response [500 Internal Server Error]>.status_code
+
+tests/integration/test_artifact_owners.py:82: AssertionError
+------------------------------ Captured log call -------------------------------
+ERROR    learning_workbench.api:boundary.py:69 request_failed request_id=request_cf7176528912480894f397972cf02ac3
+_ test_registered_import_reader_rejects_corrupt_origin_and_bytes[manifest_extra_field] _
+
+importing = (<fastapi.applications.FastAPI object at 0x7e2ac9dce5a0>, <starlette.testclient.TestClient object at 0x7e2acad0bb30>, ...52428800, max_block_characters=400000, max_package_bytes=209715200, max_package_files=2000, max_compression_ratio=100))
+corruption = 'manifest_extra_field'
+
+    @pytest.mark.parametrize('corruption', ['source_membership', 'job_kind', 'other_import_job', 'manifest_size',
+                                           'manifest_hash', 'manifest_filename', 'manifest_missing_field',
+                                           'manifest_extra_field', 'manifest_bool_version', 'bytes', 'file'])
+    def test_registered_import_reader_rejects_corrupt_origin_and_bytes(importing, corruption):
+        app, client, settings, staged, _, artifact, _ = imported_original(importing)
+        with app.state.database.transaction() as connection:
+            row = connection.execute('SELECT * FROM artifacts WHERE id=?', (artifact['artifact_id'],)).fetchone()
+            if corruption == 'source_membership':
+                source = connection.execute('SELECT source_id FROM ingestion_imports WHERE id=?', (staged['import_id'],)).fetchone()[0]
+                metadata = json.loads(connection.execute('SELECT metadata_json FROM sources WHERE id=?', (source,)).fetchone()[0])
+                metadata['artifact_id'] = 'artifact_not_the_original'
+                connection.execute('UPDATE sources SET metadata_json=? WHERE id=?', (json.dumps(metadata), source))
+            elif corruption == 'job_kind':
+                connection.execute("UPDATE jobs SET kind='quality_gate' WHERE id=?", (staged['job']['id'],))
+            elif corruption == 'other_import_job':
+                pass
+            elif corruption.startswith('manifest_'):
+                manifest = json.loads(row['manifest_json'])
+                if corruption == 'manifest_size': manifest['size'] += 1
+                if corruption == 'manifest_hash': manifest['sha256'] = '0' * 64
+                if corruption == 'manifest_filename': manifest['filename'] = '../PRIVATE_SENTINEL'
+                if corruption == 'manifest_missing_field': del manifest['filename']
+                if corruption == 'manifest_extra_field': manifest['unexpected'] = 'PRIVATE_SENTINEL'
+                if corruption == 'manifest_bool_version': manifest['version'] = True
+                connection.execute('UPDATE artifacts SET manifest_json=? WHERE id=?', (json.dumps(manifest), artifact['artifact_id']))
+            else:
+                path = settings.data_dir / connection.execute('SELECT relative_path FROM content_blobs WHERE sha256=?',
+                                                             (row['blob_sha256'],)).fetchone()[0]
+                if corruption == 'bytes': path.write_bytes(b'PRIVATE_SENTINEL')
+                else: path.unlink()
+        if corruption == 'other_import_job':
+            other = upload(client, settings, b'# Another real source\n', key='another')
+            assert preview(client, other['import_id'])['status'] == 'preview_ready'
+            with app.state.database.transaction() as connection:
+                connection.execute('UPDATE artifacts SET job_id=? WHERE id=?', (other['job']['id'], artifact['artifact_id']))
+        response = client.get(artifact['download_path'])
+        expected = 'ARTIFACT_OWNER_UNAVAILABLE' if corruption == 'job_kind' else 'BLOB_STORAGE_UNAVAILABLE' if corruption == 'file' else 'CONTENT_HASH_MISMATCH'
+>       assert response.status_code == (503 if corruption == 'file' else 409)
+E       assert 200 == 409
+E        +  where 200 = <Response [200 OK]>.status_code
+
+tests/integration/test_artifact_owners.py:82: AssertionError
+_ test_registered_import_reader_rejects_corrupt_origin_and_bytes[manifest_bool_version] _
+
+importing = (<fastapi.applications.FastAPI object at 0x7e2ac9dafd10>, <starlette.testclient.TestClient object at 0x7e2ac84f1fd0>, ...52428800, max_block_characters=400000, max_package_bytes=209715200, max_package_files=2000, max_compression_ratio=100))
+corruption = 'manifest_bool_version'
+
+    @pytest.mark.parametrize('corruption', ['source_membership', 'job_kind', 'other_import_job', 'manifest_size',
+                                           'manifest_hash', 'manifest_filename', 'manifest_missing_field',
+                                           'manifest_extra_field', 'manifest_bool_version', 'bytes', 'file'])
+    def test_registered_import_reader_rejects_corrupt_origin_and_bytes(importing, corruption):
+        app, client, settings, staged, _, artifact, _ = imported_original(importing)
+        with app.state.database.transaction() as connection:
+            row = connection.execute('SELECT * FROM artifacts WHERE id=?', (artifact['artifact_id'],)).fetchone()
+            if corruption == 'source_membership':
+                source = connection.execute('SELECT source_id FROM ingestion_imports WHERE id=?', (staged['import_id'],)).fetchone()[0]
+                metadata = json.loads(connection.execute('SELECT metadata_json FROM sources WHERE id=?', (source,)).fetchone()[0])
+                metadata['artifact_id'] = 'artifact_not_the_original'
+                connection.execute('UPDATE sources SET metadata_json=? WHERE id=?', (json.dumps(metadata), source))
+            elif corruption == 'job_kind':
+                connection.execute("UPDATE jobs SET kind='quality_gate' WHERE id=?", (staged['job']['id'],))
+            elif corruption == 'other_import_job':
+                pass
+            elif corruption.startswith('manifest_'):
+                manifest = json.loads(row['manifest_json'])
+                if corruption == 'manifest_size': manifest['size'] += 1
+                if corruption == 'manifest_hash': manifest['sha256'] = '0' * 64
+                if corruption == 'manifest_filename': manifest['filename'] = '../PRIVATE_SENTINEL'
+                if corruption == 'manifest_missing_field': del manifest['filename']
+                if corruption == 'manifest_extra_field': manifest['unexpected'] = 'PRIVATE_SENTINEL'
+                if corruption == 'manifest_bool_version': manifest['version'] = True
+                connection.execute('UPDATE artifacts SET manifest_json=? WHERE id=?', (json.dumps(manifest), artifact['artifact_id']))
+            else:
+                path = settings.data_dir / connection.execute('SELECT relative_path FROM content_blobs WHERE sha256=?',
+                                                             (row['blob_sha256'],)).fetchone()[0]
+                if corruption == 'bytes': path.write_bytes(b'PRIVATE_SENTINEL')
+                else: path.unlink()
+        if corruption == 'other_import_job':
+            other = upload(client, settings, b'# Another real source\n', key='another')
+            assert preview(client, other['import_id'])['status'] == 'preview_ready'
+            with app.state.database.transaction() as connection:
+                connection.execute('UPDATE artifacts SET job_id=? WHERE id=?', (other['job']['id'], artifact['artifact_id']))
+        response = client.get(artifact['download_path'])
+        expected = 'ARTIFACT_OWNER_UNAVAILABLE' if corruption == 'job_kind' else 'BLOB_STORAGE_UNAVAILABLE' if corruption == 'file' else 'CONTENT_HASH_MISMATCH'
+>       assert response.status_code == (503 if corruption == 'file' else 409)
+E       assert 200 == 409
+E        +  where 200 = <Response [200 OK]>.status_code
+
+tests/integration/test_artifact_owners.py:82: AssertionError
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_artifact_owners.py::test_registered_import_reader_rejects_corrupt_origin_and_bytes[source_membership]
+FAILED tests/integration/test_artifact_owners.py::test_registered_import_reader_rejects_corrupt_origin_and_bytes[other_import_job]
+FAILED tests/integration/test_artifact_owners.py::test_registered_import_reader_rejects_corrupt_origin_and_bytes[manifest_filename]
+FAILED tests/integration/test_artifact_owners.py::test_registered_import_reader_rejects_corrupt_origin_and_bytes[manifest_missing_field]
+FAILED tests/integration/test_artifact_owners.py::test_registered_import_reader_rejects_corrupt_origin_and_bytes[manifest_extra_field]
+FAILED tests/integration/test_artifact_owners.py::test_registered_import_reader_rejects_corrupt_origin_and_bytes[manifest_bool_version]
+6 failed, 11 passed, 2 warnings in 15.67s

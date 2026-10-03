@@ -1,0 +1,253 @@
+diff --git a/apps/web/src/workbench/Controls.tsx b/apps/web/src/workbench/Controls.tsx
+index 9537b458..a75299f9 100644
+--- a/apps/web/src/workbench/Controls.tsx
++++ b/apps/web/src/workbench/Controls.tsx
+@@ -1,9 +1,20 @@
+-import { useEffect, useRef, type ReactNode } from 'react'
++import { useEffect, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+ import { resizeValue } from './model'
+ export function Dialog({ title, children, close, className = '' }: { title: string; children: ReactNode; close: () => void; className?: string }) {
+   const ref = useRef<HTMLDialogElement>(null)
++  // A content press can finish as a click on the dialog after movement or layout
++  // changes. Only a complete primary gesture outside its box requests closing.
++  const backdropPress = useRef<{ id: number; released: boolean } | null>(null)
++  const onBackdrop = (event: ReactPointerEvent<HTMLDialogElement>) => {
++    const rect = event.currentTarget.getBoundingClientRect()
++    return event.target === event.currentTarget && (event.clientX < rect.left || event.clientX >= rect.right || event.clientY < rect.top || event.clientY >= rect.bottom)
++  }
+   useEffect(() => { const dialog = ref.current; const opener = document.activeElement as HTMLElement | null; dialog?.showModal(); dialog?.querySelector<HTMLElement>('button')?.focus(); return () => { dialog?.close(); opener?.focus() } }, [])
+-  return <dialog ref={ref} className={className} aria-label={title} onKeyDown={event => { if (event.key !== "Tab") return; const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex="0"],summary')).filter(item => item.getClientRects().length > 0); const first = items[0]; const last = items.at(-1); if ((event.shiftKey && document.activeElement === first) || (!event.shiftKey && document.activeElement === last)) { event.preventDefault(); (event.shiftKey ? last : first)?.focus() } }} onCancel={event => { event.preventDefault(); close() }} onClick={event => { if (event.target === event.currentTarget) close() }}><div className="dialog-inner"><header><h2>{title}</h2><button autoFocus onClick={close} aria-label={`关闭${title}`}>×</button></header>{children}</div></dialog>
++  return <dialog ref={ref} className={className} aria-label={title}
++    onPointerDownCapture={event => { backdropPress.current = event.isPrimary && event.button === 0 && onBackdrop(event) ? { id: event.pointerId, released: false } : null }}
++    onPointerUpCapture={event => { const press = backdropPress.current; if (press?.id === event.pointerId && event.isPrimary && event.button === 0 && onBackdrop(event)) press.released = true; else backdropPress.current = null }}
++    onPointerCancelCapture={() => { backdropPress.current = null }}
++    onKeyDown={event => { if (event.key !== "Tab") return; const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex="0"],summary')).filter(item => item.getClientRects().length > 0); const first = items[0]; const last = items.at(-1); if ((event.shiftKey && document.activeElement === first) || (!event.shiftKey && document.activeElement === last)) { event.preventDefault(); (event.shiftKey ? last : first)?.focus() } }} onCancel={event => { event.preventDefault(); backdropPress.current = null; close() }} onClick={event => { const press = backdropPress.current; backdropPress.current = null; if (press?.released && event.target === event.currentTarget) close() }}><div className="dialog-inner"><header><h2>{title}</h2><button autoFocus onClick={close} aria-label={`关闭${title}`}>×</button></header>{children}</div></dialog>
+ }
+ export function Splitter({ side, value, otherWidth, collapsed, onResize, toggle }: { side: 'nav' | 'agent'; value: number; otherWidth: number; collapsed: boolean; onResize: (value: number) => void; toggle: () => void }) {
+   const min = side === 'nav' ? 260 : 320
+diff --git a/apps/web/src/workbench/DialogPointer.test.tsx b/apps/web/src/workbench/DialogPointer.test.tsx
+new file mode 100644
+index 00000000..02ac26b2
+--- /dev/null
++++ b/apps/web/src/workbench/DialogPointer.test.tsx
+@@ -0,0 +1,70 @@
++import { useState } from 'react'
++import { afterEach, beforeEach, expect, it, vi } from 'vitest'
++import { cleanup, fireEvent, render, screen } from '@testing-library/react'
++import { Dialog } from './Controls'
++
++beforeEach(() => {
++  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value(this: HTMLDialogElement) { this.setAttribute('open', '') } })
++  Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value(this: HTMLDialogElement) { this.removeAttribute('open') } })
++})
++afterEach(() => { cleanup(); vi.restoreAllMocks(); Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal'); Reflect.deleteProperty(HTMLDialogElement.prototype, 'close') })
++
++function Example() {
++  const [open, setOpen] = useState(true)
++  return open && <Dialog title="Pointer example" close={() => setOpen(false)}><button>Read details</button></Dialog>
++}
++
++it('keeps the dialog when a content press ends with a click retargeted to its backdrop', () => {
++  render(<Example />)
++  const dialog = screen.getByRole('dialog'), button = screen.getByRole('button', { name: 'Read details' })
++  fireEvent.pointerDown(button, { pointerId: 1, isPrimary: true, button: 0 })
++  fireEvent.pointerUp(dialog, { pointerId: 1, isPrimary: true, button: 0 })
++  fireEvent.click(dialog)
++  expect(screen.queryByRole('dialog')).toBe(dialog)
++})
++
++const outside = { pointerId: 1, isPrimary: true, button: 0, clientX: 2, clientY: 2 }
++function example() {
++  render(<Example />)
++  const dialog = screen.getByRole('dialog'), button = screen.getByRole('button', { name: 'Read details' })
++  vi.spyOn(dialog, 'getBoundingClientRect').mockReturnValue(DOMRect.fromRect({ x: 100, y: 100, width: 400, height: 300 }))
++  return { dialog, button }
++}
++
++it('closes for a primary press and release both on the backdrop', () => {
++  const { dialog } = example()
++  fireEvent.pointerDown(dialog, outside); fireEvent.pointerUp(dialog, outside); fireEvent.click(dialog)
++  expect(screen.queryByRole('dialog')).toBeNull()
++})
++
++it.each(['released on content', 'captured release inside box', 'different pointer', 'cancelled', 'secondary', 'no press', 'dialog interior'] as const)('keeps the dialog for %s', mode => {
++  const { dialog, button } = example()
++  const start = mode === 'secondary' ? { ...outside, button: 2 } : mode === 'dialog interior' ? { ...outside, clientX: 120, clientY: 120 } : outside
++  if (mode !== 'no press') fireEvent.pointerDown(dialog, start)
++  if (mode === 'cancelled') fireEvent.pointerCancel(dialog, outside)
++  fireEvent.pointerUp(mode === 'released on content' ? button : dialog,
++    mode === 'captured release inside box' ? { ...outside, clientX: 120, clientY: 120 } : mode === 'different pointer' ? { ...outside, pointerId: 2 } : outside)
++  fireEvent.click(dialog)
++  expect(screen.queryByRole('dialog')).toBe(dialog)
++})
++
++it('consumes a background gesture once even when the caller retains an unsaved dialog', () => {
++  const close = vi.fn()
++  render(<Dialog title="Guarded example" close={close}><p>Unsaved text remains with the caller.</p></Dialog>)
++  const dialog = screen.getByRole('dialog')
++  fireEvent.pointerDown(dialog, outside); fireEvent.pointerUp(dialog, outside); fireEvent.click(dialog)
++  expect(close).toHaveBeenCalledTimes(1)
++  fireEvent.click(dialog)
++  expect(close).toHaveBeenCalledTimes(1)
++  expect(screen.getByText('Unsaved text remains with the caller.')).toBeTruthy()
++})
++
++it.each(['close button', 'Escape cancellation'] as const)('preserves %s through the caller close guard', mode => {
++  const close = vi.fn()
++  render(<Dialog title="Guarded example" close={close}><p>Unsaved text remains with the caller.</p></Dialog>)
++  const dialog = screen.getByRole('dialog')
++  if (mode === 'close button') fireEvent.click(screen.getByRole('button', { name: '关闭Guarded example' }))
++  else expect(fireEvent(dialog, new Event('cancel', { bubbles: false, cancelable: true }))).toBe(false)
++  expect(close).toHaveBeenCalledTimes(1)
++  expect(screen.queryByRole('dialog')).toBe(dialog)
++})
+diff --git a/apps/web/src/workbench/Shell.tsx b/apps/web/src/workbench/Shell.tsx
+index 706f962d..83a2f923 100644
+--- a/apps/web/src/workbench/Shell.tsx
++++ b/apps/web/src/workbench/Shell.tsx
+@@ -3,7 +3,7 @@ import { fixture, fixtureRef, findLesson, sameRef, type SyntheticLesson } from '
+ import { ConflictComparison } from './ConflictComparison'
+ import { PreserveReaderViewport, readerViewportOwner } from './PreserveReaderViewport'
+ import { AuthoringPanel } from '../features/authoring/AuthoringPanel'
+-import { discardForms as discardImpactForms } from '../features/contentImpacts/formMemory'
++import { discardForms as discardImpactForms, formsPending as pendingImpactForms } from '../features/contentImpacts/formMemory'
+ import { ImportWorkflow } from '../features/imports/ImportWorkflow'
+ import { Dialog, Splitter } from './Controls'
+ import { Navigation } from './Navigation'
+@@ -111,7 +111,8 @@ export function Shell() {
+   const profileConcepts = useConceptStates(workspaceId, subjectLocked || dialog !== '学习目标与基础', undefined, learningVersion)
+   const canLeave = () => { if (active && (!editorState(active.id).safe || practiceStatesRef.current[active.id]?.safe === false || assessmentStatesRef.current[active.id]?.safe === false || routeStatesRef.current[active.id]?.safe === false)) { setHistoryWarning('当前文字或作答尚未安全保存到本机，请保持页面打开并重试；未切换对象。'); return false }; return true }
+   const hasDraft = (id: string) => editorState(id).dirty || !editorState(id).safe || !!latestDrafts.current[id] || !!practiceStatesRef.current[id]?.dirty || practiceStatesRef.current[id]?.safe === false || !!assessmentStatesRef.current[id]?.dirty || assessmentStatesRef.current[id]?.safe === false || !!routeStatesRef.current[id]?.dirty || routeStatesRef.current[id]?.safe === false
+-  const protectLearningDialog = () => { if (dialog === '知识画像' && (applicabilityState.dirty || !applicabilityState.safe)) { setClosingApplicability(true); return true }; if (dialog === '导入' && (importReviewState.dirty || !importReviewState.safe)) { setClosingImportReview(true); return true }; if (dialog === '创作' && (authoringState.dirty || !authoringState.safe)) { setClosingAuthoring(true); return true }; if (dialog === '检索材料' && !retrievalState.safe) { setHistoryWarning('索引命令仍在处理中或本机记录尚未安全读取，请保持检索面板打开。'); return true }; if (dialog === '设置' && (providerState.dirty || !providerState.safe)) { setClosingProviders(true); return true }; if (dialog === '学习目标与基础' && (profileState.dirty || !profileState.safe)) { setClosingLearning('profile'); return true }; if (['创建路线', '编辑路线'].includes(dialog ?? '') && (routeEditState.dirty || !routeEditState.safe)) { setClosingLearning('route'); return true }; if (dialog === '学习建议' && (recommendationState.dirty || !recommendationState.safe)) { setClosingLearning('recommendations'); return true }; return false }
++  // The impact owner retains a form before passive child state reaches Shell.
++  const protectLearningDialog = () => { if (dialog === '知识画像' && (applicabilityState.dirty || !applicabilityState.safe)) { setClosingApplicability(true); return true }; if (dialog === '导入' && (importReviewState.dirty || !importReviewState.safe)) { setClosingImportReview(true); return true }; if (dialog === '创作' && (authoringState.dirty || !authoringState.safe || !!workspaceId && pendingImpactForms(workspaceId))) { setClosingAuthoring(true); return true }; if (dialog === '检索材料' && !retrievalState.safe) { setHistoryWarning('索引命令仍在处理中或本机记录尚未安全读取，请保持检索面板打开。'); return true }; if (dialog === '设置' && (providerState.dirty || !providerState.safe)) { setClosingProviders(true); return true }; if (dialog === '学习目标与基础' && (profileState.dirty || !profileState.safe)) { setClosingLearning('profile'); return true }; if (['创建路线', '编辑路线'].includes(dialog ?? '') && (routeEditState.dirty || !routeEditState.safe)) { setClosingLearning('route'); return true }; if (dialog === '学习建议' && (recommendationState.dirty || !recommendationState.safe)) { setClosingLearning('recommendations'); return true }; return false }
+   const openAux = (name: string) => { if (name !== dialog && protectLearningDialog()) return; if (subjectLocked && !['设置', '快捷键', '命令面板', '创作'].includes(name)) { setHistoryWarning('当前测试策略限制此操作。可返回自己的测试、提交或明确放弃。'); return }; if (name === '打开测试记录') { navigate('assessment'); return }; if (name === '笔记') { setNoteSelection(active?.context.selection ?? null); setNoteState({ dirty: false, safe: true }) }; setDialog(name) }
+   const closeDialog = () => { if (protectLearningDialog()) return; if (dialog === '笔记' && (noteState.dirty || !noteState.safe)) setClosingNotes(true); else setDialog(null) }
+   const clearReaderLink = () => { if ((new URLSearchParams(location.search).has('reader') || new URLSearchParams(location.search).has('practice') || new URLSearchParams(location.search).has('assessment') || new URLSearchParams(location.search).has('route'))) history.pushState(null, '', '/') }
+diff --git a/tests/e2e/dialog-form-guard.spec.ts b/tests/e2e/dialog-form-guard.spec.ts
+new file mode 100644
+index 00000000..d1da18db
+--- /dev/null
++++ b/tests/e2e/dialog-form-guard.spec.ts
+@@ -0,0 +1,56 @@
++import { writeFileSync } from 'node:fs'
++import { expect, test } from '../../apps/web/node_modules/@playwright/test/index.mjs'
++import { RestartRuntime } from './restartRuntime'
++import { publishEditedBlock } from './contentImpactsData'
++
++test('native rendered Content form is guarded before passive state propagation', async ({ playwright }, info) => {
++  test.setTimeout(120_000)
++  const runtime = await RestartRuntime.start()
++  try {
++    const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]
++    await runtime.authenticateOnly(page)
++    const publication = await publishEditedBlock(page, runtime), target = publication.fixture.lessons[0]
++    let decisions = 0
++    page.on('request', request => { if (request.method() === 'POST' && /\/content\/impacts\/[^/]+\/decisions$/.test(new URL(request.url()).pathname)) decisions++ })
++    const open = async () => { await page.getByRole('button', { name: '创作', exact: true }).click(); await page.getByRole('button', { name: '打开内容变更影响复核', exact: true }).click() }
++    await open()
++    const panel = page.getByRole('region', { name: '内容变更影响复核', exact: true })
++    await panel.getByRole('button', { name: '从第一页读取内容变更', exact: true }).click()
++    await panel.getByRole('button', { name: /^查看影响详情 / }).first().click()
++    await panel.getByRole('button', { name: `读取对象当前依据 ${target.id}`, exact: true }).click()
++    await expect(panel.getByRole('button', { name: '采用本次对象依据准备决定', exact: true })).toBeEnabled()
++    // The browser performs the real adopt first. A one-shot DOM observer invokes
++    // the real close button as soon as the actual form is connected, before the
++    // child-to-parent passive effect chain can be treated as a safety boundary.
++    // This is a controlled programmatic DOM click, not a trusted pointer claim.
++    await page.evaluate(() => {
++      const state = { form_connected: false, close_clicks: 0, close_found: false }
++      Object.assign(window, { renderedFormGuard: state })
++      const observer = new MutationObserver(() => {
++        const form = document.querySelector('[aria-label="本次人工内容决定"]')
++        if (!form?.isConnected) return
++        observer.disconnect()
++        const close = document.querySelector<HTMLButtonElement>('dialog[aria-label="创作"] button[aria-label="关闭创作"]')
++        state.form_connected = true; state.close_found = !!close
++        if (close) { state.close_clicks++; close.click() }
++      })
++      observer.observe(document.body, { childList: true, subtree: true })
++    })
++    await panel.getByRole('button', { name: '采用本次对象依据准备决定', exact: true }).click()
++    const observed = await page.evaluate(() => (window as unknown as { renderedFormGuard: { form_connected: boolean; close_clicks: number; close_found: boolean } }).renderedFormGuard)
++    expect(observed).toEqual({ form_connected: true, close_clicks: 1, close_found: true })
++    const guard = page.getByRole('dialog', { name: '保留创作原命令', exact: true })
++    try { await expect(guard).toBeVisible() }
++    finally { writeFileSync(info.outputPath('rendered-form-guard.json'), JSON.stringify({ scope: 'Synthetic actual API/React form and native DOM; one programmatic close click at real form insertion, zero scheduling changes or sleeps.', observed, decision_posts: decisions }, null, 2)) }
++    await guard.getByRole('button', { name: '返回创作', exact: true }).click()
++    const form = panel.getByRole('group', { name: '本次人工内容决定', exact: true })
++    await expect(form).toContainText(target.id); await expect(form).toContainText(target.sha256)
++    await form.getByRole('textbox', { name: '决定理由', exact: true }).fill('Synthetic original form remains editable')
++    await page.getByRole('button', { name: '关闭创作', exact: true }).click(); await expect(guard).toBeVisible()
++    await guard.getByRole('button', { name: '保留原命令，明确丢弃临时表单并关闭', exact: true }).click()
++    await expect(page.getByRole('dialog', { name: '创作', exact: true })).toHaveCount(0)
++    await open(); await expect(panel.getByRole('group', { name: '本次人工内容决定', exact: true })).toHaveCount(0)
++    await expect(panel.getByText(/本页仍保留未提交的内容决定表单与原依据/)).toHaveCount(0)
++    expect(decisions).toBe(0)
++  } finally { await runtime.close() }
++})
+diff --git a/tests/e2e/dialog-pointer.spec.ts b/tests/e2e/dialog-pointer.spec.ts
+new file mode 100644
+index 00000000..beea820e
+--- /dev/null
++++ b/tests/e2e/dialog-pointer.spec.ts
+@@ -0,0 +1,59 @@
++import { writeFileSync } from 'node:fs'
++import { expect, test } from '../../apps/web/node_modules/@playwright/test/index.mjs'
++import { RestartRuntime } from './restartRuntime'
++import { publishEditedBlock } from './contentImpactsData'
++
++test('native dialog keeps a content gesture through layout change and still accepts explicit closing', async ({ playwright }, info) => {
++  test.setTimeout(120_000)
++  const runtime = await RestartRuntime.start()
++  try {
++    const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]
++    await runtime.authenticateOnly(page)
++    await publishEditedBlock(page, runtime)
++    const writes: string[] = []
++    page.on('request', request => { if (request.method() === 'POST' && /\/content\/impacts\/[^/]+\/decisions$/.test(new URL(request.url()).pathname)) writes.push('decision') })
++    await page.getByRole('button', { name: '创作', exact: true }).click()
++    await page.getByRole('button', { name: '打开内容变更影响复核', exact: true }).click()
++    const dialog = page.getByRole('dialog', { name: '创作', exact: true }), panel = page.getByRole('region', { name: '内容变更影响复核', exact: true })
++    await panel.getByRole('button', { name: '从第一页读取内容变更', exact: true }).click()
++    const button = panel.getByRole('button', { name: /^查看影响详情 / }).first()
++    await expect(button).toBeVisible()
++    await page.setViewportSize({ width: 700, height: 900 })
++    await button.scrollIntoViewIfNeeded()
++    const box = (await button.boundingBox())!, point = { x: box.x + 8, y: box.y + box.height / 2 }
++    await button.evaluate(element => { Object.assign(window, { originalDialogButton: element }) })
++    await page.mouse.move(point.x, point.y); await page.mouse.down()
++    // A real viewport layout change moves the still-mounted button away from the
++    // stationary pointer. No role, payload, DOM replacement, or transport is faked.
++    await page.setViewportSize({ width: 1800, height: 900 })
++    const shifted = await dialog.evaluate((element, originalPoint) => {
++      const rect = element.getBoundingClientRect(), original = (window as unknown as { originalDialogButton: Element }).originalDialogButton
++      return { button_connected: original.isConnected, same_button: element.contains(original), outside: originalPoint.x < rect.left || originalPoint.x >= rect.right || originalPoint.y < rect.top || originalPoint.y >= rect.bottom, target_is_dialog: document.elementFromPoint(originalPoint.x, originalPoint.y) === element }
++    }, point)
++    expect(shifted).toEqual({ button_connected: true, same_button: true, outside: true, target_is_dialog: true })
++    await page.mouse.up()
++    try { await expect(dialog).toBeVisible() }
++    finally { writeFileSync(info.outputPath('dialog-pointer-layout.json'), JSON.stringify({ scope: 'Synthetic actual Content UI; layout and pointer categories only. Separate from the original full-gate cause.', shifted }, null, 2)) }
++    // A stationary ordinary click still invokes the actual Content detail read.
++    await button.click(); await expect(panel.getByRole('region', { name: '本次读取的内容影响详情', exact: true })).toBeVisible()
++    // A completed child read does not promise that every parent safety effect
++    // has settled. Honor any real caller guard when leaving the Content panel.
++    await dialog.getByRole('button', { name: '关闭创作', exact: true }).click()
++    const guard = page.getByRole('dialog', { name: '保留创作原命令', exact: true })
++    await expect.poll(async () => await dialog.count() === 0 || await guard.isVisible()).toBe(true)
++    if (await guard.isVisible()) await guard.getByRole('button', { name: '保留原命令，明确丢弃临时表单并关闭', exact: true }).click()
++    await expect(dialog).toHaveCount(0)
++    // This auxiliary dialog has no business-owner guard, so closing it is an
++    // unambiguous check of the shared pointer, cancellation, and close controls.
++    for (const action of ['backdrop', 'Escape', 'close button']) {
++      await page.keyboard.press('Control+Shift+P')
++      const auxiliary = page.getByRole('dialog', { name: '命令面板', exact: true })
++      await expect(auxiliary).toBeVisible()
++      if (action === 'backdrop') await page.mouse.click(2, 2)
++      else if (action === 'Escape') await page.keyboard.press('Escape')
++      else await auxiliary.getByRole('button', { name: '关闭命令面板', exact: true }).click()
++      await expect(auxiliary).toHaveCount(0)
++    }
++    expect(writes).toEqual([])
++  } finally { await runtime.close() }
++})

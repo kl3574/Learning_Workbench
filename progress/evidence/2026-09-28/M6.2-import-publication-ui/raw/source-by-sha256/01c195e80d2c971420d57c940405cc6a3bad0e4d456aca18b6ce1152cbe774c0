@@ -1,0 +1,29 @@
+import 'fake-indexeddb/auto'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, expect, test, vi } from 'vitest'
+import { reviewSession } from '../draftReview/reviewFixtures'
+import { PublicationPanel } from './PublicationPanel'
+import { publicationDraft, publicationReceipt, publicationRef } from './publicationFixtures'
+import { publicationCommandStore } from './publicationCommands'
+import type { PublicationPort } from './publicationClient'
+
+afterEach(async () => { cleanup(); vi.restoreAllMocks(); await publicationCommandStore.close() })
+test('each warning instance needs explicit confirmation before deduplicating codes in the real four-field command', async () => {
+  const workspace = `workspace_${crypto.randomUUID()}`, onState = vi.fn()
+  const port: PublicationPort = { session: async () => reviewSession(workspace), draft: vi.fn(async () => publicationDraft), review: vi.fn(async () => publicationReceipt), publish: vi.fn(async () => publicationRef), current: vi.fn(async () => publicationRef) }
+  render(<PublicationPanel workspace={workspace} paused={false} blocked={false} draft={publicationDraft} receipt={publicationReceipt} port={port} onState={onState} />)
+  const prepare = screen.getByRole('button', { name: '选择此审核并重新读取发布基准' })
+  await waitFor(() => expect(prepare).not.toBeDisabled()); fireEvent.click(prepare)
+  const first = await screen.findByRole('checkbox', { name: /Synthetic first source warning/ }), second = screen.getByRole('checkbox', { name: /Synthetic second source warning/ })
+  const publish = screen.getByRole('button', { name: '明确发布这一文本块' })
+  fireEvent.click(first); expect(second).not.toBeChecked()
+  fireEvent.click(screen.getByRole('checkbox', { name: /我已核对这份发布候选/ }))
+  expect(publish).toBeDisabled(); expect(port.publish).not.toHaveBeenCalled()
+  fireEvent.click(second); expect(publish).not.toBeDisabled()
+  await waitFor(() => expect(onState).toHaveBeenLastCalledWith({ dirty: true, safe: true }))
+  fireEvent.click(publish)
+  await screen.findByText('原发布 ACK 已保存', { exact: true })
+  expect(vi.mocked(port.publish).mock.calls[0][1]).toEqual({ expected_revision: 1, expected_content_sha256: publicationRef.sha256, review_receipt_id: publicationReceipt.id, acknowledged_warning_codes: ['SOURCE_CONFIRM'] })
+  expect(port.current).not.toHaveBeenCalled()
+  expect(screen.getByText(/当前指针尚未在本面板另行读取/)).toBeVisible()
+})

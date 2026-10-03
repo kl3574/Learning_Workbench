@@ -4,6 +4,11 @@ import hashlib
 import hmac
 import secrets
 import sqlite3
+from collections.abc import Callable
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .restore_numeric_service import RestoreNumericService
+    from .publication_models import PublicationHistory
 from uuid import uuid4
 
 from packages.contracts import domain_models as dm
@@ -13,13 +18,16 @@ from ..import_dto import JobCancelRequest, JobSnapshot
 from ..infrastructure.authoring_job_repository import integrity
 from ..infrastructure.authoring_repository import AuthoringRepository, AuthoringRecord
 from ..infrastructure.database import Database
-from ..infrastructure.security import SessionIdentity
+from ..infrastructure.publication_repository import PublicationRepository
+from ..infrastructure.security import SessionIdentity, author_execution_identity
 from .authoring_context import AuthoringContext
-from .authoring_models import AuthoringJobInput
+from .authoring_models import AuthoringCandidateRecord, AuthoringJobInput
 from .authoring_source import build_outbound
 from .errors import ApiError
+from .draft_candidate_models import ResolvedDraftCandidate, match_candidate
 from .provider_models import CheckedProviderFinished
 from .tutor_worker import TutorProviderPort
+from .review_material_models import CheckedReviewMaterial, SingleReviewMaterial, checked_material
 
 
 class AuthoringService:
@@ -28,7 +36,35 @@ class AuthoringService:
         self.database = database
         self.context = context or AuthoringContext(database)
         self.provider = provider
+        self.restore_numeric: RestoreNumericService | None = None
+        self.verify_publication: Callable[[sqlite3.Connection, SessionIdentity, 'PublicationHistory'], dm.ContentRef] | None = None
         self._cursor_key = secrets.token_bytes(32)
+
+    def resolve_candidate(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                          candidate: dm.DraftCandidate) -> ResolvedDraftCandidate:
+        return self._candidate_history(connection, identity, candidate)[0]
+
+    def _candidate_history(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                           candidate: dm.DraftCandidate) -> tuple[ResolvedDraftCandidate, AuthoringCandidateRecord, AuthoringRecord]:
+        self.context.check_access(connection, identity)
+        repository = AuthoringRepository(connection, identity.workspace_id)
+        actual = repository.candidate(candidate.draft_id)
+        history = self.verify_history(connection, identity, actual.source_job_id)
+        expected = dm.DraftCandidate.model_validate(candidate.model_dump(mode='python'))
+        actual_identity = dm.DraftCandidate.model_validate(actual.candidate.model_dump(mode='python'))
+        match_candidate(expected, actual_identity)
+        resolved = ResolvedDraftCandidate(identity.workspace_id, 'authoring', 'authoring_single', actual_identity)
+        return resolved, actual, history
+
+    def read_review_material(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                             candidate: dm.DraftCandidate) -> CheckedReviewMaterial:
+        self.context.check_access(connection, identity)
+        current = author_execution_identity(connection, identity.workspace_id, identity.id)
+        resolved, actual, history = self._candidate_history(connection, current, candidate)
+        context = self.context.read(connection, current, history.view.preparation.context_snapshot_id)
+        self.context.verify(connection, current, context)
+        return checked_material(resolved, SingleReviewMaterial(version='authoring-single-review-material-v1',
+            record=actual, input=history.input, context=context))
 
     def verify_history(self, conn: sqlite3.Connection, identity: SessionIdentity, identifier: str) -> AuthoringRecord:
         """Verify protected source and Provider history within the caller's transaction."""
@@ -111,7 +147,35 @@ class AuthoringService:
                 raise integrity()
             for check_id in result.numeric_check_ids:
                 numeric.current(check_id)
+            published = self.published_ref_in_transaction(conn, identity,
+                dm.DraftCandidate.model_validate(result.candidate.model_dump()))
+            if published is not None:
+                result = AuthoringDraftView.model_validate({**result.model_dump(), 'state': 'published',
+                    'published_ref': published.model_dump(), 'warnings': [
+                        {**warning.model_dump(), 'message': '原生成阶段未执行数学、来源或教学审核；当前发布以绑定的发布记录为准。'}
+                        if warning.code == 'AUTHORING_REVIEW_NOT_RUN' else warning.model_dump()
+                        for warning in result.warnings]})
             return result
+
+    def published_ref_in_transaction(self, conn: sqlite3.Connection, identity: SessionIdentity,
+                                     candidate: dm.DraftCandidate) -> dm.ContentRef | None:
+        """Current Single projection; source, publication and actual Content stay checked."""
+        from .publication_models import SinglePublicationRecord
+        resolved, _, _ = self._candidate_history(conn, identity, candidate)
+        publication = PublicationRepository(conn, identity.workspace_id).single_for_candidate(resolved.candidate)
+        if publication is None:
+            return None
+        if not isinstance(publication.record, SinglePublicationRecord):
+            raise integrity()
+        if self.verify_publication is None:
+            raise ApiError(503, 'PUBLICATION_OWNER_UNAVAILABLE', '生成候选的真实发布记录当前无法核验。')
+        return self.verify_publication(conn, identity, publication)
+
+    def require_unpublished_candidate(self, conn: sqlite3.Connection, identity: SessionIdentity,
+                                      candidate: dm.DraftCandidate) -> None:
+        """Call in the same write transaction as new preview/approval/start permission."""
+        if self.published_ref_in_transaction(conn, identity, candidate) is not None:
+            raise ApiError(409, 'DRAFT_ALREADY_PUBLISHED', '此生成候选已发布，不能新增数值批准或启动许可。')
 
     def job(self, identity: SessionIdentity, identifier: str) -> JobSnapshot:
         with self.database.transaction(immediate=False) as conn:
@@ -119,6 +183,10 @@ class AuthoringService:
 
     def _control(self, conn: sqlite3.Connection, identity: SessionIdentity, identifier: str) -> JobSnapshot:
         repo = AuthoringRepository(conn, identity.workspace_id)
+        if repo.jobs.input_version(identifier) == 'restore-numeric-job-v1':
+            if self.restore_numeric is None:
+                raise ApiError(503, 'NUMERIC_OWNER_UNAVAILABLE', '恢复数值安全控制服务当前不可用。')
+            return self.restore_numeric.control_in_transaction(conn, identity, identifier)
         if repo.jobs.input_version(identifier) in {'authoring-group-job-v1', 'authoring-group-numeric-job-v1'}:
             from .authoring_group import AuthoringGroupService
             return AuthoringGroupService(self.database)._control(conn, identity, identifier)

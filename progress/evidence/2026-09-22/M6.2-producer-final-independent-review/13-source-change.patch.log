@@ -1,0 +1,1023 @@
+diff --git a/services/api/app/application/authoring_group_worker.py b/services/api/app/application/authoring_group_worker.py
+index 9878fab..c407a6e 100644
+--- a/services/api/app/application/authoring_group_worker.py
++++ b/services/api/app/application/authoring_group_worker.py
+@@ -11,6 +11,7 @@ from ..authoring_group_dto import AuthoringGroupCandidate, AuthoringContentPlanR
+ from ..infrastructure.authoring_job_repository import AuthoringLease, TERMINAL, integrity
+ from ..infrastructure.authoring_group_repository import AuthoringGroupRepository, group_not_run
+ from ..infrastructure.database import Database, utc_now
++from ..infrastructure.draft_candidate_repository import DraftCandidateRepository
+ from ..infrastructure.security import SessionIdentity, author_execution_identity, expires_after
+ from .authoring_group_context import AuthoringGroupContext
+ from .authoring_group_models import AuthoringGroupCandidateRecord, AuthoringContentPlanRecord
+@@ -18,6 +19,7 @@ from .authoring_group_validation import (parse_group_plan, parse_group_generated
+     plan_sha256, group_candidate_sha256)
+ from .authoring_group_source import AuthoringGroupOutboundSource
+ from .errors import ApiError
++from .draft_candidate_models import ResolvedDraftCandidate
+ from .provider_models import CheckedProviderFinished
+ from .tutor_worker import TutorProviderPort
+ 
+@@ -198,6 +200,8 @@ class AuthoringGroupWorker:
+                         provider_receipt_id=receipt.id, plan_ref=plan_ref, payload=payload,
+                         validation=view.validation, created_at=utc_now()))
+                     view.summary.candidate = candidate
++                    DraftCandidateRepository(conn).register(ResolvedDraftCandidate(
++                        lease.workspace_id, 'authoring', 'authoring_group', candidate))
+             terminal_result = {'result_sha256': sha256_bytes(canonical_bytes(view.model_dump(mode='json', exclude={'summary'}))),
+                                'candidate': view.summary.candidate.model_dump() if view.summary.candidate else None}
+             repo.jobs.transition(row, status, result=terminal_result)
+@@ -245,6 +249,11 @@ class AuthoringGroupWorker:
+                 await watcher
+             await asyncio.to_thread(self._finish, lease)
+         except ApiError as error:
++            if error.code == 'DRAFT_IDENTITY_CONFLICT':
++                # Keep the candidate/catalog/terminal transaction rolled back.
++                # An expired lease may recover the same checked Provider result;
++                # this process must not immediately retry with a different ID.
++                raise
+             code = error.code if error.code in {'POLICY_DENIED', 'ASSESSMENT_ACTIVE', 'ASSESSMENT_ANSWER_PROTECTED',
+                 'CAPABILITY_UNSUPPORTED', 'PROVIDER_CANCELLED'} else 'AUTHORING_CONTEXT_UNAVAILABLE'
+             await asyncio.to_thread(self._finish, lease, code)
+diff --git a/services/api/app/application/authoring_worker.py b/services/api/app/application/authoring_worker.py
+index a844faa..28ca8f6 100644
+--- a/services/api/app/application/authoring_worker.py
++++ b/services/api/app/application/authoring_worker.py
+@@ -10,10 +10,12 @@ from ..authoring_dto import AuthoringCandidate, candidate_sha256, parse_worked_e
+ from ..infrastructure.authoring_job_repository import AuthoringLease, TERMINAL, integrity
+ from ..infrastructure.authoring_repository import AuthoringRepository, not_run
+ from ..infrastructure.database import Database, utc_now
++from ..infrastructure.draft_candidate_repository import DraftCandidateRepository
+ from ..infrastructure.security import SessionIdentity, author_execution_identity, expires_after
+ from .authoring_context import AuthoringContext
+ from .authoring_models import AuthoringCandidateRecord
+ from .authoring_source import AuthoringOutboundSource
++from .draft_candidate_models import ResolvedDraftCandidate
+ from .errors import ApiError
+ from .provider_models import CheckedProviderFinished
+ from .tutor_worker import TutorProviderPort
+@@ -175,6 +177,8 @@ class AuthoringWorker:
+                 conn.execute('INSERT INTO authoring_candidates VALUES(?,?,?,?,?)',
+                     (candidate.draft_id, lease.workspace_id, lease.job_id, raw, sha256_bytes(raw.encode())))
+                 view.summary.candidate = candidate
++                DraftCandidateRepository(conn).register(ResolvedDraftCandidate(
++                    lease.workspace_id, 'authoring', 'authoring_single', candidate))
+             terminal_result = {'result_sha256': sha256_bytes(canonical_bytes(view.model_dump(mode='json', exclude={'summary'}))),
+                                'candidate': view.summary.candidate.model_dump() if view.summary.candidate else None}
+             repo.jobs.transition(row, status, result=terminal_result)
+@@ -222,6 +226,11 @@ class AuthoringWorker:
+                 await watcher
+             await asyncio.to_thread(self._finish, lease)
+         except ApiError as error:
++            if error.code == 'DRAFT_IDENTITY_CONFLICT':
++                # Keep the candidate/catalog/terminal transaction rolled back.
++                # An expired lease may recover the same checked Provider result;
++                # this process must not immediately retry with a different ID.
++                raise
+             code = error.code if error.code in {'POLICY_DENIED', 'ASSESSMENT_ACTIVE', 'ASSESSMENT_ANSWER_PROTECTED',
+                 'CAPABILITY_UNSUPPORTED', 'PROVIDER_CANCELLED'} else 'AUTHORING_CONTEXT_UNAVAILABLE'
+             await asyncio.to_thread(self._finish, lease, code)
+diff --git a/services/api/app/application/draft_candidates.py b/services/api/app/application/draft_candidates.py
+index d795ef6..51ec11a 100644
+--- a/services/api/app/application/draft_candidates.py
++++ b/services/api/app/application/draft_candidates.py
+@@ -22,6 +22,26 @@ class DraftCandidates:
+     def __init__(self, owners: dict[DraftSourceKind, DraftCandidateOwner]):
+         self._owners = dict(owners)
+ 
++    def lookup(self, connection: sqlite3.Connection, identity: SessionIdentity,
++               draft_id: str, expected_revision: int) -> ResolvedDraftCandidate:
++        """Read only: the catalog selects one owner, which rechecks complete history.
++
++        Missing registration is never repaired here, including for an otherwise
++        valid legacy candidate. No owner detection by ID prefix or fallback scan.
++        """
++        AuthoringContext.check_access(connection, identity)
++        current = author_execution_identity(connection, identity.workspace_id, identity.id)
++        AuthoringContext.check_access(connection, current)
++        registered = DraftCandidateRepository(connection).lookup(
++            current.workspace_id, draft_id, expected_revision)
++        owner = self._owners.get(registered.source_kind)
++        if owner is None:
++            raise ApiError(503, 'DRAFT_OWNER_UNAVAILABLE', '草稿所属服务当前无法核验。')
++        resolved = owner.resolve_candidate(connection, current, registered.candidate)
++        if resolved != registered:
++            raise ApiError(503, 'DRAFT_OWNER_INTEGRITY', '草稿所属记录当前无法核验。')
++        return resolved
++
+     def admit(self, connection: sqlite3.Connection, identity: SessionIdentity,
+               source_kind: DraftSourceKind, candidate: dm.DraftCandidate) -> ResolvedDraftCandidate:
+         """No implicit owner detection, HTTP handler, review, content write or Provider call.
+diff --git a/services/api/app/infrastructure/draft_candidate_repository.py b/services/api/app/infrastructure/draft_candidate_repository.py
+index 35ce3ea..86e623d 100644
+--- a/services/api/app/infrastructure/draft_candidate_repository.py
++++ b/services/api/app/infrastructure/draft_candidate_repository.py
+@@ -2,7 +2,10 @@
+ 
+ import sqlite3
+ 
+-from ..application.draft_candidate_models import ResolvedDraftCandidate
++from pydantic import TypeAdapter, ValidationError
++
++from packages.contracts import domain_models as dm
++from ..application.draft_candidate_models import DraftOwner, DraftSourceKind, ResolvedDraftCandidate
+ from ..application.errors import ApiError
+ 
+ 
+@@ -16,6 +19,46 @@ class DraftCandidateRepository:
+             raise ApiError(409, 'TRANSACTION_REQUIRED', '候选登记需要有效事务。')
+         self.connection = connection
+ 
++    def lookup(self, workspace_id: str, draft_id: str, revision: int) -> ResolvedDraftCandidate:
++        """Locate an exact registered revision; this does not authenticate its owner."""
++        try:
++            draft_id = TypeAdapter(dm.Id).validate_python(draft_id, strict=True)
++            revision = TypeAdapter(dm.Revision).validate_python(revision, strict=True)
++        except ValidationError:
++            raise ApiError(422, 'SCHEMA_INVALID', '草稿候选身份无效。') from None
++        identity = self.connection.execute(
++            'SELECT * FROM draft_candidate_identities WHERE draft_id=? AND workspace_id=?',
++            (draft_id, workspace_id),
++        ).fetchone()
++        if identity is None:
++            raise ApiError(404, 'DRAFT_CANDIDATE_UNREGISTERED', '草稿候选未登记或不可访问。')
++        # The core Revision contract has no upper bound. A larger valid integer
++        # cannot identify a SQLite INTEGER revision; do not overflow its binding
++        # or reveal another workspace's identity before the scoped lookup above.
++        if revision > 2**63 - 1:
++            raise ApiError(412, 'DRAFT_REVISION_MISMATCH', '草稿候选修订未登记，请重新读取。')
++        row = self.connection.execute(
++            'SELECT * FROM draft_candidate_revisions WHERE draft_id=? AND draft_revision=?',
++            (draft_id, revision),
++        ).fetchone()
++        if row is None:
++            raise ApiError(412, 'DRAFT_REVISION_MISMATCH', '草稿候选修订未登记，请重新读取。')
++        try:
++            owner: DraftOwner = TypeAdapter(DraftOwner).validate_python(identity['owner'], strict=True)
++            kind: DraftSourceKind = TypeAdapter(DraftSourceKind).validate_python(identity['source_kind'], strict=True)
++            candidate = dm.DraftCandidate.model_validate(dict(
++                draft_id=row['draft_id'], draft_revision=row['draft_revision'],
++                entity=row['entity'], candidate_sha256=row['candidate_sha256']))
++            if (tuple(row[key] for key in ('draft_id', 'workspace_id', 'owner', 'entity'))
++                    != tuple(identity[key] for key in ('draft_id', 'workspace_id', 'owner', 'entity'))
++                    or owner != ('import' if kind == 'import' else 'authoring')
++                    or kind == 'authoring_single' and candidate.entity != 'block'
++                    or kind == 'authoring_group' and candidate.entity not in {'lesson', 'practice_set', 'assessment'}):
++                raise ValueError('Candidate registry linkage is inconsistent')
++        except (ValidationError, ValueError, TypeError, KeyError):
++            raise ApiError(503, 'DRAFT_OWNER_INTEGRITY', '草稿所属记录当前无法核验。') from None
++        return ResolvedDraftCandidate(workspace_id, owner, kind, candidate)
++
+     def register(self, value: ResolvedDraftCandidate) -> None:
+         """Called only after the source owner verified this candidate in this transaction.
+ 
+diff --git a/services/api/app/infrastructure/import_worker.py b/services/api/app/infrastructure/import_worker.py
+index 93acca6..06141fb 100644
+--- a/services/api/app/infrastructure/import_worker.py
++++ b/services/api/app/infrastructure/import_worker.py
+@@ -14,6 +14,7 @@ from packages.contracts.canonical import metadata_sha256
+ from packages.contracts.validation import ENTITY_MODELS
+ 
+ from ..application.errors import ApiError
++from ..application.draft_candidate_models import ResolvedDraftCandidate
+ from ..application.evidence import EvidenceRecovery
+ from ..application.grading import GradingWorker
+ from ..application.imports import ImportService, safe_filename
+@@ -21,6 +22,7 @@ from ..application.recommendations import RecommendationWorker
+ from ..application.retrieval import RetrievalWorker
+ from .content_repository import damaged
+ from .database import Database, utc_now
++from .draft_candidate_repository import DraftCandidateRepository
+ from .document_sandbox import bind_parent_lifetime
+ from .import_repository import ImportRepository, identifier, json_object, json_text
+ from .security import expires_after, guard_subject_access
+@@ -175,6 +177,10 @@ class ImportWorker:
+                 if self._stop.is_set():
+                     raise _Stopped()
+                 if not process.is_alive():
++                    # The child can send and exit after the earlier poll timed out.
++                    # Drain that real result before classifying an empty exit.
++                    if parent.poll(0):
++                        continue
+                     raise ApiError(422, "IMPORT_PARSE_FAILED", "解析进程未返回完整结果。")
+                 if time.monotonic() - last_check > 0.5:
+                     with self.database.connect() as connection:
+@@ -228,6 +234,10 @@ class ImportWorker:
+                     (draft_id, lease.workspace_id, value.entity, 1, json_text({"import_id": lease.import_id, "metadata": value.model_dump(mode="json")}), metadata_sha256(value), utc_now()),
+                 )
+                 preview["draft_ids"].append(draft_id)
++                DraftCandidateRepository(connection).register(ResolvedDraftCandidate(
++                    lease.workspace_id, 'import', 'import', dm.DraftCandidate(
++                        draft_id=draft_id, draft_revision=1, entity=value.entity,
++                        candidate_sha256=metadata_sha256(value))))
+             metadata = json_object(row["source_metadata"])
+             preview_visibility = "author_private" if private else "learner"
+             original_visibility = getattr(parsed, "original_visibility", None) or preview_visibility
+diff --git a/tests/e2e/assessment-submit.spec.ts b/tests/e2e/assessment-submit.spec.ts
+new file mode 100644
+index 0000000..f67ec76
+--- /dev/null
++++ b/tests/e2e/assessment-submit.spec.ts
+@@ -0,0 +1,81 @@
++import { writeFileSync } from 'node:fs'
++import { expect, test } from '../../apps/web/node_modules/@playwright/test/index.mjs'
++import type { AttemptSnapshot } from '../../packages/contracts/generated/api-types'
++import { importAssessmentPackage, originalAssessmentPackage, submitAssessment } from './assessmentTestData'
++import { RestartRuntime } from './restartRuntime'
++
++test('a pending real submission remains unsubmitted until its exact acknowledgement, then exposes only the actual grading result', async ({ playwright }, info) => {
++  const runtime = await RestartRuntime.start(), fixture = originalAssessmentPackage('submitack')
++  let release: (() => void) | undefined, routed: Promise<void> | undefined
++  try {
++    const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]
++    await runtime.authenticateOnly(page)
++    const imported = await importAssessmentPackage(page, fixture)
++    await imported.dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
++    await page.goto(`${runtime.origin}/?assessment=${encodeURIComponent(JSON.stringify({ assessment_ref: fixture.assessment, course_ref: fixture.course }))}`)
++    await page.getByRole('radio', { name: '独立测试', exact: true }).check()
++    await page.getByRole('checkbox', { name: '我已核对内容状态与模式，确认开始未评分测试', exact: true }).check()
++    const creating = page.waitForResponse(response => response.request().method() === 'POST'
++      && new URL(response.url()).pathname === `/api/v1/assessments/${fixture.assessment.id}/attempts`)
++    await page.getByRole('button', { name: '明确开始本次测试', exact: true }).click()
++    const created = await creating
++    expect(created.status()).toBe(201)
++    const attempt: AttemptSnapshot = await created.json()
++    await expect(page.getByText('服务端作答已保存', { exact: true })).toBeVisible()
++    const saved = await page.request.get(`/api/v1/attempts/${attempt.id}/responses`)
++    expect(saved.status()).toBe(200)
++    const savedResponses = await saved.json()
++
++    let intercepted!: () => void, requestHeld = false
++    const held = new Promise<void>(resolve => { intercepted = resolve })
++    const gate = new Promise<void>(resolve => { release = resolve })
++    await page.route(`**/api/v1/attempts/${attempt.id}/submit`, async route => {
++      if (route.request().method() !== 'POST') { await route.continue(); return }
++      let finish!: () => void
++      routed = new Promise<void>(resolve => { finish = resolve })
++      requestHeld = true; intercepted()
++      try { await gate; await route.continue() } finally { finish() }
++    })
++    let acknowledged = false
++    const submitting = submitAssessment(page, attempt.id).then(value => { acknowledged = true; return value })
++    // Retain a rejection until the awaited command below, without an unhandled promise.
++    void submitting.catch(() => undefined)
++    await Promise.race([held, submitting.then(() => {
++      if (!requestHeld) throw new Error('Submission finished without the expected real request gate')
++    })])
++    const premature = await page.request.get(`/api/v1/attempts/${attempt.id}/result`)
++    expect(premature.status()).toBe(409)
++    expect((await premature.json()).error.code).toBe('ATTEMPT_NOT_SUBMITTED')
++    const active = await page.request.get(`/api/v1/attempts/${attempt.id}`)
++    expect(active.status()).toBe(200)
++    const before: AttemptSnapshot = await active.json()
++    expect(before.status).toBe('active')
++    expect(before.revision).toBe(attempt.revision)
++    expect(acknowledged).toBe(false)
++
++    if (!release) throw new Error('Submission gate was not initialized')
++    release()
++    const ack = await submitting
++    expect(ack.revision).toBeGreaterThan(attempt.revision)
++    expect(acknowledged).toBe(true)
++    await expect.poll(async () => {
++      const response = await page.request.get(`/api/v1/attempts/${attempt.id}/result`)
++      if (response.status() === 202) return false
++      expect(response.status()).toBe(200)
++      const result = await response.json()
++      expect(result.grading_revision).toBe(1)
++      expect(result.status).toBe('needs_review')
++      expect(result.items.every((item: { score: number | null }) => item.score === null)).toBe(true)
++      return true
++    }).toBe(true)
++    const after = await page.request.get(`/api/v1/attempts/${attempt.id}/responses`)
++    expect(after.status()).toBe(200)
++    expect((await after.json()).responses).toEqual(savedResponses.responses)
++    writeFileSync(info.outputPath('actual-submission-ack.json'), JSON.stringify({
++      scope: 'Real UI, held outgoing submit request, actual HTTP/SQLite state and grading worker; no fabricated response.',
++      before_ack: { result_status: 409, error_code: 'ATTEMPT_NOT_SUBMITTED', attempt_status: before.status, revision: before.revision },
++      submission_ack: { status: ack.status, revision: ack.revision },
++      grading_revision: 1, original_responses_preserved: true, mathematical_approval: 'NOT_RUN',
++    }, null, 2))
++  } finally { release?.(); await routed; await runtime.close() }
++})
+diff --git a/tests/e2e/assessmentTestData.ts b/tests/e2e/assessmentTestData.ts
+index 3265bdc..66469f4 100644
+--- a/tests/e2e/assessmentTestData.ts
++++ b/tests/e2e/assessmentTestData.ts
+@@ -1,6 +1,8 @@
+ import { execFileSync } from 'node:child_process'
+ import { resolve } from 'node:path'
++import { expect, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
+ import type { ContentRef } from '../../packages/contracts/generated/types'
++import type { AttemptSnapshot } from '../../packages/contracts/generated/api-types'
+ import { importPracticePackage, type PracticePackage } from './practiceTestData'
+ 
+ export type AssessmentPackage = PracticePackage & { assessment: ContentRef }
+@@ -15,3 +17,20 @@ export function originalAssessmentPackage(prefix: string, profile: PracticePacka
+ 
+ /** Existing explicit role, actual upload/worker/confirm and learner readback workflow. */
+ export const importAssessmentPackage = importPracticePackage
++
++/** A click can finish before the server freezes the submission. Await its exact ACK. */
++export async function submitAssessment(page: Page, attemptId: string): Promise<AttemptSnapshot> {
++  const [response] = await Promise.all([
++    page.waitForResponse(response => response.request().method() === 'POST'
++      && new URL(response.url()).pathname === `/api/v1/attempts/${attemptId}/submit`),
++    (async () => {
++      await page.getByRole('button', { name: '提交本次测试', exact: true }).click()
++      await page.getByRole('button', { name: '确认提交已保存作答', exact: true }).click()
++    })(),
++  ])
++  expect(response.status()).toBe(202)
++  const submitted: AttemptSnapshot = await response.json()
++  expect(submitted.id).toBe(attemptId)
++  expect(submitted.status).toBe('submitted')
++  return submitted
++}
+diff --git a/tests/e2e/grading-recovery.spec.ts b/tests/e2e/grading-recovery.spec.ts
+index cc1e98b..70eb271 100644
+--- a/tests/e2e/grading-recovery.spec.ts
++++ b/tests/e2e/grading-recovery.spec.ts
+@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs'
+ import { resolve } from 'node:path'
+ import { expect, test, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
+ import type { AssessmentGradingResult, AttemptSnapshot } from '../../packages/contracts/generated/api-types'
+-import { originalAssessmentPackage, importAssessmentPackage } from './assessmentTestData'
++import { originalAssessmentPackage, importAssessmentPackage, submitAssessment } from './assessmentTestData'
+ import { RestartRuntime } from './restartRuntime'
+ 
+ const root = resolve(import.meta.dirname, '../..')
+@@ -74,8 +74,7 @@ test('a real failed regrade survives reload and can recover from the last actual
+     expect(created.status()).toBe(201)
+     const attempt: AttemptSnapshot = await created.json()
+     await expect(page.getByText('服务端作答已保存', { exact: true })).toBeVisible()
+-    await page.getByRole('button', { name: '提交本次测试', exact: true }).click()
+-    await page.getByRole('button', { name: '确认提交已保存作答', exact: true }).click()
++    await submitAssessment(page, attempt.id)
+     const original = await result(page, attempt.id, 1)
+     expect(original.items.every(item => item.score === null)).toBe(true)
+     const originalResponses = await (await page.request.get(`/api/v1/attempts/${attempt.id}/responses`)).json()
+diff --git a/tests/integration/test_draft_candidate_catalog.py b/tests/integration/test_draft_candidate_catalog.py
+new file mode 100644
+index 0000000..15c48fd
+--- /dev/null
++++ b/tests/integration/test_draft_candidate_catalog.py
+@@ -0,0 +1,360 @@
++"""Actual producers register immutable identities; lookup never repairs or approves."""
++
++import asyncio
++from contextlib import aclosing
++from dataclasses import replace
++from uuid import UUID
++
++import pytest
++
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import canonical_bytes
++from services.api.app.application.draft_candidate_models import ResolvedDraftCandidate
++from services.api.app.application.draft_candidates import DraftCandidates
++from services.api.app.application.errors import ApiError
++from services.api.app.application.sessions import SessionService
++from services.api.app.dto import RoleRequest
++from services.api.app.infrastructure.draft_candidate_repository import DraftCandidateRepository
++from services.api.app.infrastructure.security import expires_after
++from tests.integration.test_authoring_numeric_provider_history import ProviderHistoryCase, table_hashes
++
++from tests.integration.test_draft_candidate_owners import imported_candidate as original_import_fixture
++
++
++@pytest.fixture
++def imported_candidate(tmp_path):
++    yield from original_import_fixture.__wrapped__(tmp_path)
++
++
++def test_real_import_preview_already_has_exact_catalog_identity(imported_candidate):
++    database, identity, _, _, _, candidate = imported_candidate
++    with database.transaction(immediate=False) as connection:
++        row = connection.execute(
++            'SELECT i.workspace_id,i.owner,i.source_kind,i.entity,r.draft_revision,r.candidate_sha256 '
++            'FROM draft_candidate_identities i JOIN draft_candidate_revisions r USING(draft_id) '
++            'WHERE i.draft_id=?', (candidate.draft_id,),
++        ).fetchone()
++        assert row is not None
++        assert tuple(row) == (identity.workspace_id, 'import', 'import', 'block', 1, candidate.candidate_sha256)
++
++
++@pytest.fixture(params=['single', 'lesson', 'practice_set', 'assessment'])
++def generated_candidate(request, tmp_path):
++    from tests.integration.test_authoring_numeric_service import generated
++    from tests.integration.test_authoring_group_numeric_service import generated_group
++    state = generated.__wrapped__(tmp_path) if request.param == 'single' else generated_group(tmp_path, request.param)
++    return request.param, state
++
++
++def test_real_checked_generation_already_has_exact_catalog_identity(generated_candidate):
++    kind, state = generated_candidate
++    database, identity, _, _, candidate, *_ = state
++    with database.transaction(immediate=False) as connection:
++        row = connection.execute(
++            'SELECT i.workspace_id,i.owner,i.source_kind,i.entity,r.draft_revision,r.candidate_sha256 '
++            'FROM draft_candidate_identities i JOIN draft_candidate_revisions r USING(draft_id) '
++            'WHERE i.draft_id=?', (candidate.draft_id,),
++        ).fetchone()
++        assert row is not None
++        assert tuple(row) == (identity.workspace_id, 'authoring',
++            'authoring_single' if kind == 'single' else 'authoring_group',
++            'block' if kind == 'single' else kind, 1, candidate.candidate_sha256)
++
++
++def test_lookup_revalidates_real_import_without_writes(imported_candidate):
++    database, identity, service, _, original, candidate = imported_candidate
++    before = table_hashes(database)
++    with database.transaction(immediate=False) as connection:
++        connection.execute('PRAGMA query_only=ON')
++        result = DraftCandidates({'import': service}).lookup(
++            connection, identity, candidate.draft_id, candidate.draft_revision)
++    assert result.candidate == candidate and result.source_kind == 'import'
++    assert service.draft(identity, candidate.draft_id) == original
++    assert table_hashes(database) == before
++
++
++def test_lookup_revalidates_each_real_authoring_root_without_writes(generated_candidate):
++    from services.api.app.application.authoring import AuthoringService
++    from services.api.app.application.authoring_group import AuthoringGroupService
++
++    kind, state = generated_candidate
++    database, identity, original, _, candidate, *_ = state
++    source = 'authoring_single' if kind == 'single' else 'authoring_group'
++    fresh_class = AuthoringService if kind == 'single' else AuthoringGroupService
++    fresh = fresh_class(database, provider=original.provider)
++    before = table_hashes(database)
++    with database.transaction(immediate=False) as connection:
++        connection.execute('PRAGMA query_only=ON')
++        result = DraftCandidates({source: fresh}).lookup(connection, identity, candidate.draft_id, 1)
++    assert result.candidate.model_dump() == candidate.model_dump()
++    assert result.source_kind == source
++    assert table_hashes(database) == before
++
++
++@pytest.mark.parametrize(('draft_id', 'revision', 'status', 'code'), [
++    (None, True, 422, 'SCHEMA_INVALID'), (None, 1.0, 422, 'SCHEMA_INVALID'),
++    (None, '1', 422, 'SCHEMA_INVALID'), (None, 0, 422, 'SCHEMA_INVALID'),
++    (None, 2**63, 412, 'DRAFT_REVISION_MISMATCH'), (None, 10**100, 412, 'DRAFT_REVISION_MISMATCH'),
++    (None, 2, 412, 'DRAFT_REVISION_MISMATCH'), ('missing', 1, 404, 'DRAFT_CANDIDATE_UNREGISTERED'),
++    ('missing', 2**63, 404, 'DRAFT_CANDIDATE_UNREGISTERED'),
++    ('', 1, 422, 'SCHEMA_INVALID'),
++])
++def test_lookup_requires_exact_typed_identity(imported_candidate, draft_id, revision, status, code):
++    database, identity, service, _, _, candidate = imported_candidate
++    before = table_hashes(database)
++    with pytest.raises(ApiError) as caught, database.transaction(immediate=False) as connection:
++        connection.execute('PRAGMA query_only=ON')
++        DraftCandidates({'import': service}).lookup(connection, identity,
++            candidate.draft_id if draft_id is None else draft_id, revision)
++    assert (caught.value.status, caught.value.code) == (status, code)
++    assert table_hashes(database) == before
++
++
++@pytest.mark.parametrize('change', ['role', 'revoke', 'expire'])
++def test_lookup_rechecks_current_session_not_captured_author(imported_candidate, change):
++    database, identity, service, _, _, candidate = imported_candidate
++    if change == 'role':
++        SessionService(database).switch_role(identity, RoleRequest(role='learner'), 'leave-author')
++    else:
++        with database.transaction() as connection:
++            column = 'revoked_at' if change == 'revoke' else 'expires_at'
++            connection.execute(f'UPDATE local_sessions SET {column}=? WHERE id=?',
++                               ('2000-01-01T00:00:00Z', identity.id))
++    before = table_hashes(database)
++    with pytest.raises(ApiError) as caught, database.transaction(immediate=False) as connection:
++        DraftCandidates({'import': service}).lookup(connection, identity, candidate.draft_id, 1)
++    assert (caught.value.status, caught.value.code) == (403, 'POLICY_DENIED')
++    assert table_hashes(database) == before
++
++
++@pytest.mark.parametrize('revision', [1, 2**63])
++def test_lookup_cannot_locate_another_workspace_candidate(imported_candidate, revision):
++    database, identity, service, _, _, candidate = imported_candidate
++    other = replace(identity, id='other_author', workspace_id='workspace_other', csrf_token='')
++    with database.transaction() as connection:
++        connection.execute("INSERT INTO workspace(id,title,created_at) VALUES(?, 'other', '2026-01-01T00:00:00Z')",
++                           (other.workspace_id,))
++        connection.execute('INSERT INTO local_sessions(id,workspace_id,token_hash,csrf_hash,role,expires_at) '
++                           "VALUES(?,?,'controlled-other-token','controlled-other-csrf','author',?)",
++                           (other.id, other.workspace_id, expires_after(300)))
++    before = table_hashes(database)
++    with pytest.raises(ApiError) as caught, database.transaction(immediate=False) as connection:
++        DraftCandidates({'import': service}).lookup(connection, other, candidate.draft_id, revision)
++    assert (caught.value.status, caught.value.code) == (404, 'DRAFT_CANDIDATE_UNREGISTERED')
++    assert table_hashes(database) == before
++
++
++def test_valid_legacy_candidate_without_catalog_stays_unregistered_on_lookup(imported_candidate):
++    database, identity, service, _, original, candidate = imported_candidate
++    # Controlled historical fixture: remove only the two catalog facts, retaining
++    # the complete authenticated Import history. Production lookup cannot repair it.
++    with database.transaction() as connection:
++        for table in ('draft_candidate_revisions', 'draft_candidate_identities'):
++            connection.execute(f'DROP TRIGGER {table}_no_delete')
++            connection.execute(f'DELETE FROM {table} WHERE draft_id=?', (candidate.draft_id,))
++    assert service.draft(identity, candidate.draft_id) == original
++    before = table_hashes(database)
++    with pytest.raises(ApiError) as caught, database.transaction(immediate=False) as connection:
++        connection.execute('PRAGMA query_only=ON')
++        DraftCandidates({'import': service}).lookup(connection, identity, candidate.draft_id, 1)
++    assert caught.value.code == 'DRAFT_CANDIDATE_UNREGISTERED'
++    assert table_hashes(database) == before
++
++
++def test_catalog_hash_cannot_substitute_for_real_import_history(imported_candidate):
++    database, identity, service, _, _, candidate = imported_candidate
++    with database.transaction() as connection:
++        connection.execute('DROP TRIGGER draft_candidate_revisions_no_update')
++        connection.execute('UPDATE draft_candidate_revisions SET candidate_sha256=? WHERE draft_id=?',
++                           ('0' * 64, candidate.draft_id))
++    before = table_hashes(database)
++    with pytest.raises(ApiError) as caught, database.transaction(immediate=False) as connection:
++        DraftCandidates({'import': service}).lookup(connection, identity, candidate.draft_id, 1)
++    assert caught.value.status == 409
++    assert table_hashes(database) == before
++
++
++def test_lookup_rechecks_original_checked_provider_artifact(generated_candidate):
++    kind, state = generated_candidate
++    case = ProviderHistoryCase('single' if kind == 'single' else 'group', state)
++    before = case.damage_original_artifact()
++    source = 'authoring_single' if kind == 'single' else 'authoring_group'
++    with pytest.raises(ApiError) as caught, case.database.transaction(immediate=False) as connection:
++        DraftCandidates({source: case.authoring}).lookup(connection, case.identity, case.candidate.draft_id, 1)
++    assert (caught.value.status, caught.value.code) == (503, 'PROVIDER_INTEGRITY_INVALID')
++    assert table_hashes(case.database) == before
++
++
++def test_lookup_does_not_guess_an_available_wrong_owner(imported_candidate):
++    database, identity, service, _, _, candidate = imported_candidate
++    before = table_hashes(database)
++    with pytest.raises(ApiError) as caught, database.transaction(immediate=False) as connection:
++        DraftCandidates({'authoring_single': service}).lookup(connection, identity, candidate.draft_id, 1)
++    assert caught.value.code == 'DRAFT_OWNER_UNAVAILABLE'
++    assert table_hashes(database) == before
++
++
++@pytest.mark.parametrize('mode', ['independent', 'open_book'])
++def test_lookup_checks_live_assessment_policy_before_returning_candidate(imported_candidate, mode):
++    from services.api.app.application.assessment import AssessmentService
++    from services.api.app.assessment_dto import AssessmentAttemptCreate
++    from services.api.app.infrastructure.content_repository import reference
++    from tests.assessment_fixtures import assessment_fixture
++    from tests.integration.test_assessment_attempts import import_fixture
++
++    database, identity, service, _, _, candidate = imported_candidate
++    fixture = assessment_fixture('lookupguard')
++    import_fixture(database, identity, fixture, 'guard-material')
++    attempt = AssessmentService(database).create_attempt(identity, fixture.assessment.id,
++        AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode=mode), 'guard-attempt')
++    assert attempt.status == 'active'
++    before = table_hashes(database)
++    with pytest.raises(ApiError) as caught, database.transaction(immediate=False) as connection:
++        DraftCandidates({'import': service}).lookup(connection, identity, candidate.draft_id, 1)
++    assert caught.value.code in {'ASSESSMENT_ACTIVE', 'ASSESSMENT_ANSWER_PROTECTED', 'POLICY_DENIED'}
++    assert table_hashes(database) == before
++
++
++def test_learner_import_still_registers_without_granting_author_lookup(imported_candidate):
++    from services.api.app.infrastructure.import_worker import ImportWorker
++
++    database, identity, service, _, _, _ = imported_candidate
++    SessionService(database).switch_role(identity, RoleRequest(role='learner'), 'leave-author')
++    learner = replace(identity, role='learner')
++    staged = service.stage(learner, data=b'# Learner source\n\nLearner allowed import.\n',
++                           filename='learner.md', kind='markdown', key='learner-import')
++    worker = ImportWorker(database)
++    try:
++        assert worker.run_once()
++        preview = service.preview(learner, staged.import_id)
++        assert preview.preview_refs
++        with database.transaction(immediate=False) as connection:
++            for draft_id in preview.preview_refs:
++                assert DraftCandidateRepository(connection).lookup(learner.workspace_id, draft_id, 1).owner == 'import'
++        before = table_hashes(database)
++        with pytest.raises(ApiError) as caught, database.transaction(immediate=False) as connection:
++            DraftCandidates({'import': service}).lookup(connection, learner, preview.preview_refs[0], 1)
++        assert caught.value.code == 'POLICY_DENIED'
++        assert table_hashes(database) == before
++    finally:
++        worker.stop()
++
++
++@pytest.mark.parametrize('kind', ['single', 'group'])
++def test_catalog_conflict_rolls_back_original_authoring_finish_without_new_id(tmp_path, monkeypatch, kind):
++    from services.api.app.application import authoring_worker, authoring_group_worker
++    from tests.integration import test_authoring_provider as single
++    from tests.integration import test_authoring_group_provider as group
++    from tests.provider_protocol_fixture import local_provider
++
++    async def run():
++        fixture = single if kind == 'single' else group
++        module = authoring_worker if kind == 'single' else authoring_group_worker
++        async with local_provider(text=canonical_bytes(fixture.payload()).decode()) as server:
++            state = fixture.configured(tmp_path, server.base_url)
++            database, identity, service, worker, _, dispatch = state
++            original, _, grant = fixture.approved(state)
++            lease = worker.claim()
++            assert lease is not None
++            async with aclosing(dispatch.dispatch(identity, original.id, grant.id,
++                                                  lease.dispatch(), asyncio.Event())) as stream:
++                async for _ in stream:
++                    pass
++            assert len(server.requests) == 1
++            prefix = 'authoring_draft_' if kind == 'single' else 'authoring_group_'
++            collision_id = prefix + UUID(int=1).hex
++            # Adversarial catalog claim from another owner; catalog is not itself
++            # authentication. The actual producer must not overwrite or evade it.
++            with database.transaction() as connection:
++                DraftCandidateRepository(connection).register(ResolvedDraftCandidate(
++                    identity.workspace_id, 'import', 'import', dm.DraftCandidate(
++                        draft_id=collision_id, draft_revision=1, entity='block', candidate_sha256='0' * 64)))
++            ids = []
++
++            def next_identifier():
++                value = UUID(int=len(ids) + 1)
++                ids.append(value)
++                return value
++
++            monkeypatch.setattr(module, 'uuid4', next_identifier)
++            before = table_hashes(database)
++            with pytest.raises(ApiError) as caught:
++                await worker.process(lease)
++            assert caught.value.code == 'DRAFT_IDENTITY_CONFLICT'
++            assert ids == [UUID(int=1)]
++            assert table_hashes(database) == before
++            current = service.read(identity, original.id)
++            assert current.summary.status == 'running' and current.summary.candidate is None
++            assert len(server.requests) == 1
++            # This rollback is not a new permanent terminal state. Existing lease
++            # recovery may consume the already checked result, never pay again.
++            with database.transaction() as connection:
++                connection.execute('UPDATE jobs SET lease_until=? WHERE id=?',
++                                   ('2000-01-01T00:00:00Z', original.id))
++            assert await asyncio.to_thread(worker.run_once)
++            recovered = service.read(identity, original.id)
++            assert recovered.summary.status == 'completed'
++            assert recovered.summary.candidate.draft_id != collision_id
++            assert len(server.requests) == 1
++            with database.transaction(immediate=False) as connection:
++                existing = DraftCandidateRepository(connection).lookup(identity.workspace_id, collision_id, 1)
++                actual = DraftCandidates({
++                    'authoring_single' if kind == 'single' else 'authoring_group': service,
++                }).lookup(connection, identity, recovered.summary.candidate.draft_id, 1)
++            assert existing.owner == 'import' and existing.candidate.candidate_sha256 == '0' * 64
++            assert actual.candidate.model_dump() == recovered.summary.candidate.model_dump()
++
++    asyncio.run(run())
++
++
++@pytest.mark.parametrize('cross_workspace', [False, True])
++def test_import_catalog_conflict_rolls_back_entire_preview_batch(imported_candidate, monkeypatch, cross_workspace):
++    from services.api.app.application.import_parsing import parse_import
++    from services.api.app.infrastructure import import_worker as module
++
++    database, identity, service, _, _, _ = imported_candidate
++    staged = service.stage(identity, data=b'# Second source\n\nChanged candidate body.\n',
++                           filename='second.md', kind='markdown', key='collision-import')
++    worker = module.ImportWorker(database)
++    try:
++        lease = worker.claim()
++        assert lease is not None and lease.import_id == staged.import_id
++        data, options = worker._input(lease)
++        parsed = parse_import(data, **options)
++        assert len(parsed.objects) >= 2
++        conflict_id = 'draft_conflicting_second_member'
++        workspace = 'workspace_other' if cross_workspace else identity.workspace_id
++        with database.transaction() as connection:
++            if cross_workspace:
++                connection.execute("INSERT INTO workspace(id,title,created_at) VALUES(?, 'other', '2026-01-01T00:00:00Z')",
++                                   (workspace,))
++            DraftCandidateRepository(connection).register(ResolvedDraftCandidate(
++                workspace, 'authoring', 'authoring_single', dm.DraftCandidate(
++                    draft_id=conflict_id, draft_revision=1, entity='block', candidate_sha256='0' * 64)))
++        allocated = []
++        original_identifier = module.identifier
++
++        def identifier(prefix):
++            if prefix != 'draft':
++                return original_identifier(prefix)
++            value = 'draft_inserted_before_conflict' if not allocated else conflict_id
++            allocated.append(value)
++            return value
++
++        monkeypatch.setattr(module, 'identifier', identifier)
++        before = table_hashes(database)
++        with pytest.raises(ApiError) as caught:
++            worker.complete_preview(lease, parsed)
++        assert caught.value.code == 'DRAFT_IDENTITY_CONFLICT'
++        assert allocated == ['draft_inserted_before_conflict', conflict_id]
++        assert table_hashes(database) == before
++        # Existing run_once records a separate failure transaction after this
++        # rolled-back preview transaction. Preserve that honest failure behavior.
++        worker.fail(lease, caught.value)
++        with database.connect() as connection:
++            assert connection.execute('SELECT status FROM jobs WHERE id=?', (staged.job.id,)).fetchone()[0] == 'failed'
++            assert connection.execute('SELECT COUNT(*) FROM drafts WHERE id IN (?,?)', tuple(allocated)).fetchone()[0] == 0
++            assert connection.execute('SELECT COUNT(*) FROM draft_candidate_identities WHERE draft_id=?',
++                                      (allocated[0],)).fetchone()[0] == 0
++    finally:
++        worker.stop()
+diff --git a/tests/integration/test_draft_candidate_owners.py b/tests/integration/test_draft_candidate_owners.py
+index 0d5a2b3..6e6d0f4 100644
+--- a/tests/integration/test_draft_candidate_owners.py
++++ b/tests/integration/test_draft_candidate_owners.py
+@@ -17,6 +17,7 @@ from services.api.app.application.sessions import SessionService
+ from services.api.app.dto import RoleRequest
+ from services.api.app.infrastructure.config import Settings
+ from services.api.app.infrastructure.database import Database
++from services.api.app.infrastructure.draft_candidate_repository import DraftCandidateRepository
+ from services.api.app.infrastructure.import_worker import ImportWorker
+ from services.api.app.infrastructure.security import consume_bootstrap, issue_bootstrap_code
+ from tests.integration.test_authoring_numeric_provider_history import (
+@@ -45,8 +46,8 @@ def test_admission_and_fresh_retry_preserve_original_payloads_and_do_not_create_
+     before = table_hashes(case.database)
+     result = admit(case)
+     after = table_hashes(case.database)
+-    assert {name for name in before if before[name] != after[name]} == {
+-        'draft_candidate_identities', 'draft_candidate_revisions'}
++    # Actual producers already registered this exact candidate atomically.
++    assert after == before
+     assert result.candidate.model_dump() == case.candidate.model_dump()
+     assert result.workspace_id == case.identity.workspace_id and result.owner == 'authoring'
+     assert result.source_kind == owner_kind(case)
+@@ -64,8 +65,8 @@ def test_admission_and_fresh_retry_preserve_original_payloads_and_do_not_create_
+ @pytest.mark.parametrize('registered', [False, True])
+ def test_existing_catalog_never_masks_damaged_original_provider_history(generated_history, registered):
+     case = generated_history
+-    if registered:
+-        admit(case)
++    if not registered:
++        remove_catalog_fixture(case.database, case.candidate.draft_id)
+     before = case.damage_original_artifact()
+     with pytest.raises(ApiError) as caught:
+         admit(case)
+@@ -143,8 +144,8 @@ def test_question_group_admits_complete_original_group_without_approving_private
+     result = admit(case)
+     after = table_hashes(case.database)
+     assert result.candidate.entity == kind and result.candidate.model_dump() == case.candidate.model_dump()
+-    assert {name for name in before if before[name] != after[name]} == {
+-        'draft_candidate_identities', 'draft_candidate_revisions'}
++    # Actual producers already registered this exact candidate atomically.
++    assert after == before
+     assert [case.authoring.solution(case.identity, case.candidate.draft_id, item.question.member_key)
+             for item in original.private_solution_refs] == private
+     assert table_hashes(case.database) == after
+@@ -203,8 +204,8 @@ def test_import_identity_uses_real_import_preview_and_keeps_existing_read_contra
+         result = DraftCandidates({'import': service}).admit(conn, identity, 'import', candidate)
+     after = table_hashes(database)
+     assert result.owner == result.source_kind == 'import' and result.candidate == candidate
+-    assert {name for name in before if before[name] != after[name]} == {
+-        'draft_candidate_identities', 'draft_candidate_revisions'}
++    # Actual producers already registered this exact candidate atomically.
++    assert after == before
+     assert service.draft(identity, candidate.draft_id) == original
+     with database.transaction() as conn:
+         assert DraftCandidates({'import': ImportService(database)}).admit(conn, identity, 'import', candidate) == result
+@@ -239,8 +240,7 @@ def test_imported_question_identity_does_not_approve_or_publish_its_private_solu
+             result = DraftCandidates({'import': service}).admit(conn, identity, 'import', candidate)
+         after = table_hashes(database)
+         assert result.candidate == candidate
+-        assert {name for name in before if before[name] != after[name]} == {
+-            'draft_candidate_identities', 'draft_candidate_revisions'}
++        assert after == before
+         with database.connect() as conn:
+             for table in ['objects', 'revisions', 'solutions', 'reviews']:
+                 assert conn.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0] == 0
+@@ -275,8 +275,17 @@ def test_import_registration_rechecks_original_preview_and_actual_bytes(imported
+     assert table_hashes(database) == before
+ 
+ 
++def remove_catalog_fixture(database, draft_id):
++    """Represent a legacy unregistered candidate while preserving real owner history."""
++    with database.transaction() as conn:
++        for table in ('draft_candidate_revisions', 'draft_candidate_identities'):
++            conn.execute(f'DROP TRIGGER {table}_no_delete')
++            conn.execute(f'DELETE FROM {table} WHERE draft_id=?', (draft_id,))
++
++
+ def test_caller_rollback_includes_both_identity_tables(imported_candidate):
+     database, identity, service, _, _, candidate = imported_candidate
++    remove_catalog_fixture(database, candidate.draft_id)
+     before = table_hashes(database)
+     with pytest.raises(RuntimeError, match='caller rollback'), database.transaction() as conn:
+         DraftCandidates({'import': service}).admit(conn, identity, 'import', candidate)
+@@ -298,8 +307,17 @@ def test_upgrade_of_real_original_owner_records_backfills_without_rewriting_payl
+         if path.name < '0016_draft_candidate_identities.sql':
+             shutil.copyfile(path, migrations / path.name)
+     generation = single_generation if kind == 'single' else group_generation
++
++    def legacy_producer_registration(repository, value):
++        # This fixture intentionally runs the pre-0016 producer behavior against
++        # v15. Only the newly added registration is absent; actual generation,
++        # checked Provider artifacts and all original owner persistence stay real.
++        assert repository.connection.execute(
++            "SELECT 1 FROM sqlite_master WHERE name='draft_candidate_identities'").fetchone() is None
++
+     with monkeypatch.context() as patch:
+         patch.setattr(generation, 'Settings', lambda **kwargs: Settings(migrations_dir=migrations, **kwargs))
++        patch.setattr(DraftCandidateRepository, 'register', legacy_producer_registration)
+         state = single_fixture.__wrapped__(tmp_path) if kind == 'single' else generated_group(tmp_path, kind)
+     case = ProviderHistoryCase('single' if kind == 'single' else 'group', state)
+     before = table_hashes(case.database)
+diff --git a/tests/integration/test_evidence_independent_review.py b/tests/integration/test_evidence_independent_review.py
+index 7bb90dd..59a1871 100644
+--- a/tests/integration/test_evidence_independent_review.py
++++ b/tests/integration/test_evidence_independent_review.py
+@@ -152,7 +152,8 @@ def test_page_uses_latest_successful_grade_without_old_duplicates_and_all_gets_a
+ 
+ def test_late_legacy_binding_failure_rolls_back_and_does_not_starve_safe_import_or_other_grades(tmp_path, monkeypatch):
+     # Real six-migration submit/score/review records, then the actual seventh
+-    # migration. The fixture disables only the not-yet-installed M3.4 hooks.
++    # migration. The fixture disables only later evidence/catalog hooks while
++    # constructing six-migration storage, then restores them before upgrading.
+     storage, _, _, _, original, _ = legacy_storage(tmp_path, monkeypatch, two=True)
+     database, identity, _, _ = storage
+     with database.transaction() as connection:
+diff --git a/tests/integration/test_import_parser_exit_race.py b/tests/integration/test_import_parser_exit_race.py
+new file mode 100644
+index 0000000..ae939a1
+--- /dev/null
++++ b/tests/integration/test_import_parser_exit_race.py
+@@ -0,0 +1,116 @@
++"""Real pipe/process scheduling at the import HTTP and durable worker boundaries."""
++
++import multiprocessing
++from multiprocessing.connection import Connection
++from multiprocessing.process import BaseProcess
++import threading
++
++from services.api.app.infrastructure.import_worker import _parse_process
++from tests.document_fixtures import pdf_scan_fixture
++from tests.integration.test_document_http import (
++    test_failed_documents_report_safe_failure_and_retain_exact_original_without_formal_content as check_failed_document,
++)
++from tests.integration.test_import_repository import imports as imports  # fixture
++from tests.integration.test_import_repository import sql_count
++
++
++def _wait_then_parse(connection, data, options, expected_parent, release, empty):
++    """Gate scheduling only; the normal branch executes the unchanged real parser."""
++    try:
++        assert release.wait(10), "Parent never released the parser scheduling gate"
++        if not empty:
++            _parse_process(connection, data, options, expected_parent)
++    finally:
++        connection.close()
++
++
++def schedule_exit_after_poll(monkeypatch, *, empty=False, stop=None):
++    """Return an actual false poll after the selected child has naturally exited.
++
++    This is the descheduled-parent interleaving. Neither poll/recv values nor
++    parser responses are invented. An Event guarantees the first false poll;
++    join bounds the test coordination without changing the worker's deadline.
++    The empty branch deliberately models a child exiting without any envelope.
++    """
++    release = multiprocessing.get_context("spawn").Event()
++    original_start, original_poll, original_recv = BaseProcess.start, Connection.poll, Connection.recv
++    trace = {"gated": False, "received": []}
++    selected = []
++
++    def start(process):
++        if getattr(process, "_target", None) is _parse_process:
++            process._target = _wait_then_parse
++            process._args = (*process._args, release, empty)
++            original_start(process)
++            selected.append((process, threading.get_ident()))
++        else:
++            original_start(process)
++
++    def poll(connection, timeout=0.0):
++        ready = original_poll(connection, timeout)
++        if (not trace["gated"] and not ready and timeout == 0.1 and selected
++                and threading.get_ident() == selected[-1][1]):
++            trace["gated"] = True
++            process = selected[-1][0]
++            if stop is not None:
++                stop()
++            release.set()
++            process.join(timeout=5)
++            trace.update(exitcode=process.exitcode, alive=process.is_alive(), ready=original_poll(connection, 0))
++        return ready
++
++    def recv(connection):
++        result = original_recv(connection)
++        if selected and threading.get_ident() == selected[-1][1]:
++            kind, payload = result
++            trace["received"].append((kind, payload.get("code") if isinstance(payload, dict) else None))
++        return result
++
++    monkeypatch.setattr(BaseProcess, "start", start)
++    monkeypatch.setattr(Connection, "poll", poll)
++    monkeypatch.setattr(Connection, "recv", recv)
++    return trace
++
++
++def assert_natural_exit(trace):
++    assert trace["gated"], "The real false-poll/child-exit interleaving was not reached"
++    assert trace["exitcode"] == 0 and trace["alive"] is False
++    assert trace["ready"] is True
++
++
++def test_exited_parser_retains_scan_error_ocr_original_and_restart(tmp_path, monkeypatch):
++    trace = schedule_exit_after_poll(monkeypatch)
++    # Reuse every original HTTP/SQLite/restart assertion, including exact source
++    # bytes, OCR/page warnings, typed failure and zero published content.
++    check_failed_document(tmp_path, "pdf", pdf_scan_fixture, True)
++    assert_natural_exit(trace)
++    assert trace["received"] == [("error", "PDF_NO_EXTRACTABLE_TEXT")]
++
++
++def test_exited_parser_without_envelope_still_fails_without_drafts(imports, monkeypatch):
++    database, service, worker, identity = imports
++    trace = schedule_exit_after_poll(monkeypatch, empty=True)
++    staged = service.stage(identity, data=b"Synthetic EOF source", filename="eof.txt", kind="text", key="eof")
++    assert worker.run_once()
++    snapshot = service.job(identity, staged.job.id)
++    assert snapshot.status == "failed" and snapshot.error.code == "IMPORT_PARSE_FAILED"
++    assert snapshot.result_refs == []
++    assert service.preview(identity, staged.import_id).status == "failed"
++    assert sql_count(database, "drafts") == sql_count(database, "objects") == 0
++    assert_natural_exit(trace)
++    assert trace["received"] == []
++
++
++def test_stop_precedes_receiving_exited_parser_result(imports, monkeypatch):
++    database, service, worker, identity = imports
++    trace = schedule_exit_after_poll(monkeypatch, stop=worker.stop)
++    staged = service.stage(identity, data=pdf_scan_fixture(), filename="scan.pdf", kind="pdf", key="stop")
++    assert worker.run_once()
++    # Stopping leaves the lease recoverable, without publishing or consuming the
++    # now-ready parser envelope as a new terminal decision.
++    snapshot = service.job(identity, staged.job.id)
++    assert snapshot.status == "running" and snapshot.result_refs == []
++    assert service.preview(identity, staged.import_id).status == "parsing"
++    assert sql_count(database, "drafts") == sql_count(database, "objects") == 0
++    assert_natural_exit(trace)
++    assert trace["received"] == []
+diff --git a/tests/integration/test_learning_evidence.py b/tests/integration/test_learning_evidence.py
+index 4bd30dc..062ee83 100644
+--- a/tests/integration/test_learning_evidence.py
++++ b/tests/integration/test_learning_evidence.py
+@@ -23,6 +23,7 @@ from services.api.app.application.practice import PracticeService
+ from services.api.app.infrastructure.config import Settings
+ from services.api.app.infrastructure.content_repository import reference
+ from services.api.app.infrastructure.database import Database
++from services.api.app.infrastructure.draft_candidate_repository import DraftCandidateRepository
+ from services.api.app.infrastructure.import_worker import ImportWorker
+ from services.api.app.infrastructure.security import SessionIdentity, consume_bootstrap, issue_bootstrap_code
+ from services.api.app.main import create_app
+@@ -253,8 +254,9 @@ def test_http_evidence_queries_are_strict_read_only_and_other_active_attempt_blo
+ def legacy_storage(tmp_path, monkeypatch, *, two=False):
+     """Compatibility fixture: real six-migration storage and original grading.
+ 
+-    Only the new M3.4 hooks are disabled while constructing old-style rows; no
+-    grades, signatures or submission JSON are manufactured by this fixture.
++    Only later evidence hooks and candidate registration are disabled while
++    constructing old-style rows; no grades, signatures or submission JSON are
++    manufactured by this fixture. All hooks return before the real upgrade.
+     """
+     import services.api.app.application.evidence as evidence
+     migrations = tmp_path / 'six-migrations'
+@@ -267,7 +269,17 @@ def legacy_storage(tmp_path, monkeypatch, *, two=False):
+     identity = SessionIdentity('session_legacy_fixture', workspace, 'learner', 'unused', '2099-01-01T00:00:00Z')
+     fixture = assessment_fixture('legacyevidence')
+     storage = database, identity, fixture, AssessmentService(database)
++
++    def legacy_producer_registration(repository, value):
++        # Model the six-migration producer, which predates the M6.2 catalog.
++        # Never allow this fixture override to mask a failure on current storage.
++        assert repository.connection.execute('SELECT COUNT(*) FROM schema_migrations').fetchone()[0] == 6
++        assert repository.connection.execute(
++            "SELECT 1 FROM sqlite_master WHERE name='draft_candidate_identities'").fetchone() is None
++        assert value.owner == value.source_kind == 'import'
++
+     with monkeypatch.context() as patch:
++        patch.setattr(DraftCandidateRepository, 'register', legacy_producer_registration)
+         patch.setattr(EvidenceRecovery, 'run_once', lambda self: False)
+         patch.setattr(evidence, 'freeze_submission_prerequisites', lambda *args: None)
+         patch.setattr(evidence, 'checked_submission_basis', lambda *args: None)
+@@ -337,7 +349,16 @@ def test_corrupt_legacy_grade_is_quarantined_without_starving_valid_grade_or_saf
+     assert worker.run_once()
+     assert worker.run_once()
+     assert GradingService(database).result(identity, valid.id).grading_revision == 1
+-    assert ingestion.preview(identity, staged.import_id).status == 'preview_ready'
++    preview = ingestion.preview(identity, staged.import_id)
++    assert preview.status == 'preview_ready'
++    # The legacy-only override ended before migration. The real post-upgrade
++    # producer must already have registered every safe-import candidate.
++    assert preview.preview_refs
++    with database.transaction(immediate=False) as connection:
++        catalog = DraftCandidateRepository(connection)
++        for draft_id in preview.preview_refs:
++            registered = catalog.lookup(identity.workspace_id, draft_id, 1)
++            assert registered.owner == registered.source_kind == 'import'
+     with database.connect() as connection:
+         assert connection.execute('SELECT COUNT(*) FROM learning_evidence_recovery_failures WHERE attempt_id=?', (old.id,)).fetchone()[0] == 2
+         assert connection.execute('SELECT COUNT(*) FROM learning_grade_bindings WHERE attempt_id=?', (old.id,)).fetchone()[0] == 0

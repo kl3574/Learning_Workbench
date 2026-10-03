@@ -1,0 +1,36 @@
+--- 11-role-change-red/apps/web/src/features/reader/versionCompare/useVersionCompare.ts
++++ 12-role-change-green/apps/web/src/features/reader/versionCompare/useVersionCompare.ts
+@@ -30,15 +30,17 @@
+   const permitted = async () => {
+     const session = await port.session()
+     if (!workspace || session.workspace_id !== workspace || session.active_independent_attempt_id !== null) throw new Error('当前工作区或测试策略不允许读取比较内容。')
++    return JSON.stringify([session.workspace_id, session.role, session.active_independent_attempt_id, session.active_open_book_attempt_id])
+   }
+   const history = async (more = false) => {
+     if (!workspace || more && (!state.cursor || state.items.length >= 200)) return
+     const valid = begin(), cursor = more ? state.cursor : null
+     try {
+-      await permitted(); if (!valid()) return
++      const permission = await permitted(); if (!valid()) return
+       const page = await port.history(id, cursor)
+       if (!valid()) return
+-      await permitted(); if (!valid()) return
++      if (await permitted() !== permission) throw new Error('读取期间权限发生变化，请重新读取准确修订。')
++      if (!valid()) return
+       if (more && (page.next_cursor === cursor || page.items.some(item => item.ref.revision >= state.items.at(-1)!.ref.revision))) throw new Error('历史分页重复或冲突，请重新读取历史列表。')
+       patch({ items: more ? [...state.items, ...page.items] : page.items, cursor: page.next_cursor })
+     } catch (error) { if (valid()) patch({ error: (error as Error).message, result: null }) }
+@@ -54,10 +56,11 @@
+     if (!state.left || !state.right || state.left.sha256 === state.right.sha256) return
+     const left = state.left, right = state.right, valid = begin()
+     try {
+-      await permitted(); if (!valid()) return
++      const permission = await permitted(); if (!valid()) return
+       const pair = await Promise.all([port.block(left), port.block(right)])
+       if (!valid()) return
+-      await permitted(); if (!valid()) return
++      if (await permitted() !== permission) throw new Error('读取期间权限发生变化，请重新读取准确修订。')
++      if (!valid()) return
+       patch({ result: pair })
+     } catch (error) { if (valid()) patch({ error: (error as Error).message, result: null }) }
+     finally { if (valid()) patch({ busy: false }) }

@@ -1,0 +1,50 @@
+diff --git a/docs/adr/0023-review-history-storage.md b/docs/adr/0023-review-history-storage.md
+index d3e68f3..b809f67 100644
+--- a/docs/adr/0023-review-history-storage.md
++++ b/docs/adr/0023-review-history-storage.md
+@@ -10,7 +10,7 @@ Migration 0017 adds four empty Quality-owned tables. It does not change 0001, 00
+ 
+ `review_artifact_bindings` preserves original attachment order and binds an actual artifact's ID, workspace and blob hash to an actual review revision. Its owner label is a closed dispatch tag, not an authenticated ownership claim. Future Import/Quality ports must check the real profile, manifest, bytes, current permissions and original owner history. Numeric ledgers remain with their existing owners; they are not cast into Import artifacts. All four new tables reject UPDATE, DELETE and REPLACE during normal operation. The artifact guard covers both ordinal and artifact-ID uniqueness even with SQLite recursive triggers disabled.
+ 
+-`review_commands` retains the exact workspace/actor/route/key and original request/ACK JSON and hashes. Its command kind separates revision domains: create binds the candidate basis and initial Job revision, decision binds adjacent retained Review revisions, and cancel binds actual Jobs event sequence numbers for its basis/result. Object-specific routes include their original IDs. Creation requires no nonexistent ReviewReceipt; cancellation before a machine report also remains representable. These relational checks do not validate ACK shape, request equality, canonical JSON/hash authenticity, event semantics or current actor permission. Checked owner/Jobs ports must do that before replay. A same-key operation is never overwritten with a new ACK.
++`review_commands` retains the exact workspace/actor/route/key and original request/ACK JSON and hashes. Its command kind separates revision domains: create binds the candidate basis and initial Job revision, decision binds adjacent retained Review revisions, and cancel binds actual Jobs event sequence numbers for its basis/result. Generated domain columns and composite foreign keys keep those revision references valid after insertion, including against later event deletion/rekeying. Object-specific routes include their original IDs. Creation requires no nonexistent ReviewReceipt; cancellation before a machine report also remains representable. These relational checks do not validate ACK shape, request equality, canonical JSON/hash authenticity, event semantics or current actor permission. Checked owner/Jobs ports must do that before replay. A same-key operation is never overwritten with a new ACK.
+ 
+ Historical actor IDs are opaque identities, not session tokens and not foreign keys conferring current access. `reviews.reviewer_session_id=NULL` remains legal, including the existing backup script's isolated-copy cleanup; original receipt and immutable history bytes stay unchanged. Removing replay-only command material during full export requires a separately reviewed owner backup port and explicit manifest exclusions. This migration does not claim M7 export/restore completeness. Append-only guards protect normal operations and do not remove the documented future maintenance/purge workflow.
+ 
+diff --git a/migrations/0017_review_history.sql b/migrations/0017_review_history.sql
+index 898b279..f0a09dd 100644
+--- a/migrations/0017_review_history.sql
++++ b/migrations/0017_review_history.sql
+@@ -91,9 +91,21 @@ CREATE TABLE review_commands(
+  ack_sha256 TEXT NOT NULL CHECK(length(ack_sha256)=64 AND ack_sha256 NOT GLOB '*[^a-f0-9]*'),
+  basis_revision INTEGER NOT NULL CHECK(typeof(basis_revision)='integer' AND basis_revision>=1),
+  resulting_revision INTEGER NOT NULL CHECK(typeof(resulting_revision)='integer' AND resulting_revision>=1),
++ job_basis_revision INTEGER GENERATED ALWAYS AS
++  (CASE WHEN command_kind='cancel' THEN basis_revision END) VIRTUAL,
++ job_resulting_revision INTEGER GENERATED ALWAYS AS
++  (CASE WHEN command_kind IN ('create','cancel') THEN resulting_revision END) VIRTUAL,
++ review_basis_revision INTEGER GENERATED ALWAYS AS
++  (CASE WHEN command_kind='decision' THEN basis_revision END) VIRTUAL,
++ review_resulting_revision INTEGER GENERATED ALWAYS AS
++  (CASE WHEN command_kind='decision' THEN resulting_revision END) VIRTUAL,
+  recorded_at TEXT NOT NULL,
+  PRIMARY KEY(workspace_id,actor_id,route,command_key),
+  FOREIGN KEY(review_id,workspace_id) REFERENCES review_jobs(review_id,workspace_id),
++ FOREIGN KEY(review_id,job_basis_revision) REFERENCES job_events(job_id,seq),
++ FOREIGN KEY(review_id,job_resulting_revision) REFERENCES job_events(job_id,seq),
++ FOREIGN KEY(review_id,review_basis_revision) REFERENCES review_revisions(review_id,revision),
++ FOREIGN KEY(review_id,review_resulting_revision) REFERENCES review_revisions(review_id,revision),
+  CHECK((command_kind='create' AND resulting_revision=1)
+     OR (command_kind='decision' AND resulting_revision=basis_revision+1)
+     OR (command_kind='cancel' AND resulting_revision IN (basis_revision,basis_revision+1)))
+@@ -110,9 +122,7 @@ WHEN NOT EXISTS(
+        AND EXISTS(SELECT 1 FROM review_revisions r WHERE r.review_id=j.review_id
+         AND r.revision=NEW.resulting_revision AND r.previous_revision=NEW.basis_revision
+         AND r.record_kind='human_decision'))
+-   OR (NEW.command_kind='cancel' AND NEW.route='POST /jobs/'||j.review_id||'/cancel'
+-       AND EXISTS(SELECT 1 FROM job_events e WHERE e.job_id=j.review_id AND e.seq=NEW.basis_revision)
+-       AND EXISTS(SELECT 1 FROM job_events e WHERE e.job_id=j.review_id AND e.seq=NEW.resulting_revision)))
++   OR (NEW.command_kind='cancel' AND NEW.route='POST /jobs/'||j.review_id||'/cancel'))
+ )
+ BEGIN SELECT RAISE(ABORT,'review command binding mismatch'); END;
+ 

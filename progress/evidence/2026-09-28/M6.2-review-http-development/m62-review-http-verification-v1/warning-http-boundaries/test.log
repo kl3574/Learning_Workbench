@@ -1,0 +1,233 @@
+.........................FFF                                             [100%]
+=================================== FAILURES ===================================
+__ test_real_active_assessment_policy_blocks_review_subject_http[independent] __
+
+prepared_review_http = <test_review_http.ReviewHttpCase object at 0x72d356c21910>
+mode = 'independent'
+
+    @pytest.mark.parametrize('mode', ['independent', 'assisted', 'open_book'])
+    def test_real_active_assessment_policy_blocks_review_subject_http(prepared_review_http, mode):
+        from services.api.app.application.assessment import AssessmentService
+        from services.api.app.assessment_dto import AssessmentAttemptCreate
+        from services.api.app.infrastructure.content_repository import reference
+        from tests.assessment_fixtures import assessment_fixture
+        from tests.integration.test_assessment_attempts import import_fixture
+        case = prepared_review_http
+        path, body, read_path = review_create(case)
+        assert case.app.state.review_worker.run_once()
+        receipt = case.client.get(read_path).json()
+        fixture = assessment_fixture('reviewhttp')
+        import_fixture(case.database, case.identity, fixture, 'assessment-material')
+        AssessmentService(case.database).create_attempt(case.identity, fixture.assessment.id,
+            AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode=mode), 'attempt')
+        before = table_hashes(case.database)
+        results = [case.client.get(read_path), case.client.get(receipt['evidence_paths'][0]),
+                   case.client.post(path, json=body, headers=command(case.headers, 'create')),
+                   case.client.post(read_path + '/decision', json=rejected_decision(case), headers=command(case.headers, 'decision'))]
+>       assert [item.status_code for item in results] == [403] * 4
+E       assert [409, 409, 409, 409] == [403, 403, 403, 403]
+E         
+E         At index 0 diff: 409 != 403
+E         
+E         Full diff:
+E           [
+E         -     403,
+E         ?       ^
+E         +     409,
+E         ?       ^
+E         -     403,
+E         ?       ^
+E         +     409,
+E         ?       ^
+E         -     403,
+E         ?       ^
+E         +     409,
+E         ?       ^
+E         -     403,
+E         ?       ^
+E         +     409,
+E         ?       ^
+E           ]
+
+tests/integration/test_review_http.py:209: AssertionError
+___ test_real_active_assessment_policy_blocks_review_subject_http[assisted] ____
+
+prepared_review_http = <test_review_http.ReviewHttpCase object at 0x72d356b30a40>
+mode = 'assisted'
+
+    @pytest.mark.parametrize('mode', ['independent', 'assisted', 'open_book'])
+    def test_real_active_assessment_policy_blocks_review_subject_http(prepared_review_http, mode):
+        from services.api.app.application.assessment import AssessmentService
+        from services.api.app.assessment_dto import AssessmentAttemptCreate
+        from services.api.app.infrastructure.content_repository import reference
+        from tests.assessment_fixtures import assessment_fixture
+        from tests.integration.test_assessment_attempts import import_fixture
+        case = prepared_review_http
+        path, body, read_path = review_create(case)
+        assert case.app.state.review_worker.run_once()
+        receipt = case.client.get(read_path).json()
+        fixture = assessment_fixture('reviewhttp')
+        import_fixture(case.database, case.identity, fixture, 'assessment-material')
+        AssessmentService(case.database).create_attempt(case.identity, fixture.assessment.id,
+            AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode=mode), 'attempt')
+        before = table_hashes(case.database)
+        results = [case.client.get(read_path), case.client.get(receipt['evidence_paths'][0]),
+                   case.client.post(path, json=body, headers=command(case.headers, 'create')),
+                   case.client.post(read_path + '/decision', json=rejected_decision(case), headers=command(case.headers, 'decision'))]
+>       assert [item.status_code for item in results] == [403] * 4
+E       assert [409, 409, 409, 409] == [403, 403, 403, 403]
+E         
+E         At index 0 diff: 409 != 403
+E         
+E         Full diff:
+E           [
+E         -     403,
+E         ?       ^
+E         +     409,
+E         ?       ^
+E         -     403,
+E         ?       ^
+E         +     409,
+E         ?       ^
+E         -     403,
+E         ?       ^
+E         +     409,
+E         ?       ^
+E         -     403,
+E         ?       ^
+E         +     409,
+E         ?       ^
+E           ]
+
+tests/integration/test_review_http.py:209: AssertionError
+___ test_real_active_assessment_policy_blocks_review_subject_http[open_book] ___
+
+prepared_review_http = <test_review_http.ReviewHttpCase object at 0x72d358081d90>
+mode = 'open_book'
+
+    @pytest.mark.parametrize('mode', ['independent', 'assisted', 'open_book'])
+    def test_real_active_assessment_policy_blocks_review_subject_http(prepared_review_http, mode):
+        from services.api.app.application.assessment import AssessmentService
+        from services.api.app.assessment_dto import AssessmentAttemptCreate
+        from services.api.app.infrastructure.content_repository import reference
+        from tests.assessment_fixtures import assessment_fixture
+        from tests.integration.test_assessment_attempts import import_fixture
+        case = prepared_review_http
+        path, body, read_path = review_create(case)
+        assert case.app.state.review_worker.run_once()
+        receipt = case.client.get(read_path).json()
+        fixture = assessment_fixture('reviewhttp')
+        import_fixture(case.database, case.identity, fixture, 'assessment-material')
+        AssessmentService(case.database).create_attempt(case.identity, fixture.assessment.id,
+            AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode=mode), 'attempt')
+        before = table_hashes(case.database)
+        results = [case.client.get(read_path), case.client.get(receipt['evidence_paths'][0]),
+                   case.client.post(path, json=body, headers=command(case.headers, 'create')),
+                   case.client.post(read_path + '/decision', json=rejected_decision(case), headers=command(case.headers, 'decision'))]
+>       assert [item.status_code for item in results] == [403] * 4
+E       assert [409, 409, 409, 409] == [403, 403, 403, 403]
+E         
+E         At index 0 diff: 409 != 403
+E         
+E         Full diff:
+E           [
+E         -     403,
+E         ?       ^
+E         +     409,
+E         ?       ^
+E         -     403,
+E         ?       ^
+E         +     409,
+E         ?       ^
+E         -     403,
+E         ?       ^
+E         +     409,
+E         ?       ^
+E         -     403,
+E         ?       ^
+E         +     409,
+E         ?       ^
+E           ]
+
+tests/integration/test_review_http.py:209: AssertionError
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_review_http.py::test_real_active_assessment_policy_blocks_review_subject_http[independent] - assert [409, 409, 409, 409] == [403, 403, 403, 403]
+  
+  At index 0 diff: 409 != 403
+  
+  Full diff:
+    [
+  -     403,
+  ?       ^
+  +     409,
+  ?       ^
+  -     403,
+  ?       ^
+  +     409,
+  ?       ^
+  -     403,
+  ?       ^
+  +     409,
+  ?       ^
+  -     403,
+  ?       ^
+  +     409,
+  ?       ^
+    ]
+FAILED tests/integration/test_review_http.py::test_real_active_assessment_policy_blocks_review_subject_http[assisted] - assert [409, 409, 409, 409] == [403, 403, 403, 403]
+  
+  At index 0 diff: 409 != 403
+  
+  Full diff:
+    [
+  -     403,
+  ?       ^
+  +     409,
+  ?       ^
+  -     403,
+  ?       ^
+  +     409,
+  ?       ^
+  -     403,
+  ?       ^
+  +     409,
+  ?       ^
+  -     403,
+  ?       ^
+  +     409,
+  ?       ^
+    ]
+FAILED tests/integration/test_review_http.py::test_real_active_assessment_policy_blocks_review_subject_http[open_book] - assert [409, 409, 409, 409] == [403, 403, 403, 403]
+  
+  At index 0 diff: 409 != 403
+  
+  Full diff:
+    [
+  -     403,
+  ?       ^
+  +     409,
+  ?       ^
+  -     403,
+  ?       ^
+  +     409,
+  ?       ^
+  -     403,
+  ?       ^
+  +     409,
+  ?       ^
+  -     403,
+  ?       ^
+  +     409,
+  ?       ^
+    ]
+3 failed, 25 passed, 2 warnings in 24.35s

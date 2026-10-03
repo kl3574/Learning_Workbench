@@ -1,0 +1,40 @@
+import 'fake-indexeddb/auto'
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
+import { afterEach, expect, test, vi } from 'vitest'
+import { reviewSession } from '../draftReview/reviewFixtures'
+import { publicationDraft, publicationReceipt, publicationRef } from './publicationFixtures'
+import { publicationCommandStore, readPublicationCommand } from './publicationCommands'
+import type { PublicationPort } from './publicationClient'
+import { usePublication } from './usePublication'
+
+afterEach(async () => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); await publicationCommandStore.close() })
+function fixture() {
+  const workspace = `workspace_${crypto.randomUUID()}`
+  const port: PublicationPort = { session: vi.fn(async () => reviewSession(workspace)), draft: vi.fn(async () => structuredClone(publicationDraft)), review: vi.fn(async () => structuredClone(publicationReceipt)), publish: vi.fn(async () => publicationRef), current: vi.fn(async () => ({ ...publicationRef, revision: 2, sha256: 'b'.repeat(64) })) }
+  return { workspace, port }
+}
+test('lost publication ACK retains the committed original body/key; explicit replay and fresh current remain distinct', async () => {
+  const { workspace, port } = fixture()
+  vi.mocked(port.publish).mockImplementationOnce(async (_id, body, key) => {
+    const durable = readPublicationCommand((await publicationCommandStore.load(workspace))[key], workspace)
+    expect(durable.body).toEqual(body); expect(durable.ack).toBeNull()
+    throw new Error('Synthetic lost response after server commit')
+  })
+  const hook = renderHook(() => usePublication(workspace, false, 'selection', port))
+  await waitFor(() => expect(hook.result.current.ready).toBe(true))
+  await act(() => hook.result.current.prepare(publicationDraft, publicationReceipt))
+  expect(port.draft).toHaveBeenCalledTimes(1); expect(port.review).toHaveBeenCalledTimes(1)
+  await act(() => hook.result.current.publish([0, 1]))
+  const original = hook.result.current.commands[0]
+  expect(original.ack).toBeNull(); expect(port.current).not.toHaveBeenCalled()
+  await act(() => hook.result.current.prepare(publicationDraft, publicationReceipt))
+  await act(() => hook.result.current.publish([0, 1]))
+  expect(port.publish).toHaveBeenCalledTimes(1)
+  await act(() => hook.result.current.execute(original))
+  expect(vi.mocked(port.publish).mock.calls[1]).toEqual(vi.mocked(port.publish).mock.calls[0])
+  const confirmed = hook.result.current.commands[0]
+  expect(confirmed.ack).toEqual(publicationRef); expect(hook.result.current.currentRead).toBeNull()
+  await act(() => hook.result.current.readCurrent(confirmed))
+  expect(hook.result.current.currentRead?.ref.revision).toBe(2)
+  expect(hook.result.current.commands[0].ack?.revision).toBe(1)
+})

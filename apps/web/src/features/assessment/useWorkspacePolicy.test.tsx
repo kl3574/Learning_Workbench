@@ -8,7 +8,7 @@ vi.mock('../../api/client', () => ({
   request: api.request,
   subscribeSessionAccess: (listener: () => void) => { api.listeners.add(listener); return () => { api.listeners.delete(listener) } },
 }))
-const session = (workspace = 'workspace_policy', independentId: string | null = null): SessionResponse => ({ workspace_id: workspace, role: 'learner', csrf_token: 'synthetic-policy-test', active_independent_attempt_id: independentId, active_open_book_attempt_id: null })
+const session = (workspace = 'workspace_policy', independentId: string | null = null): SessionResponse => ({ workspace_id: workspace, actor_session_id: 'session_fixture_useWorkspacePolicy_test', role: 'learner', csrf_token: 'synthetic-policy-test', active_independent_attempt_id: independentId, active_open_book_attempt_id: null })
 let replies: { resolve: (value: SessionResponse) => void; reject: (reason: Error) => void }[]
 beforeEach(() => {
   vi.useFakeTimers(); replies = []; api.request.mockReset()

@@ -1,4 +1,4 @@
-"""Jobs-owned lifecycle for two Authoring consumers, with safe projections."""
+"""Jobs-owned checked lifecycle with explicitly isolated consumer adapters."""
 from dataclasses import dataclass
 import sqlite3
 from uuid import uuid4
@@ -42,13 +42,71 @@ class AuthoringLease:
         return DispatchLease(owner_id=self.owner, job_revision=self.revision, expires_at=self.expires_at)
 
 
+@dataclass(frozen=True, repr=False)
+class AuthoringJobEvent:
+    seq: int
+    type: str
+    payload_json: str
+    occurred_at: str
+
+
 class AuthoringJobRepository:
+    kinds = frozenset(KINDS)
+    transitions = {'awaiting_approval': {'queued', 'cancelled'}, 'queued': {'running', 'cancelled'},
+                   'running': {'running', 'awaiting_approval', *TERMINAL}}
+
+    @staticmethod
+    def initial_status(kind: str) -> str:
+        return 'awaiting_approval' if kind == 'authoring' else 'queued'
+
     def __init__(self, connection: sqlite3.Connection, workspace_id: str):
         self.conn, self.workspace_id = connection, workspace_id
 
+    def claimable_numeric(self, version: str, cursor: tuple[str, str] | None,
+                          limit: int = 32) -> list[sqlite3.Row]:
+        """Bounded scheduling hints; the numeric owner must verify before claim.
+
+        This port reads only explicitly registered numeric versions. A hint is
+        not an execution permission or a substitute for full owner history.
+        """
+        if version not in {'authoring-numeric-job-v1', 'authoring-group-numeric-job-v1', 'restore-numeric-job-v1'} or not 1 <= limit <= 32:
+            raise integrity()
+        base = ("SELECT created_at,id FROM jobs WHERE workspace_id=? AND kind='authoring_numeric_check' "
+                "AND json_extract(input_json,'$.version')=? AND (status='queued' OR (status='running' AND lease_until<=?))")
+        params = (self.workspace_id, version, utc_now())
+        if cursor is None:
+            return self.conn.execute(base + ' ORDER BY created_at,id LIMIT ?', (*params, limit)).fetchall()
+        rows = self.conn.execute(base + ' AND (created_at,id)>(?,?) ORDER BY created_at,id LIMIT ?',
+                                 (*params, *cursor, limit)).fetchall()
+        if len(rows) < limit:
+            rows += self.conn.execute(base + ' AND (created_at,id)<=(?,?) ORDER BY created_at,id LIMIT ?',
+                                      (*params, *cursor, limit - len(rows))).fetchall()
+        return rows
+
+    def numeric_members(self, version: str, draft: str) -> set[str]:
+        """Jobs-owned membership fact, never a subject permission grant."""
+        return {row[0] for row in self.conn.execute(
+            "SELECT id FROM jobs WHERE workspace_id=? AND kind='authoring_numeric_check' "
+            "AND json_extract(input_json,'$.version')=? AND json_extract(input_json,'$.candidate.draft_id')=?",
+            (self.workspace_id, version, draft))}
+
+    def register_restore_numeric(self, identifier, actor, value):
+        raw = canonical_bytes({'version': 'restore-numeric-membership-v1', 'input': value.model_dump(mode='json')}).decode()
+        self.conn.execute('INSERT INTO authoring_records(job_id,workspace_id,actor_id,record_json,record_sha256) VALUES(?,?,?,?,?)',
+                          (identifier, self.workspace_id, actor, raw, sha256_bytes(raw.encode())))
+
+    def verify_restore_numeric_membership(self, identifier, actor, value):
+        row = self.conn.execute('SELECT workspace_id,actor_id,record_json,record_sha256 FROM authoring_records WHERE job_id=?', (identifier,)).fetchone()
+        raw = canonical_bytes({'version': 'restore-numeric-membership-v1', 'input': value.model_dump(mode='json')}).decode()
+        if row is None or tuple(row) != (self.workspace_id, actor, raw, sha256_bytes(raw.encode())):
+            raise integrity()
+
     def member_ids(self) -> set[str]:
-        return {row[0] for row in self.conn.execute("SELECT id FROM jobs WHERE workspace_id=? AND kind IN ('authoring','authoring_numeric_check')",
-                                                   (self.workspace_id,))}
+        kinds = sorted(self.kinds)
+        placeholders = ','.join('?' for _ in kinds)
+        return {row[0] for row in self.conn.execute(
+            f'SELECT id FROM jobs WHERE workspace_id=? AND kind IN ({placeholders})',
+            (self.workspace_id, *kinds))}
 
     def input_version(self, identifier: str) -> str:
         """Route only an existing, hash/event-checked Job owned by this workspace."""
@@ -56,7 +114,7 @@ class AuthoringJobRepository:
         value = checked(row['input_json'], row['input_sha256'])
         version = value.get('version')
         allowed = ({'authoring-job-v1', 'authoring-group-job-v1'} if row['kind'] == 'authoring'
-                   else {'authoring-numeric-job-v1', 'authoring-group-numeric-job-v1'})
+                   else {'authoring-numeric-job-v1', 'authoring-group-numeric-job-v1', 'restore-numeric-job-v1'})
         if not isinstance(version, str) or version not in allowed:
             raise integrity()
         return version
@@ -64,7 +122,7 @@ class AuthoringJobRepository:
     def load(self, identifier: str) -> sqlite3.Row:
         row = self.conn.execute('SELECT * FROM jobs WHERE id=? AND workspace_id=?',
                                 (identifier, self.workspace_id)).fetchone()
-        if row is None or row['kind'] not in KINDS:
+        if row is None or row['kind'] not in self.kinds:
             raise ApiError(404, 'JOB_MISSING', '任务不存在或不可访问。')
         try:
             checked(row['input_json'], row['input_sha256'])
@@ -75,8 +133,6 @@ class AuthoringJobRepository:
             previous = None
             previous_time = ''
             cancel = False
-            allowed = {'awaiting_approval': {'queued', 'cancelled'}, 'queued': {'running', 'cancelled'},
-                       'running': {'running', 'awaiting_approval', *TERMINAL}}
             for seq, event in enumerate(events, 1):
                 payload = strict_json(event['payload_json'])
                 if (set(payload) != {'revision', 'status', 'cancel_requested', 'kind', 'input_sha256', 'result_sha256'}
@@ -85,9 +141,9 @@ class AuthoringJobRepository:
                         or payload['kind'] != row['kind'] or payload['input_sha256'] != row['input_sha256']
                         or type(payload['cancel_requested']) is not bool or cancel and not payload['cancel_requested']
                         or payload['status'] != event['type'] or previous in TERMINAL
-                        or previous is not None and event['type'] not in allowed[previous]):
+                        or previous is not None and event['type'] not in self.transitions[previous]):
                     raise integrity()
-                if seq == 1 and event['type'] != ('awaiting_approval' if row['kind'] == 'authoring' else 'queued'):
+                if seq == 1 and event['type'] != self.initial_status(row['kind']):
                     raise integrity()
                 TypeAdapter(dm.UTC).validate_python(event['occurred_at'])
                 if event['occurred_at'] < previous_time:
@@ -122,10 +178,10 @@ class AuthoringJobRepository:
                           (row['id'], row['revision'], row['status'], canonical_bytes(payload).decode(), row['updated_at']))
 
     def create(self, identifier: str, kind: str, value: object) -> None:
-        if kind not in KINDS:
+        if kind not in self.kinds:
             raise integrity()
         raw, now = canonical_bytes(value).decode(), utc_now()
-        status = 'awaiting_approval' if kind == 'authoring' else 'queued'
+        status = self.initial_status(kind)
         self.conn.execute('INSERT INTO jobs(id,workspace_id,kind,status,revision,input_sha256,input_json,created_at,updated_at) VALUES(?,?,?,?,1,?,?,?,?)',
                           (identifier, self.workspace_id, kind, status, sha256_bytes(raw.encode()), raw, now, now))
         self._event(self.conn.execute('SELECT * FROM jobs WHERE id=?', (identifier,)).fetchone())
@@ -139,6 +195,15 @@ class AuthoringJobRepository:
         return JobSnapshot(id=identifier, workspace_id=self.workspace_id, kind=row['kind'], status=event['type'],
             revision=revision, created_at=row['created_at'], updated_at=event['occurred_at'],
             progress=JobProgress(completed=0, total=None, label=event['type']), result_refs=[], warnings=[], error=None)
+
+    def event_prefix(self, identifier: str, revision: int) -> tuple[AuthoringJobEvent, ...]:
+        """Return exact owned events after checking complete history in this transaction."""
+        if not self.conn.in_transaction:
+            raise ApiError(409, 'TRANSACTION_REQUIRED', '任务历史需要当前事务核验。')
+        self.snapshot(identifier, revision)
+        rows = self.conn.execute('SELECT * FROM job_events WHERE job_id=? AND seq<=? ORDER BY seq',
+                                 (identifier, revision)).fetchall()
+        return tuple(AuthoringJobEvent(row['seq'], row['type'], row['payload_json'], row['occurred_at']) for row in rows)
 
     def transition(self, row: sqlite3.Row, status: str, *, result: dict | None = None,
                    cancel: bool | None = None, owner: str | None = None, until: str | None = None) -> None:

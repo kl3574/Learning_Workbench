@@ -1,0 +1,40 @@
+
+Running 1 test using 1 worker
+
+(node:2837696) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/e2e/dialog-pointer.spec.ts:6:1 › native dialog retains content gestures across layout changes and preserves explicit close guards (15.6s)
+
+
+  1) tests/e2e/dialog-pointer.spec.ts:6:1 › native dialog retains content gestures across layout changes and preserves explicit close guards › unsaved guard: backdrop 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('dialog', { name: '保留创作原命令', exact: true })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('dialog', { name: '保留创作原命令', exact: true }) with timeout 5000ms
+      - waiting for getByRole('dialog', { name: '保留创作原命令', exact: true })
+
+
+      52 |         else if (action === 'Escape') await page.keyboard.press('Escape')
+      53 |         else await dialog.getByRole('button', { name: '关闭创作', exact: true }).click()
+    > 54 |         try { await expect(guard).toBeVisible() }
+         |                                   ^
+      55 |         finally { writeFileSync(info.outputPath('guard-events.json'), JSON.stringify(await page.evaluate(() => (window as unknown as { guardEvents: unknown[] }).guardEvents), null, 2)) }
+      56 |         await guard.getByRole('button', { name: '返回创作', exact: true }).click()
+      57 |         await expect(panel.getByRole('textbox', { name: '决定理由', exact: true })).toHaveValue('Synthetic unsaved gesture guard')
+        at <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-dialog-pointer-boundary-oct03/tests/e2e/dialog-pointer.spec.ts:54:35
+        at <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-dialog-pointer-boundary-oct03/tests/e2e/dialog-pointer.spec.ts:50:7
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-dialog-pointer-boundary-evidence-oct03/native-guard-trace/artifacts/dialog-pointer-native-dial-fcfa9-erves-explicit-close-guards/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m62-dialog-pointer-boundary-evidence-oct03/native-guard-trace/artifacts/dialog-pointer-native-dial-fcfa9-erves-explicit-close-guards/error-context.md
+
+  1 failed
+    tests/e2e/dialog-pointer.spec.ts:6:1 › native dialog retains content gestures across layout changes and preserves explicit close guards 

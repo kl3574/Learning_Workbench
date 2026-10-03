@@ -1,0 +1,239 @@
+"""Actual SQLite edit boundaries; every identity and human decision is synthetic."""
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
+from threading import Barrier
+import warnings
+
+import pytest
+from pydantic import ValidationError
+from packages.contracts.canonical import sha256_bytes
+from services.api.app.application.content import ContentService
+from services.api.app.application.draft_edits import DraftEditService
+from services.api.app.application.errors import ApiError
+from services.api.app.draft_dto import DraftCreateWrite, DraftPatch, DraftPatchWrite
+from services.api.app.infrastructure.database import Database
+from tests.integration.test_draft_edit_migration import previous as previous
+from tests.integration.test_authoring_numeric_provider_history import table_hashes
+
+
+class Case(tuple):
+    def __repr__(self):
+        return 'SyntheticDraftEditCase()'
+
+
+@pytest.fixture
+def case(previous):
+    _, settings, identity, _, _, _, base = previous
+    database = Database(settings)
+    database.initialize()
+    service = DraftEditService(database)
+    body = DraftCreateWrite(kind='block', base_ref=base, title='Synthetic draft')
+    created = service.create(identity, body, 'create')
+    return Case((database, identity, base, service, body, created))
+
+
+def patch(revision=1, text='Changed synthetic text.\n'):
+    return DraftPatchWrite(expected_revision=revision, patches=[DraftPatch(field='body_markdown', value=text)])
+
+
+@pytest.mark.parametrize('field', ['id', 'revision', 'base_ref', 'base_hash', 'body_path', 'kind', 'candidate_sha256',
+                                  'state', 'reviewer', 'mathematical', 'citations', 'depends_on', 'unknown'])
+def test_non_whitelisted_fields_have_no_partial_side_effects(case, field):
+    database, identity, _, service, _, created = case
+    before = table_hashes(database)
+    with pytest.raises(ApiError):
+        service.patch(identity, created.draft_id, DraftPatchWrite(expected_revision=1, patches=[
+            DraftPatch(field='title', value='Must never commit'), DraftPatch(field=field, value='invalid')]), 'bad')
+    assert table_hashes(database) == before
+    assert service.read(identity, created.draft_id, 1).payload.title == 'Synthetic draft'
+
+
+@pytest.mark.parametrize('value', [True, 1, 1.5, None, [], {'nested': ['json', 1, False]}])
+def test_json_values_are_real_json_but_wrong_field_types_never_coerce(case, value):
+    database, identity, _, service, _, created = case
+    body = DraftPatchWrite(expected_revision=1, patches=[DraftPatch(field='title', value=value)])
+    before = table_hashes(database)
+    with pytest.raises(ApiError):
+        service.patch(identity, created.draft_id, body, 'bad-value')
+    assert table_hashes(database) == before
+
+
+@pytest.mark.parametrize('bad', [float('inf'), float('nan'), {'nested': float('inf')}])
+def test_nonfinite_json_is_rejected_by_strict_transport_model(bad):
+    with pytest.raises(ValidationError):
+        DraftPatch(field='title', value=bad)
+
+
+def test_deep_json_and_large_value_have_explicit_bounds():
+    value = 'leaf'
+    for _ in range(40):
+        value = [value]
+    with pytest.raises(ValidationError):
+        DraftPatch(field='title', value=value)
+    with pytest.raises(ValidationError):
+        DraftPatch(field='title', value='x' * 2_000_001)
+
+
+@pytest.mark.parametrize('change', ['hash', 'id', 'revision', 'null', 'kind'])
+def test_create_exact_base_identity_and_supported_scope(case, change):
+    database, identity, base, service, _, _ = case
+    data = dict(kind='block', base_ref=base, title='Another synthetic draft')
+    if change == 'null':
+        data['base_ref'] = None
+    elif change == 'kind':
+        data['kind'] = 'lesson'
+    else:
+        data['base_ref'] = base.model_copy(update={change if change != 'hash' else 'sha256':
+            '0' * 64 if change == 'hash' else 'missing_block' if change == 'id' else 999})
+    before = table_hashes(database)
+    with pytest.raises(ApiError):
+        service.create(identity, DraftCreateWrite(**data), 'other')
+    assert table_hashes(database) == before
+
+
+def test_original_ack_after_later_edits_restart_expiry_and_later_content(case, monkeypatch):
+    database, identity, base, service, body, created = case
+    first = patch()
+    ack = service.patch(identity, created.draft_id, first, 'patch')
+    service.patch(identity, created.draft_id, patch(2, 'Third synthetic body.\n'), 'third')
+    content = ContentService(database)
+    block = content.read(identity.workspace_id, 'block', base.id, base.revision)
+    new_body = b'Later actual published synthetic text.\n'
+    newer = block.model_copy(update={'revision': 2, 'body_sha256': sha256_bytes(new_body)})
+    content.publish(identity.workspace_id, [newer], {newer.body_path: new_body})
+    with database.transaction() as conn:
+        conn.execute("UPDATE idempotency SET expires_at='2000-01-01T00:00:00Z'")
+    fresh = DraftEditService(Database(database.settings))
+    before = table_hashes(database)
+    assert fresh.create(identity, body, 'create') == created
+    assert fresh.patch(identity, created.draft_id, first, 'patch') == ack
+    assert fresh.read(identity, created.draft_id, 1).base.ref == base
+    historical = fresh.create(identity, body, 'new-from-historical')
+    assert fresh.read(identity, historical.draft_id, 1).payload.body_markdown != new_body.decode()
+    # A no-key repeat remains a new command with stale CAS, never guessed replay.
+    with pytest.raises(ApiError) as error:
+        fresh.patch(identity, created.draft_id, first)
+    assert error.value.status == 412
+    assert table_hashes(database) != before  # only the explicitly new historical draft above
+    assert content.current(identity.workspace_id, base.id).revision == 2
+
+
+@pytest.mark.parametrize('same_key', [False, True])
+def test_actual_connections_serialize_competing_edit_commands(case, same_key):
+    database, identity, _, service, _, created = case
+    barrier = Barrier(2)
+    def write(key):
+        barrier.wait(timeout=10)
+        try:
+            return service.patch(identity, created.draft_id, patch(), key)
+        except ApiError as error:
+            return error.status
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(write, ['one', 'one' if same_key else 'two']))
+    successes = [item for item in results if not isinstance(item, int)]
+    assert len(successes) == (2 if same_key else 1)
+    if same_key:
+        assert successes[0] == successes[1]
+    else:
+        assert 412 in results
+    assert service.read(identity, created.draft_id, 2).candidate.draft_revision == 2
+    with pytest.raises(ApiError):
+        service.read(identity, created.draft_id, 3)
+
+
+@pytest.mark.parametrize('change', ['role', 'revoked', 'expired', 'workspace'])
+def test_current_identity_before_original_ack_and_private_material(case, change):
+    database, identity, _, service, body, created = case
+    with database.transaction() as conn:
+        if change == 'role':
+            conn.execute("UPDATE local_sessions SET role='learner' WHERE id=?", (identity.id,))
+        elif change == 'revoked':
+            conn.execute("UPDATE local_sessions SET revoked_at='2000-01-01T00:00:00Z' WHERE id=?", (identity.id,))
+        elif change == 'expired':
+            conn.execute("UPDATE local_sessions SET expires_at='2000-01-01T00:00:00Z' WHERE id=?", (identity.id,))
+        else:
+            identity = replace(identity, workspace_id='workspace_nonexistent')
+    before = table_hashes(database)
+    for call in [lambda: service.create(identity, body, 'create'), lambda: service.read(identity, created.draft_id, 1),
+                 lambda: service.patch(identity, created.draft_id, patch(), 'patch')]:
+        with pytest.raises(ApiError):
+            call()
+    assert table_hashes(database) == before
+
+
+@pytest.mark.parametrize('mode', ['independent', 'open_book', 'assisted'])
+def test_real_current_assessment_policy_blocks_new_writes_and_original_ack(case, mode):
+    from services.api.app.application.assessment import AssessmentService
+    from services.api.app.assessment_dto import AssessmentAttemptCreate
+    from services.api.app.infrastructure.content_repository import reference
+    from tests.assessment_fixtures import assessment_fixture
+    from tests.integration.test_assessment_attempts import import_fixture
+    database, identity, _, service, body, created = case
+    fixture = assessment_fixture('drafteditpolicy')
+    import_fixture(database, identity, fixture, 'assessment-material')
+    AssessmentService(database).create_attempt(identity, fixture.assessment.id,
+        AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode=mode), 'attempt')
+    before = table_hashes(database)
+    for call in [lambda: service.create(identity, body, 'create'), lambda: service.read(identity, created.draft_id, 1),
+                 lambda: service.patch(identity, created.draft_id, patch(), 'patch')]:
+        with pytest.raises(ApiError):
+            call()
+    assert table_hashes(database) == before
+
+
+@pytest.mark.parametrize('operation,table', [('create', 'draft_edits'), ('create', 'draft_edit_versions'),
+    ('create', 'draft_edit_commands'), ('create', 'draft_candidate_identities'),
+    ('patch', 'draft_edit_versions'), ('patch', 'draft_edit_commands'), ('patch', 'draft_candidate_revisions')])
+def test_fault_after_actual_write_rolls_back_whole_operation(case, operation, table):
+    database, identity, _, service, body, created = case
+    with database.transaction() as conn:
+        conn.execute(f"CREATE TRIGGER synthetic_edit_failure AFTER INSERT ON {table} "
+                     "BEGIN SELECT RAISE(ABORT,'synthetic failure'); END")
+    before = table_hashes(database)
+    with pytest.raises(ApiError):
+        if operation == 'create':
+            service.create(identity, body, 'other')
+        else:
+            service.patch(identity, created.draft_id, patch(), 'patch')
+    assert table_hashes(database) == before
+
+
+def test_invalid_constructed_request_never_emits_sensitive_serializer_warning(case):
+    _, identity, _, service, _, created = case
+    secret_marker = 'synthetic-private-draft-marker'
+    invalid = DraftPatchWrite.model_construct(expected_revision=1,
+        patches=[DraftPatch.model_construct(field='title', value=object())], hidden=secret_marker)
+    with warnings.catch_warnings(record=True) as emitted:
+        warnings.simplefilter('always')
+        with pytest.raises(ApiError) as error:
+            service.patch(identity, created.draft_id, invalid, 'invalid')
+    assert emitted == []
+    assert secret_marker not in str(error.value)
+
+
+@pytest.mark.parametrize('operation', ['original_ack', 'new_patch'])
+def test_damaged_original_catalog_cannot_be_bypassed_by_edit_owner(case, operation):
+    database, identity, _, service, body, created = case
+    with database.transaction() as conn:
+        conn.execute('DROP TRIGGER draft_candidate_revisions_no_update')
+        conn.execute("UPDATE draft_candidate_revisions SET candidate_sha256=? WHERE draft_id=?", ('0' * 64, created.draft_id))
+    before = table_hashes(database)
+    with pytest.raises(ApiError):
+        if operation == 'original_ack':
+            service.create(identity, body, 'create')
+        else:
+            service.patch(identity, created.draft_id, patch(), 'patch')
+    assert table_hashes(database) == before
+
+
+def test_create_title_requires_unicode_scalar_values():
+    with pytest.raises(ValidationError):
+        DraftCreateWrite(kind='block', base_ref=None, title='bad\ud800title')
+
+
+def test_private_edit_models_never_expand_content_in_ordinary_representations(case):
+    _, identity, _, service, body, created = case
+    record = service.read(identity, created.draft_id, 1)
+    for value in [body, record, record.payload, record.base]:
+        assert 'Synthetic' not in repr(value)
+        assert 'Synthetic' not in str(value)

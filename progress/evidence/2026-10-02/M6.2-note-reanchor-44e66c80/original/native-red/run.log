@@ -1,0 +1,32 @@
+
+Running 1 test using 1 worker
+
+(node:2353697) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 tests/e2e/note-reanchor-publication.spec.ts:28:1 › actual UI edit publication stales the original Note, explicit new-source reanchor and old-scope rebuild preserve historical bytes and parent pins (23.5s)
+
+
+  1) tests/e2e/note-reanchor-publication.spec.ts:28:1 › actual UI edit publication stales the original Note, explicit new-source reanchor and old-scope rebuild preserve historical bytes and parent pins 
+
+    TimeoutError: locator.click: Timeout 10000ms exceeded.
+    Call log:
+      - waiting for getByRole('dialog', { name: '笔记', exact: true }).getByRole('button', { name: '读取此块当前修订以手工重锚', exact: true })
+
+
+      57 |     await notes.getByRole('button', { name: new RegExp('旧笔记原文.*stale') }).click(); await expect(notes.getByText(`锚点：${original.anchor.ref.id} · 修订 1 · stale`, { exact: true })).toBeVisible()
+      58 |     const notePatchesBefore = writes.filter(w => w.method === 'PATCH' && /\/notes\//.test(w.path)).length
+    > 59 |     await notes.getByRole('button', { name: '读取此块当前修订以手工重锚', exact: true }).click()
+         |                                                                             ^
+      60 |     const reanchor = notes.getByRole('region', { name: '手工选择新的笔记锚点', exact: true })
+      61 |     await expect(reanchor).toContainText(publication.published.sha256)
+      62 |     const newBody = await page.request.get(`/api/v1/blocks/${publication.published.id}/body?revision=2`).then(r => r.text())
+        at $HOME/.cache/learning-workbench-acceptance/m62-note-reanchor-native-oct02/tests/e2e/note-reanchor-publication.spec.ts:59:77
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../m62-note-reanchor-native-evidence-oct02/red-output/note-reanchor-publication--72af0-rical-bytes-and-parent-pins/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../m62-note-reanchor-native-evidence-oct02/red-output/note-reanchor-publication--72af0-rical-bytes-and-parent-pins/error-context.md
+
+  1 failed
+    tests/e2e/note-reanchor-publication.spec.ts:28:1 › actual UI edit publication stales the original Note, explicit new-source reanchor and old-scope rebuild preserve historical bytes and parent pins 

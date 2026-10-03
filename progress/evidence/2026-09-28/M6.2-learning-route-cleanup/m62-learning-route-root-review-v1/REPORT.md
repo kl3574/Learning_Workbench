@@ -1,0 +1,3 @@
+# Independent root review: route cleanup
+
+Fixed e618f3d919656206c6428f1bb7a41f34c3fd6136; one actual test callsite differs. The gate is released before wait-mode unroute drains the running callback; the other page closes afterward. This page has only the one relevant interception in this test. No ignoreErrors, retry, deadline change, production change or weakened assertion. All481 original manifest members were independently byte/hash checked. Source-bound actual-finally probe retains three real RED then three GREEN; whole native case passed both before and after, therefore no claim to have reproduced or repaired the other-page timeout. Scope is the demonstrated secondary cleanup error only. No tests rerun in this review. No blocking findings in this scope.

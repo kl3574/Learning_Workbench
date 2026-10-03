@@ -1,0 +1,45 @@
+...............F........................................................ [ 62%]
+............................................                             [100%]
+=================================== FAILURES ===================================
+_________ test_emitted_sse_codec_real_typescript_and_stream_execution __________
+
+tmp_path = PosixPath('<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-tutor-cancel-lease-diagnosis-v1/05-complete-tutor-regressions/private-pytest-tmp/test_emitted_sse_codec_real_ty0')
+
+    def test_emitted_sse_codec_real_typescript_and_stream_execution(tmp_path):
+        values = generated()
+        for name in ['api-types.ts', 'api-client.ts', 'tutor-sse.ts']:
+            (tmp_path / name).write_text(values[name])
+        (tmp_path / 'package.json').write_text('{"type":"module"}')
+>       run_node(ROOT / 'apps/web/node_modules/.bin/tsc', '--strict', '--skipLibCheck', '--target', 'ES2022',
+                 '--module', 'ESNext', '--moduleResolution', 'Bundler', '--lib', 'ES2022,DOM',
+                 '--outDir', 'out', 'api-types.ts', 'api-client.ts', 'tutor-sse.ts', cwd=tmp_path)
+
+tests/contract/test_tutor_transport.py:133: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cwd = PosixPath('<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-tutor-cancel-lease-diagnosis-v1/05-complete-tutor-regressions/private-pytest-tmp/test_emitted_sse_codec_real_ty0')
+args = (PosixPath('<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-tutor-cancel-lease-active/apps/web/node_modules/.bin/tsc'), '--strict', '--skipLibCheck', '--target', 'ES2022', '--module', ...)
+
+    def run_node(*args, cwd):
+        result = subprocess.run(['bash', str(ROOT / 'scripts/node.sh'), *map(str, args)],
+                                cwd=cwd, capture_output=True, text=True)
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: Node 24.21.0 is required; run make setup.
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['bash', '<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-tutor-cancel-lease-active/scripts/n...s.ts', 'api-client.ts', 'tutor-sse.ts'], returncode=1, stdout='', stderr='Node 24.21.0 is required; run make setup.\n').returncode
+
+tests/contract/test_tutor_transport.py:125: AssertionError
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/contract/test_tutor_transport.py::test_emitted_sse_codec_real_typescript_and_stream_execution
+1 failed, 115 passed, 2 warnings in 22.29s

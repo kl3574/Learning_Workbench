@@ -1,0 +1,302 @@
+...FF............FFFFFF......                                            [100%]
+=================================== FAILURES ===================================
+_ test_real_generated_material_keeps_complete_plan_members_private_and_history[practice_set] _
+
+tmp_path = PosixPath('<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-material-verification-v1/03-owner-boundaries<PYTEST_ROOT>/pytest-0/test_real_generated_material_k2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7806b6e7a3c0>
+kind = 'practice_set'
+
+    @pytest.mark.parametrize('kind', ['single', 'lesson', 'practice_set', 'assessment'])
+    def test_real_generated_material_keeps_complete_plan_members_private_and_history(tmp_path, monkeypatch, kind):
+        state = single_fixture.__wrapped__(tmp_path) if kind == 'single' else generated_group(tmp_path, kind)
+        database, identity, owner, _, candidate, *_ = state
+        original = owner.draft(identity, candidate.draft_id)
+        source_kind = 'authoring_single' if kind == 'single' else 'authoring_group'
+        value = checked_read(database, identity, owner, source_kind, candidate, monkeypatch)
+        assert value.payload.record.source_job_id == original.source_job_id
+        assert value.payload.input.job_id == original.source_job_id
+        assert value.payload.context.job_id == original.source_job_id
+        table = 'authoring_candidates' if kind == 'single' else 'authoring_group_candidates'
+        with database.connect() as conn:
+            stored = conn.execute(f'SELECT record_sha256 FROM {table} WHERE draft_id=?', (candidate.draft_id,)).fetchone()
+        assert value.owner_record_sha256 == stored['record_sha256']
+        assert 'numeric_check_ids' not in value.payload.record.model_dump()
+        assert 'state' not in value.payload.record.model_dump()
+        if kind == 'single':
+            assert value.payload.record.payload == original.payload
+        else:
+            payload = value.payload.record.payload
+            assert payload.root == original.root
+            assert payload.blocks == original.blocks and payload.questions == original.questions
+            assert value.payload.plan.plan == payload.content_plan
+            assert value.payload.plan.plan_ref == value.payload.record.plan_ref
+            assert value.payload.private_solution_coverage == 'included_in_complete_root_sha'
+            for private, ref in zip(payload.private_solutions, original.private_solution_refs, strict=True):
+                assert private.question == ref.question
+                assert sha256_bytes(canonical_bytes(private)) == ref.solution_sha256
+                actual = owner.solution(identity, candidate.draft_id, ref.question.member_key)
+>               assert actual.solution == private
+                       ^^^^^^^^^^^^^^^
+
+tests/integration/test_review_materials.py:90: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = AuthoringPrivateSolutionView(), item = 'solution'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra and item in pydantic_extra:
+                return pydantic_extra[item]
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'AuthoringPrivateSolutionView' object has no attribute 'solution'
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/pydantic/main.py:1042: AttributeError
+_ test_real_generated_material_keeps_complete_plan_members_private_and_history[assessment] _
+
+tmp_path = PosixPath('<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-material-verification-v1/03-owner-boundaries<PYTEST_ROOT>/pytest-0/test_real_generated_material_k3')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7806b6bc8170>
+kind = 'assessment'
+
+    @pytest.mark.parametrize('kind', ['single', 'lesson', 'practice_set', 'assessment'])
+    def test_real_generated_material_keeps_complete_plan_members_private_and_history(tmp_path, monkeypatch, kind):
+        state = single_fixture.__wrapped__(tmp_path) if kind == 'single' else generated_group(tmp_path, kind)
+        database, identity, owner, _, candidate, *_ = state
+        original = owner.draft(identity, candidate.draft_id)
+        source_kind = 'authoring_single' if kind == 'single' else 'authoring_group'
+        value = checked_read(database, identity, owner, source_kind, candidate, monkeypatch)
+        assert value.payload.record.source_job_id == original.source_job_id
+        assert value.payload.input.job_id == original.source_job_id
+        assert value.payload.context.job_id == original.source_job_id
+        table = 'authoring_candidates' if kind == 'single' else 'authoring_group_candidates'
+        with database.connect() as conn:
+            stored = conn.execute(f'SELECT record_sha256 FROM {table} WHERE draft_id=?', (candidate.draft_id,)).fetchone()
+        assert value.owner_record_sha256 == stored['record_sha256']
+        assert 'numeric_check_ids' not in value.payload.record.model_dump()
+        assert 'state' not in value.payload.record.model_dump()
+        if kind == 'single':
+            assert value.payload.record.payload == original.payload
+        else:
+            payload = value.payload.record.payload
+            assert payload.root == original.root
+            assert payload.blocks == original.blocks and payload.questions == original.questions
+            assert value.payload.plan.plan == payload.content_plan
+            assert value.payload.plan.plan_ref == value.payload.record.plan_ref
+            assert value.payload.private_solution_coverage == 'included_in_complete_root_sha'
+            for private, ref in zip(payload.private_solutions, original.private_solution_refs, strict=True):
+                assert private.question == ref.question
+                assert sha256_bytes(canonical_bytes(private)) == ref.solution_sha256
+                actual = owner.solution(identity, candidate.draft_id, ref.question.member_key)
+>               assert actual.solution == private
+                       ^^^^^^^^^^^^^^^
+
+tests/integration/test_review_materials.py:90: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = AuthoringPrivateSolutionView(), item = 'solution'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra and item in pydantic_extra:
+                return pydantic_extra[item]
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'AuthoringPrivateSolutionView' object has no attribute 'solution'
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/pydantic/main.py:1042: AttributeError
+___ test_material_rechecks_real_active_assessment_policy[import-independent] ___
+
+material_case = <synthetic import review fixture; session values omitted>
+mode = 'independent'
+
+    @pytest.mark.parametrize('mode', ['independent', 'open_book'])
+    def test_material_rechecks_real_active_assessment_policy(material_case, mode):
+        from services.api.app.application.assessment import AssessmentService
+        from services.api.app.assessment_dto import AssessmentAttemptCreate
+        from services.api.app.infrastructure.content_repository import reference
+        from tests.assessment_fixtures import assessment_fixture
+        from tests.integration.test_assessment_attempts import import_fixture as import_assessment
+    
+        case = material_case
+        fixture = assessment_fixture('reviewpolicy')
+        import_assessment(case.database, case.identity, fixture, 'review-policy-material')
+>       AssessmentService(case.database).create(case.identity,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode=mode), 'review-policy-attempt')
+E       AttributeError: 'AssessmentService' object has no attribute 'create'
+
+tests/integration/test_review_materials.py:175: AttributeError
+____ test_material_rechecks_real_active_assessment_policy[import-open_book] ____
+
+material_case = <synthetic import review fixture; session values omitted>
+mode = 'open_book'
+
+    @pytest.mark.parametrize('mode', ['independent', 'open_book'])
+    def test_material_rechecks_real_active_assessment_policy(material_case, mode):
+        from services.api.app.application.assessment import AssessmentService
+        from services.api.app.assessment_dto import AssessmentAttemptCreate
+        from services.api.app.infrastructure.content_repository import reference
+        from tests.assessment_fixtures import assessment_fixture
+        from tests.integration.test_assessment_attempts import import_fixture as import_assessment
+    
+        case = material_case
+        fixture = assessment_fixture('reviewpolicy')
+        import_assessment(case.database, case.identity, fixture, 'review-policy-material')
+>       AssessmentService(case.database).create(case.identity,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode=mode), 'review-policy-attempt')
+E       AttributeError: 'AssessmentService' object has no attribute 'create'
+
+tests/integration/test_review_materials.py:175: AttributeError
+___ test_material_rechecks_real_active_assessment_policy[single-independent] ___
+
+material_case = <synthetic authoring_single review fixture; session values omitted>
+mode = 'independent'
+
+    @pytest.mark.parametrize('mode', ['independent', 'open_book'])
+    def test_material_rechecks_real_active_assessment_policy(material_case, mode):
+        from services.api.app.application.assessment import AssessmentService
+        from services.api.app.assessment_dto import AssessmentAttemptCreate
+        from services.api.app.infrastructure.content_repository import reference
+        from tests.assessment_fixtures import assessment_fixture
+        from tests.integration.test_assessment_attempts import import_fixture as import_assessment
+    
+        case = material_case
+        fixture = assessment_fixture('reviewpolicy')
+        import_assessment(case.database, case.identity, fixture, 'review-policy-material')
+>       AssessmentService(case.database).create(case.identity,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode=mode), 'review-policy-attempt')
+E       AttributeError: 'AssessmentService' object has no attribute 'create'
+
+tests/integration/test_review_materials.py:175: AttributeError
+____ test_material_rechecks_real_active_assessment_policy[single-open_book] ____
+
+material_case = <synthetic authoring_single review fixture; session values omitted>
+mode = 'open_book'
+
+    @pytest.mark.parametrize('mode', ['independent', 'open_book'])
+    def test_material_rechecks_real_active_assessment_policy(material_case, mode):
+        from services.api.app.application.assessment import AssessmentService
+        from services.api.app.assessment_dto import AssessmentAttemptCreate
+        from services.api.app.infrastructure.content_repository import reference
+        from tests.assessment_fixtures import assessment_fixture
+        from tests.integration.test_assessment_attempts import import_fixture as import_assessment
+    
+        case = material_case
+        fixture = assessment_fixture('reviewpolicy')
+        import_assessment(case.database, case.identity, fixture, 'review-policy-material')
+>       AssessmentService(case.database).create(case.identity,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode=mode), 'review-policy-attempt')
+E       AttributeError: 'AssessmentService' object has no attribute 'create'
+
+tests/integration/test_review_materials.py:175: AttributeError
+___ test_material_rechecks_real_active_assessment_policy[group-independent] ____
+
+material_case = <synthetic authoring_group review fixture; session values omitted>
+mode = 'independent'
+
+    @pytest.mark.parametrize('mode', ['independent', 'open_book'])
+    def test_material_rechecks_real_active_assessment_policy(material_case, mode):
+        from services.api.app.application.assessment import AssessmentService
+        from services.api.app.assessment_dto import AssessmentAttemptCreate
+        from services.api.app.infrastructure.content_repository import reference
+        from tests.assessment_fixtures import assessment_fixture
+        from tests.integration.test_assessment_attempts import import_fixture as import_assessment
+    
+        case = material_case
+        fixture = assessment_fixture('reviewpolicy')
+        import_assessment(case.database, case.identity, fixture, 'review-policy-material')
+>       AssessmentService(case.database).create(case.identity,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode=mode), 'review-policy-attempt')
+E       AttributeError: 'AssessmentService' object has no attribute 'create'
+
+tests/integration/test_review_materials.py:175: AttributeError
+____ test_material_rechecks_real_active_assessment_policy[group-open_book] _____
+
+material_case = <synthetic authoring_group review fixture; session values omitted>
+mode = 'open_book'
+
+    @pytest.mark.parametrize('mode', ['independent', 'open_book'])
+    def test_material_rechecks_real_active_assessment_policy(material_case, mode):
+        from services.api.app.application.assessment import AssessmentService
+        from services.api.app.assessment_dto import AssessmentAttemptCreate
+        from services.api.app.infrastructure.content_repository import reference
+        from tests.assessment_fixtures import assessment_fixture
+        from tests.integration.test_assessment_attempts import import_fixture as import_assessment
+    
+        case = material_case
+        fixture = assessment_fixture('reviewpolicy')
+        import_assessment(case.database, case.identity, fixture, 'review-policy-material')
+>       AssessmentService(case.database).create(case.identity,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+            AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode=mode), 'review-policy-attempt')
+E       AttributeError: 'AssessmentService' object has no attribute 'create'
+
+tests/integration/test_review_materials.py:175: AttributeError
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_review_materials.py::test_real_generated_material_keeps_complete_plan_members_private_and_history[practice_set]
+FAILED tests/integration/test_review_materials.py::test_real_generated_material_keeps_complete_plan_members_private_and_history[assessment]
+FAILED tests/integration/test_review_materials.py::test_material_rechecks_real_active_assessment_policy[import-independent]
+FAILED tests/integration/test_review_materials.py::test_material_rechecks_real_active_assessment_policy[import-open_book]
+FAILED tests/integration/test_review_materials.py::test_material_rechecks_real_active_assessment_policy[single-independent]
+FAILED tests/integration/test_review_materials.py::test_material_rechecks_real_active_assessment_policy[single-open_book]
+FAILED tests/integration/test_review_materials.py::test_material_rechecks_real_active_assessment_policy[group-independent]
+FAILED tests/integration/test_review_materials.py::test_material_rechecks_real_active_assessment_policy[group-open_book]
+8 failed, 21 passed, 2 warnings in 24.17s

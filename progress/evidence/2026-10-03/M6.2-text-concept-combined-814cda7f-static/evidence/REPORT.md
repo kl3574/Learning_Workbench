@@ -1,0 +1,11 @@
+# Fixed concept-retention combination: full Web and static gates
+
+Source 814cda7f73e864af7a499c0486b4fe9bc46fccb9, isolated detached `m62-text-concept-combined-gate-oct03`, clean. This is the existing 617 backend + tree-equivalent UI 86f96b5a/91ef + one native testcase. Sole v3.0.13 SHA256 949e2348902d8b8cb65f560b36fa58039fce75cd2e70c0a9ce9dcd8023160c05 is unchanged.
+
+Actual results: complete Web **961 PASS** (10.18s runner, 10.468s process); strict TypeScript/no-unused PASS; build PASS (841 modules, original >500k chunk advisory retained); full-tree Ruff PASS; mypy PASS (236 source files); verify_spec PASS (78 generated artifacts, 54 models, 130 catalog routes). Structural verification is not product, provider or learning-effectiveness acceptance.
+
+Each gate's receipt records its exact argv, UTC start/end, process duration, exit code and raw log SHA256. Every gate captures all **1321 Git-tracked non-progress engineering inputs** plus the exact private runner before/after. All tracked bytes match the fixed commit and all before/after captures are equal. Exclusions: progress/ and ignored installed tools, build output, runtime files and caches. No selected production subtree was substituted for this full scope. Installed Node dependencies came from offline npm ci and the fixed lock; Python uses uv --frozen --no-sync with the existing project environment. Independent tools and temporary databases are private.
+
+Full Python (3582 collected items) was still RUNNING when this static package was sealed. It has a separate live log/receipt outside this immutable STATIC package and is not accepted here. No complete native suite was run for this combination: root requested waiting for final source review. The separately sealed single native case PASS is not relabeled as the full suite. Existing earlier-source acceptance belongs to its own source.
+
+Only explicitly listed deliverables are eligible for copying; private runtime DB/profile/cache/temp files are excluded. The accompanying share candidate applies only exact local-home prefix replacements, preserves originals and records both hashes. Raw path-scan FAIL is preserved separately from the candidate scan PASS. No headers, tokens, session response or raw environment is exported.

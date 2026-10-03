@@ -1,0 +1,13 @@
+# Independent checkpoint: Dialog 52121ca4
+
+Fixed source `52121ca4f493ab0e2667d5f228d93ce00ad3c938`, parent `0b885ec31bafbd6f64a83108b4fc491a8179b28a`. Independent detached worktree with own pinned node_modules; no author/root/frozen tree edits. Review is by one independent reviewer across both axes, not falsely claimed as two parallel sub-agent reviews; the other reviewer was reassigned to a root evidence audit.
+
+Standards: no documented-standard breach or concrete maintainability blocker in the three-file diff. The pointer boundary stays local to Dialog, uses existing close callback and existing focus trapping. No business owner, persistence, role or publication changes.
+
+Spec: pointer close requires same primary pointer's button-0 down and up on the actual outside backdrop, then consumes that gesture once on click. Inside-to-outside, layout movement of the still-connected target, cancellation, another pointer, secondary button and dialog-interior cases do not imply closing. Explicit close and Escape still route through caller guard. This matches the authorized narrow gesture intent. Existing unsaved protection requirements remain in sole spec PRODUCT_DESIGN.md:247 and §20.8 at PRODUCT_DESIGN.md:1146; the native unexplained form-guard window is a separate known issue pending a second owner fix.
+
+Actual independent focused execution: 54 PASS / 5 files, 3.06 s (12 new component, 42 existing owners). Actual independent native: 1 FAIL, 15.3 s. Input manifests contain 1281 non-progress tracked files and are unchanged; worktree remains clean.
+
+The native passes its primary geometric control: original Content button remains connected, the actual viewport changes, stationary pointer becomes outside dialog, and release does not close it. It reads Content details normally. Failure occurs later at test line39 expecting the authoring Dialog to disappear after a normal backdrop click. The actual screenshot shows the existing `保留创作原命令` guard, with an enabled explicit discard/close button, above the still-open Authoring dialog. The existing close callback was reached; the assertion assumes a read becoming visible means every parent guard has finished propagating readiness. That timing hypothesis is not yet independently proved. This FAIL is retained rather than retried to green; owner/root were notified. No new production regression in pointer gating has been proved by this failure, but native acceptance of this checkpoint is not PASS.
+
+Safe screenshot scope: synthetic fixture only. No credentials/headers were logged by reviewer. No full Web/native gate, backend, remote, provider or numeric execution claim. This adjacent gesture review does not diagnose the unique historical Content impacts full-gate cause.

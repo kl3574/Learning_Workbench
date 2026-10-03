@@ -1,5 +1,5 @@
-// Generated from PRODUCT_DESIGN.md v3.0.7. DO NOT EDIT.
-// spec_sha256: 2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d
+// Generated from PRODUCT_DESIGN.md v3.0.13. DO NOT EDIT.
+// spec_sha256: 949e2348902d8b8cb65f560b36fa58039fce75cd2e70c0a9ce9dcd8023160c05
 // JSON Schema is the type source; runtime semantic checks remain required.
 
 export type ActualUsageCost = {
@@ -184,7 +184,8 @@ export type AuthoringDraftView = {
   "owner": "authoring";
   "candidate": AuthoringCandidate;
   "source_job_id": string;
-  "state": "draft";
+  "state": "draft" | "published";
+  "published_ref": (AuthoringBlockRef | null);
   "base_ref": null;
   "body_sha256": string;
   "payload": WorkedExamplePayload;
@@ -658,11 +659,73 @@ export type ContentBlock = {
   "depends_on"?: Array<ContentRef>;
 };
 
+export type ContentImpactPage = {
+  "items": Array<ContentImpactSummary>;
+  "next_cursor": (string | null);
+};
+
+export type ContentImpactSummary = {
+  "event_id": string;
+  "old_ref": ContentRef;
+  "new_ref": ContentRef;
+  "reason": "content_revision_published";
+  "evidence_version": "owner_frozen_v1" | "legacy_unverified";
+  "event_snapshot_sha256": (string | null);
+  "pending_target_ids": Array<string>;
+  "action_required_target_ids": Array<string>;
+};
+
+export type ContentImpactView = {
+  "event_id": string;
+  "old_ref": ContentRef;
+  "new_ref": ContentRef;
+  "reason": "content_revision_published";
+  "evidence_version": "owner_frozen_v1" | "legacy_unverified";
+  "event_snapshot_sha256": (string | null);
+  "affected_ids": Array<string>;
+  "exact_dependency_refs": Array<ContentRef>;
+  "conservative_only_ids": Array<string>;
+  "pending_target_ids": Array<string>;
+  "action_required_target_ids": Array<string>;
+  "target_decision_head": (number | null);
+  "decisions": Array<ImpactObjectDecisionReceipt>;
+  "next_cursor": (string | null);
+};
+
 export type ContentRef = {
   "entity": "course" | "lesson" | "block" | "concept" | "route" | "question" | "practice_set" | "assessment" | "note";
   "id": string;
   "revision": number;
   "sha256": string;
+};
+
+export type ContentRestoreDraftCreateAck = {
+  "candidate": DraftCandidate;
+  "source_ref": ContentRef;
+  "base_ref": ContentRef;
+  "state": "draft";
+};
+
+export type ContentRestoreDraftCreateWrite = {
+  "source_ref": ContentRef;
+  "expected_current_ref": ContentRef;
+  "reason": string;
+};
+
+export type ContentRestoreDraftSnapshot = {
+  "owner": "authoring_restore";
+  "candidate": DraftCandidate;
+  "source_ref": ContentRef;
+  "base_ref": ContentRef;
+  "reason": string;
+  "proposed_block": ContentBlock;
+  "body_markdown": string;
+  "source_material_sha256": string;
+  "warnings": Array<Warning>;
+  "state": "draft" | "published";
+  "published_ref": (ContentRef | null);
+  "numeric_material": (RestoreNumericMaterialView | null);
+  "numeric_check_ids": Array<string>;
 };
 
 export type ContextSnapshot = {
@@ -734,6 +797,80 @@ export type DownloadArtifact = {
   "download_path": string;
 };
 
+export type DraftCandidate = {
+  "draft_id": string;
+  "draft_revision": number;
+  "entity": "course" | "lesson" | "block" | "concept" | "route" | "question" | "practice_set" | "assessment" | "note";
+  "candidate_sha256": string;
+};
+
+export type DraftCreateWrite = {
+  "kind": "course" | "lesson" | "block" | "question" | "practice_set" | "assessment";
+  "base_ref": (ContentRef | null);
+  "title": string;
+};
+
+export type DraftCreated = {
+  "draft_id": string;
+  "revision": number;
+  "base_ref": (ContentRef | null);
+  "state"?: "draft";
+};
+
+export type DraftEditPayload = {
+  "version": "text-block-edit-v1";
+  "entity": "block";
+  "kind": "text";
+  "base_ref": ContentRef;
+  "body_path": string;
+  "citations": Array<string>;
+  "title": string;
+  "body_markdown": string;
+  "body_sha256": string;
+  "base_material_sha256": string;
+};
+
+export type DraftJsonValue = (boolean | number | number | string | Array<DraftJsonValue> | { [key: string]: DraftJsonValue } | null);
+
+export type DraftPatch = {
+  "field": string;
+  "value": DraftJsonValue;
+};
+
+export type DraftPatchWrite = {
+  "expected_revision": number;
+  "patches": Array<DraftPatch>;
+};
+
+export type DraftPatched = {
+  "draft_id": string;
+  "revision": number;
+  "validation_warnings": Array<Warning>;
+};
+
+export type DraftPublishWrite = {
+  "expected_revision": number;
+  "expected_content_sha256": string;
+  "review_receipt_id": string;
+  "acknowledged_warning_codes": Array<string>;
+};
+
+export type DraftReviewWrite = {
+  "expected_revision": number;
+  "checks": Array<"structure" | "sources" | "mathematics" | "numerical_examples">;
+  "reviewer_note": string;
+};
+
+export type EditDraftSnapshot = {
+  "owner": "authoring_edit";
+  "candidate": DraftCandidate;
+  "base_ref": ContentRef;
+  "base_material_sha256": string;
+  "payload": DraftEditPayload;
+  "warnings": Array<Warning>;
+  "state": "draft" | "published";
+};
+
 export type EmptyRequest = Record<string, never>;
 
 export type ErrorDetail = {
@@ -779,6 +916,57 @@ export type EvidenceApplicability = {
   "reason_codes": Array<string>;
   "checked_refs": Array<ContentRef>;
   "check_scope"?: "exact_semantic_dependencies";
+};
+
+export type EvidenceApplicabilityDecisionView = {
+  "evidence_id": string;
+  "original_evidence": Evidence;
+  "question_ref": ContentRef;
+  "concept_ref": ContentRef;
+  "attempt_id": string;
+  "grading_revision": number;
+  "original_evidence_sha256": string;
+  "current_basis_sha256": string;
+  "applicability": "usable" | "pending_review" | "confirmed_stale";
+  "reason_codes": Array<string>;
+  "relevant_event_ids": Array<string>;
+  "event_decision_head": (number | null);
+  "decisions": Array<EvidenceImpactDecisionReceipt>;
+  "next_cursor": (string | null);
+};
+
+export type EvidenceImpactArtifact = {
+  "id": string;
+  "sha256": string;
+};
+
+export type EvidenceImpactDecisionReceipt = {
+  "evidence_id": string;
+  "event_id": string;
+  "decision_revision": number;
+  "relevance": "exact_ref" | "id_only_candidate";
+  "question_ref": ContentRef;
+  "concept_ref": ContentRef;
+  "attempt_id": string;
+  "grading_revision": number;
+  "original_evidence_sha256": string;
+  "current_basis_sha256": string;
+  "decision": "usable" | "confirmed_stale";
+  "reason": string;
+  "evidence_artifacts": Array<EvidenceImpactArtifact>;
+  "actor_session_id": string;
+  "decided_at": string;
+  "request_sha256": string;
+  "receipt_sha256": string;
+};
+
+export type EvidenceImpactDecisionWrite = {
+  "event_id": string;
+  "expected_decision_revision": number;
+  "expected_current_basis_sha256": string;
+  "decision": "usable" | "confirmed_stale";
+  "reason": string;
+  "evidence_artifact_ids": Array<string>;
 };
 
 export type FrozenOutboundBudget = {
@@ -868,6 +1056,39 @@ export type GradingReadiness = {
 export type HealthResponse = {
   "status"?: "ok";
   "build_version"?: string;
+};
+
+export type ImpactArtifact = {
+  "id": string;
+  "sha256": string;
+};
+
+export type ImpactObjectDecisionReceipt = {
+  "event_id": string;
+  "target_id": string;
+  "decision_revision": number;
+  "classification": "exact_ref" | "id_only_candidate";
+  "observed_ref": ContentRef;
+  "target_metadata_sha256": string;
+  "target_body_sha256": (string | null);
+  "event_snapshot_sha256": string;
+  "decision": "no_revision_needed" | "new_revision_required";
+  "reason": string;
+  "evidence_artifacts": Array<ImpactArtifact>;
+  "actor_session_id": string;
+  "decided_at": string;
+  "request_sha256": string;
+  "receipt_sha256": string;
+};
+
+export type ImpactObjectDecisionWrite = {
+  "target_id": string;
+  "observed_ref": ContentRef;
+  "expected_event_snapshot_sha256": string;
+  "expected_decision_revision": number;
+  "decision": "no_revision_needed" | "new_revision_required";
+  "reason": string;
+  "evidence_artifact_ids": Array<string>;
 };
 
 export type ImportCancelRequest = {
@@ -1685,6 +1906,67 @@ export type ResponsesWrite = {
   "responses": Array<ResponseDraft>;
 };
 
+export type RestoreNumericAssertionBinding = {
+  "assertion_id": string;
+  "expression_source": RestoreNumericSourceSpan;
+  "expected_source": RestoreNumericSourceSpan;
+};
+
+export type RestoreNumericCheckPreviewWrite = {
+  "candidate": AuthoringCandidate;
+  "material": RestoreNumericMaterialWrite;
+};
+
+export type RestoreNumericCheckView = {
+  "id": string;
+  "revision": number;
+  "candidate": AuthoringCandidate;
+  "plan": NumericPlan;
+  "runtime": NumericRuntimeProfile;
+  "operation_sha256": string;
+  "decision": "pending" | "approve_once" | "decline";
+  "created_at": string;
+  "expires_at": string;
+  "expired": boolean;
+  "job": (JobRef | null);
+  "job_revision": (number | null);
+  "result": (NumericCheckResult | null);
+  "warnings": Array<Warning>;
+  "owner": "authoring_restore";
+  "numeric_material_sha256": string;
+};
+
+export type RestoreNumericMaterialView = {
+  "owner": "authoring_restore";
+  "candidate": AuthoringCandidate;
+  "restore_record_sha256": string;
+  "source_ref": AuthoringBlockRef;
+  "source_material_sha256": string;
+  "body_sha256": string;
+  "material": RestoreNumericMaterialWrite;
+  "numeric_material_sha256": string;
+};
+
+export type RestoreNumericMaterialWrite = {
+  "version": "restore-numeric-material-v1";
+  "symbols": Array<WorkedExampleSymbol>;
+  "plan": NumericPlan;
+  "variable_bindings": Array<RestoreNumericVariableBinding>;
+  "assertion_bindings": Array<RestoreNumericAssertionBinding>;
+  "reason": string;
+};
+
+export type RestoreNumericSourceSpan = {
+  "start_codepoint": number;
+  "end_codepoint": number;
+  "quote": string;
+};
+
+export type RestoreNumericVariableBinding = {
+  "variable_name": string;
+  "value_source": RestoreNumericSourceSpan;
+};
+
 export type RetainedOriginal = {
   "source": ProvenanceSource;
   "original_access": "allowed" | "author_required" | "unavailable";
@@ -1815,6 +2097,20 @@ export type RetrievalWholeBlockLocation = {
   "unit": "unicode_codepoint";
   "start_cp": 0;
   "end_cp": number;
+};
+
+export type ReviewDecisionWrite = {
+  "expected_revision": number;
+  "candidate_sha256": string;
+  "mathematical": "APPROVED" | "REJECTED" | "NOT_APPLICABLE";
+  "sources": "APPROVED" | "REJECTED" | "NOT_APPLICABLE";
+  "reason": string;
+  "evidence_artifact_ids": Array<string>;
+};
+
+export type ReviewJobAck = {
+  "id": string;
+  "status": "queued" | "running" | "awaiting_approval" | "completed" | "failed" | "cancelled";
 };
 
 export type ReviewMaterial = {
@@ -1948,6 +2244,7 @@ export type SelfAssessmentWrite = {
 
 export type SessionResponse = {
   "workspace_id": string;
+  "actor_session_id": string;
   "role": "learner" | "author";
   "csrf_token": string;
   "active_independent_attempt_id": (string | null);
@@ -1969,6 +2266,20 @@ export type SourceResponse = {
   "parser_version": (string | null);
   "warnings": Array<Warning>;
   "artifact": DownloadArtifact;
+};
+
+export type StoredReviewReceipt = {
+  "id": string;
+  "revision"?: number;
+  "candidate": DraftCandidate;
+  "structural": "PASS" | "FAIL" | "NOT_RUN" | "BLOCKED";
+  "mathematical": "APPROVED" | "REJECTED" | "NOT_RUN" | "NOT_APPLICABLE";
+  "sources": "APPROVED" | "REJECTED" | "NOT_RUN" | "NOT_APPLICABLE";
+  "independent_pedagogy": "PASS" | "FAIL" | "NOT_RUN" | "BLOCKED";
+  "reviewer": string;
+  "created_at": string;
+  "evidence_paths": Array<string>;
+  "decision_reason": string;
 };
 
 export type SubmissionActivity = {

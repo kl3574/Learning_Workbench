@@ -1,0 +1,44 @@
+
+> @learning-workbench/web@0.1.0 test:e2e
+> playwright test --config ../../tests/e2e/playwright.config.ts block-version-compare.spec.ts
+
+[WebServer] INFO:     Started server process [408110]
+[WebServer] INFO:     Waiting for application startup.
+[WebServer] INFO:     Application startup complete.
+[WebServer] INFO:     Uvicorn running on http://127.0.0.1:8765 (Press CTRL+C to quit)
+[WebServer] (node:408137) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:408193) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 ../../tests/e2e/block-version-compare.spec.ts:5:1 › actual historical block r1/r2 comparison is read-only and remains contained at desktop and narrow widths (30.1s)
+
+
+  1) ../../tests/e2e/block-version-compare.spec.ts:5:1 › actual historical block r1/r2 comparison is read-only and remains contained at desktop and narrow widths 
+
+    Test timeout of 30000ms exceeded.
+
+    Error: locator.selectOption: Test timeout of 30000ms exceeded.
+    Call log:
+      - waiting for locator('#block-block_nativecompare_definition-r2').getByRole('region', { name: '块修订比较', exact: true }).getByLabel('左侧修订', { exact: true })
+
+
+      19 |   await expect(panel.getByRole('option', { name: /修订 1/ }).first()).toBeAttached()
+      20 |   await expect(panel.getByRole('button', { name: '读取所选两个修订', exact: true })).toBeDisabled()
+    > 21 |   await panel.getByLabel('左侧修订', { exact: true }).selectOption(old.blocks[0].sha256)
+         |                                                   ^
+      22 |   await panel.getByLabel('右侧修订', { exact: true }).selectOption(current.blocks[0].sha256)
+      23 |   await panel.getByRole('button', { name: '读取所选两个修订', exact: true }).click()
+      24 |   const left = panel.getByLabel('左侧完整原文', { exact: true }), right = panel.getByLabel('右侧完整原文', { exact: true })
+        at <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-block-version-compare-active/tests/e2e/block-version-compare.spec.ts:21:51
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    ../../../m62-block-version-compare-development-v1/native-output/block-version-compare-actu-c3b4f-t-desktop-and-narrow-widths/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../m62-block-version-compare-development-v1/native-output/block-version-compare-actu-c3b4f-t-desktop-and-narrow-widths/error-context.md
+
+  1 failed
+    ../../tests/e2e/block-version-compare.spec.ts:5:1 › actual historical block r1/r2 comparison is read-only and remains contained at desktop and narrow widths 

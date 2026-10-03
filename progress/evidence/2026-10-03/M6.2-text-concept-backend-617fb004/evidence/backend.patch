@@ -1,0 +1,886 @@
+diff --git a/services/api/app/application/content.py b/services/api/app/application/content.py
+index 7ed18297..002dee1a 100644
+--- a/services/api/app/application/content.py
++++ b/services/api/app/application/content.py
+@@ -500,14 +500,19 @@ class ContentService:
+             raise invalid() from None
+         expected = original.model_copy(update={'revision': base.revision + 1,
+                                                'title': block.title, 'body_sha256': block.body_sha256})
+-        if block != expected or block.kind != 'text' or block.concepts:
++        if block != expected or block.kind != 'text':
+             raise invalid()
+-        if original.depends_on:
++        if original.depends_on or original.concepts:
+             if self.verify_retained_dependencies_in_transaction(connection, workspace_id, base) != expected_dependencies:
+                 raise damaged()
+         elif expected_dependencies is not None:
+             raise damaged()
+-        refs = self.publish_in_transaction(connection, workspace_id, [block], {block.body_path: body})
++        # Root concept IDs retain their verified original pins just like the
++        # historical descendants. Resolving current here would reinterpret the edit.
++        bindings = {key(block): {identifier: reference(repository.concept_dependency(original, identifier))
++                                for identifier in original.concepts}}
++        refs = self.publish_in_transaction(connection, workspace_id, [block], {block.body_path: body},
++                                           frozen_concepts=bindings)
+         if refs != [reference(block)] or reference(repository.current(block.id).value) != refs[0]:
+             raise damaged()
+         if expected_dependencies is not None and self.verify_retained_dependencies_in_transaction(
+diff --git a/services/api/app/application/content_draft_source.py b/services/api/app/application/content_draft_source.py
+index fb9ebaac..f0cc08de 100644
+--- a/services/api/app/application/content_draft_source.py
++++ b/services/api/app/application/content_draft_source.py
+@@ -22,9 +22,9 @@ class ContentDraftSource:
+         if ref.entity != 'block':
+             raise unsupported()
+         block, raw = self.content.verify_publication_in_transaction(conn, current.workspace_id, ref)
+-        if block.kind != 'text' or block.concepts or block.body_path.startswith('private/'):
++        if block.kind != 'text' or block.body_path.startswith('private/'):
+             raise unsupported()
+-        dependencies = self.content.verify_retained_dependencies_in_transaction(conn, current.workspace_id, ref) if block.depends_on else None
++        dependencies = self.content.verify_retained_dependencies_in_transaction(conn, current.workspace_id, ref) if block.depends_on or block.concepts else None
+         provenance = ProvenanceRepository(conn, current.workspace_id).bounded_frozen(block, max_bytes=2_000_000)
+         try:
+             if dependencies is not None:
+diff --git a/services/api/app/application/draft_edit_models.py b/services/api/app/application/draft_edit_models.py
+index 531c08c3..be855110 100644
+--- a/services/api/app/application/draft_edit_models.py
++++ b/services/api/app/application/draft_edit_models.py
+@@ -51,7 +51,7 @@ class DraftBaseMaterial(DraftModel):
+     @model_validator(mode='after')
+     def exact(self) -> Self:
+         _verify_base(self)
+-        if self.metadata.depends_on:
++        if self.metadata.depends_on or self.metadata.concepts:
+             raise ValueError('legacy base has no frozen dependency witness')
+         return self
+ 
+@@ -68,7 +68,7 @@ class DependencyDraftBaseMaterial(DraftModel):
+     @model_validator(mode='after')
+     def exact(self) -> Self:
+         _verify_base(self)
+-        if not self.metadata.depends_on or self.dependency_witness.root_ref != self.ref:
++        if not (self.metadata.depends_on or self.metadata.concepts) or self.dependency_witness.root_ref != self.ref:
+             raise ValueError('dependency base must bind its original exact root and witness')
+         return self
+ 
+@@ -79,7 +79,7 @@ StoredDraftBase = Annotated[DraftBaseMaterial | DependencyDraftBaseMaterial, Fie
+ def _verify_base(base: DraftBaseMaterial | DependencyDraftBaseMaterial) -> None:
+     value = base.metadata
+     if (base.ref.entity != 'block' or base.ref.id != value.id or base.ref.revision != value.revision
+-            or base.ref.sha256 != metadata_sha256(value) or value.kind != 'text' or value.concepts
++            or base.ref.sha256 != metadata_sha256(value) or value.kind != 'text'
+             or value.body_path.startswith('private/') or value.body_sha256 != body_hash(base.body_markdown)):
+         raise ValueError('base must be the exact supported historical text block')
+     if base.provenance is not None:
+diff --git a/tests/contract/test_draft_edit_legacy_v2_records.py b/tests/contract/test_draft_edit_legacy_v2_records.py
+new file mode 100644
+index 00000000..845ac1e7
+--- /dev/null
++++ b/tests/contract/test_draft_edit_legacy_v2_records.py
+@@ -0,0 +1,51 @@
++"""Concept retention must not reinterpret actual earlier no-concept V2 records."""
++import json
++from pathlib import Path
++
++import pytest
++from packages.contracts.canonical import canonical_bytes, metadata_sha256, sha256_bytes
++from services.api.app.application.draft_edit_models import DraftEditRecord, DraftEditCommand, ack
++from services.api.app.application.publication_models import EditPublicationRecord
++from services.api.app.infrastructure.draft_edit_repository import DraftEditRepository
++
++FIXTURES = Path(__file__).resolve().parents[1] / 'fixtures' / 'draft_edit_legacy_v2' / 'ordered-dependencies-v2-published'
++
++
++def original(name):
++    manifest = json.loads((FIXTURES / 'manifest.json').read_bytes())
++    assert manifest['source_commit'] == '7a6a8a2a0cc4dca86abd437bd7cd532423a48167'
++    raw = (FIXTURES / name).read_bytes()
++    entry = next(item for item in manifest['files'] if item['path'] == name)
++    assert (len(raw), sha256_bytes(raw)) == (entry['bytes'], entry['sha256'])
++    return raw
++
++
++@pytest.mark.parametrize('revision', [1, 2])
++def test_original_no_concept_v2_record_hash_payload_and_http_ack_remain_exact(revision):
++    raw = original(f'version-r{revision}.json')
++    record = DraftEditRepository.decode(DraftEditRecord, {'record_json': raw.decode(), 'record_sha256': sha256_bytes(raw)})
++    assert canonical_bytes(record) == raw
++    assert record.base.version == 'draft-base-material-dependencies-v2'
++    assert not record.base.metadata.concepts and len(record.base.metadata.depends_on) == 2
++    assert record.payload.base_material_sha256 == metadata_sha256(record.base)
++    assert record.candidate.candidate_sha256 == metadata_sha256(record.payload)
++    assert ack(record).model_dump_json().encode() == original('http-post-ack.bin' if revision == 1 else 'http-patch-ack.bin')
++
++
++@pytest.mark.parametrize('revision', [1, 2])
++def test_original_no_concept_v2_command_and_http_ack_remain_exact(revision):
++    raw = original(f'command-r{revision}.json')
++    command = DraftEditRepository.decode(DraftEditCommand, {'record_json': raw.decode(), 'record_sha256': sha256_bytes(raw)})
++    assert canonical_bytes(command) == raw
++    assert command.record_sha256 == sha256_bytes(original(f'version-r{revision}.json'))
++    assert command.ack.model_dump_json().encode() == original('http-post-ack.bin' if revision == 1 else 'http-patch-ack.bin')
++
++
++def test_original_no_concept_v2_publication_and_result_ack_remain_exact():
++    raw = original('publication-record.json')
++    publication = EditPublicationRecord.model_validate_json(raw)
++    assert canonical_bytes(publication) == raw
++    assert publication.base.version == 'draft-base-material-dependencies-v2' and not publication.base.metadata.concepts
++    assert publication.edit_record_sha256 == sha256_bytes(original('version-r2.json'))
++    assert publication.payload.base_material_sha256 == metadata_sha256(publication.base)
++    assert publication.result.model_dump_json().encode() == original('http-publication-ack.bin')
+diff --git a/tests/fixtures/draft_edit_legacy_v2/README.md b/tests/fixtures/draft_edit_legacy_v2/README.md
+new file mode 100644
+index 00000000..4433b340
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v2/README.md
+@@ -0,0 +1,7 @@
++# Original no-concept V2 owner records
++
++Captured independently from fixed `7a6a8a2a0cc4dca86abd437bd7cd532423a48167` using the actual local HTTP create/PATCH/Review/synthetic human/publication owners. The original text has no concepts and two ordered explicit dependencies. Its base is `draft-base-material-dependencies-v2` with a complete original dependency witness.
++
++The 11 manifest-listed files and original manifest are exact bytes. Five records were read from actual synthetic SQLite owner rows and checked against their stored digest and canonical bytes. The three HTTP ACK bodies were obtained by real original-command replay, with unchanged table hashes. No database, headers or credentials are included; all material and decisions are synthetic software fixtures.
++
++Keep these files unchanged. Contract tests parse/canonicalize the old records, preserve their hashes and render ACKs to these independent raw bodies. This is a cross-version representation oracle, not a claim of reopening the original capture database with new code. Current integration tests separately exercise the real new-code HTTP replay path. The existing `draft_edit_legacy_v1` oracle remains separate and unchanged.
+diff --git a/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/command-r1.json b/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/command-r1.json
+new file mode 100644
+index 00000000..6aab0e10
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/command-r1.json
+@@ -0,0 +1 @@
++{"ack":{"base_ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"draft_id":"draft_cd18780b922f443ba9269239f253f837","revision":1,"state":"draft"},"actor_id":"session_056245735a654a3b9e55bdb93337119a","key":"dependency-create","record_sha256":"ed067b4df311df3f5d8b02d31a64219dcc136b74d596504f238d4ac4982f1af6","request":{"base_ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"kind":"block","title":"Synthetic corrected title"},"route":"POST /drafts","version":"draft-edit-command-v1","workspace_id":"workspace_dbdec46be0d4403e86c53908be0a7e11"}
+\ No newline at end of file
+diff --git a/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/command-r2.json b/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/command-r2.json
+new file mode 100644
+index 00000000..4fde35d8
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/command-r2.json
+@@ -0,0 +1 @@
++{"ack":{"draft_id":"draft_cd18780b922f443ba9269239f253f837","revision":2,"validation_warnings":[{"code":"PROVENANCE_UNRESOLVED","locator":null,"message":"此精确修订尚无可核验的冻结来源记录；原始引用保留，未猜测来源。","severity":"warning"},{"code":"DRAFT_EDIT_UNREVIEWED","locator":null,"message":"此编辑候选尚未取得数学、来源或教学批准；继承来源不是对新正文的认证。","severity":"warning"}]},"actor_id":"session_056245735a654a3b9e55bdb93337119a","key":"dependency-patch","record_sha256":"489af8bc22d5e45de31b9088d9e2c1c84005fd41525ba7a6a98e6aec5b18a47e","request":{"expected_revision":1,"patches":[{"field":"body_markdown","value":"Corrected synthetic prose.\n"}]},"route":"PATCH /drafts/draft_cd18780b922f443ba9269239f253f837","version":"draft-edit-command-v1","workspace_id":"workspace_dbdec46be0d4403e86c53908be0a7e11"}
+\ No newline at end of file
+diff --git a/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/http-patch-ack.bin b/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/http-patch-ack.bin
+new file mode 100644
+index 00000000..23565432
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/http-patch-ack.bin
+@@ -0,0 +1 @@
++{"draft_id":"draft_cd18780b922f443ba9269239f253f837","revision":2,"validation_warnings":[{"code":"PROVENANCE_UNRESOLVED","message":"此精确修订尚无可核验的冻结来源记录；原始引用保留，未猜测来源。","locator":null,"severity":"warning"},{"code":"DRAFT_EDIT_UNREVIEWED","message":"此编辑候选尚未取得数学、来源或教学批准；继承来源不是对新正文的认证。","locator":null,"severity":"warning"}]}
+\ No newline at end of file
+diff --git a/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/http-post-ack.bin b/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/http-post-ack.bin
+new file mode 100644
+index 00000000..a354877b
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/http-post-ack.bin
+@@ -0,0 +1 @@
++{"draft_id":"draft_cd18780b922f443ba9269239f253f837","revision":1,"base_ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"state":"draft"}
+\ No newline at end of file
+diff --git a/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/http-publication-ack.bin b/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/http-publication-ack.bin
+new file mode 100644
+index 00000000..bd0975e9
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/http-publication-ack.bin
+@@ -0,0 +1 @@
++{"entity":"block","id":"edit_dependent_text","revision":2,"sha256":"53332edab76d1820ef4e1cab7dd8e642750b7a3892a8aad1be17409ee1771045"}
+\ No newline at end of file
+diff --git a/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/manifest.json b/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/manifest.json
+new file mode 100644
+index 00000000..8e09ae4d
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/manifest.json
+@@ -0,0 +1,401 @@
++{
++  "source_commit": "7a6a8a2a0cc4dca86abd437bd7cd532423a48167",
++  "synthetic": true,
++  "scope": "Real local HTTP/SQLite/worker; synthetic review intent, no model or numeric execution.",
++  "draft_id": "draft_cd18780b922f443ba9269239f253f837",
++  "workspace_id": "workspace_dbdec46be0d4403e86c53908be0a7e11",
++  "versions": [
++    {
++      "revision": 1,
++      "candidate_sha256": "d462e53925bef00ba9f060606869fed3e70f48e28063fe679aa96f5136e4c95b",
++      "record_sha256": "ed067b4df311df3f5d8b02d31a64219dcc136b74d596504f238d4ac4982f1af6",
++      "parent_sha256": null
++    },
++    {
++      "revision": 2,
++      "candidate_sha256": "68b08a52951e010d3da4f1201018dfd9ad213206fbfe4ab28e93054925725b38",
++      "record_sha256": "489af8bc22d5e45de31b9088d9e2c1c84005fd41525ba7a6a98e6aec5b18a47e",
++      "parent_sha256": "ed067b4df311df3f5d8b02d31a64219dcc136b74d596504f238d4ac4982f1af6"
++    }
++  ],
++  "commands": [
++    {
++      "revision": 1,
++      "route": "POST /drafts",
++      "command_key": "dependency-create",
++      "record_sha256": "8b3234baac672d14f8906734c8105211a688da4487cbfcaf5a457b473e7e0128",
++      "http_status": 201,
++      "original_replay_bytes_equal": true
++    },
++    {
++      "revision": 2,
++      "route": "PATCH /drafts/draft_cd18780b922f443ba9269239f253f837",
++      "command_key": "dependency-patch",
++      "record_sha256": "094bed610302f5a9b318b330f7aef6ec6e49a593cf5738dacca6fa8907de908d",
++      "http_status": 200,
++      "original_replay_bytes_equal": true
++    }
++  ],
++  "files": [
++    {
++      "path": "version-r1.json",
++      "bytes": 3440,
++      "sha256": "ed067b4df311df3f5d8b02d31a64219dcc136b74d596504f238d4ac4982f1af6"
++    },
++    {
++      "path": "version-r2.json",
++      "bytes": 3405,
++      "sha256": "489af8bc22d5e45de31b9088d9e2c1c84005fd41525ba7a6a98e6aec5b18a47e"
++    },
++    {
++      "path": "command-r1.json",
++      "bytes": 725,
++      "sha256": "8b3234baac672d14f8906734c8105211a688da4487cbfcaf5a457b473e7e0128"
++    },
++    {
++      "path": "http-post-ack.bin",
++      "bytes": 228,
++      "sha256": "d080f92348ce84fff15dbab65a99223d26edd4c6f8b8a91ebbce7d8d0a8d188d"
++    },
++    {
++      "path": "command-r2.json",
++      "bytes": 887,
++      "sha256": "094bed610302f5a9b318b330f7aef6ec6e49a593cf5738dacca6fa8907de908d"
++    },
++    {
++      "path": "http-patch-ack.bin",
++      "bytes": 449,
++      "sha256": "d6e8fd222cbaf2d3148ae3032494f235afa9b1b23a16afdf084748af7a25a19c"
++    },
++    {
++      "path": "publication-record.json",
++      "bytes": 5039,
++      "sha256": "5aa81e721df7605db8bf333ee27b601465c139d481613349f2e9b210f9adab5f"
++    },
++    {
++      "path": "http-publication-ack.bin",
++      "bytes": 134,
++      "sha256": "4ee7541324fba8bcbfcd3a511a369d4310357ce1af384560e740e3b1cedd0fcc"
++    },
++    {
++      "path": "source-metadata.json",
++      "bytes": 2190,
++      "sha256": "05f06017d3058021bcf204424a902236738cf8b69723d82ce2e109e7eef3ecd8"
++    },
++    {
++      "path": "source-body-base.bin",
++      "bytes": 25,
++      "sha256": "343757b3b428169e8541904f6a179300583c16feb2f345de393626809a9ce78a"
++    },
++    {
++      "path": "publication-request.json",
++      "bytes": 257,
++      "sha256": "4cc04cc50f3cc596b30b12af00085c467418c208350ddb3a298ebc7a19b5bb0f"
++    }
++  ],
++  "publication": {
++    "record_sha256": "5aa81e721df7605db8bf333ee27b601465c139d481613349f2e9b210f9adab5f",
++    "publication_id": "publication_057862ae97064709b4fafbb210383c8a",
++    "http_status": 201,
++    "original_replay_bytes_equal": true
++  },
++  "readonly_replays_table_hashes_unchanged": true,
++  "before_table_hashes": {
++    "approvals": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "artifacts": "619d8831d14672915cec0a4dccf44dab109ca0f6ed67ae7f4d423a24892a7893",
++    "assessment_grade_audits": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "assessment_grade_jobs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "assessment_manual_reviews": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "assessment_receipts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "attempts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "authoring_authorizations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "authoring_candidates": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "authoring_commands": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "authoring_content_plans": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "authoring_group_candidates": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "authoring_group_numeric_checks": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "authoring_numeric_checks": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "authoring_numeric_executions": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "authoring_records": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "block_bodies": "c0ed943464807ba0c43b7480961c7a1174a3d8f3cfbef6efc3ed4e059d6d06d2",
++    "block_provenance": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "block_provenance_witnesses": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "bootstrap_codes": "39c7e7c78c058b981b6d64263eac1b09cfa2b029eeec2c94ff92c7367552b745",
++    "codex_sessions": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "concept_edges": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "connectors": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "consents": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "content_blobs": "0ad172d0fac09790f36759ecb47b53a5bfb7c587813ee36cfe39f6f467273a06",
++    "content_impact_decision_heads": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "content_impact_decisions": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "content_impact_legacy_events": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "content_impact_snapshots": "977821fcaa71e541fd0e6a707a75feb06c6aa85961e5f0e5ee49941d1ef57f63",
++    "content_restore_commands": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "content_restore_drafts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "context_snapshots": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "draft_candidate_identities": "fa838b2cbe45292539bb2d433deff70372441b56298fec0409438436ee2da0e4",
++    "draft_candidate_revisions": "f56016267398a83db7692213b747a9b50123ce0757d3de4d58823fd73ffd6de4",
++    "draft_edit_commands": "e0e9d2e16995192c980af73951d5490458a7a6c5e41bf8cacb7a621751d6d0fc",
++    "draft_edit_versions": "67a6ede04c60950f67b23883c3c7912ebea30a0f402edaf9c7a659cdf1bd996b",
++    "draft_edits": "5bc70cc05dd3926e73cfe0f158f95133b35cc697d58788ad1c5827c459a61239",
++    "draft_publication_commands": "1b22f98137e2f8da39fadbf8baa394b50728ec6847d8409b1829a26b748bea0a",
++    "draft_publication_events": "af5b3ce2ec1d87379a45b19088b44092dac8479cc0faac4d2fbd936975a509b1",
++    "draft_publication_results": "13eb15ed284cbac0d29cb5472a29c9d8e8d744d19d5028939c5f465fa83d39ae",
++    "draft_publications": "769e5a30360c3ab3db1703bae9babed28eec3612c6c5d2653230af7a56535a81",
++    "drafts": "5cd2108ccaffda37da9ebf4e6b2e649325fae9114a915cc80c22dfb3a7c35d8c",
++    "evidence": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "exposures": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "feedback": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "fts_chunks": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "fts_chunks_config": "ada92526309f86a3a9ffe14c12a523763133e33caef1f59c210553e4cb604c81",
++    "fts_chunks_content": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "fts_chunks_data": "ebc9c2e8cb6e5b13837ceaac89259bf4081ad3e2239a59bc2a80bc32d70ca9f3",
++    "fts_chunks_docsize": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "fts_chunks_idx": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "grades": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "grading_recovery_failures": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "grading_signing_keys": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "idempotency": "da888b46277e54d7f6f7e1b9e92bd8889d0de1961c40bb3926a150e8e6229023",
++    "indexes": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "ingestion_imports": "ae755584a328423f813135cb0e11bfc501b4614af8a53fdb340d46a983bc7a21",
++    "job_events": "b4b3a7c9e3993fe078259d339a343175a93ed7d576e33a85173fb2a6c23c4ce8",
++    "jobs": "e3a17cb12ed923b17f507dd9a3fecdc61ea9827b3d214631418458aeec6565ca",
++    "learner_profile_command_receipts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "learner_profile_history": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "learner_profile_legacy_snapshots": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "learner_profiles": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "learning_applicability_decisions": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "learning_applicability_heads": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "learning_events": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "learning_evidence_recovery_failures": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "learning_evidence_refs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "learning_grade_bindings": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "learning_progress": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "learning_submission_bases": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "local_sessions": "c29de60290189d1249f743a4104432592eab0631a590d6a210315363da81f5e6",
++    "messages": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "notes_index": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "object_dependencies": "fc71091d7b06f7d2b27d7bba5701029205d276ec0893555b8d22d46de697217e",
++    "objects": "e33b507797d2eabce40138cbf154ac26d8c11e19f3b73612a5f7538b025381d9",
++    "outbox": "db458b3cda6391370700b76245089808fe6e379391c38af2f9a6ef58b276b84b",
++    "practice_exposures": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "practice_grading_audits": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "practice_model_help": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "practice_responses": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "practice_sessions": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "proposals": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_artifacts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_backup_projections": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_command_history": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_config_heads": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_config_history": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_configs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_consent_heads": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_consent_history": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_dispatch_usage": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_dispatches": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_private_commands": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_private_references": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_proposals": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_terminals": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "recommendation_command_receipts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "recommendation_decision_heads": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "recommendation_decision_history": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "recommendation_input_events": "da7157026aaa169d78da96a359e9ba0b5c7dcf21aba87bc296a2e5f566c497c2",
++    "recommendation_legacy_snapshots": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "recommendation_projection_state": "a5a5a8443798f420133ddc1deef60fd6de7fd6705dd6d12d74569ce113841f03",
++    "recommendation_snapshots": "0de4044e77f8eb8faaace16fd63a9dac13795037d5a68098e04105c35c3bc4ad",
++    "recommendations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "responses": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "restore_numeric_checks": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "restore_numeric_commands": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "restore_numeric_events": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "restore_numeric_heads": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "restore_numeric_jobs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "restore_numeric_materials": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "retrieval_chunks": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "retrieval_commands": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "retrieval_consumption": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "retrieval_fts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "retrieval_fts_config": "ada92526309f86a3a9ffe14c12a523763133e33caef1f59c210553e4cb604c81",
++    "retrieval_fts_content": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "retrieval_fts_data": "ebc9c2e8cb6e5b13837ceaac89259bf4081ad3e2239a59bc2a80bc32d70ca9f3",
++    "retrieval_fts_docsize": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "retrieval_fts_idx": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "retrieval_generations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "retrieval_input_events": "4f532e5f79bf89d57f840456a891ff1e96d2c90104972301919c984b4500dd80",
++    "retrieval_jobs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "retrieval_scopes": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "review_artifact_bindings": "13d51680c01808c3ffa83d86981df70b48df919515f1cb390924902de7744315",
++    "review_commands": "5b3b332029683c1af0995443644d9d9779718d7510a3f81897404727ac41d01a",
++    "review_jobs": "88f096c6f647d2f89b531f7ed3f292ee625bb7702a80148d247f6cc4ea2340d4",
++    "review_revisions": "445e0d39b16b1c3fcd1b03264be3d89e293fa027fda2695c4361b5650040964d",
++    "reviews": "ebe9e9e1e7b8b49f3461accf059a67dceefd45de0c4698622c7db30142891d4e",
++    "revisions": "0342a9d97a3b0973b60b1332f8f638f91c08a42d3ce4e59b660de06ea1a4271e",
++    "route_steps": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "runs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "schema_migrations": "cd811fbedfb4c443783e3cca594b0dcc6e85d5ce7c650abb5ad4052c85c240e8",
++    "single_publication_bindings": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "solutions": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "sources": "c279d38bed70fee82bbdbea849e4016ae6d67f39e3aa51f55639434fb8a5059f",
++    "sqlite_sequence": "1efd9032c7091a74cfaa7f7b23b4ee9689e61318b3a196d1ce7c6da31e7c9751",
++    "threads": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "tutor_commands": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "tutor_events": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "tutor_messages": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "tutor_runs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "tutor_threads": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "usage_records": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "workbench_sessions": "35298bf041fd3c9f1f81d2632b3b35c804f29374fdd817be071059e2f46a2f16",
++    "workspace": "4cc5a5e7cabff9063893516d674be84d8733fa15c1eb6dbbdaef6b53f33d8221"
++  },
++  "after_table_hashes": {
++    "approvals": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "artifacts": "619d8831d14672915cec0a4dccf44dab109ca0f6ed67ae7f4d423a24892a7893",
++    "assessment_grade_audits": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "assessment_grade_jobs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "assessment_manual_reviews": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "assessment_receipts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "attempts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "authoring_authorizations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "authoring_candidates": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "authoring_commands": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "authoring_content_plans": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "authoring_group_candidates": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "authoring_group_numeric_checks": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "authoring_numeric_checks": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "authoring_numeric_executions": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "authoring_records": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "block_bodies": "c0ed943464807ba0c43b7480961c7a1174a3d8f3cfbef6efc3ed4e059d6d06d2",
++    "block_provenance": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "block_provenance_witnesses": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "bootstrap_codes": "39c7e7c78c058b981b6d64263eac1b09cfa2b029eeec2c94ff92c7367552b745",
++    "codex_sessions": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "concept_edges": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "connectors": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "consents": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "content_blobs": "0ad172d0fac09790f36759ecb47b53a5bfb7c587813ee36cfe39f6f467273a06",
++    "content_impact_decision_heads": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "content_impact_decisions": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "content_impact_legacy_events": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "content_impact_snapshots": "977821fcaa71e541fd0e6a707a75feb06c6aa85961e5f0e5ee49941d1ef57f63",
++    "content_restore_commands": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "content_restore_drafts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "context_snapshots": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "draft_candidate_identities": "fa838b2cbe45292539bb2d433deff70372441b56298fec0409438436ee2da0e4",
++    "draft_candidate_revisions": "f56016267398a83db7692213b747a9b50123ce0757d3de4d58823fd73ffd6de4",
++    "draft_edit_commands": "e0e9d2e16995192c980af73951d5490458a7a6c5e41bf8cacb7a621751d6d0fc",
++    "draft_edit_versions": "67a6ede04c60950f67b23883c3c7912ebea30a0f402edaf9c7a659cdf1bd996b",
++    "draft_edits": "5bc70cc05dd3926e73cfe0f158f95133b35cc697d58788ad1c5827c459a61239",
++    "draft_publication_commands": "1b22f98137e2f8da39fadbf8baa394b50728ec6847d8409b1829a26b748bea0a",
++    "draft_publication_events": "af5b3ce2ec1d87379a45b19088b44092dac8479cc0faac4d2fbd936975a509b1",
++    "draft_publication_results": "13eb15ed284cbac0d29cb5472a29c9d8e8d744d19d5028939c5f465fa83d39ae",
++    "draft_publications": "769e5a30360c3ab3db1703bae9babed28eec3612c6c5d2653230af7a56535a81",
++    "drafts": "5cd2108ccaffda37da9ebf4e6b2e649325fae9114a915cc80c22dfb3a7c35d8c",
++    "evidence": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "exposures": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "feedback": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "fts_chunks": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "fts_chunks_config": "ada92526309f86a3a9ffe14c12a523763133e33caef1f59c210553e4cb604c81",
++    "fts_chunks_content": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "fts_chunks_data": "ebc9c2e8cb6e5b13837ceaac89259bf4081ad3e2239a59bc2a80bc32d70ca9f3",
++    "fts_chunks_docsize": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "fts_chunks_idx": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "grades": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "grading_recovery_failures": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "grading_signing_keys": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "idempotency": "da888b46277e54d7f6f7e1b9e92bd8889d0de1961c40bb3926a150e8e6229023",
++    "indexes": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "ingestion_imports": "ae755584a328423f813135cb0e11bfc501b4614af8a53fdb340d46a983bc7a21",
++    "job_events": "b4b3a7c9e3993fe078259d339a343175a93ed7d576e33a85173fb2a6c23c4ce8",
++    "jobs": "e3a17cb12ed923b17f507dd9a3fecdc61ea9827b3d214631418458aeec6565ca",
++    "learner_profile_command_receipts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "learner_profile_history": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "learner_profile_legacy_snapshots": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "learner_profiles": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "learning_applicability_decisions": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "learning_applicability_heads": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "learning_events": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "learning_evidence_recovery_failures": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "learning_evidence_refs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "learning_grade_bindings": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "learning_progress": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "learning_submission_bases": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "local_sessions": "c29de60290189d1249f743a4104432592eab0631a590d6a210315363da81f5e6",
++    "messages": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "notes_index": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "object_dependencies": "fc71091d7b06f7d2b27d7bba5701029205d276ec0893555b8d22d46de697217e",
++    "objects": "e33b507797d2eabce40138cbf154ac26d8c11e19f3b73612a5f7538b025381d9",
++    "outbox": "db458b3cda6391370700b76245089808fe6e379391c38af2f9a6ef58b276b84b",
++    "practice_exposures": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "practice_grading_audits": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "practice_model_help": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "practice_responses": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "practice_sessions": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "proposals": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_artifacts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_backup_projections": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_command_history": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_config_heads": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_config_history": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_configs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_consent_heads": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_consent_history": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_dispatch_usage": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_dispatches": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_private_commands": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_private_references": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_proposals": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "provider_terminals": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "recommendation_command_receipts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "recommendation_decision_heads": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "recommendation_decision_history": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "recommendation_input_events": "da7157026aaa169d78da96a359e9ba0b5c7dcf21aba87bc296a2e5f566c497c2",
++    "recommendation_legacy_snapshots": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "recommendation_projection_state": "a5a5a8443798f420133ddc1deef60fd6de7fd6705dd6d12d74569ce113841f03",
++    "recommendation_snapshots": "0de4044e77f8eb8faaace16fd63a9dac13795037d5a68098e04105c35c3bc4ad",
++    "recommendations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "responses": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "restore_numeric_checks": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "restore_numeric_commands": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "restore_numeric_events": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "restore_numeric_heads": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "restore_numeric_jobs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "restore_numeric_materials": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "retrieval_chunks": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "retrieval_commands": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "retrieval_consumption": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "retrieval_fts": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "retrieval_fts_config": "ada92526309f86a3a9ffe14c12a523763133e33caef1f59c210553e4cb604c81",
++    "retrieval_fts_content": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "retrieval_fts_data": "ebc9c2e8cb6e5b13837ceaac89259bf4081ad3e2239a59bc2a80bc32d70ca9f3",
++    "retrieval_fts_docsize": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "retrieval_fts_idx": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "retrieval_generations": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "retrieval_input_events": "4f532e5f79bf89d57f840456a891ff1e96d2c90104972301919c984b4500dd80",
++    "retrieval_jobs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "retrieval_scopes": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "review_artifact_bindings": "13d51680c01808c3ffa83d86981df70b48df919515f1cb390924902de7744315",
++    "review_commands": "5b3b332029683c1af0995443644d9d9779718d7510a3f81897404727ac41d01a",
++    "review_jobs": "88f096c6f647d2f89b531f7ed3f292ee625bb7702a80148d247f6cc4ea2340d4",
++    "review_revisions": "445e0d39b16b1c3fcd1b03264be3d89e293fa027fda2695c4361b5650040964d",
++    "reviews": "ebe9e9e1e7b8b49f3461accf059a67dceefd45de0c4698622c7db30142891d4e",
++    "revisions": "0342a9d97a3b0973b60b1332f8f638f91c08a42d3ce4e59b660de06ea1a4271e",
++    "route_steps": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "runs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "schema_migrations": "cd811fbedfb4c443783e3cca594b0dcc6e85d5ce7c650abb5ad4052c85c240e8",
++    "single_publication_bindings": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "solutions": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "sources": "c279d38bed70fee82bbdbea849e4016ae6d67f39e3aa51f55639434fb8a5059f",
++    "sqlite_sequence": "1efd9032c7091a74cfaa7f7b23b4ee9689e61318b3a196d1ce7c6da31e7c9751",
++    "threads": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "tutor_commands": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "tutor_events": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "tutor_messages": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "tutor_runs": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "tutor_threads": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "usage_records": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
++    "workbench_sessions": "35298bf041fd3c9f1f81d2632b3b35c804f29374fdd817be071059e2f46a2f16",
++    "workspace": "4cc5a5e7cabff9063893516d674be84d8733fa15c1eb6dbbdaef6b53f33d8221"
++  }
++}
+diff --git a/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/publication-record.json b/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/publication-record.json
+new file mode 100644
+index 00000000..38416835
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/publication-record.json
+@@ -0,0 +1 @@
++{"actor_id":"session_056245735a654a3b9e55bdb93337119a","admission":{"acknowledged_warning_codes":["DRAFT_EDIT_UNREVIEWED","PROVENANCE_UNRESOLVED"],"candidate":{"candidate_sha256":"68b08a52951e010d3da4f1201018dfd9ad213206fbfe4ab28e93054925725b38","draft_id":"draft_cd18780b922f443ba9269239f253f837","draft_revision":2,"entity":"block"},"material_descriptor_sha256":"e5b57a66ec9bcc67b611dbbf98de47112e572b65f996ec184de5fa231a300704","numeric_check_ids":[],"numeric_coverage":"not_required_by_material","numeric_observation_sha256":"51510c966f123fbf1e2bf3a6f1ce0a5f169da5c347cd5ed9fa9538c52b376759","publication":"NOT_RUN","receipt_sha256":"e1b8bb9cc914bdda5597e2773d0c358a023d79b0a2fff16afb38ee3f38d45656","review_receipt_id":"review_5e09ab0834b2433f979764680b701ca2","review_revision":2,"version":"publication-admission-observation-v1","workspace_id":"workspace_dbdec46be0d4403e86c53908be0a7e11"},"adopted_at":"2026-10-03T00:22:02.079731Z","base":{"body_markdown":"Synthetic original base.\n","dependency_witness":{"edges":[{"owner_ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"relation":"reference","target_ref":{"entity":"block","id":"edit_dependency_first","revision":1,"sha256":"52008c8137228ab108df7c83704d68c7cef6830fbcf4852173d791855a64368f"}},{"owner_ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"relation":"reference","target_ref":{"entity":"block","id":"edit_dependency_second","revision":1,"sha256":"652e62beb88165d993a4ecd5cfb5950abfadd59f47821329dad443c3c27583e3"}}],"root_ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"version":"content-dependency-witness-v1"},"metadata":{"body_path":"content/edit-dependent.md","body_sha256":"343757b3b428169e8541904f6a179300583c16feb2f345de393626809a9ce78a","citations":[],"concepts":[],"depends_on":[{"entity":"block","id":"edit_dependency_second","revision":1,"sha256":"652e62beb88165d993a4ecd5cfb5950abfadd59f47821329dad443c3c27583e3"},{"entity":"block","id":"edit_dependency_first","revision":1,"sha256":"52008c8137228ab108df7c83704d68c7cef6830fbcf4852173d791855a64368f"}],"entity":"block","id":"edit_dependent_text","kind":"text","revision":1,"schema_version":"3.0.0","title":"Original synthetic text"},"provenance":null,"ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"version":"draft-base-material-dependencies-v2","warnings":[{"code":"PROVENANCE_UNRESOLVED","locator":null,"message":"此精确修订尚无可核验的冻结来源记录；原始引用保留，未猜测来源。","severity":"warning"}]},"block":{"body_path":"content/edit-dependent.md","body_sha256":"66a9d043451eb9cd089172ba1e6f69ad5744edbf5c41152f42381ecc9adfd558","citations":[],"concepts":[],"depends_on":[{"entity":"block","id":"edit_dependency_second","revision":1,"sha256":"652e62beb88165d993a4ecd5cfb5950abfadd59f47821329dad443c3c27583e3"},{"entity":"block","id":"edit_dependency_first","revision":1,"sha256":"52008c8137228ab108df7c83704d68c7cef6830fbcf4852173d791855a64368f"}],"entity":"block","id":"edit_dependent_text","kind":"text","revision":2,"schema_version":"3.0.0","title":"Synthetic corrected title"},"candidate":{"candidate_sha256":"68b08a52951e010d3da4f1201018dfd9ad213206fbfe4ab28e93054925725b38","draft_id":"draft_cd18780b922f443ba9269239f253f837","draft_revision":2,"entity":"block"},"command_key":"dependency-publish","edit_record_sha256":"489af8bc22d5e45de31b9088d9e2c1c84005fd41525ba7a6a98e6aec5b18a47e","human_record_sha256":"2a2a946470a46936b90687593575128b3cf8de8ac4cb7970317b58dcc7082ead","id":"publication_057862ae97064709b4fafbb210383c8a","owner":"authoring","payload":{"base_material_sha256":"a20e670dc4f678a86dbe6d1a6234f2a431ffeb682d574835c91fc73ed01be2ee","base_ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"body_markdown":"Corrected synthetic prose.\n","body_path":"content/edit-dependent.md","body_sha256":"66a9d043451eb9cd089172ba1e6f69ad5744edbf5c41152f42381ecc9adfd558","citations":[],"entity":"block","kind":"text","title":"Synthetic corrected title","version":"text-block-edit-v1"},"published_at":"2026-10-03T00:22:02.125284Z","request":{"acknowledged_warning_codes":["DRAFT_EDIT_UNREVIEWED","PROVENANCE_UNRESOLVED"],"expected_content_sha256":"68b08a52951e010d3da4f1201018dfd9ad213206fbfe4ab28e93054925725b38","expected_revision":2,"review_receipt_id":"review_5e09ab0834b2433f979764680b701ca2"},"result":{"entity":"block","id":"edit_dependent_text","revision":2,"sha256":"53332edab76d1820ef4e1cab7dd8e642750b7a3892a8aad1be17409ee1771045"},"route":"POST /drafts/draft_cd18780b922f443ba9269239f253f837/publish","version":"edit-publication-v1","workspace_id":"workspace_dbdec46be0d4403e86c53908be0a7e11"}
+\ No newline at end of file
+diff --git a/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/publication-request.json b/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/publication-request.json
+new file mode 100644
+index 00000000..50db3350
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/publication-request.json
+@@ -0,0 +1 @@
++{"acknowledged_warning_codes":["DRAFT_EDIT_UNREVIEWED","PROVENANCE_UNRESOLVED"],"expected_content_sha256":"68b08a52951e010d3da4f1201018dfd9ad213206fbfe4ab28e93054925725b38","expected_revision":2,"review_receipt_id":"review_5e09ab0834b2433f979764680b701ca2"}
+\ No newline at end of file
+diff --git a/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/source-body-base.bin b/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/source-body-base.bin
+new file mode 100644
+index 00000000..e878e17a
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/source-body-base.bin
+@@ -0,0 +1 @@
++Synthetic original base.
+diff --git a/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/source-metadata.json b/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/source-metadata.json
+new file mode 100644
+index 00000000..dd94dfd9
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/source-metadata.json
+@@ -0,0 +1 @@
++{"base_ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"dependencies":[{"body_path":"content/edit-first.md","body_sha256":"bbeab96c39b1981b421160ed951d81bfc7c34f13f103c6716d7950b50e42ab8c","citations":[],"concepts":[],"depends_on":[],"entity":"block","id":"edit_dependency_first","kind":"text","revision":1,"schema_version":"3.0.0","title":"first"},{"body_path":"content/edit-second.md","body_sha256":"4c0b52c46e9965347ccf227bd8f9ce2618c31cab9f0dd992607fac59feabf668","citations":[],"concepts":[],"depends_on":[],"entity":"block","id":"edit_dependency_second","kind":"text","revision":1,"schema_version":"3.0.0","title":"second"}],"ordered_depends_on":[{"entity":"block","id":"edit_dependency_second","revision":1,"sha256":"652e62beb88165d993a4ecd5cfb5950abfadd59f47821329dad443c3c27583e3"},{"entity":"block","id":"edit_dependency_first","revision":1,"sha256":"52008c8137228ab108df7c83704d68c7cef6830fbcf4852173d791855a64368f"}],"original":{"body_path":"content/edit-dependent.md","body_sha256":"343757b3b428169e8541904f6a179300583c16feb2f345de393626809a9ce78a","citations":[],"concepts":[],"depends_on":[{"entity":"block","id":"edit_dependency_second","revision":1,"sha256":"652e62beb88165d993a4ecd5cfb5950abfadd59f47821329dad443c3c27583e3"},{"entity":"block","id":"edit_dependency_first","revision":1,"sha256":"52008c8137228ab108df7c83704d68c7cef6830fbcf4852173d791855a64368f"}],"entity":"block","id":"edit_dependent_text","kind":"text","revision":1,"schema_version":"3.0.0","title":"Original synthetic text"},"published":{"body_path":"content/edit-dependent.md","body_sha256":"66a9d043451eb9cd089172ba1e6f69ad5744edbf5c41152f42381ecc9adfd558","citations":[],"concepts":[],"depends_on":[{"entity":"block","id":"edit_dependency_second","revision":1,"sha256":"652e62beb88165d993a4ecd5cfb5950abfadd59f47821329dad443c3c27583e3"},{"entity":"block","id":"edit_dependency_first","revision":1,"sha256":"52008c8137228ab108df7c83704d68c7cef6830fbcf4852173d791855a64368f"}],"entity":"block","id":"edit_dependent_text","kind":"text","revision":2,"schema_version":"3.0.0","title":"Synthetic corrected title"}}
+\ No newline at end of file
+diff --git a/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/version-r1.json b/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/version-r1.json
+new file mode 100644
+index 00000000..a81b7a95
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/version-r1.json
+@@ -0,0 +1 @@
++{"actor_id":"session_056245735a654a3b9e55bdb93337119a","base":{"body_markdown":"Synthetic original base.\n","dependency_witness":{"edges":[{"owner_ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"relation":"reference","target_ref":{"entity":"block","id":"edit_dependency_first","revision":1,"sha256":"52008c8137228ab108df7c83704d68c7cef6830fbcf4852173d791855a64368f"}},{"owner_ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"relation":"reference","target_ref":{"entity":"block","id":"edit_dependency_second","revision":1,"sha256":"652e62beb88165d993a4ecd5cfb5950abfadd59f47821329dad443c3c27583e3"}}],"root_ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"version":"content-dependency-witness-v1"},"metadata":{"body_path":"content/edit-dependent.md","body_sha256":"343757b3b428169e8541904f6a179300583c16feb2f345de393626809a9ce78a","citations":[],"concepts":[],"depends_on":[{"entity":"block","id":"edit_dependency_second","revision":1,"sha256":"652e62beb88165d993a4ecd5cfb5950abfadd59f47821329dad443c3c27583e3"},{"entity":"block","id":"edit_dependency_first","revision":1,"sha256":"52008c8137228ab108df7c83704d68c7cef6830fbcf4852173d791855a64368f"}],"entity":"block","id":"edit_dependent_text","kind":"text","revision":1,"schema_version":"3.0.0","title":"Original synthetic text"},"provenance":null,"ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"version":"draft-base-material-dependencies-v2","warnings":[{"code":"PROVENANCE_UNRESOLVED","locator":null,"message":"此精确修订尚无可核验的冻结来源记录；原始引用保留，未猜测来源。","severity":"warning"}]},"candidate":{"candidate_sha256":"d462e53925bef00ba9f060606869fed3e70f48e28063fe679aa96f5136e4c95b","draft_id":"draft_cd18780b922f443ba9269239f253f837","draft_revision":1,"entity":"block"},"command_key":"dependency-create","created_at":"2026-10-03T00:22:01.737346Z","parent_sha256":null,"payload":{"base_material_sha256":"a20e670dc4f678a86dbe6d1a6234f2a431ffeb682d574835c91fc73ed01be2ee","base_ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"body_markdown":"Synthetic original base.\n","body_path":"content/edit-dependent.md","body_sha256":"343757b3b428169e8541904f6a179300583c16feb2f345de393626809a9ce78a","citations":[],"entity":"block","kind":"text","title":"Synthetic corrected title","version":"text-block-edit-v1"},"request":{"base_ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"kind":"block","title":"Synthetic corrected title"},"version":"draft-edit-record-v1","warnings":[{"code":"PROVENANCE_UNRESOLVED","locator":null,"message":"此精确修订尚无可核验的冻结来源记录；原始引用保留，未猜测来源。","severity":"warning"},{"code":"DRAFT_EDIT_UNREVIEWED","locator":null,"message":"此编辑候选尚未取得数学、来源或教学批准；继承来源不是对新正文的认证。","severity":"warning"}],"workspace_id":"workspace_dbdec46be0d4403e86c53908be0a7e11"}
+\ No newline at end of file
+diff --git a/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/version-r2.json b/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/version-r2.json
+new file mode 100644
+index 00000000..882b7fb5
+--- /dev/null
++++ b/tests/fixtures/draft_edit_legacy_v2/ordered-dependencies-v2-published/version-r2.json
+@@ -0,0 +1 @@
++{"actor_id":"session_056245735a654a3b9e55bdb93337119a","base":{"body_markdown":"Synthetic original base.\n","dependency_witness":{"edges":[{"owner_ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"relation":"reference","target_ref":{"entity":"block","id":"edit_dependency_first","revision":1,"sha256":"52008c8137228ab108df7c83704d68c7cef6830fbcf4852173d791855a64368f"}},{"owner_ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"relation":"reference","target_ref":{"entity":"block","id":"edit_dependency_second","revision":1,"sha256":"652e62beb88165d993a4ecd5cfb5950abfadd59f47821329dad443c3c27583e3"}}],"root_ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"version":"content-dependency-witness-v1"},"metadata":{"body_path":"content/edit-dependent.md","body_sha256":"343757b3b428169e8541904f6a179300583c16feb2f345de393626809a9ce78a","citations":[],"concepts":[],"depends_on":[{"entity":"block","id":"edit_dependency_second","revision":1,"sha256":"652e62beb88165d993a4ecd5cfb5950abfadd59f47821329dad443c3c27583e3"},{"entity":"block","id":"edit_dependency_first","revision":1,"sha256":"52008c8137228ab108df7c83704d68c7cef6830fbcf4852173d791855a64368f"}],"entity":"block","id":"edit_dependent_text","kind":"text","revision":1,"schema_version":"3.0.0","title":"Original synthetic text"},"provenance":null,"ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"version":"draft-base-material-dependencies-v2","warnings":[{"code":"PROVENANCE_UNRESOLVED","locator":null,"message":"此精确修订尚无可核验的冻结来源记录；原始引用保留，未猜测来源。","severity":"warning"}]},"candidate":{"candidate_sha256":"68b08a52951e010d3da4f1201018dfd9ad213206fbfe4ab28e93054925725b38","draft_id":"draft_cd18780b922f443ba9269239f253f837","draft_revision":2,"entity":"block"},"command_key":"dependency-patch","created_at":"2026-10-03T00:22:01.773369Z","parent_sha256":"ed067b4df311df3f5d8b02d31a64219dcc136b74d596504f238d4ac4982f1af6","payload":{"base_material_sha256":"a20e670dc4f678a86dbe6d1a6234f2a431ffeb682d574835c91fc73ed01be2ee","base_ref":{"entity":"block","id":"edit_dependent_text","revision":1,"sha256":"500b15e8662e81e9c0d91720de15b4b74a6e2c5d1117b64719db47e2aadc3062"},"body_markdown":"Corrected synthetic prose.\n","body_path":"content/edit-dependent.md","body_sha256":"66a9d043451eb9cd089172ba1e6f69ad5744edbf5c41152f42381ecc9adfd558","citations":[],"entity":"block","kind":"text","title":"Synthetic corrected title","version":"text-block-edit-v1"},"request":{"expected_revision":1,"patches":[{"field":"body_markdown","value":"Corrected synthetic prose.\n"}]},"version":"draft-edit-record-v1","warnings":[{"code":"PROVENANCE_UNRESOLVED","locator":null,"message":"此精确修订尚无可核验的冻结来源记录；原始引用保留，未猜测来源。","severity":"warning"},{"code":"DRAFT_EDIT_UNREVIEWED","locator":null,"message":"此编辑候选尚未取得数学、来源或教学批准；继承来源不是对新正文的认证。","severity":"warning"}],"workspace_id":"workspace_dbdec46be0d4403e86c53908be0a7e11"}
+\ No newline at end of file
+diff --git a/tests/integration/test_draft_edit_integrity.py b/tests/integration/test_draft_edit_integrity.py
+index 05ebcf85..fec08fed 100644
+--- a/tests/integration/test_draft_edit_integrity.py
++++ b/tests/integration/test_draft_edit_integrity.py
+@@ -252,7 +252,7 @@ def test_repository_append_fault_is_atomic_even_if_outer_caller_commits(case):
+     assert service.read(identity, created.draft_id, 1) == original
+ 
+ 
+-@pytest.mark.parametrize('scope', ['kind', 'concept', 'foreign_workspace'])
++@pytest.mark.parametrize('scope', ['kind', 'foreign_workspace'])
+ def test_real_published_bases_outside_first_scope_create_no_edit(case, scope):
+     database, identity, base, service, _, _ = case
+     content = ContentService(database)
+@@ -263,10 +263,6 @@ def test_real_published_bases_outside_first_scope_create_no_edit(case, scope):
+     workspace = identity.workspace_id
+     if scope == 'kind':
+         changes['kind'] = 'worked_example'
+-    elif scope == 'concept':
+-        concept = dm.Concept(id='synthetic_concept', revision=1, title='Synthetic concept')
+-        values.append(concept)
+-        changes['concepts'] = [concept.id]
+     else:
+         workspace = 'synthetic_other_workspace'
+         with database.transaction() as conn:
+diff --git a/tests/integration/test_edit_publication_concepts.py b/tests/integration/test_edit_publication_concepts.py
+new file mode 100644
+index 00000000..143adac1
+--- /dev/null
++++ b/tests/integration/test_edit_publication_concepts.py
+@@ -0,0 +1,218 @@
++"""Synthetic root concept pins through actual Edit/Review/publication HTTP owners."""
++import pytest
++from pydantic import TypeAdapter, ValidationError
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import sha256_bytes
++from services.api.app.application.content import ContentService
++from services.api.app.application.draft_edit_models import StoredDraftBase
++from tests.integration.test_authoring_http import command
++from tests.integration.test_authoring_numeric_provider_history import table_hashes
++from tests.integration.test_edit_publication_dependencies import draft, reviewed
++from tests.integration.test_review_http import prepared_review_http as prepared_review_http
++
++
++def source(case, *, with_dependencies=False):
++    content = ContentService(case.database)
++    prerequisite = dm.Concept(id='edit_root_prerequisite', revision=1, title='Original prerequisite')
++    content.publish(case.identity.workspace_id, [prerequisite], {})
++    concepts = [dm.Concept(id='edit_root_concept_' + name, revision=1, title='Original ' + name)
++        for name in ('first', 'second')]
++    concepts[0] = concepts[0].model_copy(update={'prerequisite_ids': [prerequisite.id]})
++    refs = content.publish(case.identity.workspace_id, concepts, {})
++    ordered = [refs[1], refs[0]]
++    raw = b'Original synthetic text with concept bindings.\n'
++    dependencies = []
++    if with_dependencies:
++        leaf = dm.ContentBlock(id='edit_concept_leaf', revision=1, kind='definition', title='Original leaf',
++            body_path='content/edit-concept-leaf.md', body_sha256=sha256_bytes(raw), concepts=[concepts[0].id])
++        leaf_ref = content.publish(case.identity.workspace_id, [leaf], {leaf.body_path: raw})[0]
++        middle = dm.ContentBlock(id='edit_concept_middle', revision=1, kind='text', title='Original middle',
++            body_path='content/edit-concept-middle.md', body_sha256=sha256_bytes(raw), depends_on=[leaf_ref])
++        middle_ref = content.publish(case.identity.workspace_id, [middle], {middle.body_path: raw})[0]
++        dependencies = [middle_ref, leaf_ref]
++    block = dm.ContentBlock(id='edit_concept_text', revision=1, kind='text', title='Original synthetic text',
++        body_path='content/edit-concept.md', body_sha256=sha256_bytes(raw), concepts=[ref.id for ref in ordered],
++        depends_on=dependencies)
++    base = content.publish(case.identity.workspace_id, [block], {block.body_path: raw})[0]
++    return content, block, base, [*concepts, prerequisite], ordered, raw
++
++
++def rejected(response, expected):
++    assert (response.status_code, response.json()['error']['code']) == expected
++
++
++@pytest.mark.parametrize('with_dependencies', [False, True])
++def test_original_concept_order_and_pins_survive_http_edit_after_concept_current_advances(prepared_review_http, with_dependencies):
++    case = prepared_review_http
++    content, block, base, concepts, ordered, raw = source(case, with_dependencies=with_dependencies)
++    identifier, create, created, patch, patched, snapshot = draft(case, base)
++    content.publish(case.identity.workspace_id,
++        [value.model_copy(update={'revision': 2, 'title': 'Later concept'}) for value in concepts], {})
++    publication = reviewed(case, identifier, snapshot)
++    path = f'/api/v1/drafts/{identifier}/publish'
++    result = case.client.post(path, json=publication, headers=command(case.headers, 'dependency-publish'))
++    assert result.status_code == 201, result.text
++    published = dm.ContentRef.model_validate(result.json())
++    assert published.id == base.id and published.revision == 2
++    metadata = case.client.get(f'/api/v1/blocks/{base.id}?revision=2')
++    assert metadata.status_code == 200
++    assert metadata.json()['concepts'] == [ref.id for ref in ordered]
++    assert metadata.json()['depends_on'] == [ref.model_dump(mode='json') for ref in block.depends_on]
++    assert metadata.json()['title'] == create['title']
++    assert case.client.get(f'/api/v1/blocks/{base.id}/body?revision=2').text == patch['patches'][0]['value']
++    assert case.client.get(f'/api/v1/blocks/{base.id}?revision=1').json() == block.model_dump(mode='json')
++    assert case.client.get(f'/api/v1/blocks/{base.id}/body?revision=1').content == raw
++    with case.database.connect() as connection:
++        connection.execute('PRAGMA query_only=ON')
++        connection.execute('BEGIN')
++        witness = content.verify_retained_dependencies_in_transaction(connection, case.identity.workspace_id, published)
++    assert {(edge.target_ref.id, edge.target_ref.revision, edge.target_ref.sha256)
++        for edge in witness.edges if edge.owner_ref == published and edge.relation == 'concept'} == {
++            (ref.id, ref.revision, ref.sha256) for ref in ordered}
++    assert all(edge.target_ref.revision == 1 for edge in witness.edges)
++    before = table_hashes(case.database)
++    current = case.client.get('/api/v1/draft-edits/' + identifier)
++    assert current.status_code == 200 and current.json()['state'] == 'published'
++    assert current.json()['candidate'] == snapshot['candidate']
++    assert case.client.post('/api/v1/drafts', json=create, headers=command(case.headers, 'dependency-create')).content == created.content
++    assert case.client.patch('/api/v1/drafts/' + identifier, json=patch, headers=command(case.headers, 'dependency-patch')).content == patched.content
++    assert case.client.post(path, json=publication, headers=command(case.headers, 'dependency-publish')).content == result.content
++    assert table_hashes(case.database) == before
++
++
++@pytest.mark.parametrize('damage', ['root_pin', 'concept_metadata', 'nested_pin', 'dependency_pin'])
++@pytest.mark.parametrize('published', [False, True])
++def test_frozen_root_and_descendant_concept_damage_refuses_candidate_paths_without_writes(prepared_review_http, damage, published):
++    case = prepared_review_http
++    content, _, base, concepts, _, _ = source(case, with_dependencies=True)
++    identifier, create, _, patch, _, snapshot = draft(case, base)
++    content.publish(case.identity.workspace_id,
++        [value.model_copy(update={'revision': 2, 'title': 'Later concept'}) for value in concepts], {})
++    publication = reviewed(case, identifier, snapshot)
++    path = f'/api/v1/drafts/{identifier}/publish'
++    if published:
++        assert case.client.post(path, json=publication, headers=command(case.headers, 'dependency-publish')).status_code == 201
++    with case.database.transaction() as connection:
++        if damage == 'concept_metadata':
++            connection.execute('DROP TRIGGER revisions_no_update')
++            connection.execute('UPDATE revisions SET sha256=? WHERE object_id=? AND revision=1', ('0' * 64, concepts[0].id))
++        else:
++            owner, target = {'root_pin': (base.id, concepts[0].id),
++                'nested_pin': (concepts[0].id, concepts[2].id),
++                'dependency_pin': ('edit_concept_leaf', concepts[0].id)}[damage]
++            changed = connection.execute("UPDATE object_dependencies SET target_revision=2 WHERE owner_id=? AND owner_revision=1 AND target_id=? AND relation='concept'", (owner, target))
++            assert changed.rowcount == 1
++    before = table_hashes(case.database)
++    expected = (409, 'CONTENT_HASH_MISMATCH') if damage == 'concept_metadata' else (503, 'DRAFT_EDIT_INTEGRITY')
++    rejected(case.client.get('/api/v1/draft-edits/' + identifier), expected)
++    rejected(case.client.post('/api/v1/drafts', json=create, headers=command(case.headers, 'dependency-create')), expected)
++    rejected(case.client.patch('/api/v1/drafts/' + identifier, json=patch, headers=command(case.headers, 'dependency-patch')), expected)
++    rejected(case.client.get('/api/v1/reviews/' + publication['review_receipt_id']), expected)
++    rejected(case.client.post(f'/api/v1/drafts/{identifier}/review', json={'expected_revision': 2, 'checks': ['structure'],
++        'reviewer_note': 'Synthetic damaged concept recheck.'}, headers=command(case.headers, 'bad-concept-review')), expected)
++    rejected(case.client.post(path, json=publication, headers=command(case.headers, 'dependency-publish')), expected)
++    assert table_hashes(case.database) == before
++
++
++def test_only_published_root_concept_damage_preserves_original_candidate_facts(prepared_review_http):
++    case = prepared_review_http
++    content, _, base, concepts, _, _ = source(case)
++    identifier, create, created, patch, patched, snapshot = draft(case, base)
++    original_r1 = case.client.get('/api/v1/draft-edits/' + identifier + '?revision=1')
++    content.publish(case.identity.workspace_id,
++        [value.model_copy(update={'revision': 2, 'title': 'Later concept'}) for value in concepts], {})
++    publication = reviewed(case, identifier, snapshot)
++    review_path = '/api/v1/reviews/' + publication['review_receipt_id']
++    original_review = case.client.get(review_path)
++    path = f'/api/v1/drafts/{identifier}/publish'
++    assert case.client.post(path, json=publication, headers=command(case.headers, 'dependency-publish')).status_code == 201
++    with case.database.transaction() as connection:
++        changed = connection.execute("UPDATE object_dependencies SET target_revision=2 WHERE owner_id=? AND owner_revision=2 AND target_id=? AND relation='concept'", (base.id, concepts[0].id))
++        assert changed.rowcount == 1
++    before = table_hashes(case.database)
++    rejected(case.client.get('/api/v1/draft-edits/' + identifier), (503, 'DRAFT_EDIT_INTEGRITY'))
++    rejected(case.client.post(path, json=publication, headers=command(case.headers, 'dependency-publish')), (409, 'PUBLICATION_INTEGRITY_ERROR'))
++    assert case.client.post('/api/v1/drafts', json=create, headers=command(case.headers, 'dependency-create')).content == created.content
++    assert case.client.patch('/api/v1/drafts/' + identifier, json=patch, headers=command(case.headers, 'dependency-patch')).content == patched.content
++    assert case.client.get(review_path).content == original_review.content
++    assert case.client.get('/api/v1/draft-edits/' + identifier + '?revision=1').content == original_r1.content
++    assert table_hashes(case.database) == before
++
++
++def test_missing_published_concept_pin_rolls_back_whole_publication_before_original_key_retry(prepared_review_http):
++    case = prepared_review_http
++    _, _, base, _, _, _ = source(case, with_dependencies=True)
++    identifier, _, _, _, _, snapshot = draft(case, base)
++    publication = reviewed(case, identifier, snapshot)
++    path = f'/api/v1/drafts/{identifier}/publish'
++    with case.database.transaction() as connection:
++        connection.execute("""CREATE TRIGGER damage_new_concept AFTER INSERT ON object_dependencies
++            WHEN NEW.owner_id='edit_concept_text' AND NEW.owner_revision=2 AND NEW.relation='concept'
++            BEGIN DELETE FROM object_dependencies WHERE owner_id=NEW.owner_id AND owner_revision=NEW.owner_revision
++              AND target_id=NEW.target_id AND relation='concept'; END""")
++    before = table_hashes(case.database)
++    assert case.client.post(path, json=publication, headers=command(case.headers, 'dependency-publish')).status_code == 409
++    assert table_hashes(case.database) == before
++    assert case.client.get('/api/v1/objects/' + base.id + '/current').json() == base.model_dump(mode='json')
++    with case.database.transaction() as connection:
++        connection.execute('DROP TRIGGER damage_new_concept')
++    result = case.client.post(path, json=publication, headers=command(case.headers, 'dependency-publish'))
++    assert result.status_code == 201 and result.json()['revision'] == 2
++
++
++@pytest.mark.parametrize('downgrade', [False, True])
++def test_root_concepts_require_the_existing_v2_witness_without_default_or_v1_downgrade(prepared_review_http, downgrade):
++    case = prepared_review_http
++    _, _, base, _, _, _ = source(case)
++    identifier, _, _, _, _, _ = draft(case, base)
++    record = case.app.state.draft_edit_service.read(case.identity, identifier, 2)
++    assert record.base.version == 'draft-base-material-dependencies-v2'
++    value = record.base.model_dump(mode='python')
++    assert value['metadata']['concepts'] and not value['metadata']['depends_on']
++    value.pop('dependency_witness')
++    if downgrade:
++        value['version'] = 'draft-base-material-v1'
++    before = table_hashes(case.database)
++    with pytest.raises(ValidationError):
++        TypeAdapter(StoredDraftBase).validate_python(value)
++    assert table_hashes(case.database) == before
++
++
++def test_concept_edit_cannot_change_reference_fields_or_publish_past_a_new_base(prepared_review_http):
++    case = prepared_review_http
++    content, block, base, _, _, raw = source(case, with_dependencies=True)
++    identifier, create, created, patch, patched, snapshot = draft(case, base)
++    publication = reviewed(case, identifier, snapshot)
++    before = table_hashes(case.database)
++    for field, value in [('concepts', []), ('depends_on', []), ('body_path', 'content/other.md'), ('kind', 'definition')]:
++        response = case.client.patch('/api/v1/drafts/' + identifier, json={'expected_revision': 2,
++            'patches': [{'field': field, 'value': value}]}, headers=command(case.headers, 'blocked-field-' + field))
++        assert response.status_code == 422
++    assert table_hashes(case.database) == before
++    later = content.publish(case.identity.workspace_id,
++        [block.model_copy(update={'revision': 2, 'title': 'Competing exact base'})], {block.body_path: raw})[0]
++    before = table_hashes(case.database)
++    rejected(case.client.post(f'/api/v1/drafts/{identifier}/publish', json=publication,
++        headers=command(case.headers, 'dependency-publish')), (412, 'PUBLICATION_BASE_CHANGED'))
++    assert case.client.get('/api/v1/draft-edits/' + identifier).json() == snapshot
++    assert case.client.post('/api/v1/drafts', json=create, headers=command(case.headers, 'dependency-create')).content == created.content
++    assert case.client.patch('/api/v1/drafts/' + identifier, json=patch, headers=command(case.headers, 'dependency-patch')).content == patched.content
++    assert case.client.get('/api/v1/objects/' + base.id + '/current').json() == later.model_dump(mode='json')
++    assert table_hashes(case.database) == before
++
++
++def test_current_role_still_guards_concept_draft_and_original_publication_acks(prepared_review_http):
++    case = prepared_review_http
++    _, _, base, _, _, _ = source(case, with_dependencies=True)
++    identifier, create, _, patch, _, snapshot = draft(case, base)
++    publication = reviewed(case, identifier, snapshot)
++    path = f'/api/v1/drafts/{identifier}/publish'
++    assert case.client.post(path, json=publication, headers=command(case.headers, 'dependency-publish')).status_code == 201
++    role = case.client.post('/api/v1/session/role', json={'role': 'learner'}, headers=command(case.headers, 'concept-role'))
++    assert role.status_code == 200
++    before = table_hashes(case.database)
++    assert case.client.get('/api/v1/draft-edits/' + identifier).status_code == 403
++    assert case.client.post('/api/v1/drafts', json=create, headers=command(case.headers, 'dependency-create')).status_code == 403
++    assert case.client.patch('/api/v1/drafts/' + identifier, json=patch, headers=command(case.headers, 'dependency-patch')).status_code == 403
++    assert case.client.post(path, json=publication, headers=command(case.headers, 'dependency-publish')).status_code == 403
++    assert table_hashes(case.database) == before

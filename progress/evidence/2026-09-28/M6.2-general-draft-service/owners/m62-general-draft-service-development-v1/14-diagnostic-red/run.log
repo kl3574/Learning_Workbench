@@ -1,0 +1,31 @@
+.F                                                                       [100%]
+=================================== FAILURES ===================================
+__ test_private_edit_models_never_expand_content_in_ordinary_representations ___
+
+case = SyntheticDraftEditCase()
+
+    def test_private_edit_models_never_expand_content_in_ordinary_representations(case):
+        _, identity, _, service, body, created = case
+        record = service.read(identity, created.draft_id, 1)
+        for value in [body, record, record.payload, record.base]:
+>           assert 'Synthetic' not in repr(value)
+E           assert 'Synthetic' not in "DraftCreate...etic draft')"
+E             
+E             'Synthetic' is contained here:
+E               ), title='Synthetic draft')
+E             ?           +++++++++
+
+tests/integration/test_draft_edit_boundaries.py:239: AssertionError
+=============================== warnings summary ===============================
+../m62-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../m62-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_draft_edit_boundaries.py::test_private_edit_models_never_expand_content_in_ordinary_representations
+1 failed, 1 passed, 48 deselected, 2 warnings in 1.40s

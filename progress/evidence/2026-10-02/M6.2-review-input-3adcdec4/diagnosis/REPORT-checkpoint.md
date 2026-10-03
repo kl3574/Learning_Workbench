@@ -1,0 +1,28 @@
+# Independent c2 Review form failure diagnosis (checkpoint)
+
+Fixed product source: c2f47a2778bb6a78c73237f8bb89fb271dfedcd6, tree60f57b19c185f1db5c8f7bbb6c3bc5f5bab8484f. Sole historical spec v3.0.12 SHA1c571ee91a7d39dedd2e8395f48766bd6183d496154ee9bdd9b67cb978ff26d7. Product files and original case remain unchanged. Only private probes added in an isolated worktree, own npm installation; no remote/provider calls or default5173/8765 servers.
+
+## Finding
+
+A demonstrated input-admission race can produce the CI's exact final empty-note recovery symptom. It is not demonstrated loss of an already accepted input: in the deterministic negative run there was no beforeinput/input event, and original actor memory remained the earlier confirmed blank create form before Policy began.
+
+Reading a Review receipt makes useReview finish its own busy phase. The new receipt simultaneously changes Publication selection (PublicationPanel.tsx:11; usePublication.ts:13,49-54), launching its independent automatic session refresh. Publication onState reports safe via an effect (PublicationPanel.tsx:18-20). ReviewPanel.tsx:80,88,94 applies that subordinate safety to all form editing, causing the same textarea to enable, accept focus, disable, and lose focus to BODY. Playwright's fill actionability check/focus and native Input.insertText can straddle this transition. fill resolves although the disabled target receives no input. An actual user's already delivered input was preserved in the positive observed run; unaccepted keystrokes at the disabled interval cannot be treated as persisted form data.
+
+This is a plausible mechanism for original PR run37007484342/job110839065970, whose merge tree equals c2. The CI artifact lacks original failure-time event/memory observations, so its unique root cause is still UNPROVEN. Do not relabel original CI failure as passed.
+
+## Evidence and experiments
+
+- original-native-01: original unmodified case and original5000ms assertion, PASS1/16.5s,1238inputs unchanged. A bounded local pass only, not proof of CI repair.
+- controlled-native-01: only hold/release the actual first browser Review GET while native fill starts against its disabled textarea. FAIL at immediate after-fill assertion before Policy: DOM empty, sole held create blank/confirmed true. Raw source archived controlled-native-01-source.ts; raw owner/DOM observation retained in corresponding results.
+- controlled-native-02-timeline: same real GET hold plus passive DOM/input observations. PASS1/15.3s. Same textarea node: enabled8089.3ms; focus8094.5; beforeinput8099.7; input8105.3; disabled8114.1; blur8122.5. Already delivered note persisted and original Policy/role recovery passed.
+- controlled-native-03-transport: deterministic diagnostic scheduler additionally holds the actual Publication.session response and the known synthetic note's Playwright Chromium Input.insertText (installed1.63.0 in-process transport seam; no dependency edits, no substituted session/HTTP data). FAIL at the original final5000ms note assertion,12empty observations. Same node: enabled8321.4ms; focus8331.4; disabled8339.5; blur8351.3 to BODY; native input released8420.3 while disabled. No beforeinput/input events. fill resolved8427.5; note and held create blank. Reason and math inputs later retained accurately. Raw events, memory, panel.html, screenshot, original HTTP status/path trace preserved. This private transport interception is a controlled timing experiment, not a claimed production/browser API.
+- panel-probes-01:26existing PASS,3private probe FAIL. Two probe design errors plus unstable cross-Publication readiness: one synthetic CRLF expectation ignored textarea normalization; two fireEvent-based setup/recovery actions arrived during subordinate Publication readiness changes. Preserved verbatim; not counted as confirmed memory defects.
+- panel-probes-02:29PASS (26existing+3new): synchronous replacement of the earlier confirmed blank form, Policy pause recovery, real access-generation recovery, late Review read across Policy/remount. These intentionally isolate Review from Publication and use normalized user-entered LF. No automatic decision.
+
+## Recommended minimum implementation boundary (not implemented here)
+
+Separate local Review editing from subordinate Publication busy status. Preserve Review own busy/current actor/Policy/pending-memory and old-basis guards. Preserve Publication unsafe as an additional block on Review submission and all existing mutually exclusive commands and close protection. A dedicated submitBlocked prop on ReviewCreateForm/ReviewDecisionForm can express that distinction without removing authority guards. Permanent regression should hold real Publication refresh, ensure local note/reason remain editable and focus stable while submission stays disabled, then complete original Policy/role recovery. Do not repair solely by adding a post-fill assertion, increasing timeout, or retrying input. Product fix requires parent integration decision; none made in this read-only audit.
+
+## Root failure-only diagnostic review
+
+Read reviewFormDiagnostic.ts45lines, original case catch delta and exact CI artifact basename allowlist in root isolated diagnosis tree. No confirmed blocker: original assertion unchanged/error rethrown; exceptions and1000ms diagnostic deadline do not mask it; no session/token/command values serialized. Snapshot scope explicitly acknowledges later observation. DOM is sampled before fresh GET, memory after GET+module import: not an atomic or failure-time snapshot. Safe claim is restricted to this synthetic fixture; do not present it as production authorization or proof of earlier state.

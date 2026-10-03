@@ -1,0 +1,34 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+______ test_original_ack_still_checks_the_actual_import_job_input_binding ______
+
+workflow = SyntheticReviewWorkflow()
+
+    def test_original_ack_still_checks_the_actual_import_job_input_binding(workflow):
+        from tests.integration.test_draft_publication import import_id
+        database, identity, candidate, _, _ = workflow
+        service, body, receipt = ready(workflow)
+        identifier = import_id(workflow, receipt)
+        service.publish(identity, candidate.draft_id, body, 'published')
+        with database.transaction() as conn:
+            conn.execute('UPDATE jobs SET input_sha256=? WHERE id=(SELECT job_id FROM ingestion_imports WHERE id=?)',
+                         ('0'*64, identifier))
+        before = table_hashes(database)
+>       with pytest.raises(ApiError):
+             ^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ApiError
+
+tests/integration/test_draft_publication_integrity.py:166: Failed
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-publication-service-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-publication-service-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_draft_publication_integrity.py::test_original_ack_still_checks_the_actual_import_job_input_binding
+1 failed, 2 warnings in 1.51s

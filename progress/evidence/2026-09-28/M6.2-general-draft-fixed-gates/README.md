@@ -1,0 +1,11 @@
+# Fixed general Draft gate evidence
+
+This package preserves the complete available original members of two fixed-source local gate caches and the original source composition record. `verify.py --git-repo <main-repo> --raw-base <private-cache-base>` replays every original hash and exact local-path replacement span, reconstructs all 1055/1066 engineering source inputs from the public `4cc4fd5` Git tree plus exact included source overlays, and checks all fourteen stage receipts against their complete logs and before/after inputs. No product tests, network calls, or provider requests are performed by the verifier.
+
+The isolated `ea86495` source has seven passing fixed gates. Its **full Python suite** reports **2991 passed, 1 actual sealed numeric `BLOCKED_ENVIRONMENT` skip, and 2 dependency warnings**. That skip retains the original numeric environment failure; it is not a calculator success. The same source reports Web **512 passed** plus Ruff, mypy, spec, strict web lint, and build success.
+
+The integrated `e58abaa` source has seven passing fixed gates. Its **related Python selection** reports **239 passed and 2 dependency warnings**; its Web suite reports **538 passed across 91 files**, with Ruff, mypy, spec, strict web lint, and build success. **Full Python at e58 was not run in these originals.** The older `a944` push and PR CI failures remain historical failures and are not superseded or relabeled by these local gates.
+
+The 4cc public base has 1051 engineering paths. The exact e58 source overlay has 15 added and 17 modified paths. The ea reconstruction removes 11 e58-only compare paths and replaces 3 different paths. The original `COMPOSITION.json` is preserved in `originals/` and checked against these operations. All original test-log lines are retained; only exact personal filesystem prefixes are replaced in public copies, with raw-byte spans recorded in `manifest.json`. There are no scanner exceptions.
+
+These gates do not prove real Provider behavior, author browser end-to-end acceptance, numeric calculator execution, or completion of M6.2. The fixed stage descriptions are in `stage-bindings.json`; complete logs and original source runner scripts are under `originals/`.

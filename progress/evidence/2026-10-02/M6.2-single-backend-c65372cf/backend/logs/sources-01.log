@@ -1,0 +1,104 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_exact_dependency_order_no_invented_citations_and_parent_pins_never_change[False] _
+
+tmp_path = PosixPath('$HOME/.cache/learning-workbench-acceptance/single-publication-runtime-oct02/pytest-sources-01/test_exact_dependency_order_no0')
+damage_source = False
+
+    @pytest.mark.parametrize('damage_source', [False, True])
+    def test_exact_dependency_order_no_invented_citations_and_parent_pins_never_change(tmp_path, damage_source):
+        case, reviews, publication, refs, lesson, course = source_case(tmp_path)
+        original = case.authoring.draft(case.identity, case.candidate.draft_id)
+        synthetic_numeric(case, 'synthetic-numeric')
+        receipt = reviewed(case.database, case.identity, case.candidate, reviews)
+        intent = publish_request(case.database, case.identity, case.candidate, reviews, receipt)
+        result = publication.publish(case.identity, case.candidate.draft_id, intent, 'publish')
+        content = ContentService(case.database)
+        block = content.read(case.identity.workspace_id, 'block', result.id, 1)
+        assert block.depends_on == refs and block.citations == block.concepts == []
+        assert block.title == original.payload.title == ' 标题保留 '
+        assert content.body(case.identity.workspace_id, result.id, 1)[0] == original.payload.body_markdown.encode()
+>       assert content.read(case.identity.workspace_id, 'lesson', lesson.id, None) == lesson
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_single_publication_sources.py:72: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/api/app/application/content.py:80: in read
+    return repository.load(entity, id, revision).value
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.content_repository.ContentRepository object at 0x763ff87fc680>
+entity = 'lesson', object_id = 'source_lesson', revision = None
+
+    def load(self, entity: str, object_id: str, revision: int) -> StoredRevision:
+        if entity not in ENTITY_MODELS or entity == "note" and not self.allow_notes:
+            raise missing()
+        row = self.connection.execute(
+            "SELECT r.*,o.kind,o.lifecycle FROM revisions r JOIN objects o ON o.id=r.object_id "
+            "WHERE o.workspace_id=? AND o.id=? AND o.kind=? AND r.revision=?",
+            (self.workspace_id, object_id, entity, revision),
+        ).fetchone()
+        if row is None:
+>           raise missing()
+E           services.api.app.application.errors.ApiError: (404, 'REFERENCE_MISSING', '指定内容修订不存在或不可访问。')
+
+services/api/app/infrastructure/content_repository.py:66: ApiError
+_ test_exact_dependency_order_no_invented_citations_and_parent_pins_never_change[True] _
+
+tmp_path = PosixPath('$HOME/.cache/learning-workbench-acceptance/single-publication-runtime-oct02/pytest-sources-01/test_exact_dependency_order_no1')
+damage_source = True
+
+    @pytest.mark.parametrize('damage_source', [False, True])
+    def test_exact_dependency_order_no_invented_citations_and_parent_pins_never_change(tmp_path, damage_source):
+        case, reviews, publication, refs, lesson, course = source_case(tmp_path)
+        original = case.authoring.draft(case.identity, case.candidate.draft_id)
+        synthetic_numeric(case, 'synthetic-numeric')
+        receipt = reviewed(case.database, case.identity, case.candidate, reviews)
+        intent = publish_request(case.database, case.identity, case.candidate, reviews, receipt)
+        result = publication.publish(case.identity, case.candidate.draft_id, intent, 'publish')
+        content = ContentService(case.database)
+        block = content.read(case.identity.workspace_id, 'block', result.id, 1)
+        assert block.depends_on == refs and block.citations == block.concepts == []
+        assert block.title == original.payload.title == ' 标题保留 '
+        assert content.body(case.identity.workspace_id, result.id, 1)[0] == original.payload.body_markdown.encode()
+>       assert content.read(case.identity.workspace_id, 'lesson', lesson.id, None) == lesson
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_single_publication_sources.py:72: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/api/app/application/content.py:80: in read
+    return repository.load(entity, id, revision).value
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.infrastructure.content_repository.ContentRepository object at 0x763ff888c230>
+entity = 'lesson', object_id = 'source_lesson', revision = None
+
+    def load(self, entity: str, object_id: str, revision: int) -> StoredRevision:
+        if entity not in ENTITY_MODELS or entity == "note" and not self.allow_notes:
+            raise missing()
+        row = self.connection.execute(
+            "SELECT r.*,o.kind,o.lifecycle FROM revisions r JOIN objects o ON o.id=r.object_id "
+            "WHERE o.workspace_id=? AND o.id=? AND o.kind=? AND r.revision=?",
+            (self.workspace_id, object_id, entity, revision),
+        ).fetchone()
+        if row is None:
+>           raise missing()
+E           services.api.app.application.errors.ApiError: (404, 'REFERENCE_MISSING', '指定内容修订不存在或不可访问。')
+
+services/api/app/infrastructure/content_repository.py:66: ApiError
+=============================== warnings summary ===============================
+../m62-combined-final-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  $HOME/.cache/learning-workbench-acceptance/m62-combined-final-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../m62-combined-final-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  $HOME/.cache/learning-workbench-acceptance/m62-combined-final-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_single_publication_sources.py::test_exact_dependency_order_no_invented_citations_and_parent_pins_never_change[False]
+FAILED tests/integration/test_single_publication_sources.py::test_exact_dependency_order_no_invented_citations_and_parent_pins_never_change[True]
+2 failed, 2 warnings in 7.18s

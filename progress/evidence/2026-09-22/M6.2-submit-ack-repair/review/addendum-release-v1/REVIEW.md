@@ -1,0 +1,3 @@
+The only delta from the prior pinned review is the explicit `if (!release) throw` immediately before `release()` in the new submission regression. The guard narrows the optional callback and fails explicitly if gate initialization is missing. The gate, exact submission ACK, original 409/200 assertions, timeouts and finally cleanup are unchanged. The other two reviewed test files are byte-identical to their previous pins. No new blocking finding.
+
+No tests or TypeScript checks were run by this reviewer. This static check does not claim the independent Playwright module-resolution/type-adapter issues passed. All previous report, source and manifest bytes remain untouched; this directory is an append-only review addendum.

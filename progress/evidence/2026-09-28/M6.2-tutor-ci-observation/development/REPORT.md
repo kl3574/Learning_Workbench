@@ -1,0 +1,17 @@
+# Tutor completion observation candidate
+
+Candidate `ab11b811867bb1c30166491279ada5ae20934886`, base `416b53261dafa0ddbdec3adf4ef2deab058b866b`. All 14 task paths are committed; six production paths and eight tests/fixtures are listed in `git-input-binding.json`. Current spec equals the outer PRODUCT_DESIGN.md exactly.
+
+The observation path links a real GET or SSE connection to validated event yields, scope checks, accepted snapshots and a matching DOM projection token. Browser source, API source and Node receipt clocks remain separate. Only records already delivered to Node are frozen at assertion return. Later control-file/API/browser snapshots cannot establish an earlier deadline state. Missing, invalid, contended or dropped observations are unknown. There is no payload capture or new model call.
+
+The backend test recorder originally admitted authorization with run=None before the first Run. The Node publication boundary correctly rejected the whole API component. Stage 32 reproduced the service-level bug; stage 36 restores precisely that prior test-only predicate and demonstrates the failure through the actual GET /threads route. Stage 37 restores the fix and all six observation tests pass. New HTTP preparation/Run start/read coverage verifies that every retained event belongs to the actually selected Run. This is an observation defect repair, not proof of the old CI timeout cause.
+
+Fixed source: stage 44 has 57 Python tests passed with two dependency warnings (15.26 s); stage 40 has 22 web tests passed; stages 39/41/42/43 pass Ruff, web lint/strict-unused, private native strict TypeScript and worker mypy. The 965 full engineering inputs for these stages and stage 37 match their before/after manifests and actual candidate Git blobs. Stage 38 used a nonexistent test filename and ran zero tests; this operator error is retained, not counted as a failed application test or a pass.
+
+Stage 31 ran the original unchanged browser case exactly once, with retries=0 and the original five-second completed-heading assertion, and passed. It recorded 33 valid browser entries and 10 source-matched DOM projections, but API mechanism status remained failed. Original artifact SHA 5571d63ddb42851828a7c1d15533465f26f53746170337f48d10bf104f4000f9 is unchanged. No rerun after recorder repair was performed. The six production files used by that run equal final candidate bytes; its test-only recorder differs as documented. Do not attribute the local pass to the historical CI failing execution.
+
+Stage 23 passed two controlled diagnostics. Stage 35 passed its controlled page assertion while Vite logged port 5173 already in use; this is not evidence of a fresh clean full-app startup. Static native types use a private declaration alias for the existing Playwright mjs import (no generated-contract changes). Earlier failing tests/typechecks and every original command/log/source snapshot remain indexed.
+
+No generated codec, original tutor.spec.ts, Playwright timeout/retry configuration, workflow, production input proof, credential, public main tree or remote branch was changed. No full platform gate or new CI has run on this candidate. No full-agent, real-model, mathematical or pedagogical acceptance is claimed.
+
+See TASK_RECEIPT.json for spec §19.3 fields, exact commands/exits and boundaries. Raw evidence is private: sanitize paths and synthetic session/CSRF repr before publication. raw-index.json hashes every original and report (excluding itself), and does not replace original logs.

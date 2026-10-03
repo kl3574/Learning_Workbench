@@ -1,0 +1,267 @@
+diff --git a/services/api/app/application/review_checks.py b/services/api/app/application/review_checks.py
+new file mode 100644
+index 0000000..1eff488
+--- /dev/null
++++ b/services/api/app/application/review_checks.py
+@@ -0,0 +1,132 @@
++"""Deterministic checks of complete material declarations, without owner authority.
++
++The application must obtain the material from its actual owner in the current
++transaction. Revalidating a self-consistent descriptor here does not authenticate
++that history, validate mathematical prose, execute a plan or approve a source.
++"""
++from typing import Literal, Self
++
++from pydantic import model_validator, ValidationError
++
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import canonical_bytes
++from ..authoring_dto import AuthoringBlockRef, AuthoringModel, WorkedExamplePayload
++from ..authoring_group_dto import AuthoringTextBlockPayload, GeneratedSolutionAnswer
++from .errors import ApiError
++from .review_material_models import (
++    CheckedReviewMaterial, ImportReviewMaterial, SingleReviewMaterial, GroupReviewMaterial,
++)
++
++CheckCode = Literal['material_schema', 'candidate_byte_binding', 'declared_source_membership',
++                    'declared_symbol_consistency']
++CheckStatus = Literal['PASS', 'FAIL', 'NOT_RUN']
++DetailCode = Literal['not_requested', 'typed_material_revalidated', 'candidate_and_body_hashes_revalidated',
++                     'all_declared_sources_in_prepared_set', 'declared_source_outside_prepared_set',
++                     'symbol_and_numeric_declarations_consistent', 'symbol_or_numeric_declaration_conflict',
++                     'no_authoring_declaration_schema']
++ORDER: tuple[CheckCode, ...] = ('material_schema', 'candidate_byte_binding',
++                               'declared_source_membership', 'declared_symbol_consistency')
++DETAILS: dict[tuple[CheckCode, CheckStatus], DetailCode] = {
++    ('material_schema', 'PASS'): 'typed_material_revalidated',
++    ('candidate_byte_binding', 'PASS'): 'candidate_and_body_hashes_revalidated',
++    ('declared_source_membership', 'PASS'): 'all_declared_sources_in_prepared_set',
++    ('declared_source_membership', 'FAIL'): 'declared_source_outside_prepared_set',
++    ('declared_symbol_consistency', 'PASS'): 'symbol_and_numeric_declarations_consistent',
++    ('declared_symbol_consistency', 'FAIL'): 'symbol_or_numeric_declaration_conflict',
++}
++
++
++class StructuralReviewCheck(AuthoringModel):
++    code: CheckCode
++    status: CheckStatus
++    detail_code: DetailCode
++
++
++class StructuralReviewReport(AuthoringModel):
++    version: Literal['review-structure-report-v1']
++    candidate: dm.DraftCandidate
++    material_descriptor_sha256: dm.Sha256
++    requested: bool
++    structural: CheckStatus
++    checks: list[StructuralReviewCheck]
++
++    @model_validator(mode='after')
++    def complete_scope(self) -> Self:
++        if tuple(check.code for check in self.checks) != ORDER:
++            raise ValueError('The report must retain the complete ordered check scope')
++        if not self.requested:
++            if self.structural != 'NOT_RUN' or any(
++                    check.status != 'NOT_RUN' or check.detail_code != 'not_requested' for check in self.checks):
++                raise ValueError('Unrequested structure checks cannot claim execution')
++            return self
++        for check in self.checks:
++            expected = DETAILS.get((check.code, check.status))
++            if check.status == 'NOT_RUN' and check.code in ORDER[2:]:
++                expected = 'no_authoring_declaration_schema'
++            if expected is None or check.detail_code != expected:
++                raise ValueError('The detail must describe the actual named check boundary')
++        expected_status = 'FAIL' if any(x.status == 'FAIL' for x in self.checks) else 'PASS'
++        if self.structural != expected_status:
++            raise ValueError('The aggregate cannot hide a failed check')
++        return self
++
++
++def _check(code: CheckCode, status: CheckStatus, detail: DetailCode | None = None) -> StructuralReviewCheck:
++    return StructuralReviewCheck(code=code, status=status, detail_code=detail or DETAILS[(code, status)])
++
++
++Declaration = WorkedExamplePayload | AuthoringTextBlockPayload | GeneratedSolutionAnswer
++
++
++def _declarations(material: CheckedReviewMaterial) -> tuple[list[list[AuthoringBlockRef]], list[Declaration]]:
++    """Return only explicit source/symbol declarations, never scrape prose."""
++    payload = material.payload
++    if isinstance(payload, SingleReviewMaterial):
++        single = payload.record.payload
++        return [single.declared_source_refs], [single]
++    if isinstance(payload, GroupReviewMaterial):
++        value = payload.record.payload
++        if value.root.entity == 'lesson':
++            return [block.payload.declared_source_refs for block in value.blocks], [block.payload for block in value.blocks]
++        return [question.declared_source_refs for question in value.questions], [item.answer for item in value.private_solutions]
++    return [], []
++
++
++def review_structure(material: CheckedReviewMaterial, *, requested: bool) -> StructuralReviewReport:
++    """Run named local checks; no database, file, Provider or NumericRuntime calls.
++
++    Malformed purported owner material is an integrity error, not a fabricated
++    receipt about an unbound candidate. Structurally valid foreign declarations
++    can yield FAIL. Successful declarations never authenticate their meaning.
++    """
++    try:
++        material = CheckedReviewMaterial.model_validate(material.model_dump(mode='python'))
++    except (ValidationError, ValueError, TypeError, AttributeError):
++        raise ApiError(503, 'REVIEW_MATERIAL_INTEGRITY', '审核材料未通过完整性校验。') from None
++    if not isinstance(requested, bool):
++        raise ApiError(422, 'SCHEMA_INVALID', '结构检查选择无效。')
++    if not requested:
++        checks = [_check(code, 'NOT_RUN', 'not_requested') for code in ORDER]
++        status: CheckStatus = 'NOT_RUN'
++    else:
++        # The complete model validation recomputes descriptor, candidate/body,
++        # plan, member and private-solution relationships for its exact profile.
++        checks = [_check('material_schema', 'PASS'), _check('candidate_byte_binding', 'PASS')]
++        if isinstance(material.payload, ImportReviewMaterial):
++            checks += [_check(code, 'NOT_RUN', 'no_authoring_declaration_schema') for code in ORDER[2:]]
++        else:
++            source_lists, declarations = _declarations(material)
++            allowed = {canonical_bytes(ref) for ref in material.source_refs}
++            references_ok = all(canonical_bytes(ref) in allowed for refs in source_lists for ref in refs)
++            symbols_ok = True
++            for declaration in declarations:
++                names = [symbol.name for symbol in declaration.symbols]
++                symbols_ok = symbols_ok and len(names) == len(set(names))
++                plan = None if isinstance(declaration, AuthoringTextBlockPayload) else declaration.numeric_plan
++                if plan is not None:
++                    symbols_ok = symbols_ok and all(variable.name in names for variable in plan.variables)
++            checks += [_check('declared_source_membership', 'PASS' if references_ok else 'FAIL'),
++                       _check('declared_symbol_consistency', 'PASS' if symbols_ok else 'FAIL')]
++        status = 'FAIL' if any(check.status == 'FAIL' for check in checks) else 'PASS'
++    return StructuralReviewReport(version='review-structure-report-v1', candidate=material.candidate,
++        material_descriptor_sha256=material.descriptor_sha256, requested=requested, structural=status, checks=checks)
+diff --git a/tests/integration/test_review_structure_checks.py b/tests/integration/test_review_structure_checks.py
+new file mode 100644
+index 0000000..a55cd4b
+--- /dev/null
++++ b/tests/integration/test_review_structure_checks.py
+@@ -0,0 +1,123 @@
++"""Actual owner material enters deterministic checks; no review/human receipt."""
++import copy
++
++import pytest
++from pydantic import ValidationError
++
++from packages.contracts.canonical import canonical_bytes, sha256_bytes
++from services.api.app.application.errors import ApiError
++from services.api.app.application.review_checks import (
++    ORDER, StructuralReviewReport, review_structure,
++)
++from services.api.app.application.review_material_models import CheckedReviewMaterial
++from tests.integration.test_review_materials import (
++    MaterialCase, import_fixture, single_fixture, generated_group, read_case, table_hashes,
++)
++
++
++@pytest.fixture(params=['import', 'single', 'lesson', 'practice_set', 'assessment'])
++def actual_material(request, tmp_path):
++    kind = request.param
++    if kind == 'import':
++        for database, identity, owner, _, _, candidate in import_fixture.__wrapped__(tmp_path):
++            case = MaterialCase(database, identity, owner, candidate, 'import')
++            yield case, read_case(case)
++    else:
++        state = single_fixture.__wrapped__(tmp_path) if kind == 'single' else generated_group(tmp_path, kind)
++        database, identity, owner, _, candidate, *_ = state
++        case = MaterialCase(database, identity, owner, candidate,
++                            'authoring_single' if kind == 'single' else 'authoring_group', state)
++        yield case, read_case(case)
++
++
++def test_current_real_owner_material_reports_only_its_actual_declaration_scope(actual_material):
++    case, material = actual_material
++    before = table_hashes(case.database)
++    original = canonical_bytes(material)
++    result = review_structure(material, requested=True)
++    assert result.candidate == material.candidate
++    assert result.material_descriptor_sha256 == material.descriptor_sha256
++    assert result.structural == 'PASS'
++    assert [check.code for check in result.checks] == list(ORDER)
++    assert [check.status for check in result.checks] == (
++        ['PASS', 'PASS', 'NOT_RUN', 'NOT_RUN'] if case.kind == 'import' else ['PASS'] * 4)
++    assert canonical_bytes(material) == original and table_hashes(case.database) == before
++    # The serialized result has no payload, answer, numeric execution, human
++    # verdict, provider identity or fabricated ReviewReceipt identity.
++    assert set(result.model_dump()) == {
++        'version', 'candidate', 'material_descriptor_sha256', 'requested', 'structural', 'checks'}
++
++
++def test_unrequested_structure_is_not_run_even_when_input_was_validated(actual_material):
++    _, material = actual_material
++    result = review_structure(material, requested=False)
++    assert result.structural == 'NOT_RUN'
++    assert all(check.status == 'NOT_RUN' and check.detail_code == 'not_requested' for check in result.checks)
++
++
++def test_bypassed_material_validation_is_integrity_error_without_receipt(actual_material):
++    case, material = actual_material
++    before = table_hashes(case.database)
++    malformed = material.model_copy(update={'descriptor_sha256': '0' * 64})
++    with pytest.raises(ApiError) as caught:
++        review_structure(malformed, requested=True)
++    assert caught.value.code == 'REVIEW_MATERIAL_INTEGRITY'
++    assert table_hashes(case.database) == before
++
++
++def test_self_consistent_foreign_declared_source_is_fail_without_owner_authentication(tmp_path):
++    # This is deliberately synthesized from real material after the owner read.
++    # Recomputing its hashes does not make it authenticated owner history.
++    state = single_fixture.__wrapped__(tmp_path)
++    database, identity, owner, _, candidate, *_ = state
++    case = MaterialCase(database, identity, owner, candidate, 'authoring_single', state)
++    material = read_case(case)
++    raw = material.model_dump(mode='json')
++    record = raw['payload']['record']
++    record['payload']['declared_source_refs'] = [
++        {'entity': 'block', 'id': 'block_unprepared', 'revision': 1, 'sha256': 'a' * 64}]
++    candidate_sha = sha256_bytes(canonical_bytes(record['payload']))
++    record['candidate']['candidate_sha256'] = candidate_sha
++    raw['candidate']['candidate_sha256'] = candidate_sha
++    raw['owner_record_sha256'] = sha256_bytes(canonical_bytes(record))
++    raw['descriptor_sha256'] = sha256_bytes(canonical_bytes({k: v for k, v in raw.items() if k != 'descriptor_sha256'}))
++    synthetic = CheckedReviewMaterial.model_validate(raw)
++    result = review_structure(synthetic, requested=True)
++    assert result.structural == 'FAIL'
++    assert result.checks[2].status == 'FAIL'
++    assert result.checks[2].detail_code == 'declared_source_outside_prepared_set'
++    # Actual owner material and immutable history remain unchanged.
++    assert read_case(case) == material
++
++
++@pytest.mark.parametrize('damage', ['missing', 'duplicate', 'aggregate', 'unrequested', 'detail', 'verdict', 'raw_text'])
++def test_report_cannot_hide_scope_or_failed_check(actual_material, damage):
++    _, material = actual_material
++    raw = review_structure(material, requested=True).model_dump(mode='python')
++    if damage == 'missing':
++        raw['checks'].pop()
++    elif damage == 'duplicate':
++        raw['checks'][1] = copy.deepcopy(raw['checks'][0])
++    elif damage == 'aggregate':
++        raw['checks'][2].update(status='FAIL', detail_code='declared_source_outside_prepared_set')
++    elif damage == 'unrequested':
++        raw['requested'] = False
++    elif damage == 'detail':
++        raw['checks'][0]['detail_code'] = 'symbol_and_numeric_declarations_consistent'
++    elif damage == 'verdict':
++        raw['mathematical'] = 'APPROVED'
++    else:
++        raw['checks'][0]['detail_code'] = 'private-prose-must-not-be-in-validation-error'
++    with pytest.raises(ValidationError) as caught:
++        StructuralReviewReport.model_validate(raw)
++    assert 'private-prose-must-not-be-in-validation-error' not in str(caught.value)
++
++
++def test_report_and_nested_checks_have_safe_repr(actual_material):
++    _, material = actual_material
++    result = review_structure(material, requested=True)
++    assert repr(result) == 'StructuralReviewReport()'
++    assert all(repr(check) == 'StructuralReviewCheck()' for check in result.checks)
++    with pytest.raises(ApiError) as caught:
++        review_structure(material, requested=1)
++    assert caught.value.code == 'SCHEMA_INVALID'

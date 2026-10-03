@@ -1,5 +1,5 @@
-// Generated from PRODUCT_DESIGN.md v3.0.7 and actual runtime OpenAPI.
-// spec_sha256: 2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d
+// Generated from PRODUCT_DESIGN.md v3.0.13 and actual runtime OpenAPI.
+// spec_sha256: 949e2348902d8b8cb65f560b36fa58039fce75cd2e70c0a9ce9dcd8023160c05
 import type { AuthoringApplicationDTOMap } from "../module-ports";
 import type * as Api from "./api-types";
 export interface AuthoringRuntimeDTOMap extends AuthoringApplicationDTOMap {

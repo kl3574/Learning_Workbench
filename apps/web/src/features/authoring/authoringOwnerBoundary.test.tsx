@@ -9,7 +9,7 @@ afterEach(()=>{cleanup();vi.restoreAllMocks()})
 function fixture(){
  const workspace=`workspace_${crypto.randomUUID()}`
  const unavailable=vi.fn(async():Promise<never>=>{throw new Error('Unexpected operation')})
- const port:AuthoringPort={session:vi.fn<AuthoringPort['session']>(async()=>({workspace_id:workspace,role:'author',csrf_token:'synthetic-cache-test-only',active_independent_attempt_id:null,active_open_book_attempt_id:null})),list:vi.fn(async()=>({items:[],next_cursor:null})),prepare:vi.fn(async()=>{throw new ApiError(412,'fixed synthetic conflict','REVISION_MISMATCH')}),read:unavailable,draft:unavailable,preview:unavailable,numeric:unavailable,decide:unavailable,job:unavailable,cancel:unavailable}
+ const port:AuthoringPort={session:vi.fn<AuthoringPort['session']>(async()=>({workspace_id:workspace,actor_session_id: 'session_fixture_authoringOwnerBoundary_test',role:'author',csrf_token:'synthetic-cache-test-only',active_independent_attempt_id:null,active_open_book_attempt_id:null})),list:vi.fn(async()=>({items:[],next_cursor:null})),prepare:vi.fn(async()=>{throw new ApiError(412,'fixed synthetic conflict','REVISION_MISMATCH')}),read:unavailable,draft:unavailable,preview:unavailable,numeric:unavailable,decide:unavailable,job:unavailable,cancel:unavailable}
  return {workspace,port}
 }
 test('late original rejection journal read cannot enter a replacement workspace',async()=>{

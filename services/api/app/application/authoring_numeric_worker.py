@@ -2,6 +2,8 @@
 import sqlite3
 import threading
 
+from packages.contracts import domain_models as dm
+
 from ..authoring_dto import NumericCheckResult, numeric_result_sha256
 from ..infrastructure.authoring_job_repository import AuthoringLease, integrity
 from ..infrastructure.authoring_numeric_repository import NumericRepository
@@ -144,6 +146,10 @@ class NumericWorker:
             self.runtime.check(value.runtime)
             with self.database.transaction() as conn:
                 repo = self._access(conn, lease, value, actor)
+                assert self.authoring is not None
+                self.authoring.require_unpublished_candidate(conn,
+                    author_execution_identity(conn, lease.workspace_id, actor),
+                    dm.DraftCandidate.model_validate(value.candidate.model_dump()))
                 admitted = repo.begin(lease, utc_now())
             if not admitted:
                 self._blocked(lease, value, 'outcome_unknown')
@@ -154,7 +160,7 @@ class NumericWorker:
         except NumericRuntimeError:
             self._blocked(lease, value, 'environment_unavailable')
         except ApiError as error:
-            if error.code not in {'POLICY_DENIED', 'ASSESSMENT_ACTIVE', 'ASSESSMENT_ANSWER_PROTECTED', 'AUTHORING_LEASE_LOST'}:
+            if error.code not in {'POLICY_DENIED', 'ASSESSMENT_ACTIVE', 'ASSESSMENT_ANSWER_PROTECTED', 'AUTHORING_LEASE_LOST', 'DRAFT_ALREADY_PUBLISHED'}:
                 raise
             self._blocked(lease, value, 'cancelled')
 

@@ -1,0 +1,113 @@
+.......................FFF......                                         [100%]
+=================================== FAILURES ===================================
+___ test_current_real_assessment_policy_still_blocks_admission[independent] ____
+
+workflow = SyntheticReviewWorkflow(), mode = 'independent'
+
+    @pytest.mark.parametrize('mode', ['independent', 'open_book', 'assisted'])
+    def test_current_real_assessment_policy_still_blocks_admission(workflow, mode):
+        from services.api.app.application.assessment import AssessmentService
+        from services.api.app.assessment_dto import AssessmentAttemptCreate
+        from services.api.app.infrastructure.content_repository import reference
+        from tests.assessment_fixtures import assessment_fixture
+        from tests.integration.test_assessment_attempts import import_fixture
+        database, identity, candidate, reviews, _ = workflow
+        receipt = reviewed(database, identity, candidate, reviews, math='NOT_APPLICABLE')
+        body = publish_request(database, identity, candidate, reviews, receipt)
+>       fixture = assessment_fixture('admission-policy')
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_publication_admission.py:308: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/assessment_fixtures.py:27: in assessment_fixture
+    original = practice_fixture(prefix, profile=profile, revision=revision)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+prefix = 'admission-policy', profile = 'author', revision = 1
+
+    def practice_fixture(prefix: str = 'practice', *, profile: Literal['learner', 'author'] = 'author', revision: int = 1) -> PracticeFixture:
+        if not prefix.isascii() or not prefix.isalpha() or revision not in {1, 2}:
+>           raise ValueError('Use an ASCII alphabetic prefix and revision 1 or 2')
+E           ValueError: Use an ASCII alphabetic prefix and revision 1 or 2
+
+tests/practice_fixtures.py:34: ValueError
+____ test_current_real_assessment_policy_still_blocks_admission[open_book] _____
+
+workflow = SyntheticReviewWorkflow(), mode = 'open_book'
+
+    @pytest.mark.parametrize('mode', ['independent', 'open_book', 'assisted'])
+    def test_current_real_assessment_policy_still_blocks_admission(workflow, mode):
+        from services.api.app.application.assessment import AssessmentService
+        from services.api.app.assessment_dto import AssessmentAttemptCreate
+        from services.api.app.infrastructure.content_repository import reference
+        from tests.assessment_fixtures import assessment_fixture
+        from tests.integration.test_assessment_attempts import import_fixture
+        database, identity, candidate, reviews, _ = workflow
+        receipt = reviewed(database, identity, candidate, reviews, math='NOT_APPLICABLE')
+        body = publish_request(database, identity, candidate, reviews, receipt)
+>       fixture = assessment_fixture('admission-policy')
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_publication_admission.py:308: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/assessment_fixtures.py:27: in assessment_fixture
+    original = practice_fixture(prefix, profile=profile, revision=revision)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+prefix = 'admission-policy', profile = 'author', revision = 1
+
+    def practice_fixture(prefix: str = 'practice', *, profile: Literal['learner', 'author'] = 'author', revision: int = 1) -> PracticeFixture:
+        if not prefix.isascii() or not prefix.isalpha() or revision not in {1, 2}:
+>           raise ValueError('Use an ASCII alphabetic prefix and revision 1 or 2')
+E           ValueError: Use an ASCII alphabetic prefix and revision 1 or 2
+
+tests/practice_fixtures.py:34: ValueError
+_____ test_current_real_assessment_policy_still_blocks_admission[assisted] _____
+
+workflow = SyntheticReviewWorkflow(), mode = 'assisted'
+
+    @pytest.mark.parametrize('mode', ['independent', 'open_book', 'assisted'])
+    def test_current_real_assessment_policy_still_blocks_admission(workflow, mode):
+        from services.api.app.application.assessment import AssessmentService
+        from services.api.app.assessment_dto import AssessmentAttemptCreate
+        from services.api.app.infrastructure.content_repository import reference
+        from tests.assessment_fixtures import assessment_fixture
+        from tests.integration.test_assessment_attempts import import_fixture
+        database, identity, candidate, reviews, _ = workflow
+        receipt = reviewed(database, identity, candidate, reviews, math='NOT_APPLICABLE')
+        body = publish_request(database, identity, candidate, reviews, receipt)
+>       fixture = assessment_fixture('admission-policy')
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_publication_admission.py:308: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/assessment_fixtures.py:27: in assessment_fixture
+    original = practice_fixture(prefix, profile=profile, revision=revision)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+prefix = 'admission-policy', profile = 'author', revision = 1
+
+    def practice_fixture(prefix: str = 'practice', *, profile: Literal['learner', 'author'] = 'author', revision: int = 1) -> PracticeFixture:
+        if not prefix.isascii() or not prefix.isalpha() or revision not in {1, 2}:
+>           raise ValueError('Use an ASCII alphabetic prefix and revision 1 or 2')
+E           ValueError: Use an ASCII alphabetic prefix and revision 1 or 2
+
+tests/practice_fixtures.py:34: ValueError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-state-owner-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-review-state-owner-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_publication_admission.py::test_current_real_assessment_policy_still_blocks_admission[independent]
+FAILED tests/integration/test_publication_admission.py::test_current_real_assessment_policy_still_blocks_admission[open_book]
+FAILED tests/integration/test_publication_admission.py::test_current_real_assessment_policy_still_blocks_admission[assisted]
+3 failed, 29 passed, 2 warnings in 42.93s

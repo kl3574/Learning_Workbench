@@ -1,0 +1,232 @@
+{
+  "task_id": "M6.2",
+  "requirement_ids": [
+    "R-21",
+    "R-22",
+    "R-24",
+    "R-38"
+  ],
+  "spec_sha256": "2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d",
+  "implementation_commit": "75b0ca5f83d809816b338c2d70cc5bfb9f1a3f83",
+  "recorded_at": "2026-09-22T07:25:56.902934+00:00",
+  "scope": "Immutable real-producer candidate registration and authorized read-only owner resolution, parser exit race repair and real submit ACK synchronization. Partial M6.2 foundation, not review/publication implementation.",
+  "changed_paths": [
+    "services/api/app/application/authoring_group_worker.py",
+    "services/api/app/application/authoring_worker.py",
+    "services/api/app/application/draft_candidates.py",
+    "services/api/app/infrastructure/draft_candidate_repository.py",
+    "services/api/app/infrastructure/import_worker.py",
+    "tests/e2e/assessment-submit.spec.ts",
+    "tests/e2e/assessmentTestData.ts",
+    "tests/e2e/grading-recovery.spec.ts",
+    "tests/integration/test_draft_candidate_catalog.py",
+    "tests/integration/test_draft_candidate_owners.py",
+    "tests/integration/test_evidence_independent_review.py",
+    "tests/integration/test_import_parser_exit_race.py",
+    "tests/integration/test_learning_evidence.py",
+    "progress/evidence/2026-09-22/M6.2-catalog-producer-wiring/manifest.json",
+    "progress/evidence/2026-09-22/M6.2-parser-exit-repair/manifest.json",
+    "progress/evidence/2026-09-22/M6.2-tutor-b90-artifacts/manifest.json",
+    "progress/evidence/2026-09-22/M6.2-producer-parser-88daa-gates/manifest.json",
+    "progress/evidence/2026-09-22/M6.2-legacy-catalog-fixture/manifest.json",
+    "progress/evidence/2026-09-22/M6.2-producer-final-gates/manifest.json"
+  ],
+  "commands": [
+    {
+      "id": "original-full-python",
+      "code_commit": "88daa0a23dab0e69f7009b9af670671c45f90924",
+      "command": [
+        ".venv/bin/pytest",
+        "-q"
+      ],
+      "exit_code": 1,
+      "start": "2026-09-22T06:51:59.977741+00:00",
+      "finish": "2026-09-22T07:01:40.530586+00:00",
+      "log_sha256": "aafe9a4921784e28c64edc604c6e3e511430cabb84b18efc03907b653f3af20e",
+      "source_count": 949,
+      "source_unchanged": true,
+      "evidence_receipt": "progress/evidence/2026-09-22/M6.2-producer-parser-88daa-gates/gates/python/receipt.json"
+    },
+    {
+      "id": "focused-native-12",
+      "code_commit": "88daa0a23dab0e69f7009b9af670671c45f90924",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "test:e2e",
+        "--",
+        "document-imports.spec.ts",
+        "authoring.spec.ts",
+        "authoring-groups.spec.ts",
+        "assessment-submit.spec.ts",
+        "grading-recovery.spec.ts",
+        "--retries=0"
+      ],
+      "exit_code": 0,
+      "start": "2026-09-22T06:52:01.829296+00:00",
+      "finish": "2026-09-22T06:53:19.558501+00:00",
+      "log_sha256": "b401702e5b4b4e4e7c935d2da57e272a0206f30c0e74a3b9b52b38cfbefca691",
+      "source_count": 949,
+      "source_unchanged": true,
+      "evidence_receipt": "progress/evidence/2026-09-22/M6.2-producer-parser-88daa-gates/gates/native/receipt.json"
+    },
+    {
+      "id": "product-mypy",
+      "code_commit": "88daa0a23dab0e69f7009b9af670671c45f90924",
+      "command": [
+        ".venv/bin/mypy",
+        "services/api"
+      ],
+      "exit_code": 0,
+      "start": "2026-09-22T06:52:00.009306+00:00",
+      "finish": "2026-09-22T06:52:00.223786+00:00",
+      "log_sha256": "c07fdcc3676b2f23d52a8e7054bfe688d78d08d4a38537abe6e217559cde07cc",
+      "source_count": 949,
+      "source_unchanged": true,
+      "evidence_receipt": "progress/evidence/2026-09-22/M6.2-producer-parser-88daa-gates/gates/mypy/receipt.json"
+    },
+    {
+      "id": "original-ruff",
+      "code_commit": "88daa0a23dab0e69f7009b9af670671c45f90924",
+      "command": [
+        ".venv/bin/ruff",
+        "check",
+        "."
+      ],
+      "exit_code": 0,
+      "start": "2026-09-22T06:51:59.991698+00:00",
+      "finish": "2026-09-22T06:52:00.007342+00:00",
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "source_count": 949,
+      "source_unchanged": true,
+      "evidence_receipt": "progress/evidence/2026-09-22/M6.2-producer-parser-88daa-gates/gates/ruff/receipt.json"
+    },
+    {
+      "id": "original-spec",
+      "code_commit": "88daa0a23dab0e69f7009b9af670671c45f90924",
+      "command": [
+        ".venv/bin/python",
+        "scripts/verify_spec.py"
+      ],
+      "exit_code": 0,
+      "start": "2026-09-22T06:52:00.026563+00:00",
+      "finish": "2026-09-22T06:52:01.694621+00:00",
+      "log_sha256": "01a68f12c2440da91fef280d88f8a6aa7179d17cd05457f0e73cefc4656c7c48",
+      "source_count": 949,
+      "source_unchanged": true,
+      "evidence_receipt": "progress/evidence/2026-09-22/M6.2-producer-parser-88daa-gates/gates/spec/receipt.json"
+    },
+    {
+      "id": "final-full-python",
+      "code_commit": "75b0ca5f83d809816b338c2d70cc5bfb9f1a3f83",
+      "command": [
+        ".venv/bin/pytest",
+        "-q"
+      ],
+      "exit_code": 0,
+      "start": "2026-09-22T07:14:08.428340+00:00",
+      "finish": "2026-09-22T07:23:48.388529+00:00",
+      "log_sha256": "b2ab91d9347f907f6c92faa02247297c55fb9291830767697fd9b034c676a5f8",
+      "source_count": 949,
+      "source_unchanged": true,
+      "evidence_receipt": "progress/evidence/2026-09-22/M6.2-producer-final-gates/python/receipt.json"
+    },
+    {
+      "id": "final-ruff",
+      "code_commit": "75b0ca5f83d809816b338c2d70cc5bfb9f1a3f83",
+      "command": [
+        ".venv/bin/ruff",
+        "check",
+        "."
+      ],
+      "exit_code": 0,
+      "start": "2026-09-22T07:16:35.072778+00:00",
+      "finish": "2026-09-22T07:16:35.088533+00:00",
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "source_count": 949,
+      "source_unchanged": true,
+      "evidence_receipt": "progress/evidence/2026-09-22/M6.2-producer-final-gates/ruff/receipt.json"
+    },
+    {
+      "id": "final-spec",
+      "code_commit": "75b0ca5f83d809816b338c2d70cc5bfb9f1a3f83",
+      "command": [
+        ".venv/bin/python",
+        "scripts/verify_spec.py"
+      ],
+      "exit_code": 0,
+      "start": "2026-09-22T07:16:35.084937+00:00",
+      "finish": "2026-09-22T07:16:36.752012+00:00",
+      "log_sha256": "01a68f12c2440da91fef280d88f8a6aa7179d17cd05457f0e73cefc4656c7c48",
+      "source_count": 949,
+      "source_unchanged": true,
+      "evidence_receipt": "progress/evidence/2026-09-22/M6.2-producer-final-gates/spec/receipt.json"
+    }
+  ],
+  "exit_codes": {
+    "original-full-python": 1,
+    "focused-native-12": 0,
+    "product-mypy": 0,
+    "original-ruff": 0,
+    "original-spec": 0,
+    "final-full-python": 0,
+    "final-ruff": 0,
+    "final-spec": 0
+  },
+  "test_summary": "LOCAL_PRODUCER_PARSER_GATES_PASS：75b0ca5固定949源完整Python2293PASS/1数值环境SKIP/2依赖弃用warning579.40s，Ruff/spec PASS。88daa0a实际12定向nativePASS1.3m、mypy180PASS；最终仅两historical fixture测试变化，947其余工程源（全部产品/native/config）同字节，明确沿用而非重跑native/mypy。原88完整3FAIL2290PASS1SKIP和全部开发RED、b90 CI失败保留。15PNG/13geometry及源码/迁移/历史fixture独立审查无阻断。仅候选登记/只读lookup和两项受控竞态修复；无新review/publish HTTP/UI、人工批准、生产模型或数值成功。",
+  "screenshot_paths": [
+    "progress/evidence/2026-09-22/M6.2-producer-parser-88daa-gates/native-artifacts/authoring-explicit-same-Jo-09ff7-view-needs-its-own-decision/authoring-actual-numeric-390.png",
+    "progress/evidence/2026-09-22/M6.2-producer-parser-88daa-gates/native-artifacts/authoring-explicit-same-Jo-09ff7-view-needs-its-own-decision/authoring-candidate-1440.png",
+    "progress/evidence/2026-09-22/M6.2-producer-parser-88daa-gates/native-artifacts/authoring-explicit-same-Jo-09ff7-view-needs-its-own-decision/authoring-candidate-390.png",
+    "progress/evidence/2026-09-22/M6.2-producer-parser-88daa-gates/native-artifacts/authoring-groups-native-as-81e35-job-under-a-permission-lock/group-assessment-1440.png",
+    "progress/evidence/2026-09-22/M6.2-producer-parser-88daa-gates/native-artifacts/authoring-groups-native-as-81e35-job-under-a-permission-lock/group-assessment-390.png",
+    "progress/evidence/2026-09-22/M6.2-producer-parser-88daa-gates/native-artifacts/authoring-groups-native-as-81e35-job-under-a-permission-lock/group-assessment-numeric-390.png",
+    "progress/evidence/2026-09-22/M6.2-producer-parser-88daa-gates/native-artifacts/authoring-groups-native-as-81e35-job-under-a-permission-lock/group-assessment-private-390.png",
+    "progress/evidence/2026-09-22/M6.2-producer-parser-88daa-gates/native-artifacts/authoring-groups-native-le-f0866-es-one-exact-numeric-member/group-lesson-1440.png",
+    "progress/evidence/2026-09-22/M6.2-producer-parser-88daa-gates/native-artifacts/authoring-groups-native-le-f0866-es-one-exact-numeric-member/group-lesson-390.png",
+    "progress/evidence/2026-09-22/M6.2-producer-parser-88daa-gates/native-artifacts/authoring-groups-native-le-f0866-es-one-exact-numeric-member/group-numeric-390.png",
+    "progress/evidence/2026-09-22/M6.2-producer-parser-88daa-gates/native-artifacts/authoring-groups-native-pr-d6a94-rs-after-permission-changes/group-practice-1440.png",
+    "progress/evidence/2026-09-22/M6.2-producer-parser-88daa-gates/native-artifacts/authoring-groups-native-pr-d6a94-rs-after-permission-changes/group-practice-390.png",
+    "progress/evidence/2026-09-22/M6.2-producer-parser-88daa-gates/native-artifacts/authoring-groups-native-pr-d6a94-rs-after-permission-changes/group-private-390.png",
+    "progress/evidence/2026-09-22/M6.2-producer-parser-88daa-gates/native-artifacts/document-imports-real-DOCX-54907-ire-an-explicit-author-role/document-docx-preview-390.png",
+    "progress/evidence/2026-09-22/M6.2-producer-parser-88daa-gates/native-artifacts/document-imports-real-two--ca322--explicit-fidelity-approval/document-pdf-preview-1440.png"
+  ],
+  "migrations": [],
+  "migration_note": "0016 immutable identity/revision and review foreign-key migration was already published in the candidate foundation; unchanged in this slice. Core54/0001 unchanged.",
+  "security_review": {
+    "source": "Independent final catalog, parser and historical-fixture reviews found no blocker; raw original findings and fixes retained.",
+    "native": "Independent reviewer opened all 15 original synthetic PNGs and reviewed 13 geometry records, permissions and recovery JSON. No actual credential or private learner material observed in the selected artifacts.",
+    "history": "Catalog chooses one owner and never replaces current authorization or checked Provider history. Import question scope excludes private solutions.",
+    "publication": "Allowlisted source and redacted synthetic evidence only; staged/outgoing-history scan and remote readback are recorded separately during publication."
+  },
+  "not_run": [
+    "Full frontend/native suites for this slice (12 targeted native cases actually ran at88daa0a)",
+    "Actual review/read/decision/publish HTTP and UI, human mathematical/source approval",
+    "Successful sealed numeric runtime",
+    "Production DeepSeek platform Agent E2E",
+    "Real Codex and independent teaching effectiveness",
+    "Remote CI for the not-yet-published final head"
+  ],
+  "blockers": [
+    "PRODUCTION_INPUT_PROOF_NOT_ESTABLISHED",
+    "M61_NUMERIC_SANDBOX_ENVIRONMENT",
+    "M5_3_CI_TUTOR_COMPLETION_OBSERVATION_FAILED",
+    "M62_PR55_GRADING_RESULT_CI_FAILED",
+    "M62_B90_PDF_IMPORT_CI_FAILED"
+  ],
+  "next_task_id": "M6.2",
+  "next_action": "Same-transaction complete owner-backed review material, then actual review Job/read/human decision; atomic publish/diff/impact/restore remain pending.",
+  "evidence_packages": [
+    "progress/evidence/2026-09-22/M6.2-catalog-producer-wiring/manifest.json",
+    "progress/evidence/2026-09-22/M6.2-parser-exit-repair/manifest.json",
+    "progress/evidence/2026-09-22/M6.2-tutor-b90-artifacts/manifest.json",
+    "progress/evidence/2026-09-22/M6.2-producer-parser-88daa-gates/manifest.json",
+    "progress/evidence/2026-09-22/M6.2-legacy-catalog-fixture/manifest.json",
+    "progress/evidence/2026-09-22/M6.2-producer-final-gates/manifest.json"
+  ],
+  "prior_ci_scope": "Old b90 failures remain historical facts; controlled local assessment/parser mechanisms are not proven unique original CI causes."
+}

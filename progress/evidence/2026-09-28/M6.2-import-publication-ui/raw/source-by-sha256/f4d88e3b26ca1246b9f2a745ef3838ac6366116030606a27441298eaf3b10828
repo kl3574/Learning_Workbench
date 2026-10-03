@@ -1,0 +1,58 @@
+import 'fake-indexeddb/auto'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { afterEach, expect, test, vi } from 'vitest'
+const state = vi.hoisted(() => ({ workspace: 'workspace_review_shell', importConfirmed: false, commit: vi.fn() }))
+vi.mock('../../workbench/useWorkbench', async () => {
+  const { emptySession } = await import('../../workbench/model')
+  return { useWorkbench: () => ({ session: emptySession(), set: vi.fn(), status: 'saved', uiReady: true, error: '', drafts: {}, updateDraft: vi.fn(), reconnect: vi.fn(), draftConflicts: {}, draftSaving: {}, draftErrors: {}, chooseDraft: vi.fn(), draftResolving: {}, workspaceId: state.workspace, recoverable: [], restorePending: false, comparison: null, retainLocal: vi.fn(), draftBases: {}, draftStored: {} }) }
+})
+vi.mock('../assessment/useWorkspacePolicy', () => ({ useWorkspacePolicy: () => ({ known: true, independentId: null, openBookId: null, error: '', refresh: () => {} }) }))
+vi.mock('../routes/useRoutes', () => ({ useRoutes: () => ({ records: [], loading: false, error: '', refresh: () => {} }) }))
+vi.mock('../learning/useConceptStates', () => ({ useConceptStates: () => ({ value: null, error: '' }) }))
+vi.mock('../../workbench/Tutor', () => ({ Tutor: () => null }))
+vi.mock('../imports/useImportWorkflow', async () => {
+  const { reviewCandidate, reviewSession } = await import('./reviewFixtures')
+  return { useImportWorkflow: () => ({ snapshot: null, active: null, auth: reviewSession(state.workspace), accessReady: true,
+    accepted: [], mapping: [], courses: [], recovery: [], courseCursor: null, busy: false, confirmed: state.importConfirmed,
+    draft: { id: reviewCandidate.draft_id, revision: 1, kind: 'block', candidate_sha256: reviewCandidate.candidate_sha256, state: 'draft' }, commit: state.commit }) }
+})
+HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
+HTMLDialogElement.prototype.close = function () { this.removeAttribute('open') }
+import { Shell } from '../../workbench/Shell'
+import { machineReceipt, reviewSession, safeReviewJob } from './reviewFixtures'
+import { rememberReviewJob, reviewCommandStore, reviewControlStore, reviewJobStore } from './reviewCommands'
+afterEach(async () => { cleanup(); vi.unstubAllGlobals(); await Promise.all([reviewCommandStore.close(), reviewControlStore.close(), reviewJobStore.close()]) })
+
+test('actual Import and Shell preserve review reason until explicit close without submitting import or review', async () => {
+  state.workspace = `workspace_${crypto.randomUUID()}`
+  const calls: string[] = []
+  vi.stubGlobal('fetch', vi.fn(async (path: string, init: RequestInit) => {
+    calls.push(`${init.method} ${path}`)
+    const value = path === '/api/v1/session' ? reviewSession(state.workspace)
+      : path === `/api/v1/jobs/${machineReceipt.id}` ? safeReviewJob(state.workspace)
+        : path === `/api/v1/reviews/${machineReceipt.id}` ? machineReceipt : undefined
+    if (!value || init.method !== 'GET') throw new Error('Unexpected write or endpoint in Shell review fixture')
+    return new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } })
+  }))
+  await rememberReviewJob(state.workspace, machineReceipt.id)
+  render(<Shell />)
+  fireEvent.click(screen.getByRole('button', { name: '导入' }))
+  const dialog = screen.getByRole('dialog', { name: '导入' })
+  fireEvent.click(within(dialog).getByRole('button', { name: '打开候选审核与恢复' }))
+  const readJob = await screen.findByRole('button', { name: `读取审核任务 ${machineReceipt.id}` })
+  await waitFor(() => expect((readJob as HTMLButtonElement).disabled).toBe(false)); fireEvent.click(readJob)
+  const read = await screen.findByRole('button', { name: '另行读取当前审核回执' })
+  await waitFor(() => expect((read as HTMLButtonElement).disabled).toBe(false)); fireEvent.click(read)
+  const reason = await screen.findByLabelText('审核理由')
+  fireEvent.change(reason, { target: { value: 'Synthetic unsubmitted reason' } })
+  fireEvent.click(within(dialog).getByRole('button', { name: '关闭导入' }))
+  const confirm = await screen.findByRole('dialog', { name: '保留审核原命令' })
+  expect((reason as HTMLTextAreaElement).value).toBe('Synthetic unsubmitted reason')
+  fireEvent.click(within(confirm).getByRole('button', { name: '返回导入与审核' }))
+  expect((screen.getByLabelText('审核理由') as HTMLTextAreaElement).value).toBe('Synthetic unsubmitted reason')
+  fireEvent.click(within(dialog).getByRole('button', { name: '关闭导入' }))
+  fireEvent.click(screen.getByRole('button', { name: '保留审核原命令，明确丢弃临时表单并关闭' }))
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: '导入' })).toBeNull())
+  expect(state.commit).not.toHaveBeenCalled(); expect(state.importConfirmed).toBe(false)
+  expect(calls.every(value => value.startsWith('GET '))).toBe(true)
+})

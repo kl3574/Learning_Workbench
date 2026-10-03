@@ -1,0 +1,572 @@
+diff --git a/docs/adr/0026-publication-admission.md b/docs/adr/0026-publication-admission.md
+new file mode 100644
+index 0000000..522b748
+--- /dev/null
++++ b/docs/adr/0026-publication-admission.md
+@@ -0,0 +1,13 @@
++# 发布前只读准入观察
++
++依据 PRODUCT_DESIGN.md 3.0.7 §12.4、§15.1、§19.3、§20.3 与附录 A 的发布请求四字段。
++
++本切片只实现 PublicationAdmissionService.check 的当前事务内只读端口，接受严格 DraftPublishWrite。它通过 ReviewService.read_publication_basis 重新核当前会话、作者、工作区和 Policy，以及原候选 owner、完整审核历史、原数值历史前缀、报告与递归证据物理字节。不能用调用方 JSON 或上次返回的观察冒充权限。结果仅包含精确候选、审核修订与证据摘要，publication 固定 NOT_RUN；它不生成 ContentRef，不注册 HTTP 假发布、不改变 Draft 状态或 Authoring DTO，也不调用 Provider/数值 runtime。实际发布者以后必须在自己的写事务中重新调用该端口并完成所有所属事务。
++
++准入要求原机器结构检查 PASS、当前审核最后的人类决定批准全部适用的数学/来源条件、完整材料范围、真实数值覆盖和实际 owner 警告确认。数学 N/A 由 Quality 在全历史回读中按原材料检查，理由和 actor 保留；真实来源存在时来源 N/A 不成立。独立教学 NOT_RUN 保留，不被升为已验证，也不额外作为本软件交付门槛。警告 severity=error 拒绝，warning 必须明确确认，未知确认代码拒绝。
++
++数值计划来自实际 single payload 或 group 每个 worked_example 成员；group target 比较全部规范字段而非 Python 子类身份。Numeric owner 的 candidate_checks 按持久 SQLite rowid 枚举，ReviewNumeric 冻结原有顺序并逐项重验原前缀。每个精确 plan/member 采用该冻结列表最后匹配检查作为当前发布依据：必须明确批准、有实际启动与真实 Job completed、完整输出、已取得 exit 0、原断言全部 PASS。最后 pending/queued/running/failed/cancelled/BLOCKED 或无记录不能复用早先 PASS。较早失败仍完整验证和保留，不是终身否决；真实重跑成功必须被新机器 Review 观察到，不能升级旧冻结回执。这是当前准入依据的工程选择，不删除旧失败，也不把数值 PASS 当数学批准。此切片不引入跨 Review 的全局优先级或 Draft 当前审核选择规则。
++
++当前 Import block 可提供完整正文，但 imported worked_example 没有独立数值 owner 历史；Import question 材料明确 excluded 私解，其他导入图只有候选元数据而没有完整成员材料，均给出具体未支持原因。Import.commit 原参考导入行为不变，公开题面审核不审批私解。当前生成题组的七类必要题目语义检查仍为 NOT_RUN，两个全候选 APPROVED 不能补造这些检查；本端口以真实未检查范围阻断，不定义永久禁止题目发布或新增产品状态，后续可由规范允许的真实人类/独立证据补全。
++
++测试使用实际 Import/Authoring/Review/Numeric SQLite owner 与受控 loopback 生成。明确标记的合成人类意图和 numeric ledger 终态只验证持久协议与准入选择，不是实际专家批准或数值沙箱成功。当前实现不处理发布输出转换、私解入库、版本影响传播、恢复、UI、HTTP、迁移或状态转换。
+diff --git a/services/api/app/application/publication_admission.py b/services/api/app/application/publication_admission.py
+new file mode 100644
+index 0000000..a263470
+--- /dev/null
++++ b/services/api/app/application/publication_admission.py
+@@ -0,0 +1,116 @@
++"""Same-transaction publication prerequisites; no publication or state mutation."""
++import sqlite3
++
++from packages.contracts.canonical import canonical_bytes, metadata_sha256
++from ..authoring_dto import NumericPlan, WorkedExamplePayload
++from ..authoring_group_dto import AuthoringGroupNumericCheckView, AuthoringDraftMemberRef
++from ..import_dto import BlockDraftPayload
++from ..infrastructure.review_repository import validated
++from ..infrastructure.security import SessionIdentity
++from .authoring_group_validation import member_ref
++from .errors import ApiError
++from .publication_admission_models import DraftPublishWrite, PublicationAdmission
++from .review_history_models import ReviewDecisionRecord, ReviewMachineRecord
++from .review_material_models import CheckedReviewMaterial, ImportReviewMaterial, SingleReviewMaterial, GroupReviewMaterial
++from .review_numeric_models import NumericReviewCheck
++from .review_service import ReviewService
++
++
++def blocked(code: str, message: str) -> ApiError:
++    return ApiError(409, code, message)
++
++
++class PublicationAdmissionService:
++    def __init__(self, reviews: ReviewService):
++        self.reviews = reviews
++
++    @staticmethod
++    def _plans(material: CheckedReviewMaterial) -> list[tuple[AuthoringDraftMemberRef | None, NumericPlan]]:
++        payload = material.payload
++        if isinstance(payload, ImportReviewMaterial):
++            if material.candidate.entity == 'question':
++                raise blocked('PUBLISH_PRIVATE_COVERAGE_UNAVAILABLE', '当前导入审核不包含私有解答，不能据此准入题目发布。')
++            if not isinstance(payload.payload, BlockDraftPayload):
++                raise blocked('PUBLISH_MEMBER_COVERAGE_UNAVAILABLE', '当前导入审核只有对象元数据，缺少发布所需的完整成员材料。')
++            if payload.payload.metadata.kind == 'worked_example':
++                raise blocked('PUBLISH_NUMERIC_COVERAGE_UNAVAILABLE', '当前导入例题没有可核验的数值执行历史。')
++            return []
++        if isinstance(payload, SingleReviewMaterial):
++            return [(None, payload.record.payload.numeric_plan)]
++        assert isinstance(payload, GroupReviewMaterial)
++        if payload.record.payload.questions:
++            # §12.4 requires these actual checks. The current owner explicitly
++            # reports NOT_RUN; whole-root human math/source fields cannot fill
++            # those absent facts. A later real evidence port may support them.
++            raise blocked('PUBLISH_QUESTION_QUALITY_UNCHECKED',
++                '题目唯一性、干扰项、条件、单位、解答评分语义、目标及先修质量尚无完整检查证据。')
++        return [(member_ref(block), block.payload.numeric_plan) for block in payload.record.payload.blocks
++                if isinstance(block.payload, WorkedExamplePayload)]
++
++    @staticmethod
++    def _matching(check: NumericReviewCheck, target: AuthoringDraftMemberRef | None, plan: NumericPlan) -> bool:
++        view = check.view
++        if target is None:
++            target_matches = not isinstance(view, AuthoringGroupNumericCheckView)
++        else:
++            target_matches = (isinstance(view, AuthoringGroupNumericCheckView)
++                and canonical_bytes(view.target) == canonical_bytes(target))
++        return target_matches and canonical_bytes(view.plan) == canonical_bytes(plan)
++
++    @staticmethod
++    def _passed(check: NumericReviewCheck) -> bool:
++        view, job, start, end = check.view, check.job, check.start, check.end
++        return bool(view.decision == 'approve_once' and check.record.decision_actor_id is not None
++            and job is not None and job.status == 'completed' and check.input is not None
++            and start is not None and start.admitted_at is not None and start.actual_started_at is not None
++            and end is not None and end.output_complete and end.stdout_base64
++            and end.result.outcome == 'passed' and end.result.verdict == 'PASS' and end.result.exit_code == 0
++            and end.result.started_at == start.actual_started_at and end.result.output_sha256 is not None
++            and end.result.assertions and all(x.passed and x.error_code is None for x in end.result.assertions))
++
++    def check(self, connection: sqlite3.Connection, identity: SessionIdentity,
++              draft_id: str, body: DraftPublishWrite) -> PublicationAdmission:
++        body = validated(DraftPublishWrite, body)
++        history, material = self.reviews.read_publication_basis(connection, identity, body.review_receipt_id)
++        candidate = material.candidate
++        if (candidate.draft_id != draft_id or candidate.draft_revision != body.expected_revision
++                or candidate.candidate_sha256 != body.expected_content_sha256):
++            raise ApiError(412, 'PUBLISH_CANDIDATE_MISMATCH', '发布请求与审核的精确候选版本不一致。')
++        if (not history.records or not isinstance(history.records[0], ReviewMachineRecord)
++                or not isinstance(history.records[-1], ReviewDecisionRecord)):
++            raise blocked('PUBLISH_HUMAN_REVIEW_REQUIRED', '发布准入需要绑定此候选的明确人工审核决定。')
++        machine, human = history.records[0], history.records[-1]
++        if machine.structural_report.structural != 'PASS':
++            raise blocked('PUBLISH_STRUCTURE_REQUIRED', '结构检查尚未通过，不能准入发布。')
++        if human.receipt.mathematical not in {'APPROVED', 'NOT_APPLICABLE'} or human.receipt.sources not in {'APPROVED', 'NOT_APPLICABLE'}:
++            raise blocked('PUBLISH_HUMAN_REVIEW_REQUIRED', '数学与来源的适用审核尚未批准。')
++        # Mathematical applicability was already checked against actual material
++        # by the Quality owner while authenticating this exact human history.
++        if human.receipt.sources == 'NOT_APPLICABLE' and (
++                isinstance(material.payload, ImportReviewMaterial) or material.source_refs):
++            raise blocked('PUBLISH_SOURCE_REVIEW_REQUIRED', '材料存在真实来源，不能以来源不适用替代审核。')
++        plans = self._plans(material)
++        selected: list[str] = []
++        for target, plan in plans:
++            matches = [check for check in machine.numeric.checks if self._matching(check, target, plan)]
++            # Original owner order is persisted SQLite insertion order, verified
++            # by ReviewNumeric's exact prefix checks, not wall-clock ordering.
++            # A new check cannot make us reuse an earlier preferred PASS.
++            if not matches or not self._passed(matches[-1]):
++                raise blocked('PUBLISH_NUMERIC_REQUIRED', '审核所记录的数值历史缺少全部所需成员的完整通过结果。')
++            selected.append(matches[-1].view.id)
++        warnings = [*material.warnings, *(warning for check in machine.numeric.checks for warning in check.view.warnings)]
++        if any(warning.severity == 'error' for warning in warnings):
++            raise blocked('PUBLISH_OWNER_ERROR_UNRESOLVED', '实际所属材料仍包含未解决的错误。')
++        acknowledged = set(body.acknowledged_warning_codes)
++        known = {warning.code for warning in warnings}
++        if acknowledged - known:
++            raise ApiError(422, 'PUBLISH_WARNING_CODES_INVALID', '警告确认包含当前所属材料中不存在的代码。')
++        if {warning.code for warning in warnings if warning.severity == 'warning'} - acknowledged:
++            raise blocked('PUBLISH_WARNINGS_UNACKNOWLEDGED', '需要明确确认当前材料的全部实际警告。')
++        return PublicationAdmission(version='publication-admission-observation-v1', workspace_id=material.workspace_id,
++            candidate=candidate, review_receipt_id=human.review_id, review_revision=human.receipt.revision,
++            receipt_sha256=metadata_sha256(human.receipt), material_descriptor_sha256=material.descriptor_sha256,
++            numeric_observation_sha256=machine.numeric.descriptor_sha256, numeric_check_ids=selected,
++            numeric_coverage='complete' if plans else 'not_required_by_material',
++            acknowledged_warning_codes=list(body.acknowledged_warning_codes), publication='NOT_RUN')
+diff --git a/services/api/app/application/publication_admission_models.py b/services/api/app/application/publication_admission_models.py
+new file mode 100644
+index 0000000..7a15cd3
+--- /dev/null
++++ b/services/api/app/application/publication_admission_models.py
+@@ -0,0 +1,39 @@
++"""Appendix A publish intent and a non-durable read-only admission observation.
++
++Constructing either model grants no publication permission. A publisher must
++invoke the real service again inside its own current write transaction.
++"""
++from typing import Literal, Self
++
++from pydantic import model_validator
++from packages.contracts import domain_models as dm
++from ..authoring_dto import AuthoringModel
++
++
++class DraftPublishWrite(AuthoringModel):
++    expected_revision: dm.Revision
++    expected_content_sha256: dm.Sha256
++    review_receipt_id: dm.Id
++    acknowledged_warning_codes: list[str]
++
++    @model_validator(mode='after')
++    def distinct_warnings(self) -> Self:
++        if (len(set(self.acknowledged_warning_codes)) != len(self.acknowledged_warning_codes)
++                or any(not value.strip() for value in self.acknowledged_warning_codes)):
++            raise ValueError('Warning acknowledgments require distinct nonblank codes')
++        return self
++
++
++class PublicationAdmission(AuthoringModel):
++    version: Literal['publication-admission-observation-v1']
++    workspace_id: dm.Id
++    candidate: dm.DraftCandidate
++    review_receipt_id: dm.Id
++    review_revision: dm.Revision
++    receipt_sha256: dm.Sha256
++    material_descriptor_sha256: dm.Sha256
++    numeric_observation_sha256: dm.Sha256
++    numeric_check_ids: list[dm.Id]
++    numeric_coverage: Literal['complete', 'not_required_by_material']
++    acknowledged_warning_codes: list[str]
++    publication: Literal['NOT_RUN']
+diff --git a/services/api/app/application/review_service.py b/services/api/app/application/review_service.py
+index 1d789a2..0a038a8 100644
+--- a/services/api/app/application/review_service.py
++++ b/services/api/app/application/review_service.py
+@@ -42,6 +42,17 @@ class ReviewService:
+     def readers(self) -> dict[tuple[str, str], ArtifactReader]:
+         return {**self.external_artifact_readers, (PROFILE, 'draft_review'): self}
+ 
++    def read_publication_basis(self, connection: sqlite3.Connection, identity: SessionIdentity,
++                               identifier: str) -> tuple[ReviewHistory, CheckedReviewMaterial]:
++        """Current checked Quality facts; never a cached or reusable permission.
++
++        The caller must own the transaction and still perform publication's
++        remaining prerequisites. No state/history repair occurs on this read.
++        """
++        if not connection.in_transaction:
++            raise ApiError(409, 'TRANSACTION_REQUIRED', '发布准入核验需要当前事务。')
++        return self._history(connection, identity, identifier)
++
+     @staticmethod
+     def _identity(conn: sqlite3.Connection, identity: SessionIdentity, *, subject: bool = True) -> SessionIdentity:
+         current = current_session_identity(conn, identity)
+diff --git a/tests/integration/test_publication_admission.py b/tests/integration/test_publication_admission.py
+new file mode 100644
+index 0000000..3a913c9
+--- /dev/null
++++ b/tests/integration/test_publication_admission.py
+@@ -0,0 +1,358 @@
++"""Actual SQLite owners; synthetic human and numeric ledger facts, no publication.
++
++Generated fixtures use controlled loopback output. Synthetic terminal numeric
++records test admission of recorded facts, never physical sandbox success.
++"""
++import pytest
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import canonical_bytes, sha256_bytes
++from services.api.app.application.draft_candidates import DraftCandidates
++from services.api.app.application.errors import ApiError
++from services.api.app.application.publication_admission import PublicationAdmissionService
++from services.api.app.application.publication_admission_models import DraftPublishWrite
++from services.api.app.application.review_numeric import ReviewNumeric
++from services.api.app.application.review_service import ReviewService
++from services.api.app.application.review_worker import ReviewWorker
++from services.api.app.authoring_dto import NumericCheckResult, numeric_result_sha256
++from services.api.app.authoring_group_dto import AuthoringGroupNumericPreviewWrite
++from services.api.app.infrastructure.authoring_numeric_repository import NumericRepository
++from services.api.app.infrastructure.authoring_group_numeric_repository import GroupNumericRepository
++from services.api.app.infrastructure.database import utc_now
++from tests.integration.test_authoring_numeric_provider_history import ProviderHistoryCase, table_hashes
++from tests.integration.test_authoring_numeric_service import generated as single_fixture, decision as numeric_decision
++from tests.integration.test_authoring_group_numeric_service import generated_group
++from tests.integration.test_review_workflow import workflow as workflow_fixture, request, decision
++
++
++@pytest.fixture
++def workflow(tmp_path):
++    yield from workflow_fixture.__wrapped__(tmp_path)
++
++
++def reviewed(database, identity, candidate, reviews, *, key='review', checks=None, math='APPROVED', sources='APPROVED'):
++    body = request(candidate)
++    if checks is not None:
++        body = body.model_copy(update={'checks': checks})
++    ack = reviews.create(identity, candidate.draft_id, body, key)
++    assert ReviewWorker(reviews).run_once()
++    receipt = reviews.read(identity, ack.id)
++    return reviews.decide(identity, ack.id, decision(receipt, mathematical=math, sources=sources), key+'-human')
++
++
++def publish_request(database, identity, candidate, reviews, receipt, **changes):
++    with database.transaction(immediate=False) as conn:
++        history, material = reviews.read_publication_basis(conn, identity, receipt.id)
++        warnings = [*material.warnings, *(w for c in history.records[0].numeric.checks for w in c.view.warnings)]
++    return DraftPublishWrite(**(dict(expected_revision=candidate.draft_revision,
++        expected_content_sha256=candidate.candidate_sha256, review_receipt_id=receipt.id,
++        acknowledged_warning_codes=sorted({w.code for w in warnings})) | changes))
++
++
++def admit(database, identity, candidate, reviews, body):
++    with database.transaction(immediate=False) as conn:
++        conn.execute('PRAGMA query_only=ON')
++        return PublicationAdmissionService(reviews).check(conn, identity, candidate.draft_id, body)
++
++
++def test_plain_import_admission_is_same_transaction_readonly_and_not_publication(workflow, monkeypatch):
++    database, identity, candidate, reviews, _ = workflow
++    receipt = reviewed(database, identity, candidate, reviews, math='NOT_APPLICABLE')
++    body = publish_request(database, identity, candidate, reviews, receipt)
++    before = table_hashes(database)
++    with database.transaction(immediate=False) as conn:
++        conn.execute('PRAGMA query_only=ON')
++        monkeypatch.setattr(database, 'connect', lambda **kwargs: pytest.fail('admission opened another connection'))
++        result = PublicationAdmissionService(reviews).check(conn, identity, candidate.draft_id, body)
++        assert result.publication == 'NOT_RUN' and result.numeric_coverage == 'not_required_by_material'
++        assert result.numeric_check_ids == [] and result.review_revision == 2
++    monkeypatch.undo()
++    assert table_hashes(database) == before
++    assert reviews.read(identity, receipt.id).independent_pedagogy == 'NOT_RUN'
++
++
++@pytest.mark.parametrize('change', [dict(expected_revision=2), dict(expected_content_sha256='0'*64), dict(review_receipt_id='missing_review')])
++def test_exact_publish_binding_and_no_mutation(workflow, change):
++    database, identity, candidate, reviews, _ = workflow
++    receipt = reviewed(database, identity, candidate, reviews, math='NOT_APPLICABLE')
++    body = publish_request(database, identity, candidate, reviews, receipt, **change)
++    before = table_hashes(database)
++    with pytest.raises(ApiError):
++        admit(database, identity, candidate, reviews, body)
++    assert table_hashes(database) == before
++
++
++@pytest.mark.parametrize('checks,sources,expected', [(['sources'], 'APPROVED', 'PUBLISH_STRUCTURE_REQUIRED'),
++    (None, 'REJECTED', 'PUBLISH_HUMAN_REVIEW_REQUIRED'), (None, 'NOT_APPLICABLE', 'PUBLISH_SOURCE_REVIEW_REQUIRED')])
++def test_real_review_fields_cannot_bypass_required_checks(workflow, checks, sources, expected):
++    database, identity, candidate, reviews, _ = workflow
++    receipt = reviewed(database, identity, candidate, reviews, checks=checks, math='NOT_APPLICABLE', sources=sources)
++    body = publish_request(database, identity, candidate, reviews, receipt)
++    with pytest.raises(ApiError) as caught:
++        admit(database, identity, candidate, reviews, body)
++    assert caught.value.code == expected
++
++
++def test_current_latest_human_rejection_invalidates_earlier_admission(workflow):
++    database, identity, candidate, reviews, _ = workflow
++    receipt = reviewed(database, identity, candidate, reviews, math='NOT_APPLICABLE')
++    body = publish_request(database, identity, candidate, reviews, receipt)
++    assert admit(database, identity, candidate, reviews, body).review_revision == 2
++    reviews.decide(identity, receipt.id, decision(receipt, sources='REJECTED'), 'later-rejection')
++    with pytest.raises(ApiError):
++        admit(database, identity, candidate, reviews, body)
++
++
++@pytest.mark.parametrize('damage', ['role', 'revoked', 'report', 'history'])
++def test_admission_revalidates_current_access_complete_history_and_bytes(workflow, damage):
++    database, identity, candidate, reviews, _ = workflow
++    receipt = reviewed(database, identity, candidate, reviews, math='NOT_APPLICABLE')
++    body = publish_request(database, identity, candidate, reviews, receipt)
++    with database.transaction() as conn:
++        if damage == 'role':
++            conn.execute("UPDATE local_sessions SET role='learner'")
++        elif damage == 'revoked':
++            conn.execute("UPDATE local_sessions SET revoked_at='2000-01-01T00:00:00Z'")
++        elif damage == 'history':
++            conn.execute('DROP TRIGGER review_commands_no_delete')
++            conn.execute('DELETE FROM review_commands WHERE review_id=?', (receipt.id,))
++        else:
++            row = conn.execute("SELECT b.relative_path FROM artifacts a JOIN content_blobs b ON a.blob_sha256=b.sha256 WHERE a.profile='quality_review_report'").fetchone()
++            (database.settings.data_dir / row[0]).write_bytes(b'SYNTHETIC_CHANGED_REPORT')
++    before = table_hashes(database)
++    with pytest.raises(ApiError):
++        admit(database, identity, candidate, reviews, body)
++    assert table_hashes(database) == before
++
++
++def generated_case(tmp_path, kind):
++    state = single_fixture.__wrapped__(tmp_path) if kind == 'single' else generated_group(tmp_path, kind)
++    case = ProviderHistoryCase('single' if kind == 'single' else 'group', state)
++    source = 'authoring_single' if kind == 'single' else 'authoring_group'
++    candidates = DraftCandidates({source:case.authoring})
++    reviews = ReviewService(case.database, candidates, ReviewNumeric(candidates, {source:case.numeric}), {})
++    return case, reviews
++
++
++def synthetic_numeric(case, key, *, target=None, outcome='passed', complete=True, exit_code=0):
++    """Populate an explicit synthetic execution through actual Jobs/Numeric owners."""
++    if target is None:
++        preview = case.preview(key)
++    else:
++        preview = case.numeric.preview(case.identity, case.candidate.draft_id, target.member_key,
++            AuthoringGroupNumericPreviewWrite(candidate=case.candidate, target=target), key)
++    ack = case.numeric.decide(case.identity, preview.id, numeric_decision(preview), key+'-approve')
++    cls = NumericRepository if case.variant == 'single' else GroupNumericRepository
++    with case.database.transaction() as conn:
++        repo = cls(conn, case.identity.workspace_id)
++        lease, job, _ = repo.claim(ack.job.id)
++        assert repo.begin(lease, utc_now())
++        started = utc_now()
++        repo.mark_started(lease, started)
++        assertions = [dict(id=x.id, actual=x.expected, passed=True, error_code=None) for x in job.plan.assertions]
++        stdout = canonical_bytes(dict(synthetic_ledger_only=True, assertions=assertions))
++        raw = dict(job_id=job.job_id, input_sha256=sha256_bytes(canonical_bytes(job)),
++            operation_sha256=job.operation_sha256, outcome=outcome, verdict='PASS' if outcome == 'passed' else 'BLOCKED',
++            started_at=started, finished_at=utc_now(), exit_code=exit_code if outcome == 'passed' else None,
++            assertions=assertions if outcome == 'passed' else [], output_sha256=sha256_bytes(stdout) if complete else None, result_sha256='0'*64)
++        raw['result_sha256'] = numeric_result_sha256(raw)
++        repo.finish(lease, NumericCheckResult.model_validate(raw), stdout, b'', complete, case.runtime.manifest_document())
++    return preview
++
++
++@pytest.mark.parametrize('kind', ['single', 'lesson', 'practice_set', 'assessment'])
++def test_two_human_approvals_and_empty_numeric_history_do_not_admit_generated_candidates(tmp_path, kind):
++    case, reviews = generated_case(tmp_path, kind)
++    receipt = reviewed(case.database, case.identity, case.candidate, reviews)
++    body = publish_request(case.database, case.identity, case.candidate, reviews, receipt)
++    before = table_hashes(case.database)
++    with pytest.raises(ApiError) as caught:
++        admit(case.database, case.identity, case.candidate, reviews, body)
++    expected = 'PUBLISH_NUMERIC_REQUIRED' if kind in {'single','lesson'} else 'PUBLISH_QUESTION_QUALITY_UNCHECKED'
++    assert caught.value.code == expected
++    assert table_hashes(case.database) == before
++
++
++def test_last_frozen_numeric_check_controls_recovery_without_upgrading_old_review(tmp_path):
++    case, reviews = generated_case(tmp_path, 'single')
++    synthetic_numeric(case, 'blocked', outcome='environment_unavailable')
++    old = reviewed(case.database, case.identity, case.candidate, reviews, key='old')
++    old_body = publish_request(case.database, case.identity, case.candidate, reviews, old)
++    good = synthetic_numeric(case, 'recovery')
++    with pytest.raises(ApiError):
++        admit(case.database, case.identity, case.candidate, reviews, old_body)
++    fresh = reviewed(case.database, case.identity, case.candidate, reviews, key='fresh')
++    fresh_body = publish_request(case.database, case.identity, case.candidate, reviews, fresh)
++    result = admit(case.database, case.identity, case.candidate, reviews, fresh_body)
++    assert result.numeric_check_ids == [good.id] and result.publication == 'NOT_RUN'
++    synthetic_numeric(case, 'last-blocked', outcome='cancelled')
++    latest = reviewed(case.database, case.identity, case.candidate, reviews, key='latest')
++    with pytest.raises(ApiError):
++        admit(case.database, case.identity, case.candidate, reviews,
++              publish_request(case.database, case.identity, case.candidate, reviews, latest))
++
++
++def test_complete_lesson_requires_every_exact_numeric_member(tmp_path):
++    case, reviews = generated_case(tmp_path, 'lesson')
++    draft = case.authoring.draft(case.identity, case.candidate.draft_id)
++    first, second = [target for target in draft.root.blocks if target.member_key != 'lesson_text']
++    one = synthetic_numeric(case, 'first', target=first)
++    partial = reviewed(case.database, case.identity, case.candidate, reviews, key='partial')
++    with pytest.raises(ApiError):
++        admit(case.database, case.identity, case.candidate, reviews,
++              publish_request(case.database, case.identity, case.candidate, reviews, partial))
++    two = synthetic_numeric(case, 'second', target=second)
++    full = reviewed(case.database, case.identity, case.candidate, reviews, key='full')
++    result = admit(case.database, case.identity, case.candidate, reviews,
++        publish_request(case.database, case.identity, case.candidate, reviews, full))
++    assert result.numeric_check_ids == [one.id, two.id]
++    assert case.authoring.draft(case.identity, case.candidate.draft_id).state == 'draft'
++
++
++def test_request_has_only_the_four_specified_fields_and_serialization_failure_is_private(workflow):
++    import warnings
++    from pydantic import ValidationError
++    database, identity, candidate, reviews, _ = workflow
++    receipt = reviewed(database, identity, candidate, reviews, math='NOT_APPLICABLE')
++    body = publish_request(database, identity, candidate, reviews, receipt)
++    assert set(DraftPublishWrite.model_fields) == {'expected_revision', 'expected_content_sha256', 'review_receipt_id', 'acknowledged_warning_codes'}
++    with pytest.raises(ValidationError):
++        DraftPublishWrite.model_validate({**body.model_dump(), 'publish_now': True})
++    invalid = body.model_copy(update={'acknowledged_warning_codes': [{'secret': 'synthetic-private-admission-marker'}]})
++    before = table_hashes(database)
++    with warnings.catch_warnings(record=True) as observed:
++        warnings.simplefilter('always')
++        with pytest.raises(ApiError) as caught:
++            admit(database, identity, candidate, reviews, invalid)
++    assert observed == [] and 'synthetic-private-admission-marker' not in str(caught.value)
++    assert table_hashes(database) == before
++
++
++def test_machine_only_and_no_transaction_do_not_produce_admission(workflow):
++    database, identity, candidate, reviews, worker = workflow
++    ack = reviews.create(identity, candidate.draft_id, request(candidate), 'machine-only')
++    assert worker.run_once()
++    receipt = reviews.read(identity, ack.id)
++    body = publish_request(database, identity, candidate, reviews, receipt)
++    with database.connect() as conn:
++        with pytest.raises(ApiError) as caught:
++            PublicationAdmissionService(reviews).check(conn, identity, candidate.draft_id, body)
++        assert caught.value.code == 'TRANSACTION_REQUIRED'
++    with pytest.raises(ApiError) as caught:
++        admit(database, identity, candidate, reviews, body)
++    assert caught.value.code == 'PUBLISH_HUMAN_REVIEW_REQUIRED'
++
++
++def test_actual_import_warnings_require_exact_acknowledgment(workflow):
++    from services.api.app.application.imports import ImportService
++    from services.api.app.infrastructure.import_worker import ImportWorker
++    database, identity, _, reviews, _ = workflow
++    imports = ImportService(database)
++    staged = imports.stage(identity, data=b'<h1>Plain heading</h1><script>alert(1)</script>',
++        filename='warning.html', kind='html', key='warning-source')
++    worker = ImportWorker(database)
++    try:
++        assert worker.run_once()
++    finally:
++        worker.stop()
++    preview = imports.preview(identity, staged.import_id)
++    draft = next(d for d in (imports.draft(identity, item) for item in preview.preview_refs) if d.kind == 'block')
++    candidate = dm.DraftCandidate(draft_id=draft.id, draft_revision=draft.revision, entity=draft.kind, candidate_sha256=draft.candidate_sha256)
++    receipt = reviewed(database, identity, candidate, reviews, math='NOT_APPLICABLE')
++    body = publish_request(database, identity, candidate, reviews, receipt)
++    assert body.acknowledged_warning_codes
++    with pytest.raises(ApiError) as caught:
++        admit(database, identity, candidate, reviews, body.model_copy(update={'acknowledged_warning_codes': []}))
++    assert caught.value.code == 'PUBLISH_WARNINGS_UNACKNOWLEDGED'
++    with pytest.raises(ApiError) as caught:
++        admit(database, identity, candidate, reviews, body.model_copy(update={'acknowledged_warning_codes': ['invented-code']}))
++    assert caught.value.code == 'PUBLISH_WARNING_CODES_INVALID'
++    assert admit(database, identity, candidate, reviews, body).publication == 'NOT_RUN'
++
++
++@pytest.mark.parametrize('entity,code', [('question','PUBLISH_PRIVATE_COVERAGE_UNAVAILABLE'),
++    ('lesson','PUBLISH_MEMBER_COVERAGE_UNAVAILABLE')])
++def test_actual_import_package_does_not_claim_private_or_member_coverage(workflow, entity, code):
++    from tests.assessment_fixtures import assessment_fixture
++    from services.api.app.application.imports import ImportService
++    from services.api.app.infrastructure.import_worker import ImportWorker
++    database, identity, _, reviews, _ = workflow
++    imports = ImportService(database)
++    fixture = assessment_fixture('unreviewed')
++    staged = imports.stage(identity, data=fixture.archive, filename='synthetic.learnpack.zip', kind='learnpack', key='package')
++    worker = ImportWorker(database)
++    try:
++        assert worker.run_once()
++    finally:
++        worker.stop()
++    preview = imports.preview(identity, staged.import_id)
++    draft = next(d for d in (imports.draft(identity, item) for item in preview.preview_refs) if d.kind == entity)
++    candidate = dm.DraftCandidate(draft_id=draft.id, draft_revision=draft.revision, entity=draft.kind, candidate_sha256=draft.candidate_sha256)
++    receipt = reviewed(database, identity, candidate, reviews)
++    body = publish_request(database, identity, candidate, reviews, receipt)
++    before = table_hashes(database)
++    with pytest.raises(ApiError) as caught:
++        admit(database, identity, candidate, reviews, body)
++    assert caught.value.code == code and table_hashes(database) == before
++
++
++@pytest.mark.parametrize('mode', ['independent', 'open_book', 'assisted'])
++def test_current_real_assessment_policy_still_blocks_admission(workflow, mode):
++    from services.api.app.application.assessment import AssessmentService
++    from services.api.app.assessment_dto import AssessmentAttemptCreate
++    from services.api.app.infrastructure.content_repository import reference
++    from tests.assessment_fixtures import assessment_fixture
++    from tests.integration.test_assessment_attempts import import_fixture
++    database, identity, candidate, reviews, _ = workflow
++    receipt = reviewed(database, identity, candidate, reviews, math='NOT_APPLICABLE')
++    body = publish_request(database, identity, candidate, reviews, receipt)
++    fixture = assessment_fixture('admissionpolicy')
++    import_fixture(database, identity, fixture, 'assessment-material')
++    AssessmentService(database).create_attempt(identity, fixture.assessment.id,
++        AssessmentAttemptCreate(assessment_ref=reference(fixture.assessment), mode=mode), 'attempt')
++    before = table_hashes(database)
++    with pytest.raises(ApiError):
++        admit(database, identity, candidate, reviews, body)
++    assert table_hashes(database) == before
++
++
++@pytest.mark.parametrize('last', ['pending', 'queued', 'running'])
++def test_last_unfinished_numeric_check_cannot_reuse_earlier_pass(tmp_path, last):
++    case, reviews = generated_case(tmp_path, 'single')
++    synthetic_numeric(case, 'earlier-pass')
++    preview = case.preview('latest-unfinished')
++    if last != 'pending':
++        ack = case.numeric.decide(case.identity, preview.id, numeric_decision(preview), 'latest-approve')
++        if last == 'running':
++            with case.database.transaction() as conn:
++                NumericRepository(conn, case.identity.workspace_id).claim(ack.job.id)
++    receipt = reviewed(case.database, case.identity, case.candidate, reviews)
++    body = publish_request(case.database, case.identity, case.candidate, reviews, receipt)
++    before = table_hashes(case.database)
++    with pytest.raises(ApiError) as caught:
++        admit(case.database, case.identity, case.candidate, reviews, body)
++    assert caught.value.code == 'PUBLISH_NUMERIC_REQUIRED' and table_hashes(case.database) == before
++
++
++@pytest.mark.parametrize('changes', [dict(complete=False), dict(exit_code=None)])
++def test_declared_numeric_pass_without_complete_output_or_known_exit_is_not_admitted(tmp_path, changes):
++    case, reviews = generated_case(tmp_path, 'single')
++    synthetic_numeric(case, 'incomplete-proof', **changes)
++    receipt = reviewed(case.database, case.identity, case.candidate, reviews)
++    with pytest.raises(ApiError) as caught:
++        admit(case.database, case.identity, case.candidate, reviews,
++            publish_request(case.database, case.identity, case.candidate, reviews, receipt))
++    assert caught.value.code == 'PUBLISH_NUMERIC_REQUIRED'
++
++
++def test_numeric_original_output_corruption_cannot_reuse_accepted_admission(tmp_path):
++    case, reviews = generated_case(tmp_path, 'single')
++    synthetic_numeric(case, 'original')
++    receipt = reviewed(case.database, case.identity, case.candidate, reviews)
++    body = publish_request(case.database, case.identity, case.candidate, reviews, receipt)
++    assert admit(case.database, case.identity, case.candidate, reviews, body).publication == 'NOT_RUN'
++    with case.database.transaction() as conn:
++        conn.execute("UPDATE authoring_numeric_executions SET end_json='{}'")
++    before = table_hashes(case.database)
++    with pytest.raises(ApiError):
++        admit(case.database, case.identity, case.candidate, reviews, body)
++    assert table_hashes(case.database) == before

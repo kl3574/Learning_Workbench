@@ -1,0 +1,302 @@
+........................................................................ [  2%]
+........................................................................ [  4%]
+..................................F..............FF..................... [  6%]
+........................................................................ [  8%]
+........................................................................ [ 10%]
+...............................................................F........ [ 13%]
+........................................................................ [ 15%]
+....................F................................................... [ 17%]
+...........................................F............................ [ 19%]
+........................................................................ [ 21%]
+........................................................................ [ 24%]
+........................................s............................... [ 26%]
+........................................................................ [ 28%]
+........................................................................ [ 30%]
+........................................................................ [ 32%]
+........................................................................ [ 34%]
+........................................................................ [ 37%]
+........................................................................ [ 39%]
+........................................................................ [ 41%]
+..........................................
+=================================== FAILURES ===================================
+_ test_generated_types_and_executed_transport_preserve_old_calls_and_bind_exact_parameters _
+
+tmp_path = PosixPath('/tmp/pytest-of-lkx/pytest-206/test_generated_types_and_execu0')
+
+    def test_generated_types_and_executed_transport_preserve_old_calls_and_bind_exact_parameters(tmp_path):
+        generated = artifacts(transport_fixture())
+        for name in ("api-types.ts", "api-client.ts"):
+            (tmp_path / name).write_text(generated[name])
+        (tmp_path / "package.json").write_text(json.dumps({"type": "module"}))
+        (tmp_path / "compile.ts").write_text('''import { createApiClient, type ApiResponse, type JsonTransport } from './api-client';
+    const oldTransport: JsonTransport = async (_path, _init) => ({ value: 'old caller' });
+    const request = createApiClient(oldTransport);
+    const oldRead: Promise<{ value: string }> = request('GET /session', undefined);
+    request('POST /bootstrap', { code: 'value' }, { 'Idempotency-Key': 'create-1' });
+    request('GET /courses', undefined);
+    request('GET /courses', undefined, undefined, { query: { q: '中文', limit: 20 } });
+    request('GET /courses/{id}', undefined, undefined, { path: { id: 'course' }, query: { revision: 1 } });
+    const markdown: Promise<string> = request('GET /blocks/{id}/body', undefined, undefined, { path: { id: 'block' }, query: { revision: 1 } });
+    const response: ApiResponse<'GET /blocks/{id}/body'> = 'Markdown';
+    // @ts-expect-error required path/query parameters cannot be omitted
+    request('GET /courses/{id}', undefined);
+    // @ts-expect-error revision is required
+    request('GET /courses/{id}', undefined, undefined, { path: { id: 'course' }, query: {} });
+    // @ts-expect-error revision is numeric
+    request('GET /courses/{id}', undefined, undefined, { path: { id: 'course' }, query: { revision: '1' } });
+    // @ts-expect-error path id must be declared with its required type
+    request('GET /courses/{id}', undefined, undefined, { path: { id: 1 }, query: { revision: 1 } });
+    // @ts-expect-error body is a strict named DTO
+    request('POST /bootstrap', { wrong: 'value' }, { 'Idempotency-Key': 'create-1' });
+    // @ts-expect-error old required headers remain required
+    request('POST /bootstrap', { code: 'value' });
+    // @ts-expect-error undeclared query keys have no client binding
+    request('GET /courses', undefined, undefined, { query: { latest: true } });
+    // @ts-expect-error Markdown transport returns string, never a copied JSON DTO
+    const incorrect: Promise<{ value: string }> = request('GET /blocks/{id}/body', undefined, undefined, { path: { id: 'block' }, query: { revision: 1 } });
+    ''')
+>       run_node(ROOT / "apps/web/node_modules/.bin/tsc", "--strict", "--skipLibCheck", "--target", "ES2022",
+                 "--module", "ESNext", "--moduleResolution", "Bundler", "--lib", "ES2022,DOM", "--outDir", "out",
+                 "api-types.ts", "api-client.ts", "compile.ts", cwd=tmp_path)
+
+tests/contract/test_generated_transport.py:94: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cwd = PosixPath('/tmp/pytest-of-lkx/pytest-206/test_generated_types_and_execu0')
+args = (PosixPath('$HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/apps/web/node_modules/.bin/tsc'), '--strict', '--skipLibCheck', '--target', 'ES2022', '--module', ...)
+
+    def run_node(*args, cwd):
+        result = subprocess.run(["bash", str(ROOT / "scripts/node.sh"), *map(str, args)], cwd=cwd, capture_output=True, text=True)
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: $HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/scripts/node.sh: line 13: $HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/apps/web/node_modules/.bin/tsc: No such file or directory
+E         
+E       assert 127 == 0
+E        +  where 127 = CompletedProcess(args=['bash', '$HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/scripts/node.../learning-workbench-acceptance/m62-combined-gate-819aa927/apps/web/node_modules/.bin/tsc: No such file or directory\n').returncode
+
+tests/contract/test_generated_transport.py:59: AssertionError
+_ test_multipart_roundtrip_keeps_original_bytes_filename_and_binary_response[binary_schema0] _
+
+tmp_path = PosixPath('/tmp/pytest-of-lkx/pytest-206/test_multipart_roundtrip_keeps0')
+binary_schema = {'format': 'binary'}
+
+    @pytest.mark.parametrize("binary_schema", [{"format": "binary"}, {"contentMediaType": "application/octet-stream"}])
+    def test_multipart_roundtrip_keeps_original_bytes_filename_and_binary_response(tmp_path, binary_schema):
+        api = upload_api()
+        api["components"]["schemas"]["Upload"]["properties"]["file"] = {"type": "string", **binary_schema}
+        generated = artifacts(api)
+        for name in ("api-types.ts", "api-client.ts"):
+            (tmp_path / name).write_text(generated[name])
+        (tmp_path / "package.json").write_text(json.dumps({"type": "module"}))
+        (tmp_path / "compile.ts").write_text('''import { createApiClient } from './api-client';
+    const request = createApiClient(async () => new Blob());
+    request('POST /imports', {file: new File(['x'], '合成.md'), kind: 'markdown'}, {'Idempotency-Key': 'upload'});
+    const file: Promise<Blob> = request('GET /artifacts/{id}/download', undefined, undefined, {path: {id: 'artifact_a'}});
+    // @ts-expect-error file bytes are not a JSON string
+    request('POST /imports', {file: 'text', kind: 'auto'}, {'Idempotency-Key': 'upload'});
+    // @ts-expect-error file upload requires an explicit kind
+    request('POST /imports', {file: new Blob()}, {'Idempotency-Key': 'upload'});
+    // @ts-expect-error unknown form fields cannot be sent
+    request('POST /imports', {file: new Blob(), kind: 'auto', execute: true}, {'Idempotency-Key': 'upload'});
+    // @ts-expect-error binary result is not JSON or Markdown
+    const wrong: Promise<string> = request('GET /artifacts/{id}/download', undefined, undefined, {path: {id: 'artifact_a'}});
+    ''')
+>       run_node(ROOT / "apps/web/node_modules/.bin/tsc", "--strict", "--skipLibCheck", "--target", "ES2022",
+                 "--module", "ESNext", "--moduleResolution", "Bundler", "--lib", "ES2022,DOM", "--outDir", "out",
+                 "api-types.ts", "api-client.ts", "compile.ts", cwd=tmp_path)
+
+tests/contract/test_generated_upload.py:53: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cwd = PosixPath('/tmp/pytest-of-lkx/pytest-206/test_multipart_roundtrip_keeps0')
+args = (PosixPath('$HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/apps/web/node_modules/.bin/tsc'), '--strict', '--skipLibCheck', '--target', 'ES2022', '--module', ...)
+
+    def run_node(*args, cwd):
+        result = subprocess.run(["bash", str(ROOT / "scripts/node.sh"), *map(str, args)], cwd=cwd, capture_output=True, text=True)
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: $HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/scripts/node.sh: line 13: $HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/apps/web/node_modules/.bin/tsc: No such file or directory
+E         
+E       assert 127 == 0
+E        +  where 127 = CompletedProcess(args=['bash', '$HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/scripts/node.../learning-workbench-acceptance/m62-combined-gate-819aa927/apps/web/node_modules/.bin/tsc: No such file or directory\n').returncode
+
+tests/contract/test_generated_transport.py:59: AssertionError
+_ test_multipart_roundtrip_keeps_original_bytes_filename_and_binary_response[binary_schema1] _
+
+tmp_path = PosixPath('/tmp/pytest-of-lkx/pytest-206/test_multipart_roundtrip_keeps1')
+binary_schema = {'contentMediaType': 'application/octet-stream'}
+
+    @pytest.mark.parametrize("binary_schema", [{"format": "binary"}, {"contentMediaType": "application/octet-stream"}])
+    def test_multipart_roundtrip_keeps_original_bytes_filename_and_binary_response(tmp_path, binary_schema):
+        api = upload_api()
+        api["components"]["schemas"]["Upload"]["properties"]["file"] = {"type": "string", **binary_schema}
+        generated = artifacts(api)
+        for name in ("api-types.ts", "api-client.ts"):
+            (tmp_path / name).write_text(generated[name])
+        (tmp_path / "package.json").write_text(json.dumps({"type": "module"}))
+        (tmp_path / "compile.ts").write_text('''import { createApiClient } from './api-client';
+    const request = createApiClient(async () => new Blob());
+    request('POST /imports', {file: new File(['x'], '合成.md'), kind: 'markdown'}, {'Idempotency-Key': 'upload'});
+    const file: Promise<Blob> = request('GET /artifacts/{id}/download', undefined, undefined, {path: {id: 'artifact_a'}});
+    // @ts-expect-error file bytes are not a JSON string
+    request('POST /imports', {file: 'text', kind: 'auto'}, {'Idempotency-Key': 'upload'});
+    // @ts-expect-error file upload requires an explicit kind
+    request('POST /imports', {file: new Blob()}, {'Idempotency-Key': 'upload'});
+    // @ts-expect-error unknown form fields cannot be sent
+    request('POST /imports', {file: new Blob(), kind: 'auto', execute: true}, {'Idempotency-Key': 'upload'});
+    // @ts-expect-error binary result is not JSON or Markdown
+    const wrong: Promise<string> = request('GET /artifacts/{id}/download', undefined, undefined, {path: {id: 'artifact_a'}});
+    ''')
+>       run_node(ROOT / "apps/web/node_modules/.bin/tsc", "--strict", "--skipLibCheck", "--target", "ES2022",
+                 "--module", "ESNext", "--moduleResolution", "Bundler", "--lib", "ES2022,DOM", "--outDir", "out",
+                 "api-types.ts", "api-client.ts", "compile.ts", cwd=tmp_path)
+
+tests/contract/test_generated_upload.py:53: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cwd = PosixPath('/tmp/pytest-of-lkx/pytest-206/test_multipart_roundtrip_keeps1')
+args = (PosixPath('$HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/apps/web/node_modules/.bin/tsc'), '--strict', '--skipLibCheck', '--target', 'ES2022', '--module', ...)
+
+    def run_node(*args, cwd):
+        result = subprocess.run(["bash", str(ROOT / "scripts/node.sh"), *map(str, args)], cwd=cwd, capture_output=True, text=True)
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: $HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/scripts/node.sh: line 13: $HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/apps/web/node_modules/.bin/tsc: No such file or directory
+E         
+E       assert 127 == 0
+E        +  where 127 = CompletedProcess(args=['bash', '$HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/scripts/node.../learning-workbench-acceptance/m62-combined-gate-819aa927/apps/web/node_modules/.bin/tsc: No such file or directory\n').returncode
+
+tests/contract/test_generated_transport.py:59: AssertionError
+_ test_emitted_application_binding_and_nested_types_compile_with_no_unknown_escape _
+
+tmp_path = PosixPath('/tmp/pytest-of-lkx/pytest-206/test_emitted_application_bindi0')
+
+    def test_emitted_application_binding_and_nested_types_compile_with_no_unknown_escape(tmp_path):
+        generated = tmp_path / 'generated'
+        generated.mkdir()
+        (tmp_path / 'module-ports.ts').write_text(PORTS)
+        value = shape_openapi()
+        binding = recommendation_ports_binding(PORTS, value, PROVENANCE)
+        (generated / 'recommendation-ports-binding.ts').write_text(binding)
+        (generated / 'api-types.ts').write_text(generate_types(deepcopy(value['components']['schemas']), PROVENANCE))
+        (tmp_path / 'verify.ts').write_text('''import type { RecommendationPort } from './module-ports';
+    import type { RecommendationApplicationDTOMap } from './generated/recommendation-ports-binding';
+    import type { RecommendationDecisionWrite, RecommendationPage } from './generated/api-types';
+    declare const port: RecommendationPort<RecommendationApplicationDTOMap>;
+    type IsUnknown<T> = unknown extends T ? true : false;
+    const resultIsKnown: IsUnknown<Awaited<ReturnType<typeof port.read>>> = false;
+    const pending: RecommendationDecisionWrite = { decision: 'accepted', reason: null };
+    // @ts-expect-error nullable reason is required
+    const missingReason: RecommendationDecisionWrite = { decision: 'dismissed' };
+    // @ts-expect-error pending is not a user decision
+    const wrongDecision: RecommendationDecisionWrite = { decision: 'pending', reason: null };
+    declare const page: RecommendationPage;
+    const exactHash: string = page.items[0].target_ref.sha256;
+    const reply: 'missing' | 'pending_refresh' | 'ready' | 'stale' | 'failed' = page.projection_state;
+    // @ts-expect-error the old undocumented alias is absent
+    const wrongAlias = page.items[0].target;
+    // @ts-expect-error ContentRef cannot masquerade as an Evidence reference
+    const wrongEvidence: RecommendationPage['items'][number]['evidence_refs'][number] = page.items[0].target_ref;
+    ''')
+        result = subprocess.run(['bash', str(ROOT / 'scripts/node.sh'),
+            str(ROOT / 'apps/web/node_modules/.bin/tsc'), '--strict', '--skipLibCheck', '--noEmit',
+            '--target', 'ES2022', '--module', 'ESNext', '--moduleResolution', 'Bundler', '--lib', 'ES2022,DOM',
+            'verify.ts', 'module-ports.ts', 'generated/api-types.ts', 'generated/recommendation-ports-binding.ts'],
+            cwd=tmp_path, capture_output=True, text=True)
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: $HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/scripts/node.sh: line 13: $HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/apps/web/node_modules/.bin/tsc: No such file or directory
+E         
+E       assert 127 == 0
+E        +  where 127 = CompletedProcess(args=['bash', '$HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/scripts/node.../learning-workbench-acceptance/m62-combined-gate-819aa927/apps/web/node_modules/.bin/tsc: No such file or directory\n').returncode
+
+tests/contract/test_recommendation_binding.py:119: AssertionError
+_ test_generated_client_compiles_exact_query_union_and_executes_only_legal_scalar_modes _
+
+tmp_path = PosixPath('/tmp/pytest-of-lkx/pytest-206/test_generated_client_compiles0')
+
+    def test_generated_client_compiles_exact_query_union_and_executes_only_legal_scalar_modes(tmp_path):
+        generated = tmp_path / 'generated'
+        generated.mkdir()
+        (tmp_path / 'module-ports.ts').write_text(PORTS)
+        for path, value in generator.artifacts().items():
+            if path.name in {'api-types.ts', 'api-client.ts', 'retrieval-ports-binding.ts', 'retrieval-content-types.ts'}:
+                (generated / path.name).write_bytes(value)
+        (tmp_path / 'package.json').write_text(json.dumps({'type': 'module'}))
+        (tmp_path / 'compile.ts').write_text('''import { createApiClient } from './generated/api-client';
+    import type { ContentRetrievalRuntimeDTOMap } from './generated/retrieval-ports-binding';
+    const request = createApiClient(async () => ({}));
+    request('GET /api/v1/index/status', undefined);
+    request('GET /api/v1/index/status', undefined, undefined, { query: { scope_refs: '[]' } });
+    request('GET /api/v1/index/status', undefined, undefined, { query: { cursor: 'opaque', limit: 2 } });
+    request('POST /api/v1/retrieval/query', { query: '概率', scope_refs: [], limit: 10 });
+    // @ts-expect-error scope and overview pagination cannot mix
+    request('GET /api/v1/index/status', undefined, undefined, { query: { scope_refs: '[]', limit: 20 } });
+    // @ts-expect-error scope is a scalar JSON string, not an array transported as a body
+    request('GET /api/v1/index/status', undefined, undefined, { query: { scope_refs: [] } });
+    // @ts-expect-error omitted and explicit null are different
+    request('GET /api/v1/index/status', undefined, undefined, { query: { cursor: null } });
+    // @ts-expect-error rebuild requires the original command key
+    request('POST /api/v1/index/rebuild', { scope_refs: [], expected_corpus_sha256: 'a', provider_id: null, consent_id: null });
+    const bytes: ContentRetrievalRuntimeDTOMap['RetrievalBlockMaterial']['body'] = new Uint8Array([10]);
+    // @ts-expect-error internal Content bytes cannot be an HTTP blob or decoded string
+    const bad: typeof bytes = 'text';
+    ''')
+        command = ['bash', str(ROOT / 'scripts/node.sh'), str(ROOT / 'apps/web/node_modules/.bin/tsc'),
+            '--strict', '--skipLibCheck', '--target', 'ES2022', '--module', 'ESNext',
+            '--moduleResolution', 'Bundler', '--lib', 'ES2022,DOM', '--outDir', 'out', 'compile.ts']
+        compiled = subprocess.run(command, cwd=tmp_path, capture_output=True, text=True)
+>       assert compiled.returncode == 0, compiled.stdout + compiled.stderr
+E       AssertionError: $HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/scripts/node.sh: line 13: $HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/apps/web/node_modules/.bin/tsc: No such file or directory
+E         
+E       assert 127 == 0
+E        +  where 127 = CompletedProcess(args=['bash', '$HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/scripts/node.../learning-workbench-acceptance/m62-combined-gate-819aa927/apps/web/node_modules/.bin/tsc: No such file or directory\n').returncode
+
+tests/contract/test_retrieval_generation.py:125: AssertionError
+_________ test_emitted_sse_codec_real_typescript_and_stream_execution __________
+
+tmp_path = PosixPath('/tmp/pytest-of-lkx/pytest-206/test_emitted_sse_codec_real_ty0')
+
+    def test_emitted_sse_codec_real_typescript_and_stream_execution(tmp_path):
+        values = generated()
+        for name in ['api-types.ts', 'api-client.ts', 'tutor-sse.ts']:
+            (tmp_path / name).write_text(values[name])
+        (tmp_path / 'package.json').write_text('{"type":"module"}')
+>       run_node(ROOT / 'apps/web/node_modules/.bin/tsc', '--strict', '--skipLibCheck', '--target', 'ES2022',
+                 '--module', 'ESNext', '--moduleResolution', 'Bundler', '--lib', 'ES2022,DOM',
+                 '--outDir', 'out', 'api-types.ts', 'api-client.ts', 'tutor-sse.ts', cwd=tmp_path)
+
+tests/contract/test_tutor_transport.py:133: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cwd = PosixPath('/tmp/pytest-of-lkx/pytest-206/test_emitted_sse_codec_real_ty0')
+args = (PosixPath('$HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/apps/web/node_modules/.bin/tsc'), '--strict', '--skipLibCheck', '--target', 'ES2022', '--module', ...)
+
+    def run_node(*args, cwd):
+        result = subprocess.run(['bash', str(ROOT / 'scripts/node.sh'), *map(str, args)],
+                                cwd=cwd, capture_output=True, text=True)
+>       assert result.returncode == 0, result.stdout + result.stderr
+E       AssertionError: $HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/scripts/node.sh: line 13: $HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/apps/web/node_modules/.bin/tsc: No such file or directory
+E         
+E       assert 127 == 0
+E        +  where 127 = CompletedProcess(args=['bash', '$HOME/.cache/learning-workbench-acceptance/m62-combined-gate-819aa927/scripts/node.../learning-workbench-acceptance/m62-combined-gate-819aa927/apps/web/node_modules/.bin/tsc: No such file or directory\n').returncode
+
+tests/contract/test_tutor_transport.py:125: AssertionError
+=============================== warnings summary ===============================
+../m62-combined-final-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  $HOME/.cache/learning-workbench-acceptance/m62-combined-final-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../m62-combined-final-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  $HOME/.cache/learning-workbench-acceptance/m62-combined-final-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/integration/test_authoring_numeric_runtime.py:46: BLOCKED_ENVIRONMENT: real sealed runtime did not execute the calculator; original FAIL retained
+FAILED tests/contract/test_generated_transport.py::test_generated_types_and_executed_transport_preserve_old_calls_and_bind_exact_parameters
+FAILED tests/contract/test_generated_upload.py::test_multipart_roundtrip_keeps_original_bytes_filename_and_binary_response[binary_schema0]
+FAILED tests/contract/test_generated_upload.py::test_multipart_roundtrip_keeps_original_bytes_filename_and_binary_response[binary_schema1]
+FAILED tests/contract/test_recommendation_binding.py::test_emitted_application_binding_and_nested_types_compile_with_no_unknown_escape
+FAILED tests/contract/test_retrieval_generation.py::test_generated_client_compiles_exact_query_union_and_executes_only_legal_scalar_modes
+FAILED tests/contract/test_tutor_transport.py::test_emitted_sse_codec_real_typescript_and_stream_execution
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! KeyboardInterrupt !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+$HOME/.cache/learning-workbench-acceptance/m62-combined-final-active/.venv/lib/python3.12/site-packages/pydantic/_internal/_known_annotated_metadata.py:226: KeyboardInterrupt
+(to show a full traceback on KeyboardInterrupt use --full-trace)
+6 failed, 1403 passed, 1 skipped, 2 warnings in 647.82s (0:10:47)

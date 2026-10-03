@@ -1,0 +1,71 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/draftReview
+
+
+[1m[30m[46m RUN [49m[39m[22m [36mv5.0.0 [39m[90m[REVIEW_UI_WORKTREE]/apps/web[39m
+
+ [32m✓[39m src/features/draftReview/reviewCommands.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m src/features/draftReview/ReviewPanel.test.tsx [2m([22m[2m2 tests[22m[2m)[22m[32m 209[2mms[22m[39m
+ [31m❯[39m src/features/draftReview/useReview.test.tsx [2m([22m[2m10 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[33m 614[2mms[22m[39m
+   [32m✓[39m lost ACK retains one original key/body and permits only explicit same-page replay[32m 68[2mms[22m[39m
+   [32m✓[39m storage failure stops before any HTTP write[32m 53[2mms[22m[39m
+   [32m✓[39m a prior page command is read-only after reload while known job and receipt remain readable[32m 55[2mms[22m[39m
+   [32m✓[39m Policy pause discards a late create ACK without persisting private acknowledgement[32m 105[2mms[22m[39m
+   [32m✓[39m late protected receipt cannot enter a different workspace or paused view[32m 53[2mms[22m[39m
+   [32m✓[39m foreign or non-review safe job cannot be remembered as review recovery[32m 54[2mms[22m[39m
+[31m   [31m×[31m report bytes require actual ETag and a second unchanged currently authorized receipt[39m[32m 59[2mms[22m[39m
+[31m   [31m×[31m artifact Policy rejection clears already displayed private receipt and stored command projection[39m[32m 55[2mms[22m[39m
+   [32m✓[39m stale decision preserves the original CAS and requires a fresh receipt before another command[32m 55[2mms[22m[39m
+   [32m✓[39m learner can recover and cancel safe known review work without reading academic commands[32m 55[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m src/features/draftReview/useReview.test.tsx[2m > [22mreport bytes require actual ETag and a second unchanged currently authorized receipt
+[31m[1mAssertionError[22m: expected null to deeply equal { …(3) }[39m
+
+[32m- Expected:[39m
+{
+  "path": "/api/v1/artifacts/artifact_synthetic/download",
+  "sha256": "792006c36494718e3d5af6263fe304e48a912c8af44d6307a276fe27fd3be6fd",
+  "text": "{\"fixture\":\"synthetic report\"}",
+}
+
+[31m+ Received:[39m
+null
+
+[36m [2m❯[22m src/features/draftReview/useReview.test.tsx:[2m120:38[22m[39m
+    [90m118|[39m   expect(port.artifact).not.toHaveBeenCalled()
+    [90m119|[39m   await act(() => hook.result.current.artifact(machineReceipt.evidence…
+    [90m120|[39m   expect(hook.result.current.report).toEqual({ path: machineReceipt.ev…
+    [90m   |[39m                                      [31m^[39m
+    [90m121|[39m   expect(port.read).toHaveBeenCalledTimes(2)
+    [90m122|[39m   vi.mocked(port.artifact).mockResolvedValueOnce({ data: await new Res…
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m src/features/draftReview/useReview.test.tsx[2m > [22martifact Policy rejection clears already displayed private receipt and stored command projection
+[31m[1mAssertionError[22m: expected true to be false // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- false[39m
+[31m+ true[39m
+
+[36m [2m❯[22m src/features/draftReview/useReview.test.tsx:[2m139:40[22m[39m
+    [90m137|[39m   vi.mocked(port.read).mockRejectedValueOnce(new ApiError(409, 'Synthe…
+    [90m138|[39m   await act(() => hook.result.current.artifact(machineReceipt.evidence…
+    [90m139|[39m   expect(hook.result.current.academic).toBe(false)
+    [90m   |[39m                                        [31m^[39m
+    [90m140|[39m   expect(hook.result.current.receipt).toBeNull(); expect(hook.result.c…
+    [90m141|[39m   expect(hook.result.current.commands).toEqual([])
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m2 passed[39m[22m[90m (3)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m16 passed[39m[22m[90m (18)[39m
+[2m   Start at [22m 09:55:58
+[2m   Duration [22m 1.07s[2m (tests 43%, environment 32%, transform 15%, import 10%)[22m
+

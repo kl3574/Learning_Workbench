@@ -1,0 +1,7 @@
+# Root review boundary clarification
+
+Applies to fixed observer candidate `8b6629205a72593ab835e2c61a20b6e1eac7061e` and root review report SHA256 `f0f4311d4c25968594159209108e3359c8c70490ad706fb8348e1990bc60fa2f`, manifest `e4e37b7306e423a04c7ec73141057e2042effec656d539df7d99541d8adb6db9`. The original review package is retained unchanged.
+
+The target click is still invoked once with its original 10-second timeout. Its settlement is followed immediately by a synchronous freeze; its original thrown error object is preserved. However, the diagnostic helper then awaits bounded local file save/attachment for up to 250 milliseconds on both success and failure before returning/rethrowing. On success this can delay the start of readPrepared's subsequent region assertion. Installation and metadata delivery also incur ordinary instrumentation overhead. The claim that business request/guard/assertion ordering is retained is not a claim that the entire case has identical scheduling or wall-clock duration.
+
+No new business HTTP request, assertion retry, longer target-click timeout or request/guard reordering was found. The bounded post-target-assertion delay is disclosed as an observation limitation, not evidence that the original intermittent failure is fixed or explained. Changing to background save would introduce a different artifact-lifetime behavior requiring new evidence; no such code change was made. No product test was rerun for this clarification.

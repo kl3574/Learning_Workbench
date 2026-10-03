@@ -1,0 +1,14 @@
+# Original 316 v1 owner bytes: independent capture
+
+Fixed unchanged source `316bf693e52f1ca08a675fc7671f4d9cebad3e8b` in m62-text-edit-dependencies-oct02. A private pytest file imported the actual prepared_review_http and ready(case) helpers and used real local TestClient/SQLite/Review worker/human-decision/publication owners. Decisions are synthetic protocol fixtures, not human academic review. No production code or original checkout was modified.
+
+Actual command: `UV_PROJECT_ENVIRONMENT=$HOME/.cache/learning-workbench-acceptance/m62-public-safe-oct02/.venv TMPDIR=<legacy-capture>/tmp uv run --frozen --no-sync python -m pytest -c pyproject.toml <legacy-capture>/test_capture_original_v1.py --tb=short -q -o cache_dir=<legacy-capture>/pytest-cache --basetemp=<legacy-capture>/private-basetemp`.
+
+Result: **2 PASS / 2 existing dependency warnings**, exit 0, 3.44s. Logs preserve warning paths; no dependency changes. This captures actual old-version bytes rather than constructing a new-version model with a missing optional property.
+
+- captured/empty-dependencies-published: original create/PATCH two draft_edit_versions record_json and stored hashes, two draft_edit_commands record_json and hashes, actual draft_publication_results record_json/hash, HTTP create/PATCH/publication ACK response bodies. Publication completed as synthetic public text r2; its original ACK was replayed unchanged.
+- captured/dependencies-no-witness-unpublished: source(case)+draft(case) generated actual old v1 records with two ordered dependencies. Both draft versions, commands and create/PATCH ACKs are retained without inventing a new witness. This is a negative compatibility fixture for the new v2 implementation, not permission to accept the unsafe old dependent record.
+
+The raw JSON files contain the exact stored canonical UTF-8 bytes without added newline. Canonical serialization and SHA256 were checked against the original owner hash columns before export. HTTP ACKs were actual original key/body replay responses; tables were hash-equal before/after replay. Each capture has its own manifest containing raw filenames, sizes, data hashes and stored owner hashes. A scan of captured payloads found no CSRF/cookie/bootstrap/header markers or private home paths.
+
+No headers, tokens, session DB, private user materials or database copies were exported. The test created its own synthetic temporary database; private-basetemp, tmp and pytest-cache are explicitly excluded from the deliverable hash manifest and must not be copied into repository fixtures. Only the captured safe raw owner/ACK files and their provenance are candidate permanent compatibility fixtures. Source files were checked byte-for-byte against the fixed Git commit; the source worktree remained clean. Capturing these bytes does not itself validate the new v2 parser, compatibility handling or the fixed publication behavior.

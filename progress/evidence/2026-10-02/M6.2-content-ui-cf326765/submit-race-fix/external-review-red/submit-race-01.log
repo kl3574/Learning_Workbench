@@ -1,0 +1,38 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/contentImpacts/independentFormReview.test.tsx
+
+
+ RUN  v5.0.0 $HOME/.cache/learning-workbench-acceptance/m62-content-form-review-oct02/apps/web
+
+ ❯ src/features/contentImpacts/independentFormReview.test.tsx (1 test | 1 failed) 187ms
+   × independent: editing while submit waits for journal read must retain the newer unsent reason 186ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/contentImpacts/independentFormReview.test.tsx > independent: editing while submit waits for journal read must retain the newer unsent reason
+AssertionError: expected undefined to be 'Newer unsent reason α\nPreserve after…' // Object.is equality
+
+- Expected:
+"Newer unsent reason α
+Preserve after original ACK"
+
++ Received:
+undefined
+
+ ❯ src/features/contentImpacts/independentFormReview.test.tsx:36:75
+     34|   await screen.findByText('原决定回执已保存。它记录当时的判断；请另行读取当前对象状态，修订和其他复核不会自动完成…
+     35|   expect(vi.mocked(port.decide).mock.calls[0][1].reason).toBe('Origina…
+     36|   expect(ownForm(workspace, session(workspace).csrf_token)?.value.reas…
+       |                                                                           ^
+     37|   const persisted = Object.values(await commandStore.load(workspace));…
+     38|   expect(JSON.parse(persisted[0].text).body.reason).toBe('Original sen…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  18:51:17
+   Duration  718ms (environment 32%, tests 29%, transform 26%, import 13%)
+

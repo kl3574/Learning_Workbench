@@ -1,0 +1,84 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/authoring/useAuthoringAdmission.test.tsx
+
+
+ RUN  v5.0.0 $HOME/.cache/learning-workbench-acceptance/m62-single-publication-ui-oct02/apps/web
+
+ ❯ src/features/authoring/useAuthoringAdmission.test.tsx (8 tests | 1 failed) 625ms
+   × academic recovery completed during a pending safe cancel remains visible after its original ACK arrives 111ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/authoring/useAuthoringAdmission.test.tsx > academic recovery completed during a pending safe cancel remains visible after its original ACK arrives
+AssertionError: expected [ { kind: 'cancel', …(7) } ] to deep equally contain { kind: 'prepare', …(6) }
+
+- Expected:
+{
+  "ack": null,
+  "body": {
+    "objectives": [
+      "计算",
+    ],
+    "output_kind": "worked_example",
+    "prerequisites": [],
+    "proof_policy": "full",
+    "provider_id": "provider_synthetic",
+    "source_refs": [],
+    "topic": "合成主题",
+  },
+  "command_id": "authoring_93aa40e0-fa97-447c-8e5a-25339e87e5ad",
+  "kind": "prepare",
+  "rejection": null,
+  "version": 1,
+  "workspace_id": "workspace_aa763e31-3b37-439c-84e5-95c96c9f32f2",
+}
+
++ Received:
+[
+  {
+    "ack": {
+      "created_at": "2026-10-01T00:00:00Z",
+      "error": null,
+      "id": "job_generation",
+      "kind": "authoring",
+      "progress": {
+        "completed": 0,
+        "label": "合成运行中",
+        "total": 1,
+      },
+      "result_refs": [],
+      "revision": 4,
+      "status": "cancelled",
+      "updated_at": "2026-10-01T00:00:01Z",
+      "warnings": [],
+      "workspace_id": "workspace_aa763e31-3b37-439c-84e5-95c96c9f32f2",
+    },
+    "body": {
+      "expected_revision": 3,
+    },
+    "command_id": "authoring_3932c452-4fe5-4d38-9068-29bb30bbc52c",
+    "job_id": "job_generation",
+    "kind": "cancel",
+    "rejection": null,
+    "version": 1,
+    "workspace_id": "workspace_aa763e31-3b37-439c-84e5-95c96c9f32f2",
+  },
+]
+
+ ❯ src/features/authoring/useAuthoringAdmission.test.tsx:91:40
+     89|   await act(async () => heldJournal.resolve(records)); await waitFor((…
+     90|   await act(async () => { heldCancel.resolve({ ...f.job, status: 'canc…
+     91|   expect(hook.result.current.commands).toContainEqual(original)
+       |                                        ^
+     92|   const cancelled = hook.result.current.commands.find(command => comma…
+     93| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 7 passed (8)
+   Start at  22:55:45
+   Duration  1.38s (tests 48%, transform 28%, environment 15%, import 9%)
+

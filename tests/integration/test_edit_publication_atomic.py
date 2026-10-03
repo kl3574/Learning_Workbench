@@ -1,0 +1,224 @@
+"""Real Content/notes/outbox transaction and concurrent SQLite writers; no provider."""
+
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+
+import pytest
+
+from packages.contracts import domain_models as dm
+from packages.contracts.canonical import strict_json
+from services.api.app.application.content import ContentService
+from services.api.app.application.errors import ApiError
+from services.api.app.application.notes import NotesService
+from services.api.app.draft_dto import DraftPatch, DraftPatchWrite
+from tests.integration.test_edit_publication import editing as editing, approved, publisher
+from tests.integration.test_authoring_numeric_provider_history import table_hashes
+
+
+def note_on_base(editing):
+    database, identity, base, _, _, _ = editing
+    note = dm.Note(
+        id="synthetic_edit_note",
+        revision=1,
+        workspace_id=identity.workspace_id,
+        anchor=dm.Selection(ref=base, exact_quote="Synthetic", start_codepoint=0, end_codepoint=9),
+        markdown="Synthetic note must retain its old anchor.",
+    )
+    NotesService(database).create(identity, note, "note")
+    return note
+
+
+def test_content_pointer_stale_note_and_durable_impact_intent_commit_together(editing):
+    database, identity, base, _, created, _ = editing
+    note = note_on_base(editing)
+    _, _, body = approved(editing)
+    result = publisher(editing).publish(identity, created.draft_id, body, "publish")
+    current = NotesService(database).list(identity.workspace_id).items[0]
+    assert current.revision == 2 and current.anchor_state == "stale" and current.anchor == note.anchor
+    assert current.markdown == note.markdown
+    with database.connect() as conn:
+        events = [
+            strict_json(r[0])
+            for r in conn.execute("SELECT payload_json FROM outbox WHERE event_type='content.dependencies_invalidated'")
+        ]
+        matching = [e for e in events if e["new_ref"] == result.model_dump(mode="json")]
+        assert len(matching) == 1
+        assert matching[0]["old_ref"] == base.model_dump(mode="json")
+        assert matching[0]["reason"] == "content_revision_published"
+        assert set(matching[0]["affected_ids"]) == {base.id, note.id}
+        historic = strict_json(
+            conn.execute("SELECT metadata_json FROM revisions WHERE object_id=? AND revision=1", (note.id,)).fetchone()[
+                0
+            ]
+        )
+        assert historic == note.model_dump(mode="json")
+    before = table_hashes(database)
+    assert publisher(editing).publish(identity, created.draft_id, body, "publish") == result
+    assert table_hashes(database) == before
+
+
+@pytest.mark.parametrize(
+    "table,condition",
+    [
+        ("revisions", "NEW.revision=2"),
+        ("notes_index", "NEW.note_revision=2"),
+        ("outbox", "NEW.event_type='content.dependencies_invalidated'"),
+        ("draft_publication_results", "1"),
+        ("draft_publication_commands", "1"),
+        ("draft_publication_events", "NEW.revision=4"),
+    ],
+)
+def test_failure_rolls_back_content_notes_events_and_publication_ack(editing, table, condition):
+    database, identity, base, _, created, _ = editing
+    note = note_on_base(editing)
+    _, _, body = approved(editing)
+    with database.transaction() as conn:
+        conn.execute(
+            f"CREATE TRIGGER synthetic_edit_publish_failure AFTER INSERT ON {table} WHEN {condition} "
+            "BEGIN SELECT RAISE(ABORT,'synthetic failure'); END"
+        )
+    before = table_hashes(database)
+    with pytest.raises(ApiError) as caught:
+        publisher(editing).publish(identity, created.draft_id, body, "rollback")
+    assert caught.value.code == "PUBLICATION_STORAGE_UNAVAILABLE"
+    assert table_hashes(database) == before
+    assert ContentService(database).current(identity.workspace_id, base.id) == base
+    assert NotesService(database).list(identity.workspace_id).items == [note]
+    with database.transaction() as conn:
+        conn.execute("DROP TRIGGER synthetic_edit_publish_failure")
+    assert publisher(editing).publish(identity, created.draft_id, body, "rollback").revision == 2
+
+
+@pytest.mark.parametrize("same_key", [False, True])
+def test_same_candidate_concurrent_publish_uses_one_content_revision(editing, same_key):
+    database, identity, base, _, created, _ = editing
+    _, _, body = approved(editing)
+    barrier = Barrier(2)
+
+    def execute(key):
+        barrier.wait(timeout=10)
+        try:
+            return publisher(editing).publish(identity, created.draft_id, body, key)
+        except ApiError as error:
+            return error.code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(execute, ["first", "first" if same_key else "second"]))
+    refs = [r for r in results if not isinstance(r, str)]
+    assert len(refs) == (2 if same_key else 1) and all(r == refs[0] for r in refs)
+    if not same_key:
+        assert "DRAFT_ALREADY_PUBLISHED" in results
+    assert ContentService(database).current(identity.workspace_id, base.id) == refs[0]
+    with database.connect() as conn:
+        assert conn.execute("SELECT count(*) FROM revisions WHERE object_id=?", (base.id,)).fetchone()[0] == 2
+        assert conn.execute("SELECT count(*) FROM draft_publications WHERE owner='authoring'").fetchone()[0] == 1
+
+
+def test_patch_and_publish_serialize_without_publishing_unreviewed_new_head(editing):
+    database, identity, base, edits, created, _ = editing
+    _, _, body = approved(editing)
+    barrier = Barrier(2)
+
+    def publish():
+        barrier.wait(timeout=10)
+        try:
+            return publisher(editing).publish(identity, created.draft_id, body, "publish")
+        except ApiError as error:
+            return error.status
+
+    def patch():
+        barrier.wait(timeout=10)
+        try:
+            return edits.patch(
+                identity,
+                created.draft_id,
+                DraftPatchWrite(
+                    expected_revision=2, patches=[DraftPatch(field="title", value="Unreviewed concurrent title")]
+                ),
+                "concurrent-patch",
+            )
+        except ApiError as error:
+            return error.status, error.code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first, second = pool.submit(publish), pool.submit(patch)
+        published, changed = first.result(), second.result()
+    if isinstance(published, int):
+        assert changed.revision == 3
+        assert published == 412 and ContentService(database).current(identity.workspace_id, base.id) == base
+    else:
+        assert changed == (409, "DRAFT_ALREADY_PUBLISHED")
+        assert published.revision == 2
+        with pytest.raises(ApiError) as caught:
+            edits.read(identity, created.draft_id, 3)
+        assert caught.value.code == "DRAFT_REVISION_MISMATCH"
+        assert publisher(editing).publish(identity, created.draft_id, body, "publish") == published
+        assert (
+            ContentService(database).read(identity.workspace_id, "block", base.id, 2).title == "Synthetic revised title"
+        )
+
+
+def test_two_reviewed_drafts_from_one_base_cannot_both_advance_content(editing):
+    from services.api.app.draft_dto import DraftCreateWrite
+
+    database, identity, base, edits, _, reviews = editing
+    first_record, _, first_body = approved(editing)
+    created = edits.create(
+        identity, DraftCreateWrite(kind="block", base_ref=base, title="Competing draft"), "other-create"
+    )
+    edits.patch(
+        identity,
+        created.draft_id,
+        DraftPatchWrite(
+            expected_revision=1, patches=[DraftPatch(field="body_markdown", value="Other synthetic prose.\n")]
+        ),
+        "other-patch",
+    )
+    other = (database, identity, base, edits, created, reviews)
+    _, _, second_body = approved(other, key="other-review")
+    barrier = Barrier(2)
+
+    def execute(pair):
+        draft_id, body = pair
+        barrier.wait(timeout=10)
+        try:
+            return publisher(editing).publish(identity, draft_id, body, "competing-publish")
+        except ApiError as error:
+            return error.code
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(
+            pool.map(execute, [(first_record.candidate.draft_id, first_body), (created.draft_id, second_body)])
+        )
+    assert results.count("PUBLICATION_BASE_CHANGED") == 1
+    result = next(x for x in results if not isinstance(x, str))
+    assert result.revision == 2 and ContentService(database).current(identity.workspace_id, base.id) == result
+
+
+def test_review_rejection_and_edit_publication_have_only_serial_outcomes(editing):
+    from tests.integration.test_review_workflow import decision
+
+    database, identity, base, _, created, reviews = editing
+    _, receipt, body = approved(editing)
+    barrier = Barrier(2)
+
+    def publish():
+        barrier.wait(timeout=10)
+        try:
+            return publisher(editing).publish(identity, created.draft_id, body, "race-review")
+        except ApiError as error:
+            return error.code
+
+    def reject():
+        barrier.wait(timeout=10)
+        return reviews.decide(identity, receipt.id, decision(receipt, mathematical="REJECTED"), "later-rejection")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first, second = pool.submit(publish), pool.submit(reject)
+        published, rejected = first.result(), second.result()
+    assert rejected.mathematical == "REJECTED"
+    if isinstance(published, str):
+        assert published == "PUBLISH_HUMAN_REVIEW_REQUIRED"
+        assert ContentService(database).current(identity.workspace_id, base.id) == base
+    else:
+        assert publisher(editing).publish(identity, created.draft_id, body, "race-review") == published

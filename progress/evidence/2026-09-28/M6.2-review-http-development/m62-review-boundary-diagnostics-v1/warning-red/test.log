@@ -1,0 +1,246 @@
+FFFFFFF                                                                  [100%]
+=================================== FAILURES ===================================
+_ test_candidate_owner_boundary_suppresses_malformed_serialization[import-material] _
+
+material_case = <synthetic import review fixture; session values omitted>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x78684ffd1c10>
+entry = 'material'
+
+    @pytest.mark.parametrize('entry', ['material', 'candidate'])
+    def test_candidate_owner_boundary_suppresses_malformed_serialization(material_case, monkeypatch, entry):
+        case = material_case
+        marker = 'synthetic-private-review-boundary'
+        material = read_case(case)
+        facade = DraftCandidates({case.kind: case.owner})
+        if entry == 'material':
+            bad = material.model_copy(update={'payload': {'unexpected': marker}})
+            monkeypatch.setattr(case.owner, 'read_review_material', lambda *args: bad)
+        else:
+            bad = case.candidate.model_copy(update={'draft_id': {'unexpected': marker}})
+        before = table_hashes(case.database)
+        with case.database.transaction() as connection, warnings.catch_warnings(record=True) as emitted:
+            warnings.simplefilter('always')
+            with pytest.raises(ApiError) as caught:
+                if entry == 'material':
+                    facade.read_review_material(connection, case.identity, case.candidate.draft_id, case.candidate.draft_revision)
+                else:
+                    facade.admit(connection, case.identity, case.kind, bad)
+        expected = (503, 'DRAFT_OWNER_INTEGRITY') if entry == 'material' else (422, 'SCHEMA_INVALID')
+        assert (caught.value.status, caught.value.code) == expected
+        assert marker not in str(caught.value) and marker not in repr(caught.value)
+>       assert not emitted, 'Malformed owner input must not produce serializer warnings'
+E       AssertionError: Malformed owner input must not produce serializer warnings
+E       assert not [<warnings.WarningMessage object at 0x78684f92fc50>]
+
+tests/integration/test_review_boundary_diagnostics.py:37: AssertionError
+_ test_candidate_owner_boundary_suppresses_malformed_serialization[import-candidate] _
+
+material_case = <synthetic import review fixture; session values omitted>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x78684ffd1c40>
+entry = 'candidate'
+
+    @pytest.mark.parametrize('entry', ['material', 'candidate'])
+    def test_candidate_owner_boundary_suppresses_malformed_serialization(material_case, monkeypatch, entry):
+        case = material_case
+        marker = 'synthetic-private-review-boundary'
+        material = read_case(case)
+        facade = DraftCandidates({case.kind: case.owner})
+        if entry == 'material':
+            bad = material.model_copy(update={'payload': {'unexpected': marker}})
+            monkeypatch.setattr(case.owner, 'read_review_material', lambda *args: bad)
+        else:
+            bad = case.candidate.model_copy(update={'draft_id': {'unexpected': marker}})
+        before = table_hashes(case.database)
+        with case.database.transaction() as connection, warnings.catch_warnings(record=True) as emitted:
+            warnings.simplefilter('always')
+            with pytest.raises(ApiError) as caught:
+                if entry == 'material':
+                    facade.read_review_material(connection, case.identity, case.candidate.draft_id, case.candidate.draft_revision)
+                else:
+                    facade.admit(connection, case.identity, case.kind, bad)
+        expected = (503, 'DRAFT_OWNER_INTEGRITY') if entry == 'material' else (422, 'SCHEMA_INVALID')
+        assert (caught.value.status, caught.value.code) == expected
+        assert marker not in str(caught.value) and marker not in repr(caught.value)
+>       assert not emitted, 'Malformed owner input must not produce serializer warnings'
+E       AssertionError: Malformed owner input must not produce serializer warnings
+E       assert not [<warnings.WarningMessage object at 0x78684f92f5f0>]
+
+tests/integration/test_review_boundary_diagnostics.py:37: AssertionError
+_ test_candidate_owner_boundary_suppresses_malformed_serialization[single-material] _
+
+material_case = <synthetic authoring_single review fixture; session values omitted>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x78684fddcbc0>
+entry = 'material'
+
+    @pytest.mark.parametrize('entry', ['material', 'candidate'])
+    def test_candidate_owner_boundary_suppresses_malformed_serialization(material_case, monkeypatch, entry):
+        case = material_case
+        marker = 'synthetic-private-review-boundary'
+        material = read_case(case)
+        facade = DraftCandidates({case.kind: case.owner})
+        if entry == 'material':
+            bad = material.model_copy(update={'payload': {'unexpected': marker}})
+            monkeypatch.setattr(case.owner, 'read_review_material', lambda *args: bad)
+        else:
+            bad = case.candidate.model_copy(update={'draft_id': {'unexpected': marker}})
+        before = table_hashes(case.database)
+        with case.database.transaction() as connection, warnings.catch_warnings(record=True) as emitted:
+            warnings.simplefilter('always')
+            with pytest.raises(ApiError) as caught:
+                if entry == 'material':
+                    facade.read_review_material(connection, case.identity, case.candidate.draft_id, case.candidate.draft_revision)
+                else:
+                    facade.admit(connection, case.identity, case.kind, bad)
+        expected = (503, 'DRAFT_OWNER_INTEGRITY') if entry == 'material' else (422, 'SCHEMA_INVALID')
+        assert (caught.value.status, caught.value.code) == expected
+        assert marker not in str(caught.value) and marker not in repr(caught.value)
+>       assert not emitted, 'Malformed owner input must not produce serializer warnings'
+E       AssertionError: Malformed owner input must not produce serializer warnings
+E       assert not [<warnings.WarningMessage object at 0x78684f978d10>]
+
+tests/integration/test_review_boundary_diagnostics.py:37: AssertionError
+_ test_candidate_owner_boundary_suppresses_malformed_serialization[single-candidate] _
+
+material_case = <synthetic authoring_single review fixture; session values omitted>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x78684f9e5b20>
+entry = 'candidate'
+
+    @pytest.mark.parametrize('entry', ['material', 'candidate'])
+    def test_candidate_owner_boundary_suppresses_malformed_serialization(material_case, monkeypatch, entry):
+        case = material_case
+        marker = 'synthetic-private-review-boundary'
+        material = read_case(case)
+        facade = DraftCandidates({case.kind: case.owner})
+        if entry == 'material':
+            bad = material.model_copy(update={'payload': {'unexpected': marker}})
+            monkeypatch.setattr(case.owner, 'read_review_material', lambda *args: bad)
+        else:
+            bad = case.candidate.model_copy(update={'draft_id': {'unexpected': marker}})
+        before = table_hashes(case.database)
+        with case.database.transaction() as connection, warnings.catch_warnings(record=True) as emitted:
+            warnings.simplefilter('always')
+            with pytest.raises(ApiError) as caught:
+                if entry == 'material':
+                    facade.read_review_material(connection, case.identity, case.candidate.draft_id, case.candidate.draft_revision)
+                else:
+                    facade.admit(connection, case.identity, case.kind, bad)
+        expected = (503, 'DRAFT_OWNER_INTEGRITY') if entry == 'material' else (422, 'SCHEMA_INVALID')
+        assert (caught.value.status, caught.value.code) == expected
+        assert marker not in str(caught.value) and marker not in repr(caught.value)
+>       assert not emitted, 'Malformed owner input must not produce serializer warnings'
+E       AssertionError: Malformed owner input must not produce serializer warnings
+E       assert not [<warnings.WarningMessage object at 0x78684f978b00>]
+
+tests/integration/test_review_boundary_diagnostics.py:37: AssertionError
+_ test_candidate_owner_boundary_suppresses_malformed_serialization[group-material] _
+
+material_case = <synthetic authoring_group review fixture; session values omitted>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x78684f92e900>
+entry = 'material'
+
+    @pytest.mark.parametrize('entry', ['material', 'candidate'])
+    def test_candidate_owner_boundary_suppresses_malformed_serialization(material_case, monkeypatch, entry):
+        case = material_case
+        marker = 'synthetic-private-review-boundary'
+        material = read_case(case)
+        facade = DraftCandidates({case.kind: case.owner})
+        if entry == 'material':
+            bad = material.model_copy(update={'payload': {'unexpected': marker}})
+            monkeypatch.setattr(case.owner, 'read_review_material', lambda *args: bad)
+        else:
+            bad = case.candidate.model_copy(update={'draft_id': {'unexpected': marker}})
+        before = table_hashes(case.database)
+        with case.database.transaction() as connection, warnings.catch_warnings(record=True) as emitted:
+            warnings.simplefilter('always')
+            with pytest.raises(ApiError) as caught:
+                if entry == 'material':
+                    facade.read_review_material(connection, case.identity, case.candidate.draft_id, case.candidate.draft_revision)
+                else:
+                    facade.admit(connection, case.identity, case.kind, bad)
+        expected = (503, 'DRAFT_OWNER_INTEGRITY') if entry == 'material' else (422, 'SCHEMA_INVALID')
+        assert (caught.value.status, caught.value.code) == expected
+        assert marker not in str(caught.value) and marker not in repr(caught.value)
+>       assert not emitted, 'Malformed owner input must not produce serializer warnings'
+E       AssertionError: Malformed owner input must not produce serializer warnings
+E       assert not [<warnings.WarningMessage object at 0x78684f92f800>]
+
+tests/integration/test_review_boundary_diagnostics.py:37: AssertionError
+_ test_candidate_owner_boundary_suppresses_malformed_serialization[group-candidate] _
+
+material_case = <synthetic authoring_group review fixture; session values omitted>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x78684f92f260>
+entry = 'candidate'
+
+    @pytest.mark.parametrize('entry', ['material', 'candidate'])
+    def test_candidate_owner_boundary_suppresses_malformed_serialization(material_case, monkeypatch, entry):
+        case = material_case
+        marker = 'synthetic-private-review-boundary'
+        material = read_case(case)
+        facade = DraftCandidates({case.kind: case.owner})
+        if entry == 'material':
+            bad = material.model_copy(update={'payload': {'unexpected': marker}})
+            monkeypatch.setattr(case.owner, 'read_review_material', lambda *args: bad)
+        else:
+            bad = case.candidate.model_copy(update={'draft_id': {'unexpected': marker}})
+        before = table_hashes(case.database)
+        with case.database.transaction() as connection, warnings.catch_warnings(record=True) as emitted:
+            warnings.simplefilter('always')
+            with pytest.raises(ApiError) as caught:
+                if entry == 'material':
+                    facade.read_review_material(connection, case.identity, case.candidate.draft_id, case.candidate.draft_revision)
+                else:
+                    facade.admit(connection, case.identity, case.kind, bad)
+        expected = (503, 'DRAFT_OWNER_INTEGRITY') if entry == 'material' else (422, 'SCHEMA_INVALID')
+        assert (caught.value.status, caught.value.code) == expected
+        assert marker not in str(caught.value) and marker not in repr(caught.value)
+>       assert not emitted, 'Malformed owner input must not produce serializer warnings'
+E       AssertionError: Malformed owner input must not produce serializer warnings
+E       assert not [<warnings.WarningMessage object at 0x78684f97b5f0>]
+
+tests/integration/test_review_boundary_diagnostics.py:37: AssertionError
+___ test_job_input_boundary_rejects_malformed_request_without_warning_or_job ___
+
+prepared = PreparedReviewFixture()
+
+    def test_job_input_boundary_rejects_malformed_request_without_warning_or_job(prepared):
+        database, identity, value = prepared
+        marker = 'synthetic-private-review-job-request'
+        malformed = value.model_copy(update={'request': {'reviewer_note': marker}})
+        before = table_hashes(database)
+        with database.transaction() as connection, warnings.catch_warnings(record=True) as emitted:
+            warnings.simplefilter('always')
+            with pytest.raises(ApiError) as caught:
+                ReviewJobRepository(connection, identity.workspace_id).create(value.review_id, 'draft_review', malformed)
+        assert (caught.value.status, caught.value.code) == (409, 'AUTHORING_INTEGRITY_ERROR')
+        assert marker not in str(caught.value) and marker not in repr(caught.value)
+>       assert not emitted, 'Malformed Review input must not produce serializer warnings'
+E       AssertionError: Malformed Review input must not produce serializer warnings
+E       assert not [<warnings.WarningMessage object at 0x78684f92bb60>]
+
+tests/integration/test_review_boundary_diagnostics.py:52: AssertionError
+=============================== warnings summary ===============================
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../../Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/Desktop/learning/Learning_Workbench/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_review_boundary_diagnostics.py::test_candidate_owner_boundary_suppresses_malformed_serialization[import-material] - AssertionError: Malformed owner input must not produce serializer warnings
+assert not [<warnings.WarningMessage object at 0x78684f92fc50>]
+FAILED tests/integration/test_review_boundary_diagnostics.py::test_candidate_owner_boundary_suppresses_malformed_serialization[import-candidate] - AssertionError: Malformed owner input must not produce serializer warnings
+assert not [<warnings.WarningMessage object at 0x78684f92f5f0>]
+FAILED tests/integration/test_review_boundary_diagnostics.py::test_candidate_owner_boundary_suppresses_malformed_serialization[single-material] - AssertionError: Malformed owner input must not produce serializer warnings
+assert not [<warnings.WarningMessage object at 0x78684f978d10>]
+FAILED tests/integration/test_review_boundary_diagnostics.py::test_candidate_owner_boundary_suppresses_malformed_serialization[single-candidate] - AssertionError: Malformed owner input must not produce serializer warnings
+assert not [<warnings.WarningMessage object at 0x78684f978b00>]
+FAILED tests/integration/test_review_boundary_diagnostics.py::test_candidate_owner_boundary_suppresses_malformed_serialization[group-material] - AssertionError: Malformed owner input must not produce serializer warnings
+assert not [<warnings.WarningMessage object at 0x78684f92f800>]
+FAILED tests/integration/test_review_boundary_diagnostics.py::test_candidate_owner_boundary_suppresses_malformed_serialization[group-candidate] - AssertionError: Malformed owner input must not produce serializer warnings
+assert not [<warnings.WarningMessage object at 0x78684f97b5f0>]
+FAILED tests/integration/test_review_boundary_diagnostics.py::test_job_input_boundary_rejects_malformed_request_without_warning_or_job - AssertionError: Malformed Review input must not produce serializer warnings
+assert not [<warnings.WarningMessage object at 0x78684f92bb60>]
+7 failed, 2 warnings in 5.41s

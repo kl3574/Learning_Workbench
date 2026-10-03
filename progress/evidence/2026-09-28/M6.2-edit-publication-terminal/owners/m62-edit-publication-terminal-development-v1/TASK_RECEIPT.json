@@ -1,0 +1,179 @@
+{
+  "base_commit": "e58abaaf4baa5b06d27bd1db1f06c8a13c1c730a",
+  "blockers": [
+    "Actual numeric runtime remains BLOCKED_ENVIRONMENT; no numeric PASS claimed",
+    "Independent final Spec/Standards review and publishing pending"
+  ],
+  "changed_paths": [
+    "docs/adr/0034-edit-block-publication.md",
+    "migrations/0020_edit_publications.sql",
+    "services/api/app/application/content.py",
+    "services/api/app/application/draft_edits.py",
+    "services/api/app/application/draft_publication.py",
+    "services/api/app/application/edit_publication.py",
+    "services/api/app/application/publication_admission.py",
+    "services/api/app/application/publication_models.py",
+    "services/api/app/infrastructure/publication_repository.py",
+    "tests/integration/test_draft_edit_integrity.py",
+    "tests/integration/test_edit_publication.py",
+    "tests/integration/test_edit_publication_atomic.py",
+    "tests/integration/test_edit_publication_http.py",
+    "tests/integration/test_edit_publication_migration.py",
+    "tests/integration/test_edit_publication_terminal.py"
+  ],
+  "commands": [
+    {
+      "actual_head": "17ff439c3b7e6fce704fcc8ec2afbbb607079a0e",
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/integration/test_edit_publication_terminal.py",
+        "-q"
+      ],
+      "exit_code": 1,
+      "log_sha256": "6336f5275cbb07cfc029cffdb60a14fb0fd595734116355ef59377b1ccbb1ea2",
+      "stage": "01-published-patch-red"
+    },
+    {
+      "actual_head": "17ff439c3b7e6fce704fcc8ec2afbbb607079a0e",
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/integration/test_edit_publication_terminal.py",
+        "tests/integration/test_edit_publication.py",
+        "tests/integration/test_edit_publication_atomic.py",
+        "-q"
+      ],
+      "exit_code": 0,
+      "log_sha256": "7bbf50aa4e3b9021b3cce8fcd6cc65ceca7645e8e6502d41e4920b54c6a590e0",
+      "stage": "02-published-patch-green"
+    },
+    {
+      "actual_head": "a60b394f41f3ac2e340ba338167e85c76df0265f",
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/integration/test_edit_publication.py",
+        "tests/integration/test_edit_publication_atomic.py",
+        "tests/integration/test_edit_publication_http.py",
+        "tests/integration/test_edit_publication_migration.py",
+        "tests/integration/test_edit_publication_terminal.py",
+        "tests/integration/test_draft_publication.py",
+        "tests/integration/test_draft_publication_atomic.py",
+        "tests/integration/test_draft_publication_integrity.py",
+        "tests/integration/test_draft_publication_scope.py",
+        "tests/integration/test_draft_publication_http.py",
+        "tests/integration/test_draft_edit_migration.py",
+        "tests/integration/test_draft_edits.py",
+        "tests/integration/test_draft_edit_boundaries.py",
+        "tests/integration/test_draft_edit_integrity.py",
+        "tests/integration/test_draft_edit_http.py",
+        "tests/unit/test_content_store.py",
+        "-q"
+      ],
+      "exit_code": 0,
+      "log_sha256": "1102d990c131acae0ebc183e366007da92c100d6782e855fba60f594d212298b",
+      "stage": "03-fixed-related"
+    },
+    {
+      "actual_head": "a60b394f41f3ac2e340ba338167e85c76df0265f",
+      "command": [
+        ".venv/bin/ruff",
+        "check",
+        "."
+      ],
+      "exit_code": 0,
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "stage": "04-fixed-ruff"
+    },
+    {
+      "actual_head": "a60b394f41f3ac2e340ba338167e85c76df0265f",
+      "command": [
+        ".venv/bin/mypy"
+      ],
+      "exit_code": 0,
+      "log_sha256": "7eb4120d06ce3e4d6b76e8fe90d6ce47493cbd73fb2053133e2f25fdac418fdb",
+      "stage": "05-fixed-mypy"
+    },
+    {
+      "actual_head": "a60b394f41f3ac2e340ba338167e85c76df0265f",
+      "command": [
+        ".venv/bin/python",
+        "scripts/verify_spec.py"
+      ],
+      "exit_code": 0,
+      "log_sha256": "01a68f12c2440da91fef280d88f8a6aa7179d17cd05457f0e73cefc4656c7c48",
+      "stage": "06-fixed-spec"
+    },
+    {
+      "actual_head": "a60b394f41f3ac2e340ba338167e85c76df0265f",
+      "command": [
+        ".venv/bin/python",
+        "-m",
+        "pytest",
+        "-q"
+      ],
+      "exit_code": 0,
+      "log_sha256": "580a11f78c0e42dcc38b1abc8d61c71d9ab20aab76ba85c9a806684920d82585",
+      "stage": "07-fixed-full-python"
+    },
+    {
+      "actual_head": "a60b394f41f3ac2e340ba338167e85c76df0265f",
+      "command": [
+        "bash",
+        "scripts/node.sh",
+        "node",
+        "--version"
+      ],
+      "exit_code": 0,
+      "log_sha256": "f2ec568164f99546161909b0189b57bb5be3e80f8e2ccd8a51a4aed8c4055a04",
+      "stage": "08-final-node-environment-control"
+    }
+  ],
+  "exit_codes": {
+    "01-published-patch-red": 1,
+    "02-published-patch-green": 0,
+    "03-fixed-related": 0,
+    "04-fixed-ruff": 0,
+    "05-fixed-mypy": 0,
+    "06-fixed-spec": 0,
+    "07-fixed-full-python": 0,
+    "08-final-node-environment-control": 0
+  },
+  "implementation_commit": "a60b394f41f3ac2e340ba338167e85c76df0265f",
+  "migrations": [
+    "0020_edit_publications.sql"
+  ],
+  "next_task_id": "M6.2-edit-publication-independent-review-and-evidence",
+  "not_run": [
+    "real vendor acceptance",
+    "native edit/publish UI",
+    "real mathematical/source/pedagogical approval",
+    "actual sealed calculator PASS",
+    "completed impact processing",
+    "full M6.2 product acceptance"
+  ],
+  "repair_base_commit": "17ff439c3b7e6fce704fcc8ec2afbbb607079a0e",
+  "requirement_ids": [
+    "R-19",
+    "R-21",
+    "R-24",
+    "R-26",
+    "R-29"
+  ],
+  "screenshot_paths": [],
+  "security_review": "Current identity/Policy/current candidate+base/corruption/atomic rollback/terminal guard tests performed; independent final review pending. Private logs require sanitization.",
+  "spec_sha256": "2d1ecce71e0aa6953c0f772b1935e7e3abdc5933bfbbe93d851a6171236d8a4d",
+  "status": "IMPLEMENTED_TESTED_PENDING_INDEPENDENT_REVIEW",
+  "task_id": "M6.2-edit-publication-terminal",
+  "test_summary": {
+    "fixed_full": "3032 PASS, 1 actual numeric ENV SKIP, 2 dependency warnings; exit0",
+    "fixed_related": "272 PASS, 2 dependency warnings",
+    "fixed_static": "Ruff PASS; mypy211 PASS; spec structural baseline PASS",
+    "green": "31 PASS on captured repaired development source",
+    "red": "2 genuine new-PATCH-after-publication failures"
+  }
+}

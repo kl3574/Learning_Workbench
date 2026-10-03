@@ -1,0 +1,224 @@
+............................FF                                           [100%]
+=================================== FAILURES ===================================
+_ test_catalog_conflict_rolls_back_original_authoring_finish_without_new_id[single] _
+
+tmp_path = PosixPath('<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-catalog-wiring-development-v1<PYTEST_ROOT>/pytest-6/test_catalog_conflict_rolls_ba0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7a3ed32da900>
+kind = 'single'
+
+    @pytest.mark.parametrize('kind', ['single', 'group'])
+    def test_catalog_conflict_rolls_back_original_authoring_finish_without_new_id(tmp_path, monkeypatch, kind):
+        from services.api.app.application import authoring_worker, authoring_group_worker
+        from tests.integration import test_authoring_provider as single
+        from tests.integration import test_authoring_group_provider as group
+        from tests.provider_protocol_fixture import local_provider
+    
+        async def run():
+            fixture = single if kind == 'single' else group
+            module = authoring_worker if kind == 'single' else authoring_group_worker
+            async with local_provider(text=canonical_bytes(fixture.payload()).decode()) as server:
+                state = fixture.configured(tmp_path, server.base_url)
+                database, identity, service, worker, _, dispatch = state
+                original, _, grant = fixture.approved(state)
+                lease = worker.claim()
+                assert lease is not None
+                async with aclosing(dispatch.dispatch(identity, original.id, grant.id,
+                                                      lease.dispatch(), asyncio.Event())) as stream:
+                    async for _ in stream:
+                        pass
+                assert len(server.requests) == 1
+                prefix = 'authoring_draft_' if kind == 'single' else 'authoring_group_'
+                collision_id = prefix + UUID(int=1).hex
+                # Adversarial catalog claim from another owner; catalog is not itself
+                # authentication. The actual producer must not overwrite or evade it.
+                with database.transaction() as connection:
+                    DraftCandidateRepository(connection).register(ResolvedDraftCandidate(
+                        identity.workspace_id, 'import', 'import', dm.DraftCandidate(
+                            draft_id=collision_id, draft_revision=1, entity='block', candidate_sha256='0' * 64)))
+                ids = []
+    
+                def next_identifier():
+                    value = UUID(int=len(ids) + 1)
+                    ids.append(value)
+                    return value
+    
+                monkeypatch.setattr(module, 'uuid4', next_identifier)
+                before = table_hashes(database)
+                with pytest.raises(ApiError) as caught:
+                    await worker.process(lease)
+                assert caught.value.code == 'DRAFT_IDENTITY_CONFLICT'
+                assert ids == [UUID(int=1)]
+                assert table_hashes(database) == before
+                current = service.read(identity, original.id)
+                assert current.summary.status == 'running' and current.summary.candidate is None
+                assert len(server.requests) == 1
+    
+>       asyncio.run(run())
+
+tests/integration/test_draft_candidate_catalog.py:241: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    async def run():
+        fixture = single if kind == 'single' else group
+        module = authoring_worker if kind == 'single' else authoring_group_worker
+        async with local_provider(text=canonical_bytes(fixture.payload()).decode()) as server:
+            state = fixture.configured(tmp_path, server.base_url)
+            database, identity, service, worker, _, dispatch = state
+            original, _, grant = fixture.approved(state)
+            lease = worker.claim()
+            assert lease is not None
+            async with aclosing(dispatch.dispatch(identity, original.id, grant.id,
+                                                  lease.dispatch(), asyncio.Event())) as stream:
+                async for _ in stream:
+                    pass
+            assert len(server.requests) == 1
+            prefix = 'authoring_draft_' if kind == 'single' else 'authoring_group_'
+            collision_id = prefix + UUID(int=1).hex
+            # Adversarial catalog claim from another owner; catalog is not itself
+            # authentication. The actual producer must not overwrite or evade it.
+            with database.transaction() as connection:
+                DraftCandidateRepository(connection).register(ResolvedDraftCandidate(
+                    identity.workspace_id, 'import', 'import', dm.DraftCandidate(
+                        draft_id=collision_id, draft_revision=1, entity='block', candidate_sha256='0' * 64)))
+            ids = []
+    
+            def next_identifier():
+                value = UUID(int=len(ids) + 1)
+                ids.append(value)
+                return value
+    
+            monkeypatch.setattr(module, 'uuid4', next_identifier)
+            before = table_hashes(database)
+>           with pytest.raises(ApiError) as caught:
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: DID NOT RAISE ApiError
+
+tests/integration/test_draft_candidate_catalog.py:232: Failed
+_ test_catalog_conflict_rolls_back_original_authoring_finish_without_new_id[group] _
+
+tmp_path = PosixPath('<LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-catalog-wiring-development-v1<PYTEST_ROOT>/pytest-6/test_catalog_conflict_rolls_ba1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7a3ed32ed310>
+kind = 'group'
+
+    @pytest.mark.parametrize('kind', ['single', 'group'])
+    def test_catalog_conflict_rolls_back_original_authoring_finish_without_new_id(tmp_path, monkeypatch, kind):
+        from services.api.app.application import authoring_worker, authoring_group_worker
+        from tests.integration import test_authoring_provider as single
+        from tests.integration import test_authoring_group_provider as group
+        from tests.provider_protocol_fixture import local_provider
+    
+        async def run():
+            fixture = single if kind == 'single' else group
+            module = authoring_worker if kind == 'single' else authoring_group_worker
+            async with local_provider(text=canonical_bytes(fixture.payload()).decode()) as server:
+                state = fixture.configured(tmp_path, server.base_url)
+                database, identity, service, worker, _, dispatch = state
+                original, _, grant = fixture.approved(state)
+                lease = worker.claim()
+                assert lease is not None
+                async with aclosing(dispatch.dispatch(identity, original.id, grant.id,
+                                                      lease.dispatch(), asyncio.Event())) as stream:
+                    async for _ in stream:
+                        pass
+                assert len(server.requests) == 1
+                prefix = 'authoring_draft_' if kind == 'single' else 'authoring_group_'
+                collision_id = prefix + UUID(int=1).hex
+                # Adversarial catalog claim from another owner; catalog is not itself
+                # authentication. The actual producer must not overwrite or evade it.
+                with database.transaction() as connection:
+                    DraftCandidateRepository(connection).register(ResolvedDraftCandidate(
+                        identity.workspace_id, 'import', 'import', dm.DraftCandidate(
+                            draft_id=collision_id, draft_revision=1, entity='block', candidate_sha256='0' * 64)))
+                ids = []
+    
+                def next_identifier():
+                    value = UUID(int=len(ids) + 1)
+                    ids.append(value)
+                    return value
+    
+                monkeypatch.setattr(module, 'uuid4', next_identifier)
+                before = table_hashes(database)
+                with pytest.raises(ApiError) as caught:
+                    await worker.process(lease)
+                assert caught.value.code == 'DRAFT_IDENTITY_CONFLICT'
+                assert ids == [UUID(int=1)]
+                assert table_hashes(database) == before
+                current = service.read(identity, original.id)
+                assert current.summary.status == 'running' and current.summary.candidate is None
+                assert len(server.requests) == 1
+    
+>       asyncio.run(run())
+
+tests/integration/test_draft_candidate_catalog.py:241: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../../.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    async def run():
+        fixture = single if kind == 'single' else group
+        module = authoring_worker if kind == 'single' else authoring_group_worker
+        async with local_provider(text=canonical_bytes(fixture.payload()).decode()) as server:
+            state = fixture.configured(tmp_path, server.base_url)
+            database, identity, service, worker, _, dispatch = state
+            original, _, grant = fixture.approved(state)
+            lease = worker.claim()
+            assert lease is not None
+            async with aclosing(dispatch.dispatch(identity, original.id, grant.id,
+                                                  lease.dispatch(), asyncio.Event())) as stream:
+                async for _ in stream:
+                    pass
+            assert len(server.requests) == 1
+            prefix = 'authoring_draft_' if kind == 'single' else 'authoring_group_'
+            collision_id = prefix + UUID(int=1).hex
+            # Adversarial catalog claim from another owner; catalog is not itself
+            # authentication. The actual producer must not overwrite or evade it.
+            with database.transaction() as connection:
+                DraftCandidateRepository(connection).register(ResolvedDraftCandidate(
+                    identity.workspace_id, 'import', 'import', dm.DraftCandidate(
+                        draft_id=collision_id, draft_revision=1, entity='block', candidate_sha256='0' * 64)))
+            ids = []
+    
+            def next_identifier():
+                value = UUID(int=len(ids) + 1)
+                ids.append(value)
+                return value
+    
+            monkeypatch.setattr(module, 'uuid4', next_identifier)
+            before = table_hashes(database)
+>           with pytest.raises(ApiError) as caught:
+                 ^^^^^^^^^^^^^^^^^^^^^^^
+E           Failed: DID NOT RAISE ApiError
+
+tests/integration/test_draft_candidate_catalog.py:232: Failed
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-catalog-wiring-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  <LOCAL_HOME>/.cache/learning-workbench-acceptance/m62-catalog-wiring-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_draft_candidate_catalog.py::test_catalog_conflict_rolls_back_original_authoring_finish_without_new_id[single]
+FAILED tests/integration/test_draft_candidate_catalog.py::test_catalog_conflict_rolls_back_original_authoring_finish_without_new_id[group]
+2 failed, 28 passed, 2 warnings in 18.97s

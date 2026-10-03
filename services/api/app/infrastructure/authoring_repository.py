@@ -171,7 +171,7 @@ class AuthoringRepository:
         checks = self.conn.execute('SELECT check_id FROM authoring_numeric_checks WHERE draft_id=? AND workspace_id=? ORDER BY rowid',
                                    (identifier, self.workspace_id)).fetchall()
         return AuthoringDraftView(owner='authoring', candidate=candidate.candidate,
-            source_job_id=candidate.source_job_id, state='draft', base_ref=None, body_sha256=candidate.body_sha256,
+            source_job_id=candidate.source_job_id, state='draft', published_ref=None, base_ref=None, body_sha256=candidate.body_sha256,
             payload=candidate.payload, validation=candidate.validation, numeric_check_ids=[row[0] for row in checks],
             warnings=[dm.Warning(code='AUTHORING_REVIEW_NOT_RUN', severity='warning',
                 message='当前为草稿；数学、来源、教学审核与发布均未完成。')])

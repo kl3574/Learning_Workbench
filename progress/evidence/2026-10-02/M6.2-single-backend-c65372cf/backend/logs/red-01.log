@@ -1,0 +1,61 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+_ test_generated_example_publishes_original_bytes_and_independently_reads_its_exact_ref _
+
+tmp_path = PosixPath('$HOME/.cache/learning-workbench-acceptance/single-publication-runtime-oct02/pytest-red-01/test_generated_example_publish0')
+
+    def test_generated_example_publishes_original_bytes_and_independently_reads_its_exact_ref(tmp_path):
+        case, _, publication, intent = ready_single(tmp_path)
+        original = case.authoring.draft(case.identity, case.candidate.draft_id)
+        generation = case.authoring.read(case.identity, original.source_job_id)
+>       result = publication.publish(case.identity, case.candidate.draft_id, intent, 'publish-single')
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/integration/test_single_publication.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <services.api.app.application.draft_publication.DraftPublicationService object at 0x7254af85f3e0>
+identity = SessionIdentity(id='session_4f585a87535e43e3a53ae0e7bbf2b01a', workspace_id='workspace_99140c6044cd4d498593776c2b08564...srf_token='e9a159fd556abf0df6f965e0380bfe5cbda26b4e40edad80e67ea73b2d318769', expires_at='2026-10-03T02:10:16.587419Z')
+draft_id = 'authoring_draft_568b05d2b17443bf8970c2fe99302f9d'
+body = DraftPublishWrite(), key = 'publish-single'
+
+    def publish(self, identity: SessionIdentity, draft_id: str, body: DraftPublishWrite, key: str) -> dm.ContentRef:
+        key, body = validate_key(key), validated(DraftPublishWrite, body)
+        try:
+            draft_id = TypeAdapter(dm.Id).validate_python(draft_id, strict=True)
+        except (ValueError, TypeError):
+            raise ApiError(422, 'SCHEMA_INVALID', '发布草稿标识无效。') from None
+        route = f'POST /drafts/{draft_id}/publish'
+        try:
+            with self.database.transaction() as conn:
+                current = self._access(conn, identity)
+                repo = PublicationRepository(conn, current.workspace_id)
+                replay = repo.replay(current.id, route, key, body)
+                if replay is not None:
+                    return self._verify(conn, current, replay)
+                history, material = self.reviews.read_publication_basis(conn, current, body.review_receipt_id)
+                if (material.candidate.draft_id != draft_id or material.candidate.draft_revision != body.expected_revision
+                        or material.candidate.candidate_sha256 != body.expected_content_sha256):
+                    raise ApiError(412, 'PUBLISH_CANDIDATE_MISMATCH', '发布请求与精确审核候选不符。')
+                if isinstance(material.payload, RestoreReviewMaterial):
+                    return self._publish_restore(conn, current, repo, material, body, key)
+                if isinstance(material.payload, EditReviewMaterial):
+                    return self._publish_edit(conn, current, repo, material, body, key)
+                if not isinstance(material.payload, ImportReviewMaterial):
+>                   raise unsupported()
+E                   services.api.app.application.errors.ApiError: (409, 'PUBLICATION_OWNER_SCOPE_UNSUPPORTED', '当前发布仅支持待确认导入中无依赖的公开纯文本块。')
+
+services/api/app/application/draft_publication.py:158: ApiError
+=============================== warnings summary ===============================
+../m62-combined-final-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  $HOME/.cache/learning-workbench-acceptance/m62-combined-final-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../m62-combined-final-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  $HOME/.cache/learning-workbench-acceptance/m62-combined-final-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_single_publication.py::test_generated_example_publishes_original_bytes_and_independently_reads_its_exact_ref
+1 failed, 2 warnings in 3.18s

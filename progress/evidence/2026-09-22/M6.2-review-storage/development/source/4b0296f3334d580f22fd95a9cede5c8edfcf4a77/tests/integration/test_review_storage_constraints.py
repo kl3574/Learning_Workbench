@@ -1,0 +1,367 @@
+"""Real SQLite constraints with synthetic SQL rows, not owner/HTTP review proof.
+
+Fixtures deliberately bypass application owners to test the migration boundary.
+JSON validity and relational identity do not certify a machine or human review.
+"""
+import json
+import sqlite3
+from contextlib import closing
+
+import pytest
+
+from packages.contracts.canonical import canonical_bytes, sha256_bytes
+from services.api.app.infrastructure.config import Settings
+from services.api.app.infrastructure.database import Database
+from tests.integration.test_draft_candidate_migration import STAMP
+from tests.integration.test_review_storage_migration import TABLES, rows
+
+
+def insert(connection, table, value, *, replace=False):
+    columns = ','.join(value)
+    markers = ','.join('?' for _ in value)
+    connection.execute(f'INSERT {"OR REPLACE " if replace else ""}INTO {table}({columns}) VALUES({markers})',
+                       tuple(value.values()))
+
+
+def encoded(value):
+    raw = canonical_bytes(value).decode()
+    return raw, sha256_bytes(raw.encode())
+
+
+def catalog(connection, workspace, identifier, source_kind='import', entity='concept'):
+    owner = 'import' if source_kind == 'import' else 'authoring'
+    connection.execute('INSERT INTO draft_candidate_identities VALUES(?,?,?,?,?)',
+                       (identifier, workspace, owner, source_kind, entity))
+    digest = sha256_bytes(identifier.encode())
+    connection.execute('INSERT INTO draft_candidate_revisions VALUES(?,?,?,?,?,?)',
+                       (identifier, workspace, owner, entity, 1, digest))
+    return {'workspace_id': workspace, 'owner': owner, 'source_kind': source_kind, 'draft_id': identifier,
+            'draft_revision': 1, 'entity': entity, 'candidate_sha256': digest}
+
+
+def job(connection, candidate, identifier='review_fixture', *, kind='draft_review'):
+    # SQL fixture; checked Jobs ports are tested independently.
+    raw, digest = encoded({'fixture_only': True})
+    insert(connection, 'jobs', {'id': identifier, 'workspace_id': candidate['workspace_id'], 'kind': kind,
+        'status': 'queued', 'revision': 1, 'input_json': raw, 'input_sha256': digest,
+        'created_at': STAMP, 'updated_at': STAMP})
+    insert(connection, 'job_events', {'job_id': identifier, 'seq': 1, 'type': 'queued',
+                                     'payload_json': raw, 'occurred_at': STAMP})
+    return {'review_id': identifier, **candidate, 'creator_actor_id': 'synthetic_actor',
+            'input_json': raw, 'input_sha256': digest, 'created_at': STAMP}
+
+
+def receipt(connection, registered, revision=1, previous=None):
+    identifier = registered['review_id']
+    candidate = {key: registered[key] for key in ('draft_id', 'draft_revision', 'entity', 'candidate_sha256')}
+    raw, digest = encoded({'id': identifier, 'revision': revision, 'candidate': candidate,
+        'structural': 'NOT_RUN', 'mathematical': 'NOT_RUN', 'sources': 'NOT_RUN',
+        'independent_pedagogy': 'NOT_RUN', 'reviewer': 'Synthetic SQL fixture, not an authenticated review',
+        'created_at': STAMP, 'evidence_paths': [], 'decision_reason': 'No approval is being granted.'})
+    if revision == 1:
+        insert(connection, 'reviews', {'id': identifier, **candidate, 'revision': revision, 'receipt_json': raw,
+            'reviewer_session_id': None, 'created_at': STAMP, 'workspace_id': registered['workspace_id'],
+            'owner': registered['owner']})
+    record, record_hash = encoded({'fixture_only': True, 'revision': revision})
+    return {'review_id': identifier, 'revision': revision, 'receipt_json': raw, 'receipt_sha256': digest,
+            'record_kind': 'machine' if revision == 1 else 'human_decision', 'record_json': record,
+            'record_sha256': record_hash, 'previous_receipt_sha256': previous, 'recorded_at': STAMP}
+
+
+def artifact(connection, workspace, identifier='artifact_fixture', blob='a' * 64):
+    connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,size,relative_path,created_at) '
+                       'VALUES(?,0,?,?)', (blob, 'blobs/' + blob[:2] + '/' + blob, STAMP))
+    insert(connection, 'artifacts', {'id': identifier, 'workspace_id': workspace, 'job_id': None,
+        'blob_sha256': blob, 'profile': 'synthetic_schema_fixture', 'manifest_json': '{}',
+        'visibility': 'author_private', 'created_at': STAMP})
+
+
+def binding(registered, artifact_id='artifact_fixture', ordinal=0):
+    return {'review_id': registered['review_id'], 'workspace_id': registered['workspace_id'],
+            'review_revision': 1, 'ordinal': ordinal, 'artifact_id': artifact_id, 'artifact_owner': 'import',
+            'artifact_sha256': 'a' * 64, 'manifest_sha256': 'b' * 64, 'binding_json': '{}',
+            'binding_sha256': sha256_bytes(b'{}')}
+
+
+def command(registered, kind='create'):
+    route = {'create': f"POST /drafts/{registered['draft_id']}/review",
+             'decision': f"POST /reviews/{registered['review_id']}/decision",
+             'cancel': f"POST /jobs/{registered['review_id']}/cancel"}[kind]
+    return {'workspace_id': registered['workspace_id'], 'actor_id': 'synthetic_actor', 'route': route,
+            'command_key': 'synthetic_key', 'command_kind': kind, 'review_id': registered['review_id'],
+            'request_json': '{}', 'request_sha256': sha256_bytes(b'{}'), 'ack_json': '{}',
+            'ack_sha256': sha256_bytes(b'{}'), 'basis_revision': 1,
+            'resulting_revision': 2 if kind == 'decision' else 1, 'recorded_at': STAMP}
+
+
+@pytest.fixture
+def storage(tmp_path):
+    database = Database(Settings(data_dir=tmp_path / 'data'))
+    workspace = database.initialize()
+    with database.transaction() as connection:
+        connection.execute("INSERT INTO workspace(id,title,created_at) VALUES('workspace_other','fixture',?)", (STAMP,))
+        candidate = catalog(connection, workspace, 'draft_fixture')
+        registered = job(connection, candidate)
+    return database, registered
+
+
+def populated(storage):
+    database, registered = storage
+    with database.transaction() as connection:
+        insert(connection, 'review_jobs', registered)
+        revision = receipt(connection, registered)
+        insert(connection, 'review_revisions', revision)
+        artifact(connection, registered['workspace_id'])
+        insert(connection, 'review_artifact_bindings', binding(registered))
+        insert(connection, 'review_commands', command(registered))
+    return database, registered, revision
+
+
+def test_queued_create_and_cancel_do_not_require_a_review_receipt(storage):
+    database, registered = storage
+    with database.transaction() as connection:
+        insert(connection, 'review_jobs', registered)
+        insert(connection, 'review_commands', command(registered))
+        insert(connection, 'review_commands', command(registered, 'cancel'))
+        assert rows(connection, 'reviews') == rows(connection, 'review_revisions') == []
+        assert connection.execute('PRAGMA foreign_key_check').fetchall() == []
+
+
+@pytest.mark.parametrize(('field', 'value'), [
+    ('review_id', 'absent_job'), ('workspace_id', 'workspace_other'), ('owner', 'authoring'),
+    ('source_kind', 'authoring_group'), ('draft_id', 'absent_draft'), ('draft_revision', 2),
+    ('entity', 'block'), ('candidate_sha256', 'e' * 64), ('job_kind', 'authoring'),
+])
+def test_review_job_rejects_each_foreign_identity_field(storage, field, value):
+    database, registered = storage
+    with pytest.raises(sqlite3.IntegrityError), database.transaction() as connection:
+        insert(connection, 'review_jobs', {**registered, field: value})
+
+
+@pytest.mark.parametrize(('source_kind', 'entity', 'wrong_kind'), [
+    ('authoring_single', 'block', 'authoring_group'), ('authoring_group', 'lesson', 'authoring_single')])
+def test_source_kind_cannot_be_relabelled_with_other_catalog_fields_unchanged(storage, source_kind, entity, wrong_kind):
+    database, registered = storage
+    with database.transaction() as connection:
+        candidate = catalog(connection, registered['workspace_id'], 'draft_authoring', source_kind, entity)
+        value = job(connection, candidate, 'review_authoring')
+    with pytest.raises(sqlite3.IntegrityError), database.transaction() as connection:
+        insert(connection, 'review_jobs', {**value, 'source_kind': wrong_kind})
+    with database.transaction() as connection:
+        insert(connection, 'review_jobs', value)
+
+
+def test_borrowed_non_review_job_is_rejected_even_with_matching_workspace(storage):
+    database, registered = storage
+    with database.transaction() as connection:
+        connection.execute("UPDATE jobs SET kind='authoring' WHERE id=?", (registered['review_id'],))
+    with pytest.raises(sqlite3.IntegrityError), database.transaction() as connection:
+        insert(connection, 'review_jobs', registered)
+
+
+def test_history_retains_exact_predecessor_hash_and_decision_command(storage):
+    database, registered, first = populated(storage)
+    with database.transaction() as connection:
+        second = receipt(connection, registered, 2, first['receipt_sha256'])
+        insert(connection, 'review_revisions', second)
+        connection.execute('UPDATE reviews SET revision=2,receipt_json=? WHERE id=?',
+                           (second['receipt_json'], registered['review_id']))
+        insert(connection, 'review_commands', command(registered, 'decision'))
+        assert [row['previous_revision'] for row in connection.execute(
+            'SELECT previous_revision FROM review_revisions ORDER BY revision')] == [None, 1]
+        assert connection.execute('SELECT receipt_json FROM review_revisions WHERE revision=1').fetchone()[0] == first['receipt_json']
+        assert connection.execute('PRAGMA foreign_key_check').fetchall() == []
+
+
+@pytest.mark.parametrize('damage', ['gap', 'wrong_hash', 'wrong_review', 'missing_previous', 'machine_again', 'first_human'])
+def test_broken_revision_chain_is_rejected(storage, damage):
+    database, registered, first = populated(storage)
+    with database.transaction() as connection:
+        candidate = {k: registered[k] for k in ('workspace_id', 'owner', 'source_kind', 'draft_id', 'draft_revision', 'entity', 'candidate_sha256')}
+        other = job(connection, candidate, 'review_other')
+        insert(connection, 'review_jobs', other)
+        other_first = receipt(connection, other)
+        if damage != 'first_human':
+            insert(connection, 'review_revisions', other_first)
+        second = receipt(connection, registered, 2, first['receipt_sha256'])
+    if damage == 'gap':
+        second['revision'] = 3
+    elif damage == 'wrong_hash':
+        second['previous_receipt_sha256'] = 'f' * 64
+    elif damage == 'wrong_review':
+        second['previous_receipt_sha256'] = other_first['receipt_sha256']
+    elif damage == 'missing_previous':
+        second['previous_receipt_sha256'] = None
+    elif damage == 'machine_again':
+        second['record_kind'] = 'machine'
+    else:
+        second = {**other_first, 'record_kind': 'human_decision'}
+    with pytest.raises(sqlite3.IntegrityError), database.transaction() as connection:
+        insert(connection, 'review_revisions', second)
+
+
+def test_history_rejects_a_projection_for_another_valid_candidate(storage):
+    database, registered = storage
+    with database.transaction() as connection:
+        insert(connection, 'review_jobs', registered)
+        other = catalog(connection, registered['workspace_id'], 'draft_other')
+        revision = receipt(connection, {**registered, **other})
+    with pytest.raises(sqlite3.IntegrityError), database.transaction() as connection:
+        insert(connection, 'review_revisions', revision)
+
+
+@pytest.mark.parametrize(('field', 'value'), [
+    ('artifact_id', 'absent_artifact'), ('workspace_id', 'workspace_other'), ('artifact_sha256', 'f' * 64),
+    ('review_id', 'absent_review'), ('review_revision', 2), ('ordinal', -1), ('artifact_owner', 'provider'),
+])
+def test_artifact_binding_requires_real_artifact_workspace_blob_and_history(storage, field, value):
+    database, registered, _ = populated(storage)
+    with database.transaction() as connection:
+        artifact(connection, registered['workspace_id'], 'artifact_new')
+    with pytest.raises(sqlite3.IntegrityError), database.transaction() as connection:
+        insert(connection, 'review_artifact_bindings', {**binding(registered, 'artifact_new', 1), field: value})
+
+
+def test_existing_cross_workspace_artifact_cannot_be_attached(storage):
+    database, registered, _ = populated(storage)
+    with database.transaction() as connection:
+        artifact(connection, 'workspace_other', 'artifact_foreign')
+    with pytest.raises(sqlite3.IntegrityError), database.transaction() as connection:
+        insert(connection, 'review_artifact_bindings', binding(registered, 'artifact_foreign', 1))
+
+
+@pytest.mark.parametrize('table', TABLES)
+@pytest.mark.parametrize('operation', ['UPDATE', 'DELETE', 'REPLACE'])
+@pytest.mark.parametrize('recursive', [0, 1])
+def test_history_cannot_be_updated_deleted_or_replaced(storage, table, operation, recursive):
+    database, _, _ = populated(storage)
+    with database.connect() as connection:
+        before = {name: rows(connection, name) for name in TABLES}
+        # Generated previous_revision must not be explicitly inserted.
+        columns = [row['name'] for row in connection.execute(f'PRAGMA table_info({table})')]
+    statement = {'UPDATE': f'UPDATE {table} SET review_id=review_id', 'DELETE': f'DELETE FROM {table}',
+                 'REPLACE': f'INSERT OR REPLACE INTO {table}({",".join(columns)}) SELECT {",".join(columns)} FROM {table}'}[operation]
+    with pytest.raises(sqlite3.IntegrityError), database.transaction() as connection:
+        connection.execute(f'PRAGMA recursive_triggers={recursive}')
+        connection.execute(statement)
+    with database.connect() as connection:
+        assert {name: rows(connection, name) for name in TABLES} == before
+
+
+@pytest.mark.parametrize('recursive', [0, 1])
+@pytest.mark.parametrize('conflict', ['ordinal_pk', 'artifact_unique'])
+def test_artifact_replace_guards_both_distinct_unique_constraints(storage, recursive, conflict):
+    database, registered, _ = populated(storage)
+    with database.transaction() as connection:
+        artifact(connection, registered['workspace_id'], 'artifact_second')
+    value = binding(registered, 'artifact_second', 0) if conflict == 'ordinal_pk' else binding(registered, ordinal=7)
+    with database.connect() as connection:
+        before = rows(connection, 'review_artifact_bindings')
+    with pytest.raises(sqlite3.IntegrityError), database.transaction() as connection:
+        connection.execute(f'PRAGMA recursive_triggers={recursive}')
+        insert(connection, 'review_artifact_bindings', value, replace=True)
+    with database.connect() as connection:
+        assert rows(connection, 'review_artifact_bindings') == before
+
+
+@pytest.mark.parametrize(('kind', 'field', 'value'), [
+    ('create', 'workspace_id', 'workspace_other'), ('create', 'actor_id', 'different_actor'),
+    ('create', 'review_id', 'absent_review'), ('create', 'route', 'POST /drafts/other/review'),
+    ('create', 'basis_revision', 2), ('create', 'resulting_revision', 2),
+    ('decision', 'route', 'POST /reviews/other/decision'), ('decision', 'basis_revision', 2),
+    ('decision', 'resulting_revision', 3), ('cancel', 'route', 'POST /jobs/other/cancel'),
+    ('cancel', 'basis_revision', 20), ('cancel', 'resulting_revision', 2),
+])
+def test_command_cannot_rebind_original_route_owner_or_revision_domain(storage, kind, field, value):
+    database, registered, first = populated(storage)
+    with database.transaction() as connection:
+        insert(connection, 'review_revisions', receipt(connection, registered, 2, first['receipt_sha256']))
+    with pytest.raises(sqlite3.IntegrityError), database.transaction() as connection:
+        insert(connection, 'review_commands', {**command(registered, kind), 'command_key': 'another_key', field: value})
+
+
+def test_same_original_command_key_cannot_be_reused_for_another_review(storage):
+    database, registered, _ = populated(storage)
+    with database.transaction() as connection:
+        candidate = {k: registered[k] for k in ('workspace_id', 'owner', 'source_kind', 'draft_id', 'draft_revision', 'entity', 'candidate_sha256')}
+        other = job(connection, candidate, 'review_second')
+        insert(connection, 'review_jobs', other)
+    with pytest.raises(sqlite3.IntegrityError), database.transaction() as connection:
+        insert(connection, 'review_commands', command(other), replace=True)
+
+
+@pytest.mark.parametrize(('table', 'field'), [
+    ('review_jobs', 'input_json'), ('review_revisions', 'receipt_json'), ('review_revisions', 'record_json'),
+    ('review_artifact_bindings', 'binding_json'), ('review_commands', 'request_json'), ('review_commands', 'ack_json'),
+])
+def test_invalid_json_is_rejected_without_claiming_json_authenticates_history(storage, table, field):
+    database, registered = storage
+    with database.transaction() as connection:
+        revision = None
+        if table != 'review_jobs':
+            insert(connection, 'review_jobs', registered)
+            revision = receipt(connection, registered)
+        if table == 'review_artifact_bindings':
+            insert(connection, 'review_revisions', revision)
+            artifact(connection, registered['workspace_id'])
+    value = {'review_jobs': registered, 'review_revisions': revision,
+             'review_artifact_bindings': binding(registered), 'review_commands': command(registered)}[table]
+    with pytest.raises(sqlite3.IntegrityError), database.transaction() as connection:
+        insert(connection, table, {**value, field: '{bad json'})
+
+
+def test_sql_does_not_authenticate_hashes_owner_claims_or_current_actor(storage):
+    database, registered = storage
+    with database.transaction() as connection:
+        # Structurally valid opaque bytes can be false. Future checked ports
+        # must reject these; migration PASS must never be called review PASS.
+        insert(connection, 'review_jobs', {**registered, 'input_sha256': '0' * 64})
+        insert(connection, 'review_commands', {**command(registered), 'ack_json': json.dumps({'fixture_only': True})})
+        assert connection.execute('SELECT count(*) FROM local_sessions').fetchone()[0] == 0
+        assert connection.execute('PRAGMA foreign_key_check').fetchall() == []
+
+
+def test_copy_can_clear_live_reviewer_without_rewriting_immutable_history(storage, tmp_path):
+    database, registered, _ = populated(storage)
+    with database.transaction() as connection:
+        connection.execute('INSERT INTO local_sessions(id,workspace_id,token_hash,csrf_hash,role,expires_at) '
+                           "VALUES('synthetic_actor',?,?,?,'author','2099-01-01T00:00:00Z')",
+                           (registered['workspace_id'], 'c' * 64, 'd' * 64))
+        connection.execute("UPDATE reviews SET reviewer_session_id='synthetic_actor'")
+        before = {table: rows(connection, table) for table in TABLES}
+        original = connection.execute('SELECT receipt_json FROM reviews').fetchone()[0]
+    backup = database.online_backup(tmp_path / 'copy.sqlite3')
+    with closing(sqlite3.connect(backup)) as connection:
+        connection.execute('PRAGMA foreign_keys=ON')
+        connection.execute('UPDATE reviews SET reviewer_session_id=NULL')
+        connection.execute('DELETE FROM local_sessions')
+        connection.commit()
+        assert connection.execute('SELECT receipt_json,reviewer_session_id FROM reviews').fetchone() == (original, None)
+        assert {table: rows(connection, table) for table in TABLES} == before
+        assert connection.execute('PRAGMA foreign_key_check').fetchall() == []
+    with database.connect() as connection:
+        assert connection.execute('SELECT reviewer_session_id FROM reviews').fetchone()[0] == 'synthetic_actor'
+
+
+@pytest.mark.parametrize(('table', 'field', 'value'), [
+    ('review_jobs', 'input_sha256', 'A' * 64), ('review_jobs', 'draft_revision', 1.5),
+    ('review_revisions', 'receipt_sha256', 'g' * 64), ('review_revisions', 'record_sha256', 'a' * 63),
+    ('review_revisions', 'revision', 0), ('review_artifact_bindings', 'ordinal', 0.5),
+    ('review_artifact_bindings', 'binding_sha256', 'A' * 64), ('review_artifact_bindings', 'manifest_sha256', 'g' * 64),
+    ('review_commands', 'basis_revision', 1.5), ('review_commands', 'request_sha256', 'a' * 63),
+    ('review_commands', 'ack_sha256', 'A' * 64), ('review_commands', 'command_key', ''),
+])
+def test_invalid_digest_and_numeric_storage_shapes_fail(storage, table, field, value):
+    database, registered = storage
+    with database.transaction() as connection:
+        revision = None
+        if table != 'review_jobs':
+            insert(connection, 'review_jobs', registered)
+            revision = receipt(connection, registered)
+        if table == 'review_artifact_bindings':
+            insert(connection, 'review_revisions', revision)
+            artifact(connection, registered['workspace_id'])
+    source = {'review_jobs': registered, 'review_revisions': revision,
+              'review_artifact_bindings': binding(registered), 'review_commands': command(registered)}[table]
+    with pytest.raises(sqlite3.IntegrityError), database.transaction() as connection:
+        insert(connection, table, {**source, field: value})

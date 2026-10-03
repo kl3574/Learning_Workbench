@@ -1,0 +1,78 @@
+.F...................................................................... [ 11%]
+........................................................................ [ 23%]
+........................................................................ [ 35%]
+........................................................................ [ 47%]
+........................................................................ [ 58%]
+........................................................................ [ 70%]
+........................................................................ [ 82%]
+........................................................................ [ 94%]
+...................................                                      [100%]
+=================================== FAILURES ===================================
+_____ test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec _____
+
+    def test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec():
+        application = create_app()
+        api = application.openapi()
+        runtime = {(method, context.path) for context in iter_route_contexts(application.routes)
+                   if isinstance(context.original_route, APIRoute) for method in context.methods}
+        projection = {(method.upper(), path) for path, methods in api["paths"].items() for method in methods if method in HTTP_METHODS}
+        assert runtime == projection
+        assert projection <= SPEC_ROUTES
+        assert {('GET', '/api/v1/recommendations'),
+                ('POST', '/api/v1/recommendations/{id}/decision')} <= projection
+        provider_operations = {item for item in SPEC_ROUTES if item[1].startswith(('/api/v1/providers/', '/api/v1/consents'))}
+        assert len(provider_operations) == 10
+        assert provider_operations <= projection
+        assert {('POST', '/api/v1/retrieval/query'), ('POST', '/api/v1/index/rebuild'),
+                ('GET', '/api/v1/index/status')} <= projection
+        tutor = {('POST', '/api/v1/threads'), ('GET', '/api/v1/threads'),
+                 ('GET', '/api/v1/threads/{id}/messages'), ('POST', '/api/v1/tutor/runs'),
+                 ('GET', '/api/v1/runs/{id}'), ('GET', '/api/v1/runs/{id}/events'),
+                 ('POST', '/api/v1/runs/{id}/cancel')}
+        assert tutor <= projection
+        authoring = {
+            ('POST', '/api/v1/authoring/jobs'), ('GET', '/api/v1/authoring/jobs'),
+            ('GET', '/api/v1/authoring/jobs/{id}'), ('GET', '/api/v1/authoring/drafts/{id}'),
+            ('POST', '/api/v1/authoring/drafts/{id}/numeric-checks'),
+            ('GET', '/api/v1/authoring/numeric-checks/{id}'),
+            ('POST', '/api/v1/authoring/numeric-checks/{id}/decision'),
+            ('POST', '/api/v1/authoring/group-jobs'),
+            ('GET', '/api/v1/authoring/draft-groups/{id}'),
+            ('GET', '/api/v1/authoring/draft-groups/{id}/solutions/{member_key}'),
+            ('POST', '/api/v1/authoring/draft-groups/{id}/members/{member_key}/numeric-checks'),
+            ('GET', '/api/v1/authoring/group-numeric-checks/{id}'),
+            ('POST', '/api/v1/authoring/group-numeric-checks/{id}/decision'),
+        }
+        assert authoring <= projection
+        assert {('POST', '/api/v1/drafts/{id}/review'), ('GET', '/api/v1/reviews/{id}'),
+                ('POST', '/api/v1/reviews/{id}/decision')} <= projection
+        assert ('POST', '/api/v1/drafts/{id}/publish') in projection
+        assert {('POST', '/api/v1/drafts'), ('PATCH', '/api/v1/drafts/{id}'),
+                ('GET', '/api/v1/draft-edits/{id}')} <= projection
+        assert {
+            ('GET', '/api/v1/content/impacts/{event_id}'),
+            ('POST', '/api/v1/content/impacts/{event_id}/decisions'),
+            ('GET', '/api/v1/learning/evidence/{id}/applicability'),
+            ('POST', '/api/v1/learning/evidence/{id}/applicability-decisions'),
+            ('POST', '/api/v1/content/restore-drafts'),
+            ('GET', '/api/v1/content/restore-drafts/{id}'),
+        } <= projection
+        assert len(projection) == 106
+>       assert len(SPEC_ROUTES - projection) == 20
+E       AssertionError: assert 21 == 20
+E        +  where 21 = len(({('DELETE', '/api/v1/notes/{id}'), ('DELETE', '/api/v1/providers/{id}/secret'), ('GET', '/api/v1/artifacts/{id}/download'), ('GET', '/api/v1/assessments'), ('GET', '/api/v1/attempts/{id}'), ('GET', '/api/v1/attempts/{id}/responses'), ...} - {('DELETE', '/api/v1/notes/{id}'), ('DELETE', '/api/v1/providers/{id}/secret'), ('GET', '/api/v1/artifacts/{id}/download'), ('GET', '/api/v1/assessments'), ('GET', '/api/v1/attempts/{id}'), ('GET', '/api/v1/attempts/{id}/responses'), ...}))
+
+tests/contract/test_api_projection.py:74: AssertionError
+=============================== warnings summary ===============================
+.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  $HOME/.cache/learning-workbench-acceptance/m62-session-editor-continuity-oct02/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  $HOME/.cache/learning-workbench-acceptance/m62-session-editor-continuity-oct02/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/contract/test_api_projection.py::test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec
+1 failed, 610 passed, 2 warnings in 152.12s (0:02:32)

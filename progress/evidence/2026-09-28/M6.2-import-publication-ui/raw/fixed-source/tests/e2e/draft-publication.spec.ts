@@ -1,0 +1,110 @@
+import { createHash } from 'node:crypto'
+import { writeFileSync } from 'node:fs'
+import { expect, test } from '../../apps/web/node_modules/@playwright/test/index.mjs'
+import type { ContentRef, DraftPublishWrite, ImportDraftSnapshot, ReviewJobAck, StoredReviewReceipt } from '../../packages/contracts/generated/api-types'
+import { RestartRuntime } from './restartRuntime'
+
+test('real synthetic Import text block receives explicit human decisions, survives lost publish ACK and reads actual current independently', async ({ playwright }, info) => {
+  test.setTimeout(120_000)
+  const runtime = await RestartRuntime.start(), errors: string[] = []
+  try {
+    const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]
+    page.on('pageerror', error => errors.push(error.message))
+    await runtime.authenticateOnly(page)
+    await page.getByRole('button', { name: '导入', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '导入', exact: true })
+    await dialog.getByRole('button', { name: '切换为作者角色', exact: true }).click()
+    await expect(dialog.getByText('操作角色：作者', { exact: true })).toBeVisible()
+    await dialog.getByLabel('解析格式').selectOption('markdown')
+    await dialog.getByLabel('选择导入文件', { exact: true }).setInputFiles({ name: 'synthetic-publication.md', mimeType: 'text/markdown', buffer: Buffer.from('# 原创合成发布验收\n\n这是无数学断言的原创合成段落，仅验证软件发布链，不代表真实教学验收。\n') })
+    const uploading = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith('/api/v1/imports'))
+    await dialog.getByRole('button', { name: '上传并生成预览', exact: true }).click()
+    expect((await uploading).status()).toBe(202)
+    await expect(dialog.getByText('预览已就绪，等待确认', { exact: true })).toBeVisible()
+    await expect(dialog.getByLabel('当前候选正文', { exact: true })).toBeVisible()
+    const id = await dialog.getByLabel('选择预览候选').inputValue()
+    const draftResponse = await page.request.get(`/api/v1/drafts/${id}`); expect(draftResponse.status()).toBe(200)
+    const draft: ImportDraftSnapshot = await draftResponse.json()
+    expect(draft.kind).toBe('block'); expect(draft.state).toBe('draft')
+    if (!('metadata' in draft.payload)) throw new Error('Actual imported block payload required')
+    const metadata = draft.payload.metadata
+    expect(metadata.kind).toBe('text')
+    const metadataHash = createHash('sha256').update(JSON.stringify(Object.fromEntries(Object.entries(metadata).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)))).digest('hex')
+    expect(metadataHash).toBe(draft.candidate_sha256)
+    await dialog.getByRole('button', { name: '打开候选审核与恢复', exact: true }).click()
+    const reviewPanel = dialog.getByRole('region', { name: '候选审核与原命令恢复', exact: true })
+    await reviewPanel.getByLabel('本次审核备注', { exact: true }).fill('仅合成浏览器软件验收；不作真实内容质量或教学批准。')
+    await reviewPanel.getByLabel('我已核对候选 ID、修订、哈希与本次检查范围，明确创建审核任务。', { exact: true }).check()
+    const reviewing = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith(`/api/v1/drafts/${id}/review`))
+    await reviewPanel.getByRole('button', { name: '明确创建本次审核任务', exact: true }).click()
+    const reviewResponse = await reviewing; expect(reviewResponse.status()).toBe(202)
+    const review: ReviewJobAck = await reviewResponse.json()
+    const read = reviewPanel.getByRole('button', { name: '另行读取当前审核回执', exact: true })
+    await expect(read).toBeEnabled(); await read.click()
+    const machine: StoredReviewReceipt = await page.request.get(`/api/v1/reviews/${review.id}`).then(value => value.json())
+    expect(machine.structural).toBe('PASS'); expect(machine.mathematical).toBe('NOT_RUN'); expect(machine.sources).toBe('NOT_RUN'); expect(machine.independent_pedagogy).toBe('NOT_RUN')
+    const decision = reviewPanel.getByRole('region', { name: '明确人工审核决定', exact: true })
+    await expect(decision.getByLabel('数学审核决定')).toHaveValue(''); await expect(decision.getByLabel('来源审核决定')).toHaveValue('')
+    await decision.getByLabel('数学审核决定').selectOption('NOT_APPLICABLE')
+    await decision.getByLabel('来源审核决定').selectOption('APPROVED')
+    const reason = '明确合成验收判断：原创纯文本无数学断言，已核对上传原件；不代表真实学习材料或教学审核。'
+    await decision.getByLabel('审核理由').fill(reason)
+    await decision.getByLabel('我已核对准确候选与本回执，明确记录上述数学和来源决定及理由。', { exact: true }).check()
+    const deciding = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith(`/api/v1/reviews/${review.id}/decision`))
+    await decision.getByRole('button', { name: '明确保存这次人工审核决定', exact: true }).click()
+    const decided = await deciding; expect(decided.status()).toBe(200)
+    const human: StoredReviewReceipt = await decided.json()
+    expect(human.mathematical).toBe('NOT_APPLICABLE'); expect(human.sources).toBe('APPROVED'); expect(human.independent_pedagogy).toBe('NOT_RUN'); expect(human.decision_reason).toBe(reason)
+    await expect(read).toBeEnabled(); await read.click()
+    const publication = reviewPanel.getByRole('region', { name: 'Import 文本块发布与恢复', exact: true })
+    const prepare = publication.getByRole('button', { name: '选择此审核并重新读取发布基准', exact: true })
+    await expect(prepare).toBeEnabled(); await prepare.click()
+    const basis = publication.getByRole('region', { name: '本次发布基准', exact: true })
+    await expect(basis).toContainText(draft.candidate_sha256)
+    const warningInputs = basis.getByRole('group', { name: '逐条确认此块警告' }).getByRole('checkbox')
+    for (const checkbox of await warningInputs.all()) { await expect(checkbox).not.toBeChecked(); await checkbox.check() }
+    await basis.getByLabel('我已核对这份发布候选、所选人工审核与逐条警告，明确发布这一文本块。', { exact: true }).check()
+    await dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
+    await page.getByRole('dialog', { name: '保留审核原命令', exact: true }).getByRole('button', { name: '返回导入与审核', exact: true }).click()
+    await expect(basis.getByLabel('我已核对这份发布候选、所选人工审核与逐条警告，明确发布这一文本块。', { exact: true })).toBeChecked()
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 }); await basis.scrollIntoViewIfNeeded()
+      await page.screenshot({ path: info.outputPath(`publication-basis-${width}.png`) })
+      const geometry = await dialog.evaluate(element => ({ width: element.clientWidth, scroll: element.scrollWidth, document: document.documentElement.scrollWidth, viewport: innerWidth }))
+      expect(geometry.scroll).toBeLessThanOrEqual(geometry.width + 1); expect(geometry.document).toBeLessThanOrEqual(geometry.viewport)
+    }
+    await page.setViewportSize({ width: 1440, height: 900 })
+    const commands: { key: string; body: DraftPublishWrite }[] = [], currentRequests: string[] = []
+    let original!: ContentRef, dropped = false
+    page.on('request', value => { if (new URL(value.url()).pathname === `/api/v1/objects/${metadata.id}/current`) currentRequests.push(value.method()) })
+    const pattern = `**/api/v1/drafts/${id}/publish`
+    await page.route(pattern, async route => {
+      const request = route.request(); commands.push({ key: request.headers()['idempotency-key'], body: request.postDataJSON() })
+      if (commands.length === 1) { const actual = await route.fetch(); expect(actual.status()).toBe(201); original = await actual.json(); await route.abort('failed'); dropped = true }
+      else await route.continue()
+    })
+    await basis.getByRole('button', { name: '明确发布这一文本块', exact: true }).click()
+    await expect.poll(() => dropped).toBe(true)
+    await expect(publication.getByText('发布结果未知，原 key 与完整命令保留', { exact: true })).toBeVisible()
+    expect(commands).toHaveLength(1); expect(currentRequests).toEqual([])
+    expect(original).toEqual({ entity: 'block', id: metadata.id, revision: 1, sha256: draft.candidate_sha256 })
+    const replaying = page.waitForResponse(value => value.request().method() === 'POST' && value.url().endsWith(`/api/v1/drafts/${id}/publish`))
+    await publication.getByRole('button', { name: `显式回放原发布命令 ${commands[0].key}`, exact: true }).click()
+    const replay = await replaying; expect(replay.status()).toBe(201); expect(await replay.json()).toEqual(original)
+    await expect(publication.getByText('原发布 ACK 已保存', { exact: true })).toBeVisible()
+    expect(commands).toHaveLength(2); expect(commands[1]).toEqual(commands[0]); expect(currentRequests).toEqual([])
+    expect(commands[0].body).toEqual({ expected_revision: draft.revision, expected_content_sha256: draft.candidate_sha256, review_receipt_id: review.id, acknowledged_warning_codes: [...new Set(draft.warnings.filter(warning => warning.severity === 'warning').map(warning => warning.code))] })
+    const reading = page.waitForResponse(value => value.request().method() === 'GET' && value.url().endsWith(`/api/v1/objects/${metadata.id}/current`))
+    await publication.getByRole('button', { name: `另行读取当前引用 ${metadata.id}`, exact: true }).click()
+    const currentResponse = await reading; expect(currentResponse.status()).toBe(200)
+    const current: ContentRef = await currentResponse.json(); expect(current).toEqual(original); expect(currentRequests).toEqual(['GET'])
+    await expect(publication.getByRole('region', { name: '另行读取的当前引用', exact: true })).toContainText(original.sha256)
+    const block = await page.request.get(`/api/v1/blocks/${original.id}?revision=1`); expect(block.status()).toBe(200); expect(await block.json()).toEqual(metadata)
+    const body = await page.request.get(`/api/v1/blocks/${original.id}/body?revision=1`); expect(body.status()).toBe(200)
+    expect(await body.text()).toBe(draft.payload.body_markdown); expect(createHash('sha256').update(await body.body()).digest('hex')).toBe(metadata.body_sha256)
+    expect((await page.request.get(`/api/v1/drafts/${id}`).then(value => value.json())).state).toBe('draft')
+    await page.screenshot({ path: info.outputPath('publication-history-and-current.png') })
+    expect(errors).toEqual([])
+    writeFileSync(info.outputPath('publication-flow.json'), JSON.stringify({ scope: 'Actual synthetic Import/Review workers and explicit synthetic author decisions/publication/original-key replay/Content bytes/current; no real provider or content-quality approval', candidate: machine.candidate, machine, human, commands, original, current, body_sha256: metadata.body_sha256, errors }, null, 2))
+  } finally { await runtime.close() }
+})
