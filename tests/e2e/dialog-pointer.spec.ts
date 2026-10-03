@@ -36,11 +36,24 @@ test('native dialog keeps a content gesture through layout change and still acce
     finally { writeFileSync(info.outputPath('dialog-pointer-layout.json'), JSON.stringify({ scope: 'Synthetic actual Content UI; layout and pointer categories only. Separate from the original full-gate cause.', shifted }, null, 2)) }
     // A stationary ordinary click still invokes the actual Content detail read.
     await button.click(); await expect(panel.getByRole('region', { name: '本次读取的内容影响详情', exact: true })).toBeVisible()
-    await page.mouse.click(2, 2); await expect(dialog).toHaveCount(0)
-    await page.getByRole('button', { name: '创作', exact: true }).click()
-    await expect(dialog).toBeVisible(); await page.keyboard.press('Escape'); await expect(dialog).toHaveCount(0)
-    await page.getByRole('button', { name: '创作', exact: true }).click()
-    await dialog.getByRole('button', { name: '关闭创作', exact: true }).click(); await expect(dialog).toHaveCount(0)
+    // A completed child read does not promise that every parent safety effect
+    // has settled. Honor any real caller guard when leaving the Content panel.
+    await dialog.getByRole('button', { name: '关闭创作', exact: true }).click()
+    const guard = page.getByRole('dialog', { name: '保留创作原命令', exact: true })
+    await expect.poll(async () => await dialog.count() === 0 || await guard.isVisible()).toBe(true)
+    if (await guard.isVisible()) await guard.getByRole('button', { name: '保留原命令，明确丢弃临时表单并关闭', exact: true }).click()
+    await expect(dialog).toHaveCount(0)
+    // This auxiliary dialog has no business-owner guard, so closing it is an
+    // unambiguous check of the shared pointer, cancellation, and close controls.
+    for (const action of ['backdrop', 'Escape', 'close button']) {
+      await page.keyboard.press('Control+Shift+P')
+      const auxiliary = page.getByRole('dialog', { name: '命令面板', exact: true })
+      await expect(auxiliary).toBeVisible()
+      if (action === 'backdrop') await page.mouse.click(2, 2)
+      else if (action === 'Escape') await page.keyboard.press('Escape')
+      else await auxiliary.getByRole('button', { name: '关闭命令面板', exact: true }).click()
+      await expect(auxiliary).toHaveCount(0)
+    }
     expect(writes).toEqual([])
   } finally { await runtime.close() }
 })
