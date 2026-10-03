@@ -61,6 +61,6 @@ export function CodexCapabilitiesPanel({ workspace, admitted, port = codexCapabi
                 <dt>产物清单</dt><dd>{value.capabilities.artifacts ? '可用' : '不可用'}</dd></dl>
               {value.sandbox_roots.length > 0 && <div><p>隔离目录</p><ul>{value.sandbox_roots.map(root => <li key={root.id}>{root.label}</li>)}</ul></div>}
             </>}
-    {admitted && <p>受控 Codex 任务导出与产物回导尚未实现；当前可下载四项本地需求说明，仍未连接 Codex。已有文件可从“导入”进入预览与审核。</p>}
+    {admitted && <p>受控 Codex 任务导出与产物回导尚未实现；当前可下载四项本地需求说明；该本地需求说明不调用 Codex。已有文件可从“导入”进入预览与审核。</p>}
   </section>
 }

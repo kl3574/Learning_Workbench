@@ -19,7 +19,7 @@ test('explicit check reads session then capabilities, displays only this Broker 
   p.capabilities = vi.fn(async () => { order.push('capabilities'); return capabilities() })
   render(<CodexCapabilitiesPanel workspace={workspace} admitted port={p} />)
   expect(p.session).not.toHaveBeenCalled(); expect(p.capabilities).not.toHaveBeenCalled()
-  expect(screen.getByText(/受控 Codex 任务导出与产物回导尚未实现；当前可下载四项本地需求说明，仍未连接 Codex/)).toBeTruthy()
+  expect(screen.getByText(/受控 Codex 任务导出与产物回导尚未实现；当前可下载四项本地需求说明；该本地需求说明不调用 Codex/)).toBeTruthy()
   check(); await screen.findByText('未连接 Codex：此工作区的隔离 Broker 尚未授权。')
   expect(order).toEqual(['session', 'capabilities']); expect(screen.getAllByText('不可用')).toHaveLength(3)
   expect(screen.getByText('codex-cli/0.160.0')).toBeTruthy()
@@ -77,4 +77,15 @@ test('malformed port response never displays private extra fields or a successfu
   render(<CodexCapabilitiesPanel workspace={workspace} admitted port={p} />); check()
   await screen.findByText(/暂时无法确认 Codex 连接状态/)
   expect(screen.queryByText(/synthetic-private/)).toBeNull(); expect(screen.queryByText('此工作区的 Codex 连接与授权状态已确认。')).toBeNull()
+})
+
+test.each(['unknown', 'authorized'])('local download explanation never contradicts the %s Broker observation', async mode => {
+  const p = port()
+  p.capabilities = mode === 'unknown'
+    ? vi.fn(async () => { throw new ApiError(503, 'synthetic-unavailable') })
+    : vi.fn(async () => ({ ...capabilities(), authorized: true }))
+  render(<CodexCapabilitiesPanel workspace={workspace} admitted port={p} />); check()
+  await screen.findByText(mode === 'unknown' ? /暂时无法确认 Codex 连接状态/ : '此工作区的 Codex 连接与授权状态已确认。')
+  expect(screen.queryByText(/仍未连接 Codex/)).toBeNull()
+  expect(screen.getByText(/当前可下载四项本地需求说明；该本地需求说明不调用 Codex/)).toBeTruthy()
 })
