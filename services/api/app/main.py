@@ -5,7 +5,6 @@ import asyncio
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from services.api.app.interfaces.static import WorkbenchStaticMount
 
 from packages.contracts.domain_models import ErrorEnvelope
 
@@ -51,6 +50,7 @@ from .application.authoring_routing import AuthoringSourceRouter
 from .application.codex_capabilities import CodexCapabilityProbe, CodexCapabilitiesService
 from .infrastructure.codex_probe import LocalCodexProbe
 from .interfaces.codex_http import create_codex_router
+from .interfaces.static import WorkbenchStaticMount
 from .application.codex_bootstrap import CodexBootstrapService
 from .application.codex_bootstrap_ports import CodexBootstrapRuntime
 from .infrastructure.codex_bootstrap_runtime import LocalCodexBootstrapRuntime
