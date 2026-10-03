@@ -5,6 +5,7 @@ import asyncio
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from services.api.app.interfaces.static import WorkbenchStaticMount
 
 from packages.contracts.domain_models import ErrorEnvelope
 
@@ -234,5 +235,5 @@ def create_app(settings: Settings | None = None, *,
     application.include_router(create_content_restore_router(content_restores))
     application.include_router(create_restore_numeric_router(restore_numeric_service))
     if settings.static_dir.is_dir():
-        application.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="workbench")
+        application.router.routes.append(WorkbenchStaticMount("/", StaticFiles(directory=settings.static_dir, html=True), name="workbench"))
     return application

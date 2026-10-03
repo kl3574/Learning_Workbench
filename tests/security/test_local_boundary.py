@@ -12,7 +12,7 @@ from services.api.app.security import COOKIE_NAME, consume_bootstrap, issue_boot
 
 @pytest.fixture
 def runtime(tmp_path):
-    settings = Settings(data_dir=tmp_path)
+    settings = Settings(data_dir=tmp_path, static_dir=tmp_path / "absent-ui")
     application = create_app(settings)
     with TestClient(application, base_url=settings.origin) as client:
         yield application, client, settings
@@ -198,8 +198,23 @@ def test_independent_guard_is_workspace_wide_across_sessions(runtime):
         assert second.post("/api/v1/session/role", json={"role": "author"}, headers=other_headers).status_code == 409
 
 
-def test_payload_budget_and_unimplemented_routes(runtime):
-    application, client, settings = runtime
+@pytest.fixture(params=[False, True], ids=["without-ui", "with-ui"])
+def routing_runtime(tmp_path, request):
+    static = tmp_path / "ui"
+    if request.param:
+        static.mkdir()
+        (static / "index.html").write_text("<h1>synthetic workbench</h1>")
+        shadow = static / "api/v1/codex/sessions"
+        shadow.mkdir(parents=True)
+        (shadow / "index.html").write_text("<h1>must not be served as API</h1>")
+    settings = Settings(data_dir=tmp_path / "data", static_dir=static)
+    application = create_app(settings)
+    with TestClient(application, base_url=settings.origin) as client:
+        yield application, client, settings
+
+
+def test_payload_budget_and_unimplemented_routes(routing_runtime):
+    application, client, settings = routing_runtime
     headers = login(application, client, settings)
     assert client.post("/api/v1/session/logout", content=b"x" * (settings.max_request_bytes + 1), headers=headers).status_code == 413
     # v3.0.14 implements POST session bootstrap, but no session list or turns.
@@ -216,6 +231,11 @@ def test_payload_budget_and_unimplemented_routes(runtime):
     unavailable = client.post("/api/v1/codex/sessions/unavailable/turns", json={}, headers=headers)
     assert unavailable.status_code == 404
     assert unavailable.json()["error"]["code"] == "REFERENCE_MISSING"
+    unknown = client.get("/api/v1/not-implemented")
+    assert unknown.status_code == 404 and unknown.json()["error"]["code"] == "REFERENCE_MISSING"
+    assert client.post("/health", headers=headers).status_code == 405
+    if settings.static_dir.is_dir():
+        assert client.get("/").text == "<h1>synthetic workbench</h1>"
 
 
 @pytest.mark.parametrize("host", ["0.0.0.0", "192.168.1.2", "example.com", "::"])
