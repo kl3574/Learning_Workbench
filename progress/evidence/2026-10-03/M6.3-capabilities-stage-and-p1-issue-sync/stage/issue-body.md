@@ -28,8 +28,8 @@ spec_sha256: `ab061119163b5b2a10411bb90d7cae45bf2e2b14082f4e9266f6c9452db3870c`
 规范：`3.0.13` / `949e2348902d8b8cb65f560b36fa58039fce75cd2e70c0a9ce9dcd8023160c05`
 当前需求关联：R-23, R-27
 验证代码：`NOT_RUN`
-验证：`固定1ab后台61相关PASS/strict静态与真实隔离CLI控制探测PASS；实际HTTP两次200/同稳定Broker、配置变更503、全业务SQLite零写。组合54fc界面27focused/strict/native-types及真实native1PASS6.7s，1320nonprogress前后同Git；两次生产GET200 available=true/authorized=false、三能力false，重启同DB结果一致。原1ab合同全套731PASS1旧路由计数FAIL保留；test-only8d修111/19并18DTO反例共19PASS。独立代码/安全/HTTP审查及最终含e287组合全量门禁仍待完成。 独立底层审查另实证IPC隔离P1，M6.3发布HOLD；既有局部PASS不证明无命名IPC外发。`
+验证：`固定1ab后台61相关PASS/strict静态与真实隔离CLI控制探测PASS；实际HTTP两次200/同稳定Broker、配置变更503、全业务SQLite零写。组合54fc界面27focused/strict/native-types及真实native1PASS6.7s，1320nonprogress前后同Git；两次生产GET200 available=true/authorized=false、三能力false，重启同DB结果一致。原1ab合同全套731PASS1旧路由计数FAIL保留；test-only8d修111/19并18DTO反例共19PASS。独立代码/安全/HTTP审查及最终含e287组合全量门禁仍待完成。`
 实施分支：`feat/M6.3-codex-capabilities`
 - 证据：`progress/evidence/2026-10-03/M6.3-capabilities-start/REPORT.json`
-下一动作：优先修复并独立复验命名Unix数据报IPC逃逸P1，保留原探针RED和实际控制结果；重新固定最窄fence且核真实CLI，再处理其余审查，最后组合完整门禁。机械e992仍未验收、未推送。
+下一动作：处理M6.3独立审查实际发现，组合最新e287、固定backend1ab、合同test-only8d与UI/native，完成一次最终全量验收，再同步源码分支与draftPR。仅连接读取，不继承全局CLI授权，未实现线程/生成/审批/中断/产物回导。
 <!-- engineering_progress:end -->

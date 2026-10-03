@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-03T01:45:02Z；规范 SHA-256：`949e2348902d8b8cb65f560b36fa58039fce75cd2e70c0a9ce9dcd8023160c05`
+更新：2026-10-03T02:14:25Z；规范 SHA-256：`949e2348902d8b8cb65f560b36fa58039fce75cd2e70c0a9ce9dcd8023160c05`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED_PR55_ISSUE31_CONCEPTS_PUSHED_NEW_CI_OBSERVED
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
 
-M6.3主要实施本机Codex能力探测→严格GET→界面状态；M6.2概念保留完整Python3580/961Web/126native通过并已推送，继续读取新head CI。实际数值BLOCKED，平台DeepSeek/学术教学NOT_RUN，PR不自动合并。
+优先修复并独立复验IPC命名数据报P1和配置FIFO阻塞P2，两个原probe分别RED/GREEN，并重新实测固定CLI/HTTP；其余Spec/UI审查继续。机械e992尚未运行全量门禁、未推送。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -265,6 +265,12 @@ M6.3主要实施本机Codex能力探测→严格GET→界面状态；M6.2概念�
 - M6.2_concepts_ci_independent: {'status': 'PASS', 'scope': '777raw12logs4ZIP8candidates13publicfiles; separatecheckoutclarificationchecked', 'evidence': 'progress/evidence/2026-10-03/M6.2-ci-0ede-independent-audit/REPORT.json', 'product_rerun': False}
 - M6.2_concepts_pushed_progress_sync: {'readback_at': '2026-10-03T01:43:23.559812+00:00', 'head': 'e2877101d9c2bda0f793a460db63ef496350c6b4', 'pull_request': 55, 'draft': True, 'open': True, 'merged': False, 'issue': 31, 'issue_outside_managed_block_and_metadata_unchanged': True, 'pr_body_sha256': '358618ad7e3645b36f107531578584c1c78d1ff7b6f26c688ad03f02eb05b2cf', 'issue_body_sha256': 'e153c6ce27c2cfc102322dd80483ff93e302b5296616fc6e38e473ea01d3b7dc', 'source_push_in_this_sync': False, 'prior_source_push_verified': True, 'new_head_ci': [{'id': 37087119424, 'event': 'pull_request', 'status': 'in_progress', 'conclusion': None, 'url': 'https://github.com/kl3574/Learning_Workbench/actions/runs/37087119424'}, {'id': 37087115486, 'event': 'push', 'status': 'in_progress', 'conclusion': None, 'url': 'https://github.com/kl3574/Learning_Workbench/actions/runs/37087115486'}], 'release': False, 'deployment': False}
 - M6.2_concepts_source_publication: {'head': 'e2877101d9c2bda0f793a460db63ef496350c6b4', 'branch_head': 'e2877101d9c2bda0f793a460db63ef496350c6b4', 'pr_head': 'e2877101d9c2bda0f793a460db63ef496350c6b4', 'matched': True, 'draft': True, 'state': 'open', 'merged': False, 'at': '2026-10-03T01:42:27.110534+00:00'}
+- M6.3_capabilities_local_stage: {'recorded_at': '2026-10-03T02:04:27.954081+00:00', 'backend': '1ab169a83e9619bd529ca55ae8ef603c596432f2', 'contract_test_fix': '8d34b0446d2e59fbb5f9840792c9779b82fc831d', 'ui': '90f35366053b4fef5fccd033864d4b46e56a7d2f', 'native': '7aacbd4210fcd6574a109b8d70c1352f1e159581', 'tested_ui_combination': '54fc266798a1e4be2142266012f24f468a57fb98', 'checks': '固定1ab后台61相关PASS/strict静态与真实隔离CLI控制探测PASS；实际HTTP两次200/同稳定Broker、配置变更503、全业务SQLite零写。组合54fc界面27focused/strict/native-types及真实native1PASS6.7s，1320nonprogress前后同Git；两次生产GET200 available=true/authorized=false、三能力false，重启同DB结果一致。原1ab合同全套731PASS1旧路由计数FAIL保留；test-only8d修111/19并18DTO反例共19PASS。独立代码/安全/HTTP审查及最终含e287组合全量门禁仍待完成。', 'actual_native_json_sha256': '2d6fc09436b7add2dc90d0a236157bf4ce6e1cffcd4649dea5ccf8f0396b43c0', 'external_model_calls': 0, 'thread_turn_login_calls': 0, 'global_user_login_status': 'NOT_READ; available/authorizedrefersonlytostableisolatedBroker', 'full_codex_workflow': 'NOT_RUN', 'source_push': False}
+- M6.3_capabilities_stage_issue_sync: {'at': '2026-10-03T02:06:10.469529+00:00', 'issue': 32, 'state': 'open', 'body_sha256': 'f5af3212538811b69d402733700b19221b7525b049261472bd8746fc5559f502', 'metadata_outside_block_unchanged': True, 'source_push': False, 'scope': 'ActualCLIcontrol/HTTP/UIlocalstage; contractgateoriginalFAILretainedwithtest-onlyfix; independentreviewsandfinalcombinedgatespending; nofullCodexworkflowclaim'}
+- M6.3_capabilities_security_P1: {'at': '2026-10-03T02:11:15.970645+00:00', 'source': '1ab169a83e9619bd529ca55ae8ef603c596432f2', 'confirmed': 'Actual synthetic18bytes received by outside namedUnixsocket from postfence socketpair/sendto', 'reviewer_evidence': 'm63-capabilities-independent-review-oct03/probes/ipc_probe.py and ipc-probe-01.log', 'status': 'PUBLICATION_HOLD_FIX_IN_PROGRESS', 'actual_cli_exfiltration': 'NOT_CLAIMED', 'old_stage_receipts': 'Preserved; not fullsandboxproof', 'full_gate': 'NOT_STARTED on mechanicale992', 'source_push': False}
+- M6.3_capabilities_P1_issue_sync: {'at': '2026-10-03T02:12:01.832049+00:00', 'issue': 32, 'state': 'open', 'body_sha256': '6c46c06cd36680dfec66f483f40e5686285ca62b22d51c32a8b842c3dc8a11d6', 'metadata_outside_block_unchanged': True, 'source_push': False, 'scope': 'Confirmed1abIPC_P1fixinprogress; M6.3publicationhold, nofullgateyet. LocalpriorPASSscopesretained. M6.2unaffected.'}
+- M6.3_capabilities_security_limitations: {'recorded_at': '2026-10-03T02:14:25.349339+00:00', 'source': '1ab169a83e9619bd529ca55ae8ef603c596432f2', 'ui_combination': '54fc266798a1e4be2142266012f24f468a57fb98', 'status': 'SECURITY_REVIEW_FOUND_P1_AND_P2_PUBLICATION_HELD', 'P1': 'Actual independent postfence anonymousAF_UNIX datagram socketpair sent18syntheticbytes to outside namedUnixsocket via sendto; invalidates anonymousIPC confinement inference. Does not claim actualCodex exfiltration.', 'P2': 'FIFOconfig open blocked before processdeadline while holdingprobe lock; independently reproduced and released by testownedwriter; noCLIstart.', 'prior_receipts': 'Focused/UI/actualHTTPandCLIobservationresultsremainasrecorded; noneprovefullisolationsecurity. Originalreportandsealedmanifestunchanged.', 'next': 'Ownerfix plusindependent sameprobe verification and realCLIreadback; finalcombinationfullgatesNOT_STARTED.', 'source_push': False}
+- M6.3_mechanical_combination: {'head': 'e99252dc3d15db62955409a8d8ea1c50052b5bd5', 'tree': 'm63-capabilities-combined-oct03', 'base': '6093171f6640cd88d4f4e4f5f23ec76babc1501c', 'source': 'e287publishedM6.2+merge1ab+cherry8d+UI90f+native7aac', 'gates': 'NOT_STARTED pendingconfirmedsecurityfix', 'source_push': False}
 
 ## 阻塞与待决项
 
@@ -299,5 +305,7 @@ M6.3主要实施本机Codex能力探测→严格GET→界面状态；M6.2概念�
 - M62_C2_PR_REVIEW_FORM_FAILED: 原c2 PR116PASS1FAIL保留。受控真实Publication读取使textarea临时disabled/失焦，原fill可未发input；3adc将本机编辑与提交安全分开，2DOM/1native原RED→GREEN，原case5s未改，root组合919Web/10native PASS。不能证明历史CI唯一原因；新远端待推送。 当前0ede push37083065732/PR37083068519各6job成功，两browser各125PASS；原c2失败与机制限定保留，不把新PASS回写旧结果。
 - M62_V313_FULL_NATIVE_APPLICABILITY_FAILED: 原60fa完整121PASS1FAIL保留；受控samepage等待与lateACK修复/独审后，原applicability在0b全套及7a完整125PASS均通过，不反推历史唯一原因或旧套件PASS。
 - M62_V313_CONTENT_IMPACTS_NATIVE_FAILED: 原0b完整121PASS1FAIL保留，历史唯一原因未确立。角色完成等待修复后，ContentImpact原流程在固定7a完整125PASS套件内通过；保护逻辑未放宽。
+- M63_CONTROL_PROBE_NAMED_UNIX_DATAGRAM_ESCAPE: 独立固定1ab探针在Landlock/seccomp后socketpair(AF_UNIX,SOCK_DGRAM).sendto向沙盒外已有命名socket成功发送18个合成bytes，父端实收；证明旧匿名IPC边界不成立，不代表实际CLI主动外发。owner已接受，最窄addrNULL/消息syscall修复及同原probe与真实CLI再验收进行中。原61PASS/HTTP/native控制观测不抹除，不当完整隔离PASS；未发布M6.3，已发布M6.2无此代码。
+- M63_CONTROL_PROBE_FIFO_CONFIG_BLOCK: 独立1ab探针证明配置FIFO在fstat和8s子进程deadline前阻塞并持锁，测试ownedwriter打开后才503；无CLI启动。owner修O_NONBLOCK+原regular检查，独立复验待完成。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。
