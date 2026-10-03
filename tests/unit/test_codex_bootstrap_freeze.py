@@ -52,14 +52,17 @@ def test_confirmed_configuration_change_is_changed_without_repair(tmp_path, monk
     runtime.validate_frozen(original)
 
 
-def test_original_profile_v1_remains_readable_but_cannot_use_new_launcher(tmp_path):
+@pytest.mark.parametrize('version', ['codex-local-control-profile-v1', 'codex-local-control-profile-v2'])
+def test_original_profiles_remain_readable_but_cannot_use_new_observer(tmp_path, version):
     runtime = module.LocalCodexBootstrapRuntime(tmp_path, tmp_path / 'missing-cli')
     current = runtime.freeze('workspace_default')
     old = strict_json(current.description_json)
-    old['version'] = 'codex-local-control-profile-v1'
-    old.pop('launcher_source_utf8')
-    old['launcher'] = str(Path(module.__file__).with_name('codex_probe_isolation.py'))
-    old['resources'].pop('parent_death')
+    old['version'] = version
+    old['schemas'] = dict(module.HISTORICAL_SCHEMAS)
+    if version.endswith('-v1'):
+        old.pop('launcher_source_utf8')
+        old['launcher'] = str(Path(module.__file__).with_name('codex_probe_isolation.py'))
+        old['resources'].pop('parent_death')
     historical = BootstrapFreeze.model_validate({**current.model_dump(), 'description_json': canonical_json(old),
         'scope': {**current.scope.model_dump(), 'bootstrap_profile_sha256': content_sha256(old)}})
     before = historical.model_dump()
@@ -75,6 +78,30 @@ def test_confirmed_root_mode_change_is_changed_not_environment_unknown(tmp_path)
     workspace.chmod(0o755)
     assert runtime.validity(original) == 'changed'
     assert workspace.stat().st_mode & 0o777 == 0o755
+
+
+def test_control_schemas_have_complete_local_reference_closures():
+    from packages.contracts.canonical import sha256_bytes
+    directory = Path(module.__file__).with_name('codex_protocol')
+    for relative, digest in module.CONTROL_SCHEMAS_V3.items():
+        raw = (directory / relative).read_bytes()
+        assert sha256_bytes(raw) == digest
+        document = strict_json(raw)
+        def visit(value):
+            if isinstance(value, dict):
+                if '$ref' in value:
+                    reference = value['$ref']
+                    assert reference.startswith('#/')
+                    target = document
+                    for part in reference[2:].split('/'):
+                        target = target[part.replace('~1', '/').replace('~0', '~')]
+                    assert isinstance(target, dict)
+                for child in value.values():
+                    visit(child)
+            elif isinstance(value, list):
+                for child in value:
+                    visit(child)
+        visit(document)
 
 
 def test_restored_root_is_changed_without_reading_old_directory_or_creating_new_one(tmp_path, monkeypatch):

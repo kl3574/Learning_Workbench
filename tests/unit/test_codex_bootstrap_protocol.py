@@ -14,7 +14,10 @@ from services.api.app.infrastructure import codex_bootstrap_runtime as module
     ('duplicate_key', 'unknown'), ('duplicate_response', 'unknown'), ('flood', 'unknown'), ('wrong_root', 'unknown'),
     ('unexpected_request', 'unknown'), ('deep_json', 'unknown'), ('unknown_member', 'unknown'),
     ('tail_duplicate', 'unknown'), ('tail_notification', 'unknown'), ('tail_stderr', 'unknown'),
-    ('slow_launch', 'failed'), ('reap_unverified', 'unknown')])
+    ('slow_launch', 'failed'), ('reap_unverified', 'unknown'), ('upstream_current', 'ready'),
+    ('notification_missing', 'unknown'), ('notification_mismatch', 'unknown'), ('notification_extra', 'unknown'),
+    ('notification_duplicate', 'unknown'), ('notification_before_result', 'unknown'),
+    ('metadata_profile', 'unknown'), ('metadata_roots', 'unknown'), ('metadata_mode', 'unknown')])
 def test_exact_three_frames_bounded_responses_and_complete_cleanup(tmp_path, monkeypatch, mode, status):
     runtime = module.LocalCodexBootstrapRuntime(tmp_path, tmp_path / 'absent-cli')
     frozen = runtime.freeze('workspace_default')
@@ -49,17 +52,28 @@ result={'approvalPolicy':'never','approvalsReviewer':'user','cwd':cwd,'model':st
  'modelProvider':'openai','sandbox':{'type':'readOnly','networkAccess':False},'thread':thread}
 if mode=='wrong_root': result['cwd']='/synthetic/other-root'
 if mode=='unknown_member': result['extra_unverified_fact']=True
-if mode=='tail_stderr': result['thread']['name']='x'*60000
+if mode=='tail_stderr': result['thread']['name']='x'*30000
+result.update(activePermissionProfile=None,multiAgentMode='explicitRequestOnly',runtimeWorkspaceRoots=[])
+if mode=='metadata_profile': result['activePermissionProfile']={'id':':workspace'}
+if mode=='metadata_roots': result['runtimeWorkspaceRoots']=['/synthetic/other-root']
+if mode=='metadata_mode': result['multiAgentMode']='proactive'
 response={'id':9 if mode=='wrong_id' else 2,'result':result}
 line=json.dumps(response)+'\\n'
-if mode=='tail_stderr':
-    os.write(1,line[:-1].encode())
+notice={'method':'thread/started','params':{'thread':dict(thread)},'emittedAtMs':0}
+if mode=='notification_mismatch': notice['params']['thread']['id']='different-synthetic-thread'
+if mode=='notification_extra': notice['extra_unverified_fact']=True
+notice_line=json.dumps(notice)+'\\n'
+if mode=='notification_before_result': os.write(1,(notice_line+line).encode())
+elif mode=='notification_missing': os.write(1,line.encode())
+elif mode=='notification_duplicate': os.write(1,(line+notice_line+notice_line).encode())
+elif mode=='tail_stderr':
+    os.write(1,(line+notice_line[:-1]).encode())
     os.write(2,b'x'*8192)
     os.write(1,b'\\n')
 elif mode=='tail_notification':
-    os.write(1,(line+json.dumps({'method':'unexpected/notification','params':{}})+'\\n').encode())
+    os.write(1,(line+notice_line+json.dumps({'method':'unexpected/notification','params':{}})+'\\n').encode())
 else:
-    os.write(1,(line+line if mode in ('duplicate_response','tail_duplicate') else line).encode())
+    os.write(1,(line+notice_line+line if mode in ('duplicate_response','tail_duplicate') else line+notice_line).encode())
 time.sleep(60)
 '''
     def launch(arguments, **kwargs):

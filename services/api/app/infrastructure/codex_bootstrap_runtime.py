@@ -28,7 +28,7 @@ from ..codex_bootstrap_dto import CodexBootstrapScope
 from ..serialization import canonical_json, content_sha256
 from .codex_probe import ADAPTER_VERSION, CONFIG, PINNED_BYTES, PINNED_SHA256, sealed_binary, _private_directory
 
-PROFILE_VERSION = 'codex-local-control-profile-v2'
+PROFILE_VERSION = 'codex-local-control-profile-v3'
 MODEL = 'gpt-5.4'
 WALL_SECONDS, OUTPUT_BYTES, REAP_SECONDS = 8, 65536, 2
 RESOURCES = {'wall_seconds': WALL_SECONDS, 'cpu_seconds': 5, 'address_space_bytes': 2 * 1024**3,
@@ -43,11 +43,18 @@ HISTORICAL_RESOURCES = {'wall_seconds': 8, 'cpu_seconds': 5, 'address_space_byte
 PROFILE_DEFINITIONS = {
     'codex-local-control-profile-v1': HISTORICAL_RESOURCES,
     'codex-local-control-profile-v2': {**HISTORICAL_RESOURCES, 'parent_death': 'SIGKILL-before-fence-and-exec'},
+    'codex-local-control-profile-v3': {**HISTORICAL_RESOURCES, 'parent_death': 'SIGKILL-before-fence-and-exec'},
 }
 HISTORICAL_CONFIG_SHA256 = 'bff46532b53a7592511dbe2a39bdcf39eae764cd7b12b6f66f2ca8c3bcb621e3'
 HISTORICAL_SCHEMAS = {'ThreadStartParams.json': 'e9c6d3cc18d049bfbc0249add3808fb8e5a27e1a0b5a423767aafbc3859a9428',
                  'ThreadStartResponse.json': '70d9c9a3a064edb76662ec7cd066d142ed9252b768272bc3a7d00788386755c0'}
-SCHEMA_HASHES = dict(HISTORICAL_SCHEMAS)
+CONTROL_SCHEMAS_V3 = {
+    'experimental/ThreadStartParams.json': '80a40a7fac15b4bf70efb7f893fb353acc0a0d30c68f54aee4f01923deca85de',
+    'experimental/ThreadStartResponse.json': '92f5ddc37717b922de1dc0b0405e9a6d463f370554e2091610c6e595bc2616d4',
+    'experimental/ThreadStartedNotification.json': 'f4c4acf11b4a71d72c19678583df1b5639561434b5156b12657951cda25cf0d1',
+    'experimental/ServerNotification.json': '28a42039eee1c3f45c92b6cf07111bacf6de2716f4d3365ff53ad65507fef00c',
+}
+SCHEMA_HASHES = dict(CONTROL_SCHEMAS_V3)
 LAUNCHER_PREFIX = ('import ctypes, os, signal\n'
     'control_parent = os.getppid()\n'
     'if ctypes.CDLL(None, use_errno=True).prctl(1, signal.SIGKILL, 0, 0, 0) != 0:\n'
@@ -112,6 +119,14 @@ def _directory_binding(path: Path) -> dict:
     if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
         raise unavailable()
     return {'path': str(path), 'device': info.st_dev, 'inode': info.st_ino, 'uid': info.st_uid, 'mode': stat.S_IMODE(info.st_mode)}
+
+
+def _schema(profile: dict, name: str) -> dict:
+    relative = ('experimental/' if profile['version'] == 'codex-local-control-profile-v3' else '') + name
+    raw = _read_regular(Path(__file__).with_name('codex_protocol') / relative, 256 * 1024)
+    if sha256_bytes(raw) != profile['schemas'][relative]:
+        raise ValueError('The bound control schema changed')
+    return strict_json(raw)
 
 
 def _deployment() -> list[dict]:
@@ -243,10 +258,11 @@ class LocalCodexBootstrapRuntime:
                     'python_executable', 'launcher_source_utf8'}
         legacy = value['version'] == 'codex-local-control-profile-v1'
         required = expected - {'launcher_source_utf8'} | {'launcher'} if legacy else expected
+        schemas = CONTROL_SCHEMAS_V3 if value['version'] == 'codex-local-control-profile-v3' else HISTORICAL_SCHEMAS
         if (set(value) != required or value['version'] not in PROFILE_DEFINITIONS
                 or value['resources'] != PROFILE_DEFINITIONS[value['version']]
                 or not isinstance(value['config_utf8'], str)
-                or sha256_bytes(value['config_utf8'].encode()) != HISTORICAL_CONFIG_SHA256 or value['schemas'] != HISTORICAL_SCHEMAS
+                or sha256_bytes(value['config_utf8'].encode()) != HISTORICAL_CONFIG_SHA256 or value['schemas'] != schemas
                 or value['expected_binary'] != {'sha256': '12eb3e81114588aca3b7998f4f19e8997b056aca08e57a7ca7c8a3ec8c652aad', 'size': 289101384}
                 or frozen.scope.sandbox_root_id != 'workspace_default' or frozen.scope.adapter_version != 'codex-cli/0.160.0'
                 or frozen.scope.sandbox_label != '此工作区的隔离 Broker 目录'
@@ -271,7 +287,7 @@ class LocalCodexBootstrapRuntime:
                     or fences[0]['sha256'] != sha256_bytes(source[len(LAUNCHER_PREFIX):].encode())
                     or fences[0]['size'] != len(source[len(LAUNCHER_PREFIX):].encode())):
                 raise ValueError('Missing exact frozen launcher source binding')
-        schema = strict_json(_read_regular(Path(__file__).with_name('codex_protocol') / 'ThreadStartParams.json', 256 * 1024))
+        schema = _schema(value, 'ThreadStartParams.json')
         Draft7Validator(schema).validate(strict_json(value['request_frames_utf8'][2])['params'])
         if frozen.available and (value['binary'] is None or value['binary']['sha256'] != value['expected_binary']['sha256']
                                  or value['binary']['size'] != value['expected_binary']['size'] or value['platform']['landlock_abi'] < 3):
@@ -338,7 +354,7 @@ class LocalCodexBootstrapRuntime:
             with selectors.DefaultSelector() as selector:
                 selector.register(process.stdout, selectors.EVENT_READ, 'stdout')
                 selector.register(process.stderr, selectors.EVENT_READ, 'stderr')
-                def receive(identifier: int) -> object:
+                def receive(identifier: int | None) -> object:
                     nonlocal budget, pending
                     while True:
                         if time.monotonic() >= protocol_deadline:
@@ -346,6 +362,9 @@ class LocalCodexBootstrapRuntime:
                         if b'\n' in pending:
                             line, pending = pending.split(b'\n', 1)
                             value = strict_json(line)
+                            if identifier is None:
+                                self._notification(profile, result, value)
+                                return value
                             if (not isinstance(value, dict) or set(value) != {'id', 'result'}
                                     or type(value['id']) is not int or value['id'] != identifier):
                                 raise ValueError('Unexpected control response')
@@ -384,12 +403,16 @@ class LocalCodexBootstrapRuntime:
                 result = receive(2)
                 self._result(profile, result)
                 assert isinstance(result, dict)
+                notification = receive(None) if profile['version'] == 'codex-local-control-profile-v3' else None
                 if pending:
                     raise ValueError('Unexpected trailing control output')
-                receipt = canonical_json({'version': 'codex-bootstrap-receipt-v1', 'permit_id': permit_id,
+                receipt_record = {'version': 'codex-bootstrap-receipt-v2' if notification else 'codex-bootstrap-receipt-v1', 'permit_id': permit_id,
                     'profile_sha256': frozen.scope.bootstrap_profile_sha256,
                     'frames_sha256': sha256_bytes(''.join(profile['request_frames_utf8']).encode()),
-                    'initialized': initialized, 'result': result})
+                    'initialized': initialized, 'result': result}
+                if notification is not None:
+                    receipt_record['started_notification'] = notification
+                receipt = canonical_json(receipt_record)
                 outcome = BootstrapOutcome(status='ready', thread_id=result['thread']['id'], receipt_json=receipt,
                                            error_code=None, thread_start_attempted=True)
         except Exception:
@@ -450,7 +473,7 @@ class LocalCodexBootstrapRuntime:
 
     @staticmethod
     def _result(profile: dict, value: object) -> None:
-        schema = strict_json(_read_regular(Path(__file__).with_name('codex_protocol') / 'ThreadStartResponse.json', 256 * 1024))
+        schema = _schema(profile, 'ThreadStartResponse.json')
         Draft7Validator(schema).validate(value)
         if not isinstance(value, dict):
             raise ValueError('The result must be an object')
@@ -467,6 +490,25 @@ class LocalCodexBootstrapRuntime:
                 or thread['turns'] != [] or thread['preview'] != '' or thread['status'] != {'type': 'idle'}
                 or not thread['id'] or len(thread['id']) > 240):
             raise ValueError('The result does not match the exact approved control profile')
+        if profile['version'] == 'codex-local-control-profile-v3':
+            permission = value.get('activePermissionProfile')
+            if (not {'activePermissionProfile', 'multiAgentMode', 'runtimeWorkspaceRoots'} <= set(value)
+                    or permission not in (None, {'id': ':read-only'}, {'id': ':read-only', 'extends': None})
+                    or value['multiAgentMode'] != 'explicitRequestOnly'
+                    or value['runtimeWorkspaceRoots'] not in ([], [value['cwd']])):
+                raise ValueError('Unverified additional control metadata')
+
+    @staticmethod
+    def _notification(profile: dict, result: object, value: object) -> None:
+        schema = _schema(profile, 'ServerNotification.json')
+        Draft7Validator(schema).validate(value)
+        if (not isinstance(value, dict) or set(value) - {'method', 'params', 'emittedAtMs'}
+                or value.get('method') != 'thread/started' or not isinstance(value.get('params'), dict)
+                or set(value['params']) != {'thread'} or not isinstance(result, dict)
+                or value['params']['thread'] != result['thread']
+                or 'emittedAtMs' in value and (type(value['emittedAtMs']) is not int or value['emittedAtMs'] < 0)):
+            raise ValueError('The notification is not the one checked empty thread')
+        Draft7Validator(_schema(profile, 'ThreadStartedNotification.json')).validate(value['params'])
 
     def validate_outcome(self, frozen: BootstrapFreeze, permit_id: str, outcome: BootstrapOutcome) -> None:
         BootstrapOutcome.model_validate(outcome.model_dump())
@@ -475,12 +517,18 @@ class LocalCodexBootstrapRuntime:
         assert outcome.receipt_json is not None
         receipt = strict_json(outcome.receipt_json)
         profile = strict_json(frozen.description_json)
-        if (set(receipt) != {'version', 'permit_id', 'profile_sha256', 'frames_sha256', 'initialized', 'result'}
-                or receipt['version'] != 'codex-bootstrap-receipt-v1' or receipt['permit_id'] != permit_id
+        current = profile['version'] == 'codex-local-control-profile-v3'
+        required = {'version', 'permit_id', 'profile_sha256', 'frames_sha256', 'initialized', 'result'}
+        if current:
+            required.add('started_notification')
+        if (set(receipt) != required
+                or receipt['version'] != ('codex-bootstrap-receipt-v2' if current else 'codex-bootstrap-receipt-v1') or receipt['permit_id'] != permit_id
                 or receipt['profile_sha256'] != frozen.scope.bootstrap_profile_sha256
                 or receipt['frames_sha256'] != sha256_bytes(''.join(profile['request_frames_utf8']).encode())):
             raise ValueError('The receipt is not bound to the original control instance')
         self._initialized(profile, receipt['initialized'])
         self._result(profile, receipt['result'])
+        if current:
+            self._notification(profile, receipt['result'], receipt['started_notification'])
         if outcome.thread_id != receipt['result']['thread']['id']:
             raise ValueError('The saved external mapping does not match its receipt')
