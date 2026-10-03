@@ -1,0 +1,25 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_restored_root_is_changed_without_reading_old_directory_or_creating_new_one _
+tests/unit/test_codex_bootstrap_freeze.py:89: in test_restored_root_is_changed_without_reading_old_directory_or_creating_new_one
+    assert runtime.validity(original) == 'changed'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+services/api/app/infrastructure/codex_bootstrap_runtime.py:261: in validity
+    info = Path(directory['path']).lstat()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/unit/test_codex_bootstrap_freeze.py:86: in guarded_lstat
+    assert not path.is_relative_to(tmp_path / 'original'), 'read a different restored workspace root'
+E   AssertionError: read a different restored workspace root
+E   assert not True
+E    +  where True = is_relative_to((PosixPath('$HOME/.cache/learning-workbench-acceptance/m63-local-session-bootstrap-evidence-oct03/private-temp/24/test_restored_root_is_changed_0') / 'original'))
+E    +    where is_relative_to = PosixPath('$HOME/.cache/learning-workbench-acceptance/m63-local-session-bootstrap-evidence-oct03/private-temp/24/test_restored_root_is_changed_0/original').is_relative_to
+_____ test_historical_decode_does_not_use_current_admission_configuration ______
+tests/unit/test_codex_bootstrap_freeze.py:100: in test_historical_decode_does_not_use_current_admission_configuration
+    runtime.validate_frozen(original)
+services/api/app/infrastructure/codex_bootstrap_runtime.py:244: in validate_frozen
+    raise ValueError('Frozen control profile is invalid')
+E   ValueError: Frozen control profile is invalid
+=========================== short test summary info ============================
+FAILED tests/unit/test_codex_bootstrap_freeze.py::test_restored_root_is_changed_without_reading_old_directory_or_creating_new_one
+FAILED tests/unit/test_codex_bootstrap_freeze.py::test_historical_decode_does_not_use_current_admission_configuration
+2 failed, 4 deselected in 0.45s
