@@ -3201,6 +3201,97 @@
         "title": "Citation",
         "type": "object"
       },
+      "CodexCapabilities": {
+        "additionalProperties": false,
+        "properties": {
+          "adapter_version": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adapter Version"
+          },
+          "authorized": {
+            "title": "Authorized",
+            "type": "boolean"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/CodexFeatures"
+          },
+          "sandbox_roots": {
+            "items": {
+              "$ref": "#/components/schemas/CodexSandboxRoot"
+            },
+            "title": "Sandbox Roots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "available",
+          "authorized",
+          "adapter_version",
+          "sandbox_roots",
+          "capabilities"
+        ],
+        "title": "CodexCapabilities",
+        "type": "object"
+      },
+      "CodexFeatures": {
+        "additionalProperties": false,
+        "properties": {
+          "approvals": {
+            "title": "Approvals",
+            "type": "boolean"
+          },
+          "artifacts": {
+            "title": "Artifacts",
+            "type": "boolean"
+          },
+          "interrupt": {
+            "title": "Interrupt",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "approvals",
+          "interrupt",
+          "artifacts"
+        ],
+        "title": "CodexFeatures",
+        "type": "object"
+      },
+      "CodexSandboxRoot": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "CodexSandboxRoot",
+        "type": "object"
+      },
       "Concept": {
         "additionalProperties": false,
         "properties": {
@@ -19359,6 +19450,142 @@
         "summary": "Body",
         "tags": [
           "content"
+        ]
+      }
+    },
+    "/api/v1/codex/capabilities": {
+      "get": {
+        "operationId": "capabilities_api_v1_codex_capabilities_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexCapabilities"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Capabilities",
+        "tags": [
+          "codex"
         ]
       }
     },

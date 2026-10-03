@@ -22,6 +22,7 @@ class Settings:
     ui_origin: str | None = None
     migrations_dir: Path = REPOSITORY_ROOT / "migrations"
     static_dir: Path = REPOSITORY_ROOT / "apps/web/dist"
+    codex_executable: Path | None = None
     session_seconds: int = 43200
     bootstrap_seconds: int = 120
     recommendation_review_after_days: int = 3
@@ -94,6 +95,7 @@ class Settings:
         return cls(
             data_dir=Path(os.environ.get("LEARNING_DATA_DIR", default_data_dir())),
             host=os.environ.get("LEARNING_HOST", "127.0.0.1"),
+            codex_executable=Path(os.environ["LEARNING_CODEX_EXECUTABLE"]) if os.environ.get("LEARNING_CODEX_EXECUTABLE") else None,
             port=int(os.environ.get("LEARNING_PORT", "8765")),
             ui_origin=os.environ.get("LEARNING_UI_ORIGIN") or None,
             recommendation_review_after_days=int(os.environ.get("LEARNING_RECOMMENDATION_REVIEW_AFTER_DAYS", "3")),

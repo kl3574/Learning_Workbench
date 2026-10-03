@@ -520,6 +520,25 @@ export type Citation = {
   "verification": "verified" | "unverified" | "user_supplied";
 };
 
+export type CodexCapabilities = {
+  "available": boolean;
+  "authorized": boolean;
+  "adapter_version": (string | null);
+  "sandbox_roots": Array<CodexSandboxRoot>;
+  "capabilities": CodexFeatures;
+};
+
+export type CodexFeatures = {
+  "approvals": boolean;
+  "interrupt": boolean;
+  "artifacts": boolean;
+};
+
+export type CodexSandboxRoot = {
+  "id": string;
+  "label": string;
+};
+
 export type Concept = {
   "schema_version"?: "3.0.0";
   "id": string;
