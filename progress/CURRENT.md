@@ -2,7 +2,7 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-03T13:25:18Z；规范 SHA-256：`bed7c924955512ec4a6775812c80e6c5ce82e968f19feb403e568099f8dc4144`
+更新：2026-10-03T13:36:33Z；规范 SHA-256：`bed7c924955512ec4a6775812c80e6c5ce82e968f19feb403e568099f8dc4144`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED_PR55_ISSUE31_CONCEPTS_PUSHED_NEW_CI_OBSERVED
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
@@ -285,6 +285,7 @@
 - M6.3_bootstrap_root_dto_gate: {'head': 'f1c1cd65cb2e3bc3e44f206c69f3690ae4a7327f', 'result': '34PASS/0.08s pytest;exit0', 'runner_duration_seconds': 1.887, 'tracked_inputs': 1349, 'before_after_git_match': True, 'evidence': 'progress/evidence/2026-10-03/M6.3-bootstrap-root-dto-contract/REPORT.json', 'scope': 'DTO only; no actual new session/thread'}
 - M6.3-bootstrap-ui-5d07: 1037PASS/145files; strict/build849PASS;1369 complete Git inputs +63 explicit evidence independently read back. Backend366 intermediate; actual new native/threadNOT_RUN.
 - M6.3-bootstrap-backup-c73: 4PASS/2existingwarnings, realbackupCLI syntheticCodexowner;1374 Git inputs unchanged. Oldactor/8Codex tables intact; oldcookie401, newactor cannot consume/decide original authority. No actualCodex/fullrestore acceptance.
+- M6.3-bootstrap-root-focused-852: 217PASS/2existingwarnings; actual root combinationdec36,1376 inputs sameGit/unchanged. Synthetic control/realHTTP+backupCLI only; no actualCodex/native. Final upstream schema correction pending.
 
 ## 阻塞与待决项
 
