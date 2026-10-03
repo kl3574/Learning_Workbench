@@ -11,6 +11,9 @@ from services.api.app.application.codex_bootstrap_models import BootstrapFreeze,
 from services.api.app.codex_bootstrap_dto import CodexBootstrapScope
 from services.api.app.serialization import canonical_json, content_sha256
 from packages.contracts.canonical import strict_json
+from tests.integration.test_assessment_learning_port import assessment_learning_state
+
+assessment_state = assessment_learning_state
 
 
 @dataclass
@@ -249,4 +252,178 @@ def test_incomplete_history_cannot_replay_or_repair(controlled_case, table, mode
     before = case.dump()
     assert case.get('session-preparations/' + original['id']).status_code == 409
     assert case.post('sessions', body, 'one').status_code == 409
+    assert case.dump() == before and len(runtime.calls) == 1
+
+
+def test_concurrent_original_command_and_recovery_observe_one_live_instance(controlled_case):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    case, runtime = controlled_case
+    original, _, body = approve(case)
+    entered, release = Event(), Event()
+    def hold():
+        entered.set()
+        assert release.wait(5)
+    runtime.after_start = hold
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        pending = pool.submit(case.post, 'sessions', body, 'original')
+        try:
+            assert entered.wait(3)
+            current = case.get('session-preparations/' + original['id']).json()
+            assert current['status'] == 'consumed'
+            assert case.get('sessions/' + current['session_id']).json()['status'] == 'initializing'
+            before = case.dump()
+            locks = sorted((case.app.state.settings.data_dir / 'codex-control-owners').iterdir())
+            assert case.post('sessions', body, 'original').json()['error']['code'] == 'CODEX_SESSION_INITIALIZING'
+            assert case.post('sessions', body, 'different').status_code == 409
+            assert sorted((case.app.state.settings.data_dir / 'codex-control-owners').iterdir()) == locks
+            restarted = create_app(case.app.state.settings, codex_bootstrap_runtime=runtime)
+            assert restarted.state.codex_bootstrap_service.recover(case.app.state.database.workspace_id()) == 0
+            assert case.dump() == before and len(runtime.calls) == 1
+        finally:
+            release.set()
+        assert pending.result().status_code == 201
+    assert case.post('sessions', body, 'original').status_code == 201 and len(runtime.calls) == 1
+
+
+@pytest.mark.parametrize('phase', ['consume', 'result'])
+def test_transaction_failure_never_partially_consumes_or_repeats_started_operation(controlled_case, monkeypatch, phase):
+    import sqlite3
+    from services.api.app.infrastructure.codex_bootstrap_repository import CodexBootstrapRepository
+    case, runtime = controlled_case
+    original, _, body = approve(case)
+    real = CodexBootstrapRepository.project_session
+    def failing(self, snapshot, consumed, finished):
+        real(self, snapshot, consumed, finished)
+        if (phase == 'consume') == (finished is None):
+            raise sqlite3.OperationalError('synthetic fault after owner projection')
+    before = case.dump()
+    monkeypatch.setattr(CodexBootstrapRepository, 'project_session', failing)
+    response = case.post('sessions', body, 'original')
+    assert response.status_code == 503
+    monkeypatch.setattr(CodexBootstrapRepository, 'project_session', real)
+    if phase == 'consume':
+        assert runtime.calls == [] and case.dump() == before
+        assert case.post('sessions', body, 'original').status_code == 201 and len(runtime.calls) == 1
+    else:
+        assert len(runtime.calls) == 1
+        current = case.get('session-preparations/' + original['id']).json()
+        assert current['status'] == 'consumed' and current['session_id'] is not None
+        before_get = case.dump()
+        assert case.get('sessions/' + current['session_id']).json()['status'] == 'initializing'
+        assert case.dump() == before_get
+        # Explicit lifecycle recovery, never a read side effect or second CLI.
+        restarted = create_app(case.app.state.settings, codex_bootstrap_runtime=runtime)
+        assert restarted.state.codex_bootstrap_service.recover(case.app.state.database.workspace_id()) == 1
+        assert case.get('sessions/' + current['session_id']).json()['status'] == 'unknown'
+        assert case.post('sessions', body, 'original').json()['error']['code'] == 'CODEX_SESSION_OUTCOME_UNKNOWN'
+        assert restarted.state.codex_bootstrap_service.recover(case.app.state.database.workspace_id()) == 0
+        assert len(runtime.calls) == 1
+
+
+@pytest.mark.parametrize('validity', ['changed', 'unavailable', 'expired'])
+def test_derived_current_validity_never_rewrites_original_approval(controlled_case, monkeypatch, validity):
+    from datetime import datetime, timedelta
+    from services.api.app.application import codex_bootstrap
+    from services.api.app.infrastructure import codex_bootstrap_repository
+    case, runtime = controlled_case
+    original, decision, body = approve(case)
+    if validity == 'expired':
+        later = (datetime.fromisoformat(original['expires_at']) + timedelta(seconds=1)).isoformat().replace('+00:00', 'Z')
+        monkeypatch.setattr(codex_bootstrap, 'utc_now', lambda: later)
+        monkeypatch.setattr(codex_bootstrap_repository, 'utc_now', lambda: later)
+    else:
+        runtime.current = validity
+    before = case.dump()
+    path = 'session-preparations/' + original['id']
+    assert case.get(path).json()['validity'] == validity
+    replay = case.post(path + '/decision', {'expected_revision': 1, 'operation_sha256': original['operation_sha256'],
+                                          'decision': 'approve_once'}, 'decision-one')
+    assert replay.status_code == 200 and replay.json() == decision
+    assert case.post('session-preparations', {'sandbox_root_id': 'workspace_default', 'allowed_actions': []}, 'prepare-one').json() == original
+    assert case.post('sessions', body, 'not-current').status_code == 409
+    assert case.dump() == before and runtime.calls == []
+    assert not (case.app.state.settings.data_dir / 'codex-control-owners').exists()
+
+
+def test_new_actor_can_read_metadata_but_cannot_take_over_an_old_grant(controlled_case):
+    case, runtime = controlled_case
+    original, _, body = approve(case)
+    bootstrap = case.client.post('/api/v1/session/bootstrap', json={'one_time_code': issue_bootstrap_code(case.app.state.database)},
+                                headers={'Origin': case.headers['Origin']})
+    case.headers['X-CSRF-Token'] = bootstrap.json()['csrf_token']
+    assert case.client.post('/api/v1/session/role', json={'role': 'author'},
+        headers={**case.headers, 'Idempotency-Key': 'new-actor-author'}).status_code == 200
+    current_actor = case.client.get('/api/v1/session').json()['actor_session_id']
+    assert current_actor != original['actor_session_id']
+    path = 'session-preparations/' + original['id']
+    before = case.dump()
+    assert case.get(path).json()['actor_session_id'] == original['actor_session_id']
+    assert case.post(path + '/decision', {'expected_revision': 1, 'operation_sha256': original['operation_sha256'],
+        'decision': 'approve_once'}, 'decision-one').status_code == 409
+    assert case.post('sessions', body, 'new-actor').status_code == 409
+    assert case.dump() == before and runtime.calls == []
+
+
+@pytest.mark.parametrize('query', ['?x=1', '?x=1&x=2'])
+def test_both_control_gets_reject_queries_and_body_without_side_effects(controlled_case, query):
+    case, runtime = controlled_case
+    original, _, body = approve(case)
+    session = case.post('sessions', body, 'one').json()
+    before = case.dump()
+    for path in ('session-preparations/' + original['id'], 'sessions/' + session['id']):
+        assert case.get(path + query).status_code == 422
+        assert case.client.request('GET', '/api/v1/codex/' + path, content='{}').status_code == 422
+    assert case.dump() == before and len(runtime.calls) == 1
+
+
+@pytest.mark.parametrize('mode', ['independent', 'open_book'])
+def test_real_workspace_policy_change_after_start_preserves_fact_but_gates_every_write(assessment_state, mode):
+    from tests.integration.test_assessment_policy import start
+    from services.api.app.infrastructure.security import SessionIdentity
+    database, _, fixture, assessment = assessment_state
+    runtime = ControlledRuntime()
+    case = make_case(database.settings.data_dir, codex_bootstrap_runtime=runtime)
+    original, decision, body = approve(case)
+    pending = case.post('session-preparations', {'sandbox_root_id': 'workspace_default', 'allowed_actions': []}, 'pending').json()
+    identity = SessionIdentity(case.actor_id, database.workspace_id(), 'author', '', '2099-01-01T00:00:00Z')
+    runtime.after_start = lambda: start((database, identity, fixture, assessment), mode=mode)
+    denied = case.post('sessions', body, 'session-original')
+    assert denied.status_code == 409 and denied.json()['error']['code'] == 'ASSESSMENT_ACTIVE'
+    assert len(runtime.calls) == 1
+    before = case.dump()
+    path = 'session-preparations/' + original['id']
+    current = case.get(path)
+    assert current.status_code == 200 and current.json()['status'] == 'consumed'
+    read = case.get('sessions/' + current.json()['session_id'])
+    assert read.status_code == 200 and read.json()['status'] == 'ready'
+    assert case.post('sessions', body, 'session-original').status_code == 409
+    assert case.post('session-preparations', {'sandbox_root_id': 'workspace_default', 'allowed_actions': []}, 'blocked').status_code == 409
+    assert case.post('session-preparations/' + pending['id'] + '/decision', {
+        'expected_revision': 1, 'operation_sha256': pending['operation_sha256'], 'decision': 'decline'}, 'blocked-decline').status_code == 409
+    assert case.post(path + '/decision', {'expected_revision': 1, 'operation_sha256': decision['operation_sha256'],
+        'decision': 'approve_once'}, 'decision-one').status_code == 409
+    assert case.dump() == before and len(runtime.calls) == 1
+
+
+def test_cross_workspace_control_ids_and_grants_never_establish_authority(controlled_case):
+    case, runtime = controlled_case
+    original, _, body = approve(case)
+    assert case.post('sessions', body, 'first').status_code == 201
+    session = case.get('session-preparations/' + original['id']).json()['session_id']
+    # A second synthetic local actor is assigned to a distinct synthetic
+    # workspace. No real workspace or credential is accessed by this fixture.
+    bootstrap = case.client.post('/api/v1/session/bootstrap', json={'one_time_code': issue_bootstrap_code(case.app.state.database)},
+        headers={'Origin': case.headers['Origin']})
+    case.headers['X-CSRF-Token'] = bootstrap.json()['csrf_token']
+    other_actor = case.client.get('/api/v1/session').json()['actor_session_id']
+    with case.app.state.database.transaction() as connection:
+        connection.execute("INSERT INTO workspace(id,title,created_at) VALUES('workspace_other','Synthetic other','2026-01-01T00:00:00Z')")
+        connection.execute("UPDATE local_sessions SET workspace_id='workspace_other',role='author' WHERE id=?", (other_actor,))
+    before = case.dump()
+    assert case.get('session-preparations/' + original['id']).status_code == 404
+    assert case.get('sessions/' + session).status_code == 404
+    assert case.post('sessions', body, 'cross-workspace').status_code == 409
+    assert case.post('session-preparations/' + original['id'] + '/decision', {
+        'expected_revision': 1, 'operation_sha256': original['operation_sha256'], 'decision': 'approve_once'}, 'cross-workspace').status_code == 404
     assert case.dump() == before and len(runtime.calls) == 1

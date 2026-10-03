@@ -28,14 +28,32 @@ from ..codex_bootstrap_dto import CodexBootstrapScope
 from ..serialization import canonical_json, content_sha256
 from .codex_probe import ADAPTER_VERSION, CONFIG, PINNED_BYTES, PINNED_SHA256, sealed_binary, _private_directory
 
-PROFILE_VERSION = 'codex-local-control-profile-v1'
+PROFILE_VERSION = 'codex-local-control-profile-v2'
 MODEL = 'gpt-5.4'
 WALL_SECONDS, OUTPUT_BYTES, REAP_SECONDS = 8, 65536, 2
 RESOURCES = {'wall_seconds': WALL_SECONDS, 'cpu_seconds': 5, 'address_space_bytes': 2 * 1024**3,
              'file_size_bytes': 16 * 1024**2, 'descriptors': 128, 'core_bytes': 0,
-             'combined_output_bytes': OUTPUT_BYTES, 'cleanup': 'SIGKILL-owned-group-wait-close-pipes', 'reap_seconds': REAP_SECONDS}
-SCHEMA_HASHES = {'ThreadStartParams.json': 'e9c6d3cc18d049bfbc0249add3808fb8e5a27e1a0b5a423767aafbc3859a9428',
+             'combined_output_bytes': OUTPUT_BYTES, 'cleanup': 'SIGKILL-owned-group-wait-close-pipes', 'reap_seconds': REAP_SECONDS,
+             'parent_death': 'SIGKILL-before-fence-and-exec'}
+# Historical decoders are deliberately independent from current admission
+# settings. A future profile adds a decoder; it must not reinterpret old ACKs.
+HISTORICAL_RESOURCES = {'wall_seconds': 8, 'cpu_seconds': 5, 'address_space_bytes': 2147483648,
+    'file_size_bytes': 16777216, 'descriptors': 128, 'core_bytes': 0, 'combined_output_bytes': 65536,
+    'cleanup': 'SIGKILL-owned-group-wait-close-pipes', 'reap_seconds': 2}
+PROFILE_DEFINITIONS = {
+    'codex-local-control-profile-v1': HISTORICAL_RESOURCES,
+    'codex-local-control-profile-v2': {**HISTORICAL_RESOURCES, 'parent_death': 'SIGKILL-before-fence-and-exec'},
+}
+HISTORICAL_CONFIG_SHA256 = 'bff46532b53a7592511dbe2a39bdcf39eae764cd7b12b6f66f2ca8c3bcb621e3'
+HISTORICAL_SCHEMAS = {'ThreadStartParams.json': 'e9c6d3cc18d049bfbc0249add3808fb8e5a27e1a0b5a423767aafbc3859a9428',
                  'ThreadStartResponse.json': '70d9c9a3a064edb76662ec7cd066d142ed9252b768272bc3a7d00788386755c0'}
+SCHEMA_HASHES = dict(HISTORICAL_SCHEMAS)
+LAUNCHER_PREFIX = ('import ctypes, os, signal\n'
+    'control_parent = os.getppid()\n'
+    'if ctypes.CDLL(None, use_errno=True).prctl(1, signal.SIGKILL, 0, 0, 0) != 0:\n'
+    '    raise SystemExit(126)\n'
+    'if os.getppid() != control_parent:\n'
+    '    raise SystemExit(126)\n')
 
 
 def unavailable() -> ApiError:
@@ -61,7 +79,7 @@ def _member(path: Path, maximum: int = 32 * 1024**2) -> dict:
     return {'path': str(path), 'size': len(raw), 'sha256': sha256_bytes(raw)}
 
 
-def _frames(broker: Path) -> list[str]:
+def _frames(broker: Path, model: str = 'gpt-5.4') -> list[str]:
     messages = [
         {'id': 1, 'method': 'initialize', 'params': {'clientInfo': {'name': 'learning_workbench_bootstrap', 'version': '0.1.0'},
             'capabilities': {'experimentalApi': False, 'explicitGatewayOauth': True,
@@ -69,17 +87,24 @@ def _frames(broker: Path) -> list[str]:
         {'method': 'initialized', 'params': {}},
         {'id': 2, 'method': 'thread/start', 'params': {'approvalPolicy': 'never', 'approvalsReviewer': 'user',
             'baseInstructions': '', 'developerInstructions': '', 'config': {}, 'cwd': str(broker / 'workspace'),
-            'ephemeral': False, 'model': MODEL, 'modelProvider': 'openai', 'personality': 'none',
+            'ephemeral': False, 'model': model, 'modelProvider': 'openai', 'personality': 'none',
             'sandbox': 'read-only', 'serviceName': None, 'serviceTier': None, 'sessionStartSource': None, 'threadSource': None}},
     ]
     return [(canonical_bytes(message) + b'\n').decode() for message in messages]
 
 
 def _environment(broker: Path) -> dict[str, str]:
-    return {'PATH': os.defpath, 'HOME': str(broker / 'os-home'), 'CODEX_HOME': str(broker / 'home'),
+    return {'PATH': '/bin:/usr/bin', 'HOME': str(broker / 'os-home'), 'CODEX_HOME': str(broker / 'home'),
             'XDG_CONFIG_HOME': str(broker / 'os-home'), 'XDG_CACHE_HOME': str(broker / 'os-home'),
             'XDG_DATA_HOME': str(broker / 'os-home'), 'TMPDIR': str(broker / 'tmp'),
             'LANG': 'C.UTF-8', 'TOKIO_WORKER_THREADS': '2'}
+
+
+def _launcher_source() -> str:
+    # Execute these exact frozen source bytes with -c. Replacing a launcher file
+    # after approval cannot redirect the pre-exec fence. Parent loss terminates
+    # the one child; restart recovery never treats a missing process as unused.
+    return LAUNCHER_PREFIX + _read_regular(Path(__file__).with_name('codex_probe_isolation.py'), 64 * 1024).decode()
 
 
 def _directory_binding(path: Path) -> dict:
@@ -149,7 +174,7 @@ def _deployment() -> list[dict]:
 
 class LocalCodexBootstrapRuntime:
     def __init__(self, data_directory: Path, executable: Path | None = None):
-        self.data_directory, self.executable = data_directory, executable
+        self.data_directory, self.executable = data_directory.resolve(), executable
 
     def _description(self, *, create: bool) -> tuple[dict, bool]:
         broker = self.data_directory / 'codex-broker'
@@ -187,10 +212,10 @@ class LocalCodexBootstrapRuntime:
             'expected_binary': {'sha256': PINNED_SHA256, 'size': PINNED_BYTES},
             'broker_root': str(broker), 'directories': bindings, 'config_utf8': config.decode(),
             'config_mode': stat.S_IMODE(config_info.st_mode), 'config_uid': config_info.st_uid,
-            'environment': _environment(broker), 'request_frames_utf8': _frames(broker), 'resources': RESOURCES,
+            'environment': _environment(broker), 'request_frames_utf8': _frames(broker, MODEL), 'resources': RESOURCES,
             'schemas': schemas, 'deployment': _deployment(), 'platform': {'system': sys.platform, 'machine': platform.machine(),
             'kernel': platform.release(), 'landlock_abi': abi}, 'python_executable': str(Path(sys.executable).resolve()),
-            'launcher': str(Path(__file__).with_name('codex_probe_isolation.py'))}
+            'launcher_source_utf8': _launcher_source()}
         available = (binary is not None and binary['sha256'] == PINNED_SHA256 and binary['size'] == PINNED_BYTES
                      and abi >= 3 and sys.platform == 'linux' and platform.machine() == 'x86_64')
         return description, available
@@ -215,25 +240,52 @@ class LocalCodexBootstrapRuntime:
         value = strict_json(frozen.description_json)
         expected = {'version', 'binary', 'expected_binary', 'broker_root', 'directories', 'config_utf8', 'config_mode',
                     'config_uid', 'environment', 'request_frames_utf8', 'resources', 'schemas', 'deployment', 'platform',
-                    'python_executable', 'launcher'}
-        if (set(value) != expected or value['version'] != PROFILE_VERSION or value['resources'] != RESOURCES
-                or value['config_utf8'] != CONFIG.decode() or value['schemas'] != SCHEMA_HASHES
-                or value['expected_binary'] != {'sha256': PINNED_SHA256, 'size': PINNED_BYTES}
-                or frozen.scope.sandbox_root_id != 'workspace_default' or frozen.scope.adapter_version != ADAPTER_VERSION
+                    'python_executable', 'launcher_source_utf8'}
+        legacy = value['version'] == 'codex-local-control-profile-v1'
+        required = expected - {'launcher_source_utf8'} | {'launcher'} if legacy else expected
+        if (set(value) != required or value['version'] not in PROFILE_DEFINITIONS
+                or value['resources'] != PROFILE_DEFINITIONS[value['version']]
+                or not isinstance(value['config_utf8'], str)
+                or sha256_bytes(value['config_utf8'].encode()) != HISTORICAL_CONFIG_SHA256 or value['schemas'] != HISTORICAL_SCHEMAS
+                or value['expected_binary'] != {'sha256': '12eb3e81114588aca3b7998f4f19e8997b056aca08e57a7ca7c8a3ec8c652aad', 'size': 289101384}
+                or frozen.scope.sandbox_root_id != 'workspace_default' or frozen.scope.adapter_version != 'codex-cli/0.160.0'
                 or frozen.scope.sandbox_label != '此工作区的隔离 Broker 目录'
                 or value['environment'] != _environment(Path(value['broker_root']))
                 or value['request_frames_utf8'] != _frames(Path(value['broker_root']))):
             raise ValueError('Frozen control profile is invalid')
+        # v1 remains a readable historical record. It is never silently upgraded
+        # or used with v2's changed launcher: current eligibility compares the
+        # complete description and therefore requires a new preparation.
+        members = value['deployment']
+        if (not isinstance(members, list) or not members or any(not isinstance(member, dict)
+                or set(member) != {'path', 'size', 'sha256'} or not isinstance(member['path'], str)
+                or not Path(member['path']).is_absolute() or type(member['size']) is not int or member['size'] < 0
+                or not isinstance(member['sha256'], str) or len(member['sha256']) != 64
+                or any(character not in '0123456789abcdef' for character in member['sha256']) for member in members)
+                or len({member['path'] for member in members}) != len(members)):
+            raise ValueError('Invalid frozen deployment members')
+        if not legacy:
+            source = value['launcher_source_utf8']
+            fences = [member for member in members if Path(member['path']).name == 'codex_probe_isolation.py']
+            if (not isinstance(source, str) or not source.startswith(LAUNCHER_PREFIX) or len(fences) != 1
+                    or fences[0]['sha256'] != sha256_bytes(source[len(LAUNCHER_PREFIX):].encode())
+                    or fences[0]['size'] != len(source[len(LAUNCHER_PREFIX):].encode())):
+                raise ValueError('Missing exact frozen launcher source binding')
         schema = strict_json(_read_regular(Path(__file__).with_name('codex_protocol') / 'ThreadStartParams.json', 256 * 1024))
         Draft7Validator(schema).validate(strict_json(value['request_frames_utf8'][2])['params'])
-        if frozen.available and (value['binary'] is None or value['binary']['sha256'] != PINNED_SHA256
-                                 or value['binary']['size'] != PINNED_BYTES or value['platform']['landlock_abi'] < 3):
+        if frozen.available and (value['binary'] is None or value['binary']['sha256'] != value['expected_binary']['sha256']
+                                 or value['binary']['size'] != value['expected_binary']['size'] or value['platform']['landlock_abi'] < 3):
             raise ValueError('Unverified deployment cannot be current')
 
     def validity(self, frozen: BootstrapFreeze) -> Literal['current', 'changed', 'unavailable']:
         self.validate_frozen(frozen)
         try:
             old = strict_json(frozen.description_json)
+            if (old['broker_root'] != str(self.data_directory / 'codex-broker')
+                    or old['version'] != PROFILE_VERSION or old['resources'] != RESOURCES
+                    or old['config_utf8'].encode() != CONFIG or frozen.scope.adapter_version != ADAPTER_VERSION
+                    or old['request_frames_utf8'] != _frames(self.data_directory / 'codex-broker', MODEL)):
+                return 'changed'
             for directory in old['directories']:
                 info = Path(directory['path']).lstat()
                 observed = {'path': directory['path'], 'device': info.st_dev, 'inode': info.st_ino,
@@ -244,7 +296,7 @@ class LocalCodexBootstrapRuntime:
             info = config.lstat()
             if (not stat.S_ISREG(info.st_mode) or info.st_uid != old['config_uid']
                     or stat.S_IMODE(info.st_mode) != old['config_mode']
-                    or _read_regular(config, len(CONFIG) + 1) != old['config_utf8'].encode()):
+                    or _read_regular(config, len(old['config_utf8'].encode()) + 1) != old['config_utf8'].encode()):
                 return 'changed'
             current, available = self._description(create=False)
         except (OSError, ValueError, ApiError):
@@ -271,13 +323,16 @@ class LocalCodexBootstrapRuntime:
 
     def _observe(self, executable: int, frozen: BootstrapFreeze, permit_id: str) -> BootstrapOutcome:
         profile = strict_json(frozen.description_json)
-        process = subprocess.Popen([profile['python_executable'], '-I', '-S', '-B', profile['launcher'],
+        deadline = time.monotonic() + WALL_SECONDS
+        # The total envelope includes process launch and cleanup. Reserve the
+        # bounded reap budget; never use an extra eight seconds after Popen.
+        protocol_deadline = deadline - min(REAP_SECONDS, WALL_SECONDS / 4)
+        process = subprocess.Popen([profile['python_executable'], '-I', '-S', '-B', '-c', profile['launcher_source_utf8'],
             str(executable), profile['broker_root']], cwd=str(Path(profile['broker_root']) / 'workspace'),
             env=profile['environment'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             start_new_session=True, close_fds=True, pass_fds=(executable,))
         assert process.stdin is not None and process.stdout is not None and process.stderr is not None
         started, budget, pending = False, 0, b''
-        deadline = time.monotonic() + WALL_SECONDS
         outcome = None
         try:
             with selectors.DefaultSelector() as selector:
@@ -286,6 +341,8 @@ class LocalCodexBootstrapRuntime:
                 def receive(identifier: int) -> object:
                     nonlocal budget, pending
                     while True:
+                        if time.monotonic() >= protocol_deadline:
+                            raise ValueError('Control deadline exceeded')
                         if b'\n' in pending:
                             line, pending = pending.split(b'\n', 1)
                             value = strict_json(line)
@@ -293,7 +350,7 @@ class LocalCodexBootstrapRuntime:
                                     or type(value['id']) is not int or value['id'] != identifier):
                                 raise ValueError('Unexpected control response')
                             return value['result']
-                        remaining = deadline - time.monotonic()
+                        remaining = protocol_deadline - time.monotonic()
                         if remaining <= 0:
                             raise ValueError('Control deadline exceeded')
                         events = selector.select(remaining)
@@ -311,12 +368,16 @@ class LocalCodexBootstrapRuntime:
                                 raise ValueError('Control output budget exceeded')
                             if selected.data == 'stdout':
                                 pending += chunk
+                if time.monotonic() >= protocol_deadline:
+                    raise ValueError('Control launch exhausted the deadline')
                 process.stdin.write(profile['request_frames_utf8'][0].encode())
                 process.stdin.flush()
                 initialized = receive(1)
                 self._initialized(profile, initialized)
                 process.stdin.write(profile['request_frames_utf8'][1].encode())
                 process.stdin.flush()
+                if time.monotonic() >= protocol_deadline:
+                    raise ValueError('Control deadline exceeded')
                 started = True  # uncertainty begins before the first start byte
                 process.stdin.write(profile['request_frames_utf8'][2].encode())
                 process.stdin.flush()
@@ -335,14 +396,47 @@ class LocalCodexBootstrapRuntime:
             outcome = uncertain_outcome() if started else BootstrapOutcome(status='failed', thread_id=None, receipt_json=None,
                 error_code='CODEX_BOOTSTRAP_UNAVAILABLE', thread_start_attempted=False)
         finally:
+            clean = True
             try:
                 os.killpg(process.pid, signal.SIGKILL)
             except ProcessLookupError:
                 pass
-            process.wait(timeout=REAP_SECONDS)
-            process.stdin.close()
-            process.stdout.close()
-            process.stderr.close()
+            except OSError:
+                clean = False
+            try:
+                process.wait(timeout=max(0.001, min(REAP_SECONDS, deadline - time.monotonic())))
+            except (OSError, subprocess.TimeoutExpired):
+                clean = False
+            try:
+                # Account for bytes already in both pipes at termination,
+                # including split duplicate responses. Never save raw text.
+                for pipe in (process.stdout, process.stderr):
+                    os.set_blocking(pipe.fileno(), False)
+                    while True:
+                        try:
+                            chunk = os.read(pipe.fileno(), 8192)
+                        except BlockingIOError:
+                            clean = False
+                            break
+                        if not chunk:
+                            break
+                        budget += len(chunk)
+                        if pipe is process.stdout or budget > OUTPUT_BYTES:
+                            clean = False
+                        if budget > OUTPUT_BYTES or time.monotonic() > deadline:
+                            clean = False
+                            break
+            except OSError:
+                clean = False
+            finally:
+                for pipe in (process.stdin, process.stdout, process.stderr):
+                    try:
+                        pipe.close()
+                    except OSError:
+                        clean = False
+            if not clean or time.monotonic() > deadline:
+                outcome = uncertain_outcome() if started else BootstrapOutcome(status='failed', thread_id=None,
+                    receipt_json=None, error_code='CODEX_BOOTSTRAP_UNAVAILABLE', thread_start_attempted=False)
         assert outcome is not None
         return outcome
 
@@ -364,7 +458,8 @@ class LocalCodexBootstrapRuntime:
         if (set(value) - set(schema['properties']) or set(thread) - set(schema['definitions']['Thread']['properties'])
                 or value['approvalPolicy'] != 'never' or value['approvalsReviewer'] != 'user'
                 or value['cwd'] != str(Path(profile['broker_root']) / 'workspace')
-                or value['model'] != MODEL or value['modelProvider'] != 'openai'
+                or value['model'] != strict_json(profile['request_frames_utf8'][2])['params']['model']
+                or value['modelProvider'] != 'openai'
                 or value['sandbox'] != {'type': 'readOnly', 'networkAccess': False}
                 or value.get('instructionSources', []) != [] or value.get('disabledPluginIds', []) != []
                 or thread['cwd'] != value['cwd'] or thread['cliVersion'] != '0.160.0'
