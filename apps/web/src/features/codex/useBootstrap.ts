@@ -13,7 +13,13 @@ const denied = (reason: unknown) => reason instanceof ApiError && ([401, 403].in
 export function useBootstrap(workspace: string, writeAdmitted: boolean, port: BootstrapPort = bootstrapClient, store: DraftStore = bootstrapStore) {
  const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
  useSyncExternalStore(subscribeBootstrapMemory, bootstrapMemoryVersion, bootstrapMemoryVersion)
- const owner = JSON.stringify([workspace, access, writeAdmitted]), scope = useRef({ owner, port, store }); scope.current = { owner, port, store }
+ const previousWriteAdmission = useRef(writeAdmitted), writeRevocation = useRef(0)
+ // Safe control reads already admit learners and test-policy readers. Initial
+ // academic admission becoming ready must not cancel an explicit control GET.
+ // A restriction still invalidates every callback and isolates any late ACK.
+ if (previousWriteAdmission.current && !writeAdmitted) ++writeRevocation.current
+ previousWriteAdmission.current = writeAdmitted
+ const owner = JSON.stringify([workspace, access, writeRevocation.current]), scope = useRef({ owner, port, store }); scope.current = { owner, port, store }
  const live = useRef(false), working = useRef(false), sequence = useRef(0), writers = useRef(new Set<AbortController>())
  const [renderScope, setRenderScope] = useState({ owner, port, store }), [identity, setIdentity] = useState<SessionResponse | null>(null)
  const [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState('')
