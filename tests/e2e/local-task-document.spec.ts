@@ -34,6 +34,7 @@ test('native offline task download contains four inputs, keeps the close guard a
     expect(download.suggestedFilename()).toBe('learning-task.md'); expect(await download.failure()).toBeNull()
     const bytes = readFileSync((await download.path())!), text = bytes.toString('utf8')
     expect(text).toBe('# 离线创作需求说明\n\n未连接 Codex。本文件仅包含作者当前输入的四项需求，不含已选材料或其他任务设置；没有创建服务器任务、授权或生成结果。\n\n## 主题\n\n合成离线主题 α\n第二行\n\n## 已声明先修\n\n线性代数\n  原空格\n\n## 学习目标\n\n保持完整证明\n明确边界\n\n## 证明策略\n\nfull（完整证明）\n')
+    writeFileSync(info.outputPath('offline-task-synthetic.md'), bytes)
     expect(text).not.toContain('provider_omitted_synthetic'); expect(text).not.toContain('block_omitted_synthetic'); expect(text).not.toContain('a'.repeat(64))
     await expect(dialog.getByText(/已交给浏览器下载；临时表单仍未保存到服务器/)).toBeVisible()
     const downloadCalls = [...calls]
@@ -43,7 +44,9 @@ test('native offline task download contains four inputs, keeps the close guard a
     await dialog.getByRole('button', { name: '关闭创作', exact: true }).click()
     const guard = page.getByRole('dialog', { name: '保留创作原命令', exact: true })
     await expect(guard).toBeVisible(); await guard.getByRole('button', { name: '返回创作', exact: true }).click()
-    await expect(dialog.getByLabel('例题主题', { exact: true })).toHaveValue('合成离线主题 α\n第二行')
+    // React mirrors controlled textarea content into its implicit label DOM text;
+    // use the unchanged exact accessible textbox name for filled-value readback.
+    await expect(dialog.getByRole('textbox', { name: '例题主题', exact: true })).toHaveValue('合成离线主题 α\n第二行')
     // Change the real server role without a page reload/broadcast: the existing
     // visible button must independently recheck this new fact before download.
     const session: SessionResponse = await page.request.get('/api/v1/session').then(response => response.json())
@@ -54,10 +57,9 @@ test('native offline task download contains four inputs, keeps the close guard a
     const checked = page.waitForResponse(response => response.request().method() === 'GET' && new URL(response.url()).pathname === '/api/v1/session')
     await button.click(); const denied = await checked
     expect(denied.status()).toBe(200); expect((await denied.json()).role).toBe('learner')
-    await expect(dialog.getByLabel('例题主题', { exact: true })).toHaveCount(0)
+    await expect(dialog.getByRole('textbox', { name: '例题主题', exact: true })).toHaveCount(0)
     expect(downloads).toEqual(['learning-task.md'])
     expect(calls.filter(call => call.method !== 'GET')).toEqual([])
-    writeFileSync(info.outputPath('offline-task-synthetic.md'), bytes)
     writeFileSync(info.outputPath('offline-task-actual.json'), JSON.stringify({
       scope: 'Client-only four-field task document. Not a Codex generation, execution, task identity, artifact import or quality receipt.',
       suggested_filename: download.suggestedFilename(), bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex'),
