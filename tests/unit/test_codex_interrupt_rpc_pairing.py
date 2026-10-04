@@ -481,3 +481,22 @@ def test_local_codec_named_execution_and_owner_storage_seams_are_zero(monkeypatc
     unknown = protocol.observe_interrupt(source, receipt.exchange, b'{"method":"unknown-fixture"}')
     assert unknown.accepted is False
     assert counts == dict(process=0, freeze=0, validity=0, bootstrap=0, probe=0, model_transport=0, secret_read=0, sqlite=0)
+
+
+@pytest.mark.parametrize('kind', ['reply', 'terminal'])
+def test_deep_unknown_object_fields_are_rejected_after_json_parse_without_losing_originals(source, kind):
+    # The parser accepts this bounded JSON object. The decoder must reject its
+    # unknown member even if typed alias/Unicode validation hits its own depth.
+    prefix = (b'{"id":7,"result":{},"extra":' if kind == 'reply' else
+        b'{"method":"turn/completed","params":{"threadId":"t","turn":{"id":"u","items":[],"status":"interrupted"}},"extra":')
+    frame = prefix+b'['*1500+b'0'+b']'*1500+b'}'
+    assert len(frame) < MAX_FRAME_BYTES
+    assert isinstance(json.loads(frame), dict)
+    exchange = protocol.observe_interrupt(source, protocol.prepare_interrupt(source, REQUEST), REPLY).exchange
+    snapshot = exchange.model_dump(by_alias=True)
+    rejected = protocol.observe_interrupt(source, exchange, frame)
+    assert rejected.accepted is False
+    assert rejected.reason == 'unsupported_shape'
+    assert rejected.frame.raw == frame
+    assert rejected.exchange.model_dump(by_alias=True) == snapshot
+    assert exchange.model_dump(by_alias=True) == snapshot
