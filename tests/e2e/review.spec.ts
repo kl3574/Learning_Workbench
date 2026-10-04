@@ -74,18 +74,20 @@ test('real history and exact material review preserve original submitted text, n
   writeFileSync(info.outputPath('actual-review-history.json'), JSON.stringify({ scope: 'original synthetic true upload/worker/manual review/history/Reader/browser reload', grading_revisions: final.history.map(entry => entry.grading_revision), original_history_unchanged: JSON.stringify(first.history[0]) === JSON.stringify(final.history[0]), first_null_scores: first.items.every(item => item.score === null), all_unreviewed_excluded: final.history[1].items.every(item => !item.eligible), selected_revision_after_reload: 1, exact_material_target: target, latest_evidence_count: evidence.items.length, original_submission_preserved: true, runtime_errors: errors }, null, 2))
 })
 
-test('a delayed old review response cannot restore history or academic context after another page starts a real independent attempt', async ({ page }) => {
+test('a delayed old review response cannot restore history or academic context after another page starts a real independent attempt', async ({ page }, info) => {
   const { fixture, attempt } = await start(page, 'reviewnativepolicy'); await submit(page); await manual(page); await grade(page, attempt.id, 2); await page.getByRole('button', { name: '打开本次测试复盘', exact: true }).click(); await expect(page.getByRole('region', { name: '当前评分结果' })).toContainText('评分版本 2'); await expect(page.getByRole('button', { name: '重新读取评分结果', exact: true })).toBeEnabled()
   let release!: () => void, captured!: () => void; const gate = new Promise<void>(resolve => { release = resolve }), ready = new Promise<void>(resolve => { captured = resolve })
   const routePattern = `**/api/v1/attempts/${attempt.id}/result`
   const consumed = await observeNextResponseJson(page, `/api/v1/attempts/${attempt.id}/result`)
-  await page.route(routePattern, async route => { const response = await route.fetch(); captured(); await gate; await route.fulfill({ response }) })
+  const phases: { event: string; invocation?: number; status?: number }[] = []; let invocations = 0
+  const phase = (event: string, invocation?: number, status?: number) => { phases.push({ event, invocation, status }); writeFileSync(info.outputPath('late-response-phases.json'), JSON.stringify(phases)) }
+  await page.route(routePattern, async route => { const invocation = ++invocations; phase('handler-enter', invocation); const response = await route.fetch(); phase('captured', invocation, response.status()); captured(); await gate; phase('fulfill-enter', invocation); try { await route.fulfill({ response }); phase('fulfill-complete', invocation) } catch (error) { phase('fulfill-error', invocation); throw error } })
   await page.getByRole('button', { name: '重新读取评分结果', exact: true }).click(); await ready
   const other = await page.context().newPage()
   try {
     await other.goto(`${new URL(page.url()).origin}/?assessment=${encodeURIComponent(JSON.stringify({ assessment_ref: fixture.assessment, course_ref: fixture.course }))}`)
     await other.getByRole('checkbox', { name: '我已核对内容状态与模式，确认开始未评分测试', exact: true }).check(); await other.getByRole('button', { name: '明确开始本次测试', exact: true }).click(); await expect(other.getByText('独立测试进行中', { exact: true }).first()).toBeVisible()
-    release(); await page.unrouteAll({ behavior: 'wait' }); expect(await consumed.wait()).toEqual({ outcome: 'fulfilled', jsonCalls: 1 }); await expect(page.getByRole('region', { name: '完整评分历史' })).toHaveCount(0); await expect(page.getByText('当前测试复盘上下文', { exact: true })).toHaveCount(0)
+    phase('other-independent-visible'); release(); await page.unrouteAll({ behavior: 'wait' }); phase('handlers-drained'); expect(await consumed.wait()).toEqual({ outcome: 'fulfilled', jsonCalls: 1 }); phase('client-chain-observed'); await expect(page.getByRole('region', { name: '完整评分历史' })).toHaveCount(0); await expect(page.getByText('当前测试复盘上下文', { exact: true })).toHaveCount(0)
     expect((await page.request.get(`/api/v1/attempts/${attempt.id}/result`)).status()).toBe(409)
   } finally { release(); await page.unrouteAll({ behavior: 'wait' }); await consumed.dispose(); await other.close() }
 })
