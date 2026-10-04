@@ -357,3 +357,49 @@ def test_completed_history_and_ack_survive_new_application_empty_registry(consen
         assert unchanged and len(calls) == 1
     finally:
         client.close()
+
+
+def test_concurrent_same_key_approval_has_one_command_and_one_execution(consent_case, monkeypatch):
+    def observe(case, prep, worker, owner, identifier, body, *rest):
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            responses = list(pool.map(lambda _:decision(case, identifier, body), range(2)))
+        assert [response.status_code for response in responses] == [200,200]
+        assert responses[0].content == responses[1].content
+        with case.app.state.database.transaction(immediate=False) as conn:
+            assert conn.execute('SELECT COUNT(*) FROM codex_approval_commands WHERE approval_id=?', (identifier,)).fetchone()[0] == 1
+        worker.execute_operation(identifier)
+    _, _, _, calls = exercise(consent_case, observe, monkeypatch)
+    assert len(calls) == 1
+
+
+def test_multiple_approvals_do_not_reserve_extra_tool_calls(consent_case, monkeypatch):
+    def observe(case, prep, worker, owner, identifier, body, raw, *rest):
+        next_id = worker.receive_operation(canonical_bytes({**json.loads(raw), 'rpc_id':'rpc_two', 'item_id':'item_two'}))
+        second = case.client.get('/api/v1/approvals/'+next_id).json()
+        assert decision(case, identifier, body).status_code == 200
+        assert decision(case, next_id, {**body,'operation_sha256':second['operation_sha256']}, 'second').status_code == 200
+        worker.execute_operation(identifier)
+        before = case.dump()
+        with pytest.raises(ApiError) as error:
+            worker.execute_operation(next_id)
+        assert error.value.code == 'CODEX_BUDGET_EXCEEDED' and case.dump() == before
+    case, prep, _, calls = exercise(consent_case, observe, monkeypatch)
+    controls = case.get('turns/'+prep['turn_id']).json()['approval_controls']
+    assert len(calls) == 1 and [item['revision'] for item in controls] == [4,3]
+
+
+def test_start_is_committed_before_interpreter_and_cannot_be_reentered(consent_case, monkeypatch):
+    def observe(case, prep, worker, owner, identifier, body, *rest):
+        assert decision(case, identifier, body).status_code == 200
+        actual = owner.operations.execute
+        def checked(*args):
+            view = case.client.get('/api/v1/approvals/'+identifier).json()
+            assert view['revision'] == 3 and view['execution'] == 'started'
+            with pytest.raises(ApiError) as error:
+                worker.execute_operation(identifier)
+            assert error.value.code == 'CODEX_OUTCOME_UNKNOWN'
+            return actual(*args)
+        monkeypatch.setattr(owner.operations, 'execute', checked)
+        worker.execute_operation(identifier)
+    _, _, _, calls = exercise(consent_case, observe, monkeypatch)
+    assert len(calls) == 1
