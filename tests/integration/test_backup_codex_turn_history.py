@@ -120,10 +120,10 @@ def original_facts_and_denied_authority(case, sid, prep, consent, body, ack, own
     assert {name: before[name] for name in owners} == owners
 
 
-def test_actual_backup_keeps_queued_grant_history_without_auth_or_get_dispatch(consent_case, tmp_path, monkeypatch):
+def test_actual_backup_keeps_queued_grant_history_without_auth_or_get_dispatch(consent_case, tmp_path_factory, monkeypatch):
     source, _, sid, proofs, _, _ = consent_case
     prep, consent, body, ack = queued(consent_case)
-    copied, _, owners = owned_backup(source, tmp_path)
+    copied, _, owners = owned_backup(source, tmp_path_factory.mktemp('queued-backup-readback'))
     assert source.app.state.synthetic_transport_calls == []
     with fresh_reader(copied, source, proofs, monkeypatch) as (case, runtime, calls):
         learner_reads(case, sid, prep, consent)
@@ -148,7 +148,7 @@ def test_actual_backup_keeps_queued_grant_history_without_auth_or_get_dispatch(c
     assert source.app.state.synthetic_transport_calls == []
 
 
-def test_actual_backup_keeps_completed_manifest_and_blob_without_restoring_authority(consent_case, tmp_path, monkeypatch):
+def test_actual_backup_keeps_completed_manifest_and_blob_without_restoring_authority(consent_case, tmp_path_factory, monkeypatch):
     source, _, sid, proofs, _, _ = consent_case
     _, _, prep, consent, body, ack = execute(consent_case)
     response = source.get(manifest_path(sid, prep))
@@ -156,7 +156,7 @@ def test_actual_backup_keeps_completed_manifest_and_blob_without_restoring_autho
     original = response.json()
     entry, = original['manifest']['entries']
     expected = b'Synthetic exact answer \xce\xb1\n'
-    copied, archive_manifest, owners = owned_backup(source, tmp_path, manifest=True)
+    copied, archive_manifest, owners = owned_backup(source, tmp_path_factory.mktemp('manifest-backup-readback'), manifest=True)
     assert len(source.app.state.synthetic_transport_calls) == 1
     assert any(item['path'] == 'blobs/' + entry['sha256'] and item['size'] == len(expected)
                for item in archive_manifest['files'])
