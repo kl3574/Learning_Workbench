@@ -25,3 +25,19 @@ test('actual selected-artifact POST persists the original actor, key, full manif
   expect(JSON.parse((await store.load(artifactWorkspace))[original.command_id].text)).toEqual(result)
  } finally { await store.close() }
 })
+
+test('actual generated manifest, aggregate and binary download routes check original target and bytes', async () => {
+ const { artifactImport, artifactData } = await import('./artifactFixtures'), paths: string[] = []
+ vi.stubGlobal('fetch', vi.fn(async (path: string, init: RequestInit) => {
+  paths.push(path); expect(init.method).toBe('GET')
+  if (path.endsWith('/download')) return new Response(artifactData)
+  return new Response(JSON.stringify(path.includes('artifact-imports') ? artifactImport() : artifactManifest()))
+ }))
+ const m = await artifactClient.manifest('codex_session_synthetic', 'turn_artifact_synthetic')
+ expect(await artifactClient.imports(artifactAck.id)).toEqual(artifactImport())
+ expect(await (await artifactClient.download(m.manifest.entries[0])).text()).toBe(artifactData)
+ expect(paths).toEqual(['/api/v1/codex/sessions/codex_session_synthetic/turns/turn_artifact_synthetic/artifacts', '/api/v1/codex/artifact-imports/job_artifact_import', '/api/v1/artifacts/artifact_synthetic_md/download'])
+ await expect(artifactClient.manifest('session_other', 'turn_artifact_synthetic')).rejects.toThrow()
+ vi.stubGlobal('fetch', vi.fn(async () => new Response('wrong bytes')))
+ await expect(artifactClient.download(m.manifest.entries[0])).rejects.toThrow()
+})
