@@ -109,7 +109,14 @@ class CodexTurnWorker:
             pending = [value for value in approvals.values() if value.operation.turn_id == turn.control.id
                 and value.closed is None and value.finished is None
                 and (value.decided is None or value.status == 'approved')]
-            if pending and outcome == 'completed':
+            owned = [value for value in approvals.values() if value.operation.turn_id == turn.control.id]
+            uncertain = any(value.started is not None and (value.finished is None or value.finished.outcome == 'unknown') for value in owned)
+            failed = next((value.finished for value in owned if value.finished and value.finished.outcome == 'failed'), None)
+            if uncertain:
+                outcome, code = 'unknown', 'CODEX_OUTCOME_UNKNOWN'
+            elif failed is not None:
+                outcome, code = 'failed', failed.error_code
+            elif pending and outcome == 'completed':
                 outcome, code = 'failed', 'CODEX_OPERATION_UNSUPPORTED'
             _, _, full_history = self.turns._owned_state(conn, workspace)
             self.turns.approvals.close_pending(conn, workspace, full_history, turn.control.id,
