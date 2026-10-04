@@ -3,8 +3,8 @@ import type { DraftStore } from '../../workbench/DraftStore'
 import type { BootstrapPort } from './bootstrapClient'
 import { useBootstrap } from './useBootstrap'
 export type BootstrapPanelState = { dirty: boolean; safe: boolean; isolated: boolean }
-export function CodexBootstrapPanel({ workspace, writeAdmitted, port, store, onState }: {
- workspace: string; writeAdmitted: boolean; port?: BootstrapPort; store?: DraftStore; onState?: (value: BootstrapPanelState) => void
+export function CodexBootstrapPanel({ workspace, writeAdmitted, port, store, onState, onSessionSelect }: {
+ workspace: string; writeAdmitted: boolean; port?: BootstrapPort; store?: DraftStore; onState?: (value: BootstrapPanelState) => void; onSessionSelect?: (id: string) => void
 }) {
  const state = useBootstrap(workspace, writeAdmitted, port, store), callback = useRef(onState); callback.current = onState
  useEffect(() => { callback.current?.({ dirty: state.dirty, safe: state.safe, isolated: state.isolated }) }, [state.dirty, state.safe, state.isolated])
@@ -43,6 +43,7 @@ export function CodexBootstrapPanel({ workspace, writeAdmitted, port, store, onS
    {value.status === 'ready' ? <p>ready 仅表示已核验 thread 映射；不代表账号授权、模型能力或进程仍在运行。</p>
     : value.status === 'unknown' ? <p>旧实例结果未知。不会自动再启动；如需另试，须另建准备并重新批准。</p>
     : value.status === 'initializing' ? <p>开始许可已登记，尚不能断言 thread 已建立。</p> : <p>本次本地会话创建失败；保留原事实。</p>}
-   <p>active_turn_id：{value.active_turn_id ?? 'null'}；审批、interrupt、artifacts：{String(value.capabilities.approvals)}、{String(value.capabilities.interrupt)}、{String(value.capabilities.artifacts)}。</p></section>)}
+   <p>active_turn_id：{value.active_turn_id ?? 'null'}；审批、interrupt、artifacts：{String(value.capabilities.approvals)}、{String(value.capabilities.interrupt)}、{String(value.capabilities.artifacts)}。</p>
+   {onSessionSelect && value.status === 'ready' && <button disabled={state.busy} onClick={() => onSessionSelect(value.id)}>用于回合准备 {value.id}</button>}</section>)}
  </section>
 }
