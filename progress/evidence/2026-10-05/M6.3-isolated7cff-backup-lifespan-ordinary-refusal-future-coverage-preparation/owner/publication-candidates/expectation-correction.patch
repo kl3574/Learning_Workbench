@@ -1,0 +1,215 @@
+diff --git a/tests/integration/test_backup_codex_lifespan.py b/tests/integration/test_backup_codex_lifespan.py
+index ade14f8d..9235f603 100644
+--- a/tests/integration/test_backup_codex_lifespan.py
++++ b/tests/integration/test_backup_codex_lifespan.py
+@@ -65,14 +65,17 @@ def checked_copy(source, target):
+ 
+ 
+ @pytest.mark.parametrize('registration', ['production_empty', 'trusted_memory_sentinel'])
+-def test_backup_lifespan_closes_old_queued_turn_without_inheriting_actor_or_permission(
++def test_backup_lifespan_rejects_old_queued_turn_without_inheriting_actor_or_permission(
+         consent_case, tmp_path_factory, monkeypatch, registration):
+     source, _, sid, proofs, _, _ = consent_case
+     preparation, consent, start_body, start_ack = queued(consent_case)
+     assert source.app.state.synthetic_transport_calls == []
+     temporary = tmp_path_factory.mktemp('codex-lifespan-copy')
+     copied, original_tables, original_files = checked_copy(source, temporary / 'restored')
+-    calls = {name: 0 for name in ('codex_model', 'ordinary_provider', 'tool', 'process', 'bootstrap')}
++    copied_before = table_hashes(copied)
++    original_control = source.get('turns/' + preparation['turn_id']).json()
++    original_job = source.client.get('/api/v1/jobs/' + preparation['job']['id']).json()
++    calls = {'codex_model': 0, 'ordinary_provider': 0, 'tool': 0, 'process': 0, 'bootstrap': 0}
+ 
+     def forbidden(name):
+         def refuse(*args, **kwargs):
+@@ -93,8 +96,10 @@ def test_backup_lifespan_closes_old_queued_turn_without_inheriting_actor_or_perm
+     app = create_app(copied.settings, codex_bootstrap_runtime=runtime, **options)
+     worker = app.state.codex_turn_worker
+     original_run_once = worker.run_once
+-    finished, idle = Event(), Event()
++    retried = Event()
+     observations = []
++    entered_lifespan = assertions_completed = False
++    alive_before_shutdown = False
+ 
+     def observe_run_once():
+         # The real lifespan thread calls the unchanged public worker method.
+@@ -102,82 +107,107 @@ def test_backup_lifespan_closes_old_queued_turn_without_inheriting_actor_or_perm
+         try:
+             worked = original_run_once()
+         except Exception as error:
+-            observations.append({'error': type(error).__name__, 'code': getattr(error, 'code', None)})
+-            finished.set()
+-            raise
++            observations.append({'error': type(error).__name__, 'code': getattr(error, 'code', None),
++                                 'prior_loop_error': worker.last_error_code})
++            if len(observations) >= 2:
++                retried.set()
++            raise  # The original loop, not this observer, handles the refusal.
+         observations.append({'worked': worked})
+-        if worked:
+-            finished.set()
+-        elif finished.is_set():
+-            idle.set()
+         return worked
+ 
+     monkeypatch.setattr(worker, 'run_once', observe_run_once)
+-    with TestClient(app, base_url=copied.settings.origin) as client:
+-        # A returned context has run actual initialize/recover/start, not merely factory.
+-        assert app.state.codex_turn_recovered == 0
+-        assert finished.wait(5), 'Restored queued turn did not reach a worker outcome'
+-        assert observations[0] == {'worked': True}, observations
+-        assert idle.wait(5), 'Restored worker did not converge to no queued work'
+-        assert worker.last_error_code is None
+-        client.cookies.update(source.client.cookies)
+-        assert client.get('/api/v1/session').status_code == 401
+-        client.cookies.clear()
+-        bootstrap = client.post('/api/v1/session/bootstrap',
+-            json={'one_time_code': issue_bootstrap_code(copied)}, headers={'Origin': copied.settings.origin})
+-        assert bootstrap.status_code == 200
+-        session = client.get('/api/v1/session').json()
+-        assert session['role'] == 'learner' and session['actor_session_id'] != source.actor_id
+-        headers = {'Origin': copied.settings.origin, 'X-CSRF-Token': bootstrap.json()['csrf_token']}
+-        case = Case(app, client, headers, session['actor_session_id'])
+-        before_gets = table_hashes(copied)
+-        control_response = case.get('turns/' + preparation['turn_id'])
+-        assert control_response.status_code == 200
+-        control = control_response.json()
+-        assert control['job']['status'] == 'failed' and control['outcome'] == 'failed'
+-        assert control['error_code'] == 'POLICY_DENIED'
+-        assert control['execution'] == 'terminal' and control['started_at'] is None
+-        assert control['job_revision'] == 3
+-        current_session = case.get('sessions/' + sid).json()
+-        assert current_session['active_turn_id'] is None and current_session['revision'] == 5
+-        assert case.get('turns/' + preparation['turn_id'] + '/result').status_code == 403
+-        assert table_hashes(copied) == before_gets
+-        role = client.post('/api/v1/session/role', json={'role': 'author'},
+-                           headers={**headers, 'Idempotency-Key': 'restored-current-author'})
+-        assert role.status_code == 200
+-        before_reads = table_hashes(copied)
+-        current = case.get('consents/' + consent['id']).json()
+-        assert current['actor_session_id'] == source.actor_id != case.actor_id
+-        assert current['summary'] == consent['summary']
+-        dispatch = current['dispatch']
+-        assert dispatch['started_at'] is None and dispatch['consumed_provider_calls'] == 0
+-        assert dispatch['outcome'] == 'failed' and dispatch['error_code'] == 'POLICY_DENIED'
+-        result = case.get('turns/' + preparation['turn_id'] + '/result')
+-        assert result.status_code == 200
+-        assert result.json()['output_state'] == 'none' and result.json()['answer_markdown'] == ''
+-        assert [result.json()[name] for name in ('mathematical', 'sources', 'independent_pedagogy')] == ['NOT_RUN'] * 3
+-        # Read the existing checked owner's immutable original ACK separately from current.
+-        with copied.transaction(immediate=False) as conn:
+-            conn.execute('PRAGMA query_only=ON')
+-            workspace = copied.workspace_id()
+-            _, _, history = app.state.codex_turn_service._owned_state(conn, workspace)
+-            turn = history[sid].turns[preparation['turn_id']]
+-            assert turn.start.command.ack.model_dump(mode='json') == start_ack.json()
+-            states, _ = app.state.codex_turn_service.outbound_owner.owned_states(conn, workspace)
+-            assert states[preparation['turn_id']].granted.command.ack.model_dump(mode='json') == consent
+-        # Neither the original key nor a new key transfers another actor's authority.
+-        for key in ('start', 'new-restored-start'):
+-            denied = case.post(f'sessions/{sid}/turns', start_body, key)
+-            assert denied.status_code == 403 and denied.json()['error']['code'] == 'POLICY_DENIED'
+-        for key in ('grant', 'new-restored-grant'):
+-            denied = case.post('consents', {'proposal_id': consent['proposal_id'],
+-                'proposal_sha256': consent['proposal_sha256']}, key)
+-            assert denied.status_code == 403 and denied.json()['error']['code'] == 'POLICY_DENIED'
+-        assert table_hashes(copied) == before_reads
+-        assert case.get('turns/' + preparation['turn_id']).json() == control
+-        assert calls == dict.fromkeys(calls, 0) and runtime.calls == []
++    try:
++        with TestClient(app, base_url=copied.settings.origin) as client:
++            # A returned context has run actual initialize/recover/start, not merely factory.
++            entered_lifespan = True
++            assert app.state.codex_turn_recovered == 0
++            assert retried.wait(5), 'Expected two real backup-disabled worker refusals'
++            assert all(item.get('code') == 'PROVIDER_BACKUP_DISABLED' for item in observations), observations
++            assert observations[1]['prior_loop_error'] == 'PROVIDER_BACKUP_DISABLED'
++            assert worker.last_error_code == 'PROVIDER_BACKUP_DISABLED'
++            alive_before_shutdown = worker._thread is not None and worker._thread.is_alive()
++            assert alive_before_shutdown
++            # This is a refused queued item, not a fabricated failed/completed terminal.
++            for name in (*TURN_TABLES, *PROVIDER_TABLES, 'jobs', 'runs', 'job_events'):
++                assert table_hashes(copied)[name] == copied_before[name]
++            client.cookies.update(source.client.cookies)
++            assert client.get('/api/v1/session').status_code == 401
++            client.cookies.clear()
++            bootstrap = client.post('/api/v1/session/bootstrap',
++                json={'one_time_code': issue_bootstrap_code(copied)}, headers={'Origin': copied.settings.origin})
++            assert bootstrap.status_code == 200
++            session = client.get('/api/v1/session').json()
++            assert session['role'] == 'learner' and session['actor_session_id'] != source.actor_id
++            headers = {'Origin': copied.settings.origin, 'X-CSRF-Token': bootstrap.json()['csrf_token']}
++            case = Case(app, client, headers, session['actor_session_id'])
++            before_gets = table_hashes(copied)
++            control_response = case.get('turns/' + preparation['turn_id'])
++            assert control_response.status_code == 200
++            control = control_response.json()
++            assert control == original_control
++            assert control['job']['status'] == 'queued' and control['outcome'] is None
++            assert control['error_code'] is None
++            assert control['execution'] == 'not_started' and control['started_at'] is None
++            assert control['job_revision'] == 2
++            assert client.get('/api/v1/jobs/' + preparation['job']['id']).json() == original_job
++            current_session = case.get('sessions/' + sid).json()
++            assert current_session['active_turn_id'] == preparation['turn_id'] and current_session['revision'] == 4
++            assert case.get('turns/' + preparation['turn_id'] + '/result').status_code == 403
++            assert table_hashes(copied) == before_gets
++            role = client.post('/api/v1/session/role', json={'role': 'author'},
++                               headers={**headers, 'Idempotency-Key': 'restored-current-author'})
++            assert role.status_code == 200
++            before_reads = table_hashes(copied)
++            current = case.get('consents/' + consent['id']).json()
++            assert current['actor_session_id'] == source.actor_id != case.actor_id
++            assert current['summary'] == consent['summary']
++            dispatch = current['dispatch']
++            assert dispatch['started_at'] is None and dispatch['consumed_provider_calls'] == 0
++            assert dispatch['outcome'] is None and dispatch['error_code'] is None
++            assert dispatch['finished_at'] is None and dispatch['input_tokens'] is None
++            assert dispatch['output_tokens'] is None
++            result = case.get('turns/' + preparation['turn_id'] + '/result')
++            assert result.status_code == 200
++            assert result.json()['output_state'] == 'none' and result.json()['answer_markdown'] == ''
++            assert [result.json()[name] for name in ('mathematical', 'sources', 'independent_pedagogy')] == ['NOT_RUN'] * 3
++            # Read the existing checked owner's immutable original ACK separately from current.
++            with copied.transaction(immediate=False) as conn:
++                conn.execute('PRAGMA query_only=ON')
++                workspace = copied.workspace_id()
++                _, _, history = app.state.codex_turn_service._owned_state(conn, workspace)
++                turn = history[sid].turns[preparation['turn_id']]
++                assert turn.start.command.ack.model_dump(mode='json') == start_ack.json()
++                states, _ = app.state.codex_turn_service.outbound_owner.owned_states(conn, workspace)
++                assert states[preparation['turn_id']].granted.command.ack.model_dump(mode='json') == consent
++            # Neither the original key nor a new key transfers another actor's authority.
++            for key in ('start', 'new-restored-start'):
++                denied = case.post(f'sessions/{sid}/turns', start_body, key)
++                assert denied.status_code == 403 and denied.json()['error']['code'] == 'POLICY_DENIED'
++            for key in ('grant', 'new-restored-grant'):
++                denied = case.post('consents', {'proposal_id': consent['proposal_id'],
++                    'proposal_sha256': consent['proposal_sha256']}, key)
++                assert denied.status_code == 403 and denied.json()['error']['code'] == 'POLICY_DENIED'
++            assert table_hashes(copied) == before_reads
++            assert case.get('turns/' + preparation['turn_id']).json() == control
++            assert calls == {'codex_model': 0, 'ordinary_provider': 0, 'tool': 0, 'process': 0, 'bootstrap': 0}
++            assert runtime.calls == []
++        assertions_completed = True
++    finally:
++        # Safe counts are actually read after normal context shutdown, even on failure.
++        (temporary / "lifespan-observation.json").write_text(json.dumps({
++            "registration": registration, "entered_lifespan": entered_lifespan,
++            "worker_observations": observations, "last_error_code": worker.last_error_code,
++            "alive_before_shutdown": alive_before_shutdown,
++            "alive_after_context": worker._thread is not None and worker._thread.is_alive(),
++            "forbidden_calls": calls, "fresh_bootstrap_calls": len(runtime.calls),
++            "source_synthetic_model_calls": len(source.app.state.synthetic_transport_calls),
++            "contract_assertions_completed": assertions_completed,
++            "boundary": "Refusal and history retention only; no general convergence or M7 acceptance",
++        }, indent=2) + "\n")
+     # Actual lifespan shutdown completes before these final invariants are read.
+-    assert calls == dict.fromkeys(calls, 0) and runtime.calls == []
++    assert calls == {'codex_model': 0, 'ordinary_provider': 0, 'tool': 0, 'process': 0, 'bootstrap': 0}
++    assert runtime.calls == []
++    assert worker._thread is not None and not worker._thread.is_alive()
+     assert source.app.state.synthetic_transport_calls == []
+     assert table_hashes(source.app.state.database) == original_tables
+     assert file_hashes(source.app.state.settings.data_dir) == original_files
