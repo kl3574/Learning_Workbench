@@ -1,4 +1,4 @@
-"""Local Codex preparation and safe control owner; no execution adapter is wired."""
+"""Codex preparation, immutable dispatch control and current safe projections."""
 import base64
 import hashlib
 import hmac
@@ -204,13 +204,18 @@ class CodexTurnService:
                 raise ApiError(409, 'CODEX_BINDING_INVALID', '原任务已消费许可或不能开始。')
             if not isinstance(turn.prepared.input, RunnableTurnInput):
                 raise ApiError(503, 'CODEX_INPUT_PROOF_UNAVAILABLE', '没有完整请求证明。')
-            if not self.execution_available(turn.prepared.input.runtime) or self.outbound_owner is None:
+            if self.outbound_owner is None:
                 raise ApiError(503, 'CODEX_RUNTIME_UNAVAILABLE', '当前部署没有对应的受检执行适配器。')
             ack = CodexTurnStartAck(turn_id=turn.control.id, session_revision=state.revision+1,
                 job=dm.JobRef(id=turn.control.job.id, status='queued'))
             command = StartCommand(workspace_id=current.workspace_id, actor_session_id=current.id, route='start',
                 target_id=session_id, key=key, body=body, ack=ack)
             dispatch, binding = self.outbound_owner.consume(conn, current, turn.control.id, body.consent_id, content_sha256(command))
+            if not self.execution_available(turn.prepared.input.runtime):
+                # Provider proof/current eligibility is checked first. This same
+                # transaction rolls back the tentative consume when no adapter
+                # is registered; no permission or queued Job escapes it.
+                raise ApiError(503, 'CODEX_RUNTIME_UNAVAILABLE', '当前部署没有对应的受检执行适配器。')
             bound = repo.append(state, binding, dispatch.occurred_at)
             state.envelopes.append(bound)
             repo.jobs.transition(repo.jobs.load(turn.control.job.id), 'queued')
