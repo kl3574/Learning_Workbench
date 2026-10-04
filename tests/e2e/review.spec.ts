@@ -34,44 +34,154 @@ async function manual(page: Page) {
 async function settleLayout(page: Page) { const choice = page.getByRole('button', { name: '采用本地会话并重新保存', exact: true }); if (await choice.isVisible()) { await choice.click(); await expect(page.getByText('✓ UI 会话已保存', { exact: true })).toBeVisible() } }
 
 test('real history and exact material review preserve original submitted text, null scores and a selected old revision after reload', async ({ page }, info) => {
+  // BEGIN REVIEW_HISTORY_TIMING_OBSERVER: metadata only; no request or response bodies.
+  type ObservedRequest = import('../../apps/web/node_modules/@playwright/test/index.mjs').Request
+  type ObservedResponse = import('../../apps/web/node_modules/@playwright/test/index.mjs').Response
+  const timingStarted = performance.now(), timingStartedAt = new Date().toISOString()
+  let timingSequence = 0, timingPhaseDropped = 0, timingHttpDropped = 0
+  const timingPhases: { sequence: number; elapsed_ms: number; stage: string }[] = []
+  const timingHttp: { sequence: number; elapsed_ms: number; event: string; route: string; method: string; status?: number; request_elapsed_ms?: number }[] = []
+  const timingRoutes: [RegExp, string][] = [
+    [/^\/api\/v1\/session$/, '/api/v1/session'], [/^\/api\/v1\/session\/role$/, '/api/v1/session/role'],
+    [/^\/api\/v1\/workbench\/session$/, '/api/v1/workbench/session'],
+    [/^\/api\/v1\/imports$/, '/api/v1/imports'], [/^\/api\/v1\/imports\/[^/]+$/, '/api/v1/imports/:id'],
+    [/^\/api\/v1\/imports\/[^/]+\/commit$/, '/api/v1/imports/:id/commit'],
+    [/^\/api\/v1\/jobs\/[^/]+$/, '/api/v1/jobs/:id'],
+    [/^\/api\/v1\/assessments\/[^/]+\/attempts$/, '/api/v1/assessments/:id/attempts'],
+    [/^\/api\/v1\/attempts\/[^/]+$/, '/api/v1/attempts/:id'],
+    [/^\/api\/v1\/attempts\/[^/]+\/responses$/, '/api/v1/attempts/:id/responses'],
+    [/^\/api\/v1\/attempts\/[^/]+\/submit$/, '/api/v1/attempts/:id/submit'],
+    [/^\/api\/v1\/attempts\/[^/]+\/result$/, '/api/v1/attempts/:id/result'],
+    [/^\/api\/v1\/attempts\/[^/]+\/regrade$/, '/api/v1/attempts/:id/regrade'],
+    [/^\/api\/v1\/questions\/[^/]+$/, '/api/v1/questions/:id'],
+    [/^\/api\/v1\/courses\/[^/]+$/, '/api/v1/courses/:id'],
+    [/^\/api\/v1\/lessons\/[^/]+$/, '/api/v1/lessons/:id'],
+    [/^\/api\/v1\/blocks\/[^/]+$/, '/api/v1/blocks/:id'],
+    [/^\/api\/v1\/blocks\/[^/]+\/body$/, '/api/v1/blocks/:id/body'],
+    [/^\/api\/v1\/learning\/evidence$/, '/api/v1/learning/evidence'],
+  ]
+  const timingPending = new WeakMap<ObservedRequest, { route: string; method: string; started: number }>()
+  const timingPhase = (stage: string) => {
+    if (timingPhases.length === 128) { timingPhaseDropped++; return }
+    timingPhases.push({ sequence: ++timingSequence, elapsed_ms: performance.now() - timingStarted, stage })
+  }
+  const timingRequest = (request: ObservedRequest) => {
+    const path = new URL(request.url()).pathname, route = timingRoutes.find(([pattern]) => pattern.test(path))?.[1]
+    const method = request.method()
+    if (!route || !['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].includes(method)) return
+    timingPending.set(request, { route, method, started: performance.now() })
+    timingEvent(request, 'request')
+  }
+  const timingEvent = (request: ObservedRequest, event: string, status?: number) => {
+    const value = timingPending.get(request)
+    if (!value) return
+    if (timingHttp.length === 512) { timingHttpDropped++; return }
+    timingHttp.push({ sequence: ++timingSequence, elapsed_ms: performance.now() - timingStarted, event,
+      route: value.route, method: value.method, ...(status === undefined ? {} : { status }),
+      ...(event === 'request' ? {} : { request_elapsed_ms: performance.now() - value.started }) })
+  }
+  const timingResponse = (response: ObservedResponse) => timingEvent(response.request(), 'response-headers', response.status())
+  const timingFinished = (request: ObservedRequest) => timingEvent(request, 'request-finished')
+  const timingFailed = (request: ObservedRequest) => timingEvent(request, 'request-failed')
+  page.on('request', timingRequest); page.on('response', timingResponse)
+  page.on('requestfinished', timingFinished); page.on('requestfailed', timingFailed)
+  // Synchronous memory marks add measurement overhead, not waits or a new budget.
+  // Browser HTTP events exclude page.request polling and do not prove JSON/React completion.
+  // END REVIEW_HISTORY_TIMING_OBSERVER
+  try {
+  timingPhase('body-enter')
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message))
+  timingPhase('assessment-start')
   const { fixture, attempt } = await start(page, 'reviewnativehistory')
+  timingPhase('question-select')
   await page.getByRole('navigation', { name: '本次测试题目', exact: true }).getByRole('button', { name: /^第 2 题/ }).click()
+  timingPhase('answer-constants')
   const answer = '交卷原始答案 🧠é', steps = '原始推导第一行\n\\alpha < beta\n**按原文保留**'
+  timingPhase('answer-fill')
   await page.getByLabel('第 2 题答案', { exact: true }).fill(answer); await page.getByLabel('第 2 题推导步骤', { exact: true }).fill(steps)
+  timingPhase('responses-persisted')
   await expect.poll(async () => { const value = await page.request.get(`/api/v1/attempts/${attempt.id}/responses`).then(response => response.json()); return value.responses.find((item: { question_id: string }) => item.question_id === fixture.questions[1].id) }).toMatchObject({ answer, steps_markdown: steps })
+  timingPhase('submit')
   await expect(page.getByText('服务端作答已保存', { exact: true })).toBeVisible(); await submit(page)
+  timingPhase('initial-grading')
   const first = await grade(page, attempt.id, 1)
+  timingPhase('initial-history-assert')
   expect(first.history).toHaveLength(1); expect(first.items.every(item => item.score === null)).toBe(true)
+  timingPhase('responses-snapshot')
   const responses = await page.request.get(`/api/v1/attempts/${attempt.id}/responses`).then(response => response.json())
+  timingPhase('review-open')
   await settleLayout(page); await page.getByRole('button', { name: '打开本次测试复盘', exact: true }).click()
+  timingPhase('review-heading')
   await expect(page.getByRole('heading', { name: '本次测试复盘', exact: true })).toBeVisible()
+  timingPhase('review-question-select')
   await page.getByRole('navigation', { name: '本次测试题目', exact: true }).getByRole('button', { name: /^第 2 题/ }).click()
+  timingPhase('submitted-text-assert')
   await expect(page.getByLabel('第 2 题已提交答案', { exact: true })).toHaveText(answer); await expect(page.getByLabel('第 2 题已提交推导步骤', { exact: true })).toHaveText(steps)
+  timingPhase('readonly-input-assert')
   expect(await page.getByRole('region', { name: '第 2 题交卷原文', exact: true }).locator('input,textarea').count()).toBe(0)
+  timingPhase('material-eligibility')
   await expect(page.getByRole('region', { name: '本题证据资格', exact: true })).toContainText('冻结的参考答案尚未审核')
+  timingPhase('manual-review-and-grade')
   await manual(page); const final = await grade(page, attempt.id, 2)
+  timingPhase('history-immutability')
   expect(final.history.map(entry => entry.grading_revision)).toEqual([1, 2]); expect(final.history[0]).toEqual(first.history[0]); expect(final.history[1].items.every(item => !item.eligible && item.reason_codes.includes('ANSWER_UNREVIEWED'))).toBe(true)
+  timingPhase('current-policy-assert')
   expect(final.current_review_policy).toEqual({ tutor_scope: 'academic', allow_materials: true, allow_web: false })
+  timingPhase('current-result-assert')
   await expect(page.getByRole('region', { name: '当前评分结果', exact: true })).toContainText('评分版本 2')
+  timingPhase('history-region')
   const history = page.getByRole('region', { name: '完整评分历史', exact: true })
+  timingPhase('history-select-old')
   await expect(history.getByLabel('选择评分版本')).toHaveValue('2'); await history.getByLabel('选择评分版本').selectOption('1'); await expect(history).toContainText('本题在版本 1：待复核 · 分数为空')
+  timingPhase('history-comparison')
   await history.locator('summary').filter({ hasText: '比较评分版本' }).click(); await history.getByLabel('对照评分版本').selectOption('2'); await expect(history.getByRole('table')).toContainText('1 / 1')
+  timingPhase('history-no-private-body')
   expect(final.history.every(entry => entry.items.every(item => !('feedback_markdown' in item) && !('solution_markdown' in item)))).toBe(true)
+  timingPhase('desktop-screenshot')
   await page.setViewportSize({ width: 1440, height: 900 }); await history.getByRole('heading', { name: '评分版本与证据' }).evaluate(node => node.scrollIntoView({ block: 'start' })); await page.screenshot({ path: info.outputPath('review-history-after-1440.png') })
-  await settleLayout(page); await page.reload(); await expect(history.getByLabel('选择评分版本')).toHaveValue('1'); await expect(page.getByLabel('第 2 题已提交答案')).toHaveText(answer)
+  timingPhase('reload-old-selection')
+  await settleLayout(page); await page.reload(); timingPhase('reload-returned'); await expect(history.getByLabel('选择评分版本')).toHaveValue('1'); await expect(page.getByLabel('第 2 题已提交答案')).toHaveText(answer)
+  timingPhase('exact-material-open')
   const material = page.getByRole('region', { name: '本题对应教材', exact: true }); await material.getByRole('button', { name: /r1/ }).first().click()
+  timingPhase('reader-route')
   await expect.poll(() => new URL(page.url()).searchParams.has('reader')).toBe(true)
+  timingPhase('reader-binding')
   const link = new URL(page.url()); const target = JSON.parse(link.searchParams.get('reader')!); expect(target.course).toEqual(fixture.course); expect(target.lesson).toEqual(fixture.lesson); expect(target.block).toEqual(fixture.block)
+  timingPhase('reader-visible')
   await expect(page.locator(`#block-${fixture.block.id}-r${fixture.block.revision}`)).toBeVisible()
-  const reviewTab = page.getByRole('tab', { name: /测试复盘/ }); await reviewTab.click(); await expect(history.getByLabel('选择评分版本')).toHaveValue('1')
-  await page.setViewportSize({ width: 390, height: 844 }); await history.getByRole('heading', { name: '评分版本与证据' }).evaluate(node => node.scrollIntoView({ block: 'start' })); expect(await page.locator('.assessment-scroll').evaluate(node => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1); await page.screenshot({ path: info.outputPath('review-history-after-390.png') })
+  timingPhase('review-tab-return')
+  const reviewTab = page.getByRole('tab', { name: /测试复盘/ }); await reviewTab.click(); timingPhase('review-tab-clicked'); await expect(history.getByLabel('选择评分版本')).toHaveValue('1')
+  timingPhase('mobile-screenshot')
+  await page.setViewportSize({ width: 390, height: 844 }); timingPhase('mobile-viewport-set'); await history.getByRole('heading', { name: '评分版本与证据' }).evaluate(node => node.scrollIntoView({ block: 'start' })); expect(await page.locator('.assessment-scroll').evaluate(node => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1); await page.screenshot({ path: info.outputPath('review-history-after-390.png') })
+  timingPhase('agent-drawer')
   await page.getByRole('button', { name: '切换 Agent 栏', exact: true }).click(); const drawer = page.getByRole('dialog', { name: 'Agent 助教', exact: true }); await expect(drawer).toContainText('当前测试复盘上下文'); await expect(drawer).toContainText('评分版本 1：待复核'); await expect(drawer).toContainText('此版本没有当前获准的反馈正文'); await expect(drawer.getByRole('button', { name: '创建本次问答任务 ↑' })).toBeDisabled(); await drawer.getByRole('button', { name: '关闭Agent 助教', exact: true }).click()
+  timingPhase('evidence-read')
   const evidence: PageEvidence = await page.request.get('/api/v1/learning/evidence?limit=100').then(response => response.json())
+  timingPhase('latest-evidence-ids')
   const latestIds = final.history[1].items.flatMap(item => item.evidence_ids)
+  timingPhase('evidence-assert')
   expect(evidence.items.map(item => item.id).sort()).toEqual([...latestIds].sort()); expect(evidence.items.every(item => !item.eligible)).toBe(true); expect(evidence.items.some(item => item.score === 1)).toBe(true)
+  timingPhase('original-submission-assert')
   expect((await page.request.get(`/api/v1/attempts/${attempt.id}/responses`).then(response => response.json())).responses).toEqual(responses.responses); expect(errors).toEqual([])
+  timingPhase('original-evidence-write')
   writeFileSync(info.outputPath('actual-review-history.json'), JSON.stringify({ scope: 'original synthetic true upload/worker/manual review/history/Reader/browser reload', grading_revisions: final.history.map(entry => entry.grading_revision), original_history_unchanged: JSON.stringify(first.history[0]) === JSON.stringify(final.history[0]), first_null_scores: first.items.every(item => item.score === null), all_unreviewed_excluded: final.history[1].items.every(item => !item.eligible), selected_revision_after_reload: 1, exact_material_target: target, latest_evidence_count: evidence.items.length, original_submission_preserved: true, runtime_errors: errors }, null, 2))
+  timingPhase('original-body-complete')
+  } finally {
+    // BEGIN REVIEW_HISTORY_TIMING_FINALIZER
+    timingPhase('body-finally')
+    page.off('request', timingRequest); page.off('response', timingResponse)
+    page.off('requestfinished', timingFinished); page.off('requestfailed', timingFailed)
+    try {
+      writeFileSync(info.outputPath('review-history-timing.json'), JSON.stringify({
+        version: 'review-history-metadata-v1', body_started_at: timingStartedAt,
+        observed_timeout_ms: info.timeout, retry: info.retry, phases: timingPhases, http: timingHttp,
+        dropped: { phases: timingPhaseDropped, http: timingHttpDropped },
+        limits: { phases: 128, http: 512 },
+        scope: 'Body-only Node monotonic timing; browser HTTP static route templates/status only. No query, ID, header, payload, DOM or error text. Page-request polling and fixture setup are not observed. Synchronous instrumentation changes scheduling; root cause remains unknown.',
+      }, null, 2), { flag: 'wx' })
+    } catch { info.annotations.push({ type: 'diagnostic', description: 'Bounded history metadata could not be saved; original outcome preserved.' }) }
+    // END REVIEW_HISTORY_TIMING_FINALIZER
+  }
 })
 
 test('a delayed old review response cannot restore history or academic context after another page starts a real independent attempt', async ({ page }, info) => {
