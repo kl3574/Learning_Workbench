@@ -49,6 +49,7 @@ test('current model accepts actual operation booleans and terminal slot release 
 test('current session panel renders the read slot and operation flags while original command bytes stay intact', async () => {
  const port = bootstrapPort(), db = new DraftStore({ name: crypto.randomUUID(), factory: new IDBFactory() })
  const command = prepareCommand(workspace, actor)
+ if (command.kind !== 'prepare') throw new Error('Expected the synthetic preparation command')
  await persistBootstrapCommand({ ...command, ack: preparation() }, db)
  const before = Object.values(await db.load(workspace))[0].text
  port.preparation = vi.fn(async () => preparation('consumed'))
