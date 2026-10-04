@@ -128,6 +128,8 @@ class CodexTurnRepository:
                 raise damaged()
             for seq, stored in enumerate(selected, 1):
                 raw = strict_json(stored['record_json'])
+                if not isinstance(raw, dict):
+                    raise damaged()
                 envelope = decode(ControlEventEnvelope if raw.get('version') == 'codex-turn-event-v2' else EventEnvelope, stored['record_json'])
                 if (envelope.session_id != anchor.session_id or envelope.workspace_id != self.workspace
                         or envelope.seq != seq or stored['seq'] != seq or envelope.previous_sha256 != digest
