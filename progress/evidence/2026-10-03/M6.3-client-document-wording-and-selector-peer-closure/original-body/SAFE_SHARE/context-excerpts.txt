@@ -1,0 +1,81 @@
+
+== AGENTS.md @ 196b6a9a7da9be94a12eaf5d93f63fb6eb041edc ==
+1: Read PRODUCT_DESIGN.md completely and follow its implementation, recovery, verification, and publication workflow. It is the sole product and engineering specification.
+
+== PRODUCT_DESIGN.md @ 196b6a9a7da9be94a12eaf5d93f63fb6eb041edc ==
+350: ### 6.6 用 Codex 生成教材
+351: 
+352: 用户给主题、先修、目标和证明策略 → Authoring 建立受控任务 → CodexBroker 准备隔离工作目录 → 启动/恢复会话 → 转译工具审批 → 产生 Markdown、题包、计算验证产物 → 验收内容和来源 → 导入草稿 → 人工审阅 → 发布。
+353: 
+354: 普通 LLM 的结构化草稿生成和 Codex 的工具型文件生成是两个适配器，不共享“任意执行权限”。未安装或未授权 Codex 时，提供明确的任务导出/文件回导降级通道，并标注“未连接 Codex”。
+654: ### 12.5 Codex Broker
+655: 
+656: 官方 App Server 有 thread/turn/item 事件及审批交互；本项目 Broker 应据固定版本适配，而不是把事件名和进程控制逻辑散落到 React 组件。[S15]
+657: 
+658: Broker 的最小职责：探测可用性与授权状态；维护产品 session 到 Codex thread 的映射；仅在隔离工作目录运行；转译命令/文件/网络审批；中断与清理；扫描产物；返回受控路径的文件引用；保留费用/状态证据。涉及权限提高、网络和文件变更要展示操作范围，不因工具名字叫“生成教材”就默认批准所有 shell 命令。
+1465: #### 20.16.5 201、未知结果与当前读回
+1466: 
+1467: session r1/initializing 表示单次控制开始许可已登记，并不表示存在外部 thread。只有从该唯一实际控制实例取得完整、匹配、受检的成功响应，验证 root/profile/返回身份并持久保存外部 thread 映射及回执后，才变为 r2/ready 并产生原 201 ACK。ready 仅表示 bootstrap 映射已核验成功，不表示模型调用、真实账号授权、当前进程仍运行或整个 Broker 已完成；账号授权状态仍由已有能力读取独立观察。
+
+== apps/web/src/features/authoring/AuthoringPanel.tsx @ 196b6a9a7da9be94a12eaf5d93f63fb6eb041edc ==
+39:     {state.error && <p role="status">{state.error}</p>}
+40:     <AuthoringControlList jobs={state.jobs} busy={state.busy || !state.controlReady} academic={state.academic} readBlocked={!state.ready} read={id => void state.read(id)} cancel={job => void state.cancel(job)} />
+41:     {state.cursor && <button disabled={state.busy} onClick={() => void state.refresh(true)}>继续读取安全任务</button>}
+42:     <section aria-label="原创作命令回执"><h3>本机保留的原命令</h3>{state.commands.map(command => <article key={command.command_id}><p>{command.kind === 'cancel' ? '取消任务' : command.kind === 'prepare' ? '准备例题' : command.kind === 'group_prepare' ? '准备组合草稿' : ['numeric_preview', 'group_numeric_preview'].includes(command.kind) ? '数值检查预览' : '独立数值决定'} · {command.ack ? '原命令已确认' : command.rejection ? '服务端拒绝，保留原基准' : '结果未知，原 key 与完整命令保留'}</p><details><summary>核对原命令</summary><p>{command.command_id}</p>{command.kind !== 'cancel' && <pre>{JSON.stringify(command.body, null, 2)}</pre>}{command.ack && <p>原回执不是当前状态。请从任务列表重新读取；数值检查从原候选的检查列表进入。</p>}</details><button disabled={state.busy || !(command.kind === 'cancel' ? state.controlReady : state.ready) || !!command.ack} onClick={() => void state.execute(command)}>回放原命令 {command.command_id}</button></article>)}</section>
+43:     {!state.academic ? <p role="status">当前只开放安全任务控制。主题、材料、候选、数值输入与结果已收起；请在作者会话且当前测试策略允许后明确重新读取。</p> : <div key={`${workspace}:${access}:${state.actor}`}>
+44:       <AuthoringForm localTask={{ workspace, actor: state.actor, port }} currentBlock={currentBlock} busy={state.busy || !state.ready} submit={body => state.create({ kind: 'prepare', body })} submitGroup={port.groups ? body => state.create({ kind: 'group_prepare', body }) : undefined} denied={state.reportAccessError} onDirty={setFormDirty} />
+45:       {detail && <section aria-label="受保护创作详情"><h3>{detail.summary.title}</h3><p>实际任务状态：{detail.summary.status} · r{detail.summary.job_revision}</p><button disabled={state.busy} onClick={() => void state.read(detail.summary.id)}>重新读取本次创作任务</button>
+56:     </div>}
+57:     <CodexCapabilitiesPanel workspace={workspace} admitted={state.academic && state.ready} />
+58:     <CodexBootstrapPanel port={bootstrap} store={bootstrapStore} workspace={workspace} writeAdmitted={state.academic && state.ready && !paused} onState={setBootstrapState} />
+59:     {impactsOpen && <ContentImpactsPanel workspace={workspace} paused={paused || !state.academic} onState={setImpactState} />}
+
+== apps/web/src/features/authoring/AuthoringForm.tsx @ 196b6a9a7da9be94a12eaf5d93f63fb6eb041edc ==
+1: import { useEffect, useRef, useState } from 'react'
+2: import type { AuthoringPrepareWrite, AuthoringGroupPrepareWrite, ContentRef } from '../../../../../packages/contracts/generated/api-types'
+3: import { checkedAuthoring } from './authoringCommands'
+4: import { AuthoringTargets, type GroupTargets } from './AuthoringTargets'
+5: import { sameRef } from '../reader/target'
+6: import { LocalTaskDocument, type LocalTaskScope } from './LocalTaskDocument'
+7: export function AuthoringForm({ localTask, currentBlock, busy, submit, submitGroup, denied = () => {}, onDirty }: { localTask?: LocalTaskScope; currentBlock: ContentRef | null; busy: boolean; submit: (body: AuthoringPrepareWrite) => Promise<void>; onDirty: (dirty: boolean) => void; submitGroup?: (body: AuthoringGroupPrepareWrite) => Promise<void>; denied?: (reason: unknown) => void }) {
+8:   const [topic, setTopic] = useState(''), [prerequisites, setPrerequisites] = useState(''), [objectives, setObjectives] = useState(''), [proof, setProof] = useState<'full' | 'declared_dependencies'>('full'), [provider, setProvider] = useState('')
+9:   const [kind, setKind] = useState<'worked_example' | 'lesson' | 'practice_set' | 'assessment'>('worked_example')
+46:       <h4>本次材料范围</h4>{!refs.length && <p>无已选教材来源。不会自动加入当前教材或父级内容。</p>}
+47:       {currentBlock?.entity === 'block' && <button disabled={refs.some(v => sameRef(v, currentBlock)) || refs.length >= 8} onClick={() => add(currentBlock)}>明确加入当前准确内容块</button>}
+48:       {refs.map((ref, i) => <p key={`${ref.id}:${ref.revision}`}>{ref.id} · r{ref.revision} · <code>{ref.sha256}</code> <button onClick={() => setRefs(old => old.filter((_, index) => index !== i))}>移除材料 {i + 1}</button></p>)}
+49:       <details><summary>明确加入其他准确内容块</summary><label>内容块 ID<input value={id} onChange={e => setId(e.target.value)} /></label><label>内容修订<input inputMode="numeric" value={revision} onChange={e => setRevision(e.target.value)} /></label><label>内容 SHA256<input value={hash} onChange={e => setHash(e.target.value)} /></label><button onClick={() => add({ entity: 'block', id, revision: /^[1-9][0-9]*$/.test(revision) ? Number(revision) : 0, sha256: hash })}>加入这份准确引用</button></details>
+50:       <button onClick={() => void prepare()}>{kind === 'worked_example' ? '明确准备本次例题任务' : '明确准备本次组合创作任务'}</button>
+51:       {localTask && <LocalTaskDocument {...localTask} inputs={{ topic, prerequisites, objectives, proof }} busy={busy} denied={denied} />}
+52:     </fieldset>{error && <p role="alert">{error}</p>}
+53:   </section>
+54: }
+
+== apps/web/src/features/codex/codexClient.ts @ 196b6a9a7da9be94a12eaf5d93f63fb6eb041edc ==
+1: import type { CodexCapabilities, SessionResponse } from '../../../../../packages/contracts/generated/api-types'
+2: import { request } from '../../api/client'
+3: import { checkedProvider } from '../providers/providerSchema'
+4: 
+5: export type CodexCapabilityPort = {
+6:   session(): Promise<SessionResponse>
+7:   capabilities(): Promise<CodexCapabilities>
+8: }
+9: 
+10: /** Validate the generated wire contract before any connection status is shown. */
+11: export function checkedCodex<T>(name: 'CodexCapabilities' | 'SessionResponse', value: unknown): T {
+12:   try {
+13:     const checked = checkedProvider<T>(name, value)
+14:     if (name === 'CodexCapabilities') {
+15:       const view = checked as CodexCapabilities
+16:       if (!view.available && (view.authorized || view.sandbox_roots.length > 0 || Object.values(view.capabilities).some(Boolean))
+17:         || view.available && !view.adapter_version?.trim()
+18:         || new Set(view.sandbox_roots.map(root => root.id)).size !== view.sandbox_roots.length) throw new Error('Inconsistent capability observation')
+19:     }
+20:     return checked
+21:   }
+22:   catch { throw new Error('Codex 连接状态不符合当前契约，请重新检查。') }
+23: }
+24: 
+25: export const codexCapabilityClient: CodexCapabilityPort = {
+26:   session: async () => checkedCodex('SessionResponse', await request('GET /api/v1/session', undefined)),
+27:   capabilities: async () => checkedCodex('CodexCapabilities', await request('GET /api/v1/codex/capabilities', undefined)),
+28: }
