@@ -1,0 +1,16 @@
+-- Generic approval facts; original core schema and other approval owners are unchanged.
+CREATE TABLE codex_approval_heads(workspace_id TEXT NOT NULL REFERENCES workspace(id),approval_id TEXT PRIMARY KEY,event_count INTEGER NOT NULL CHECK(event_count>0),head_sha256 TEXT NOT NULL);
+CREATE TABLE codex_approval_events(workspace_id TEXT NOT NULL REFERENCES workspace(id),approval_id TEXT NOT NULL,seq INTEGER NOT NULL CHECK(seq>0),record_json TEXT NOT NULL CHECK(json_valid(record_json)),record_sha256 TEXT NOT NULL,PRIMARY KEY(approval_id,seq));
+CREATE TABLE codex_approval_members(workspace_id TEXT NOT NULL REFERENCES workspace(id),approval_id TEXT NOT NULL,seq INTEGER NOT NULL,record_sha256 TEXT NOT NULL,PRIMARY KEY(approval_id,seq));
+CREATE TABLE codex_approval_commands(workspace_id TEXT NOT NULL REFERENCES workspace(id),actor_session_id TEXT NOT NULL REFERENCES local_sessions(id),command_key TEXT NOT NULL,approval_id TEXT NOT NULL,seq INTEGER NOT NULL,command_sha256 TEXT NOT NULL,PRIMARY KEY(workspace_id,actor_session_id,approval_id,command_key),UNIQUE(approval_id,seq));
+CREATE TRIGGER codex_approval_heads_delete BEFORE DELETE ON codex_approval_heads BEGIN SELECT RAISE(ABORT,'immutable generic approval history'); END;
+CREATE TRIGGER codex_approval_heads_insert BEFORE INSERT ON codex_approval_heads WHEN EXISTS(SELECT 1 FROM codex_approval_heads WHERE approval_id=NEW.approval_id) BEGIN SELECT RAISE(ABORT,'immutable generic approval history'); END;
+CREATE TRIGGER codex_approval_events_update BEFORE UPDATE ON codex_approval_events BEGIN SELECT RAISE(ABORT,'immutable generic approval history'); END;
+CREATE TRIGGER codex_approval_events_delete BEFORE DELETE ON codex_approval_events BEGIN SELECT RAISE(ABORT,'immutable generic approval history'); END;
+CREATE TRIGGER codex_approval_events_insert BEFORE INSERT ON codex_approval_events WHEN EXISTS(SELECT 1 FROM codex_approval_events WHERE approval_id=NEW.approval_id AND seq=NEW.seq) BEGIN SELECT RAISE(ABORT,'immutable generic approval history'); END;
+CREATE TRIGGER codex_approval_members_update BEFORE UPDATE ON codex_approval_members BEGIN SELECT RAISE(ABORT,'immutable generic approval history'); END;
+CREATE TRIGGER codex_approval_members_delete BEFORE DELETE ON codex_approval_members BEGIN SELECT RAISE(ABORT,'immutable generic approval history'); END;
+CREATE TRIGGER codex_approval_members_insert BEFORE INSERT ON codex_approval_members WHEN EXISTS(SELECT 1 FROM codex_approval_members WHERE approval_id=NEW.approval_id AND seq=NEW.seq) BEGIN SELECT RAISE(ABORT,'immutable generic approval history'); END;
+CREATE TRIGGER codex_approval_commands_update BEFORE UPDATE ON codex_approval_commands BEGIN SELECT RAISE(ABORT,'immutable generic approval history'); END;
+CREATE TRIGGER codex_approval_commands_delete BEFORE DELETE ON codex_approval_commands BEGIN SELECT RAISE(ABORT,'immutable generic approval history'); END;
+CREATE TRIGGER codex_approval_commands_insert BEFORE INSERT ON codex_approval_commands WHEN EXISTS(SELECT 1 FROM codex_approval_commands WHERE approval_id=NEW.approval_id AND seq=NEW.seq OR workspace_id=NEW.workspace_id AND actor_session_id=NEW.actor_session_id AND approval_id=NEW.approval_id AND command_key=NEW.command_key) BEGIN SELECT RAISE(ABORT,'immutable generic approval history'); END;

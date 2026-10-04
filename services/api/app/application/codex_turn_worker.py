@@ -58,6 +58,7 @@ class CodexTurnWorker:
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
         self.last_error_code: str | None = None
+        self._callback_context: tuple[str, str, str, int] | None = None
 
     def available(self, profile: CodexRuntimeProfile) -> bool:
         return self.executor is not None and self.executor.available(profile)
@@ -102,7 +103,19 @@ class CodexTurnWorker:
 
     def _terminal(self, conn, workspace, repo, state, turn, provider_state, *,
                   outcome, code, execution_result=None, elapsed_ms=None):
-        result={'version':'codex-turn-job-result-v1','turn_id':turn.control.id,
+        if self.turns.approvals is not None:
+            _, _, full_history = self.turns._owned_state(conn, workspace)
+            approvals = self.turns.approvals.verify_history(conn, workspace, full_history)
+            pending = [value for value in approvals.values() if value.operation.turn_id == turn.control.id
+                and value.decided is None and value.closed is None]
+            if pending and outcome == 'completed':
+                outcome, code = 'failed', 'CODEX_OPERATION_UNSUPPORTED'
+            _, _, full_history = self.turns._owned_state(conn, workspace)
+            self.turns.approvals.close_pending(conn, workspace, full_history, turn.control.id,
+                code or 'CODEX_OPERATION_UNSUPPORTED')
+            _, repo, full_history = self.turns._owned_state(conn, workspace)
+            state, turn = self.turns._find(full_history, turn.control.id)
+        result={'version':'codex-turn-job-result-v1' ,'turn_id':turn.control.id,
             'outcome':outcome,'dispatch_id':provider_state.queued.dispatch_id}
         status='completed' if outcome=='completed' else 'cancelled' if outcome=='cancelled' else 'failed'
         repo.jobs.transition(repo.jobs.load(turn.control.job.id),status,result=result)
@@ -217,6 +230,7 @@ class CodexTurnWorker:
                     return True
                 workspace,turn_id,owner,prepared,summary,profile=claimed
                 started=time.monotonic()
+                self._callback_context=(workspace,turn_id,owner,threading.get_ident())
                 try:
                     if self.executor is None:
                         raise ApiError(503,'CODEX_RUNTIME_UNAVAILABLE','执行适配器不可用。')
@@ -227,10 +241,24 @@ class CodexTurnWorker:
                     # The adapter did not yield a checked receipt. Preserve an
                     # unknown outcome; never invent a zero-call response fact.
                     result=None
+                finally:
+                    self._callback_context=None
                 self._finish(workspace,turn_id,owner,result,started)
                 return True
         finally:
             self._lock.release()
+
+    def receive_operation(self, raw: bytes) -> str:
+        """Internal synthetic adapter input; never an HTTP authority port.
+
+        The original v1 model request profile is unchanged. This separate intake
+        only retains denied callbacks and cannot start any host operation.
+        """
+        context = self._callback_context
+        if (context is None or context[3] != threading.get_ident()
+                or type(self.executor) is not SyntheticCodexExecutor or self.turns.approvals is None):
+            raise ApiError(409, 'CODEX_BINDING_INVALID', '没有受检的活跃回调实例。')
+        return self.turns.approvals.receive(context[0], context[1], context[2], raw)
 
     def recover(self) -> int:
         workspace=self.database.workspace_id()

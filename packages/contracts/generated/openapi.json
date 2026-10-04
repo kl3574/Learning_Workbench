@@ -3590,6 +3590,79 @@
         "title": "CodexCapabilities",
         "type": "object"
       },
+      "CodexCommandOperation": {
+        "additionalProperties": false,
+        "properties": {
+          "command_text": {
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Command Text",
+            "type": "string"
+          },
+          "cwd": {
+            "minLength": 1,
+            "title": "Cwd",
+            "type": "string"
+          },
+          "environment_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Environment Sha256",
+            "type": "string"
+          },
+          "executable_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Executable Sha256",
+            "type": "string"
+          },
+          "filesystem_scope_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Filesystem Scope Sha256",
+            "type": "string"
+          },
+          "kind": {
+            "const": "command",
+            "title": "Kind",
+            "type": "string"
+          },
+          "network": {
+            "const": "denied",
+            "title": "Network",
+            "type": "string"
+          },
+          "operation_profile_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Operation Profile Sha256",
+            "type": "string"
+          },
+          "read_files": {
+            "items": {
+              "$ref": "#/components/schemas/CodexOperationFile"
+            },
+            "maxItems": 64,
+            "title": "Read Files",
+            "type": "array"
+          },
+          "writable_area": {
+            "const": "turn_outputs",
+            "title": "Writable Area",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "command_text",
+          "cwd",
+          "executable_sha256",
+          "environment_sha256",
+          "read_files",
+          "writable_area",
+          "filesystem_scope_sha256",
+          "network",
+          "operation_profile_sha256"
+        ],
+        "title": "CodexCommandOperation",
+        "type": "object"
+      },
       "CodexConsentControl": {
         "additionalProperties": false,
         "properties": {
@@ -3919,6 +3992,88 @@
         "title": "CodexCurrentSessionView",
         "type": "object"
       },
+      "CodexDeniedOperation": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "enum": [
+              "network",
+              "permission_expansion",
+              "unbound_operation",
+              "unsupported_tool"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "kind": {
+            "const": "unsupported",
+            "title": "Kind",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "CODEX_PROTOCOL_INVALID",
+                  "CODEX_PROFILE_CHANGED",
+                  "CODEX_RUNTIME_UNAVAILABLE",
+                  "CODEX_BINDING_INVALID",
+                  "CODEX_HISTORY_DAMAGED",
+                  "CODEX_INPUT_PROOF_UNAVAILABLE",
+                  "CODEX_OPERATION_UNSUPPORTED",
+                  "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED",
+                  "CODEX_TIMEOUT",
+                  "CODEX_RESOURCE_LIMIT",
+                  "CODEX_CANCELLED",
+                  "CODEX_OUTCOME_UNKNOWN",
+                  "CODEX_OPERATION_FAILED",
+                  "CODEX_ARTIFACT_REJECTED",
+                  "CODEX_ARTIFACT_MISSING",
+                  "CODEX_SOURCE_CHANGED",
+                  "CODEX_SOURCE_UNAVAILABLE",
+                  "CODEX_APPROVAL_EXPIRED",
+                  "CODEX_CONSENT_EXPIRED",
+                  "CODEX_CONSENT_REVOKED",
+                  "CODEX_BUDGET_EXCEEDED",
+                  "POLICY_DENIED",
+                  "ASSESSMENT_ACTIVE"
+                ],
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "CAPABILITY_UNSUPPORTED",
+                  "PROVIDER_CONFIGURATION_CHANGED",
+                  "PROVIDER_SECRET_UNAVAILABLE",
+                  "OUTBOUND_SOURCE_CHANGED",
+                  "OUTBOUND_SOURCE_UNAVAILABLE",
+                  "CONSENT_REQUIRED",
+                  "CONSENT_REVOKED",
+                  "CONSENT_EXPIRED",
+                  "OUTBOUND_BUDGET_EXCEEDED",
+                  "PROVIDER_TIMEOUT",
+                  "PROVIDER_CANCELLED",
+                  "PROVIDER_TRANSPORT_ERROR",
+                  "PROVIDER_PROTOCOL_ERROR",
+                  "PROVIDER_OUTCOME_UNKNOWN",
+                  "PROVIDER_USAGE_INCONSISTENT",
+                  "PROVIDER_REFUSAL",
+                  "PROVIDER_INCOMPLETE"
+                ],
+                "type": "string"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "kind",
+          "category",
+          "reason"
+        ],
+        "title": "CodexDeniedOperation",
+        "type": "object"
+      },
       "CodexDispatchView": {
         "additionalProperties": false,
         "properties": {
@@ -4133,6 +4288,122 @@
           "artifacts"
         ],
         "title": "CodexFeatures",
+        "type": "object"
+      },
+      "CodexFileChange": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "add",
+              "update",
+              "delete"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "after_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After Sha256"
+          },
+          "after_size": {
+            "anyOf": [
+              {
+                "maximum": 16777216.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After Size"
+          },
+          "before_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before Sha256"
+          },
+          "before_size": {
+            "anyOf": [
+              {
+                "maximum": 16777216.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before Size"
+          },
+          "diff": {
+            "maxLength": 400000,
+            "title": "Diff",
+            "type": "string"
+          },
+          "path": {
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "action",
+          "before_sha256",
+          "after_sha256",
+          "before_size",
+          "after_size",
+          "diff"
+        ],
+        "title": "CodexFileChange",
+        "type": "object"
+      },
+      "CodexFileOperation": {
+        "additionalProperties": false,
+        "properties": {
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/CodexFileChange"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Files",
+            "type": "array"
+          },
+          "kind": {
+            "const": "file_change",
+            "title": "Kind",
+            "type": "string"
+          },
+          "operation_profile_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Operation Profile Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "files",
+          "operation_profile_sha256"
+        ],
+        "title": "CodexFileOperation",
         "type": "object"
       },
       "CodexFrozenOutboundSummary": {
@@ -4378,6 +4649,34 @@
           "wall_seconds"
         ],
         "title": "CodexLocalToolBudget",
+        "type": "object"
+      },
+      "CodexOperationFile": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "minLength": 1,
+            "title": "Path",
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size": {
+            "maximum": 16777216.0,
+            "minimum": 0.0,
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "size",
+          "sha256"
+        ],
+        "title": "CodexOperationFile",
         "type": "object"
       },
       "CodexOutboundBudgetWrite": {
@@ -8215,6 +8514,317 @@
           "numeric_plan"
         ],
         "title": "GeneratedSolutionAnswer",
+        "type": "object"
+      },
+      "GenericApprovalDecisionAck": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_session_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Actor Session Id",
+            "type": "string"
+          },
+          "applied": {
+            "const": true,
+            "title": "Applied",
+            "type": "boolean"
+          },
+          "decision": {
+            "enum": [
+              "approve_once",
+              "decline"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "job": {
+            "$ref": "#/components/schemas/JobRef"
+          },
+          "operation_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Operation Sha256",
+            "type": "string"
+          },
+          "revision": {
+            "const": 2,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "run_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "session_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "turn_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "actor_session_id",
+          "operation_sha256",
+          "decision",
+          "applied",
+          "session_id",
+          "turn_id",
+          "run_id",
+          "job"
+        ],
+        "title": "GenericApprovalDecisionAck",
+        "type": "object"
+      },
+      "GenericApprovalView": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_session_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Actor Session Id",
+            "type": "string"
+          },
+          "created_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided At"
+          },
+          "decision": {
+            "enum": [
+              "pending",
+              "approve_once",
+              "decline"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "CODEX_PROTOCOL_INVALID",
+                  "CODEX_PROFILE_CHANGED",
+                  "CODEX_RUNTIME_UNAVAILABLE",
+                  "CODEX_BINDING_INVALID",
+                  "CODEX_HISTORY_DAMAGED",
+                  "CODEX_INPUT_PROOF_UNAVAILABLE",
+                  "CODEX_OPERATION_UNSUPPORTED",
+                  "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED",
+                  "CODEX_TIMEOUT",
+                  "CODEX_RESOURCE_LIMIT",
+                  "CODEX_CANCELLED",
+                  "CODEX_OUTCOME_UNKNOWN",
+                  "CODEX_OPERATION_FAILED",
+                  "CODEX_ARTIFACT_REJECTED",
+                  "CODEX_ARTIFACT_MISSING",
+                  "CODEX_SOURCE_CHANGED",
+                  "CODEX_SOURCE_UNAVAILABLE",
+                  "CODEX_APPROVAL_EXPIRED",
+                  "CODEX_CONSENT_EXPIRED",
+                  "CODEX_CONSENT_REVOKED",
+                  "CODEX_BUDGET_EXCEEDED",
+                  "POLICY_DENIED",
+                  "ASSESSMENT_ACTIVE"
+                ],
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "CAPABILITY_UNSUPPORTED",
+                  "PROVIDER_CONFIGURATION_CHANGED",
+                  "PROVIDER_SECRET_UNAVAILABLE",
+                  "OUTBOUND_SOURCE_CHANGED",
+                  "OUTBOUND_SOURCE_UNAVAILABLE",
+                  "CONSENT_REQUIRED",
+                  "CONSENT_REVOKED",
+                  "CONSENT_EXPIRED",
+                  "OUTBOUND_BUDGET_EXCEEDED",
+                  "PROVIDER_TIMEOUT",
+                  "PROVIDER_CANCELLED",
+                  "PROVIDER_TRANSPORT_ERROR",
+                  "PROVIDER_PROTOCOL_ERROR",
+                  "PROVIDER_OUTCOME_UNKNOWN",
+                  "PROVIDER_USAGE_INCONSISTENT",
+                  "PROVIDER_REFUSAL",
+                  "PROVIDER_INCOMPLETE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "execution": {
+            "enum": [
+              "not_started",
+              "started",
+              "completed",
+              "failed",
+              "unknown"
+            ],
+            "title": "Execution",
+            "type": "string"
+          },
+          "expires_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "job": {
+            "$ref": "#/components/schemas/JobRef"
+          },
+          "job_revision": {
+            "minimum": 1.0,
+            "title": "Job Revision",
+            "type": "integer"
+          },
+          "operation": {
+            "discriminator": {
+              "mapping": {
+                "command": "#/components/schemas/CodexCommandOperation",
+                "file_change": "#/components/schemas/CodexFileOperation",
+                "unsupported": "#/components/schemas/CodexDeniedOperation"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CodexCommandOperation"
+              },
+              {
+                "$ref": "#/components/schemas/CodexFileOperation"
+              },
+              {
+                "$ref": "#/components/schemas/CodexDeniedOperation"
+              }
+            ],
+            "title": "Operation"
+          },
+          "operation_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Operation Sha256",
+            "type": "string"
+          },
+          "result_sha256": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result Sha256"
+          },
+          "revision": {
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "run_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "session_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "turn_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "validity": {
+            "enum": [
+              "current",
+              "expired",
+              "changed",
+              "unavailable",
+              "closed"
+            ],
+            "title": "Validity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "actor_session_id",
+          "session_id",
+          "turn_id",
+          "run_id",
+          "job",
+          "job_revision",
+          "operation",
+          "operation_sha256",
+          "created_at",
+          "expires_at",
+          "decision",
+          "validity",
+          "execution",
+          "decided_at",
+          "started_at",
+          "finished_at",
+          "result_sha256",
+          "error_code"
+        ],
+        "title": "GenericApprovalView",
         "type": "object"
       },
       "GradeHistoryEntry": {
@@ -17198,6 +17808,339 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/approvals/{id}": {
+      "get": {
+        "operationId": "read_api_v1_approvals__id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericApprovalView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Read",
+        "tags": [
+          "codex"
+        ]
+      }
+    },
+    "/api/v1/approvals/{id}/decision": {
+      "post": {
+        "operationId": "decide_api_v1_approvals__id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "title": "Origin",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GenericApprovalDecisionAck"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Decide",
+        "tags": [
+          "codex"
+        ]
+      }
+    },
     "/api/v1/artifacts/{id}/download": {
       "get": {
         "operationId": "download_api_v1_artifacts__id__download_get",

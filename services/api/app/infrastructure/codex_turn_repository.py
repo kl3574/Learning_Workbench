@@ -11,6 +11,7 @@ from ..application.codex_turn_models import (
     SessionAnchor, EventEnvelope, TurnPrepared, TurnProviderBound, TurnStarted, TurnLifecycle, TurnCancelRequested, CancelCommand, preparation_digest,
 )
 from ..application.codex_turn_execution_models import ControlEventEnvelope, RunnableTurnPrepared
+from ..application.codex_approval_models import ApprovalControlEnvelope, TurnApprovalBound
 from ..application.errors import ApiError
 from ..application.providers import retained_provider_configuration
 from ..codex_turn_dto import CodexTurnControlView, CodexConsentControl
@@ -27,6 +28,7 @@ class CheckedTurn:
     provider_bindings: list[TurnProviderBound] = field(default_factory=list)
     start: TurnStarted | None = None
     lifecycle: list[TurnLifecycle] = field(default_factory=list)
+    approval_bindings: list[TurnApprovalBound] = field(default_factory=list)
 
 
 @dataclass
@@ -34,7 +36,7 @@ class CheckedSession:
     anchor: SessionAnchor
     revision: int
     active_turn_id: str | None
-    envelopes: list[EventEnvelope | ControlEventEnvelope] = field(default_factory=list)
+    envelopes: list[EventEnvelope | ControlEventEnvelope | ApprovalControlEnvelope] = field(default_factory=list)
     turns: dict[str, CheckedTurn] = field(default_factory=dict)
 
 
@@ -130,7 +132,9 @@ class CodexTurnRepository:
                 raw = strict_json(stored['record_json'])
                 if not isinstance(raw, dict):
                     raise damaged()
-                envelope = decode(ControlEventEnvelope if raw.get('version') == 'codex-turn-event-v2' else EventEnvelope, stored['record_json'])
+                model = (ApprovalControlEnvelope if raw.get('version') == 'codex-turn-event-v3' else
+                    ControlEventEnvelope if raw.get('version') == 'codex-turn-event-v2' else EventEnvelope)
+                envelope = decode(model, stored['record_json'])
                 if (envelope.session_id != anchor.session_id or envelope.workspace_id != self.workspace
                         or envelope.seq != seq or stored['seq'] != seq or envelope.previous_sha256 != digest
                         or content_sha256(envelope) != stored['record_sha256']):
@@ -149,6 +153,8 @@ class CodexTurnRepository:
                     seen_members.add(event.input.turn_id)
                 elif isinstance(event, TurnProviderBound):
                     self._provider_bound(state, event)
+                elif isinstance(event, TurnApprovalBound):
+                    self._approval_bound(state, event)
                 elif isinstance(event, TurnStarted):
                     turn = state.turns.get(event.turn_id)
                     if turn is None or turn.start is not None or turn.control.job.status != 'awaiting_approval':
@@ -344,6 +350,28 @@ class CodexTurnRepository:
         if actual_runs != actual_jobs:
             raise damaged()
 
+    @staticmethod
+    def _approval_bound(state: CheckedSession, event: TurnApprovalBound) -> None:
+        turn = state.turns.get(event.turn_id)
+        if turn is None or turn.start is None or turn.control.execution != 'active':
+            raise damaged()
+        previous = next((item for item in reversed(turn.approval_bindings) if item.control.id == event.control.id), None)
+        if (event.approval_seq != (previous.approval_seq + 1 if previous else 1)
+                or event.control.revision != event.approval_seq
+                or previous is not None and previous.control.operation_sha256 != event.control.operation_sha256
+                or previous is None and (event.control.decision != 'pending' or event.control.validity != 'unavailable')
+                or previous is not None and previous.control.validity == 'closed'
+                or previous is None and any(event.control.id in other.control.approval_ids for other in state.turns.values())):
+            raise damaged()
+        controls = list(turn.control.approval_controls)
+        if previous is None:
+            controls.append(event.control)
+        else:
+            controls = [event.control if item.id == event.control.id else item for item in controls]
+        turn.control = CodexTurnControlView.model_validate({**turn.control.model_dump(),
+            'approval_ids': [item.id for item in controls], 'approval_controls': controls})
+        turn.approval_bindings.append(event)
+
     def next_creation_sequence(self) -> int:
         # The allocating writer owns BEGIN IMMEDIATE. Freeze the real sequence
         # into the immutable event; the surrogate is never pagination authority.
@@ -358,12 +386,15 @@ class CodexTurnRepository:
         self.conn.execute('INSERT INTO codex_turn_heads VALUES(?,?,2,0,?,NULL)', (anchor.session_id, self.workspace, digest))
         return CheckedSession(anchor, 2, None)
 
-    def append(self, state: CheckedSession, event, now: str) -> EventEnvelope | ControlEventEnvelope:
+    def append(self, state: CheckedSession, event, now: str) -> EventEnvelope | ControlEventEnvelope | ApprovalControlEnvelope:
         seq = len(state.envelopes) + 1
         previous = content_sha256(state.envelopes[-1]) if state.envelopes else content_sha256(state.anchor)
         extended = isinstance(event, (RunnableTurnPrepared, TurnProviderBound, TurnStarted, TurnLifecycle, TurnCancelRequested))
-        envelope: ControlEventEnvelope | EventEnvelope
-        if extended:
+        envelope: ControlEventEnvelope | EventEnvelope | ApprovalControlEnvelope
+        if isinstance(event, TurnApprovalBound):
+            envelope = ApprovalControlEnvelope(version='codex-turn-event-v3', workspace_id=self.workspace,
+                session_id=state.anchor.session_id, seq=seq, previous_sha256=previous, occurred_at=now, event=event)
+        elif extended:
             envelope = ControlEventEnvelope(version='codex-turn-event-v2', workspace_id=self.workspace,
                 session_id=state.anchor.session_id, seq=seq, previous_sha256=previous, occurred_at=now, event=event)
         else:
@@ -408,6 +439,11 @@ class CodexTurnRepository:
             revision, active = state.revision+int(requested), state.active_turn_id
         elif isinstance(event, TurnProviderBound):
             self._provider_bound(state, event)
+            control = state.turns[event.turn_id].control
+            self.conn.execute('UPDATE runs SET snapshot_json=? WHERE id=?', (canonical_json(control), control.job.id))
+            revision, active = state.revision, state.active_turn_id
+        elif isinstance(event, TurnApprovalBound):
+            self._approval_bound(state, event)
             control = state.turns[event.turn_id].control
             self.conn.execute('UPDATE runs SET snapshot_json=? WHERE id=?', (canonical_json(control), control.job.id))
             revision, active = state.revision, state.active_turn_id

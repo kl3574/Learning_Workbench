@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field
 from packages.contracts import domain_models as dm
-from ..codex_turn_dto import CodexApprovalControl, CodexDeniedOperation, CodexLocalToolBudget, GenericApprovalDecisionAck
+from ..codex_turn_dto import CodexApprovalControl, CodexDeniedOperation, CodexLocalToolBudget, GenericApprovalDecisionAck, SafeCode
 from .provider_models import DispatchLease
 
 
@@ -62,6 +62,11 @@ class ApprovalDecided(dm.StrictModel):
     command: ApprovalCommand
 
 
+class ApprovalClosed(dm.StrictModel):
+    kind: Literal['closed']
+    reason: SafeCode
+
+
 class ApprovalEnvelope(dm.StrictModel):
     version: Literal['codex-generic-approval-event-v1']
     workspace_id: dm.Id
@@ -69,7 +74,7 @@ class ApprovalEnvelope(dm.StrictModel):
     seq: dm.Revision
     previous_sha256: dm.Sha256 | None
     occurred_at: dm.UTC
-    event: Annotated[ApprovalCreated | ApprovalDecided, Field(discriminator='kind')]
+    event: Annotated[ApprovalCreated | ApprovalDecided | ApprovalClosed, Field(discriminator='kind')]
 
 
 class TurnApprovalBound(dm.StrictModel):

@@ -78,9 +78,9 @@ def test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec():
     assert {('POST', '/api/v1/codex/session-preparations'), ('GET', '/api/v1/codex/session-preparations/{id}'),
             ('POST', '/api/v1/codex/session-preparations/{id}/decision'), ('POST', '/api/v1/codex/sessions'),
             ('GET', '/api/v1/codex/sessions/{id}')} <= projection
-    assert len(projection) == 127
+    assert len(projection) == 129
     assert len(SPEC_ROUTES) == 147
-    assert len(SPEC_ROUTES - projection) == 20
+    assert len(SPEC_ROUTES - projection) == 18
 
 
 OPERATIONS = [(path, method, operation) for path, methods in create_app().openapi()["paths"].items()
@@ -176,3 +176,5 @@ def test_codex_turn_slice_registers_real_preparation_control_and_permit_operatio
     ]:
         assert paths[path][method]['responses'][status]['content']['application/json']['schema']['$ref'].endswith('/' + dto)
     assert paths['/api/v1/codex/turns/{id}/result']['get']['responses']['200']['content']['application/json']['schema']['$ref'].endswith('/CodexTurnResultView')
+    assert paths['/api/v1/approvals/{id}']['get']['responses']['200']['content']['application/json']['schema']['$ref'].endswith('/GenericApprovalView')
+    assert paths['/api/v1/approvals/{id}/decision']['post']['responses']['200']['content']['application/json']['schema']['$ref'].endswith('/GenericApprovalDecisionAck')
