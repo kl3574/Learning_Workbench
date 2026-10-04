@@ -1,0 +1,247 @@
+"""Finite Codex dispatch coordination; production has no execution registration.
+
+Provider consumption, Jobs lease, immutable start and independent Run witness
+commit before the trusted adapter boundary. Recovery only closes old facts.
+"""
+from collections.abc import Callable
+from contextlib import ExitStack
+from dataclasses import dataclass
+import sqlite3
+import threading
+import time
+from typing import Protocol
+from uuid import uuid4
+
+from pydantic import TypeAdapter
+
+from ..codex_turn_dto import CodexFrozenOutboundSummary, SafeCode
+from ..infrastructure.codex_bootstrap_execution import CodexExecutionOwners
+from ..infrastructure.database import utc_now
+from ..infrastructure.codex_turn_jobs import CodexTurnJobs
+from ..serialization import content_sha256
+from .codex_turn import CodexTurnService
+from .codex_turn_models import TurnLifecycle
+from .errors import ApiError
+from .provider_codex_consents import CodexConsentsService
+from .provider_codex_execution import CodexExecutionResult, CodexRequestGate, SyntheticCodexExecution, SyntheticTransport
+from .provider_codex_profile import CodexRuntimeProfile, PreparedCodexRequest
+
+
+class CodexTurnExecutor(Protocol):
+    def available(self, profile: CodexRuntimeProfile) -> bool: ...
+
+    def execute(self, prepared: PreparedCodexRequest, summary: CodexFrozenOutboundSummary,
+                profile: CodexRuntimeProfile, before_request: Callable[[], None]) -> CodexExecutionResult: ...
+
+
+@dataclass
+class SyntheticCodexExecutor:
+    """Explicit pure protocol test composition, never a host/CLI sandbox."""
+    transport: SyntheticTransport
+    peer: Callable[[CodexRequestGate], None] | None = None
+
+    def available(self, profile: CodexRuntimeProfile) -> bool:
+        return profile.version == 'codex-synthetic-runtime-profile-v1'
+
+    def execute(self, prepared, summary, profile, before_request):
+        return SyntheticCodexExecution(prepared,summary,profile,transport=self.transport).run(
+            self.peer,before_request=before_request)
+
+
+class CodexTurnWorker:
+    def __init__(self, turns: CodexTurnService, provider: CodexConsentsService,
+                 executor: CodexTurnExecutor | None = None):
+        self.turns,self.provider,self.executor = turns,provider,executor
+        self.database = turns.database
+        self.owners = CodexExecutionOwners(self.database.settings.data_dir)
+        self._stop = threading.Event()
+        self._lock = threading.Lock()
+        self._thread: threading.Thread | None = None
+        self.last_error_code: str | None = None
+
+    def available(self, profile: CodexRuntimeProfile) -> bool:
+        return self.executor is not None and self.executor.available(profile)
+
+    @staticmethod
+    def safe_failure(error: ApiError) -> SafeCode:
+        # Unknown integrity/programming errors must not be recast as normal
+        # admission failure or allow a partial damaged graph to be rewritten.
+        if error.code == 'CODEX_HISTORY_DAMAGED':
+            raise error
+        try:
+            return TypeAdapter(SafeCode).validate_python(error.code)
+        except ValueError:
+            raise error from None
+
+    def start(self):
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._stop.clear()
+        self._thread=threading.Thread(target=self._loop,name='learning-codex-turn-worker',daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=5)
+
+    def _loop(self):
+        next_recovery=0.0
+        while not self._stop.is_set():
+            try:
+                if time.monotonic()>=next_recovery:
+                    self.recover()
+                    next_recovery=time.monotonic()+1
+                worked=self.run_once()
+                self.last_error_code=None
+            except (ApiError,sqlite3.Error) as error:
+                self.last_error_code=error.code if isinstance(error,ApiError) else 'CODEX_HISTORY_DAMAGED'
+                worked=False
+            if not worked:
+                self._stop.wait(0.25)
+
+    def _terminal(self, conn, workspace, repo, state, turn, provider_state, *,
+                  outcome, code, execution_result=None, elapsed_ms=None):
+        result={'version':'codex-turn-job-result-v1','turn_id':turn.control.id,
+            'outcome':outcome,'dispatch_id':provider_state.queued.dispatch_id}
+        status='completed' if outcome=='completed' else 'cancelled' if outcome=='cancelled' else 'failed'
+        repo.jobs.transition(repo.jobs.load(turn.control.job.id),status,result=result)
+        now=repo.jobs.snapshot(turn.control.job.id).updated_at
+        event,binding=self.provider.record_terminal(conn,workspace,turn.control.id,provider_state,now,
+            outcome=outcome,error_code=code,execution_result=execution_result,elapsed_ms=elapsed_ms)
+        state.envelopes.append(repo.append(state,binding,now))
+        control=repo.terminal_control(turn.control,now,outcome,code)
+        repo.append(state,TurnLifecycle(kind='lifecycle',turn_id=turn.control.id,phase='terminal',control=control,
+            provider_seq=event.seq,provider_sha256=content_sha256(event)),now)
+        self.provider.owned_states(conn,workspace)
+
+    def _claim(self, stack: ExitStack):
+        workspace=self.database.workspace_id()
+        with self.database.transaction() as conn:
+            identifiers=CodexTurnJobs(conn,workspace).queued_ids()
+            if not identifiers:
+                return None
+            _,repo,history=self.turns._owned_state(conn,workspace)
+            states,_=self.provider.owned_states(conn,workspace)
+            state,turn=self.turns._find(history,identifiers[0],job=True)
+            provider_state=states.get(turn.control.id)
+            if provider_state is None or provider_state.queued is None:
+                raise ApiError(409,'CODEX_HISTORY_DAMAGED','任务缺少原消费事实。')
+            try:
+                provider_state,_,prepared=self.provider.admit_execution(conn,workspace,turn.control.id)
+                profile=provider_state.proposed.material.input.runtime
+                if not self.available(profile):
+                    raise ApiError(503,'CODEX_RUNTIME_UNAVAILABLE','原执行适配器当前不可用。')
+            except ApiError as error:
+                code=self.safe_failure(error)
+                self._terminal(conn,workspace,repo,state,turn,provider_state,outcome='failed',code=code)
+                return False
+            owner='codex_owner_'+uuid4().hex
+            if not stack.enter_context(self.owners.hold(owner)):
+                raise ApiError(503,'CODEX_RUNTIME_UNAVAILABLE','执行实例不可用。')
+            lease=repo.jobs.claim(turn.control.job.id,profile.tools.wall_seconds+30)
+            now=repo.jobs.snapshot(turn.control.job.id).updated_at
+            event,binding=self.provider.record_start(conn,workspace,turn.control.id,provider_state,lease.dispatch(),owner,now)
+            state.envelopes.append(repo.append(state,binding,now))
+            control=repo.active_control(turn.control,now)
+            repo.append(state,TurnLifecycle(kind='lifecycle',turn_id=turn.control.id,phase='claim',control=control,
+                provider_seq=event.seq,provider_sha256=content_sha256(event)),now)
+            self.provider.owned_states(conn,workspace)
+            return workspace,turn.control.id,owner,prepared,provider_state.proposed.command.ack.summary,profile
+
+    def _guard(self, workspace, turn_id, owner, started):
+        if self._stop.is_set():
+            raise ApiError(409,'CODEX_CANCELLED','本机执行正在停止。')
+        with self.database.transaction(immediate=False) as conn:
+            conn.execute('PRAGMA query_only=ON')
+            provider_state,_,_=self.provider.admit_execution(conn,workspace,turn_id,already_started=True)
+            _,repo,history=self.turns._owned_state(conn,workspace)
+            _,turn=self.turns._find(history,turn_id)
+            row=repo.jobs.load(turn.control.job.id)
+            permit=provider_state.started
+            if (permit is None or permit.execution_owner_id!=owner or row['lease_owner']!=permit.lease.owner_id
+                    or row['status']!='running' or row['lease_until']<=utc_now()):
+                raise ApiError(409,'CODEX_OUTCOME_UNKNOWN','原开始许可不能继续派发。')
+            if row['cancel_requested']:
+                raise ApiError(409,'CODEX_CANCELLED','原任务已请求停止。')
+            if time.monotonic()-started>=provider_state.proposed.command.ack.summary.tools.wall_seconds:
+                raise ApiError(409,'CODEX_TIMEOUT','原任务已超过总期限。')
+
+    def _finish(self, workspace, turn_id, owner, execution_result, started):
+        with self.database.transaction() as conn:
+            _,repo,history=self.turns._owned_state(conn,workspace)
+            states,_=self.provider.owned_states(conn,workspace)
+            state,turn=self.turns._find(history,turn_id)
+            provider_state=states[turn_id]
+            if provider_state.finished is not None:
+                return
+            if provider_state.started is None or provider_state.started.execution_owner_id!=owner:
+                raise ApiError(409,'CODEX_HISTORY_DAMAGED','原执行实例不一致。')
+            outcome,code=(execution_result.outcome,execution_result.error_code) if execution_result is not None else ('unknown','CODEX_OUTCOME_UNKNOWN')
+            # Receiving a real response survives actor loss; receiving it does
+            # not renew permission or label an interrupted operation complete.
+            if turn.control.cancel_requested:
+                outcome,code='cancelled','CODEX_CANCELLED'
+            elif outcome=='completed':
+                try:
+                    self.provider.admit_execution(conn,workspace,turn_id,already_started=True)
+                except ApiError as error:
+                    outcome,code='failed',self.safe_failure(error)
+                if time.monotonic()-started>=provider_state.proposed.command.ack.summary.tools.wall_seconds:
+                    outcome,code='failed','CODEX_TIMEOUT'
+            self._terminal(conn,workspace,repo,state,turn,provider_state,outcome=outcome,code=code,
+                execution_result=execution_result,elapsed_ms=max(0,int((time.monotonic()-started)*1000)))
+
+    def run_once(self) -> bool:
+        if not self._lock.acquire(blocking=False):
+            return False
+        try:
+            with ExitStack() as stack:
+                claimed=self._claim(stack)
+                if claimed is None:
+                    return False
+                if claimed is False:
+                    return True
+                workspace,turn_id,owner,prepared,summary,profile=claimed
+                started=time.monotonic()
+                try:
+                    if self.executor is None:
+                        raise ApiError(503,'CODEX_RUNTIME_UNAVAILABLE','执行适配器不可用。')
+                    result=self.executor.execute(prepared,summary,profile,
+                        lambda:self._guard(workspace,turn_id,owner,started))
+                    result=CodexExecutionResult.model_validate(result.model_dump(mode='json'))
+                except Exception:
+                    # The adapter did not yield a checked receipt. Preserve an
+                    # unknown outcome; never invent a zero-call response fact.
+                    result=None
+                self._finish(workspace,turn_id,owner,result,started)
+                return True
+        finally:
+            self._lock.release()
+
+    def recover(self) -> int:
+        workspace=self.database.workspace_id()
+        with self.database.transaction(immediate=False) as conn:
+            conn.execute('PRAGMA query_only=ON')
+            states,_=self.provider.owned_states(conn,workspace)
+            pending=[(turn,state.started.execution_owner_id) for turn,state in states.items()
+                if state.started is not None and state.finished is None]
+        count=0
+        for turn_id,owner in pending:
+            with self.owners.hold(owner) as inactive:
+                if not inactive:
+                    continue
+                with self.database.transaction() as conn:
+                    _,repo,history=self.turns._owned_state(conn,workspace)
+                    states,_=self.provider.owned_states(conn,workspace)
+                    state,turn=self.turns._find(history,turn_id)
+                    provider_state=states[turn_id]
+                    if provider_state.finished is not None:
+                        continue
+                    row=repo.jobs.load(turn.control.job.id)
+                    if row['lease_until']>utc_now():
+                        continue
+                    self._terminal(conn,workspace,repo,state,turn,provider_state,
+                        outcome='unknown',code='CODEX_OUTCOME_UNKNOWN')
+                    count+=1
+        return count

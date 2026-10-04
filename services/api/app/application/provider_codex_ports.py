@@ -6,8 +6,9 @@ from pydantic import Field
 from packages.contracts import domain_models as dm
 from ..codex_turn_dto import CodexTurnPreparationView, CodexTurnControlView
 from ..infrastructure.security import SessionIdentity
-from .codex_turn_models import TurnContext, TurnInput, TurnProviderBound
-from .codex_turn_execution_models import RunnableTurnInput, RunnableTurnContext
+from .codex_turn_models import TurnContext, TurnInput, TurnProviderBound, TurnStarted, TurnLifecycle
+from .provider_models import DispatchLease
+from .codex_turn_execution_models import RunnableTurnInput, RunnableTurnContext, UnavailableHistoryContext
 
 
 class CodexOutboundMaterial(dm.StrictModel):
@@ -17,13 +18,16 @@ class CodexOutboundMaterial(dm.StrictModel):
     preparation: CodexTurnPreparationView
     job_revision: dm.Revision
     input: Annotated[TurnInput | RunnableTurnInput, Field(discriminator='version')]
-    context: Annotated[TurnContext | RunnableTurnContext, Field(discriminator='version')]
+    context: Annotated[TurnContext | RunnableTurnContext | UnavailableHistoryContext, Field(discriminator='version')]
 
 
 class CodexOutboundSourceState(dm.StrictModel):
     material: CodexOutboundMaterial
     control: CodexTurnControlView
     provider_bindings: list[TurnProviderBound]
+    start: TurnStarted | None
+    lifecycle: list[TurnLifecycle]
+    active_lease: DispatchLease | None
 
 
 class CodexOutboundSourcePort(Protocol):
@@ -34,8 +38,13 @@ class CodexOutboundSourcePort(Protocol):
 
     def outbound_sources(self, transaction: sqlite3.Connection, identity: SessionIdentity) -> dict[str, CodexOutboundSourceState]: ...
 
+    def owned_outbound_sources(self, transaction: sqlite3.Connection, workspace_id: str) -> dict[str, CodexOutboundSourceState]: ...
+
     def bind_outbound_event(self, transaction: sqlite3.Connection, identity: SessionIdentity,
                             event: TurnProviderBound, occurred_at: str) -> None: ...
+
+    def verify_dispatch_lease(self, transaction: sqlite3.Connection, workspace_id: str, job_id: str,
+                              lease: DispatchLease) -> None: ...
 
     def current_outbound_material(self, transaction: sqlite3.Connection, identity: SessionIdentity,
                                   material: CodexOutboundMaterial) -> bool: ...

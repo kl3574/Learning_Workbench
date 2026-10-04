@@ -9,7 +9,7 @@ from ..provider_dto import ProviderConfigView, ReferenceSummary
 from .retrieval_models import RetrievalScopeSnapshot
 from .provider_codex_profile import CodexRuntimeProfile
 from .codex_turn_models import (
-    PrepareCommand, TurnCancelled, TurnProviderBound, TurnStarted, TurnLifecycle,
+    PrepareCommand, TurnInput, TurnCancelled, TurnProviderBound, TurnStarted, TurnLifecycle, TurnCancelRequested,
 )
 
 
@@ -48,6 +48,22 @@ class RunnableTurnContext(dm.StrictModel):
     omitted_history: Annotated[list[CodexCompletedHistory], Field(max_length=2)]
 
 
+class UnavailableHistoryContext(dm.StrictModel):
+    """New frozen context version; old unavailable v1 decoder stays exact."""
+    version: Literal['codex-turn-context-v3']
+    input: TurnInput
+    snapshot: dm.ContextSnapshot
+    messages: Annotated[list[dm.GenerationMessage], Field(min_length=2, max_length=6)]
+    evidence: Annotated[list[dm.EvidenceChunk], Field(max_length=8)]
+    scopes: Annotated[list[RetrievalScopeSnapshot], Field(max_length=8)]
+    materials: Annotated[list[ReferenceSummary], Field(max_length=8)]
+    omitted_refs: Annotated[list[dm.ContentRef], Field(max_length=8)]
+    omitted_scopes: Annotated[list[RetrievalScopeSnapshot], Field(max_length=8)]
+    warnings: Annotated[list[dm.Warning], Field(max_length=32)]
+    history: Annotated[list[CodexCompletedHistory], Field(max_length=2)]
+    omitted_history: Annotated[list[CodexCompletedHistory], Field(max_length=2)]
+
+
 class RunnableTurnPrepared(dm.StrictModel):
     kind: Literal['prepared']
     creation_sequence: dm.Revision
@@ -55,7 +71,7 @@ class RunnableTurnPrepared(dm.StrictModel):
     command: PrepareCommand
 
 
-NewTurnEvent = Annotated[RunnableTurnPrepared | TurnProviderBound | TurnStarted | TurnLifecycle | TurnCancelled,
+NewTurnEvent = Annotated[RunnableTurnPrepared | TurnProviderBound | TurnStarted | TurnLifecycle | TurnCancelRequested | TurnCancelled,
                          Field(discriminator='kind')]
 
 

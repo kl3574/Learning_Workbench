@@ -197,6 +197,13 @@ class CodexProviderRepository:
                     or (event.outcome == 'completed') != (event.error_code is None)
                     or state.started_at is not None and instant(envelope.occurred_at) < instant(state.started_at)):
                 raise damaged()
+            if event.execution_result is None:
+                if event.answer or event.usage.input_tokens is not None or event.usage.output_tokens is not None:
+                    raise damaged()
+            elif (state.started is None or event.answer != event.execution_result.answer
+                    or event.usage != event.execution_result.usage
+                    or event.outcome == 'completed' and event.execution_result.outcome != 'completed'):
+                raise damaged()
             state.finished, state.finished_at = event, envelope.occurred_at
         else:
             raise damaged()

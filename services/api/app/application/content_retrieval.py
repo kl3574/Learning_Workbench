@@ -84,9 +84,9 @@ class _EncodingBudget:
 
 
 class _ScopeReader:
-    def __init__(self, conn: sqlite3.Connection, identity: SessionIdentity, roots: list[dm.ContentRef]):
+    def __init__(self, conn: sqlite3.Connection, workspace_id: str, roots: list[dm.ContentRef]):
         self.conn = conn
-        self.workspace = identity.workspace_id
+        self.workspace = workspace_id
         self.roots = roots
         self.repository = ContentRepository(conn, self.workspace)
         self.provenance = ProvenanceRepository(conn, self.workspace)
@@ -290,7 +290,7 @@ class ContentRetrievalSource:
                 refs = normalize_scope_refs([_strict_ref(ref) for ref in scope_refs])
             except (ValueError, TypeError):
                 raise ApiError(422, 'RETRIEVAL_SCOPE_INVALID', '请明确选择课程、小节或正文块的完整修订。') from None
-            return _ScopeReader(conn, identity, refs).resolve()
+            return _ScopeReader(conn, identity.workspace_id, refs).resolve()
 
     def _current(self, conn: sqlite3.Connection, identity: SessionIdentity,
                  scope: RetrievalScopeSnapshot) -> RetrievalScopeSnapshot:
@@ -330,14 +330,26 @@ class ContentRetrievalSource:
         if not conn.in_transaction:
             raise ApiError(409, 'TRANSACTION_REQUIRED', '原材料核验需要当前事务。')
         current_session_identity(conn, identity)
+        self.verify_owned_retained_block(conn, identity.workspace_id, scope)
+
+    def verify_owned_retained_block(self, conn: sqlite3.Connection, workspace_id: str,
+                                   scope: RetrievalScopeSnapshot) -> None:
+        """Internal integrity-only check; returns no bytes or subject permission.
+
+        Started-owner finalization/recovery must preserve actual facts after
+        session expiry. HTTP/source admission still uses the current-session
+        port above and separate current Policy checks.
+        """
+        if not conn.in_transaction:
+            raise ApiError(409, 'TRANSACTION_REQUIRED', '原材料核验需要当前事务。')
         try:
             scope = RetrievalScopeSnapshot.model_validate(scope.model_dump(mode='json'))
-            if scope.descriptor.workspace_id != identity.workspace_id or len(scope.descriptor.blocks) != 1:
+            if scope.descriptor.workspace_id != workspace_id or len(scope.descriptor.blocks) != 1:
                 raise damaged()
             original = scope.descriptor.blocks[0]
             if scope.descriptor.scope_refs != [original.ref]:
                 raise damaged()
-            reader = _ScopeReader(conn, identity, [original.ref])
+            reader = _ScopeReader(conn, workspace_id, [original.ref])
             block = reader.load('block', original.ref.id, original.ref.revision).value
             if (not isinstance(block, dm.ContentBlock) or reference(block) != original.ref
                     or block.body_path.startswith('private/') or block.title != original.title):
