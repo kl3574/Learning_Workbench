@@ -2,7 +2,8 @@
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
-from threading import Event
+from threading import Barrier, Event
+import json
 
 from fastapi.testclient import TestClient
 import pytest
@@ -12,6 +13,7 @@ from services.api.app.application.codex_turn_interrupt_models import TurnInterru
 from services.api.app.infrastructure.codex_turn_repository import CodexTurnRepository
 from services.api.app.main import create_app
 from services.api.app.security import issue_bootstrap_code
+from services.api.app.serialization import canonical_json, content_sha256
 from tests.integration.test_codex_bootstrap_http import approve
 from tests.integration.test_codex_turn_dispatch_http import consent_case, base_consent_case, queued
 from tests.integration.test_codex_turn_consent_http import grant_fixture, make_consent_case
@@ -268,3 +270,144 @@ def test_strict_transport_rejects_without_effect(consent_case, change):
     before = case.dump()
     response = case.client.post(path, json=body, headers=headers)
     assert response.status_code in {400, 403, 422} and case.dump() == before
+
+
+@pytest.mark.parametrize('second_entry', ['same_command', 'new_key', 'jobs'])
+def test_concurrent_entrypoints_linearize_once(consent_case, second_entry):
+    case, _, sid, _, _, _ = consent_case
+    prep, _, _, _ = queued(consent_case)
+    body = {'turn_id': prep['turn_id'], 'expected_session_revision': 4}
+    barrier = Barrier(2)
+    def invoke(second):
+        barrier.wait(timeout=10)
+        if second and second_entry == 'jobs':
+            return cancel(case, prep['job']['id'], 2)
+        key = 'other-key' if second and second_entry == 'new_key' else 'same-key'
+        return case.post(f'sessions/{sid}/interrupt', body, key)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first, second = pool.submit(invoke, False), pool.submit(invoke, True)
+        responses = [first.result(timeout=20), second.result(timeout=20)]
+    if second_entry == 'same_command':
+        assert [r.status_code for r in responses] == [200, 200]
+        assert responses[0].content == responses[1].content
+    else:
+        assert sorted(r.status_code for r in responses) == [200, 412]
+    assert case.get('sessions/'+sid).json()['revision'] == 6
+    assert case.get('turns/'+prep['turn_id']).json()['job_revision'] == 3
+    assert case.app.state.synthetic_transport_calls == []
+
+
+def test_original_ack_after_new_turn_and_restart_is_not_a_current_ack(consent_case):
+    from tests.integration.test_codex_turn_consent_http import consent_preparation
+    case, runtime, sid, proofs, _, _ = consent_case
+    prep, _, _, _ = queued(consent_case)
+    body, ack = interrupt(case, sid, prep['turn_id'])
+    assert ack.status_code == 200
+    _, next_turn = consent_preparation(case, sid, 6, 'next-prepare')
+    assert next_turn.status_code == 202
+    app = create_app(case.app.state.settings, codex_bootstrap_runtime=runtime, codex_proofs=proofs)
+    client = TestClient(app, base_url=case.app.state.settings.origin)
+    client.cookies.update(case.client.cookies)
+    try:
+        before = case.dump()
+        replay = client.post(f'/api/v1/codex/sessions/{sid}/interrupt', json=body,
+            headers={**case.headers, 'Idempotency-Key': 'same-key'})
+        assert replay.content == ack.content and replay.json()['status'] == 'interrupt_requested'
+        current = client.get('/api/v1/codex/sessions/'+sid).json()
+        assert current['revision'] == 7 and current['active_turn_id'] == next_turn.json()['turn_id']
+        assert case.dump() == before
+        assert len(runtime.calls) == 1 and case.app.state.synthetic_transport_calls == []
+    finally:
+        client.close()
+
+
+@pytest.mark.parametrize('field', ['inner_basis', 'inner_actor', 'outer_status', 'outer_revision'])
+def test_rehashed_interrupt_facts_still_obey_original_stop_binding(consent_case, field):
+    case, _, sid, _, _, _ = consent_case
+    prep, _, _, _ = queued(consent_case)
+    body, ack = interrupt(case, sid, prep['turn_id'])
+    assert ack.status_code == 200
+    with case.app.state.database.transaction() as conn:
+        row = conn.execute('SELECT * FROM codex_turn_events WHERE session_id=? ORDER BY seq DESC LIMIT 1', (sid,)).fetchone()
+        value = json.loads(row['record_json'])
+        event = value['event']
+        if field == 'inner_basis':
+            event['stop']['command']['body']['expected_revision'] += 1
+        elif field == 'inner_actor':
+            event['stop']['command']['actor_session_id'] = 'different_actor'
+        elif field == 'outer_status':
+            event['command']['ack']['status'] = 'already_terminal'
+        else:
+            event['command']['body']['expected_session_revision'] += 1
+        for trigger in conn.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'codex_turn_%'").fetchall():
+            conn.execute('DROP TRIGGER '+trigger[0])
+        digest = content_sha256(value)
+        conn.execute('UPDATE codex_turn_events SET record_json=?,record_sha256=? WHERE session_id=? AND seq=?',
+            (canonical_json(value), digest, sid, row['seq']))
+        conn.execute('UPDATE codex_turn_event_members SET record_sha256=? WHERE session_id=? AND seq=?', (digest, sid, row['seq']))
+        conn.execute('UPDATE codex_turn_heads SET head_sha256=? WHERE session_id=?', (digest, sid))
+        conn.execute('UPDATE codex_turn_commands SET command_sha256=? WHERE session_id=? AND seq=?',
+            (content_sha256(event['command']), sid, row['seq']))
+        conn.execute('UPDATE codex_turn_interrupts SET event_sha256=?,stop_command_json=?,stop_command_sha256=? WHERE session_id=? AND seq=?',
+            (digest, canonical_json(event['stop']['command']), content_sha256(event['stop']['command']), sid, row['seq']))
+    before = case.dump()
+    assert case.get('turns/'+prep['turn_id']).status_code == 409
+    assert case.post(f'sessions/{sid}/interrupt', body, 'same-key').status_code == 409
+    assert case.dump() == before
+
+
+def test_interrupt_pending_unsupported_operation_retains_closed_approval(consent_case):
+    from tests.integration.test_codex_generic_approval_boundaries import exercise
+    original = []
+    def observe(case, prepared, raw, identifier):
+        control = case.get('turns/'+prepared['turn_id']).json()
+        assert control['approval_controls'][0]['decision'] == 'pending'
+        body, ack = interrupt(case, prepared['session_id'], prepared['turn_id'])
+        assert ack.status_code == 200
+        original.append((body, ack.content))
+        pending = case.get('turns/'+prepared['turn_id']).json()['approval_controls'][0]
+        assert pending['decision'] == 'pending' and pending['validity'] == 'closed'
+    case, prepared, _, identifier = exercise(consent_case, observe)
+    control = case.get('turns/'+prepared['turn_id']).json()
+    assert control['outcome'] == 'cancelled'
+    assert control['approval_controls'][0]['validity'] == 'closed'
+    read = case.client.get('/api/v1/approvals/'+identifier)
+    assert read.status_code == 200 and read.json()['execution'] == 'not_started'
+    assert read.json()['decision'] == 'pending' and read.json()['validity'] == 'closed'
+    before = case.dump()
+    body, ack = original[0]
+    assert case.post('sessions/'+prepared['session_id']+'/interrupt', body, 'same-key').content == ack
+    assert case.dump() == before and len(case.app.state.synthetic_transport_calls) == 1
+
+
+def test_late_response_cost_survives_interrupt_and_subject_permission_loss(consent_case):
+    case, _, sid, _, _, _ = consent_case
+    prep, _, _, _ = queued(consent_case)
+    executor = case.app.state.synthetic_executor
+    original = executor.transport
+    errors = []
+    def transport(*args):
+        try:
+            _, ack = interrupt(case, sid, prep['turn_id'])
+            assert ack.status_code == 200
+            assert case.client.post('/api/v1/session/role', json={'role': 'learner'},
+                headers={**case.headers, 'Idempotency-Key': 'learner'}).status_code == 200
+        except Exception as error:
+            errors.append(error)
+            raise
+        return original(*args)
+    executor.transport = transport
+    assert case.app.state.codex_turn_worker.run_once() is True
+    if errors:
+        raise errors[0]
+    assert case.get('turns/'+prep['turn_id']).json()['outcome'] == 'cancelled'
+    before = case.dump()
+    assert case.get('turns/'+prep['turn_id']+'/result').status_code == 403
+    assert case.dump() == before
+    owner = case.app.state.codex_turn_service.outbound_owner
+    with case.app.state.database.transaction(immediate=False) as conn:
+        conn.execute('PRAGMA query_only=ON')
+        state = owner.owned_states(conn, case.app.state.database.workspace_id())[0][prep['turn_id']]
+        assert state.finished.execution_result.answer == 'Synthetic exact answer α\n'
+        assert state.finished.usage.input_tokens > 0
+    assert len(case.app.state.synthetic_transport_calls) == 1
