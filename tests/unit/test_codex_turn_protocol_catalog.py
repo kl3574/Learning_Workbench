@@ -157,6 +157,14 @@ def test_interrupt_serialization_preserves_the_same_supported_shape(representati
         b'{"threadId":"fixture-thread","turnId":"fixture-turn"}')
 
 
+@pytest.mark.parametrize('damaged_id', [True, '\ud800'])
+def test_typed_interrupt_is_rechecked_without_enabling_python_field_alias_input(damaged_id):
+    params = ClosedTurnInterruptParams.model_validate({'threadId': 'fixture-thread', 'turnId': 'fixture-turn'})
+    object.__setattr__(params, 'thread_id', damaged_id)
+    with pytest.raises(ValueError):
+        codecs.serialize_interrupt(codecs.read_catalog(), params)
+
+
 @pytest.mark.parametrize('field,value', [('original_receipt_size', 55893.0), ('historical_generated_files', 314.0), ('historical_exit_code', False)])
 def test_source_summary_historical_numbers_reject_aliases(field, value):
     body = codecs.read_catalog().source_projection.model_dump()
