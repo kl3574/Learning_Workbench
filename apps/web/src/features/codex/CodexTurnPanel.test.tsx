@@ -246,6 +246,38 @@ test('late ACK followed by a changed actual actor remains original isolated hist
  expect(port.prepare).toHaveBeenCalledOnce()
 })
 
+test('late form-save failure cannot replace a fresh actor-denial notice or expose the original ACK', async () => {
+ const port = turnPort(), store = local(), formStore = local(), pending = deferred<ReturnType<typeof turnPreparation>>()
+ const saved = deferred<void>(), save = formStore.save.bind(formStore)
+ let delay = false
+ vi.spyOn(formStore, 'save').mockImplementation(async (...args) => {
+  if (!delay) return save(...args)
+  await saved.promise
+  throw new Error('synthetic delayed form save failure')
+ })
+ vi.mocked(port.prepare).mockReturnValue(pending.promise)
+ render(<CodexTurnPanel workspace={workspace} writeAdmitted port={port} store={store} formStore={formStore} />)
+ await enter(); await waitFor(() => expect(heldTurnForms(workspace)).toHaveLength(0))
+ delay = true
+ fireEvent.change(screen.getByLabelText('回合 wall 秒数'), { target: { value: '299' } })
+ await waitFor(() => expect(heldTurnForms(workspace)).toHaveLength(1))
+ fireEvent.click(screen.getByText('明确准备回合并预约 Job'))
+ await waitFor(() => expect(port.prepare).toHaveBeenCalledOnce())
+ const original = vi.mocked(port.prepare).mock.calls[0], ack = turnPreparation(original[1])
+ vi.mocked(port.session).mockResolvedValue({ ...session(), actor_session_id: 'actor_after_send' })
+ await act(async () => pending.resolve(ack))
+ await screen.findByText(/当前权限或原 actor 已变化/)
+ await act(async () => saved.resolve())
+ expect(screen.getByText(/当前权限或原 actor 已变化/)).toBeTruthy()
+ expect(screen.queryByText(/表单尚未全部保存/)).toBeNull()
+ expect(heldTurnCommands(workspace)[0].actor_session_id).toBe(actor)
+ expect(heldTurnCommands(workspace)[0].ack).toEqual(ack)
+ expect(heldTurnForms(workspace)[0].actor_session_id).toBe(actor)
+ expect(screen.queryByLabelText('回合原文')).toBeNull()
+ expect(screen.queryByText(/核对回合原命令/)).toBeNull()
+ expect(port.prepare).toHaveBeenCalledOnce()
+})
+
 test('unknown cancellation persists the original safe reader and revision across remount; original key replay needs no academic access', async () => {
  const port = turnPort(), store = local(), formStore = local()
  vi.mocked(port.session).mockResolvedValue({ ...session(), role: 'learner', actor_session_id: 'learner_cancel' })
