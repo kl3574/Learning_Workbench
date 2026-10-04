@@ -12,6 +12,9 @@ from ..application.codex_turn_models import (
 )
 from ..application.codex_turn_execution_models import ControlEventEnvelope, RunnableTurnPrepared
 from ..application.codex_approval_models import ApprovalControlEnvelope, TurnApprovalBound
+from ..application.codex_turn_interrupt_models import (
+    InterruptEventEnvelope, TurnInterruptRecorded, InterruptStopCommand, InterruptCancelRequested,
+)
 from ..application.errors import ApiError
 from ..application.providers import retained_provider_configuration
 from ..codex_turn_dto import CodexTurnControlView, CodexConsentControl
@@ -36,7 +39,7 @@ class CheckedSession:
     anchor: SessionAnchor
     revision: int
     active_turn_id: str | None
-    envelopes: list[EventEnvelope | ControlEventEnvelope | ApprovalControlEnvelope] = field(default_factory=list)
+    envelopes: list[EventEnvelope | ControlEventEnvelope | ApprovalControlEnvelope | InterruptEventEnvelope] = field(default_factory=list)
     turns: dict[str, CheckedTurn] = field(default_factory=dict)
 
 
@@ -92,6 +95,7 @@ class CodexTurnRepository:
         anchors, heads = self.rows('sessions'), self.rows('heads')
         events, witnesses = self.rows('events'), self.rows('event_members')
         members, commands = self.rows('members'), self.rows('commands')
+        interrupts = self.rows('interrupts')
         session_ids = {row['session_id'] for row in anchors}
         if (session_ids != {row['session_id'] for row in heads}
                 or session_ids != {row['session_id'] for row in events}
@@ -109,6 +113,7 @@ class CodexTurnRepository:
         result = {}
         seen_members = set()
         seen_commands = set()
+        seen_interrupts = set()
         for row in anchors:
             anchor = decode(SessionAnchor, row['record_json'])
             original = bootstrap.get(anchor.session_id)
@@ -132,7 +137,8 @@ class CodexTurnRepository:
                 raw = strict_json(stored['record_json'])
                 if not isinstance(raw, dict):
                     raise damaged()
-                model = (ApprovalControlEnvelope if raw.get('version') == 'codex-turn-event-v3' else
+                model = (InterruptEventEnvelope if raw.get('version') == 'codex-turn-event-v4' else
+                    ApprovalControlEnvelope if raw.get('version') == 'codex-turn-event-v3' else
                     ControlEventEnvelope if raw.get('version') == 'codex-turn-event-v2' else EventEnvelope)
                 envelope = decode(model, stored['record_json'])
                 if (envelope.session_id != anchor.session_id or envelope.workspace_id != self.workspace
@@ -148,6 +154,11 @@ class CodexTurnRepository:
                         or not historical_session_belongs_to(self.conn, self.workspace, command.actor_session_id)):
                         raise damaged()
                     seen_commands.add((anchor.session_id, seq))
+                if isinstance(event, TurnInterruptRecorded):
+                    self._interrupt(state, envelope, interrupts)
+                    seen_interrupts.add((anchor.session_id, seq))
+                    event = event.stop
+                    command = event.command
                 if isinstance(event, (TurnPrepared, RunnableTurnPrepared)):
                     self._prepared(state, event, envelope, members)
                     seen_members.add(event.input.turn_id)
@@ -172,7 +183,7 @@ class CodexTurnRepository:
                     state.revision += 1
                 elif isinstance(event, TurnLifecycle):
                     self._lifecycle(state, event, envelope.occurred_at)
-                elif isinstance(event, TurnCancelRequested):
+                elif isinstance(event, (TurnCancelRequested, InterruptCancelRequested)):
                     turn = state.turns.get(event.turn_id)
                     requested = event.kind == 'cancel_requested'
                     if (turn is None or turn.control.execution != 'active' or turn.control.cancel_requested == requested
@@ -187,7 +198,7 @@ class CodexTurnRepository:
                     state.revision += int(requested)
                 else:
                     turn = state.turns.get(event.turn_id)
-                    if turn is None or not isinstance(command, CancelCommand) or command.target_id != turn.control.job.id:
+                    if turn is None or not isinstance(command, (CancelCommand, InterruptStopCommand)) or command.target_id != turn.control.job.id:
                         raise damaged()
                     if command.body.expected_revision != turn.control.job_revision:
                         raise damaged()
@@ -214,9 +225,29 @@ class CodexTurnRepository:
                 self._run(state.anchor, turn)
             result[anchor.session_id] = state
         if (seen_members != {row['turn_id'] for row in members}
-                or seen_commands != {(row['session_id'], row['seq']) for row in commands}):
+                or seen_commands != {(row['session_id'], row['seq']) for row in commands}
+                or seen_interrupts != {(row['session_id'], row['seq']) for row in interrupts}):
             raise damaged()
         return result
+
+    def _interrupt(self, state, envelope, interrupts):
+        event = envelope.event
+        command, stop = event.command, event.stop.command
+        turn = state.turns.get(event.turn_id)
+        row = next((item for item in interrupts if (item['session_id'], item['seq']) ==
+                    (envelope.session_id, envelope.seq)), None)
+        if (turn is None or row is None or row['turn_id'] != event.turn_id
+                or row['stop_command_json'] != canonical_json(stop)
+                or row['stop_command_sha256'] != content_sha256(stop)
+                or row['event_sha256'] != content_sha256(envelope)
+                or command.target_id != state.anchor.session_id
+                or command.body.expected_session_revision != state.revision
+                or command.body.turn_id != event.turn_id or event.stop.turn_id != event.turn_id
+                or command.ack.id != state.anchor.session_id or command.ack.turn_id != event.turn_id
+                or command.ack.status != ('already_terminal' if turn.control.execution == 'terminal' else 'interrupt_requested')
+                or stop.workspace_id != command.workspace_id or stop.actor_session_id != command.actor_session_id
+                or stop.key != command.key or stop.target_id != turn.control.job.id):
+            raise damaged()
 
     def _prepared(self, state, event, envelope, members):
         value, command = event.input, event.command
@@ -386,12 +417,15 @@ class CodexTurnRepository:
         self.conn.execute('INSERT INTO codex_turn_heads VALUES(?,?,2,0,?,NULL)', (anchor.session_id, self.workspace, digest))
         return CheckedSession(anchor, 2, None)
 
-    def append(self, state: CheckedSession, event, now: str) -> EventEnvelope | ControlEventEnvelope | ApprovalControlEnvelope:
+    def append(self, state: CheckedSession, event, now: str) -> EventEnvelope | ControlEventEnvelope | ApprovalControlEnvelope | InterruptEventEnvelope:
         seq = len(state.envelopes) + 1
         previous = content_sha256(state.envelopes[-1]) if state.envelopes else content_sha256(state.anchor)
         extended = isinstance(event, (RunnableTurnPrepared, TurnProviderBound, TurnStarted, TurnLifecycle, TurnCancelRequested))
-        envelope: ControlEventEnvelope | EventEnvelope | ApprovalControlEnvelope
-        if isinstance(event, TurnApprovalBound):
+        envelope: ControlEventEnvelope | EventEnvelope | ApprovalControlEnvelope | InterruptEventEnvelope
+        if isinstance(event, TurnInterruptRecorded):
+            envelope = InterruptEventEnvelope(version='codex-turn-event-v4', workspace_id=self.workspace,
+                session_id=state.anchor.session_id, seq=seq, previous_sha256=previous, occurred_at=now, event=event)
+        elif isinstance(event, TurnApprovalBound):
             envelope = ApprovalControlEnvelope(version='codex-turn-event-v3', workspace_id=self.workspace,
                 session_id=state.anchor.session_id, seq=seq, previous_sha256=previous, occurred_at=now, event=event)
         elif extended:
@@ -409,6 +443,12 @@ class CodexTurnRepository:
             self.conn.execute('INSERT INTO codex_turn_commands VALUES(?,?,?,?,?,?,?,?)',
                 (self.workspace, command.actor_session_id, command.route, command.target_id, command.key,
                  state.anchor.session_id, seq, content_sha256(command)))
+        if isinstance(event, TurnInterruptRecorded):
+            stop = event.stop.command
+            self.conn.execute('INSERT INTO codex_turn_interrupts VALUES(?,?,?,?,?,?,?)',
+                (state.anchor.session_id, self.workspace, seq, event.turn_id,
+                 canonical_json(stop), content_sha256(stop), digest))
+            event = event.stop
         if isinstance(event, (TurnPrepared, RunnableTurnPrepared)):
             view = event.command.ack
             self.conn.execute('INSERT INTO codex_turn_members(sequence,turn_id,session_id,workspace_id,job_id,preparation_id,preparation_sha256,prepared_seq) VALUES(?,?,?,?,?,?,?,?)',
@@ -432,7 +472,7 @@ class CodexTurnRepository:
             revision, active = state.revision, state.active_turn_id
             # CAS below still compares against the pre-event head.
             state.revision = prior_revision
-        elif isinstance(event, TurnCancelRequested):
+        elif isinstance(event, (TurnCancelRequested, InterruptCancelRequested)):
             requested = event.kind == 'cancel_requested'
             control = self.cancel_requested_control(state.turns[event.turn_id].control) if requested else state.turns[event.turn_id].control
             self.conn.execute('UPDATE runs SET snapshot_json=? WHERE id=?', (canonical_json(control), control.job.id))

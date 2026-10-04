@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Request
 from packages.contracts import domain_models as dm
 from ..application.codex_turn import CodexTurnService
 from ..application.errors import ApiError
-from ..codex_turn_dto import CodexTurnPrepareWrite, CodexTurnPreparationView, CodexTurnPage, CodexTurnControlView, CodexTurnStartWrite, CodexTurnStartAck, CodexTurnResultView
+from ..codex_turn_dto import CodexTurnPrepareWrite, CodexTurnPreparationView, CodexTurnPage, CodexTurnControlView, CodexTurnStartWrite, CodexTurnStartAck, CodexTurnResultView, CodexInterruptWrite, CodexInterruptAck
 from .codex_bootstrap_http import no_control_body
 from .content_http import query_fields
 from .http import current_identity, verify_write
@@ -25,6 +25,11 @@ def create_codex_turn_router(service: CodexTurnService) -> APIRouter:
         dependencies=[Depends(verify_write),Depends(query_fields())],openapi_extra={'parameters':[COMMAND_PARAMETER]})
     def start(id: dm.Id, body: CodexTurnStartWrite, request: Request) -> CodexTurnStartAck:
         return service.start_turn(request.state.identity,id,body,command_key(request))
+
+    @router.post('/sessions/{id}/interrupt', response_model=CodexInterruptAck,
+        dependencies=[Depends(verify_write), Depends(query_fields())], openapi_extra={'parameters': [COMMAND_PARAMETER]})
+    def interrupt(id: dm.Id, body: CodexInterruptWrite, request: Request) -> CodexInterruptAck:
+        return service.interrupt(request.state.identity, id, body, command_key(request))
 
     @router.get('/turn-preparations/{id}', response_model=CodexTurnPreparationView,
         dependencies=[Depends(no_control_body), Depends(query_fields())])
