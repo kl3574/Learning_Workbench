@@ -90,6 +90,7 @@ class CancelCommand(dm.StrictModel):
 
 class TurnPrepared(dm.StrictModel):
     kind: Literal['prepared']
+    creation_sequence: dm.Revision
     input: TurnInput
     command: PrepareCommand
 

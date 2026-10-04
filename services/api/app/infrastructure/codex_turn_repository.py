@@ -190,7 +190,7 @@ class CodexTurnRepository:
                 or ack.created_at != envelope.occurred_at or preparation_digest(self.workspace, ack) != ack.preparation_sha256
                 or member['session_id'] != value.session_id or member['job_id'] != value.job_id
                 or member['preparation_id'] != ack.id or member['preparation_sha256'] != ack.preparation_sha256
-                or member['prepared_seq'] != envelope.seq):
+                or member['prepared_seq'] != envelope.seq or member['sequence'] != event.creation_sequence):
             raise damaged()
         row = self.jobs.load(value.job_id)
         if row['input_json'] != canonical_json(value) or row['input_sha256'] != ack.summary.job_input_sha256:
@@ -202,7 +202,7 @@ class CodexTurnRepository:
             raise damaged()
         state.revision += 1
         state.active_turn_id = value.turn_id
-        state.turns[value.turn_id] = CheckedTurn(event, turn_control(event), member['sequence'])
+        state.turns[value.turn_id] = CheckedTurn(event, turn_control(event), envelope.seq)
 
     def _run(self, anchor, turn):
         row = self.jobs.load(turn.control.job.id)
@@ -219,6 +219,11 @@ class CodexTurnRepository:
         actual_jobs = {item['job_id'] for item in self.rows('members') if item['session_id'] == anchor.session_id}
         if actual_runs != actual_jobs:
             raise damaged()
+
+    def next_creation_sequence(self) -> int:
+        # The allocating writer owns BEGIN IMMEDIATE. Freeze the real sequence
+        # into the immutable event; the surrogate is never pagination authority.
+        return self.conn.execute('SELECT COALESCE(MAX(sequence),0)+1 FROM codex_turn_members').fetchone()[0]
 
     def establish(self, anchor: SessionAnchor) -> CheckedSession:
         raw, digest = canonical_json(anchor), content_sha256(anchor)
@@ -244,8 +249,8 @@ class CodexTurnRepository:
              state.anchor.session_id, seq, content_sha256(command)))
         if isinstance(event, TurnPrepared):
             view = command.ack
-            self.conn.execute('INSERT INTO codex_turn_members(turn_id,session_id,workspace_id,job_id,preparation_id,preparation_sha256,prepared_seq) VALUES(?,?,?,?,?,?,?)',
-                (view.turn_id, view.session_id, self.workspace, view.job.id, view.id, view.preparation_sha256, seq))
+            self.conn.execute('INSERT INTO codex_turn_members(sequence,turn_id,session_id,workspace_id,job_id,preparation_id,preparation_sha256,prepared_seq) VALUES(?,?,?,?,?,?,?,?)',
+                (event.creation_sequence, view.turn_id, view.session_id, self.workspace, view.job.id, view.id, view.preparation_sha256, seq))
             self.conn.execute('INSERT INTO runs VALUES(?,?,?,?)',
                 (view.job.id, state.anchor.thread_id, view.summary.context_snapshot_id, canonical_json(turn_control(event))))
             revision, active = state.revision + 1, view.turn_id

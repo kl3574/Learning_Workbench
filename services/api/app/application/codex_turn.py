@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import secrets
 from uuid import uuid4
+from typing import TypeVar
 
 from packages.contracts import domain_models as dm
 from packages.contracts.canonical import strict_json
@@ -26,6 +27,9 @@ from .errors import ApiError
 from .providers import checked_provider_configuration, validate_key
 
 
+Delivery = TypeVar("Delivery")
+
+
 def missing() -> ApiError:
     return ApiError(404, 'REFERENCE_MISSING', '本工作区没有此本地任务记录。')
 
@@ -35,6 +39,36 @@ class CodexTurnService:
         self.database, self.bootstrap = database, bootstrap
         self.context = CodexTurnContext(database)
         self._cursor_key = secrets.token_bytes(32)
+
+    def _deliver(self, identity: SessionIdentity, value: Delivery, *, subject: bool) -> Delivery:
+        # A prior WAL read snapshot cannot observe a concurrently committed
+        # logout/role/Policy change. Check delivery in a new read transaction.
+        with self.database.transaction(immediate=False) as conn:
+            conn.execute('PRAGMA query_only=ON')
+            current_control_access(conn, identity, write=subject)
+        return value
+
+    def prepare_turn(self, identity: SessionIdentity, session_id: str,
+                     body: CodexTurnPrepareWrite, key: str) -> CodexTurnPreparationView:
+        return self._deliver(identity, self._prepare_turn(identity, session_id, body, key), subject=True)
+
+    def read_preparation(self, identity: SessionIdentity, identifier: str) -> CodexTurnPreparationView:
+        return self._deliver(identity, self._read_preparation(identity, identifier), subject=True)
+
+    def read_control(self, identity: SessionIdentity, identifier: str) -> CodexTurnControlView:
+        return self._deliver(identity, self._read_control(identity, identifier), subject=False)
+
+    def read_session(self, identity: SessionIdentity, identifier: str) -> CodexCurrentSessionView:
+        return self._deliver(identity, self._read_session(identity, identifier), subject=False)
+
+    def job(self, identity: SessionIdentity, identifier: str) -> JobSnapshot:
+        return self._deliver(identity, self._job(identity, identifier), subject=False)
+
+    def cancel_job(self, identity: SessionIdentity, identifier: str, body: JobCancelRequest, key: str) -> JobSnapshot:
+        return self._deliver(identity, self._cancel_job(identity, identifier, body, key), subject=False)
+
+    def turns(self, identity: SessionIdentity, session_id: str, cursor: str | None = None, limit: int = 20) -> CodexTurnPage:
+        return self._deliver(identity, self._turns(identity, session_id, cursor, limit), subject=False)
 
     def _state(self, conn, identity, *, subject=False):
         current = current_control_access(conn, identity, write=subject)
@@ -52,7 +86,7 @@ class CodexTurnService:
                     return state, turn
         raise missing()
 
-    def prepare_turn(self, identity: SessionIdentity, session_id: str,
+    def _prepare_turn(self, identity: SessionIdentity, session_id: str,
                      body: CodexTurnPrepareWrite, key: str) -> CodexTurnPreparationView:
         key = validate_key(key)
         body = CodexTurnPrepareWrite.model_validate(body.model_dump(mode='json'))
@@ -95,7 +129,7 @@ class CodexTurnService:
                 turn_id=value.turn_id, job=dm.JobRef(id=value.job_id, status='awaiting_approval'), request=body,
                 summary=summary, created_at=now, proposal_id=None, consent_id=None, validity='unavailable')
             ack.preparation_sha256 = preparation_digest(current.workspace_id, ack)
-            event = TurnPrepared(kind='prepared', input=value, command=PrepareCommand(workspace_id=current.workspace_id,
+            event = TurnPrepared(kind='prepared', creation_sequence=repo.next_creation_sequence(), input=value, command=PrepareCommand(workspace_id=current.workspace_id,
                 actor_session_id=current.id, route='prepare', target_id=session_id, key=key, body=body, ack=ack))
             repo.append(state, event, now)
             # Verify the actual graph before committing: Job/Run/context and
@@ -104,7 +138,7 @@ class CodexTurnService:
             current_control_access(conn, current, write=True)
             return ack
 
-    def read_preparation(self, identity: SessionIdentity, identifier: str) -> CodexTurnPreparationView:
+    def _read_preparation(self, identity: SessionIdentity, identifier: str) -> CodexTurnPreparationView:
         with self.database.transaction(immediate=False) as conn:
             conn.execute('PRAGMA query_only=ON')
             current, _, _, history = self._state(conn, identity, subject=True)
@@ -119,13 +153,13 @@ class CodexTurnService:
             return CodexTurnPreparationView.model_validate({**ack.model_dump(), 'job': turn.control.job.model_dump(),
                 'validity': validity})
 
-    def read_control(self, identity: SessionIdentity, identifier: str) -> CodexTurnControlView:
+    def _read_control(self, identity: SessionIdentity, identifier: str) -> CodexTurnControlView:
         with self.database.transaction(immediate=False) as conn:
             conn.execute('PRAGMA query_only=ON')
             _, _, _, history = self._state(conn, identity)
             return self._find(history, identifier)[1].control
 
-    def read_session(self, identity: SessionIdentity, identifier: str) -> CodexCurrentSessionView:
+    def _read_session(self, identity: SessionIdentity, identifier: str) -> CodexCurrentSessionView:
         with self.database.transaction(immediate=False) as conn:
             conn.execute('PRAGMA query_only=ON')
             _, original, _, history = self._state(conn, identity)
@@ -138,14 +172,14 @@ class CodexTurnService:
                 value.update(revision=state.revision, active_turn_id=state.active_turn_id)
             return CodexCurrentSessionView.model_validate(value)
 
-    def job(self, identity: SessionIdentity, identifier: str) -> JobSnapshot:
+    def _job(self, identity: SessionIdentity, identifier: str) -> JobSnapshot:
         with self.database.transaction(immediate=False) as conn:
             conn.execute('PRAGMA query_only=ON')
             _, _, repo, history = self._state(conn, identity)
             self._find(history, identifier, job=True)
             return repo.jobs.snapshot(identifier)
 
-    def cancel_job(self, identity: SessionIdentity, identifier: str, body: JobCancelRequest, key: str) -> JobSnapshot:
+    def _cancel_job(self, identity: SessionIdentity, identifier: str, body: JobCancelRequest, key: str) -> JobSnapshot:
         key = validate_key(key)
         body = JobCancelRequest.model_validate(body.model_dump())
         with self.database.transaction() as conn:
@@ -172,7 +206,7 @@ class CodexTurnService:
             current_control_access(conn, current, write=False)
             return ack
 
-    def turns(self, identity: SessionIdentity, session_id: str, cursor: str | None = None, limit: int = 20) -> CodexTurnPage:
+    def _turns(self, identity: SessionIdentity, session_id: str, cursor: str | None = None, limit: int = 20) -> CodexTurnPage:
         if type(limit) is not int or not 1 <= limit <= 100:
             raise ApiError(422, 'SCHEMA_INVALID', '分页数量须为1至100。')
         with self.database.transaction(immediate=False) as conn:
