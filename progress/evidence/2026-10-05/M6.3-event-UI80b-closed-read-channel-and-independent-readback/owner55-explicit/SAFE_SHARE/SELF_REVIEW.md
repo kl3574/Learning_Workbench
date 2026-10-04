@@ -1,0 +1,7 @@
+# Implementer self-check, not independent review
+
+Standards: seven-path change, only CodexTurnPanel modified among existing files. Uses the generated typed GET seam and its standalone closed schema; no any, shared-validator change, runtime registration, new persistence, command mutation or dependency installation. Explicit source binding proves old nonoverlap preservation. Tests cover the observable transport and UI seams, including real fetch Response/ReadableStream and a real browser loopback stream. All failed stages remain separate.
+
+Spec: §20.17.3 six variants, JobID cursor, raw nonempty Unicode, closed fields, strict continuous sequence and final terminal are checked. §20.17.7 current academic permissions are checked on connect and before every protected frame, plus at EOF; local access generation/lifetime/port/turn/admission changes abort and mask immediately. No automatic reconnect/command/domain-details GET. Unknown disconnection is not terminal or execution evidence. Approval/manifest IDs are references only; current state requires the original explicit GET. The 4 Mi-character frame buffer bound fails the read safely rather than truncating content; it grants no owner input/output permission.
+
+No confirmed remaining defect found during this self-check. This is not peer review or proof of all possible races. Existing current-session reads only reveal changes they observe; prior delivered bytes cannot be recalled. Synthetic browser receipts do not prove production owner, model, or host resource execution.

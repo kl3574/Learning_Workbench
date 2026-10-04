@@ -1,0 +1,355 @@
+diff --git a/migrations/0035_codex_import_immutable.sql b/migrations/0035_codex_import_immutable.sql
+new file mode 100644
+index 00000000..4ca4f987
+--- /dev/null
++++ b/migrations/0035_codex_import_immutable.sql
+@@ -0,0 +1,10 @@
++-- Forward-only protection of the original 0033 source facts; no row rewrites.
++CREATE TRIGGER codex_import_batches_update BEFORE UPDATE ON codex_import_batches BEGIN SELECT RAISE(ABORT,'immutable Codex Import'); END;
++CREATE TRIGGER codex_import_batches_delete BEFORE DELETE ON codex_import_batches BEGIN SELECT RAISE(ABORT,'immutable Codex Import'); END;
++CREATE TRIGGER codex_import_batches_replace BEFORE INSERT ON codex_import_batches WHEN EXISTS(SELECT 1 FROM codex_import_batches WHERE aggregate_job_id=NEW.aggregate_job_id) BEGIN SELECT RAISE(ABORT,'immutable Codex Import'); END;
++CREATE TRIGGER codex_import_previews_update BEFORE UPDATE ON codex_import_previews BEGIN SELECT RAISE(ABORT,'immutable Codex Import'); END;
++CREATE TRIGGER codex_import_previews_delete BEFORE DELETE ON codex_import_previews BEGIN SELECT RAISE(ABORT,'immutable Codex Import'); END;
++CREATE TRIGGER codex_import_previews_replace BEFORE INSERT ON codex_import_previews WHEN EXISTS(SELECT 1 FROM codex_import_previews WHERE import_id=NEW.import_id) BEGIN SELECT RAISE(ABORT,'immutable Codex Import'); END;
++CREATE TRIGGER codex_import_bindings_update BEFORE UPDATE ON codex_import_bindings BEGIN SELECT RAISE(ABORT,'immutable Codex Import'); END;
++CREATE TRIGGER codex_import_bindings_delete BEFORE DELETE ON codex_import_bindings BEGIN SELECT RAISE(ABORT,'immutable Codex Import'); END;
++CREATE TRIGGER codex_import_bindings_replace BEFORE INSERT ON codex_import_bindings WHEN EXISTS(SELECT 1 FROM codex_import_bindings WHERE import_id=NEW.import_id OR source_id=NEW.source_id OR import_job_id=NEW.import_job_id OR aggregate_job_id=NEW.aggregate_job_id AND ordinal=NEW.ordinal) BEGIN SELECT RAISE(ABORT,'immutable Codex Import'); END;
+diff --git a/services/api/app/application/artifacts.py b/services/api/app/application/artifacts.py
+index 7998ca81..7fba0660 100644
+--- a/services/api/app/application/artifacts.py
++++ b/services/api/app/application/artifacts.py
+@@ -5,7 +5,7 @@ be implemented and registered explicitly; it cannot use Import's trusted legacy
+ download method as a substitute for current-session, same-transaction admission.
+ """
+ 
+-from collections.abc import Mapping
++from collections.abc import Callable, Mapping
+ import sqlite3
+ from types import MappingProxyType
+ from typing import Protocol
+@@ -31,8 +31,12 @@ def unavailable_owner() -> ApiError:
+ 
+ 
+ class ArtifactsService:
+-    def __init__(self, database: Database, readers: Mapping[tuple[str, str], ArtifactReader]):
++    def __init__(self, database: Database, readers: Mapping[tuple[str, str], ArtifactReader], *,
++                 download_guards: Mapping[tuple[str, str], Callable[[SessionIdentity], None]] | None = None):
+         self.database, self.readers = database, MappingProxyType(dict(readers))
++        self.download_guards = MappingProxyType(dict(download_guards or {}))
++        if not self.download_guards.keys() <= self.readers.keys():
++            raise ValueError('An artifact delivery guard requires its registered reader')
+ 
+     def read_in_transaction(self, connection: sqlite3.Connection, identity: SessionIdentity,
+                             identifier: str) -> tuple[bytes, DownloadArtifact]:
+@@ -60,7 +64,15 @@ class ArtifactsService:
+     def download(self, identity: SessionIdentity, identifier: str) -> tuple[bytes, DownloadArtifact]:
+         try:
+             with self.database.transaction() as connection:
+-                return self.read_in_transaction(connection, identity, identifier)
++                value = self.read_in_transaction(connection, identity, identifier)
++                # Capture the checked owner in the same original transaction.
++                # Its dedicated delivery guard runs only after that snapshot closes.
++                binding = ArtifactRepository(connection, identity.workspace_id).binding(identifier)
++                kind = artifact_job_kind(connection, identity.workspace_id, binding.job_id)
++                guard = self.download_guards.get((binding.profile, kind))
++            if guard is not None:
++                guard(identity)
++            return value
+         except sqlite3.Error:
+             # Preserve the existing download endpoint's storage error contract.
+             raise ApiError(503, 'IMPORT_STORAGE_UNAVAILABLE', '导入存储暂不可用。', True) from None
+diff --git a/services/api/app/application/codex_artifacts.py b/services/api/app/application/codex_artifacts.py
+index 6e32cb27..846e305f 100644
+--- a/services/api/app/application/codex_artifacts.py
++++ b/services/api/app/application/codex_artifacts.py
+@@ -123,6 +123,11 @@ class CodexArtifactsService:
+             value = record.manifest
+         return self.turns._deliver(identity, value, subject=True)
+ 
++    def check_download_delivery(self, identity):
++        # The registered Codex download alone requires fresh author/Policy;
++        # ordinary Import readers retain their existing disclosure contract.
++        self.turns._deliver(identity, None, subject=True)
++
+     def read_artifact(self, conn, identity, identifier):
+         current = current_control_access(conn, identity, write=True)
+         _, _, history = self.turns._owned_state(conn, current.workspace_id)
+diff --git a/services/api/app/main.py b/services/api/app/main.py
+index 2f8ae27a..7b97e554 100644
+--- a/services/api/app/main.py
++++ b/services/api/app/main.py
+@@ -157,7 +157,9 @@ def create_app(settings: Settings | None = None, *,
+     codex_turn.approvals = CodexApprovalsService(codex_turn)
+     codex_turn.artifacts = CodexArtifactsService(codex_turn, codex_answer_materializer)
+     codex_artifact_imports = CodexArtifactImports(codex_turn.artifacts, import_service)
+-    artifacts = ArtifactsService(database, {**review_service.readers(), ('codex_turn_output_v1', 'codex_turn'): codex_turn.artifacts})
++    artifacts = ArtifactsService(database,
++        {**review_service.readers(), ('codex_turn_output_v1', 'codex_turn'): codex_turn.artifacts},
++        download_guards={('codex_turn_output_v1', 'codex_turn'): codex_turn.artifacts.check_download_delivery})
+     content_impacts = ContentImpactDecisionService(database, artifacts)
+     codex_turn_worker = CodexTurnWorker(codex_turn,codex_consents,codex_executor)
+     codex_turn_worker.imports = codex_artifact_imports
+diff --git a/tests/integration/test_codex_artifact_repair_boundaries.py b/tests/integration/test_codex_artifact_repair_boundaries.py
+new file mode 100644
+index 00000000..cb7161fb
+--- /dev/null
++++ b/tests/integration/test_codex_artifact_repair_boundaries.py
+@@ -0,0 +1,218 @@
++"""Real HTTP-created source facts and post-transaction download admission."""
++import sqlite3
++from concurrent.futures import ThreadPoolExecutor
++from contextlib import contextmanager
++from dataclasses import replace
++import shutil
++from threading import Event
++
++import pytest
++
++from services.api.app.infrastructure.import_worker import ImportWorker
++from services.api.app.infrastructure.database import Database
++from tests.integration.test_codex_artifact_import_http import selected, consent_case, base_consent_case
++from tests.integration.test_codex_artifact_manifest import execute
++from tests.integration.test_assessment_learning_port import assessment_learning_state
++
++__all__ = ['consent_case', 'base_consent_case']
++assessment_state = assessment_learning_state
++
++
++@pytest.mark.parametrize('table', ['codex_import_batches', 'codex_import_bindings', 'codex_import_previews'])
++@pytest.mark.parametrize('mutation', ['update', 'delete', 'replace', 'upsert'])
++def test_original_import_source_rows_reject_normal_mutation_and_preserve_full_http_readback(consent_case, table, mutation):
++    case, sid, _, body = selected(consent_case)
++    created = case.post(f'sessions/{sid}/artifacts/import', body, 'original-import')
++    assert created.status_code == 202
++    identifier = created.json()['id']
++    assert ImportWorker(case.app.state.database).run_once() is True
++    original = case.get('artifact-imports/'+identifier)
++    assert original.status_code == 200
++    item = original.json()['items'][0]
++    preview = case.client.get('/api/v1/imports/'+item['import_id'])
++    assert preview.status_code == 200 and preview.json()['status'] == 'preview_ready'
++    before = case.dump()
++    with case.app.state.database.transaction() as conn:
++        row = dict(conn.execute(f'SELECT * FROM {table}').fetchone())
++        columns = ','.join(row)
++        placeholders = ','.join('?' for _ in row)
++        statement = f'INSERT OR REPLACE INTO {table}({columns}) VALUES({placeholders})'
++        args = tuple(row.values())
++        if mutation == 'update':
++            statement, args = f'UPDATE {table} SET record_json=record_json', ()
++        elif mutation == 'delete':
++            statement, args = f'DELETE FROM {table}', ()
++        elif mutation == 'upsert':
++            statement = f'INSERT INTO {table}({columns}) VALUES({placeholders}) ON CONFLICT DO UPDATE SET record_json=excluded.record_json'
++        with pytest.raises(sqlite3.IntegrityError, match='immutable Codex Import'):
++            conn.execute(statement, args)
++    assert case.dump() == before
++    assert case.get('artifact-imports/'+identifier).content == original.content
++    assert case.client.get('/api/v1/imports/'+item['import_id']).content == preview.content
++    assert case.post(f'sessions/{sid}/artifacts/import', body, 'original-import').content == created.content
++    assert len(case.app.state.synthetic_transport_calls) == 1
++
++
++def pause_after_download_transaction(database, monkeypatch):
++    """Pause only after the real first transaction commits and closes its connection."""
++    transaction = database.transaction
++    entered, release = Event(), Event()
++    armed = True
++
++    @contextmanager
++    def held(*args, **kwargs):
++        nonlocal armed
++        pause = armed
++        armed = False
++        with transaction(*args, **kwargs) as conn:
++            yield conn
++        if pause:
++            entered.set()
++            assert release.wait(10), 'The controlled HTTP race was not released'
++
++    monkeypatch.setattr(database, 'transaction', held)
++    return entered, release
++
++
++@pytest.mark.parametrize('change,expected', [('learner', 403), ('logout', 401)])
++def test_download_rechecks_actor_after_original_transaction_has_closed(consent_case, monkeypatch, change, expected):
++    case, sid, prep, _, _, _ = execute(consent_case)
++    manifest = case.get(f'sessions/{sid}/turns/{prep["turn_id"]}/artifacts').json()['manifest']
++    path = '/api/v1/artifacts/'+manifest['entries'][0]['artifact_id']+'/download'
++    original = case.client.get(path)
++    assert original.status_code == 200 and original.content == 'Synthetic exact answer α\n'.encode()
++    entered, release = pause_after_download_transaction(case.app.state.database, monkeypatch)
++    with ThreadPoolExecutor(max_workers=1) as pool:
++        future = pool.submit(case.client.get, path)
++        try:
++            assert entered.wait(10)
++            changed = case.client.post('/api/v1/session/'+('role' if change == 'learner' else 'logout'),
++                json={'role':'learner'} if change == 'learner' else {},
++                headers={**case.headers, 'Idempotency-Key':'late-download-access'})
++            assert changed.status_code == 200
++            before = case.dump()
++        finally:
++            release.set()
++        response = future.result(timeout=10)
++    assert response.status_code == expected
++    assert original.content not in response.content
++    assert response.json()['error']['code'] in {'POLICY_DENIED', 'SESSION_REQUIRED'}
++    assert case.dump() == before
++    assert len(case.app.state.synthetic_transport_calls) == 1
++
++
++@pytest.mark.parametrize('mode', ['independent', 'open_book'])
++def test_download_rechecks_real_policy_started_after_original_transaction(assessment_state, monkeypatch, mode):
++    from services.api.app.infrastructure.content_repository import reference
++    from tests.integration.test_codex_turn_consent_http import make_consent_case
++    from tests.integration.test_codex_turn_dispatch_http import make_dispatch_case
++    database, _, fixture, _ = assessment_state
++    for original in make_consent_case(database.settings.data_dir):
++        for values in make_dispatch_case(original):
++            case, sid, prep, _, _, _ = execute(values)
++            manifest = case.get(f'sessions/{sid}/turns/{prep["turn_id"]}/artifacts').json()['manifest']
++            path = '/api/v1/artifacts/'+manifest['entries'][0]['artifact_id']+'/download'
++            entered, release = pause_after_download_transaction(case.app.state.database, monkeypatch)
++            with ThreadPoolExecutor(max_workers=1) as pool:
++                future = pool.submit(case.client.get, path)
++                try:
++                    assert entered.wait(10)
++                    started = case.client.post('/api/v1/assessments/'+fixture.assessment.id+'/attempts',
++                        json={'assessment_ref':reference(fixture.assessment).model_dump(), 'mode':mode},
++                        headers={**case.headers, 'Idempotency-Key':'late-policy'})
++                    assert started.status_code == 201
++                    before = case.dump()
++                finally:
++                    release.set()
++                response = future.result(timeout=10)
++            assert response.status_code == 409
++            assert response.json()['error']['code'] == 'ASSESSMENT_ACTIVE'
++            assert b'Synthetic exact answer' not in response.content
++            assert case.dump() == before
++            assert len(case.app.state.synthetic_transport_calls) == 1
++
++
++@pytest.mark.parametrize('identity', ['import_id', 'source_id', 'import_job_id', 'ordinal'])
++def test_replace_cannot_evict_any_existing_binding_conflict_identity(consent_case, identity):
++    case, sid, _, body = selected(consent_case)
++    created = case.post(f'sessions/{sid}/artifacts/import', body, 'original-import')
++    assert created.status_code == 202
++    before = case.dump()
++    with case.app.state.database.transaction() as conn:
++        original = dict(conn.execute('SELECT * FROM codex_import_bindings').fetchone())
++        incoming = {**original, 'import_id':'import_other', 'source_id':'source_other',
++            'import_job_id':'job_other', 'aggregate_job_id':'aggregate_other', 'ordinal':1}
++        incoming[identity] = original[identity]
++        if identity == 'ordinal':
++            incoming['aggregate_job_id'] = original['aggregate_job_id']
++        # The immutable conflict guard must reject before SQLite's later FK
++        # validation. Each candidate matches exactly one existing unique key.
++        with pytest.raises(sqlite3.IntegrityError, match='immutable Codex Import'):
++            conn.execute('INSERT OR REPLACE INTO codex_import_bindings('+','.join(incoming)+') VALUES('
++                +','.join('?' for _ in incoming)+')', tuple(incoming.values()))
++    assert case.dump() == before
++    assert case.post(f'sessions/{sid}/artifacts/import', body, 'original-import').content == created.content
++
++
++def test_forward_guards_preserve_existing_source_rows_rowids_and_original_http_acks(tmp_path, monkeypatch):
++    from tests.integration import test_codex_bootstrap_http as bootstrap_fixture
++    from tests.integration.test_codex_turn_consent_http import make_consent_case
++    from tests.integration.test_codex_turn_dispatch_http import make_dispatch_case
++    settings_type = bootstrap_fixture.Settings
++    installed = settings_type(data_dir=tmp_path/'data')
++    prior = tmp_path/'prior-migrations'
++    prior.mkdir()
++    for path in installed.migrations_dir.glob('*.sql'):
++        if path.name < '0035':
++            shutil.copyfile(path, prior/path.name)
++    # Install the real previous catalog while creating the normal HTTP fixture;
++    # no source rows, migration receipts or owner histories are fabricated.
++    monkeypatch.setattr(bootstrap_fixture, 'Settings',
++        lambda **kwargs: replace(settings_type(**kwargs), migrations_dir=prior))
++    for original in make_consent_case(installed.data_dir):
++        for values in make_dispatch_case(original):
++            case, sid, _, body = selected(values)
++            created = case.post(f'sessions/{sid}/artifacts/import', body, 'before-upgrade')
++            assert created.status_code == 202
++            assert ImportWorker(case.app.state.database).run_once() is True
++            view = case.get('artifact-imports/'+created.json()['id'])
++            assert view.status_code == 200
++            tables = ['codex_import_batches', 'codex_import_bindings', 'codex_import_previews']
++            with case.app.state.database.connect() as conn:
++                rows = {table:[tuple(row) for row in conn.execute(f'SELECT rowid,* FROM {table} ORDER BY rowid')]
++                    for table in tables}
++                assert all(rows.values())
++            upgraded = Database(replace(case.app.state.settings, migrations_dir=installed.migrations_dir))
++            upgraded.initialize()
++            with upgraded.connect() as conn:
++                assert {table:[tuple(row) for row in conn.execute(f'SELECT rowid,* FROM {table} ORDER BY rowid')]
++                    for table in tables} == rows
++                assert conn.execute('PRAGMA foreign_key_check').fetchall() == []
++                for table in tables:
++                    with pytest.raises(sqlite3.IntegrityError, match='immutable Codex Import'):
++                        conn.execute(f'UPDATE {table} SET record_json=record_json')
++            assert case.get('artifact-imports/'+created.json()['id']).content == view.content
++            assert case.post(f'sessions/{sid}/artifacts/import', body, 'before-upgrade').content == created.content
++            assert len(case.app.state.synthetic_transport_calls) == 1
++
++
++def test_ordinary_import_download_remains_available_to_current_learner(tmp_path):
++    from tests.integration.test_codex_bootstrap_http import make_case
++    from tests.integration.test_import_http import upload
++    case = make_case(tmp_path)
++    raw = b'# Ordinary learner Import\n\nOriginal bytes.\n'
++    staged = upload(case.client, case.app.state.settings, raw)
++    assert ImportWorker(case.app.state.database).run_once() is True
++    preview = case.client.get('/api/v1/imports/'+staged['import_id'])
++    assert preview.status_code == 200
++    draft = case.client.get('/api/v1/drafts/'+preview.json()['preview_refs'][0])
++    assert draft.status_code == 200
++    source = case.client.get('/api/v1/sources/'+draft.json()['payload']['source_id'])
++    assert source.status_code == 200
++    changed = case.client.post('/api/v1/session/role', json={'role':'learner'},
++        headers={**case.headers, 'Idempotency-Key':'ordinary-learner'})
++    assert changed.status_code == 200
++    before = case.dump()
++    downloaded = case.client.get(source.json()['artifact']['download_path'])
++    assert downloaded.status_code == 200 and downloaded.content == raw
++    assert case.dump() == before
+diff --git a/tests/integration/test_codex_import_owner.py b/tests/integration/test_codex_import_owner.py
+index 8080fff7..60a23db9 100644
+--- a/tests/integration/test_codex_import_owner.py
++++ b/tests/integration/test_codex_import_owner.py
+@@ -174,14 +174,18 @@ def test_new_binding_damage_fails_closed_on_ordinary_get_and_owner_read_without_
+     with case.app.state.database.transaction() as conn:
+         if damage in {'binding_tail', 'bindings_all', 'batch'}:
+             # Deliberate synthetic integrity damage, not a normal deletion API.
++            conn.execute('DROP TRIGGER codex_import_previews_delete')
++            conn.execute('DROP TRIGGER codex_import_bindings_delete')
+             conn.execute('DELETE FROM codex_import_previews WHERE import_id=?', (last.import_id,))
+             conn.execute('DELETE FROM codex_import_bindings WHERE import_id=?', (last.import_id,))
+             if damage != 'binding_tail':
+                 conn.execute('DELETE FROM codex_import_previews')
+                 conn.execute('DELETE FROM codex_import_bindings')
+             if damage == 'batch':
++                conn.execute('DROP TRIGGER codex_import_batches_delete')
+                 conn.execute('DELETE FROM codex_import_batches')
+         elif damage == 'ordinal':
++            conn.execute('DROP TRIGGER codex_import_bindings_update')
+             conn.execute('UPDATE codex_import_bindings SET ordinal=7 WHERE import_id=?', (first.import_id,))
+         elif damage == 'job_input':
+             conn.execute("UPDATE jobs SET input_json='{}' WHERE id=?", (first.import_job_id,))
+@@ -190,6 +194,7 @@ def test_new_binding_damage_fails_closed_on_ordinary_get_and_owner_read_without_
+         elif damage == 'original_artifact':
+             conn.execute("UPDATE artifacts SET profile='import_asset' WHERE job_id=?", (first.import_job_id,))
+         elif damage == 'preview_receipt':
++            conn.execute('DROP TRIGGER codex_import_previews_delete')
+             conn.execute('DELETE FROM codex_import_previews WHERE import_id=?', (first.import_id,))
+         elif damage == 'preview_tail':
+             conn.execute("DELETE FROM job_events WHERE job_id=? AND type='awaiting_approval'", (first.import_job_id,))
+@@ -231,6 +236,8 @@ def test_complete_member_discovery_and_child_status_cannot_hide_damage(tmp_path,
+     binding, = stage(case, service, identity, [source(identity)])
+     with case.app.state.database.transaction() as conn:
+         if damage == 'all_binding_family':
++            conn.execute('DROP TRIGGER codex_import_bindings_delete')
++            conn.execute('DROP TRIGGER codex_import_batches_delete')
+             conn.execute('DELETE FROM codex_import_bindings')
+             conn.execute('DELETE FROM codex_import_batches')
+         else:

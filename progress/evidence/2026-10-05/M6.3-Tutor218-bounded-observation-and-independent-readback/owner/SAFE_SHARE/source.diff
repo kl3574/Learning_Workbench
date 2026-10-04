@@ -1,0 +1,63 @@
+diff --git a/tests/e2e/tutor-completion.spec.ts b/tests/e2e/tutor-completion.spec.ts
+new file mode 100644
+index 00000000..4bea8fe1
+--- /dev/null
++++ b/tests/e2e/tutor-completion.spec.ts
+@@ -0,0 +1,24 @@
++import { expect, test } from '../../apps/web/node_modules/@playwright/test/index.mjs'
++import { expectTutorCompletion } from './tutorCompletion'
++
++for (const delay of [200, 4900]) {
++  test(`Tutor completion observer sees synthetic visible state after ${delay} ms`, async ({ page }) => {
++    await page.setContent('<section aria-label="真实问答线程与任务"><h3>真实任务状态：running</h3></section>')
++    await page.evaluate(delay => {
++      setTimeout(() => { document.querySelector('h3')!.textContent = '真实任务状态：completed' }, delay)
++    }, delay)
++    const completed = page.getByRole('region', { name: '真实问答线程与任务', exact: true })
++      .getByRole('heading', { name: '真实任务状态：completed', exact: true })
++    await expectTutorCompletion(completed)
++    expect(await completed.isVisible()).toBe(true)
++  })
++}
++
++test('Tutor completion observer rejects when the exact completed heading never appears', async ({ page }) => {
++  await page.setContent('<section aria-label="真实问答线程与任务"><h3>真实任务状态：running</h3></section><h3>真实任务状态：completed</h3>')
++  const completed = page.getByRole('region', { name: '真实问答线程与任务', exact: true })
++    .getByRole('heading', { name: '真实任务状态：completed', exact: true })
++  await expect(expectTutorCompletion(completed)).rejects.toThrow()
++  expect(await completed.isVisible()).toBe(false)
++  await expect(page.getByRole('heading', { name: '真实任务状态：running', exact: true })).toBeVisible()
++})
+diff --git a/tests/e2e/tutor.spec.ts b/tests/e2e/tutor.spec.ts
+index 0ed75ebf..33f34a3a 100644
+--- a/tests/e2e/tutor.spec.ts
++++ b/tests/e2e/tutor.spec.ts
+@@ -4,6 +4,7 @@ import type { AttemptSnapshot, ProviderConfigWrite, SessionResponse, TutorMessag
+ import { RestartRuntime } from './restartRuntime'
+ import { TutorRuntime } from './tutorRuntime'
+ import { observeTutorCompletion } from './tutorDiagnostic'
++import { expectTutorCompletion } from './tutorCompletion'
+ import { importAssessmentPackage, originalAssessmentPackage } from './assessmentTestData'
+ 
+ async function unregisteredProvider(page: Page, origin: string) {
+@@ -192,7 +193,7 @@ test('explicit same-Run consent uses the real loopback protocol and restores raw
+     diagnostic.mark('grant_click')
+     await tutor.getByRole('button', { name: '确认发送批准授权', exact: true }).click()
+     await diagnostic.around(info, async () => {
+-      await expect(tutor.getByRole('heading', { name: '真实任务状态：completed', exact: true })).toBeVisible()
++      await expectTutorCompletion(tutor.getByRole('heading', { name: '真实任务状态：completed', exact: true }))
+     })
+     const complete: TutorRunView = await page.request.get(`/api/v1/runs/${ack.run.id}`).then(value => value.json())
+     expect(complete.run.id).toBe(ack.run.id); expect(complete.run.thread_id).toBe(thread.id)
+diff --git a/tests/e2e/tutorCompletion.ts b/tests/e2e/tutorCompletion.ts
+new file mode 100644
+index 00000000..0443ba20
+--- /dev/null
++++ b/tests/e2e/tutorCompletion.ts
+@@ -0,0 +1,6 @@
++import { expect, type Locator } from '../../apps/web/node_modules/@playwright/test/index.mjs'
++
++/** Sample only this locator more densely; keep the original five-second budget. */
++export async function expectTutorCompletion(completed: Locator): Promise<void> {
++  await expect.poll(() => completed.isVisible(), { timeout: 5000, intervals: [25] }).toBe(true)
++}

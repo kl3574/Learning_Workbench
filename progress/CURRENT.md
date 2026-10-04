@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-04T15:27:52Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
+更新：2026-10-04T17:49:51Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
 
-仓库发布：VERIFIED；Issues 同步：VERIFIED_PR56_CONCRETE_BODY_ISSUE32_PUBLIC1A_TERMINAL_PUSH_FAIL_PR_SUCCESS_AND_ORIGINAL_COUNT_CORRECTED
+仓库发布：VERIFIED；Issues 同步：VERIFIED_ISSUE32_MANAGED412_BODY_ORIGINAL_NATIVE_RUNNING_SNAPSHOT_CURRENT_NATIVE_FAIL_LOCAL_ONLY
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
 
-正常整合512 Artifact/普通Import已审窄修，核所有owner/非重叠原字节并固定组合门禁；继续SSE generator2RED→新fixedGREEN/独审与组合回归，再交付UI固定API基线。保留1a真实push Tutor FAIL并读取原件定位，不能借PR/本地PASS判同因或已修。完整InputProof/实际Broker/真实Provider、数值环境与来源数学教学质量及M6.3/AC21/M7仍未完成。
+保留412完整native实际132PASS/1FAIL及原因UNKNOWN；完成d69两行测试生命周期修复的独立审阅，等待root固定d69完整native实际终态，再正常整合已闭合但未合入的Generic43与受审修复、冻结新组合门禁；d69当前RUNNING与三个子集PASS不升级旧完整套件，不把1522输入隔离结果借给412。实际生产完整InputProof/Provider/Broker、物理数值环境及来源数学教学质量和整个M6.3/AC21/M7仍未验收；不重启已中止系统探针，不自动调用模型、不上传密钥。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -41,13 +41,13 @@
 
 ## 验证边界
 
-- spec_checks: v3.0.13唯一规范SHA949e2348；已采纳并整合Single owner/UI/78生成产物；冻结ac Ruff/mypy235/verify-spec78generated54core130declared PASS，1271工程输入逐Git前后一致。当前0b前端组合935Web/strict/build841 PASS，完整native RUNNING。
-- unit: 固定7d完整Python3560PASS/2actualnumericENVSKIP/2warnings/2152.52s，1300inputsGit-boundunchanged。最终7a949Web/137files9.65s、strict/build841PASS，1303inputsunchanged。7d→7a仅Web/native/.gitattributes；完整nativeRUNNING，未全阶段验收。
-- contract: v3.0.12三新增真实HTTP与7DTO闭合，最终owner源ea3组合117DTO/transport/projection/真实HTTP PASS；此前固定fca+4a779完整contract与指定RestoreHTTP PASS，各自来源不混计。
-- integration: 已整合真实编辑发布/笔记stale/历史成绩不改/索引失效合成HTTP测试1PASS；成绩样例不属于本次影响闭包，不声称适用性复核。
-- browser_native: 固定7a完整125PASS16.7m/1worker0retry；1303Git-boundinputs，5已知UI产物归档还原，1298其他不变，原unchanged=false保留。旧60fa与0b的121PASS1FAIL均不改判；真实Single/Restore数值BLOCKED，外部模型0。
-- real_provider: 历史2026-09-15独立DeepSeek直连GET models200/Chat200、usage14/1/15仅有进度记录，未找到可独立核验的原始HTTP回执。PLATFORM_AGENT_NOT_RUN：生产RequestPreparer(ProofRegistry())注册表为空，无符合唯一规范§20.5的托管完整输入证明；用户密钥未进入本轮测试或仓库。
-- real_codex: NOT_RUN
+- spec_checks: 当前412、唯一v3.0.15/b140：82 generated artifacts、54core、147declared/134implemented/13missing，结构门禁PASS。412实际1359Web及七static PASS；结构检查不是整个M6.3/AC21验收。
+- unit: 当前源码412；完整Python实际在4353为4341PASS/2真实numeric BLOCKED_ENVIRONMENT skip。974个非Web/e2e输入（含564Python）在412逐字连续；这是4353完整结果的明确适用范围，不是412重新运行。
+- contract: 当前412沿用4353完整Python聚合4341PASS/2actual numeric ENVskip及974非Web/e2e输入连续性；未声明另一个独立contract子集计数，不能与聚合相加。
+- integration: 当前412沿用4353完整Python聚合4341PASS/2actual numeric ENVskip及974非Web/e2e输入连续性；未声明另一个独立integration子集计数。物理numeric仍环境阻断，无回退。
+- browser_native: FAIL：固定412原完整make test-e2e实际132PASS/1FAIL、24.1m，logSHA5e426eec31979b7c9b79299cd85f3d9fb33f82cba11a06e72055faa07367af2a；5个原生成输出改变、1502非生成输入逐字不变，无reset/restore/copyback。历史原因UNKNOWN；后来原单case1PASS和d69三个子集PASS不升级该套件。d69完整重跑另记RUNNING。
+- real_provider: PLATFORM_PROVIDER_NOT_RUN：生产完整请求ProofRegistry/executor没有符合要求的注册证明；本次未使用实际Provider/key。历史直连成功描述及其缺少可独立核验原HTTP回执的限定，完整保存在checkpoint_history.previous_verification_current_fields.real_provider，不据此声称当前平台Provider通过。
+- real_codex: PHYSICAL_CODEX_MODEL_OR_TOOL_TURN_NOT_RUN：当前412未建立真实CLI模型回合或物理host工具执行验收。历史仅受限bootstrap控制记录与显式synthetic memory结果分别保留，不升级为完整Broker/资源/安全验收。
 - learning_effectiveness: NOT_RUN
 - ci: 当前1a实际push5success1browserFAIL(129P1F，Tutor148原因UNKNOWN)；PR6success/native130。12原日志/真实checkout/tree已核，每event911backend/956spec/2358integration+2actualnumericENVskip/1278Web，overlap不相加；旧失败均保留，整体M6.3未验。
 - m4_1_development: 开发和独立审查的所有原失败/修复、环境诊断已保留；最终源码新验收通过，不覆盖历史失败。
@@ -315,6 +315,7 @@
 - m6_3_current_public4b_CI: Each event:953contracts;888unit/security;2258integration/2actualnumericENVskip/2warnings;1201Web/154files;130native. Counts overlap; not current79ac CI. Both actualruns success/12jobs success;actualPRcheckout parents/tree independently verified. New79ac CI NOT_RUN.
 - m6_3_current_real_model: NOT_RUN;0 actual external model requests this continuation;DeepSeek key not used, stored or uploaded. Production complete input proof/executor unavailable.
 - previous_general_ci_note_before1a: 当前已发布c2双CI终态均FAILURE，12job=10success2browserFAIL；push与PR各116nativePASS1FAIL，各integration2016PASS2SKIP。两checkout不同但tree相同，12原log/2ZIP及失败图全部本地归档；未重跑、未推断数值物理PASS。Import入口已本地修复，Review备注空仍UNKNOWN；后续CI未运行。
+- m6_3_412_current_local_checkpoint_v2_2026_10_05: {'source_head': '412abe09c519104d9dbd2b360eed3ff4f897f829', 'status': 'LOCAL_COMBINATION_WEB_STATIC_PASS_FULL_NATIVE_FAILED_UNPUBLISHED', 'python': {'source_head': '4353a05570afd9f2378c904b5594998de21bc474', 'passed': 4341, 'numeric_environment_skips': 2, 'qualification': 'Original4353 actual result.974 nonWeb/e2e inputs, including564Python, remain byte-equal at412; no claim Python rerun at412.'}, 'web': {'source_head': '412abe09c519104d9dbd2b360eed3ff4f897f829', 'passed': 1359, 'static_passed': 7}, 'native': {'source_head': '412abe09c519104d9dbd2b360eed3ff4f897f829', 'status': 'FAIL', 'passed': 132, 'failed': 1, 'elapsed_reported': '24.1m', 'log_sha256': '5e426eec31979b7c9b79299cd85f3d9fb33f82cba11a06e72055faa07367af2a', 'provenance': 'Root terminal safe packet explicitly listed by PREPARED07; original full raw failed log remains private, only admitted limited excerpt/hash copied.', 'input_boundary': '1512 complete inputs;5 original generated outputs actually changed;1502 non-generated inputs unchanged. Original diffs preserved; no reset/restore/copyback.', 'cause': 'NOT_DETERMINED'}, 'generic_approval': {'source_head': '43c70d660d98904903bd607a4661b3b95710293e', 'status': 'INDEPENDENT_CLOSED_STATIC_UNMERGED', 'inputs': 1522, 'web_passed': 1399, 'qualification': 'Original9e P2OPEN retained; final43 owner tests/native and root exact candidate readback remain isolated. Only the registry-explicit admitted documents are copied; final independent Standards/Spec review reports zero new findings and P2 CLOSED_STATIC, still unmerged.'}, 'd69_test_repair': {'source_head': 'd69de81045ff6c9ff2f345643f0fd412e2d108fb', 'parent': '43c70d660d98904903bd607a4661b3b95710293e', 'status': 'TWO_LINE_TEST_ONLY_INDEPENDENT_REVIEW_PENDING_UNMERGED', 'subset_passed': 3, 'full_native': 'RUNNING', 'full_native_started_at': '2026-10-04T17:37:16.347494+00:00', 'qualification': 'No terminal claim; original412 fullFAIL and causeUNKNOWN retained. Controlled lifecycle mechanism and later original single-case PASS do not establish unique historical cause.'}, 'publication_head': '1a6473dadcf71623008188f465586495ab28a204', 'public_pr': 'draft/open/unmerged', 'whole_M6_3': 'in_progress/not_accepted', 'evidence_paths': ['progress/evidence/2026-10-05/M6.3-combination4353-Python-terminal-and-Web-original-failure/REPORT.json', 'progress/evidence/2026-10-05/M6.3-reviewed-four-source-merges-and412-Web-static/REPORT.json', 'progress/evidence/2026-10-05/M6.3-form-notice-race-original-counterexample-and-AA-closure/REPORT.json', 'progress/evidence/2026-10-05/M6.3-Tutor218-bounded-observation-and-independent-readback/REPORT.json', 'progress/evidence/2026-10-05/M6.3-artifact-UI8f-scope-closure-and-real-loopback-preview/REPORT.json', 'progress/evidence/2026-10-05/M6.3-event-UI80b-closed-read-channel-and-independent-readback/REPORT.json', 'progress/evidence/2026-10-05/M6.3-integration412-independent-source-and-backend-continuity/REPORT.json', 'progress/evidence/2026-10-05/M6.3-artifact512-original-API-repair-owner-and-root-readback/REPORT.json', 'progress/evidence/2026-10-05/M6.3-Issue32-actual412-progress-managed-sync/REPORT.json', 'progress/evidence/2026-10-05/M6.3-generic-approval9e-independent-P2-open-original/REPORT.json', 'progress/evidence/2026-10-05/M6.3-generic-approval43-exact-owner-evidence-and-root-native-readback/REPORT.json', 'progress/evidence/2026-10-05/M6.3-generic-approval43-independent-P2-closure-original9e-open-preserved/REPORT.json', 'progress/evidence/2026-10-05/M6.3-original-native412-terminal-failure-and-review-route-lifecycle-repair/REPORT.json']}
 
 ## 阻塞与待决项
 
@@ -363,5 +364,6 @@
 - M63_DCF_SETUP_ERRORS_CAUSE_UNKNOWN: Provider-owner[single]与Review guards[extra_body-decision]在setup缺终态，正文未执行。精确关联后只读合成数据库状态为running r3/r2；UTC/monotonic差值已记，不足以证明租约/宿主原因。未恢复原实例或削弱租约/权限。
 - M63_E913_CI_BACKEND_ROUTE_AND_STATIC_BOUNDARY: 原e913两个backend822PASS1FAIL封存；db14仅无static823PASS保留，00cb生产API/static边界受控RED→完整824PASS并整合。4ecc已发布且实际双CI各backend824PASS/Ruff/mypy252PASS；旧FAIL不重标。
 - M63_1A_PUSH_TUTOR_NATIVE_FAILURE: Actual1a push37207897702 browser111452843003 129PASS1FAIL at tutor.spec.ts148;PR sixsuccess/native130 doesnoterasepushFAIL. 12 original joblogs/checkouts/treeverified;preciseTutorcauseunknown.
+- M63_412_COMPLETE_NATIVE_FAILED: 固定412原完整native132PASS1FAIL/24.1m；logSHA5e426eec31979b7c9b79299cd85f3d9fb33f82cba11a06e72055faa07367af2a。原5生成输出变化与1502非生成输入一致性保留；原因未确立，不能借1359Web、旧套件或隔离43PASS关闭。
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。
