@@ -30,7 +30,8 @@ def test_actual_old_profile_bytes_roundtrip_without_new_execution_authority():
     closure = profile.LiteralOperationClosure.model_validate(value['closure'])
     operation = CodexCommandOperation.model_validate(value['operation'])
     result = profile.LiteralOperationResult.model_validate(value['result'])
-    assert canonical_bytes({'profile': old, 'closure': closure, 'operation': operation, 'result': result}) == raw
+    assert canonical_bytes({name: model.model_dump(mode='json') for name, model in
+        [('profile', old), ('closure', closure), ('operation', operation), ('result', result)]}) == raw
     assert old.version == 'codex-synthetic-literal-profile-v1'
     assert profile.CodexOperationRegistry.projection(closure) == operation
     assert result.text == 'Original v1 synthetic result α'
