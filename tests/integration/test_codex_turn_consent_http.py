@@ -435,3 +435,18 @@ def test_grant_crossing_expiry_is_normal_refusal_not_history_corruption(consent_
     result = case.post('consents', {'proposal_id': value['id'], 'proposal_sha256': value['proposal_sha256']}, 'boundary-grant')
     assert result.status_code == 409 and result.json()['error']['code'] == 'CODEX_CONSENT_EXPIRED'
     assert case.dump() == before
+
+
+@pytest.mark.parametrize('damaged_json', ['[]', 'null', '1'])
+def test_non_object_turn_envelope_is_classified_as_damaged_history(consent_case, damaged_json):
+    case, _, sid, _, _, _ = consent_case
+    body, prep = consent_preparation(case, sid)
+    with case.app.state.database.transaction() as conn:
+        for row in conn.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='codex_turn_events'").fetchall():
+            conn.execute('DROP TRIGGER ' + row[0])
+        conn.execute('UPDATE codex_turn_events SET record_json=? WHERE seq=1', (damaged_json,))
+    before = case.dump()
+    for response in [case.get('turns/' + prep.json()['turn_id']),
+        case.post(f'sessions/{sid}/turn-preparations', body, 'turn')]:
+        assert response.status_code == 409 and response.json()['error']['code'] == 'CODEX_HISTORY_DAMAGED'
+    assert case.dump() == before
