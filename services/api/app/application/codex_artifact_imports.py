@@ -126,10 +126,10 @@ class CodexArtifactImports:
     def job(self, identity, identifier):
         with self.database.transaction(immediate=False) as conn:
             conn.execute('PRAGMA query_only=ON')
-            current = current_control_access(conn, identity, write=True)
+            current = current_control_access(conn, identity, write=False)
             repo, _, _ = self._checked(conn, current.workspace_id)
             result = repo.jobs.snapshot(identifier)
-        return self.turns._deliver(identity, result, subject=True)
+        return self.turns._deliver(identity, result, subject=False)
 
     def cancel_job(self, identity, identifier, body, key):
         key = validate_key(key)
