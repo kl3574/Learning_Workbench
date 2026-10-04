@@ -1,0 +1,13 @@
+# M6.3 operation runtime closure — 83d7b916
+
+Status: original 9d/3120 P2 CLOSED_STATIC for this fixed, literal-only memory interpreter. Standards: no new confirmed finding. Spec: no remaining confirmed blocker within the reviewed code-identity scope. The original OPEN reports, all failed runs, and the source-drift run remain unchanged.
+
+This addendum reviews 3120e06c9c00ddc01f5717260967014091cc14f5 → 83d7b9164968e314261a3d12f5fb3fc75d2e8c6d: one production file and one new test file. In conjunction with the preceding full 9d→3120 review, the complete 9d→83 change is seven paths (two production, five tests/fixture). Sole PRODUCT_DESIGN v3.0.15 SHA remains b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec.
+
+The actual serialization alias path is closed at codex_operation_profile.py:215-240: each owned function is traversed using its own loaded __globals__, rather than the profile module's same-named imports. content_sha256 therefore binds the actual serialization.canonical_bytes/sha256_bytes dependencies. Function identity collisions fail unavailable, and bindings include code/constants/defaults. The frozen original is compared against current() before new operation admission.
+
+The actual model-callable path is closed at :241-275: exact SchemaValidator/SchemaSerializer objects provide their captured validation/serialization schemas and config through __reduce__; owned callable nodes enter the same code/global traversal. Thus compiled Unicode/path/nonblank/unique-files functions are included even where JSON schema cannot describe their code. functools.partial retains its function and arguments. Only pointer suffixes in compiler ref labels and JSON-schema metadata are omitted; actual class/function nodes and behavior config remain bound.
+
+The earlier direct-wrapper fix, same-transaction captured execute, original started/debit and unknown/no-reexecution handling are unchanged. Legacy v1 still decodes and projects its original bytes but cannot equal current v2 and cannot regain execution authority. Original decision ACK and owner history paths are unchanged.
+
+Limits: this is one independent reviewer with separate Standards/Spec axes, using fixed Git only. No product, test, DB, CLI, model, account, browser, network request, or system probe ran. Python/json/hashlib/Pydantic library internals remain trusted runtime, not a hostile-process boundary. This closure does not establish actual CLI/host tools, resource enforcement, cross-database legacy ACK replay, or whole M6.3 acceptance. Production operation registration remains empty; only explicit trusted composition enables the bounded memory language.

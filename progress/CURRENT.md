@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-04T12:29:58Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
+更新：2026-10-04T12:49:21Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED_ISSUE32_LOCAL3265_ISOLATED_NATIVE_BODY_ONLY_PUBLIC4B_UNCHANGED
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
 
-完成隔离83d工具完整门禁及闭合读回，正常整合已验外发UI92与工具，保留中断v4/操作v5历史与原ACK；冻结新组合运行完整Python/Web/静态及native。继续独立受检产物source/stop receipt/manifest与普通Import草稿事务，核公开4b实际CI终态；生产proof缺失零真实模型、整个M6.3/AC21和M7未完成。
+完成新中断/操作v4-v5同session真实HTTP回归与独立融合静态读回，冻结最新组合完整Python/Web/static及原native门禁；固定来源终态后才普通push并核CI。继续受检answer materializer/终止receipt/manifest与普通Import草稿同TX，生产默认无可靠source和完整proof、零真实外部模型；整个M6.3/AC21和M7未完成。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -301,12 +301,15 @@
 - m6_3_690_actual_ci: Actual push37170415116/PR37170416801 all12jobsSUCCESS; push690/PRcheckout6692 same09c22 tree. Each825backend809contract2143integration+2numericENVskip1058Web130native; actual12APIlogs retained with original empty-log collector failure, no source/result conflation.
 - m6_3_turn_client_counterevidence: Actual97 test-only counterexamples41PASS and1109fullWeb/strict/build1407inputsGitexact; same5c production bytes. Peer originalnewlineP2 withdrawnFALSE_POSITIVE in separate immutableclosure. Localnormalmergef11 exact2newfiles, all1405 existing nonprogress paths unchanged; panel/realexecution stillincomplete.
 - m6_3_690_numeric_artifacts: Four actual690 push/PR single/restore artifact IDs11291717091/11291407336/11291472698/11291288003 independently checked metadata+archives+sixJSON. All physicalBLOCKED_ENVIRONMENT/exit1/outputnull/noassertions, publication409PUBLISH_NUMERIC_REQUIRED.23qualifiedsafe candidates;SEAL.py excluded with explicit two-prefix transformerrata.
-- m6_3_latest_checkpoint: 当前canonical3265：正常整合fddunsupported+79ainterrupt、1444完整Git exact，130实际/147声明/17未注册，六静态PASS；组合完整Python/native NOT_RUN。最后完整受测29e4085Python/2数值ENVskip/1201Web/static/native130不借给新源码。公开4b实际普通push/freshPRhead一致；原首读FAIL保留，新CI metadata9success/3running未终态。
+- m6_3_latest_checkpoint: 当前canonicalee正常本地融合已审UI92与tool83d/interrupt79a，共1464完整Git；13其他tool路径exact83d、两共享仅各语义相加，原merge冲突exit1保留，旧v1–3/v4/v5均保留。预commitdiff/Ruff/mypyPASS；新组合fullPython/Web/native NOT_RUN，独立融合review/HTTP新回归进行中。公开仍4b，新CI未终态。
 - m6_3_fixed_0dc_complete_gate: 0dc1417Git完整Python4010PASS/2真实数值ENVskip/2warnings、4012收集、2373.33s、exit0；static Ruff/mypy266/generator82/spec54core147/1109Web148files/strict/buildPASS。早先ff两完整FAIL与7case定向PASS分别保留；不覆盖latestb344未跑门禁。
 - m6_3_dispatch_related: 固定351真实start/result与保守possible-send+originalconsent/Jobs原子消费、协议memory1request相关241PASS/2warnings、6staticPASS；正常合2b3，全部25owner路径精确。生产proof/executor无注册，actualCLI/model/resource/工具未验收。
 - m6_3_turn_ui_latest: 固定b1491201Web154files+strict/build/spec+214ownerPASS，1419Git逐blob before/afterexact；真实Chrome原prepare/cancelACK丢失、刷新0自动POST、显式samekey/fullbody byteexactreplay、完整JobSnapshot durableACK与再次刷新/APIrestartPASS。1433输入normalmerge b344，当前combinedNOT_RUN。原5restoreFAIL、1wireFAIL、6非法关系FAIL及fixture/harness更正保留。 追加实际29e组合终态Python4085PASS/2ENVskip、1201Web/staticPASS与native130PASS；不借给新outboundUI。
 - m6_3_isolated_next_owners: UI92完整1278Web/157files、214旧owner/132新related及新真实Chrome32.33s PASS；生产phase0请求，受信phase1 memory synthetic response，真实CLI/模型NOT_RUN，尚未合。原9d/3120 runtime closureP2仍OPEN历史；83d55定向/6static与独审CLOSED_STATIC，完整相关RUNNING，未合。manifest/Import仅真route404RED、实施未完成。
-- m6_3_current_archive_whitespace: 本次证据归档首次git diffcheck实际exit2，原件保留；只对3明确不可变归档runner/patch路径加-whitespace，不裁剪原字节、不全局豁免。当前工程相对3265唯一非progress差异为这些.gitattributes，后续组合全量须绑定新字节。
+- m6_3_current_archive_whitespace: 本次证据归档首次git diffcheck实际exit2，原件保留；只对3明确不可变归档runner/patch路径加-whitespace，不裁剪原字节、不全局豁免。当前工程相对3265唯一非progress差异为这些.gitattributes，后续组合全量须绑定新字节。 新工具闭包3原DIFF.patch另有首次实际exit2，原件/hash保留；只追加3exactpath属性，后续新固定组合门禁计入实际属性。 融合review新SHARED_DIFF.patch在另一实际check再次exit2，单独保留原stdout；追加第4个exactpath属性。前次3path记录不改写，合计此checkpoint4精确归档豁免，无生产豁免。 又一独立resume检查实际exit2为5原Git-message捕获的EOF空行，原stdout保留；此前提取只列trailing whitespace、未列EOF类别，明确此解析遗漏。另加5exactpath属性，当前ee文档checkpoint共9新精确归档属性，原字节不改，非全局豁免；后续完整门禁绑定实际.gitattributes。
+- m6_3_turn_outbound_ui_current: 固定92完整1278Web/157files/strictbuildspec、214原owner/132新related overlapPASS，真实Chrome32.33s/1443Git exact：4命令原keyACK未知刷新0POST、明确原body完整ACK、真实role/assessment失权安全撤销、failed+complete原响应UTF8hash/APIChrome重启PASS；production0和explicitmemory1分开，actualCLI/providerNOT_RUN；6PNGrootview及24明确候选hash/Git已核。
+- m6_3_one_memory_operation_current: 固定83d226PASS/55focused overlap/6static/1434Git exact，root原纯只读VERIFY实际exit0，peerP2CLOSED_STATIC；所有原9d/3120OPEN/5RED/4RED/6e5FAIL及34source drift保留。生产registry仍空，仅显式合成bounded memory interpreter实际执行，不升级宿主工具。ee融合完整未验。
+- m6_3_shared_history_fusion_static: 固定ee独立review无新增确认融合阻断；1464完整Git、13owner83dblob与1449旧nonoverlap逐字核；原stop/replay34/17方法保留。Reviewer曾作者旧interrupt，明确仅独审root融合，不冒称再次独审自身旧实现。Root已核14明确候选与所有Git blobs。
 
 ## 阻塞与待决项
 

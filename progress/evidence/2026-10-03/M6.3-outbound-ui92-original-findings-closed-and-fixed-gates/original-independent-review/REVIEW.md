@@ -1,0 +1,12 @@
+# M6.3 outbound UI original static review — 43c6
+
+Status: two Spec P2 findings OPEN_STATIC at this source; one Standards P3 process deviation. These result/endpoint issues were already being corrected by the producer; this report independently checks the fixed original code, without claiming discovery priority or a runtime reproduction.
+
+Scope: exactly 11 changed paths from 29e864a6 to 43c6a8a1, including all seven production files and four test/fixture files. Existing turn/bootstrap/provider validators, strict DTO and DraftStore guards were read as context. The sole PRODUCT_DESIGN v3.0.15 SHA is b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec.
+
+1. P2 result owner fact is narrowed incorrectly: turnOutboundClient.ts:58-59 rejects a nonempty output_state=complete when the later turn outcome is failed/cancelled. CodexTurnResultView.exact_answer only couples exact UTF-8 SHA and empty/none (services/api/app/codex_turn_dto.py:533-538); PRODUCT_DESIGN:1688,1830 preserve already-observed output independently of later cancellation or lost permission. A retained complete answer with failed/POLICY_DENIED cannot be read through this client. The original negative complete_failed test repeats the same incorrect assumption.
+2. P2 closed endpoint spelling differs from the owner: turnOutboundClient.ts:26-30 checks the normalized browser URL host, accepting non-owner spellings such as http:/localhost/model or http://127.1/model under explicit_loopback. The application owner requires an actual authority and the explicit allowed hostname. This is a malformed-response admission gap, not evidence of network escape: this client does not itself send model requests.
+
+The remaining paths retain original immutable body/key/basis and complete ACK, persist before POST, recheck fresh session before/after delivery, separate original grant/start ACK from current GET, preserve late ACK under its original actor, and allow a new learner only safe revoke. No additional confirmed defect was found. This is not full UI or M6.3 acceptance.
+
+One independent reviewer records Standards and Spec separately. Git-only review: no application, test, browser, DB, CLI, account, model, remote request, or system probe was executed. Author gate statements are not counted as reviewer execution. The working tree was already at 92c8836; all original review content was obtained from fixed 43c6 Git objects.
