@@ -5304,6 +5304,48 @@
         "title": "CodexSessionCreateWrite",
         "type": "object"
       },
+      "CodexTurnAnswerEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "type": {
+            "const": "answer_delta",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "title": "CodexTurnAnswerEvent",
+        "type": "object"
+      },
+      "CodexTurnApprovalEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "approval_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Approval Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "approval_required",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "approval_id"
+        ],
+        "title": "CodexTurnApprovalEvent",
+        "type": "object"
+      },
       "CodexTurnControlView": {
         "additionalProperties": false,
         "properties": {
@@ -5519,6 +5561,101 @@
           "error_code"
         ],
         "title": "CodexTurnControlView",
+        "type": "object"
+      },
+      "CodexTurnEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "occurred_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "payload": {
+            "discriminator": {
+              "mapping": {
+                "answer_delta": "#/components/schemas/CodexTurnAnswerEvent",
+                "approval_required": "#/components/schemas/CodexTurnApprovalEvent",
+                "manifest_ready": "#/components/schemas/CodexTurnManifestEvent",
+                "status": "#/components/schemas/CodexTurnStatusEvent",
+                "terminal": "#/components/schemas/CodexTurnTerminalEvent",
+                "usage": "#/components/schemas/CodexTurnUsageEvent"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CodexTurnStatusEvent"
+              },
+              {
+                "$ref": "#/components/schemas/CodexTurnAnswerEvent"
+              },
+              {
+                "$ref": "#/components/schemas/CodexTurnApprovalEvent"
+              },
+              {
+                "$ref": "#/components/schemas/CodexTurnUsageEvent"
+              },
+              {
+                "$ref": "#/components/schemas/CodexTurnManifestEvent"
+              },
+              {
+                "$ref": "#/components/schemas/CodexTurnTerminalEvent"
+              }
+            ],
+            "title": "Payload"
+          },
+          "run_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "seq": {
+            "minimum": 1.0,
+            "title": "Seq",
+            "type": "integer"
+          },
+          "turn_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "run_id",
+          "seq",
+          "occurred_at",
+          "payload"
+        ],
+        "title": "CodexTurnEvent",
+        "type": "object"
+      },
+      "CodexTurnManifestEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "manifest_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Manifest Id",
+            "type": "string"
+          },
+          "manifest_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Manifest Sha256",
+            "type": "string"
+          },
+          "type": {
+            "const": "manifest_ready",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "manifest_id",
+          "manifest_sha256"
+        ],
+        "title": "CodexTurnManifestEvent",
         "type": "object"
       },
       "CodexTurnPage": {
@@ -5964,6 +6101,136 @@
           "expected_session_revision"
         ],
         "title": "CodexTurnStartWrite",
+        "type": "object"
+      },
+      "CodexTurnStatusEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "job": {
+            "$ref": "#/components/schemas/JobRef"
+          },
+          "run_revision": {
+            "minimum": 1.0,
+            "title": "Run Revision",
+            "type": "integer"
+          },
+          "type": {
+            "const": "status",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "job",
+          "run_revision"
+        ],
+        "title": "CodexTurnStatusEvent",
+        "type": "object"
+      },
+      "CodexTurnTerminalEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "error_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "CODEX_PROTOCOL_INVALID",
+                  "CODEX_PROFILE_CHANGED",
+                  "CODEX_RUNTIME_UNAVAILABLE",
+                  "CODEX_BINDING_INVALID",
+                  "CODEX_HISTORY_DAMAGED",
+                  "CODEX_INPUT_PROOF_UNAVAILABLE",
+                  "CODEX_OPERATION_UNSUPPORTED",
+                  "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED",
+                  "CODEX_TIMEOUT",
+                  "CODEX_RESOURCE_LIMIT",
+                  "CODEX_CANCELLED",
+                  "CODEX_OUTCOME_UNKNOWN",
+                  "CODEX_OPERATION_FAILED",
+                  "CODEX_ARTIFACT_REJECTED",
+                  "CODEX_ARTIFACT_MISSING",
+                  "CODEX_SOURCE_CHANGED",
+                  "CODEX_SOURCE_UNAVAILABLE",
+                  "CODEX_APPROVAL_EXPIRED",
+                  "CODEX_CONSENT_EXPIRED",
+                  "CODEX_CONSENT_REVOKED",
+                  "CODEX_BUDGET_EXCEEDED",
+                  "POLICY_DENIED",
+                  "ASSESSMENT_ACTIVE"
+                ],
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "CAPABILITY_UNSUPPORTED",
+                  "PROVIDER_CONFIGURATION_CHANGED",
+                  "PROVIDER_SECRET_UNAVAILABLE",
+                  "OUTBOUND_SOURCE_CHANGED",
+                  "OUTBOUND_SOURCE_UNAVAILABLE",
+                  "CONSENT_REQUIRED",
+                  "CONSENT_REVOKED",
+                  "CONSENT_EXPIRED",
+                  "OUTBOUND_BUDGET_EXCEEDED",
+                  "PROVIDER_TIMEOUT",
+                  "PROVIDER_CANCELLED",
+                  "PROVIDER_TRANSPORT_ERROR",
+                  "PROVIDER_PROTOCOL_ERROR",
+                  "PROVIDER_OUTCOME_UNKNOWN",
+                  "PROVIDER_USAGE_INCONSISTENT",
+                  "PROVIDER_REFUSAL",
+                  "PROVIDER_INCOMPLETE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "outcome": {
+            "enum": [
+              "completed",
+              "failed",
+              "incomplete",
+              "cancelled",
+              "unknown"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "type": {
+            "const": "terminal",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "outcome",
+          "error_code"
+        ],
+        "title": "CodexTurnTerminalEvent",
+        "type": "object"
+      },
+      "CodexTurnUsageEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "const": "usage",
+            "title": "Type",
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/UsageSnapshot"
+          }
+        },
+        "required": [
+          "type",
+          "usage"
+        ],
+        "title": "CodexTurnUsageEvent",
         "type": "object"
       },
       "CodexTurnWarning": {
@@ -26113,6 +26380,174 @@
           }
         ],
         "summary": "Turn",
+        "tags": [
+          "codex"
+        ]
+      }
+    },
+    "/api/v1/codex/turns/{id}/events": {
+      "get": {
+        "operationId": "events_api_v1_codex_turns__id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after_seq",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Last-Event-ID",
+            "required": false,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}:[0-9]+$",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexTurnEvent",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Events",
         "tags": [
           "codex"
         ]

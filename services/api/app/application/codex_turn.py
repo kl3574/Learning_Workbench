@@ -11,7 +11,7 @@ from packages.contracts import domain_models as dm
 from packages.contracts.canonical import strict_json, sha256_bytes
 from ..codex_turn_dto import (
     CodexCurrentSessionView, CodexTurnPrepareWrite, CodexTurnPreparationView, CodexTurnControlView, CodexTurnPage,
-    CodexTurnStartWrite, CodexTurnStartAck, CodexTurnResultView, CodexInterruptWrite, CodexInterruptAck,
+    CodexTurnStartWrite, CodexTurnStartAck, CodexTurnResultView, CodexInterruptWrite, CodexInterruptAck, CodexTurnEvent,
 )
 from ..import_dto import JobCancelRequest, JobSnapshot
 from ..infrastructure.codex_turn_repository import CodexTurnRepository, CheckedSession, CheckedTurn
@@ -36,6 +36,7 @@ from .codex_turn_interrupt_models import (
 )
 from .provider_codex_profile import CodexRuntimeProfile
 from .provider_models import UsageSnapshot, DispatchLease
+from .codex_events import project_events
 
 if TYPE_CHECKING:
     from .provider_codex_consents import CodexConsentsService
@@ -131,14 +132,38 @@ class CodexTurnService:
         # the original grant/revocation facts in the immutable Run projection.
         controls = self.outbound_owner.verify_links(conn, identity, self._source_views(conn, identity, history)) if self.outbound_owner else {}
         approvals = self.approvals.verify_history(conn, identity.workspace_id, history) if self.approvals else {}
+        streams = self._event_histories(conn, identity.workspace_id, history)
         result = {}
         for state in history.values():
             for turn in state.turns.values():
                 consent = controls.get(turn.control.id, turn.control.consent_control)
                 result[turn.control.id] = CodexTurnControlView.model_validate({**turn.control.model_dump(),
+                    'last_seq':len(streams[turn.control.id]),
                     'consent_control':consent.model_dump() if consent else None,
                     'approval_controls':[self.approvals.control(approvals[item.id],turn,conn,approvals,history) for item in turn.control.approval_controls] if self.approvals else []})
         return result
+
+    def _event_histories(self, conn, workspace_id, history):
+        states = self.outbound_owner.owned_states(conn, workspace_id)[0] if self.outbound_owner else {}
+        return {turn.control.id: project_events(state, turn,
+                states[turn.control.id].finished if turn.control.id in states else None)
+            for state in history.values() for turn in state.turns.values()}
+
+    def event_snapshot(self, identity: SessionIdentity, identifier: str) -> tuple[CodexTurnControlView, list[CodexTurnEvent]]:
+        with self.database.transaction(immediate=False) as conn:
+            conn.execute('PRAGMA query_only=ON')
+            current, _, _, history = self._state(conn, identity, subject=True)
+            _, turn = self._find(history, identifier)
+            events = self._event_histories(conn, current.workspace_id, history)[identifier]
+            control = self._control_views(conn, current, history)[turn.control.id]
+            if len(events) != control.last_seq:
+                raise damaged()
+        return self._deliver(identity, (control, events), subject=True)
+
+    def authorize_events(self, identity: SessionIdentity, identifier: str) -> None:
+        # Re-read current access and the full immutable owners under each
+        # delivery, including a batch paused by observer backpressure.
+        self.event_snapshot(identity, identifier)
 
     def _base_state(self, conn, identity, *, subject=False):
         current = current_control_access(conn, identity, write=subject)

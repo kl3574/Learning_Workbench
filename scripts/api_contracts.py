@@ -123,6 +123,11 @@ def response_contract(operation: dict) -> tuple[list[str], str, set[str]]:
             kinds.add("json")
         elif set(content) == {"text/event-stream"}:
             schema = content["text/event-stream"].get("schema", {})
+            if schema == {'type':'object', '$ref': '#/components/schemas/CodexTurnEvent'}:
+                response_types.append('AsyncIterable<CodexTurnEvent>')
+                models.add('CodexTurnEvent')
+                kinds.add('sse')
+                continue
             alternatives = schema.get("oneOf", [])
             if (schema.get("type") != "object" or not alternatives
                     or any(set(item) != {"$ref"} for item in alternatives)
@@ -285,8 +290,22 @@ def api_artifacts(openapi: dict, catalog: dict, provenance: dict[str, str]) -> d
             if request_type != "undefined":
                 models_needed.add(request_type)
             response_types, response_kind, response_models = response_contract(operation)
-            if response_kind == "sse" and (method, path) != ("get", "/api/v1/runs/{id}/events"):
+            if response_kind == "sse" and (method, path) not in {
+                    ("get", "/api/v1/runs/{id}/events"), ("get", "/api/v1/codex/turns/{id}/events")}:
                 raise ValueError("SSE operation requires its explicit generated adapter")
+            if (method, path) == ('get', '/api/v1/codex/turns/{id}/events'):
+                model = schemas.get('CodexTurnEvent', {})
+                fields = {'turn_id', 'run_id', 'seq', 'occurred_at', 'payload'}
+                union = model.get('properties', {}).get('payload', {})
+                names = ['CodexTurnStatusEvent', 'CodexTurnAnswerEvent', 'CodexTurnApprovalEvent',
+                    'CodexTurnUsageEvent', 'CodexTurnManifestEvent', 'CodexTurnTerminalEvent']
+                if (response_kind != 'sse' or response_models != {'CodexTurnEvent'}
+                        or model.get('additionalProperties') is not False
+                        or set(model.get('properties', {})) != fields or set(model.get('required', [])) != fields
+                        or union.get('discriminator', {}).get('propertyName') != 'type'
+                        or union.get('oneOf') != [{'$ref':'#/components/schemas/' + name} for name in names]
+                        or any(schemas.get(name, {}).get('additionalProperties') is not False for name in names)):
+                    raise ValueError('Codex SSE requires its exact closed wrapper and six payload alternatives')
             models_needed.update(response_models)
             parameters = operation_parameters(path, methods, operation)
             header_type = parameter_type(parameters["header"]) if parameters["header"] else "null"

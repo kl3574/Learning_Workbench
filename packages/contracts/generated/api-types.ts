@@ -855,6 +855,16 @@ export type CodexSessionCreateWrite = {
   "allowed_actions": [];
 };
 
+export type CodexTurnAnswerEvent = {
+  "type": "answer_delta";
+  "text": string;
+};
+
+export type CodexTurnApprovalEvent = {
+  "type": "approval_required";
+  "approval_id": string;
+};
+
 export type CodexTurnControlView = {
   "id": string;
   "session_id": string;
@@ -874,6 +884,20 @@ export type CodexTurnControlView = {
   "started_at": (string | null);
   "finished_at": (string | null);
   "error_code": ("CODEX_PROTOCOL_INVALID" | "CODEX_PROFILE_CHANGED" | "CODEX_RUNTIME_UNAVAILABLE" | "CODEX_BINDING_INVALID" | "CODEX_HISTORY_DAMAGED" | "CODEX_INPUT_PROOF_UNAVAILABLE" | "CODEX_OPERATION_UNSUPPORTED" | "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED" | "CODEX_TIMEOUT" | "CODEX_RESOURCE_LIMIT" | "CODEX_CANCELLED" | "CODEX_OUTCOME_UNKNOWN" | "CODEX_OPERATION_FAILED" | "CODEX_ARTIFACT_REJECTED" | "CODEX_ARTIFACT_MISSING" | "CODEX_SOURCE_CHANGED" | "CODEX_SOURCE_UNAVAILABLE" | "CODEX_APPROVAL_EXPIRED" | "CODEX_CONSENT_EXPIRED" | "CODEX_CONSENT_REVOKED" | "CODEX_BUDGET_EXCEEDED" | "POLICY_DENIED" | "ASSESSMENT_ACTIVE" | "CAPABILITY_UNSUPPORTED" | "PROVIDER_CONFIGURATION_CHANGED" | "PROVIDER_SECRET_UNAVAILABLE" | "OUTBOUND_SOURCE_CHANGED" | "OUTBOUND_SOURCE_UNAVAILABLE" | "CONSENT_REQUIRED" | "CONSENT_REVOKED" | "CONSENT_EXPIRED" | "OUTBOUND_BUDGET_EXCEEDED" | "PROVIDER_TIMEOUT" | "PROVIDER_CANCELLED" | "PROVIDER_TRANSPORT_ERROR" | "PROVIDER_PROTOCOL_ERROR" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_USAGE_INCONSISTENT" | "PROVIDER_REFUSAL" | "PROVIDER_INCOMPLETE" | null);
+};
+
+export type CodexTurnEvent = {
+  "turn_id": string;
+  "run_id": string;
+  "seq": number;
+  "occurred_at": string;
+  "payload": (CodexTurnStatusEvent | CodexTurnAnswerEvent | CodexTurnApprovalEvent | CodexTurnUsageEvent | CodexTurnManifestEvent | CodexTurnTerminalEvent);
+};
+
+export type CodexTurnManifestEvent = {
+  "type": "manifest_ready";
+  "manifest_id": string;
+  "manifest_sha256": string;
 };
 
 export type CodexTurnPage = {
@@ -954,6 +978,23 @@ export type CodexTurnStartWrite = {
   "preparation_sha256": string;
   "consent_id": string;
   "expected_session_revision": number;
+};
+
+export type CodexTurnStatusEvent = {
+  "type": "status";
+  "job": JobRef;
+  "run_revision": number;
+};
+
+export type CodexTurnTerminalEvent = {
+  "type": "terminal";
+  "outcome": "completed" | "failed" | "incomplete" | "cancelled" | "unknown";
+  "error_code": ("CODEX_PROTOCOL_INVALID" | "CODEX_PROFILE_CHANGED" | "CODEX_RUNTIME_UNAVAILABLE" | "CODEX_BINDING_INVALID" | "CODEX_HISTORY_DAMAGED" | "CODEX_INPUT_PROOF_UNAVAILABLE" | "CODEX_OPERATION_UNSUPPORTED" | "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED" | "CODEX_TIMEOUT" | "CODEX_RESOURCE_LIMIT" | "CODEX_CANCELLED" | "CODEX_OUTCOME_UNKNOWN" | "CODEX_OPERATION_FAILED" | "CODEX_ARTIFACT_REJECTED" | "CODEX_ARTIFACT_MISSING" | "CODEX_SOURCE_CHANGED" | "CODEX_SOURCE_UNAVAILABLE" | "CODEX_APPROVAL_EXPIRED" | "CODEX_CONSENT_EXPIRED" | "CODEX_CONSENT_REVOKED" | "CODEX_BUDGET_EXCEEDED" | "POLICY_DENIED" | "ASSESSMENT_ACTIVE" | "CAPABILITY_UNSUPPORTED" | "PROVIDER_CONFIGURATION_CHANGED" | "PROVIDER_SECRET_UNAVAILABLE" | "OUTBOUND_SOURCE_CHANGED" | "OUTBOUND_SOURCE_UNAVAILABLE" | "CONSENT_REQUIRED" | "CONSENT_REVOKED" | "CONSENT_EXPIRED" | "OUTBOUND_BUDGET_EXCEEDED" | "PROVIDER_TIMEOUT" | "PROVIDER_CANCELLED" | "PROVIDER_TRANSPORT_ERROR" | "PROVIDER_PROTOCOL_ERROR" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_USAGE_INCONSISTENT" | "PROVIDER_REFUSAL" | "PROVIDER_INCOMPLETE" | null);
+};
+
+export type CodexTurnUsageEvent = {
+  "type": "usage";
+  "usage": UsageSnapshot;
 };
 
 export type CodexTurnWarning = {
