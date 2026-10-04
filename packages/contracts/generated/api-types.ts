@@ -734,6 +734,17 @@ export type CodexFrozenOutboundSummary = {
   "expires_at": string;
 };
 
+export type CodexInterruptAck = {
+  "id": string;
+  "turn_id": string;
+  "status": "interrupt_requested" | "already_terminal";
+};
+
+export type CodexInterruptWrite = {
+  "turn_id": string;
+  "expected_session_revision": number;
+};
+
 export type CodexLocalToolBudget = {
   "max_tool_calls": number;
   "wall_seconds": number;

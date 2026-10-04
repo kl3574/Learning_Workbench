@@ -11,7 +11,7 @@ from packages.contracts import domain_models as dm
 from packages.contracts.canonical import strict_json, sha256_bytes
 from ..codex_turn_dto import (
     CodexCurrentSessionView, CodexTurnPrepareWrite, CodexTurnPreparationView, CodexTurnControlView, CodexTurnPage,
-    CodexTurnStartWrite, CodexTurnStartAck, CodexTurnResultView,
+    CodexTurnStartWrite, CodexTurnStartAck, CodexTurnResultView, CodexInterruptWrite, CodexInterruptAck,
 )
 from ..import_dto import JobCancelRequest, JobSnapshot
 from ..infrastructure.codex_turn_repository import CodexTurnRepository, CheckedSession, CheckedTurn
@@ -31,6 +31,9 @@ from .provider_codex_ports import CodexOutboundMaterial
 from .provider_codex_ports import CodexOutboundSourceState
 from .provider_budget import ProofRegistry
 from .codex_turn_execution_models import RunnableTurnInput, RunnableTurnPrepared
+from .codex_turn_interrupt_models import (
+    InterruptCommand, InterruptStopCommand, InterruptCancelled, InterruptCancelRequested, TurnInterruptRecorded,
+)
 from .provider_codex_profile import CodexRuntimeProfile
 from .provider_models import UsageSnapshot, DispatchLease
 
@@ -82,6 +85,31 @@ class CodexTurnService:
 
     def cancel_job(self, identity: SessionIdentity, identifier: str, body: JobCancelRequest, key: str) -> JobSnapshot:
         return self._deliver(identity, self._cancel_job(identity, identifier, body, key), subject=False)
+
+    def interrupt(self, identity: SessionIdentity, session_id: str, body: CodexInterruptWrite, key: str) -> CodexInterruptAck:
+        key = validate_key(key)
+        body = CodexInterruptWrite.model_validate(body.model_dump())
+        with self.database.transaction() as conn:
+            current, original, repo, history = self._state(conn, identity)
+            replay = repo.replay(history, current, 'interrupt', session_id, key, body)
+            if replay is not None:
+                ack = CodexInterruptAck.model_validate(replay.model_dump())
+            else:
+                if session_id not in original:
+                    raise missing()
+                state, turn = self._find(history, body.turn_id)
+                if state.anchor.session_id != session_id:
+                    raise ApiError(409, 'CODEX_TURN_BINDING_CHANGED', '任务不属于指定会话。')
+                if body.expected_session_revision != state.revision:
+                    raise ApiError(412, 'REVISION_MISMATCH', '会话修订已改变，请读取当前事实。')
+                ack = CodexInterruptAck(id=session_id, turn_id=body.turn_id,
+                    status='already_terminal' if turn.control.execution == 'terminal' else 'interrupt_requested')
+                command = InterruptCommand(workspace_id=current.workspace_id, actor_session_id=current.id,
+                    route='interrupt', target_id=session_id, key=key, body=body, ack=ack)
+                self.request_stop(conn, current, turn.control.job.id,
+                    JobCancelRequest(expected_revision=turn.control.job_revision), key, interrupt=command)
+            current_control_access(conn, current, write=False)
+        return self._deliver(identity, ack, subject=False)
 
     def turns(self, identity: SessionIdentity, session_id: str, cursor: str | None = None, limit: int = 20) -> CodexTurnPage:
         return self._deliver(identity, self._turns(identity, session_id, cursor, limit), subject=False)
@@ -373,12 +401,16 @@ class CodexTurnService:
         with self.database.transaction() as conn:
             return self.request_stop(conn, identity, identifier, body, key)
 
-    def request_stop(self, conn, identity, identifier, body, key):
-        """Same actual caller transaction for Jobs cancel and approval decline."""
+    def request_stop(self, conn, identity, identifier, body, key, *, interrupt: InterruptCommand | None = None):
+        """One transaction/reducer for Jobs cancel, approval decline and interrupt.
+
+        An interrupt carries its own closed v4 command. It never looks up a
+        public cancel key or interprets a current snapshot as a historical ACK.
+        """
         if not conn.in_transaction:
             raise damaged()
         current, original, repo, history = self._state(conn, identity)
-        replay = repo.replay(history, current, 'cancel', identifier, key, body)
+        replay = repo.replay(history, current, 'cancel', identifier, key, body) if interrupt is None else None
         if replay is not None:
             return JobSnapshot.model_validate(replay.model_dump())
         state, turn = self._find(history, identifier, job=True)
@@ -395,21 +427,31 @@ class CodexTurnService:
                 raise damaged()
             repo.jobs.cancel(identifier, body.expected_revision)
         ack = repo.jobs.snapshot(identifier)
-        command=CancelCommand(workspace_id=current.workspace_id, actor_session_id=current.id, route='cancel',
-            target_id=identifier,key=key,body=body,ack=ack)
+        command: CancelCommand | InterruptStopCommand
+        if interrupt is None:
+            command = CancelCommand(workspace_id=current.workspace_id, actor_session_id=current.id, route='cancel',
+                target_id=identifier,key=key,body=body,ack=ack)
+        else:
+            command = InterruptStopCommand(workspace_id=current.workspace_id, actor_session_id=current.id,
+                route='interrupt_stop', target_id=identifier,key=key,body=body,ack=ack)
         if provider_state is not None and not active and self.outbound_owner is not None:
             _, binding = self.outbound_owner.record_terminal(conn,current.workspace_id,turn.control.id,provider_state,
                 ack.updated_at,outcome='cancelled',error_code='CODEX_CANCELLED')
             bound = repo.append(state,binding,ack.updated_at)
             state.envelopes.append(bound)
-        event: TurnCancelled | TurnCancelRequested
+        event: TurnCancelled | TurnCancelRequested | InterruptCancelled | InterruptCancelRequested | TurnInterruptRecorded
         if active:
-            event = TurnCancelRequested(kind='cancel_request_observed' if already_requested else 'cancel_requested',
-                turn_id=turn.control.id,session_revision=None if already_requested else state.revision+1,command=command)
+            values = dict(kind='cancel_request_observed' if already_requested else 'cancel_requested',
+                turn_id=turn.control.id,session_revision=None if already_requested else state.revision+1,command=command.model_dump())
+            event = (InterruptCancelRequested if interrupt else TurnCancelRequested).model_validate(values)
         else:
-            event = TurnCancelled(kind='cancel_observed' if terminal else 'cancelled', turn_id=turn.control.id,
+            values = dict(kind='cancel_observed' if terminal else 'cancelled', turn_id=turn.control.id,
                 requested_session_revision=None if terminal else state.revision + 1,
-                terminal_session_revision=None if terminal else state.revision + 2,command=command)
+                terminal_session_revision=None if terminal else state.revision + 2,command=command.model_dump())
+            event = (InterruptCancelled if interrupt else TurnCancelled).model_validate(values)
+        if interrupt is not None:
+            event = TurnInterruptRecorded.model_validate(dict(kind='interrupt_recorded', turn_id=turn.control.id,
+                command=interrupt.model_dump(), stop=event.model_dump()))
         repo.append(state, event, ack.updated_at if not terminal and not already_requested else utc_now())
         self._state(conn,current)
         current_control_access(conn, current, write=False)
