@@ -57,6 +57,18 @@ class CodexImportRepository:
             raise codex_import_damaged() from None
 
     def record(self, import_id: str) -> CodexImportRecord | None:
+        required = {'codex_import_batches', 'codex_import_bindings', 'codex_import_previews'}
+        present = {row[0] for row in self.conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN "
+            "('codex_import_batches','codex_import_bindings','codex_import_previews')")}
+        if present != required:
+            applied = self.conn.execute(
+                "SELECT 1 FROM schema_migrations WHERE version='0033_codex_import_bindings'").fetchone()
+            if present or applied is not None:
+                raise codex_import_damaged()
+            # An explicitly pre-0033 schema can still read its original Import
+            # facts. The caller separately rejects any new-origin claim.
+            return None
         row = self.conn.execute('SELECT aggregate_job_id FROM codex_import_bindings WHERE import_id=? AND workspace_id=?',
             (import_id, self.workspace_id)).fetchone()
         if row is None:

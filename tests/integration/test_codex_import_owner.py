@@ -228,7 +228,7 @@ def test_current_role_is_checked_before_artifact_port_or_new_stage(tmp_path):
 @pytest.mark.parametrize('damage', ['all_binding_family', 'status_pair'])
 def test_complete_member_discovery_and_child_status_cannot_hide_damage(tmp_path, damage):
     case, service, identity = fixture(tmp_path)
-    binding, = bindings = stage(case, service, identity, [source(identity)])
+    binding, = stage(case, service, identity, [source(identity)])
     with case.app.state.database.transaction() as conn:
         if damage == 'all_binding_family':
             conn.execute('DELETE FROM codex_import_bindings')

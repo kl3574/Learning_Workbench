@@ -191,7 +191,7 @@ class ImportService:
         if (type(selected) is not tuple or len(selected) != len(request.artifact_ids)
                 or any(type(item) is not CheckedCodexArtifactSource for item in selected)):
             raise codex_import_damaged()
-        bindings = []
+        bindings: list[CodexImportBinding] = []
         for item, artifact_id in zip(selected, request.artifact_ids, strict=True):
             if (item.workspace_id != current.workspace_id or item.actor_session_id != current.id
                     or item.session_id != session_id or item.turn_id != request.turn_id
