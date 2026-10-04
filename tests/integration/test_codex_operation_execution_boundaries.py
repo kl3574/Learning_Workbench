@@ -1,5 +1,7 @@
 """Real owner lifecycle around an explicitly registered, memory-only interpreter."""
 import json
+import sys
+from contextlib import contextmanager
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -13,6 +15,28 @@ from tests.integration.test_codex_turn_dispatch_http import consent_case, base_c
 __all__ = ['consent_case', 'base_consent_case']
 
 
+@contextmanager
+def interpreter_events(observe):
+    """Observe only the current test thread; never replace frozen tool code.
+
+    The callback targets the one actual execute code object. Return-event fault
+    injection models a lost receipt after execution, not a new licensed wrapper.
+    No external process, frame values, credential or system state is inspected.
+    """
+    code = CodexOperationRegistry.execute.__code__
+    previous = sys.getprofile()
+    def trace(frame, event, arg):
+        if previous is not None:
+            previous(frame, event, arg)
+        if frame.f_code is code:
+            observe(event)
+    sys.setprofile(trace)
+    try:
+        yield
+    finally:
+        sys.setprofile(previous)
+
+
 def exercise(values, observe, monkeypatch):
     case, prepared, request, old = callback_turn(values)
     owner, worker = case.app.state.codex_turn_service.approvals, case.app.state.codex_turn_worker
@@ -20,11 +44,6 @@ def exercise(values, observe, monkeypatch):
     raw = canonical_bytes({**json.loads(old), 'request_text': canonical_bytes(LiteralCommand(
         version='codex-synthetic-literal-command-v1', text='Actual synthetic memory result')).decode()})
     executions, identifiers, errors = [], [], []
-    actual = owner.operations.execute
-    def counted(*args):
-        executions.append(args[1])
-        return actual(*args)
-    monkeypatch.setattr(owner.operations, 'execute', counted)
     def peer(gate):
         try:
             gate.request(request.body, endpoint=request.endpoint, max_output_tokens=64)
@@ -38,7 +57,8 @@ def exercise(values, observe, monkeypatch):
             errors.append(error)
             raise
     case.app.state.synthetic_executor.peer = peer
-    assert worker.run_once() is True
+    with interpreter_events(lambda event: executions.append(True) if event == 'call' else None):
+        assert worker.run_once() is True
     if errors:
         raise errors[0]
     assert len(identifiers) == 1
@@ -151,14 +171,15 @@ def test_unknown_execution_consumes_once_and_never_replays(consent_case, monkeyp
     attempts = []
     def observe(case, prep, worker, owner, identifier, body, *rest):
         assert decision(case, identifier, body).status_code == 200
-        def crash(*args):
-            attempts.append(True)
-            raise ValueError('Synthetic missing execution receipt')
-        monkeypatch.setattr(owner.operations, 'execute', crash)
-        for _ in range(2):
-            with pytest.raises(ApiError) as error:
-                worker.execute_operation(identifier)
-            assert error.value.code == 'CODEX_OUTCOME_UNKNOWN'
+        def crash(event):
+            if event == 'return':
+                attempts.append(True)
+                raise ValueError('Synthetic missing execution receipt after actual interpreter')
+        with interpreter_events(crash):
+            for _ in range(2):
+                with pytest.raises(ApiError) as error:
+                    worker.execute_operation(identifier)
+                assert error.value.code == 'CODEX_OUTCOME_UNKNOWN'
     case, prepared, identifier, _ = exercise(consent_case, observe, monkeypatch)
     assert case.get('turns/'+prepared['turn_id']).json()['outcome'] == 'unknown'
     view = case.client.get('/api/v1/approvals/'+identifier).json()
@@ -169,14 +190,12 @@ def test_unknown_execution_consumes_once_and_never_replays(consent_case, monkeyp
 def test_late_actual_result_survives_actor_loss_without_subject_delivery(consent_case, monkeypatch):
     def observe(case, prep, worker, owner, identifier, body, *rest):
         assert decision(case, identifier, body).status_code == 200
-        actual = owner.operations.execute
-        def withdraw(*args):
-            result = actual(*args)
-            assert case.client.post('/api/v1/session/role', json={'role':'learner'},
-                headers={**case.headers, 'Idempotency-Key':'late-role'}).status_code == 200
-            return result
-        monkeypatch.setattr(owner.operations, 'execute', withdraw)
-        worker.execute_operation(identifier)
+        def withdraw(event):
+            if event == 'return':
+                assert case.client.post('/api/v1/session/role', json={'role':'learner'},
+                    headers={**case.headers, 'Idempotency-Key':'late-role'}).status_code == 200
+        with interpreter_events(withdraw):
+            worker.execute_operation(identifier)
         before = case.dump()
         assert case.client.get('/api/v1/approvals/'+identifier).status_code == 403
         assert case.get('turns/'+prep['turn_id']).json()['approval_controls'][0]['revision'] == 4
@@ -243,11 +262,12 @@ def test_committed_start_without_receipt_recovers_unknown_in_new_application(con
         ack = decision(case, identifier, body)
         assert ack.status_code == 200
         receipts.append((body, ack.content))
-        def interrupted(*args):
-            raise Interrupted()
-        monkeypatch.setattr(owner.operations, 'execute', interrupted)
-        with pytest.raises(Interrupted):
-            worker.execute_operation(identifier)
+        def interrupted(event):
+            if event == 'call':
+                raise Interrupted()
+        with interpreter_events(interrupted):
+            with pytest.raises(Interrupted):
+                worker.execute_operation(identifier)
         view = case.client.get('/api/v1/approvals/'+identifier).json()
         assert view['execution'] == 'started' and view['revision'] == 3
         with pytest.raises(ApiError) as error:
@@ -270,7 +290,7 @@ def test_committed_start_without_receipt_recovers_unknown_in_new_application(con
     before = case.dump()
     assert worker.recover() == 0 and worker.run_once() is False
     assert decision(case, identifier, receipts[0][0]).content == receipts[0][1]
-    assert case.dump() == before and calls == []
+    assert case.dump() == before and calls == [True]
 
 
 def test_result_transaction_failure_retains_started_and_unknown_without_reexecution(consent_case, monkeypatch):
@@ -391,15 +411,14 @@ def test_multiple_approvals_do_not_reserve_extra_tool_calls(consent_case, monkey
 def test_start_is_committed_before_interpreter_and_cannot_be_reentered(consent_case, monkeypatch):
     def observe(case, prep, worker, owner, identifier, body, *rest):
         assert decision(case, identifier, body).status_code == 200
-        actual = owner.operations.execute
-        def checked(*args):
-            view = case.client.get('/api/v1/approvals/'+identifier).json()
-            assert view['revision'] == 3 and view['execution'] == 'started'
-            with pytest.raises(ApiError) as error:
-                worker.execute_operation(identifier)
-            assert error.value.code == 'CODEX_OUTCOME_UNKNOWN'
-            return actual(*args)
-        monkeypatch.setattr(owner.operations, 'execute', checked)
-        worker.execute_operation(identifier)
+        def checked(event):
+            if event == 'call':
+                view = case.client.get('/api/v1/approvals/'+identifier).json()
+                assert view['revision'] == 3 and view['execution'] == 'started'
+                with pytest.raises(ApiError) as error:
+                    worker.execute_operation(identifier)
+                assert error.value.code == 'CODEX_OUTCOME_UNKNOWN'
+        with interpreter_events(checked):
+            worker.execute_operation(identifier)
     _, _, _, calls = exercise(consent_case, observe, monkeypatch)
     assert len(calls) == 1
