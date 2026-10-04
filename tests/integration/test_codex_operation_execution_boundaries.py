@@ -231,3 +231,129 @@ def test_wrong_thread_cannot_claim_original_operation(consent_case, monkeypatch)
         assert case.dump() == before
     _, _, _, calls = exercise(consent_case, observe, monkeypatch)
     assert calls == []
+
+
+def test_committed_start_without_receipt_recovers_unknown_in_new_application(consent_case, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from services.api.app.main import create_app
+    class Interrupted(BaseException):
+        pass
+    receipts = []
+    def observe(case, prep, worker, owner, identifier, body, *rest):
+        ack = decision(case, identifier, body)
+        assert ack.status_code == 200
+        receipts.append((body, ack.content))
+        def interrupted(*args):
+            raise Interrupted()
+        monkeypatch.setattr(owner.operations, 'execute', interrupted)
+        with pytest.raises(Interrupted):
+            worker.execute_operation(identifier)
+        view = case.client.get('/api/v1/approvals/'+identifier).json()
+        assert view['execution'] == 'started' and view['revision'] == 3
+        with pytest.raises(ApiError) as error:
+            worker.execute_operation(identifier)
+        assert error.value.code == 'CODEX_OUTCOME_UNKNOWN'
+        # A lost owner can leave the already committed permit, not a fake
+        # zero-execution assertion. This seam suppresses only final convergence.
+        monkeypatch.setattr(worker, '_finish', lambda *args:None)
+    case, prepared, identifier, calls = exercise(consent_case, observe, monkeypatch)
+    _, runtime, _, proofs, _, _ = consent_case
+    app = create_app(case.app.state.settings, codex_bootstrap_runtime=runtime, codex_proofs=proofs)
+    worker = app.state.codex_turn_worker
+    assert worker.recover() == 0
+    later = (datetime.now(timezone.utc)+timedelta(minutes=2)).isoformat().replace('+00:00','Z')
+    monkeypatch.setattr('services.api.app.application.codex_turn_worker.utc_now', lambda:later)
+    assert worker.recover() == 1
+    view = case.client.get('/api/v1/approvals/'+identifier).json()
+    assert view['revision'] == 4 and view['execution'] == 'unknown'
+    assert case.get('turns/'+prepared['turn_id']).json()['outcome'] == 'unknown'
+    before = case.dump()
+    assert worker.recover() == 0 and worker.run_once() is False
+    assert decision(case, identifier, receipts[0][0]).content == receipts[0][1]
+    assert case.dump() == before and calls == []
+
+
+def test_result_transaction_failure_retains_started_and_unknown_without_reexecution(consent_case, monkeypatch):
+    def observe(case, prep, worker, owner, identifier, body, *rest):
+        assert decision(case, identifier, body).status_code == 200
+        actual = owner._append
+        def fail(*args):
+            actual(*args)
+            if args[4].kind == 'finished':
+                raise ApiError(503, 'CODEX_RUNTIME_UNAVAILABLE', 'Synthetic receipt transaction failure')
+        monkeypatch.setattr(owner, '_append', fail)
+        with pytest.raises(ApiError):
+            worker.execute_operation(identifier)
+        monkeypatch.setattr(owner, '_append', actual)
+        view = case.client.get('/api/v1/approvals/'+identifier).json()
+        assert view['execution'] == 'started' and view['revision'] == 3
+        with pytest.raises(ApiError) as error:
+            worker.execute_operation(identifier)
+        assert error.value.code == 'CODEX_OUTCOME_UNKNOWN'
+    case, prepared, identifier, calls = exercise(consent_case, observe, monkeypatch)
+    assert len(calls) == 1
+    assert case.client.get('/api/v1/approvals/'+identifier).json()['execution'] == 'unknown'
+    assert case.get('turns/'+prepared['turn_id']).json()['outcome'] == 'unknown'
+
+
+@pytest.mark.parametrize('damage', ['start_tail', 'finish_tail', 'member', 'core', 'shape', 'whole_family'])
+def test_supported_history_damage_rejects_safe_full_and_original_ack(consent_case, monkeypatch, damage):
+    receipts = []
+    def observe(case, prep, worker, owner, identifier, body, *rest):
+        ack = decision(case, identifier, body)
+        assert ack.status_code == 200
+        receipts.append(body)
+        worker.execute_operation(identifier)
+    case, prepared, identifier, _ = exercise(consent_case, observe, monkeypatch)
+    with case.app.state.database.transaction() as conn:
+        for row in conn.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'codex_approval_%'"):
+            conn.execute('DROP TRIGGER '+row[0])
+        if damage.endswith('_tail'):
+            conn.execute('DELETE FROM codex_approval_events WHERE approval_id=? AND seq=?',
+                (identifier, 3 if damage == 'start_tail' else 4))
+        elif damage == 'member':
+            conn.execute('DELETE FROM codex_approval_members WHERE approval_id=? AND seq=3', (identifier,))
+        elif damage == 'core':
+            conn.execute('DELETE FROM approvals WHERE id=?', (identifier,))
+        elif damage == 'shape':
+            conn.execute("UPDATE codex_approval_events SET record_json='[]' WHERE approval_id=? AND seq=4", (identifier,))
+        else:
+            for table in ('events','members','commands','heads'):
+                conn.execute('DELETE FROM codex_approval_'+table+' WHERE approval_id=?', (identifier,))
+            conn.execute('DELETE FROM approvals WHERE id=?', (identifier,))
+    before = case.dump()
+    responses = [case.client.get('/api/v1/approvals/'+identifier), case.get('turns/'+prepared['turn_id']),
+        decision(case, identifier, receipts[0])]
+    assert [item.status_code for item in responses] == [409,409,409]
+    assert all(item.json()['error']['code'] == 'CODEX_HISTORY_DAMAGED' for item in responses)
+    unchanged = case.dump() == before
+    assert unchanged
+
+
+def test_completed_history_and_ack_survive_new_application_empty_registry(consent_case, monkeypatch):
+    from fastapi.testclient import TestClient
+    from services.api.app.main import create_app
+    receipts = []
+    def observe(case, prep, worker, owner, identifier, body, *rest):
+        ack = decision(case, identifier, body)
+        assert ack.status_code == 200
+        receipts.append((body,ack.content))
+        worker.execute_operation(identifier)
+    case, prepared, identifier, calls = exercise(consent_case, observe, monkeypatch)
+    _, runtime, _, proofs, _, _ = consent_case
+    app = create_app(case.app.state.settings, codex_bootstrap_runtime=runtime, codex_proofs=proofs)
+    client = TestClient(app, base_url=case.app.state.settings.origin)
+    client.cookies.update(case.client.cookies)
+    before = case.dump()
+    try:
+        assert app.state.codex_turn_worker.recover() == 0
+        assert app.state.codex_turn_worker.run_once() is False
+        view = client.get('/api/v1/approvals/'+identifier).json()
+        assert view['execution'] == 'completed' and view['revision'] == 4
+        assert client.post('/api/v1/approvals/'+identifier+'/decision', json=receipts[0][0],
+            headers={**case.headers,'Idempotency-Key':'decision'}).content == receipts[0][1]
+        assert client.get('/api/v1/codex/turns/'+prepared['turn_id']).json()['approval_ids'] == [identifier]
+        unchanged = case.dump() == before
+        assert unchanged and len(calls) == 1
+    finally:
+        client.close()
