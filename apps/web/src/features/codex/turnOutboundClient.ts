@@ -23,11 +23,12 @@ function summary(value: CodexFrozenOutboundSummary) {
  const tokens = proof.kind === 'local_exact' ? proof.input_tokens : proof.input_tokens_upper_bound
  if (duration <= 0n || duration > 600000000n || proof.request_body_sha256 !== value.request_body_sha256 || tokens > value.budget.max_input_tokens
   || value.cost_estimate.kind === 'estimated' && value.budget.max_cost_usd !== null && value.cost_estimate.maximum_estimated_cost > value.budget.max_cost_usd) fail()
- const endpoint = new URL(value.endpoint)
+ const endpoint = new URL(value.endpoint), authority = /^https?:\/\/([^/?#]+)/i.exec(value.endpoint)?.[1]
+ const literalHost = authority?.toLowerCase().replace(/:\d+$/, '')
  if (!['http:', 'https:'].includes(endpoint.protocol) || !endpoint.hostname || endpoint.username || endpoint.password || endpoint.hash || endpoint.search
-  || /[\x00-\x20\x7f\\]/.test(value.endpoint) || value.endpoint.split('/')[2]?.includes('@') || endpoint.port === '0'
+  || !authority || /[\x00-\x20\x7f\\]/.test(value.endpoint) || authority.includes('@') || endpoint.port === '0'
   || value.endpoint_policy === 'public_https' && endpoint.protocol !== 'https:'
-  || value.endpoint_policy === 'explicit_loopback' && !['127.0.0.1', 'localhost', '[::1]'].includes(endpoint.hostname)) fail()
+  || value.endpoint_policy === 'explicit_loopback' && !['127.0.0.1', 'localhost', '[::1]'].includes(literalHost!)) fail()
  const refs = value.references.map(v => [v.ref.entity, v.ref.id, v.ref.revision])
  if (value.references.some(v => v.ref.entity !== 'block') || new Set(refs.map(v => JSON.stringify(v))).size !== refs.length) fail()
 }
@@ -55,8 +56,9 @@ export function checkedOutbound<N extends keyof Wire>(name: N, raw: unknown): Wi
  if (name === 'CodexTurnResultView') {
   const r = value as CodexTurnResultView; checkedTurn('CodexTurnControlView', r.control)
   const digest = r.answer_markdown === '' ? null : bytesToHex(sha256(new TextEncoder().encode(r.answer_markdown)))
-  if (r.output_sha256 !== digest || (r.output_state === 'none') !== (digest === null)
-   || r.output_state === 'complete' && r.control.outcome !== 'completed' || digest !== null && r.control.outcome === 'completed' && r.output_state !== 'complete') fail()
+  // Output describes the retained response. Later actor loss or cancellation
+  // can change the turn outcome without changing those original output bytes.
+  if (r.output_sha256 !== digest || (r.output_state === 'none') !== (digest === null)) fail()
  }
  return value
 }

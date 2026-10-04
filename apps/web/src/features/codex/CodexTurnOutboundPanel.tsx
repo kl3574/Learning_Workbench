@@ -47,6 +47,7 @@ export function CodexTurnOutboundPanel({ workspace, writeAdmitted, port, store, 
    <p>预算、提案过期或证明变化时，先明确取消原未开始 Job，再新准备。不会自动换 key、重试、借用 bootstrap 或普通 Provider 许可。</p>
    <button disabled={disabled || !state.basis || state.basis.preparation.turn_id !== state.fields.turn_id} onClick={() => void state.read('result')}>独立读取本回合结果</button>
    {state.result && <section aria-label="当前未审回合结果"><p>输出 {state.result.output_state} · {state.result.control.execution} · {state.result.control.outcome ?? '尚无终态'}</p>
+    {state.result.control.outcome !== 'completed' && <p>回合尚未记为 completed。输出状态仅描述保留的原响应，不表示回合成功或执行可以重试。</p>}
     <pre aria-label="原始未审回答">{state.result.answer_markdown}</pre><pre>{JSON.stringify({ output_sha256: state.result.output_sha256, usage: state.result.usage }, null, 2)}</pre>
     <p>数学审查 NOT_RUN · 来源审查 NOT_RUN · 独立教学审查 NOT_RUN。partial 是部分结果，HTTP 200 或空文本不表示完成；未自动发布或回导。</p></section>}
    {state.forms.map(f => <button key={f.snapshot_id} disabled={state.busy} onClick={() => void state.restore(f)}>恢复外发表单 {f.draft_id} · {f.sequence}</button>)}

@@ -230,3 +230,14 @@ test('outbound unsaved input and isolated memory reach the existing parent navig
  expect(changed).toHaveBeenLastCalledWith({ dirty: true, safe: false, isolated: true })
  expect(heldOutboundForms(workspace)[0].fields.max_input_tokens).toBe('1234')
 })
+
+test.each(['failed', 'cancelled'] as const)('retained complete response after %s turn stays visible without declaring the turn successful', async outcome => {
+ const p = port(), store = local(), formStore = local(), answer = 'Synthetic exact answer α\n'
+ const value = { control: { ...outboundControl(), job: { id: 'job_turn_test', status: outcome }, execution: 'terminal', outcome, started_at: '2026-10-04T00:00:02Z', finished_at: '2026-10-04T00:00:03Z', error_code: outcome === 'failed' ? 'POLICY_DENIED' : 'CODEX_CANCELLED' },
+  preparation_id: 'turn_preparation_test', answer_markdown: answer, output_sha256: bytesToHex(sha256(new TextEncoder().encode(answer))), output_state: 'complete', usage: { input_tokens: 50, output_tokens: 5 }, mathematical: 'NOT_RUN', sources: 'NOT_RUN', independent_pedagogy: 'NOT_RUN' }
+ const fetch = vi.fn(async () => new Response(JSON.stringify(value))); vi.stubGlobal('fetch', fetch)
+ render(<CodexTurnOutboundPanel workspace={workspace} writeAdmitted port={p} store={store} formStore={formStore} />); await prepare('preview')
+ fireEvent.click(screen.getByText('独立读取本回合结果')); await screen.findByLabelText('当前未审回合结果')
+ expect(screen.getByLabelText('原始未审回答').textContent).toBe(answer); expect(screen.getByText(`输出 complete · terminal · ${outcome}`)).toBeTruthy()
+ expect(screen.getByText(/回合尚未记为 completed。输出状态仅描述保留的原响应/)).toBeTruthy(); expect(fetch).toHaveBeenCalledOnce()
+})

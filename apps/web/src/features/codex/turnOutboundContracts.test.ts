@@ -44,12 +44,11 @@ test.each(['  原文 α\n中文😀  ', '', 'e\u0301 ≠ é'])('UTF-8 result wir
  expect(await turnOutboundClient.result('turn_test')).toEqual(value)
  expect(fetch.mock.calls[0][0]).toBe('/api/v1/codex/turns/turn_test/result')
 })
-test.each(['digest', 'normalized', 'empty', 'complete_failed', 'wrong_turn', 'extra'])('actual result GET rejects %s wire before delivery', async mode => {
+test.each(['digest', 'normalized', 'empty', 'wrong_turn', 'extra'])('actual result GET rejects %s wire before delivery', async mode => {
  const value = result('  α\n中文😀  ', 'failed')
  const raw = mode === 'digest' ? { ...value, output_sha256: '0'.repeat(64) }
   : mode === 'normalized' ? { ...value, answer_markdown: value.answer_markdown.trim() }
   : mode === 'empty' ? { ...value, answer_markdown: '', output_sha256: null }
-  : mode === 'complete_failed' ? { ...value, output_state: 'complete' }
   : mode === 'wrong_turn' ? { ...value, control: { ...value.control, id: 'other_turn' } } : { ...value, private_body: 'synthetic-only' }
  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(raw))))
  await expect(turnOutboundClient.result('turn_test')).rejects.toThrow()
@@ -91,4 +90,17 @@ test('safe revoke no-op retains actual revoked revision without fabricating anot
  const c = makeOutboundCommand(workspace, 'learner_new', { kind: 'revoke', basis, body: { expected_revision: 2 } })
  expect(decodeOutboundCommand(JSON.stringify({ ...c, ack: { id: 'codexconsent_original', revision: 2, applied: false } }), workspace).ack).toEqual({ id: 'codexconsent_original', revision: 2, applied: false })
  expect(() => decodeOutboundCommand(JSON.stringify({ ...c, ack: { id: 'codexconsent_original', revision: 3, applied: true } }), workspace)).toThrow()
+})
+
+test.each(['failed', 'cancelled'] as const)('actual result GET preserves completed response output after turn becomes %s', async outcome => {
+ // The worker can retain a completed response then fail/stop the turn after
+ // an access/cancellation change; the result owner keeps both original facts.
+ const value = result('Synthetic exact answer α\n')
+ value.control = { ...value.control, job: { id: 'job_turn_test', status: outcome }, outcome, error_code: outcome === 'failed' ? 'POLICY_DENIED' : 'CODEX_CANCELLED', cancel_requested: outcome === 'cancelled' }
+ vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(value))))
+ expect(await turnOutboundClient.result('turn_test')).toEqual(value)
+})
+test.each(['http:/localhost/model', 'http:///localhost/model', 'http://127.1/model'])('rejects non-owner endpoint spelling %s despite browser URL normalization', endpoint => {
+ const p = proposal(); p.summary.endpoint = endpoint; p.summary.endpoint_policy = 'explicit_loopback'
+ expect(() => checkedOutbound('CodexConsentProposalView', p)).toThrow()
 })
