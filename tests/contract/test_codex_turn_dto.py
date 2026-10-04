@@ -207,6 +207,28 @@ def test_approval_does_not_upgrade_decision_ack_to_execution_or_unsupported_gran
     assert dto.GenericApprovalView.model_validate(value).execution == 'completed'
 
 
+@pytest.mark.parametrize('execution,revision', [('started', 2), ('completed', 2), ('failed', 3), ('unknown', 3)])
+def test_approval_stage_cannot_claim_facts_without_control_revisions(execution, revision):
+    value = samples()['GenericApprovalView']
+    value.update(decision='approve_once', decided_at=NOW, started_at=NOW,
+                 execution=execution, revision=revision)
+    if execution != 'started':
+        value.update(finished_at=LATER, result_sha256=HASH)
+    with pytest.raises(ValidationError):
+        dto.GenericApprovalView.model_validate(value)
+
+
+def test_approval_stage_minimum_does_not_invent_history_for_unstarted_closure():
+    value = samples()['GenericApprovalView']
+    value.update(decision='approve_once', revision=2, decided_at=NOW, validity='closed')
+    assert dto.GenericApprovalView.model_validate(value).execution == 'not_started'
+    value.update(execution='started', started_at=NOW, revision=3)
+    dto.GenericApprovalView.model_validate(value)
+    for execution in ('completed', 'failed', 'unknown'):
+        value.update(execution=execution, revision=4, finished_at=LATER, result_sha256=HASH)
+        dto.GenericApprovalView.model_validate(value)
+
+
 def test_original_acks_are_not_current_views_or_rewritten_by_later_state():
     original = b'{"id":"session_one","revision":2,"status":"ready","capabilities":{"approvals":false,"interrupt":false,"artifacts":false},"adapter_version":"synthetic-v1"}'
     ack = bootstrap.CodexSessionCreateAck.model_validate(json.loads(original))

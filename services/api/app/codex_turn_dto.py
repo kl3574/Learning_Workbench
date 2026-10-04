@@ -693,6 +693,10 @@ class GenericApprovalView(CodexTurnModel):
             raise ValueError('Only actual decisions have a decision time')
         if self.decision != 'pending' and self.revision < 2:
             raise ValueError('A decision advances the approval revision')
+        if self.execution == 'started' and self.revision < 3:
+            raise ValueError('Actual start must advance the original decision revision')
+        if self.execution in {'completed', 'failed', 'unknown'} and self.revision < 4:
+            raise ValueError('Actual finish must advance the actual start revision')
         if isinstance(self.operation, CodexDeniedOperation) and self.decision == 'approve_once':
             raise ValueError('An unsupported operation can never be approved')
         if self.execution != 'not_started' and self.decision != 'approve_once':
