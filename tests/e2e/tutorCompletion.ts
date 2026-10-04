@@ -1,6 +1,6 @@
 import { expect, type Locator } from '../../apps/web/node_modules/@playwright/test/index.mjs'
 
-/** Keep this one completion observation within the original five-second budget. */
+/** Sample only this locator more densely; keep the original five-second budget. */
 export async function expectTutorCompletion(completed: Locator): Promise<void> {
-  await expect(completed).toBeVisible({ timeout: 5000 })
+  await expect.poll(() => completed.isVisible(), { timeout: 5000, intervals: [25] }).toBe(true)
 }
