@@ -133,7 +133,7 @@ class CodexTurnService:
                 consent = controls.get(turn.control.id, turn.control.consent_control)
                 result[turn.control.id] = CodexTurnControlView.model_validate({**turn.control.model_dump(),
                     'consent_control':consent.model_dump() if consent else None,
-                    'approval_controls':[self.approvals.control(approvals[item.id],turn) for item in turn.control.approval_controls] if self.approvals else []})
+                    'approval_controls':[self.approvals.control(approvals[item.id],turn,conn,approvals,history) for item in turn.control.approval_controls] if self.approvals else []})
         return result
 
     def _base_state(self, conn, identity, *, subject=False):
