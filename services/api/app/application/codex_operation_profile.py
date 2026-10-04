@@ -7,6 +7,9 @@ The original model-request profile/bytes remain a separate immutable contract.
 """
 from collections.abc import Iterable
 from typing import Annotated, Literal
+from types import CodeType, FunctionType, MethodType
+import sys
+import pydantic
 
 from pydantic import Field
 from packages.contracts import domain_models as dm
@@ -37,7 +40,7 @@ def executable_closure() -> dict:
 
 
 class LiteralOperationProfile(dm.StrictModel):
-    version: Literal['codex-synthetic-literal-profile-v1']
+    version: Literal['codex-synthetic-literal-profile-v1', 'codex-synthetic-literal-profile-v2']
     executable_sha256: dm.Sha256
     command_schema_sha256: dm.Sha256
     max_characters: Literal[256]
@@ -50,7 +53,7 @@ class LiteralOperationProfile(dm.StrictModel):
 
     @classmethod
     def current(cls):
-        return cls(version='codex-synthetic-literal-profile-v1', executable_sha256=content_sha256(executable_closure()),
+        return cls(version='codex-synthetic-literal-profile-v2', executable_sha256=content_sha256(runtime_executable_closure()),
             command_schema_sha256=content_sha256(LiteralCommand.model_json_schema()), max_characters=256,
             shell=None, environment={'no_environment_variables': True},
             filesystem='no_host_files; private in-memory turn_outputs namespace only', network='denied',
@@ -85,7 +88,15 @@ class CodexOperationRegistry:
             raise ValueError('Duplicate fixed operation profile')
 
     def available(self, profile: LiteralOperationProfile) -> bool:
-        return canonical_bytes(profile) in self._profiles and profile == LiteralOperationProfile.current()
+        # An instance replacement is not the class code frozen by current().
+        # Legacy v1 facts remain decodable but never regain an execution grant.
+        if (type(self) is not CodexOperationRegistry or any(name in self.__dict__
+                for name in ('prepare', 'projection', 'execute', 'available'))):
+            return False
+        try:
+            return canonical_bytes(profile) in self._profiles and profile == LiteralOperationProfile.current()
+        except (ApiError, TypeError, ValueError, RecursionError):
+            return False
 
     def prepare(self, workspace: str, turn: str, text: str):
         if not self._profiles:
@@ -130,3 +141,52 @@ class CodexOperationRegistry:
 
 def result_digest(result: LiteralOperationResult) -> str:
     return sha256_bytes(canonical_bytes(result))
+
+
+def _code_value(value):
+    """Path-independent identity of loaded owned code, not source on disk."""
+    if isinstance(value, CodeType):
+        return {'code': value.co_code.hex(), 'constants': [_code_value(item) for item in value.co_consts],
+            'names': list(value.co_names), 'varnames': list(value.co_varnames),
+            'freevars': list(value.co_freevars), 'cellvars': list(value.co_cellvars),
+            'argcount': value.co_argcount, 'posonlyargcount': value.co_posonlyargcount,
+            'kwonlyargcount': value.co_kwonlyargcount, 'flags': value.co_flags,
+            'exceptiontable': value.co_exceptiontable.hex()}
+    if value is None or type(value) in (str, int, bool):
+        return value
+    if type(value) is bytes:
+        return {'bytes': value.hex()}
+    if type(value) is tuple:
+        return {'tuple': [_code_value(item) for item in value]}
+    if type(value) is dict and all(type(key) is str for key in value):
+        return {key: _code_value(item) for key, item in value.items()}
+    raise ApiError(503, 'CODEX_RUNTIME_UNAVAILABLE', '内存解释器代码闭包不可核验。')
+
+
+def _function_binding(function):
+    if isinstance(function, MethodType):
+        function = function.__func__
+    if type(function) is not FunctionType or function.__closure__:
+        raise ApiError(503, 'CODEX_RUNTIME_UNAVAILABLE', '内存解释器包装代码不可核验。')
+    return {'code': _code_value(function.__code__), 'defaults': _code_value(function.__defaults__),
+        'kwdefaults': _code_value(function.__kwdefaults__)}
+
+
+def runtime_executable_closure() -> dict:
+    """Freeze the actual interpreter and owned decoding/execution/receipt path.
+
+    Python/Pydantic are fixed trusted runtime libraries, not a hostile process
+    boundary. This profile grants no host action. Runtime code replacement is
+    checked before a start/debit, rather than inferred from an earlier Git hash.
+    """
+    functions = {'literal': _literal, 'prepare': CodexOperationRegistry.prepare,
+        'projection': CodexOperationRegistry.projection, 'execute': CodexOperationRegistry.execute,
+        'canonical_bytes': canonical_bytes, 'strict_json': strict_json,
+        'content_sha256': content_sha256, 'sha256_bytes': sha256_bytes, 'result_digest': result_digest}
+    return {'version': 'codex-literal-runtime-closure-v2', 'interpreter': executable_closure(),
+        'functions': {name: _function_binding(function) for name, function in functions.items()},
+        'schemas': {model.__name__: model.model_json_schema() for model in
+            (LiteralCommand, LiteralOperationClosure, LiteralOperationResult, CodexCommandOperation)},
+        'model_validate': _function_binding(LiteralCommand.model_validate),
+        'model_dump': _function_binding(LiteralOperationResult.model_dump),
+        'python': list(sys.version_info[:3]), 'pydantic': pydantic.__version__}
