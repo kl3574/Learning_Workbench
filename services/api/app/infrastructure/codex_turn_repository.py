@@ -17,6 +17,7 @@ from ..application.codex_turn_interrupt_models import (
 )
 from ..application.codex_operation_models import OperationControlEnvelope, TurnOperationBound
 from ..application.codex_artifact_models import ArtifactControlEnvelope, TurnManifestReady
+from ..application.codex_broker_control_models import BrokerControlBindingEnvelope, TurnBrokerControlBound
 from ..application.errors import ApiError
 from ..application.providers import retained_provider_configuration
 from ..codex_turn_dto import CodexTurnControlView, CodexConsentControl
@@ -35,6 +36,7 @@ class CheckedTurn:
     lifecycle: list[TurnLifecycle] = field(default_factory=list)
     approval_bindings: list[TurnApprovalBound | TurnOperationBound] = field(default_factory=list)
     manifest: TurnManifestReady | None = None
+    broker_bindings: list[TurnBrokerControlBound] = field(default_factory=list)
 
 
 @dataclass
@@ -42,7 +44,7 @@ class CheckedSession:
     anchor: SessionAnchor
     revision: int
     active_turn_id: str | None
-    envelopes: list[EventEnvelope | ControlEventEnvelope | ApprovalControlEnvelope | InterruptEventEnvelope | OperationControlEnvelope | ArtifactControlEnvelope] = field(default_factory=list)
+    envelopes: list[EventEnvelope | ControlEventEnvelope | ApprovalControlEnvelope | InterruptEventEnvelope | OperationControlEnvelope | ArtifactControlEnvelope | BrokerControlBindingEnvelope] = field(default_factory=list)
     turns: dict[str, CheckedTurn] = field(default_factory=dict)
 
 
@@ -140,7 +142,8 @@ class CodexTurnRepository:
                 raw = strict_json(stored['record_json'])
                 if not isinstance(raw, dict):
                     raise damaged()
-                model = (ArtifactControlEnvelope if raw.get('version') == 'codex-turn-event-v6' else
+                model = (BrokerControlBindingEnvelope if raw.get('version') == 'codex-turn-event-v7' else
+                    ArtifactControlEnvelope if raw.get('version') == 'codex-turn-event-v6' else
                     OperationControlEnvelope if raw.get('version') == 'codex-turn-event-v5' else
                     InterruptEventEnvelope if raw.get('version') == 'codex-turn-event-v4' else
                     ApprovalControlEnvelope if raw.get('version') == 'codex-turn-event-v3' else
@@ -171,6 +174,11 @@ class CodexTurnRepository:
                     self._provider_bound(state, event)
                 elif isinstance(event, (TurnApprovalBound, TurnOperationBound)):
                     self._approval_bound(state, event)
+                elif isinstance(event, TurnBrokerControlBound):
+                    turn = state.turns.get(event.turn_id)
+                    if turn is None or event.ordinal != len(turn.broker_bindings)+1:
+                        raise damaged()
+                    turn.broker_bindings.append(event)
                 elif isinstance(event, TurnManifestReady):
                     self._manifest_ready(state, event, envelope.occurred_at)
                 elif isinstance(event, TurnStarted):
@@ -445,12 +453,15 @@ class CodexTurnRepository:
         self.conn.execute('INSERT INTO codex_turn_heads VALUES(?,?,2,0,?,NULL)', (anchor.session_id, self.workspace, digest))
         return CheckedSession(anchor, 2, None)
 
-    def append(self, state: CheckedSession, event, now: str) -> EventEnvelope | ControlEventEnvelope | ApprovalControlEnvelope | InterruptEventEnvelope | OperationControlEnvelope | ArtifactControlEnvelope:
+    def append(self, state: CheckedSession, event, now: str) -> EventEnvelope | ControlEventEnvelope | ApprovalControlEnvelope | InterruptEventEnvelope | OperationControlEnvelope | ArtifactControlEnvelope | BrokerControlBindingEnvelope:
         seq = len(state.envelopes) + 1
         previous = content_sha256(state.envelopes[-1]) if state.envelopes else content_sha256(state.anchor)
         extended = isinstance(event, (RunnableTurnPrepared, TurnProviderBound, TurnStarted, TurnLifecycle, TurnCancelRequested))
-        envelope: ControlEventEnvelope | EventEnvelope | ApprovalControlEnvelope | InterruptEventEnvelope | OperationControlEnvelope | ArtifactControlEnvelope
-        if isinstance(event, TurnManifestReady):
+        envelope: ControlEventEnvelope | EventEnvelope | ApprovalControlEnvelope | InterruptEventEnvelope | OperationControlEnvelope | ArtifactControlEnvelope | BrokerControlBindingEnvelope
+        if isinstance(event, TurnBrokerControlBound):
+            envelope = BrokerControlBindingEnvelope(version='codex-turn-event-v7', workspace_id=self.workspace,
+                session_id=state.anchor.session_id, seq=seq, previous_sha256=previous, occurred_at=now, event=event)
+        elif isinstance(event, TurnManifestReady):
             envelope = ArtifactControlEnvelope(version='codex-turn-event-v6', workspace_id=self.workspace,
                 session_id=state.anchor.session_id, seq=seq, previous_sha256=previous, occurred_at=now, event=event)
         elif isinstance(event, TurnInterruptRecorded):
