@@ -6,10 +6,11 @@ entire executable function has one argument and returns that argument unchanged.
 The original model-request profile/bytes remain a separate immutable contract.
 """
 from collections.abc import Iterable
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Any
 from types import CodeType, FunctionType, MethodType
 import sys
 import pydantic
+from pydantic_core import SchemaValidator, SchemaSerializer
 
 from pydantic import Field
 from packages.contracts import domain_models as dm
@@ -158,6 +159,8 @@ def _code_value(value):
         return {'bytes': value.hex()}
     if type(value) is tuple:
         return {'tuple': [_code_value(item) for item in value]}
+    if type(value) is frozenset and all(type(item) is str for item in value):
+        return {'frozenset': sorted(value)}
     if type(value) is dict and all(type(key) is str for key in value):
         return {key: _code_value(item) for key, item in value.items()}
     raise ApiError(503, 'CODEX_RUNTIME_UNAVAILABLE', '内存解释器代码闭包不可核验。')
@@ -187,6 +190,88 @@ def runtime_executable_closure() -> dict:
         'functions': {name: _function_binding(function) for name, function in functions.items()},
         'schemas': {model.__name__: model.model_json_schema() for model in
             (LiteralCommand, LiteralOperationClosure, LiteralOperationResult, CodexCommandOperation)},
+        'project_dependencies': _project_dependencies(functions,
+            (LiteralCommand, LiteralOperationClosure, LiteralOperationResult, CodexCommandOperation)),
         'model_validate': _function_binding(LiteralCommand.model_validate),
         'model_dump': _function_binding(LiteralOperationResult.model_dump),
         'python': list(sys.version_info[:3]), 'pydantic': pydantic.__version__}
+
+
+def _project_dependencies(functions, models):
+    """Traverse real loaded project globals and compiled model callables.
+
+    A JSON schema alone omits Python validators. A function's globals belong to
+    its defining module, not this module's same-named import. Compiler refs and
+    file paths are not identity; actual validator/serializer code and config are.
+    Standard-library and third-party internals remain explicit trusted runtime.
+    """
+    nodes: dict[str, Any] = {}
+    identities: dict[str, Any] = {}
+    def owned(value):
+        return getattr(value, '__module__', '').startswith(('services.api.app.', 'packages.contracts.'))
+    def label(value):
+        return value.__module__+'.'+value.__qualname__
+    def function(value):
+        if isinstance(value, MethodType):
+            value = value.__func__
+        if not owned(value):
+            return {'trusted_library': label(value)}
+        key = 'function:'+label(value)
+        if key in nodes:
+            if identities[key] is not value:
+                raise ApiError(503, 'CODEX_RUNTIME_UNAVAILABLE', '项目代码标识冲突。')
+            return {'ref': key}
+        identities[key] = value
+        nodes[key] = None
+        bound = _function_binding(value)
+        dependencies = {}
+        for name in value.__code__.co_names:
+            if name not in value.__globals__:
+                continue
+            dependency = value.__globals__[name]
+            if isinstance(dependency, (FunctionType, MethodType)) and owned(dependency):
+                dependencies[name] = function(dependency)
+            elif isinstance(dependency, type) and issubclass(dependency, pydantic.BaseModel) and owned(dependency):
+                dependencies[name] = model(dependency)
+            elif type(dependency) in (str, int, bool, tuple, frozenset) or dependency is None:
+                dependencies[name] = _code_value(dependency)
+        nodes[key] = {'binding': bound, 'globals': dependencies}
+        return {'ref': key}
+    def core(value):
+        if value is None or type(value) in (str, int, float, bool):
+            return value
+        if isinstance(value, dict):
+            # Pydantic JSON-schema callbacks and pointer-address ref labels are
+            # not validation. Actual referenced class/function nodes are below.
+            return {key: (item.rsplit(':', 1)[0] if key in ('ref', 'schema_ref')
+                and isinstance(item, str) and item.rsplit(':', 1)[-1].isdigit() else core(item))
+                for key, item in value.items() if key != 'metadata'}
+        if isinstance(value, (list, tuple)):
+            return [core(item) for item in value]
+        if isinstance(value, (FunctionType, MethodType)):
+            return function(value)
+        if isinstance(value, type):
+            if issubclass(value, pydantic.BaseModel) and owned(value):
+                return model(value)
+            return {'trusted_type': label(value)}
+        raise ApiError(503, 'CODEX_RUNTIME_UNAVAILABLE', '模型执行闭包不可核验。')
+    def model(value):
+        key = 'model:'+label(value)
+        if key in nodes:
+            if identities[key] is not value:
+                raise ApiError(503, 'CODEX_RUNTIME_UNAVAILABLE', '模型代码标识冲突。')
+            return {'ref': key}
+        identities[key] = value
+        nodes[key] = None
+        validator, serializer = value.__pydantic_validator__, value.__pydantic_serializer__
+        if type(validator) is not SchemaValidator or type(serializer) is not SchemaSerializer:
+            raise ApiError(503, 'CODEX_RUNTIME_UNAVAILABLE', '模型执行器不可核验。')
+        nodes[key] = {'validation': core(validator.__reduce__()[1]),
+            'serialization': core(serializer.__reduce__()[1]),
+            'constructor': _function_binding(value.__init__)}
+        return {'ref': key}
+    for value in functions.values():
+        function(value)
+    for value in models:
+        model(value)
+    return nodes
