@@ -9,7 +9,7 @@ from dataclasses import dataclass
 import sqlite3
 import threading
 import time
-from typing import Protocol
+from typing import Protocol, TYPE_CHECKING
 from uuid import uuid4
 
 from pydantic import TypeAdapter
@@ -18,6 +18,7 @@ from ..codex_turn_dto import CodexFrozenOutboundSummary, SafeCode
 from ..infrastructure.codex_bootstrap_execution import CodexExecutionOwners
 from ..infrastructure.database import utc_now
 from ..infrastructure.codex_turn_jobs import CodexTurnJobs
+from ..infrastructure.codex_answer_materializer import artifact_error
 from ..serialization import content_sha256
 from .codex_turn import CodexTurnService
 from .codex_turn_models import TurnLifecycle
@@ -25,6 +26,9 @@ from .errors import ApiError
 from .provider_codex_consents import CodexConsentsService
 from .provider_codex_execution import CodexExecutionResult, CodexRequestGate, SyntheticCodexExecution, SyntheticTransport
 from .provider_codex_profile import CodexRuntimeProfile, PreparedCodexRequest
+
+if TYPE_CHECKING:
+    from .codex_artifact_imports import CodexArtifactImports
 
 
 class CodexTurnExecutor(Protocol):
@@ -59,6 +63,7 @@ class CodexTurnWorker:
         self._thread: threading.Thread | None = None
         self.last_error_code: str | None = None
         self._callback_context: tuple[str, str, str, int] | None = None
+        self.imports: CodexArtifactImports | None = None
 
     def available(self, profile: CodexRuntimeProfile) -> bool:
         return self.executor is not None and self.executor.available(profile)
@@ -94,6 +99,8 @@ class CodexTurnWorker:
                     self.recover()
                     next_recovery=time.monotonic()+1
                 worked=self.run_once()
+                if self.imports is not None:
+                    worked = self.imports.run_once() or worked
                 self.last_error_code=None
             except (ApiError,sqlite3.Error) as error:
                 self.last_error_code=error.code if isinstance(error,ApiError) else 'CODEX_HISTORY_DAMAGED'
@@ -102,7 +109,7 @@ class CodexTurnWorker:
                 self._stop.wait(0.25)
 
     def _terminal(self, conn, workspace, repo, state, turn, provider_state, *,
-                  outcome, code, execution_result=None, elapsed_ms=None):
+                  outcome, code, execution_result=None, elapsed_ms=None, collection=None):
         if self.turns.approvals is not None:
             _, _, full_history = self.turns._owned_state(conn, workspace)
             approvals = self.turns.approvals.verify_history(conn, workspace, full_history)
@@ -125,13 +132,34 @@ class CodexTurnWorker:
             state, turn = self.turns._find(full_history, turn.control.id)
         result={'version':'codex-turn-job-result-v1' ,'turn_id':turn.control.id,
             'outcome':outcome,'dispatch_id':provider_state.queued.dispatch_id}
+        if collection is not None:
+            if self.turns.artifacts is None:
+                raise ApiError(409, 'CODEX_HISTORY_DAMAGED', '原产物所有者缺失。')
+            conn.execute('SAVEPOINT codex_artifact_terminal')
+            try:
+                _, _, history = self.turns._owned_state(conn, workspace)
+                manifest, manifest_time = self.turns.artifacts.record_manifest(conn, workspace, history,
+                    state, turn, provider_state, execution_result, collection, outcome, code)
+                envelope = repo.append(state, manifest, manifest_time)
+            except ApiError as error:
+                conn.execute('ROLLBACK TO codex_artifact_terminal')
+                conn.execute('RELEASE codex_artifact_terminal')
+                outcome, code = 'failed', self.safe_failure(artifact_error(error))
+                result['outcome'] = outcome
+            else:
+                conn.execute('RELEASE codex_artifact_terminal')
+                state.envelopes.append(envelope)
+                result = {**result, 'version': 'codex-turn-job-result-v2',
+                    'manifest_sha256': manifest.manifest.manifest_sha256,
+                    'terminal_receipt_sha256': manifest.receipt_sha256}
         status='completed' if outcome=='completed' else 'cancelled' if outcome=='cancelled' else 'failed'
         repo.jobs.transition(repo.jobs.load(turn.control.job.id),status,result=result)
         now=repo.jobs.snapshot(turn.control.job.id).updated_at
         event,binding=self.provider.record_terminal(conn,workspace,turn.control.id,provider_state,now,
             outcome=outcome,error_code=code,execution_result=execution_result,elapsed_ms=elapsed_ms)
         state.envelopes.append(repo.append(state,binding,now))
-        control=repo.terminal_control(turn.control,now,outcome,code)
+        control=repo.terminal_control(turn.control,now,outcome,code,
+            turn.manifest.manifest.manifest.id if turn.manifest else None)
         repo.append(state,TurnLifecycle(kind='lifecycle',turn_id=turn.control.id,phase='terminal',control=control,
             provider_seq=event.seq,provider_sha256=content_sha256(event)),now)
         self.provider.owned_states(conn,workspace)
@@ -205,7 +233,7 @@ class CodexTurnWorker:
             if time.monotonic()-started>=provider_state.proposed.command.ack.summary.tools.wall_seconds:
                 raise ApiError(409,'CODEX_TIMEOUT','原任务已超过总期限。')
 
-    def _finish(self, workspace, turn_id, owner, execution_result, started):
+    def _finish(self, workspace, turn_id, owner, execution_result, started, collection=None, scan_error=None):
         with self.database.transaction() as conn:
             _,repo,history=self.turns._owned_state(conn,workspace)
             states,_=self.provider.owned_states(conn,workspace)
@@ -227,8 +255,10 @@ class CodexTurnWorker:
                     outcome,code='failed',self.safe_failure(error)
                 if time.monotonic()-started>=provider_state.proposed.command.ack.summary.tools.wall_seconds:
                     outcome,code='failed','CODEX_TIMEOUT'
+            if scan_error is not None:
+                outcome, code = 'failed', scan_error
             self._terminal(conn,workspace,repo,state,turn,provider_state,outcome=outcome,code=code,
-                execution_result=execution_result,elapsed_ms=max(0,int((time.monotonic()-started)*1000)))
+                execution_result=execution_result,elapsed_ms=max(0,int((time.monotonic()-started)*1000)), collection=collection)
 
     def run_once(self) -> bool:
         if not self._lock.acquire(blocking=False):
@@ -255,7 +285,18 @@ class CodexTurnWorker:
                     result=None
                 finally:
                     self._callback_context=None
-                self._finish(workspace,turn_id,owner,result,started)
+                collection, scan_error = None, None
+                if self.turns.artifacts is not None and self.turns.artifacts.producer is not None:
+                    try:
+                        # Only this exact trusted synchronous adapter has a
+                        # closed process-free stop contract. Other adapters do
+                        # not acquire file authority by returning a result DTO.
+                        if type(self.executor) is not SyntheticCodexExecutor:
+                            raise ApiError(503, 'CODEX_RUNTIME_UNAVAILABLE', '没有受检的原执行停止映射。')
+                        collection = self.turns.artifacts.collect_stopped_answer(workspace, turn_id, owner, result)
+                    except ApiError as error:
+                        scan_error = self.safe_failure(error)
+                self._finish(workspace,turn_id,owner,result,started,collection,scan_error)
                 return True
         finally:
             self._lock.release()

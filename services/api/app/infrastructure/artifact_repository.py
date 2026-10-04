@@ -7,6 +7,8 @@ from packages.contracts.canonical import canonical_bytes, sha256_bytes
 from ..import_dto import DownloadArtifact
 from ..application.errors import ApiError
 from .content_repository import ContentRepository, damaged, missing
+from .blobs import BlobInfo
+from .database import utc_now
 
 
 @dataclass(frozen=True)
@@ -20,6 +22,21 @@ class ArtifactBinding:
 class ArtifactRepository:
     def __init__(self, connection: sqlite3.Connection, workspace_id: str):
         self.connection, self.workspace_id = connection, workspace_id
+
+    def register(self, *, identifier: str, job_id: str, profile: str,
+                 info: BlobInfo, filename: str, media_type: str) -> None:
+        """Register only a caller-owned descriptor for already verified Blob bytes."""
+        if not self.connection.in_transaction:
+            raise damaged()
+        self.connection.execute('INSERT OR IGNORE INTO content_blobs(sha256,relative_path,size,created_at) VALUES(?,?,?,?)',
+            (info.sha256, info.relative_path, info.size, utc_now()))
+        blob = self.connection.execute('SELECT * FROM content_blobs WHERE sha256=?', (info.sha256,)).fetchone()
+        if ContentRepository.decode_blob(blob) != info:
+            raise damaged()
+        descriptor = canonical_bytes(dict(version=1, filename=filename, media_type=media_type,
+            size=info.size, sha256=info.sha256)).decode()
+        self.connection.execute('INSERT INTO artifacts(id,workspace_id,job_id,blob_sha256,profile,visibility,manifest_json,created_at) VALUES(?,?,?,?,?,?,?,?)',
+            (identifier, self.workspace_id, job_id, info.sha256, profile, 'author_private', descriptor, utc_now()))
 
     def binding(self, identifier: str) -> ArtifactBinding:
         if not self.connection.in_transaction:

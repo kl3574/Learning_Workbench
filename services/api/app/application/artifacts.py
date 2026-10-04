@@ -5,7 +5,7 @@ be implemented and registered explicitly; it cannot use Import's trusted legacy
 download method as a substitute for current-session, same-transaction admission.
 """
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 import sqlite3
 from types import MappingProxyType
 from typing import Protocol
@@ -31,8 +31,12 @@ def unavailable_owner() -> ApiError:
 
 
 class ArtifactsService:
-    def __init__(self, database: Database, readers: Mapping[tuple[str, str], ArtifactReader]):
+    def __init__(self, database: Database, readers: Mapping[tuple[str, str], ArtifactReader], *,
+                 download_guards: Mapping[tuple[str, str], Callable[[SessionIdentity], None]] | None = None):
         self.database, self.readers = database, MappingProxyType(dict(readers))
+        self.download_guards = MappingProxyType(dict(download_guards or {}))
+        if not self.download_guards.keys() <= self.readers.keys():
+            raise ValueError('An artifact delivery guard requires its registered reader')
 
     def read_in_transaction(self, connection: sqlite3.Connection, identity: SessionIdentity,
                             identifier: str) -> tuple[bytes, DownloadArtifact]:
@@ -60,7 +64,15 @@ class ArtifactsService:
     def download(self, identity: SessionIdentity, identifier: str) -> tuple[bytes, DownloadArtifact]:
         try:
             with self.database.transaction() as connection:
-                return self.read_in_transaction(connection, identity, identifier)
+                value = self.read_in_transaction(connection, identity, identifier)
+                # Capture the checked owner in the same original transaction.
+                # Its dedicated delivery guard runs only after that snapshot closes.
+                binding = ArtifactRepository(connection, identity.workspace_id).binding(identifier)
+                kind = artifact_job_kind(connection, identity.workspace_id, binding.job_id)
+                guard = self.download_guards.get((binding.profile, kind))
+            if guard is not None:
+                guard(identity)
+            return value
         except sqlite3.Error:
             # Preserve the existing download endpoint's storage error contract.
             raise ApiError(503, 'IMPORT_STORAGE_UNAVAILABLE', '导入存储暂不可用。', True) from None
