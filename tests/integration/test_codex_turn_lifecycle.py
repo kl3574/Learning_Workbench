@@ -181,3 +181,26 @@ def test_forward_migration_preserves_original_bootstrap_and_all_existing_rows(tm
         current.close()
         client.close()
         case.client.close()
+
+
+def test_current_cross_workspace_actor_cannot_read_or_cancel_known_turn_ids(turn_case):
+    from services.api.app.security import issue_bootstrap_code
+    case, _, sid, _, _ = turn_case
+    value = prepared(turn_case).json()
+    fresh = case.client.post('/api/v1/session/bootstrap', json={'one_time_code': issue_bootstrap_code(case.app.state.database)},
+        headers={'Origin': case.headers['Origin']})
+    case.headers['X-CSRF-Token'] = fresh.json()['csrf_token']
+    actor = case.client.get('/api/v1/session').json()['actor_session_id']
+    with case.app.state.database.transaction() as conn:
+        conn.execute("INSERT INTO workspace(id,title,created_at) VALUES('other_workspace','Synthetic','2026-01-01T00:00:00Z')")
+        conn.execute("UPDATE local_sessions SET workspace_id='other_workspace',role='author' WHERE id=?", (actor,))
+    before = case.dump()
+    for path in ['sessions/' + sid, f'sessions/{sid}/turns', 'turns/' + value['turn_id'],
+                 'turn-preparations/' + value['id']]:
+        response = case.get(path)
+        assert response.status_code == 404
+    response = cancel(case, value['job']['id'])
+    assert response.status_code == 404
+    response = case.post(f'sessions/{sid}/turn-preparations', turn_body(), 'foreign')
+    assert response.status_code == 404
+    assert case.dump() == before
