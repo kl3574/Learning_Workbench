@@ -6,6 +6,7 @@ entire executable function has one argument and returns that argument unchanged.
 The original model-request profile/bytes remain a separate immutable contract.
 """
 from collections.abc import Iterable
+from functools import partial
 from typing import Annotated, Literal, Any
 from types import CodeType, FunctionType, MethodType
 import sys
@@ -248,6 +249,8 @@ def _project_dependencies(functions, models):
                 for key, item in value.items() if key != 'metadata'}
         if isinstance(value, (list, tuple)):
             return [core(item) for item in value]
+        if type(value) is partial:
+            return {'partial': core(value.func), 'args': core(value.args), 'keywords': core(value.keywords)}
         if isinstance(value, (FunctionType, MethodType)):
             return function(value)
         if isinstance(value, type):
