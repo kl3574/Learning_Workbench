@@ -344,3 +344,168 @@ def test_expiry_at_durable_start_boundary_is_normal_refusal(consent_case,monkeyp
         assert control.status_code==200 and control.json()['error_code']=='CODEX_CONSENT_EXPIRED'
         assert case.get('consents/'+consent.json()['id']).json()['dispatch']['consumed_provider_calls']==0
     assert case.app.state.synthetic_transport_calls==[]
+
+
+@pytest.mark.parametrize('same_key',[True,False])
+def test_parallel_start_consumes_once_and_parallel_workers_never_redeliver(consent_case,same_key):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier,Event
+    from services.api.app.application.codex_turn_worker import CodexTurnWorker
+    case,_,sid,_,_,_=consent_case
+    _,prep,_,_,_,consent=grant_fixture(consent_case)
+    body=start_body(prep.json(),consent.json())
+    barrier=Barrier(2)
+    def start(index):
+        barrier.wait(timeout=5)
+        return case.post(f'sessions/{sid}/turns',body,'start' if same_key else 'start-'+str(index))
+    with ThreadPoolExecutor(2) as pool:
+        responses=list(pool.map(start,range(2)))
+    assert sorted(response.status_code for response in responses)==([202,202] if same_key else [202,412])
+    if same_key:
+        assert responses[0].content==responses[1].content
+    assert case.get('sessions/'+sid).json()['revision']==4
+    entered,release=Event(),Event()
+    executor=case.app.state.synthetic_executor
+    original=executor.transport
+    def transport(*args):
+        entered.set()
+        assert release.wait(timeout=5)
+        return original(*args)
+    executor.transport=transport
+    service=case.app.state.codex_turn_service
+    other=CodexTurnWorker(service,service.outbound_owner,executor)
+    with ThreadPoolExecutor(1) as pool:
+        future=pool.submit(case.app.state.codex_turn_worker.run_once)
+        assert entered.wait(timeout=5)
+        try:
+            assert other.run_once() is False and other.recover()==0
+            assert case.get('turns/'+prep.json()['turn_id']).json()['execution']=='active'
+        finally:
+            release.set()
+        assert future.result(timeout=5) is True
+    assert len(case.app.state.synthetic_transport_calls)==1
+    assert case.get('sessions/'+sid).json()['revision']==5
+
+
+def test_unknown_actual_request_is_not_retried_or_implicitly_selected_as_history(consent_case):
+    from tests.integration.test_codex_turn_consent_http import consent_preparation
+    case,runtime,sid,proofs,_,_=consent_case
+    prep,consent,body,ack=queued(consent_case)
+    actual=[]
+    def transport(*args):
+        actual.append(True)
+        raise OSError('synthetic peer lost response')
+    case.app.state.synthetic_executor.transport=transport
+    assert case.app.state.codex_turn_worker.run_once() is True
+    current=case.get('turns/'+prep['turn_id']).json()
+    assert current['outcome']=='unknown'
+    assert case.get('consents/'+consent['id']).json()['dispatch']['consumed_provider_calls']==1
+    restarted=create_app(case.app.state.settings,codex_bootstrap_runtime=runtime,codex_proofs=proofs,
+        codex_executor=case.app.state.synthetic_executor)
+    before=case.dump()
+    assert restarted.state.codex_turn_worker.recover()==0 and restarted.state.codex_turn_worker.run_once() is False
+    assert case.post(f'sessions/{sid}/turns',body,'start').content==ack.content
+    assert case.post(f'sessions/{sid}/turns',{**body,'expected_session_revision':5},'retry').status_code==409
+    assert case.dump()==before and actual==[True]
+    _,following=consent_preparation(case,sid,5,key='explicit-new-turn')
+    assert following.json()['turn_id']!=prep['turn_id'] and following.json()['summary']['history_turn_ids']==[]
+
+
+def test_result_delivery_rechecks_role_after_original_read_snapshot(consent_case,monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    case,_,_,_,_,_=consent_case
+    prep,_,_,_=queued(consent_case)
+    assert case.app.state.codex_turn_worker.run_once() is True
+    service=case.app.state.codex_turn_service
+    original=service._control_views
+    entered,release=Event(),Event()
+    def held(*args):
+        result=original(*args)
+        entered.set()
+        assert release.wait(timeout=5)
+        return result
+    monkeypatch.setattr(service,'_control_views',held)
+    with ThreadPoolExecutor(1) as pool:
+        future=pool.submit(case.get,'turns/'+prep['turn_id']+'/result')
+        assert entered.wait(timeout=5)
+        try:
+            assert case.client.post('/api/v1/session/role',json={'role':'learner'},
+                headers={**case.headers,'Idempotency-Key':'revoke-delivery'}).status_code==200
+            before=case.dump()
+        finally:
+            release.set()
+        response=future.result(timeout=5)
+    assert response.status_code==403 and 'answer_markdown' not in response.json()
+    assert case.dump()==before
+
+
+def test_permission_loss_after_permit_before_transport_has_zero_actual_requests(consent_case):
+    case,_,_,_,_,_=consent_case
+    prep,consent,_,_=queued(consent_case)
+    owner=case.app.state.codex_turn_service.outbound_owner
+    with case.app.state.database.transaction(immediate=False) as conn:
+        state=owner.owned_states(conn,case.app.state.database.workspace_id())[0][prep['turn_id']]
+        request=owner.prepared_request(state)
+    def peer(gate):
+        assert case.client.post('/api/v1/session/role',json={'role':'learner'},
+            headers={**case.headers,'Idempotency-Key':'lose-before-send'}).status_code==200
+        gate.request(request.body,endpoint=request.endpoint,max_output_tokens=64)
+    case.app.state.synthetic_executor.peer=peer
+    assert case.app.state.codex_turn_worker.run_once() is True
+    current=case.get('turns/'+prep['turn_id']).json()
+    assert current['outcome']=='failed' and current['error_code']=='POLICY_DENIED'
+    assert case.app.state.synthetic_transport_calls==[]
+    with case.app.state.database.transaction(immediate=False) as conn:
+        state=owner.owned_states(conn,case.app.state.database.workspace_id())[0][prep['turn_id']]
+        assert state.started is not None and state.finished.execution_result.consumed_provider_calls==0
+    # The outer dispatch conservatively counts its persisted possible-send
+    # permission; the original checked receipt separately proves zero actual calls.
+    assert current['consent_control']['id']==consent['id']
+
+
+def test_selected_completed_history_is_omitted_only_as_a_whole_pair(consent_case):
+    from tests.integration.test_codex_turn_consent_http import full_preview_body
+    case,_,sid,_,_,_=consent_case
+    request={'message':'s'*7000,'context_refs':[],'expected_session_revision':2,'provider_id':'codex_peer',
+        'tools':{'max_tool_calls':0,'wall_seconds':30}}
+    response=case.post(f'sessions/{sid}/turn-preparations',request,'large-history')
+    assert response.status_code==202
+    prep=response.json()
+    preview=case.post('consent-previews',full_preview_body(prep),'large-preview')
+    assert preview.status_code==201
+    consent=case.post('consents',{'proposal_id':preview.json()['id'],'proposal_sha256':preview.json()['proposal_sha256']},'large-grant')
+    assert consent.status_code==201
+    assert case.post(f'sessions/{sid}/turns',start_body(prep,consent.json()),'large-start').status_code==202
+    assert case.app.state.codex_turn_worker.run_once() is True
+    assert case.get('turns/'+prep['turn_id']).json()['outcome']=='completed'
+    request={**request,'message':'x'*8000,'expected_session_revision':5}
+    second=case.post(f'sessions/{sid}/turn-preparations',request,'long-next')
+    assert second.status_code==202
+    assert second.json()['request']['message']==request['message']
+    assert second.json()['summary']['history_turn_ids']==[]
+    assert [item['code'] for item in second.json()['summary']['warnings']]==['CODEX_CONTEXT_HISTORY_OMITTED']
+    owner=case.app.state.codex_turn_service.outbound_owner
+    with case.app.state.database.transaction(immediate=False) as conn:
+        _,sources=owner.owned_states(conn,case.app.state.database.workspace_id())
+        frozen=sources[second.json()['turn_id']].material.context
+        assert frozen.history==[] and len(frozen.omitted_history)==1
+        assert frozen.omitted_history[0].user=='s'*7000
+        assert frozen.omitted_history[0].answer=='Synthetic exact answer α\n'
+
+
+def test_missing_production_proof_is_not_reported_as_only_missing_adapter(consent_case):
+    from services.api.app.application.provider_budget import ProofRegistry
+    case,runtime,sid,_,_,_=consent_case
+    _,prep,_,_,_,consent=grant_fixture(consent_case)
+    app=create_app(case.app.state.settings,codex_bootstrap_runtime=runtime,codex_proofs=ProofRegistry())
+    client=TestClient(app,base_url=app.state.settings.origin)
+    try:
+        client.cookies.update(case.client.cookies)
+        before=case.dump()
+        response=client.post('/api/v1/codex/sessions/'+sid+'/turns',json=start_body(prep.json(),consent.json()),
+            headers={**case.headers,'Idempotency-Key':'missing-proof'})
+        assert response.status_code==503 and response.json()['error']['code']=='CODEX_INPUT_PROOF_UNAVAILABLE'
+        assert case.dump()==before and case.app.state.synthetic_transport_calls==[]
+    finally:
+        client.close()
