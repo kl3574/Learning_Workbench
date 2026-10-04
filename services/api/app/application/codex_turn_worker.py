@@ -135,6 +135,8 @@ class CodexTurnWorker:
             if not identifiers:
                 return None
             _,repo,history=self.turns._owned_state(conn,workspace)
+            if self.turns.approvals is not None:
+                self.turns.approvals.verify_history(conn,workspace,history)
             states,_=self.provider.owned_states(conn,workspace)
             state,turn=self.turns._find(history,identifiers[0],job=True)
             provider_state=states.get(turn.control.id)
@@ -181,6 +183,8 @@ class CodexTurnWorker:
         with self.database.transaction() as conn:
             provider_state,_,_=self.provider.admit_execution(conn,workspace,turn_id,already_started=True)
             _,repo,history=self.turns._owned_state(conn,workspace)
+            if self.turns.approvals is not None:
+                self.turns.approvals.verify_history(conn,workspace,history)
             _,turn=self.turns._find(history,turn_id)
             row=repo.jobs.load(turn.control.job.id)
             permit=provider_state.started

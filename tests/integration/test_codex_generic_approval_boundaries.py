@@ -212,7 +212,9 @@ def test_prior_approval_damage_blocks_next_claim_before_request(consent_case):
     with pytest.raises(ApiError) as error:
         case.app.state.codex_turn_worker.run_once()
     assert error.value.code == 'CODEX_HISTORY_DAMAGED'
-    assert len(case.app.state.synthetic_transport_calls) == calls and case.dump() == before
+    current_calls = len(case.app.state.synthetic_transport_calls)
+    unchanged = case.dump() == before
+    assert current_calls == calls and unchanged
 
 
 def test_new_identifier_collision_cannot_overwrite_original_or_escape_as_500(consent_case, monkeypatch):
@@ -255,15 +257,26 @@ def test_original_acks_survive_application_reconstruction(consent_case):
     case, prepared, _, identifier = exercise(consent_case, observe)
     _, runtime, _, proofs, bootstrap_body, bootstrap_ack = consent_case
     app = create_app(case.app.state.settings, codex_bootstrap_runtime=runtime, codex_proofs=proofs)
-    before = case.dump()
+    def retained_owners():
+        with case.app.state.database.transaction(immediate=False) as conn:
+            names = [row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND (name GLOB 'codex_*' OR name GLOB 'provider_codex_*' OR name IN ('jobs','job_events','runs','threads','approvals','context_snapshots')) ORDER BY name")]
+            return {name: [tuple(row) for row in conn.execute('SELECT * FROM '+name+' ORDER BY rowid')] for name in names}
+    retained = retained_owners()
     with TestClient(app, base_url=case.app.state.settings.origin) as client:
         client.cookies.update(case.client.cookies)
-        # Application startup may recover ordinary actors; this fixture has no
-        # unfinished execution and every source/decision remains immutable.
+        # Existing startup invalidates recommendations. It is not a pure GET.
+        # The actual owner facts remain byte-identical; subsequent reads/replay
+        # must also leave the full database unchanged from this new boundary.
+        owners_unchanged = retained_owners() == retained
+        assert owners_unchanged
+        before_reads = case.dump()
         response = client.post('/api/v1/approvals/'+identifier+'/decision', json=original[0][0],
             headers={**case.headers, 'Idempotency-Key': 'decision'})
         assert response.status_code == 200 and response.content == original[0][1]
         assert client.post('/api/v1/codex/sessions', json=bootstrap_body,
             headers={**case.headers, 'Idempotency-Key': 'bootstrap-session'}).content == bootstrap_ack
         assert client.get('/api/v1/codex/turns/'+prepared['turn_id']).json()['approval_ids'] == [identifier]
-    assert case.dump() == before and len(runtime.calls) == 1
+        reads_unchanged = case.dump() == before_reads
+        assert reads_unchanged
+    owners_unchanged = retained_owners() == retained
+    assert owners_unchanged and len(runtime.calls) == 1

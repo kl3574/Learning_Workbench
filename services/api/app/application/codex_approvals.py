@@ -171,6 +171,8 @@ class CodexApprovalsService:
                 tools=turn.prepared.input.request.tools,
                 operation=CodexDeniedOperation(kind='unsupported', category=category, reason='CODEX_OPERATION_UNSUPPORTED'),
                 created_at=now, expires_at=expiry.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z'))
+            if conn.execute('SELECT 1 FROM approvals WHERE id=?', (operation.approval_id,)).fetchone() is not None:
+                raise ApiError(409, 'CODEX_BINDING_INVALID', '新审批标识与既有事实冲突。')
             self._append(conn, workspace, history, None, ApprovalCreated(kind='created', operation=operation), now)
             _, _, latest = self.turns._owned_state(conn, workspace)
             self.verify_history(conn, workspace, latest)

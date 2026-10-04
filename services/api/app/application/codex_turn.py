@@ -152,6 +152,8 @@ class CodexTurnService:
 
     def outbound_sources(self, transaction, identity):
         current, _, _, history = self._base_state(transaction, identity)
+        if self.approvals is not None:
+            self.approvals.verify_history(transaction, current.workspace_id, history)
         return self._source_views(transaction, current, history)
 
     def current_outbound_material(self, transaction, identity, material):
