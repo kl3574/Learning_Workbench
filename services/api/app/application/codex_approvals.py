@@ -135,6 +135,14 @@ class CodexApprovalsService:
             session, turn = self.turns._find(history, turn_id)
             if self.turns.outbound_owner is None:
                 raise damaged()
+            # A received original callback is a private historical read, not a
+            # new dispatch. Decline, actor loss or expiry cannot erase it. The
+            # worker still requires this exact live owner and calling thread.
+            for state in states.values():
+                if (state.operation.execution_owner_id, state.operation.callback.rpc_id) == (owner, callback.rpc_id):
+                    if state.operation.turn_id != turn_id or state.operation.callback_json != text:
+                        raise ApiError(409, 'CODEX_BINDING_INVALID', '原回调不能替换。')
+                    return state.operation.approval_id
             provider, _, _ = self.turns.outbound_owner.admit_execution(conn, workspace, turn_id, already_started=True)
             original = bootstrap[session.anchor.session_id]
             if (provider.started is None or provider.started.execution_owner_id != owner or provider.queued is None
@@ -143,11 +151,6 @@ class CodexApprovalsService:
                     or turn.control.execution != 'active' or session.active_turn_id != turn_id):
                 raise ApiError(409, 'CODEX_BINDING_INVALID', '回调不属于当前受检执行实例。')
             self.turns.verify_dispatch_lease(conn, workspace, turn.control.job.id, provider.started.lease)
-            for state in states.values():
-                if (state.operation.execution_owner_id, state.operation.callback.rpc_id) == (owner, callback.rpc_id):
-                    if state.operation.callback_json != text:
-                        raise ApiError(409, 'CODEX_BINDING_INVALID', '原回调不能替换。')
-                    return state.operation.approval_id
             if len(turn.control.approval_ids) >= 64:
                 raise ApiError(409, 'CODEX_OPERATION_UNSUPPORTED', '当前任务审批对象已达到上限。')
             now = utc_now()
