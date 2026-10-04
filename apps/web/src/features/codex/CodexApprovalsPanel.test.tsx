@@ -173,3 +173,14 @@ test('unknown approve also permits explicit safe decline while its exact pending
  fireEvent.click(screen.getByText('独立读取审批安全控制')); await screen.findByLabelText('审批安全控制 GET')
  expect((screen.getByText('明确拒绝这一次操作 approval_synthetic') as HTMLButtonElement).disabled).toBe(true); expect(p.decide).toHaveBeenCalledTimes(2)
 })
+
+test('unknown prior decline still blocks a new approve while retaining explicit original decline replay', async () => {
+ const p = port(), store = local(), forms = local(); vi.mocked(p.decide).mockRejectedValueOnce(new Error('decline response unavailable'))
+ render(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted port={p} store={store} formStore={forms} />)
+ await readControl(); fireEvent.click(screen.getByText('明确拒绝这一次操作 approval_synthetic')); await screen.findByText(/审批结果或本机保存未知/)
+ const original = vi.mocked(p.decide).mock.calls[0], before = (await store.load(approvalWorkspace))[original[2]].text
+ fireEvent.click(screen.getByText('独立读取完整操作 approval_synthetic')); await screen.findByLabelText('审批当前详情 GET')
+ expect((screen.getByText('明确仅批准这一次完整操作 approval_synthetic') as HTMLButtonElement).disabled).toBe(true)
+ expect((screen.getByText(`显式回放审批原 key ${original[2]}`) as HTMLButtonElement).disabled).toBe(false)
+ expect(p.decide).toHaveBeenCalledTimes(1); expect((await store.load(approvalWorkspace))[original[2]].text).toBe(before)
+})
