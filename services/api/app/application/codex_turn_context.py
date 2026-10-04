@@ -162,8 +162,9 @@ class CodexTurnContext:
             if not isinstance(raw, dict):
                 raise damaged()
             if raw.get('version') == 'codex-turn-context-v4':
-                result: FrozenTurnContext = UnavailablePreparationContext.model_validate(raw)
-                self.verify_bootstrap_original(conn, workspace_id, result.closure)
+                preparation = UnavailablePreparationContext.model_validate(raw)
+                self.verify_bootstrap_original(conn, workspace_id, preparation.closure)
+                result: FrozenTurnContext = preparation
             elif raw.get('version') == 'codex-turn-context-v3':
                 result = UnavailableHistoryContext.model_validate(raw)
             elif raw.get('version') == 'codex-turn-context-v2':
