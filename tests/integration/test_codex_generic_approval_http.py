@@ -87,3 +87,10 @@ def test_real_callback_safe_basis_decline_and_immutable_ack(consent_case):
     assert control['approval_controls'][0]['decision'] == 'decline'
     assert control['outcome'] == 'cancelled'
     assert case.dump() == before and len(case.app.state.synthetic_transport_calls) == 1
+
+
+def test_generated_identifier_uses_application_id_alphabet(consent_case, monkeypatch):
+    from uuid import UUID
+    from services.api.app.application import codex_approvals
+    monkeypatch.setattr(codex_approvals, 'uuid4', lambda: UUID('01234567-89ab-4cde-8123-456789abcdef'))
+    test_real_callback_safe_basis_decline_and_immutable_ack(consent_case)
