@@ -53,6 +53,8 @@ from .interfaces.codex_http import create_codex_router
 from .interfaces.static import WorkbenchStaticMount
 from .application.codex_bootstrap import CodexBootstrapService
 from .application.codex_turn import CodexTurnService
+from .application.codex_approvals import CodexApprovalsService
+from .interfaces.codex_approval_http import create_codex_approval_router
 from .application.codex_turn_worker import CodexTurnExecutor, CodexTurnWorker
 from .interfaces.codex_turn_http import create_codex_turn_router
 from .application.provider_codex_consents import CodexConsentsService
@@ -149,6 +151,7 @@ def create_app(settings: Settings | None = None, *,
     codex_turn = CodexTurnService(database, codex_bootstrap, codex_registry)
     codex_consents = CodexConsentsService(database, codex_turn, provider_secrets, codex_registry)
     codex_turn.outbound_owner = codex_consents
+    codex_turn.approvals = CodexApprovalsService(codex_turn)
     codex_turn_worker = CodexTurnWorker(codex_turn,codex_consents,codex_executor)
     codex_turn.execution_available = codex_turn_worker.available
     jobs = JobService(database, review=review_service, restore_numeric=restore_numeric_service, codex_turn=codex_turn)
@@ -242,6 +245,7 @@ def create_app(settings: Settings | None = None, *,
         codex_probe if codex_probe is not None else LocalCodexProbe(settings.data_dir, settings.codex_executable))))
     application.include_router(create_codex_bootstrap_router(codex_bootstrap, codex_turn))
     application.include_router(create_codex_turn_router(codex_turn))
+    application.include_router(create_codex_approval_router(codex_turn.approvals))
     application.include_router(create_codex_consent_router(codex_consents))
     application.include_router(create_concept_state_router(database))
     application.include_router(create_recommendation_router(database))

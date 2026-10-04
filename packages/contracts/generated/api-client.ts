@@ -1,9 +1,11 @@
 // Generated from PRODUCT_DESIGN.md v3.0.15 and actual runtime OpenAPI; do not edit.
 // spec_sha256: b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec
-import type { ApprovalDecision, AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, AuthoringDraftView, AuthoringGroupDraftView, AuthoringGroupNumericCheckView, AuthoringGroupNumericPreviewWrite, AuthoringGroupPrepareWrite, AuthoringJobPage, AuthoringJobReadView, AuthoringPrepareWrite, AuthoringPrivateSolutionView, BlockReadResponse, BootstrapRequest, BootstrapResponse, CodexBootstrapDecisionAck, CodexBootstrapPreparationView, CodexBootstrapPreparationWrite, CodexCapabilities, CodexConsentCreateAck, CodexConsentCreateWrite, CodexConsentProposalView, CodexConsentView, CodexCurrentSessionView, CodexOutboundPreviewWrite, CodexSessionCreateAck, CodexSessionCreateWrite, CodexTurnControlView, CodexTurnPage, CodexTurnPreparationView, CodexTurnPrepareWrite, CodexTurnResultView, CodexTurnStartAck, CodexTurnStartWrite, ConceptStateResponse, ConsentCreate, ConsentCreateAck, ConsentPage, ConsentPreviewWrite, ConsentProposalView, ConsentRevoke, ContentImpactPage, ContentImpactView, ContentRef, ContentRestoreDraftCreateAck, ContentRestoreDraftCreateWrite, ContentRestoreDraftSnapshot, Course, DirectorySearchResponse, DraftCreateWrite, DraftCreated, DraftPatchWrite, DraftPatched, DraftPublishWrite, DraftReviewWrite, EditDraftSnapshot, EmptyRequest, EvidenceApplicabilityDecisionView, EvidenceImpactDecisionReceipt, EvidenceImpactDecisionWrite, HealthResponse, ImpactObjectDecisionReceipt, ImpactObjectDecisionWrite, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearnerProfile, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, NumericCheckDecisionAck, NumericCheckPreviewWrite, NumericCheckView, OutlineResponse, PageAssessment, PageCourse, PageEvidence, PageNote, PagePracticeSet, PageRevision, PageRoute, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ProfileWrite, ProviderCapabilitiesResponse, ProviderConfigAck, ProviderConfigView, ProviderConfigWrite, ProviderSecretAck, ProviderSecretWrite, ReadinessResponse, RecommendationDecisionWrite, RecommendationPage, RegradeRequest, ResponsesWrite, RestoreNumericCheckPreviewWrite, RestoreNumericCheckView, RetrievalIndexOverview, RetrievalIndexRebuildWrite, RetrievalIndexScopeStatus, RetrievalQueryView, RetrievalQueryWrite, ReviewDecisionWrite, ReviewJobAck, RoleRequest, Route, RouteCompletionRequest, SessionResponse, SourceResponse, StoredReviewReceipt, TutorAnswerDeltaEvent, TutorApprovalRequiredEvent, TutorCancelledEvent, TutorCitationEvent, TutorCompletedEvent, TutorContextReadyEvent, TutorFailedEvent, TutorMessagePage, TutorQueuedEvent, TutorRetrievalCompletedEvent, TutorRunCancel, TutorRunControlView, TutorRunCreate, TutorRunView, TutorThreadCreate, TutorThreadPage, TutorThreadView, TutorUsageEvent, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
+import type { ApprovalDecision, AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, AuthoringDraftView, AuthoringGroupDraftView, AuthoringGroupNumericCheckView, AuthoringGroupNumericPreviewWrite, AuthoringGroupPrepareWrite, AuthoringJobPage, AuthoringJobReadView, AuthoringPrepareWrite, AuthoringPrivateSolutionView, BlockReadResponse, BootstrapRequest, BootstrapResponse, CodexBootstrapDecisionAck, CodexBootstrapPreparationView, CodexBootstrapPreparationWrite, CodexCapabilities, CodexConsentCreateAck, CodexConsentCreateWrite, CodexConsentProposalView, CodexConsentView, CodexCurrentSessionView, CodexOutboundPreviewWrite, CodexSessionCreateAck, CodexSessionCreateWrite, CodexTurnControlView, CodexTurnPage, CodexTurnPreparationView, CodexTurnPrepareWrite, CodexTurnResultView, CodexTurnStartAck, CodexTurnStartWrite, ConceptStateResponse, ConsentCreate, ConsentCreateAck, ConsentPage, ConsentPreviewWrite, ConsentProposalView, ConsentRevoke, ContentImpactPage, ContentImpactView, ContentRef, ContentRestoreDraftCreateAck, ContentRestoreDraftCreateWrite, ContentRestoreDraftSnapshot, Course, DirectorySearchResponse, DraftCreateWrite, DraftCreated, DraftPatchWrite, DraftPatched, DraftPublishWrite, DraftReviewWrite, EditDraftSnapshot, EmptyRequest, EvidenceApplicabilityDecisionView, EvidenceImpactDecisionReceipt, EvidenceImpactDecisionWrite, GenericApprovalDecisionAck, GenericApprovalView, HealthResponse, ImpactObjectDecisionReceipt, ImpactObjectDecisionWrite, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearnerProfile, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, NumericCheckDecisionAck, NumericCheckPreviewWrite, NumericCheckView, OutlineResponse, PageAssessment, PageCourse, PageEvidence, PageNote, PagePracticeSet, PageRevision, PageRoute, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ProfileWrite, ProviderCapabilitiesResponse, ProviderConfigAck, ProviderConfigView, ProviderConfigWrite, ProviderSecretAck, ProviderSecretWrite, ReadinessResponse, RecommendationDecisionWrite, RecommendationPage, RegradeRequest, ResponsesWrite, RestoreNumericCheckPreviewWrite, RestoreNumericCheckView, RetrievalIndexOverview, RetrievalIndexRebuildWrite, RetrievalIndexScopeStatus, RetrievalQueryView, RetrievalQueryWrite, ReviewDecisionWrite, ReviewJobAck, RoleRequest, Route, RouteCompletionRequest, SessionResponse, SourceResponse, StoredReviewReceipt, TutorAnswerDeltaEvent, TutorApprovalRequiredEvent, TutorCancelledEvent, TutorCitationEvent, TutorCompletedEvent, TutorContextReadyEvent, TutorFailedEvent, TutorMessagePage, TutorQueuedEvent, TutorRetrievalCompletedEvent, TutorRunCancel, TutorRunControlView, TutorRunCreate, TutorRunView, TutorThreadCreate, TutorThreadPage, TutorThreadView, TutorUsageEvent, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
 
 import type { RetrievalIndexStatusQuery } from "./retrieval-ports-binding";
 export interface ApiEndpointMap {
+  "GET /api/v1/approvals/{id}": { request: undefined; response: GenericApprovalView; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
+  "POST /api/v1/approvals/{id}/decision": { request: ApprovalDecision; response: GenericApprovalDecisionAck; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/artifacts/{id}/download": { request: undefined; response: Blob; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/assessments": { request: undefined; response: PageAssessment; headers: null; parameters: { query?: { "course_id"?: (string | null); "cursor"?: (string | null); "limit"?: number } }; parametersRequired: false };
   "POST /api/v1/assessments/{id}/attempts": { request: AssessmentAttemptCreate; response: AttemptSnapshot; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
@@ -134,6 +136,36 @@ export interface ApiEndpointMap {
 }
 
 export const API_ENDPOINTS = {
+  "GET /api/v1/approvals/{id}": {
+    "method": "GET",
+    "path": "/api/v1/approvals/{id}",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
+  "POST /api/v1/approvals/{id}/decision": {
+    "method": "POST",
+    "path": "/api/v1/approvals/{id}/decision",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
   "GET /api/v1/artifacts/{id}/download": {
     "method": "GET",
     "path": "/api/v1/artifacts/{id}/download",

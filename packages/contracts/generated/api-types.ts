@@ -587,6 +587,19 @@ export type CodexCapabilities = {
   "capabilities": CodexFeatures;
 };
 
+export type CodexCommandOperation = {
+  "kind": "command";
+  "command_text": string;
+  "cwd": string;
+  "executable_sha256": string;
+  "environment_sha256": string;
+  "read_files": Array<CodexOperationFile>;
+  "writable_area": "turn_outputs";
+  "filesystem_scope_sha256": string;
+  "network": "denied";
+  "operation_profile_sha256": string;
+};
+
 export type CodexConsentControl = {
   "id": string;
   "revision": number;
@@ -646,6 +659,12 @@ export type CodexCurrentSessionView = {
   "capabilities": CodexCurrentFeatures;
 };
 
+export type CodexDeniedOperation = {
+  "kind": "unsupported";
+  "category": "network" | "permission_expansion" | "unbound_operation" | "unsupported_tool";
+  "reason": ("CODEX_PROTOCOL_INVALID" | "CODEX_PROFILE_CHANGED" | "CODEX_RUNTIME_UNAVAILABLE" | "CODEX_BINDING_INVALID" | "CODEX_HISTORY_DAMAGED" | "CODEX_INPUT_PROOF_UNAVAILABLE" | "CODEX_OPERATION_UNSUPPORTED" | "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED" | "CODEX_TIMEOUT" | "CODEX_RESOURCE_LIMIT" | "CODEX_CANCELLED" | "CODEX_OUTCOME_UNKNOWN" | "CODEX_OPERATION_FAILED" | "CODEX_ARTIFACT_REJECTED" | "CODEX_ARTIFACT_MISSING" | "CODEX_SOURCE_CHANGED" | "CODEX_SOURCE_UNAVAILABLE" | "CODEX_APPROVAL_EXPIRED" | "CODEX_CONSENT_EXPIRED" | "CODEX_CONSENT_REVOKED" | "CODEX_BUDGET_EXCEEDED" | "POLICY_DENIED" | "ASSESSMENT_ACTIVE" | "CAPABILITY_UNSUPPORTED" | "PROVIDER_CONFIGURATION_CHANGED" | "PROVIDER_SECRET_UNAVAILABLE" | "OUTBOUND_SOURCE_CHANGED" | "OUTBOUND_SOURCE_UNAVAILABLE" | "CONSENT_REQUIRED" | "CONSENT_REVOKED" | "CONSENT_EXPIRED" | "OUTBOUND_BUDGET_EXCEEDED" | "PROVIDER_TIMEOUT" | "PROVIDER_CANCELLED" | "PROVIDER_TRANSPORT_ERROR" | "PROVIDER_PROTOCOL_ERROR" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_USAGE_INCONSISTENT" | "PROVIDER_REFUSAL" | "PROVIDER_INCOMPLETE");
+};
+
 export type CodexDispatchView = {
   "id": string;
   "job": JobRef;
@@ -664,6 +683,22 @@ export type CodexFeatures = {
   "approvals": boolean;
   "interrupt": boolean;
   "artifacts": boolean;
+};
+
+export type CodexFileChange = {
+  "path": string;
+  "action": "add" | "update" | "delete";
+  "before_sha256": (string | null);
+  "after_sha256": (string | null);
+  "before_size": (number | null);
+  "after_size": (number | null);
+  "diff": string;
+};
+
+export type CodexFileOperation = {
+  "kind": "file_change";
+  "files": Array<CodexFileChange>;
+  "operation_profile_sha256": string;
 };
 
 export type CodexFrozenOutboundSummary = {
@@ -702,6 +737,12 @@ export type CodexFrozenOutboundSummary = {
 export type CodexLocalToolBudget = {
   "max_tool_calls": number;
   "wall_seconds": number;
+};
+
+export type CodexOperationFile = {
+  "path": string;
+  "size": number;
+  "sha256": string;
 };
 
 export type CodexOutboundBudgetWrite = {
@@ -1346,6 +1387,42 @@ export type GeneratedSolutionAnswer = {
   "rubric_markdown": string;
   "symbols": Array<WorkedExampleSymbol>;
   "numeric_plan": (NumericPlan | null);
+};
+
+export type GenericApprovalDecisionAck = {
+  "id": string;
+  "revision": 2;
+  "actor_session_id": string;
+  "operation_sha256": string;
+  "decision": "approve_once" | "decline";
+  "applied": true;
+  "session_id": string;
+  "turn_id": string;
+  "run_id": string;
+  "job": JobRef;
+};
+
+export type GenericApprovalView = {
+  "id": string;
+  "revision": number;
+  "actor_session_id": string;
+  "session_id": string;
+  "turn_id": string;
+  "run_id": string;
+  "job": JobRef;
+  "job_revision": number;
+  "operation": (CodexCommandOperation | CodexFileOperation | CodexDeniedOperation);
+  "operation_sha256": string;
+  "created_at": string;
+  "expires_at": string;
+  "decision": "pending" | "approve_once" | "decline";
+  "validity": "current" | "expired" | "changed" | "unavailable" | "closed";
+  "execution": "not_started" | "started" | "completed" | "failed" | "unknown";
+  "decided_at": (string | null);
+  "started_at": (string | null);
+  "finished_at": (string | null);
+  "result_sha256": (string | null);
+  "error_code": ("CODEX_PROTOCOL_INVALID" | "CODEX_PROFILE_CHANGED" | "CODEX_RUNTIME_UNAVAILABLE" | "CODEX_BINDING_INVALID" | "CODEX_HISTORY_DAMAGED" | "CODEX_INPUT_PROOF_UNAVAILABLE" | "CODEX_OPERATION_UNSUPPORTED" | "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED" | "CODEX_TIMEOUT" | "CODEX_RESOURCE_LIMIT" | "CODEX_CANCELLED" | "CODEX_OUTCOME_UNKNOWN" | "CODEX_OPERATION_FAILED" | "CODEX_ARTIFACT_REJECTED" | "CODEX_ARTIFACT_MISSING" | "CODEX_SOURCE_CHANGED" | "CODEX_SOURCE_UNAVAILABLE" | "CODEX_APPROVAL_EXPIRED" | "CODEX_CONSENT_EXPIRED" | "CODEX_CONSENT_REVOKED" | "CODEX_BUDGET_EXCEEDED" | "POLICY_DENIED" | "ASSESSMENT_ACTIVE" | "CAPABILITY_UNSUPPORTED" | "PROVIDER_CONFIGURATION_CHANGED" | "PROVIDER_SECRET_UNAVAILABLE" | "OUTBOUND_SOURCE_CHANGED" | "OUTBOUND_SOURCE_UNAVAILABLE" | "CONSENT_REQUIRED" | "CONSENT_REVOKED" | "CONSENT_EXPIRED" | "OUTBOUND_BUDGET_EXCEEDED" | "PROVIDER_TIMEOUT" | "PROVIDER_CANCELLED" | "PROVIDER_TRANSPORT_ERROR" | "PROVIDER_PROTOCOL_ERROR" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_USAGE_INCONSISTENT" | "PROVIDER_REFUSAL" | "PROVIDER_INCOMPLETE" | null);
 };
 
 export type GradeHistoryEntry = {

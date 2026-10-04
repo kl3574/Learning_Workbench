@@ -36,6 +36,7 @@ from .provider_models import UsageSnapshot, DispatchLease
 
 if TYPE_CHECKING:
     from .provider_codex_consents import CodexConsentsService
+    from .codex_approvals import CodexApprovalsService
 
 
 Delivery = TypeVar("Delivery")
@@ -52,6 +53,7 @@ class CodexTurnService:
         self._cursor_key = secrets.token_bytes(32)
         self.proofs = (proofs or ProofRegistry()).codex
         self.outbound_owner: CodexConsentsService | None = None
+        self.approvals: CodexApprovalsService | None = None
         self.execution_available: Callable[[CodexRuntimeProfile], bool] = lambda profile: False
 
     def _deliver(self, identity: SessionIdentity, value: Delivery, *, subject: bool) -> Delivery:
@@ -88,18 +90,22 @@ class CodexTurnService:
         current, original, repository, history = self._base_state(conn, identity, subject=subject)
         if self.outbound_owner is not None:
             self.outbound_owner.verify_links(conn, current, self._source_views(conn, current, history))
+        if self.approvals is not None:
+            self.approvals.verify_history(conn, current.workspace_id, history)
         return current, original, repository, history
 
     def _control_views(self, conn, identity, history):
         # Derived expiry belongs only to a response. Mutation reducers must keep
         # the original grant/revocation facts in the immutable Run projection.
         controls = self.outbound_owner.verify_links(conn, identity, self._source_views(conn, identity, history)) if self.outbound_owner else {}
+        approvals = self.approvals.verify_history(conn, identity.workspace_id, history) if self.approvals else {}
         result = {}
         for state in history.values():
             for turn in state.turns.values():
                 consent = controls.get(turn.control.id, turn.control.consent_control)
                 result[turn.control.id] = CodexTurnControlView.model_validate({**turn.control.model_dump(),
-                    'consent_control':consent.model_dump() if consent else None})
+                    'consent_control':consent.model_dump() if consent else None,
+                    'approval_controls':[self.approvals.control(approvals[item.id],turn) for item in turn.control.approval_controls] if self.approvals else []})
         return result
 
     def _base_state(self, conn, identity, *, subject=False):
@@ -146,6 +152,8 @@ class CodexTurnService:
 
     def outbound_sources(self, transaction, identity):
         current, _, _, history = self._base_state(transaction, identity)
+        if self.approvals is not None:
+            self.approvals.verify_history(transaction, current.workspace_id, history)
         return self._source_views(transaction, current, history)
 
     def current_outbound_material(self, transaction, identity, material):
@@ -363,43 +371,49 @@ class CodexTurnService:
         key = validate_key(key)
         body = JobCancelRequest.model_validate(body.model_dump())
         with self.database.transaction() as conn:
-            current, original, repo, history = self._state(conn, identity)
-            replay = repo.replay(history, current, 'cancel', identifier, key, body)
-            if replay is not None:
-                return JobSnapshot.model_validate(replay.model_dump())
-            state, turn = self._find(history, identifier, job=True)
-            if body.expected_revision != turn.control.job_revision:
-                raise ApiError(412, 'REVISION_MISMATCH', '任务修订已改变，请读取当前事实。')
-            terminal = turn.control.execution == 'terminal'
-            active = turn.control.execution == 'active'
-            already_requested = turn.control.cancel_requested
-            provider_state = None
-            if not terminal and turn.start is not None and self.outbound_owner is not None:
-                provider_state = self.outbound_owner.owned_states(conn,current.workspace_id)[0][turn.control.id]
-            if not terminal:
-                if state.active_turn_id != turn.control.id:
-                    raise damaged()
-                repo.jobs.cancel(identifier, body.expected_revision)
-            ack = repo.jobs.snapshot(identifier)
-            command=CancelCommand(workspace_id=current.workspace_id, actor_session_id=current.id, route='cancel',
-                target_id=identifier,key=key,body=body,ack=ack)
-            if provider_state is not None and not active and self.outbound_owner is not None:
-                _, binding = self.outbound_owner.record_terminal(conn,current.workspace_id,turn.control.id,provider_state,
-                    ack.updated_at,outcome='cancelled',error_code='CODEX_CANCELLED')
-                bound = repo.append(state,binding,ack.updated_at)
-                state.envelopes.append(bound)
-            event: TurnCancelled | TurnCancelRequested
-            if active:
-                event = TurnCancelRequested(kind='cancel_request_observed' if already_requested else 'cancel_requested',
-                    turn_id=turn.control.id,session_revision=None if already_requested else state.revision+1,command=command)
-            else:
-                event = TurnCancelled(kind='cancel_observed' if terminal else 'cancelled', turn_id=turn.control.id,
-                    requested_session_revision=None if terminal else state.revision + 1,
-                    terminal_session_revision=None if terminal else state.revision + 2,command=command)
-            repo.append(state, event, ack.updated_at if not terminal and not already_requested else utc_now())
-            self._state(conn,current)
-            current_control_access(conn, current, write=False)
-            return ack
+            return self.request_stop(conn, identity, identifier, body, key)
+
+    def request_stop(self, conn, identity, identifier, body, key):
+        """Same actual caller transaction for Jobs cancel and approval decline."""
+        if not conn.in_transaction:
+            raise damaged()
+        current, original, repo, history = self._state(conn, identity)
+        replay = repo.replay(history, current, 'cancel', identifier, key, body)
+        if replay is not None:
+            return JobSnapshot.model_validate(replay.model_dump())
+        state, turn = self._find(history, identifier, job=True)
+        if body.expected_revision != turn.control.job_revision:
+            raise ApiError(412, 'REVISION_MISMATCH', '任务修订已改变，请读取当前事实。')
+        terminal = turn.control.execution == 'terminal'
+        active = turn.control.execution == 'active'
+        already_requested = turn.control.cancel_requested
+        provider_state = None
+        if not terminal and turn.start is not None and self.outbound_owner is not None:
+            provider_state = self.outbound_owner.owned_states(conn,current.workspace_id)[0][turn.control.id]
+        if not terminal:
+            if state.active_turn_id != turn.control.id:
+                raise damaged()
+            repo.jobs.cancel(identifier, body.expected_revision)
+        ack = repo.jobs.snapshot(identifier)
+        command=CancelCommand(workspace_id=current.workspace_id, actor_session_id=current.id, route='cancel',
+            target_id=identifier,key=key,body=body,ack=ack)
+        if provider_state is not None and not active and self.outbound_owner is not None:
+            _, binding = self.outbound_owner.record_terminal(conn,current.workspace_id,turn.control.id,provider_state,
+                ack.updated_at,outcome='cancelled',error_code='CODEX_CANCELLED')
+            bound = repo.append(state,binding,ack.updated_at)
+            state.envelopes.append(bound)
+        event: TurnCancelled | TurnCancelRequested
+        if active:
+            event = TurnCancelRequested(kind='cancel_request_observed' if already_requested else 'cancel_requested',
+                turn_id=turn.control.id,session_revision=None if already_requested else state.revision+1,command=command)
+        else:
+            event = TurnCancelled(kind='cancel_observed' if terminal else 'cancelled', turn_id=turn.control.id,
+                requested_session_revision=None if terminal else state.revision + 1,
+                terminal_session_revision=None if terminal else state.revision + 2,command=command)
+        repo.append(state, event, ack.updated_at if not terminal and not already_requested else utc_now())
+        self._state(conn,current)
+        current_control_access(conn, current, write=False)
+        return ack
 
     def _turns(self, identity: SessionIdentity, session_id: str, cursor: str | None = None, limit: int = 20) -> CodexTurnPage:
         if type(limit) is not int or not 1 <= limit <= 100:
