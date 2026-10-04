@@ -233,7 +233,8 @@ def test_unknown_method_returns_safe_reason_and_private_original_only(source, fr
 
 
 @pytest.mark.parametrize('frame', [b'{', b'\xff', b'{"id":7,"id":8,"result":{}}',
-    b'{"id":NaN,"result":{}}', b'{"id":Infinity,"result":{}}', b'['*1100+b'0'+b']'*1100])
+    b'{"id":NaN,"result":{}}', b'{"id":Infinity,"result":{}}', b'['*6000+b'0'+b']'*6000],
+    ids=['syntax', 'utf8', 'duplicate', 'nan', 'infinity', 'deep-parser-bound'])
 def test_malformed_duplicate_or_deep_json_is_a_private_rejection(source, frame):
     exchange = protocol.prepare_interrupt(source, REQUEST)
     observed = protocol.observe_interrupt(source, exchange, frame)
