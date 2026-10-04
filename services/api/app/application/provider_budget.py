@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 import math
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import TypeAdapter
 
@@ -31,6 +31,9 @@ from ..infrastructure.database import utc_now
 
 ADAPTER_VERSION = 'text-request-v2'
 INPUT_SHAPE = 'text-messages-with-delimited-evidence-v2'
+
+if TYPE_CHECKING:
+    from .provider_codex_profile import CodexProofRegistry
 
 
 def unsupported() -> ApiError:
@@ -83,7 +86,10 @@ class InputProof:
 
 
 class ProofRegistry:
-    def __init__(self, proofs: Iterable[InputProof] = (), *, withdrawn_proofs: Iterable[str] = ()):
+    def __init__(self, proofs: Iterable[InputProof] = (), *, withdrawn_proofs: Iterable[str] = (),
+                 codex: 'CodexProofRegistry | None' = None):
+        from .provider_codex_profile import CodexProofRegistry
+        self._codex = codex if codex is not None else CodexProofRegistry()
         # Trusted composition supplies known withdrawals; it is never an HTTP
         # capability or a volatile user toggle. Original proof bytes stay intact.
         self._withdrawn = frozenset(TypeAdapter(dm.Sha256).validate_python(value) for value in withdrawn_proofs)
@@ -111,6 +117,11 @@ class ProofRegistry:
             if proof.valid_until is not None:
                 TypeAdapter(dm.UTC).validate_python(proof.valid_until)
             self._proofs[key] = proof
+
+    @property
+    def codex(self) -> 'CodexProofRegistry':
+        """Separate named admission; ordinary text proofs never become Codex."""
+        return self._codex
 
     @staticmethod
     def _identity(adapter: ProviderAdapter, model: str, base_url: str, policy: EndpointPolicy) -> tuple[str, str, str, str]:
