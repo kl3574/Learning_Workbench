@@ -1,6 +1,6 @@
 # 知径 Learning Workbench：完整产品设计与工程实施规范
 
-**版本：3.0.14｜日期：2026-10-03｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
+**版本：3.0.15｜日期：2026-10-04｜规范文件：`PRODUCT_DESIGN.md`｜目标：从零构建、公开代码仓库、可追踪实施**
 
 **本文件（含文末附录）是唯一产品与工程规范。** 将它放入空目录即可开始；不需要旧版设计包、旧 Demo、之前聊天、私有 GitHub 仓库或另一份提示词说明需求。正文定义产品，附录内嵌数据模型、HTTP 字段、数据库设计、模块接口、样例和验收用例。构建 Agent 根据本文生成实现文件、OpenAPI、测试和进度记录；这些是派生产物，不是第二套产品需求。
 
@@ -37,6 +37,7 @@
 | 3.0.12 | M6.2 恢复例题的作者显式数值计划、原文定位、独立预览/单次执行与新Review绑定（§20.14） | 已获所有者批准，待实施验收；不继承旧批准、不放宽发布准入，不改54 core/0001/学习包3.0.0 |
 | 3.0.13 | M6.2 单块生成例题的新公开块映射、严格发布态读回与当前数值/启动许可事务边界（§20.15） | 已获所有者批准，待实施验收；不自动调整父级引用，不扩组/题目发布，不改54 core/0001/学习包3.0.0 |
 | 3.0.14 | M6.3 本地控制会话准备、单次明确决定、冻结许可消费及真实 thread 映射/未知结果读回（§20.16） | 已获所有者批准，待实施验收；仅空 actions、零模型/工具/学科读取/网络，不关闭AC-21或整个M6.3，不改54 core/0001/学习包3.0.0 |
+| 3.0.15 | M6.3 单请求受控turn、独立完整输入许可、逐操作审批与安全减权基准、不可变产物清单及普通Import草稿回导（§20.17） | 已批准4e8及同范围控制基准澄清，待实施/真实验收；无proof零外发，工具后第二模型请求停止，不代表自动连续Agent循环或整个M6.3/AC-21完成；54 core/0001/学习包3.0.0不变 |
 
 v3.0.10 会话连续性与 v3.0.11 内容影响事件发现均已获所有者明确批准；本文件保留两项合同。批准不代表实现或验收通过，实际状态见进度事实记录。
 
@@ -1035,6 +1036,8 @@ Provider-owned 备份降权端口仅修改独立备份副本：排除所有秘�
 
 ### 20.5 上下文、搜索与资源预算
 
+本节普通 Provider 的预算、十个 HTTP 操作与历史 wire 保持不变；Codex 的独立具名输入、许可与单请求账本限定沿 §20.17.1–20.17.2。该例外不把普通文本适配器变为 Codex profile，不授予搜索/任意网络；有限本地工具预算仍须逐操作批准，不能当作第二次外发许可。
+
 每个外发任务绑定 provider、模型、目的、具体精确引用与正文摘录、联网许可、token/调用次数/时间上限、到期时间；批准只覆盖服务端冻结输入，新增来源、模板、目的地、模型或范围需要新许可。Context/Policy 与真实 source owner 先从已持久任务读取和核验准备材料，形成无假 consent 的私有快照；用户批准服务端提案后才构造带实际 consent_id 的核心 GenerationInput。正文与准备材料不直接下发普通浏览器 API 或公开日志。Provider 持有许可/派发/用量与自有终态；source owner 持有 Job/Run/回答，外部事件不能自行建立本机 completed/approval。
 
 **服务端准备 → 预览 → 批准 → 派发。** HTTP preview 只接已存在 job/provider 的 ID/预览基准版本、预算与到期时间。registered source owner 核真实 workspace、不可变 job input、ContextSnapshot、精确 refs/正文 hash、当前 Policy 和可批准阶段，再冻结真实 messages/evidence、转换版本和请求体；未知 source 返回 OUTBOUND_SOURCE_UNAVAILABLE，不能把 import/grading 冒充生成任务，也不新增任意 prompt 的测试产品入口。source_job_revision 是预览 CAS/审计事实，授权稳定身份是 job ID+原 input hash+准备材料/请求体/上下文 hash；正常 lease/status revision 推进不自动使同输入失效，当前 lease 仍必须单独验证。
@@ -1369,7 +1372,7 @@ Authoring/Quality/Content/Publication 各自具名受检端口在调用方真实
 
 原附录 A 已规定 POST `/codex/sessions` 必须携带 `consent_id`，以及精确 GET session。现有 Provider consent 必须来自实际 job/provider 的冻结外发输入；它尚不批准 codex，不能把另一个 Authoring/Tutor 的许可拿来创建 Codex session。session 的公开状态及 bootstrap 结果未知时的读回也未闭合。
 
-本节仅补齐：本地控制准备 → 阅读冻结范围 → 单次明确决定 → 消费对应许可创建受控 thread 映射 → 当前元数据读回。新增三个准备端点，补充原有两个 session 端点；不修改 Provider consent 合同，不开放 turn、登录、工具、学科文件访问、网络、通用审批或产物回导。`allowed_actions` 本切片只接受 `[]`，包括 `read` 在内的任何非空项均拒绝。建立 Broker 自有控制记录不等于获准读取教材或执行文件操作；不扩大已有隔离目录和固定控制 profile 的文件访问范围。
+本节仅补齐 bootstrap：本地控制准备 → 阅读冻结范围 → 单次明确决定 → 消费对应许可创建受控 thread 映射 → 当前元数据读回。新的独立 turn 控制历史与当前投影沿 §20.17.3；本节许可仍只批准空 actions 的 bootstrap。新增三个准备端点，补充原有两个 session 端点；不修改 Provider consent 合同，不开放 turn、登录、工具、学科文件访问、网络、通用审批或产物回导。`allowed_actions` 本切片只接受 `[]`，包括 `read` 在内的任何非空项均拒绝。建立 Broker 自有控制记录不等于获准读取教材或执行文件操作；不扩大已有隔离目录和固定控制 profile 的文件访问范围。
 
 协议依据是此前由固定 Codex CLI 0.160.0 离线生成的 schema，而非本节运行的结果：`ThreadStartParams` 没有 turn 的 `input`，`TurnStartParams` 的 `input/threadId` 必填，两个方法独立。schema 的 nullable、默认值和空 `turns` 不证明无联网。零外发由受检外层隔离强制；首次交付必须另证固定上游确实能在该边界内完成建 thread。若不能证实，保持不支持，不降低隔离、不调用模型来“验证”，不返回虚假成功。
 
@@ -1420,11 +1423,13 @@ CodexSessionCreateAck = {
 }
 CodexSessionView = {
   id: Id, revision: Revision, status: CodexBootstrapSessionStatus,
-  active_turn_id: null,
+  active_turn_id: Id|null,
   adapter_version: nonblank safe string,
-  capabilities: {approvals:false, interrupt:false, artifacts:false}
+  capabilities: {approvals:boolean, interrupt:boolean, artifacts:boolean}
 }
 ```
+
+没有新 turn 控制历史的 session 仍严格按原 initializing/r1、终态/r2、active_turn_id=null、flags全false校验。新历史的当前投影按 §20.17.3推进，旧bootstrap原JSON/hash/准备/决定/create ACK及其旧解码器逐字保留；原create ACK仍r2/false，不能从当前投影改写。
 
 | 操作 | 请求/返回 | 明确边界 |
 |---|---|---|
@@ -1470,7 +1475,7 @@ session r1/initializing 表示单次控制开始许可已登记，并不表示�
 
 开始后当前会话失权或 Policy 改变，不回滚已经发生的外部事实或单次消费，也不能把已开始改成“未执行”。执行 owner 仍按受检结果持久保存 ready/failed/unknown、原 actor、映射或安全错误与原命令历史；保存事实不代表可以向已失权调用者交付成功。返回前再核当前身份及该写操作权限，不满足时不返回 201 或正文；后续原命令回放仍核当前写权限，当前 GET 仍核有效会话、工作区归属和上述无正文控制读取权限。未知结果不因权限恢复而再次启 CLI。
 
-客户端已持有准备 ID：读取该准备的 session_id，再 GET session 即可定位初始化中或未知的原实例，无需新增任意“按 key 搜索”入口，也不把 ID 塞进原始错误文本。GET 与原 ACK 分离；准备/决定原 ACK 保留当时修订，GET 显示真实 r3 消费和当前 session。consumed/closed 准备仍保留非 null 的 session_id，允许受权读者查看旧 unknown；这既不接管原 actor，也不自动启动。若另建准备，只能作为满足当前写权限的 actor 的新操作，不能继承旧许可或更改旧命令归属。`active_turn_id` 始终 null。
+客户端已持有准备 ID：读取该准备的 session_id，再 GET session 即可定位初始化中或未知的原实例，无需新增任意“按 key 搜索”入口，也不把 ID 塞进原始错误文本。GET 与原 ACK 分离；准备/决定原 ACK 保留当时修订，GET 显示真实 r3 消费和当前 session。consumed/closed 准备仍保留非 null 的 session_id，允许受权读者查看旧 unknown；这既不接管原 actor，也不自动启动。若另建准备，只能作为满足当前写权限的 actor 的新操作，不能继承旧许可或更改旧命令归属。只有 bootstrap 历史时 `active_turn_id` 为 null；新的真实 turn 活动槽与当前控制修订沿 §20.17.3，GET仍不产生执行。
 
 重启恢复只处理本机已登记实例及实际执行 owner 的结束事实；有仍活动的 owner 时不另领/重复启动。owner 已结束而未持久取得成功响应的 initializing 收敛为 unknown，不从时间经过推定未开始；GET 本身不负责该写入。ready 的读回是已保存映射事实，不偷偷调用 thread/resume/read 来改变状态；原映射/回执损坏安全拒绝。失败或未知若需重新尝试，须另建准备、显示旧未知事实、再明确批准；不自动替用户创建新准备或宣称旧外部副作用已清除。
 
@@ -1483,7 +1488,385 @@ session r1/initializing 表示单次控制开始许可已登记，并不表示�
 3. 测试专用受控协议的 ready/failed/unknown、坏/重复/过量响应、超时/回收分别验证；仅 fake thread ID 或协议测试不能证明真实上游成功。
 4. 在固定受限部署中完成获准的真实零模型控制建 thread，核实际响应、唯一 start、稳定根、原 ACK 与同 DB 重启后当前映射读回；未运行则真实 session 为 NOT_RUN，受限环境无法成功则 BLOCKED，不改三 flags 或隔离来使测试变绿。若现有 schema/受限配置和实际验收仍不能证明该控制路径遵守零外发，保持明确不可用门禁，不注册虚假可用成功能力。
 
-不包含 Provider codex 外发/InputProof、多轮对话、GenericApprovalView、Codex 产物清单、登录 UI、任务导出、普通文件执行/写入、回导或发布。它们仍按 v3.0.13 的对应目标另行补齐，不由本节关闭 AC-21 或整个 M6.3。
+本节 bootstrap 不包含 Provider codex 外发/InputProof、多轮对话、GenericApprovalView、Codex 产物清单、登录 UI、任务导出、普通文件执行/写入、回导或发布。已批准的受控turn/审批/产物合同另沿 §20.17；两节均不因规范采纳关闭 AC-21 或整个 M6.3。
+
+### 20.17 M6.3 受控turn、逐操作审批与产物回导
+
+所有者已批准固定4e8d4f79合同补充及实施；后续7820199b在同一已批准减权行为内补齐安全控制读基准，两项原P2另行静态闭合。以下是唯一规范的正式合同，批准不代表代码、真实CLI/模型或内容质量已通过。bootstrap原许可、原ACK与普通Provider历史不升级为新执行授权。
+
+#### 20.17.1 执行单位：一次模型请求，不是无限 Agent 循环
+
+一个产品 turn 对应一个真实 `kind=codex_turn` 的 Job 和一个 Codex-owned Run；`run_id=job.id`，`turn_id` 是稳定本地 Id，不是外部 thread/turn ID。一个 session 同时最多一个未终态 turn，包括等待外发许可和等待工具审批。外部 ID、进程身份、原始控制帧仅在 Broker 私有记录中，HTTP 不下发。
+
+一次 turn 的模型额度固定 `max_provider_calls=1`，搜索固定 0；工具是单独有限预算，默认 0、显式可选 1..16。工具额度不授权任何具体操作。只有冻结、展示、逐项 approve_once 的本地 command/file_change 可执行；一次批准最多消费一个操作槽，拒绝不消费执行槽，已开始而结果未知保守计一次。固定 turn 总 wall 上限由请求明确给出，1..300 秒，从首次实际受控执行开始按单调钟计时，等待人工批准仍计入；排队不计时。未开始批准对象的独立到期时间不晚于 turn 截止时间。
+
+App Server 若在第一次模型响应后要求下一次模型请求（包括工具结果反馈、重试、补全、压缩总结、隐藏辅助请求），Broker 必须在任何字节离开前阻断；本 turn 保存已发生事实，结束为 `failed`，原因 `CODEX_NEW_OUTBOUND_CONSENT_REQUIRED`，不得把它称为正常完整回答。用户可从已保存事实明确建立**新 turn、新冻结输入、新 proposal、新 consent**；旧 turn/许可不续用。已经受检完成的本地工具产物可按第 7 节独立标明来源 turn 未成功的事实供选择；不因有文件把旧 turn 改成 completed。
+
+这是本节对首个完整工具链的明确上限。将来若需要一个 turn 内多次模型请求，须另有逐请求完整冻结/批准合同；本节不授予这种隐式循环。单次模型输出可请求多项工具，仍受 16 次总上限、逐项批准、执行事实和固定截止时间限制。
+
+##### 20.17.1.1 外发保持 §20.5 的强边界
+
+Codex 外发 owner 必须重用既有 Provider/SecretStore/ProofRegistry 的具名可信端口。HTTP 不能提交可信 proof、SDK config、账号、endpoint 白名单或 CLI 参数。生产注册没有完整证明时，允许保存真实本地准备 Job，但外发 preview/批准/开始均不可成功；显示 `CODEX_INPUT_PROOF_UNAVAILABLE`，实际传输为零。
+
+完整证明绑定真实最终模型请求的**完整原始字节**，包括固定 CLI/adapter 版本、模板、完整所选历史、工具定义、所有文件材料、隐含协议包装、模型/容量/输出约束、目的地和配置/秘密版本。仅 `turn/start` JSON、主题字符数、CLI token usage 通知、普通 tokenizer 或 bootstrap schema 均不构成 InputProof。每次实际请求须能与已冻结字节逐字核验；不能先发出再发现不同。
+
+新 Codex 请求 profile 必须在代码审查过的 registry 中实现可复算 `local_exact` 或 `local_upper_bound`，满足 §20.5 的完整输入与 shared-context 约束，冻结最大输出，并在受控适配器边界强制一次请求、禁止重试、禁止重定向、禁止隐藏额外请求。CLI 不能提供可验证的冻结材料或强制边界，就保持该 profile unavailable；不能以“上游承诺大致相同”或拦截到首包后追认许可替代。
+
+只允许登记的模型目的地。命令进程、文件操作和一般工具仍零网络；网络/权限扩张请求记录为不可批准操作，安全拒绝，不用模型 consent 开放任意域名、浏览器、搜索或 shell 网络。原 `ProviderAdapter` 与旧预算/summary wire 不变；新 Codex adapter 不是把 `official_responses` 字符串贴到不相同的 App Server 请求上。
+
+##### 20.17.1.2 运行 profile 与 session 复用
+
+新的 turn runtime profile 与 bootstrap profile 分开版本化，冻结二进制及部署闭包、协议 schema 全引用闭包、配置/环境、目录与原 session 映射、实际初始化/resume/turn 请求、完整历史输入、强制网络边界及资源限制。新准入逐项核当前事实；历史按冻结版本解码，不因当前 profile 更新破坏旧 ACK。
+
+首个 profile 资源上限：wall 取批准值≤300 秒，累计 CPU≤60 秒、内存≤2 GiB、允许产物总量≤16 MiB、单文件≤16 MiB、打开 FD≤128、受控进程总数≤16、core=0，协议 stdout/stderr 合计≤16 MiB。实际值显式进入冻结摘要，不能将 bootstrap 的 8 秒控制验收外推为这些新资源均已实现。无法强制的资源项使整个 profile unavailable，不降级到普通宿主执行。
+
+允许在**新 turn 消费提交后**用受检控制协议载入原已确认 session thread；只能核验并恢复本机拥有、无未知未决执行的确切映射及冻结历史，不能自动补建 thread 或启动旧 turn。若上游仍会把所选窗口之外的历史、工具输出、自动摘要或目录内容加入真实模型请求，而适配器不能逐字消除并证明完整实际输入，则拒绝复用；不能只在 UI 隐去这些材料。用户可明确另建全新 bootstrap/session；这不修改旧未知或失败事实。GET 永不调用 thread/read、resume、turn/start 或补记录。原 session bootstrap=failed/unknown 的对象不能因新 turn 请求升级 ready；需要用户另行本地准备/批准新 session。
+
+#### 20.17.2 严格 DTO 与路由
+
+下面全部为独立应用 DTO，字段全 required，nullable 显式 null，拒额外字段、重复 JSON 键、孤立 surrogate、bool 冒充数字、非有限数。Id/Revision/Sha256/UTC/JobRef/ContentRef/ApprovalDecision 沿唯一规范。SafeCode 是以下封闭枚举及原 ProviderFailureCode 的具名 union：CODEX_PROTOCOL_INVALID、CODEX_PROFILE_CHANGED、CODEX_RUNTIME_UNAVAILABLE、CODEX_BINDING_INVALID、CODEX_HISTORY_DAMAGED、CODEX_INPUT_PROOF_UNAVAILABLE、CODEX_OPERATION_UNSUPPORTED、CODEX_NEW_OUTBOUND_CONSENT_REQUIRED、CODEX_TIMEOUT、CODEX_RESOURCE_LIMIT、CODEX_CANCELLED、CODEX_OUTCOME_UNKNOWN、CODEX_OPERATION_FAILED、CODEX_ARTIFACT_REJECTED、CODEX_ARTIFACT_MISSING、CODEX_SOURCE_CHANGED、CODEX_SOURCE_UNAVAILABLE、CODEX_APPROVAL_EXPIRED、CODEX_CONSENT_EXPIRED、CODEX_CONSENT_REVOKED、CODEX_BUDGET_EXCEEDED、POLICY_DENIED、ASSESSMENT_ACTIVE；不能装原错误文本。所有数组有界并校验唯一/冲突和原顺序；不通过开放 `any`/dict 建运行合同。
+
+##### 20.17.2.1 准备、新许可、开始
+
+```text
+CodexLocalToolBudget = {
+  max_tool_calls: integer[0..16], wall_seconds: integer[1..300]
+}
+CodexTurnRuntimeSummary = {
+  profile_sha256: Sha256, cpu_seconds: 60, memory_bytes: 2147483648,
+  file_bytes: 16777216, protocol_output_bytes: 16777216,
+  file_descriptors: 128, processes: 16, core_bytes: 0,
+  command_network: denied, writable_area: turn_outputs
+}
+CodexTurnPrepareWrite = {
+  message: nonblank string[1..8000], context_refs: ContentRef(entity=block)[0..8],
+  expected_session_revision: Revision, provider_id: Id,
+  tools: CodexLocalToolBudget
+}
+CodexTurnPreparationSummary = {
+  context_snapshot_id: Id, snapshot_sha256: Sha256, job_input_sha256: Sha256,
+  prepared_input_sha256: Sha256, runtime: CodexTurnRuntimeSummary,
+  character_count: integer[1..12000],
+  materials: ReferenceSummary[0..8], history_turn_ids: Id[0..2],
+  tools: CodexLocalToolBudget, warnings: Warning[0..32]
+}
+CodexTurnPreparationView = {
+  id: Id, preparation_sha256: Sha256, actor_session_id: Id,
+  session_id: Id, session_revision: Revision, turn_id: Id, job: JobRef,
+  request: CodexTurnPrepareWrite, summary: CodexTurnPreparationSummary,
+  created_at: UTC, proposal_id: Id|null, consent_id: Id|null,
+  validity: current|changed|unavailable|closed
+}
+CodexOutboundBudgetWrite = {
+  max_input_tokens: positive integer, max_output_tokens: positive integer,
+  max_provider_calls: 1, max_search_calls: 0,
+  max_cost_usd: finite number>=0|null
+}
+CodexOutboundPreviewWrite = {
+  preparation_id: Id, preparation_sha256: Sha256,
+  expected_job_revision: Revision, expected_provider_revision: Revision,
+  budget: CodexOutboundBudgetWrite, expires_at: UTC
+}
+CodexFrozenOutboundSummary = {
+  version: codex-outbound-summary-v1,
+  preparation_id: Id, preparation_sha256: Sha256,
+  session_id: Id, turn_id: Id, job_id: Id,
+  source_job_revision: Revision, source_input_sha256: Sha256,
+  provider_id: Id, provider_revision: Revision, config_sha256: Sha256,
+  adapter: codex_app_server, adapter_version: nonblank safe string,
+  endpoint: nonblank normalized model endpoint, endpoint_policy: EndpointPolicy,
+  model: nonblank safe string,
+  context_snapshot_id: Id, context_snapshot_sha256: Sha256,
+  input_sha256: Sha256, request_body_sha256: Sha256,
+  messages: MessageSummary[2..6], references: ReferenceSummary[0..8],
+  input_character_count: integer[1..12000], input_token_assurance: InputTokenAssurance,
+  budget: CodexOutboundBudgetWrite, tools: CodexLocalToolBudget,
+  runtime: CodexTurnRuntimeSummary, cost_estimate: CostEstimate,
+  created_at: UTC, expires_at: UTC
+}
+CodexConsentProposalView = {
+  id: Id, proposal_sha256: Sha256, summary: CodexFrozenOutboundSummary,
+  validity: current|stale|expired|unavailable,
+  consent_id: Id|null, warnings: ProposalWarning[]
+}
+CodexConsentCreateWrite = {proposal_id: Id, proposal_sha256: Sha256}
+CodexConsentCreateAck = {
+  id: Id, revision: 1, status: active, actor_session_id: Id,
+  proposal_id: Id, proposal_sha256: Sha256, summary: CodexFrozenOutboundSummary
+}
+CodexConsentView = {
+  id: Id, revision: Revision, status: active|revoked|expired,
+  actor_session_id: Id, proposal_id: Id, proposal_sha256: Sha256,
+  summary: CodexFrozenOutboundSummary,
+  created_at: UTC, expires_at: UTC, revoked_at: UTC|null,
+  dispatch: CodexDispatchView|null
+}
+CodexDispatchView = {
+  id: Id, job: JobRef, started_at: UTC|null, finished_at: UTC|null,
+  consumed_provider_calls: integer[0..1], input_tokens: integer>=0|null,
+  output_tokens: integer>=0|null, elapsed_ms: integer>=0|null, cost: UsageCost,
+  outcome: completed|failed|incomplete|cancelled|unknown|null,
+  error_code: SafeCode|null
+}
+CodexTurnStartWrite = {
+  preparation_id: Id, preparation_sha256: Sha256, consent_id: Id,
+  expected_session_revision: Revision
+}
+CodexTurnStartAck = {turn_id: Id, session_revision: Revision, job: JobRef}
+```
+
+| 操作 | 严格响应 / 语义 |
+|---|---|
+| **新增** POST `/codex/sessions/{id}/turn-preparations` | 202 CodexTurnPreparationView；建立真实 Job/Run/context、预约 session 的唯一活动 turn；零 CLI/模型/工具/网络 |
+| **新增** GET `/codex/turn-preparations/{id}` | CodexTurnPreparationView；当前 GET，零写/执行 |
+| **新增** POST `/codex/consent-previews` | 201 CodexConsentProposalView；受检完整输入计量，无 proof 则拒绝；零外发 |
+| **新增** GET `/codex/consent-proposals/{id}` | CodexConsentProposalView；纯读派生资格 |
+| **新增** POST `/codex/consents` | 201 CodexConsentCreateAck；仅原 actor 明确批准一份冻结 proposal，零执行 |
+| **新增** GET `/codex/consents/{id}` | CodexConsentView；原事实与当前资格，纯读 |
+| **新增** POST `/codex/consents/{id}/revoke` | 原 `{expected_revision}` → MutationAck；减权控制；不退回已消费额度 |
+| **修订** POST `/codex/sessions/{id}/turns` | CodexTurnStartWrite → 202 CodexTurnStartAck；消费已批准新许可，Job 从 awaiting_approval 到 queued；ACK 不证明外部执行或完成 |
+
+单独命名 Codex 许可路由的理由是保持已实施 Provider 十个操作及严格历史 wire 不变。逻辑上仍是同一个 Provider-owned 外发授权/计量 owner，通过独立具名模型与 source adapter 实现，不能另造不检查 ProofRegistry 的“Codex 许可”。普通 Provider consent、bootstrap consent、其他 turn 的 consent 均拒绝；引用同一 provider/secret 也不是可互换的许可。
+
+prepare 的 message 原 Unicode 标量字符串与 refs 原序冻结；refs 只取真实公开 block 精确修订，Content owner 核正文/metadata/provenance。当前正文来源不支持 question/私解/任意文件路径。历史只取该 session 最近至多两条已 completed turn 的完整真实 user/answer，共≤4条消息；失败/未知/拒答/工具原输出不自动成为教学历史，全部纳入需要新明确 message/refs 及新预算。本次 message 与系统模板不可裁；来源/历史只可整项省略并在准备中新增的固定 Warning 说明，不能静默改变条件。完整消息/包装≤12k codepoints 只是 UI/资源上限，仍需完整 token proof。
+
+prepare 在同一事务预约 session：旧 revision 412；已有活动 turn 409。成功使 session revision +1，active_turn_id 指向真实新 turn；返回的 session_revision 是新基准。Job 初始 awaiting_approval。准备本身不在任意时钟到期时自动写关闭；可用原 Jobs cancel 明确结束。proposal 期限由用户给出且晚于当前时间，不得超过创建后10分钟；该上限是本节新增选择。grant、start、dispatch 各自重新核 actor/Policy/source/profile/provider/secret/proof 以及当前历史；原命令回放先核自身完整历史及当前访问，再按原命令返回原 ACK。
+
+一份准备至多建立一个 proposal、该 proposal 至多一份 consent；不同 key 再建/批准409，原 key 原命令回 ACK。需要改预算、替换失效 profile 或给过期许可重新授权时，先明确取消未开始的原 Job，再建立新准备；不在原 turn 修改冻结材料。GET 的 proposal_id/consent_id 只投影真实已绑定事实，不改变 preparation_sha256。Codex profile 只能引用与实际目的地/协议/模型相符的 Provider 配置；原 compatible_chat/text 请求适配器不能因有同一密钥自动改称 Codex adapter。
+
+consent 初始 r1/active，撤销按强CAS推进 r+1；纯读取过期或 dispatch 进展不改授权 revision。消费在唯一 dispatch/turn ledger 中保守记录，不重发 grant、也不将其重新变为未消费；status=active 不意味着可再次使用。首次实际开始前到期/撤销拒绝；开始后更早停止但真实终态仍保存。grant 的 proposal_sha256 不符沿既有许可强比较语义为412；准备/操作/跨对象绑定错误409，与普通 expected_revision 的412区分。
+
+preparation_sha256 对 `{version:"codex-turn-preparation-v1",workspace_id,actor_session_id,session_id,turn_id,job_id,request,summary,created_at}` 的项目规范 JSON。summary 绑定完整私有 runtime 和实际已持久输入，而不只是 UI 摘要。proposal_sha256 对 `{version:"codex-consent-proposal-v1",workspace_id,actor_session_id,summary}`。不把动态 Job status/revision、derived validity 或后来的执行事实塞回旧 hash。summary.source_job_revision 保留最初依据；普通租约/status 进展单独核验，不用它推翻未改变的输入。
+
+start 同事务绑定唯一许可消费、准备/turn、原完整命令与原 ACK、Job queued、session revision +1；active_turn_id 不变。实际派发另由 Jobs 租约+开始许可与 Provider/Broker 自有 dispatch 唯一记录线性化，开始记录在任何 CLI resume/turn 或外发前提交。实际模型请求额度从可能外发前保守消耗；不能因 worker 未收到 ACK 换新实例再发。已排队许可被撤销/过期时安全终结未执行，不能暗换许可。
+
+#### 20.17.3 当前 session/turn、事件与未知恢复
+
+bootstrap 原 create ACK 的 revision=2、flags=false 永不改写。**当前** `CodexSessionView` 字段名称保留，`active_turn_id` 从仅 null 扩为 `Id|null`，`capabilities` 三项从 false-only 扩为 boolean；status 仍只描述原 bootstrap 的 initializing/ready/failed/unknown。没有 turn 历史的旧 session 仍按原 r1/r2 校验；有新 turn 控制历史时 revision 从已确认 ready/r2 单调推进。不能从新代码当前 defaults 给旧 ACK 增字段。
+
+session revision 只在预约 turn、消费开始命令、首次中断请求、turn 唯一终态释放活动槽等持久控制变化时 +1；普通流 delta、工具审批与用量按各自 revision/seq 递增，不暗改 session CAS。终态释放只能清除仍等于该 turn 的槽，不能清新 turn。GET 派生过期/能力不改任何 revision。capabilities 仅反映当前部署真正实现且可核验的产品操作；上游 schema 自报支持、账号 authorized=true 或 bootstrap=ready 均不自动点亮。它们不授予任何 turn/操作许可。
+
+```text
+CodexApprovalControl = {
+  id: Id, revision: Revision, operation_sha256: Sha256,
+  decision: pending|approve_once|decline,
+  validity: current|expired|changed|unavailable|closed
+}
+CodexConsentControl = {
+  id: Id, revision: Revision, status: active|revoked|expired
+}
+CodexTurnControlView = {
+  id: Id, session_id: Id, actor_session_id: Id,
+  job: JobRef, job_revision: Revision, run_revision: Revision,
+  last_seq: integer>=0, cancel_requested: boolean,
+  execution: not_started|active|terminal,
+  outcome: completed|failed|incomplete|cancelled|unknown|null,
+  approval_ids: Id[0..64], approval_controls: CodexApprovalControl[0..64],
+  consent_control: CodexConsentControl|null, manifest_id: Id|null,
+  created_at: UTC, started_at: UTC|null, finished_at: UTC|null,
+  error_code: SafeCode|null
+}
+CodexTurnPage = {items: CodexTurnControlView[0..100], next_cursor: nonblank string|null}
+CodexTurnResultView = {
+  control: CodexTurnControlView, preparation_id: Id,
+  answer_markdown: string[0..400000], output_sha256: Sha256|null,
+  output_state: none|partial|complete, usage: UsageSnapshot,
+  mathematical: NOT_RUN, sources: NOT_RUN, independent_pedagogy: NOT_RUN
+}
+```
+
+新增 GET `/codex/sessions/{id}/turns`（cursor/limit 默认20、最大100，拒未知/重复参数）→CodexTurnPage；按冻结创建序列上界和最后位置的 server cursor 回读，不因新 turn 漏/重旧成员；状态是读取时事实。新增 GET `/codex/turns/{id}` →CodexTurnControlView，新增 GET `/codex/turns/{id}/result` →CodexTurnResultView。前两者为有效 learner/author 可读的安全控制面；不含 prompt、标题、ContentRefs、操作正文或文件名。result 为当前 author 且无 independent/open_book 的学科读口；成功正文只是未审输出，不是 ContentRef。
+
+**安全减权基准澄清：** 上述两个既有提案 GET 返回相同的完整安全投影。approval_ids 与 approval_controls 按所属审批创建序列严格同序、一一对应且 ID 唯一；不是仅列 pending，不能漏掉已决定/关闭的原成员。每项 id/revision/operation_sha256/decision/validity 来自本 turn 的受检审批 owner，和同一读取时刻完整 GenericApprovalView 的对应字段相等。许可实际建立前 consent_control=null；建立后其 id/revision/status 来自与本 turn/准备/Job 唯一绑定的外发许可 owner，消费、撤销、过期或 turn 终态后仍保留该三字段，不因许可不再可派发而变 null。status=active 不表示尚未消费或仍可执行。不得用 bootstrap consent、其他 turn 的许可或查询者 actor 回填。
+
+有效同 workspace learner/author（包括 independent/open_book 下的新页面）可仅通过上述安全 GET 获得 decline 所需真实 id、operation_sha256、expected_revision，以及 revoke 所需真实 consent id、expected_revision；无需先读取学科详情或依赖以前页面的内存。UI 使用这些原字段构造原 ApprovalDecision 的 decline 或原 revoke 请求；读到基准不授予 approve_once、消费许可或接管原 actor 的权限。完整 GET `/approvals/{id}` 和 GET `/codex/consents/{id}` 仍是当前 author/学科许可读口，不因提供安全控制投影向 learner 或测试期间开放其正文/summary。
+
+安全投影与命令均先核当前 session/workspace、原 turn/Job/许可/审批完整历史和成员关系，通过具名 owner 端口在同一只读事务取得；任何损坏、漏项、错绑定都拒绝整个投影，不补空数组/null或猜 revision。GET 仍零 DB 写、零 CLI/模型/工具，派生 expired/validity 不修改修订。基准在 GET 后改变时照旧412，错误操作/绑定409；客户端保留原命令，另显式 GET 看当前事实，不自动把旧决定改用新基准发送。仅 pending 审批可作唯一 decline；已有 approve_once 不通过再决定撤回，需使用原 interrupt/cancel。已过期许可仍可显式 revoke，已 revoked 且基准一致沿 §20.5 返回 applied=false，不新建许可或重新执行。
+
+新增 GET `/codex/turns/{id}/events` 仅回放本地事件，query `after_seq` 是可省略的非负整数，省略为0，SSE Last-Event-ID 与其一致性沿 §11.4；严格消息为 `{turn_id:Id,run_id:Id,seq:Revision,occurred_at:UTC,payload}`。payload 是闭合判别 union：`{type:status,job:JobRef,run_revision:Revision}`、`{type:answer_delta,text:raw nonempty string}`、`{type:approval_required,approval_id:Id}`、`{type:usage,usage:UsageSnapshot}`、`{type:manifest_ready,manifest_id:Id,manifest_sha256:Sha256}`、`{type:terminal,outcome:completed|failed|incomplete|cancelled|unknown,error_code:SafeCode|null}`。这是 author/当前学科许可通道，每批交付再核；失权关闭，不下发正文。seq 严格递增，重连只重放、零新执行；一个唯一 terminal，与 Jobs 终态同事务。普通 `/runs/{id}` 及 Tutor SSE 类型不改宽、不承接 Codex ID。
+
+Job/Run queued/running/awaiting_approval 均参加 workspace 独立测试排他。真正 completed 需要完整受检模型终态、所有已开始本地操作有可靠结果、协议与资源检查通过、输出与账本完整；失败/未知不能由文件存在或 process exit=0 升级。outcome=unknown/incomplete 映射 Job.failed；未开始取消或已确认终止映射 cancelled，但仍另记已发生的模型/工具事实与未知费用。`output_sha256` 对实际保留回答 UTF-8 字节，null iff 无文本；流片段原字节不 trim。
+
+恢复只读原 owner 事实：活动 owner/租约存在时不接管；owner 丢失且任何 start 已持久记录时，恢复原 Job 为 failed/unknown、关闭未发送批准、保存部分输出，零 CLI/模型/工具重发。即使缺 start 后完成回执，也不能凭“未找到外部 turn ID”判未执行。全部 GET 零修复。未知 session/turn 只能查看、取消本机等待或另建明确新准备；不通过 GET/重连/start 同键或新 key 恢复外部执行。全新 task 不继承未知旧 task 的同一次操作许可。
+
+#### 20.17.4 GenericApprovalView、精确操作与单次决定
+
+GenericApprovalView 是 Codex 工具审批；不与 Provider 外发 proposal、Quality 数值审批、人类数学/来源 Review 混为一类。每个对象由可信 Broker 从当前进程实例的严格协议事实建立，本地 id 与原 RPC id、thread/turn/item、callback identity 完整绑定；上游 string ID 不直接当 HTTP Id。
+
+```text
+CodexCommandOperation = {
+  kind: command, command_text: nonblank string[1..20000],
+  cwd: canonical relative sandbox path,
+  executable_sha256: Sha256, environment_sha256: Sha256,
+  read_files: CodexOperationFile[0..64], writable_area: turn_outputs,
+  filesystem_scope_sha256: Sha256, network: denied,
+  operation_profile_sha256: Sha256
+}
+CodexOperationFile = {
+  path: canonical relative sandbox path, size: integer[0..16777216], sha256: Sha256
+}
+CodexFileChange = {
+  path: canonical relative sandbox path, action: add|update|delete,
+  before_sha256: Sha256|null, after_sha256: Sha256|null,
+  before_size: integer[0..16777216]|null, after_size: integer[0..16777216]|null,
+  diff: string[0..400000]
+}
+CodexFileOperation = {
+  kind: file_change, files: CodexFileChange[1..32],
+  operation_profile_sha256: Sha256
+}
+CodexDeniedOperation = {
+  kind: unsupported, category: network|permission_expansion|unbound_operation|unsupported_tool,
+  reason: SafeCode
+}
+GenericApprovalView = {
+  id: Id, revision: Revision, actor_session_id: Id,
+  session_id: Id, turn_id: Id, run_id: Id, job: JobRef, job_revision: Revision,
+  operation: CodexCommandOperation|CodexFileOperation|CodexDeniedOperation,
+  operation_sha256: Sha256, created_at: UTC, expires_at: UTC,
+  decision: pending|approve_once|decline,
+  validity: current|expired|changed|unavailable|closed,
+  execution: not_started|started|completed|failed|unknown,
+  decided_at: UTC|null, started_at: UTC|null, finished_at: UTC|null,
+  result_sha256: Sha256|null, error_code: SafeCode|null
+}
+GenericApprovalDecisionAck = {
+  id: Id, revision: Revision, actor_session_id: Id,
+  operation_sha256: Sha256, decision: approve_once|decline,
+  applied: true, session_id: Id, turn_id: Id, run_id: Id, job: JobRef
+}
+```
+
+新增 GET `/approvals/{id}` →GenericApprovalView；原 POST `/approvals/{id}/decision` 使用原 ApprovalDecision，响应修订为200 GenericApprovalDecisionAck。两者拒 query/body 冲突和跨 owner ID，不能猜到数值 check 的 ID 就转发决定。GET 需当前 author/学科许可，但不因换 actor 改写历史；只有原准备 actor 可发 approve_once。有效同 workspace learner/author 可 decline 作为减权控制，决定另记真实操作者，ACK.actor_session_id 是本次操作者；不能把减权资格转作接管批准。decline 无需读取正文，UI 从§20.17.3安全 turn control 的 approval_controls 取得完整原命令基准，不能仅凭 approval_ids 猜 hash/revision；approve_once 必须明确展示当前完整操作。
+
+pending r1；唯一决定 r2；批准后实际开始、结束分别推进 r3/r4（未开始直接关闭也有真实单独事件）；纯 GET 过期不升 revision。expected_revision 核审批对象 revision，412；operation hash/binding 错409；内部还核当前 Job 输入、活跃 turn、租约/取消、原 actor、Policy、未消费工具额度和固定 runtime。Job 动态 revision 不是本审批的 expected_revision，但错误绑定或不允许阶段必须拒绝。原 ACK 是决定事实，approve_once ACK 不称操作已执行；其后独立 GET。
+
+操作 SHA 对 version、workspace、approval、原 actor、session/turn/run/job、完整冻结操作、原 callback/进程实例绑定、资源预算与期限的规范 JSON。私有字段可以参与 SHA，不能仅对前端 display 摘要重算。command_text 是完整实际 shell/argv 解释输入；`commandActions` 是 best-effort 描述，不能代替真实可执行身份。需要 shell 时冻结 shell 字节、实际 argv、非秘密环境完整值、工作目录、读写范围、工具代码闭包；操作不满足可核范围即 unsupported。read_files 枚举本次可读的全部学科输入与先前输出副本，运行库闭包由固定 profile 另列，不把目录通配读取藏在 hash 后；writable_area 的唯一映射是本 turn 输出区。向 UI 展示相对路径及完整命令、文件清单、固定资源/零网络范围，不把真实宿主路径/秘密嵌入文本；无法安全展示而不改原命令时不可批准。
+
+file_change 必须从同一 thread/turn/item 的完整受检变更事实与 owner 实际文件读口取得 before/after 内容、hash/size/完整 diff；add 的 before 两字段为 null，delete 的 after 两字段为 null，update 均非 null。文件集合顺序、重命名等效的 delete+add 全冻结。仅有 `FileChangeRequestApprovalParams.itemId/grantRoot` 不足以批准；没有完整补丁不得猜空 diff，亦不执行后才追认。
+
+安全相对路径规则沿 FileEntry：无绝对路径、反斜杠、`.`/`..`、冒号或非规范表示；还须阻止 symlink/hardlink/device/FIFO、路径碰撞和跨实例映射。工具只在本 turn 私有输出区写，不写宿主工作树、全局配置/秘密、产品数据库、原输入副本或其他 turn 目录。审批不授予 session-wide permission、execpolicy amendment、network policy amendment、grantRoot 或持久缓存授权。固定协议只能使用确切单次 accept；原 callback 重复返回原受检决定，绝不新执行。若上游 accept 不能限制为同一已冻结操作，保持 unavailable。
+
+decline 后对应操作绝不执行，也不改走另一 shell/路径、换工具或自动另起模型调用。对于支持的上游协议优先用 cancel 终止该 turn，持久保存拒绝与受检终止事实；不能把仅已发拒绝误写为远端已取消。unsupported 操作保留 pending 可读对象但只允许 decline，approve_once 返回409 CODEX_OPERATION_UNSUPPORTED；到期/取消后 worker 只发送拒绝/停止，不提供执行 fallback。
+
+决定与执行分开线性化：真实当前准入、原决定和命令 ACK 同事务；对原操作的 started 记录在发送 accept/执行前持久提交，并从工具预算保守扣一次。数据库锁不跨外部执行。收到 late 完成后始终保存真实结果，即使 actor/Policy 已变化；交付前再次核当前权限，不向失权用户返回正文或成功操作详情。已开始后未知不能改回 not_started 或重放 accept；清理仅降权，不能补跑。
+
+#### 20.17.5 受控 interrupt 与通用取消
+
+原 POST `/codex/sessions/{id}/interrupt` 请求保持 `{turn_id,expected_session_revision}`，响应保持 `{id,turn_id,status:interrupt_requested|already_terminal}`；必需 Idempotency-Key/Origin/CSRF。有效同 workspace learner/author 在 independent/open_book 下仍可使用，零学科正文。错误 session revision 412，错 turn/session 409，未知/跨工作区404。先回放原完整命令；同 key 异 body409。
+
+首次请求在 Jobs/Codex owner 同事务记录 cancel_requested、session revision +1 和原 ACK。awaiting_approval/queued 且未开始的任务直接安全取消并关闭未执行批准；正在执行时只向当前受检活进程的已绑定 thread/turn 发至多一个 interrupt 请求。不存在可靠活进程映射时不启动 CLI、不 resume、不猜最后 turn；保持请求事实，恢复按 unknown 终结本机任务。重复新 key 不再发送第二个 interrupt；若已有请求但未终态返回 interrupt_requested，若已终态返回 already_terminal。
+
+上游 TurnInterruptResponse 空对象只证明控制回复，不证明所有进程/网络副作用已撤销。唯一终态须结合受检 turn 完成/中断、子进程终止与实际文件状态；无法确认记 unknown。原 `/jobs/{id}/cancel` 对 codex_turn 经同一具名停止端口完成该减权路径；不能由两个 owner 各发一条中断。开始后实际费用与部分产物不清零。
+
+#### 20.17.6 产物清单、审查和普通 Import 归属
+
+产物清单由 Broker/Artifact owner 在受控执行停止后、所有受控 writer 已退出且目录可稳定核验时建立；扫描发生在唯一 Job 终态提交前，GET 不启动扫描、复制、补登记或修复。先复制允许的普通文件至内容寻址受控 BlobStore 并核实际 size/SHA，再原子登记完整清单与来源事实、manifest_ready事件和唯一终态，terminal事件在后且不再追加生成事件。以后展示/下载/回导核这份不可变受检副本，不跟随 sandbox 文件后来变化。无法证明 writer 已停或扫描不完整就没有可导入清单。
+
+只收本 turn 输出区内至多32个文件、总量≤16MiB。清单必须记录全部受检候选及排除原因，不把“跳过坏文件”说成原目录全通过；发现越界路径、链接/特殊文件、秘密/配置类文件或来源绑定损坏，整批拒绝并显示固定安全原因，无下载引用。检查范围只称安全/结构审查，不叫数学、来源或独立教学批准。
+
+```text
+CodexArtifactEntry = {
+  artifact_id: Id, logical_path: canonical relative sandbox path,
+  size: integer[0..16777216], sha256: Sha256, media_type: nonblank safe string,
+  scan: PASS, import_kind: markdown|html|learnpack|null
+}
+CodexArtifactExcluded = {entry_id: Id, reason: SafeCode}
+CodexArtifactManifest = {
+  version: codex-artifact-manifest-v1, id: Id, revision: 1,
+  session_id: Id, turn_id: Id, run_id: Id, source_job_id: Id,
+  source_outcome: completed|failed|incomplete|cancelled|unknown,
+  runtime_profile_sha256: Sha256, terminal_receipt_sha256: Sha256,
+  scan_profile_sha256: Sha256, created_at: UTC,
+  entries: CodexArtifactEntry[0..32], excluded: CodexArtifactExcluded[0..32],
+  total_bytes: integer[0..16777216], mathematical: NOT_RUN,
+  sources: NOT_RUN, independent_pedagogy: NOT_RUN
+}
+CodexArtifactManifestView = {manifest: CodexArtifactManifest, manifest_sha256: Sha256}
+CodexArtifactImportWrite = {
+  turn_id: Id, artifact_ids: Id[1..32], expected_manifest_sha256: Sha256
+}
+CodexArtifactImportItem = {
+  artifact_id: Id, source_sha256: Sha256, import_id: Id, job: JobRef
+}
+CodexArtifactImportView = {
+  job: JobRef, session_id: Id, turn_id: Id, manifest_sha256: Sha256,
+  actor_session_id: Id, items: CodexArtifactImportItem[1..32]
+}
+```
+
+新增 GET `/codex/sessions/{id}/turns/{turn_id}/artifacts` →CodexArtifactManifestView，确无登记清单404；有登记但损坏安全409，无法读取503，不回空成功。原 POST `/codex/sessions/{id}/artifacts/import` 请求字段保持，响应保持202 JobRef；新增 GET `/codex/artifact-imports/{job_id}` →CodexArtifactImportView，供回读真实 Import 子项。全部 author/当前学科许可；download 复用 `/artifacts/{id}/download`，须注册真实 Codex ArtifactReader、核 owner/membership/实际副本字节，不赋予任意 blob 读权限。
+
+manifest_sha256 对完整 manifest 规范 JSON，自身字段在 view 外；所有项唯一、原序，total_bytes=entries.size之和。HTTP 不接绝对 path、任意 filename、blob locator 或自报 scan PASS。`import_kind` 由版本化白名单按实际内容/MIME核验；只开放既有 Import 真正支持的 Markdown、HTML、learnpack；其他允许保存的安全文件为 null，只可受控下载。learnpack 必须自己满足原 Manifest/root_course/全部字节校验，不能把清单当 learnpack。空清单可表达没有可用产物，但不能发回导。
+
+terminal_receipt_sha256 绑定 Broker 的受检执行终结事实（精确 session/turn/Job、唯一开始、模型 receipt、各实际工具结果、进程停止及输出 hash），该执行 receipt 不反含 manifest SHA；随后清单单向引用它，Job 结果引用两者，避免自指哈希。scan拒绝使本机Job失败并保存安全原因，不篡改已发生的模型completed/usage或工具结果；不能因产物审查失败重跑模型。
+
+用户在当前清单看到具体文件/来源 turn 终态/未审说明后选择并明确回导；该 POST 是本次选择的确认，不产生人工质量 Review。expected_manifest_sha256 不符412，非本清单 artifact、错 turn/session 或重复 ID409；原 key 原完整 body 回原 ACK，同 key 不同选择409。只有 completed/failed/incomplete/cancelled 且已可靠终止并完成扫描的 turn 可回导；source_outcome=unknown 可保留受检清单作诊断，但禁止回导，避免把未封闭副作用当可靠来源。
+
+回导创建一个真实 `kind=codex_artifact_import` 的本地聚合 Job；Import owner 为每个所选 artifact 创建真实 staged Import/source/子 Job。同一事务保存聚合成员与全部 stage 关联；若任一文件准入失败，全批零 stage、零 Job、零清单消费；字节预存失败或事务回滚不留下可被浏览器访问的孤儿。相同文件重复的新 key 需明确新命令，可产生新预览，不能复用他 actor 的已确认命令。聚合 Job 只负责本地准备预览，所有子项成功 preview_ready 才 completed；某项失败时保存各真实状态而不自动 commit。
+
+CodexImportBinding 私有闭合记录绑定 `{version,workspace_id,actor_session_id,session_id,turn_id,source_job_id,terminal_receipt_sha256,manifest_id,manifest_sha256,artifact_id,artifact_sha256,artifact_size,aggregate_job_id,import_id,import_job_id,source_id}`，由所属 owner 端口逐项核验，不能从名称猜“模型产物”。原 Import source/input SHA 必须等于实际选中 artifact 字节，原 GET imports 返回同一预览；source/current/prior ACK 不被后来 sandbox 文件改变。对外 provenance 仍如实标记用户选择回导的未审模型材料，不能称原生人类撰写、已验证引用或新的独立学习证据。现有 import/history 字节不批量补默认字段，新 binding 在所属 forward migration 独立保存。
+
+回导**止于 preview/draft**，随后由用户走原 Import 确认和 M6.2 Review/人工数学来源审校/发布。旧 JobSnapshot.result_refs 不塞 artifact、manifest、import ID；它们只能通过上述具名读口回读。产物取消/拒绝、重新生成、旧结果失效均不删除历史事实，也不替换已审 candidate。
+
+#### 20.17.7 owner、访问、幂等和持久完整性
+
+| owner | 权威事实与具名协作 |
+|---|---|
+| Session / Policy | 当前 actor/workspace/角色、independent/open_book 与活动学科任务排他；所有跨阶段交付再核 |
+| Authoring/Codex turn application | 原任务输入、prepared context、Run 和 turn/session 控制关联；为 Provider 提供真实 OutboundSourcePort，不跨 owner SQL |
+| Jobs | 创建序列、claim/lease、取消、开始许可与唯一终态；控制列表不泄露 payload |
+| Provider / SecretStore / ProofRegistry | 新 Codex summary/许可、完整输入证明、真实请求/目的地/配置/秘密、单次外发与用量/私有终态；不写 consumer Job/Run |
+| CodexBroker | 原 thread/turn 映射、固定 runtime、实际控制/工具请求、逐操作批准执行/回执、IPC 与进程清理；不假造模型计量 |
+| Content / Context | 精确公开材料、原正文/metadata/hash/provenance、冻结上下文与重核；不从 current 替换原 ref |
+| Artifacts / Import | 受检字节清单/受控下载、stage/preview及新来源绑定；不授予 publish |
+
+内部至少有受检 `prepare_turn/verify_turn/read_control/read_result`、`read_pending_operation/decide_once/claim_operation/record_outcome`、`read_manifest/read_selected_artifacts/stage_codex_artifacts` 和 `request_interrupt/recover_control` 端口。它们接收调用方真实 SQLite transaction 与可信 SessionIdentity；外部执行不持事务。Broker 自报对象/hash不是授权，端口必须从所属持久原件重核。所有闭合内部模型与版本/schema生成在实施时先固定，不以 Protocol 名称代替实现。
+
+所有新写沿 Origin/CSRF/单个规范 Idempotency-Key。当前访问+完整 owner 历史核验在 replay 前，业务当前性/CAS在识别新命令后；命令包含完整规范 request、actor/workspace/route/目标，永久原 ACK 不受24小时通用回执过期影响。模型/工具动作的精确历史 ACK 可回放，不再次执行；错误 Envelope 的 request_id 可每次变化，不把稳定错误类别强行当全字节 ACK。operation/preparation hash或绑定409；expected_revision、grant proposal SHA、expected_manifest_sha256 的强比较412；schema422、缺/错关键header400、跨工作区/owner未知404、不可核环境503，错误仅安全 code/固定说明。
+
+学科写/读/批准/外发：当前 author、无 independent/open_book；安全控制 GET/list、cancel/interrupt、revoke/decline：有效同 workspace learner/author，无正文。prepare/start/approve 操作者绑定原 actor，换角色或同工作区新会话不能承接旧许可。恢复浏览器命令须 page/access generation 和鲜读 actor/workspace/Policy 连续性证明，原 body/key不从当前输入重建；晚到 ACK归原命令，当前新输入不被删除。跨刷新只读原事实，明确重新批准才产生新命令。
+
+失权在开始前阻止执行；开始后真实 ready/failed/unknown/usage/文件事实仍由 owner 保存，不能回滚或伪称未执行。交付前失权拒绝成功正文/201类学科响应，安全控制 GET 仍可看有限状态。停止/撤销允许更早终止，不能改已发生事实或退款。
+
+新的 append-only owner 历史同时维护权威 head、全成员关系、版本/序列/hash链及跨 owner 关联；要检测尾删、全删、漏成员、错绑定，不仅检查剩余行互相自洽。每个 GET、命令 replay、开始和结果交付都经相应受检读口，坏历史不能重建成默认空状态。旧 bootstrap/Provider/Import/Review 原 JSON/hash/ACK 按旧 decoder 原字节保留；只加所属 forward migration，54 core/0001/学习包3.0.0不改。备份副本保留历史 actor、引用与可校验事实，认证不继承、许可不可执行；恢复后 GET 不重启外部任务。
+
+#### 20.17.8 离线协议依据与不能从 schema 得出的保证
+
+固定离线来源 receipt 标记 CLI0.160.0、binary SHA256 `12eb3e81114588aca3b7998f4f19e8997b056aca08e57a7ca7c8a3ec8c652aad`、生成314个 schema、exit0。此事实仅是先前离线生成的来源，本次只读核对选用文件及完整内嵌 `$ref`，没有再次生成或运行协议。关键文件：
+
+| schema | SHA256 | 对合同的约束 |
+|---|---|---|
+| v2/TurnStartParams.json | 2dfcf68705896fadc344ccfeb2e9fe5a6bcbbb8b9a90cf449ce232b636daf05a | input/threadId 必需；公开参数没有完整 token/总请求上限；可含多个非文本输入，产品不能全放行 |
+| v2/ThreadResumeParams.json | c818e26d830ac4430791eab7d4a872d2384fa6006b14c505d8caf46e7e093527 | resume 独立且可改配置；产品 GET 不映射为此 RPC，实施须冻结完整覆写与历史 |
+| v2/TurnInterruptParams.json | 6dff382dae73d1dbc58406ed045605f647e7a49660e2540fbd2c6c24d60c5f2b | threadId+turnId 必需，不可只停止“最后一个” |
+| CommandExecutionRequestApprovalParams.json | 16a71816c2d66e319c2c4aa83dd636dfdc43c61e72b6d5475e421ce08d8e6558 | callback可缺command/cwd，commandActions仅best-effort；没有完整可核操作则不准批准 |
+| CommandExecutionRequestApprovalResponse.json | 6d0767113e22f311381809b6b236b0dde2b99b01992879c26bf7b1ea0e003cb7 | accept与acceptForSession/持久policy amendment不同；产品只可确切单次accept |
+| FileChangeRequestApprovalParams.json | 13848b26814c286ad6425a20d01c1691c86790e1f9e2529399677a8a22fe0d18 | item/thread/turn而无完整patch；grantRoot是扩大未来写权限，不等于本次批准 |
+| FileChangeRequestApprovalResponse.json | b95b03ee6be674e25cee2e863cc135a28620e1070addd2f34685aadee27cde08 | 单次accept与acceptForSession不能混用 |
+| v2/FileChangePatchUpdatedNotification.json | cfb69d18658610a0510f213e09c6847f70517410ed91cf99cc4713c15a795213 | path/kind/diff必须与同一真实item配对，通知本身不证明磁盘操作未先执行 |
+| PermissionsRequestApprovalResponse.json | 23f3f24e9dbf35db3e0b85703f0d934da5a1cff3cbb611fba8bcd41f3b4a04b0 | turn/session permission scope不是逐操作approve_once，默认或nullable不作安全证明 |
+
+公开 schema 只是协议形状，不证明通知时序、拦截点、隐藏模型输入、命令拒绝零执行、资源限制或产物来源。实施使用的实际固定响应可能包含公开非experimental schema未覆盖字段；须离线固定完整 schema/引用闭包并严格解码，不能放宽 additionalProperties 或忽略字段。未知方法、未配对事件、外部账号/路径/原错误不直传客户端；出错保存私有事实、返回受控错误，不“兼容猜测”。
+
+#### 20.17.9 实施与最低真实验收
+
+本节的批准仅授权合同实施，不等于取得真实费用/账号授权或证明 CLI 可满足强边界。第一步可完成 strict DTO/生成客户端、真实 SQLite owner/HTTP、受控协议 peer 与 UI，生产 registry 无证明时必须零外发。这不能关闭 M6.3；真实可调度链必须在独立许可和真实完整证明下另验，无法实现就明确 BLOCKED，不偷偷改预算或借普通 Provider 文本调用冒充 App Server 工具链。
+
+最低矩阵（分别绑定固定源码/实际命令/原失败，不混合 PASS）：
+
+1. 合同/读取：全部新 DTO required/closed、关联不变量、OpenAPI双向覆盖；旧54core、bootstrap/Provider/Import真实原JSON/hash/ACK逐字 oracle；当前 session/revision与原ACK区分；所有 GET全表hash不变、零CLI/外发。新增页面在 learner、independent、open_book 三种控制权限下，仅用 turn 安全 GET 的 approval_controls/consent_control 即能构造真实 decline/revoke；完整 approval/consent 学科 GET 仍拒绝，approve_once/旧许可消费仍拒绝；分别覆盖 GET 后修订变化412、错hash/绑定409、approval_ids错序/漏成员拒绝、消费/终态后许可不丢、坏历史不补 null，以及决定/撤销后真实安全 GET 读回。
+2. 准备与许可：真实 HTTP prepare→当前GET→Codex preview/grant→显式start→Job/Run；新actor、错误SHA/revision、跨session/workspace、旧bootstrap/Provider许可、过期/撤销/重复消费均准确拒绝；并发两writer仅一个活动turn/消费，事务失败全回滚。
+3. 输入/计量：完整模板/历史/refs/工具定义/配置/目的地/模型/secret/profile各变动拒旧许可；ASCII/中文/Unicode/重复文本计数；隐藏补充、额外模型调用、重试/重定向、无proof/过期proof必须零传输。测试 registry 与生产严格分开。
+4. 审批：受控真实子进程或明确协议 peer 产生 command/file请求，先核配对完整操作；approve_once只一个动作，decline/过期/坏base/错callback/unknown零动作。file callback无patch不能批准；sessionwide/permissive选项不可用；控制peer PASS不冒称实际CLI零执行。
+5. 生命周期：开始前与开始后撤权/Policy/取消竞态；事实持久保存、交付再核；断线/进程退出/恢复未知永不第二start/accept/modelcall。尾删/全删/membership破坏拒绝；两owner并发、崩溃与提交失败覆盖。
+6. interrupt：原actor与同workspace减权新actor、queued与running/awaiting、已终态、旧CAS、两入口并发；最多一次真正interrupt，空ACK不假称远端完全停止，缺liveowner零CLI重启。
+7. 产物/Import：真实受控writer的普通文件→停writer→有界扫描/受检副本→manifest GET→明确选择→正常stage/preview；SHA/size/路径/links/特殊文件/已变源负例；多文件事务全成或零stage；result_refs无伪ID，旧source/current/ACK不漂移，无自动commit/Review/publish。
+8. UI/native：真实当前session/turn列表、操作完整展示、原actor与page/access/port/unmount晚到保护、原命令恢复、未发输入保护、明确许可/决定/回导；重启同DB只读回原事实，不重启旧动作。真实原生应用与受控上游分列。
+9. 真正 App Server 与真实模型：固定binary/profile全闭包、严格完整protocol、实际计量与唯一请求、拒绝实际工具零执行、批准实际受控产物只进草稿、当前权限/重启读回。没有独立账号/费用授权或生产proof时 **NOT_RUN/BLOCKED**；不运行真实模型来“试出”安全默认值。
+10. 原完整门禁失败、环境数值BLOCKED、教学质量NOT_RUN与新subset分别保留；只有后续同固定组合完整验收才可改变总体状态。提案/代码/CI/真实模型/实际数学来源审查五种结果不得互相替代。
+
+用户已批准本节的具体会话控制修订、独立 Codex 许可 wire、单模型调用+有限逐项本地工具上限、可读通用审批、产物清单与回导归属。本次安全投影补齐原已声明的减权行为，未增加批准/消费/正文权限。普通实现细节（随机ID、内部函数拆分、锁公平性）不再另造用户授权环节；实现未验收前仍不得宣称路径已开放或功能已完成。
 
 ## 21. 旧格式兼容与确定的范围边界
 
@@ -2066,14 +2449,14 @@ consumed_provider_calls 是本机保守消耗额度，不声称服务商实际�
 | POST `/authoring/numeric-checks/{id}/decision` | ApprovalDecision；Idempotency-Key | NumericCheckDecisionAck；approve_once后202真实检查Job，decline后200且job=null；expected_revision强CAS，操作SHA必须完全一致 |
 | GET `/jobs/{id}` | 无 | JobSnapshot；敏感日志不下发原始完整请求 |
 | POST `/jobs/{id}/cancel` | `{expected_revision}` | JobSnapshot；按任务终态约束 |
-| POST `/approvals/{id}/decision` | ApprovalDecision | RunSnapshot；actor、操作hash、任务版本及过期时间校验 |
+| POST `/approvals/{id}/decision` | 原ApprovalDecision；Idempotency-Key | 200 GenericApprovalDecisionAck（§20.17.4）；原actor才approve_once，同workspace减权decline，真实hash/CAS/绑定 |
 | POST `/codex/session-preparations` | CodexBootstrapPreparationWrite（§20.16） | 201 CodexBootstrapPreparationView；冻结本地控制计划，零CLI、零Job，不授予许可 |
 | GET `/codex/session-preparations/{id}` | 无 | CodexBootstrapPreparationView（§20.16）；当前资格和已绑定session只读回读，零写/零执行 |
 | POST `/codex/session-preparations/{id}/decision` | ApprovalDecision | 200 CodexBootstrapDecisionAck（§20.16）；原actor单次approve_once或decline，hash409/revision412 |
 | POST `/codex/sessions` | CodexSessionCreateWrite（§20.16；sandbox_root_id、consent_id、allowed_actions=[]） | 201 CodexSessionCreateAck；仅受检真实本地 thread 映射及持久回执成功，失败/未知安全拒绝；浏览器不得传任意绝对沙盒路径 |
-| POST `/codex/sessions/{id}/turns` | `{message,context_refs:ContentRef[],expected_session_revision}` | 202 `{turn_id,session_revision,job:JobRef}`；文件/命令审批通过Broker事件传递 |
-| POST `/codex/sessions/{id}/interrupt` | `{turn_id,expected_session_revision}` | `{id,turn_id,status:interrupt_requested|already_terminal}`；中断不证明已完成外部副作用全部撤销 |
-| POST `/codex/sessions/{id}/artifacts/import` | `{turn_id,artifact_ids:Id[],expected_manifest_sha256}` | 202 JobRef；白名单路径、哈希、大小、审查后进入草稿 |
+| POST `/codex/sessions/{id}/turns` | CodexTurnStartWrite（§20.17.2）；Idempotency-Key | 202 CodexTurnStartAck；消费真实准备和独立新许可，ACK不证明执行/完成；旧三字段发送形状不执行 |
+| POST `/codex/sessions/{id}/interrupt` | 原`{turn_id,expected_session_revision}`；Idempotency-Key | 原`{id,turn_id,status:interrupt_requested|already_terminal}`；§20.17.5一次减权/零重启，中断不证明副作用全撤销 |
+| POST `/codex/sessions/{id}/artifacts/import` | CodexArtifactImportWrite（§20.17.6；原三字段）；Idempotency-Key | 原202 JobRef；真实不可变清单/受检副本，经Import owner原子stage，只进入预览/草稿 |
 | POST `/feedback` | `{module,severity:suggestion|minor|major|blocker,description,expected,steps:string[],include_diagnostics:boolean}` | 201 `{id,created_at}`；诊断不自动附私密正文或密钥 |
 | GET `/connectors` | 无 | `{items:{id,name,configured,read_capabilities:string[],write_capabilities:string[],last_sync:UTC|null}[]}` |
 | POST `/connectors/{id}/preview` | `{scope_ref_ids:Id[],direction:pull|push}` | 202 `{proposal_id,job:JobRef}`；连接不可用明示，预览不写远端 |
@@ -2319,7 +2702,27 @@ accepted_answers保留完整原数组、顺序及字符串，不trim、去重或
 | Codex 配套读取接口 | 请求 | 响应与语义 |
 |---|---|---|
 | GET `/codex/capabilities` | 无 | `{available,authorized,adapter_version:string|null,sandbox_roots:[{id,label}],capabilities:{approvals,interrupt,artifacts}}`；默认沙盒ID为workspace_default；实际路径仅服务端映射 |
-| GET `/codex/sessions/{id}` | 无 | CodexSessionView（§20.16）；当前本地受检 initializing/ready/failed/unknown 元数据；active_turn_id=null、flags全false、零执行/零写；供并发读回，不能要求客户端猜版本 |
+| GET `/codex/sessions/{id}` | 无 | CodexSessionView（§20.16、§20.17.3）；当前受检bootstrap状态/真实活动turn与控制revision；旧无turn历史保持null/false，零执行/零写 |
+
+
+
+
+| Codex受控turn补充操作（§20.17；声明不表示已注册/验收） | 请求 | 严格响应与边界 |
+|---|---|---|
+| POST `/codex/sessions/{id}/turn-preparations` | CodexTurnPrepareWrite；Idempotency-Key | 202 CodexTurnPreparationView；真实Job/Run/context及活动槽，零执行 |
+| GET `/codex/turn-preparations/{id}` | 无 | CodexTurnPreparationView；author/学科许可，零写 |
+| POST `/codex/consent-previews` | CodexOutboundPreviewWrite；Idempotency-Key | 201 CodexConsentProposalView；完整输入proof，无proof拒绝，零外发 |
+| GET `/codex/consent-proposals/{id}` | 无 | CodexConsentProposalView；author/学科许可，纯读 |
+| POST `/codex/consents` | CodexConsentCreateWrite；Idempotency-Key | 201 CodexConsentCreateAck；原actor明确批准，零执行 |
+| GET `/codex/consents/{id}` | 无 | CodexConsentView；author/学科许可，不作为learner减权读口 |
+| POST `/codex/consents/{id}/revoke` | 原`{expected_revision}`；Idempotency-Key | MutationAck；同workspace减权，基准从安全turn读回，不重置消耗 |
+| GET `/codex/sessions/{id}/turns` | cursor?、limit?；默认20/最大100 | CodexTurnPage；固定创建上界/安全控制含真实approval_controls与consent_control，无学科正文 |
+| GET `/codex/turns/{id}` | 无 | CodexTurnControlView；安全当前投影/真实减权CAS/hash，零写 |
+| GET `/codex/turns/{id}/result` | 无 | CodexTurnResultView；author/学科许可，输出仍未审 |
+| GET `/codex/turns/{id}/events` | after_seq?；省略0，沿Last-Event-ID规则 | 严格Codex本地SSE判别union（§20.17.3）；author/每批权限复核，重连零新执行 |
+| GET `/approvals/{id}` | 无 | GenericApprovalView；author/学科许可，真实完整操作，不是Provider或数值批准 |
+| GET `/codex/sessions/{id}/turns/{turn_id}/artifacts` | 无 | CodexArtifactManifestView；真实不可变受检清单/来源终态，author/学科许可 |
+| GET `/codex/artifact-imports/{job_id}` | 无 | CodexArtifactImportView；真实聚合Job/Import子项，author/学科许可，零写 |
 
 
 # 附录 B：核心领域模型（可抽取）
@@ -3046,6 +3449,8 @@ export interface AuthoringPort<D extends DTOMap> {
  generate(ctx:WriteContext, request:D['AuthoringRequest']):Promise<JobRef>;
  review(ctx:WriteContext, candidate:DraftCandidate):Promise<D['ReviewReceipt']>;
 }
+// Legacy coarse compatibility only: every call is subordinate to §20.17 checked ownership/consent.
+// prompt/approvedPaths never bypass frozen inputs, manifests or permanent once-only ledgers.
 export interface CodexBrokerPort<D extends DTOMap> {
  start(ctx:WriteContext, sandboxRootId:string):Promise<{sessionId:string}>;
  turn(ctx:WriteContext, sessionId:string, prompt:string):Promise<JobRef>;
@@ -3176,6 +3581,8 @@ ProviderTerminalReceipt = {
 PreparedOutboundMaterial.prepared_input_sha256 对应 §20.5 input_sha256。source owner 的 `read_prepared(transaction, AuthContext, job_id, expected_job_revision)`、`verify_prepared(transaction, AuthContext, material)`、`bind_authorization(transaction, WriteContext, job_id, prepared_input_sha256, consent_id)` 使用调用方真实活动数据库事务；后端 transaction 为现有受控 SQLite connection，不是浏览器自报 ID。read/verify 核源任务、当前可批准/运行阶段、完整准备输入、权限与精确 refs；bind 在该 owner 的表关联原输入与实际 consent。未知 source 不实现默认假材料。Job/Run 租约与业务终态由源 owner 控制；Provider 不直接写其表。
 
 `CheckedDispatchPort.dispatch(AuthContext, job_id, consent_id, DispatchLease, AbortSignal)` 只收持久身份，不接 consumer 临时拼造的 GenerationInput；从自有冻结记录、source/Policy/Jobs 受检端口和秘密存储核实后才准备网络 envelope 与调用。它返回 CheckedProviderEvent 的异步序列；另有受权限约束的 `terminal(AuthContext, dispatch_id) -> ProviderTerminalReceipt|null` 回读自有原终态。内部 envelope 非授权凭证，任意手工构造类型不能跳过事务和账本核验。计数/协议 profile 注册仅接受实际校验过的完整输入证明，测试注册与生产隔离。
+
+Codex的受检应用/内部owner端口及独立具名许可适配沿§20.17.7，原普通Provider端口/事件/历史wire不改；粗CodexBrokerPort不能绕过真实输入、许可、操作和产物清单准入。
 
 本机 InputProof/registry 是内部可信工程端口，不是配置或 HTTP 可提交的新授权 DTO。注册时对目的地绑定和 §20.5 的模型/格式/有效性依据作严格校验；`resolve(config)` 必须在无网络/秘密读取的情况下匹配规范化目的地、adapter、模型及当前有效 profile，`prepare/verify` 仍校验完整实际请求字节与冻结 proof SHA。不新增浏览器自报“可信 endpoint/模型版本/proof”的字段。测试专属任意端口服务只能在建立受控本机服务后，将其确切 endpoint 与人工模型规则显式注入测试工厂；该便利不能成为生产通配注册或环境变量准入开关。内部字段和实现可以细化，但不能遗漏这些实际匹配与失效判定。
 
@@ -3520,6 +3927,7 @@ if __name__=='__main__':
     假如 受控 Codex 会话请求命令执行与文件修改
     当 用户拒绝审批或产物路径逃出沙盒
     那么 操作不执行；越界产物不回导；批准合法成果也只进入草稿
+    并且 按§20.17.9分列真实CLI/模型/工具、受控协议与内容质量；每turn一次模型请求，第二请求外发前停止，安全控制新页可明确decline/revoke
 
   @AC-22 @M7 @R-26 @R-27 @R-29
   场景: 恢复与故障注入

@@ -54,6 +54,18 @@ def test_generated_contracts_match_current_spec():
     assert generate(check=True) >= 59
 
 
+def test_codex_control_and_result_routes_keep_m63_ownership():
+    catalog = route_catalog(ROOT / "PRODUCT_DESIGN.md")
+    routes = {(route["method"], route["path"]): route for route in catalog["routes"]}
+    codex = [route for route in routes.values()
+             if route["path"].startswith("/api/v1/codex/")
+             or route["path"] in {"/api/v1/approvals/{id}", "/api/v1/approvals/{id}/decision"}]
+    assert codex and all(route["task_id"] == "M6.3" for route in codex)
+    assert routes["GET", "/api/v1/codex/turns/{id}/result"]["task_id"] == "M6.3"
+    assert routes["GET", "/api/v1/attempts/{id}/result"]["task_id"] == "M3.4"
+    assert routes["GET", "/api/v1/runs/{id}"]["task_id"] == "M5.3"
+
+
 def test_type_projection_fails_closed_for_unbounded_schema():
     with pytest.raises(ValueError, match="unbounded"):
         typescript_type({"type": "object", "additionalProperties": True})

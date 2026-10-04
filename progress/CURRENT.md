@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-04T01:33:52Z；规范 SHA-256：`bed7c924955512ec4a6775812c80e6c5ce82e968f19feb403e568099f8dc4144`
+更新：2026-10-04T01:48:36Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED_PR55_ISSUE31_CONCEPTS_PUSHED_NEW_CI_OBSERVED
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
 
-完成已批准4e8受控turn/逐操作审批/manifest回导合同的安全减权basis澄清独审，纳入唯一v3.0.15；从真实strictDTO/SQLite owner/HTTP与受控peer开始逐步实施并验收。生产ProofRegistry/完整请求拦截证明缺失保持零模型外发，原所有FAIL/BLOCKED/NOT_RUN保持；无merge/release/deploy。
+固定已批准唯一v3.0.15及派生目录/归属结构验收，从strictDTO/真实SQLite准备与安全控制读回开始实施M6.3；普通Provider/bootstrap历史不变，新模型profile没有完整输入证明时零外发，尚无新真实turn/工具/产物验收。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
