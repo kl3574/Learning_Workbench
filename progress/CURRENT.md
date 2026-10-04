@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-04T11:46:55Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
+更新：2026-10-04T12:29:58Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
 
-仓库发布：VERIFIED；Issues 同步：VERIFIED_ISSUE32_FIXED29E_TERMINAL_BODY_ONLY_SOURCE_PUSH_PENDING
+仓库发布：VERIFIED；Issues 同步：VERIFIED_ISSUE32_LOCAL3265_ISOLATED_NATIVE_BODY_ONLY_PUBLIC4B_UNCHANGED
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
 
-普通push已验证29e组合及终态进度，读回draftPR56/Issue32与新CI实际状态；随后按固定owner/独立复核正常整合unsupported审批fdd、pure-memory单次工具9d3和interrupt79a及新outbound UI，重跑新组合必要门禁。产物manifest/普通Import回导在隔离树继续；生产完整proof缺失零外发，M6.3/AC21与M7未完成。
+完成隔离83d工具完整门禁及闭合读回，正常整合已验外发UI92与工具，保留中断v4/操作v5历史与原ACK；冻结新组合运行完整Python/Web/静态及native。继续独立受检产物source/stop receipt/manifest与普通Import草稿事务，核公开4b实际CI终态；生产proof缺失零真实模型、整个M6.3/AC21和M7未完成。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -301,11 +301,12 @@
 - m6_3_690_actual_ci: Actual push37170415116/PR37170416801 all12jobsSUCCESS; push690/PRcheckout6692 same09c22 tree. Each825backend809contract2143integration+2numericENVskip1058Web130native; actual12APIlogs retained with original empty-log collector failure, no source/result conflation.
 - m6_3_turn_client_counterevidence: Actual97 test-only counterexamples41PASS and1109fullWeb/strict/build1407inputsGitexact; same5c production bytes. Peer originalnewlineP2 withdrawnFALSE_POSITIVE in separate immutableclosure. Localnormalmergef11 exact2newfiles, all1405 existing nonprogress paths unchanged; panel/realexecution stillincomplete.
 - m6_3_690_numeric_artifacts: Four actual690 push/PR single/restore artifact IDs11291717091/11291407336/11291472698/11291288003 independently checked metadata+archives+sixJSON. All physicalBLOCKED_ENVIRONMENT/exit1/outputnull/noassertions, publication409PUBLISH_NUMERIC_REQUIRED.23qualifiedsafe candidates;SEAL.py excluded with explicit two-prefix transformerrata.
-- m6_3_latest_checkpoint: 固定29e1433完整Git before/after exact；127实际/147声明/20未注册，唯一v3.0.15 b140。Python4085PASS/2实际数值ENVskip/2warnings，Web1201/154files及七staticPASS；formalnative130PASS与原wrapperFAIL及5generatedoutputs实际变化单独限定。公开仍690，普通push待执行。
+- m6_3_latest_checkpoint: 当前canonical3265：正常整合fddunsupported+79ainterrupt、1444完整Git exact，130实际/147声明/17未注册，六静态PASS；组合完整Python/native NOT_RUN。最后完整受测29e4085Python/2数值ENVskip/1201Web/static/native130不借给新源码。公开4b实际普通push/freshPRhead一致；原首读FAIL保留，新CI metadata9success/3running未终态。
 - m6_3_fixed_0dc_complete_gate: 0dc1417Git完整Python4010PASS/2真实数值ENVskip/2warnings、4012收集、2373.33s、exit0；static Ruff/mypy266/generator82/spec54core147/1109Web148files/strict/buildPASS。早先ff两完整FAIL与7case定向PASS分别保留；不覆盖latestb344未跑门禁。
 - m6_3_dispatch_related: 固定351真实start/result与保守possible-send+originalconsent/Jobs原子消费、协议memory1request相关241PASS/2warnings、6staticPASS；正常合2b3，全部25owner路径精确。生产proof/executor无注册，actualCLI/model/resource/工具未验收。
 - m6_3_turn_ui_latest: 固定b1491201Web154files+strict/build/spec+214ownerPASS，1419Git逐blob before/afterexact；真实Chrome原prepare/cancelACK丢失、刷新0自动POST、显式samekey/fullbody byteexactreplay、完整JobSnapshot durableACK与再次刷新/APIrestartPASS。1433输入normalmerge b344，当前combinedNOT_RUN。原5restoreFAIL、1wireFAIL、6非法关系FAIL及fixture/harness更正保留。 追加实际29e组合终态Python4085PASS/2ENVskip、1201Web/staticPASS与native130PASS；不借给新outboundUI。
-- m6_3_isolated_next_owners: fdd unsupported171PASS/六static,root+peer静态；9d3purememory209PASS/六static1430Git,rootverifier实际0/peerpending；79ainterrupt1160PASS/五static1428Git,root+peer无新增产品阻断/两个task_id提交偏差保留；均未合canonical，不是实际CLI/hosttools。
+- m6_3_isolated_next_owners: UI92完整1278Web/157files、214旧owner/132新related及新真实Chrome32.33s PASS；生产phase0请求，受信phase1 memory synthetic response，真实CLI/模型NOT_RUN，尚未合。原9d/3120 runtime closureP2仍OPEN历史；83d55定向/6static与独审CLOSED_STATIC，完整相关RUNNING，未合。manifest/Import仅真route404RED、实施未完成。
+- m6_3_current_archive_whitespace: 本次证据归档首次git diffcheck实际exit2，原件保留；只对3明确不可变归档runner/patch路径加-whitespace，不裁剪原字节、不全局豁免。当前工程相对3265唯一非progress差异为这些.gitattributes，后续组合全量须绑定新字节。
 
 ## 阻塞与待决项
 

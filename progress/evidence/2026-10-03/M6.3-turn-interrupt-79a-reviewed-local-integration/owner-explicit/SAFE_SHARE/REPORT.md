@@ -1,0 +1,31 @@
+# Codex interrupt — implementation evidence
+
+Approved source: sole PRODUCT_DESIGN.md v3.0.15 §20.17.5, SHA256 `b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`.
+
+Final clean source is `79a3c0da4bef9d948bcd6a969a25ff55fd5833a0`. Production is `1b49cb6870f2b8e89337ddd26da82b5e46391e75`; 79a3 adds tests only. Parent `cc2cc675f91a2794c44267e46687422d5ae50019` is root's original three-test RED above unchanged fdd3 production. Relative to cc2 there are 11 changed paths (5 production including migration/model, 4 generated, 2 tests); relative to fdd3 there are 12 including root's original test. This is author evidence, not an independent review of this implementation.
+
+The registered POST `/api/v1/codex/sessions/{id}/interrupt` consumes only the existing strict request and returns its strict immutable ACK. It reuses the actual Jobs/Codex request_stop transaction and reducer. First request advances session revision once; unstarted cancellation adds the terminal revision. Running requests retain the cancel fact. Repeated requests do not dispatch another operation; terminal new commands return already_terminal without revision advancement. Actual delivery checks the current identity again after commit.
+
+New private v4 events bind the complete interrupt command and ACK to the actual internal Jobs stop command and original full JobSnapshot. The internal `interrupt_stop` route is separate from the public cancel namespace, even with the same key. Migration 0031 adds a protected exact command mirror linked to event sequence/hash. Read and replay cross-check full chain, heads, memberships, command registrations, Jobs/Run/Provider/approval facts and this mirror. No GET repairs or fresh snapshot substituted for an original ACK.
+
+`SOURCE_BINDING.json` records the exact unchanged files: old v1/v2/v3 event models, original bootstrap DTO, Provider request profile/engine, core model/0001 and original three RED tests. The shared service/repository are changed and are not claimed byte-identical. Existing OpenAPI paths and components remain equal; the only new path is interrupt and the two newly registered schemas are CodexInterruptWrite/Ack. Actual registered/declared/unregistered counts are 130/147/17.
+
+| Stage | Source / result | Evidence scope |
+|---|---|---|
+| Original route RED, executed by root | cc2cc675: 3 FAIL, exit 1; pytest 5.97s | 1425 complete nonprogress Git inputs before/after equal; original log unchanged |
+| Initial implementation development | WIP on cc2: 3 PASS, exit 0; pytest 6.05s | 1427 tracked/new-source hashes unchanged; explicitly not a fixed-source gate |
+| First fixed HTTP boundaries | 1b49cb68: 26 PASS, exit 0; pytest 49.27s | 1428 complete nonprogress inputs exact Git and unchanged |
+| Final contract + related integration | 79a3c0da: 1160 PASS, 2 existing deprecation warnings, exit 0 | All tests/contract plus 12 explicitly named integration files; pytest 521.11s, runner 521.822861s; 1428 complete nonprogress inputs exact Git and unchanged |
+| Final Ruff | 79a3c0da: PASS, exit 0 | Whole configured tree; 1428 exact/unchanged |
+| Final mypy | 79a3c0da: PASS, exit 0 | 273 source files; 1428 exact/unchanged |
+| Final generated check | 79a3c0da: PASS, exit 0 | 82 artifacts; 1428 exact/unchanged |
+| Final verify-spec | 79a3c0da: PASS, exit 0 | 54 core models, 147 declared routes, structural check only; 1428 exact/unchanged |
+| Final strict TS | 79a3c0da: PASS, exit 0 | tsc noEmit/noUnusedLocals/noUnusedParameters via pinned Node 24.21.0; 1428 exact/unchanged |
+
+The final 1160 includes 36 interrupt cases across the original and new files. They exercise awaiting/queued/running/terminal, original full ACK versus later current state and a new turn, same actor replay versus fresh learner actor observation, independent/open_book safe control, distinct 412/409/404 and transport rejection, both entrypoints with identical key text, real writer races, exact snapshot retention after late completion, unchanged actual usage, lost live mapping recovery to unknown with no resend, pending unsupported approval closure, logout before delivery with committed stop retained, transaction rollback and same-key retry, missing/full-deleted/tail/member/core corruption, and semantically invalid internal bindings even after owner digests are recomputed. All materials and execution peers are synthetic local fixtures.
+
+Limits remain explicit. No real CLI interrupt, model, account, host command/tool, network execution or host resource proof was performed. Production executor remains absent; no reliable process mapping causes no startup/resume or guessed turn. These gates are not the entire Python repository, native browser suite or overall M6.3 acceptance; canonical29e gates and prior full-gate failures are separate. Independent/open_book policy tests use actual assessment owner transitions; independent active subject exclusion requires stopping the prior task before that attempt begins. The new actor case establishes lack of original-command takeover and safe terminal observation; it does not claim a real CLI operation under another actor.
+
+Two evidence harness errors are retained separately. `boundaries-1b49` never launched pytest because ambient Python lacked datetime.UTC; its original runner/map and HARNESS_FAILURE.json remain. Only the private runner changed to datetime.timezone.utc, and `boundaries-1b49-02` is the actual successful run. SOURCE_BINDING_HARNESS_FAILURE.json records an initial nonexistent coverage metadata key; corrected readback uses the two real disjoint operation lists. Neither is a product defect or a discarded product failure.
+
+Raw paths are selected explicitly in RAW_MANIFEST.json. Runtime basetemp/tmp/cache, databases, archives, credentials, environment exports and raw account/CLI responses are excluded. SAFE_SHARE.json names each reviewed candidate and both original/candidate SHA256 and byte length; its only transformation is the exact local home prefix to `<LOCAL_HOME>`. No other replacement or source normalization is permitted. PUBLIC_OUTER_ALLOWLIST.json names separately shareable outer metadata. SHA256SUMS and tools/verify.py permit offline complete readback. Original RED and all recorded failures are preserved.

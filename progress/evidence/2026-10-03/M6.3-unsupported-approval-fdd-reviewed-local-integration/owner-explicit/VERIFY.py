@@ -1,0 +1,84 @@
+"""Read sealed evidence and fixed Git only; no application, DB or runtime execution."""
+from pathlib import Path
+import ast
+import hashlib
+import importlib.util
+import json
+import re
+import subprocess
+import sys
+
+root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent
+repo = Path(sys.argv[2]) if len(sys.argv) > 2 else root.parent / 'm63-generic-approval-owner-oct04'
+def sha(value): return hashlib.sha256(value).hexdigest()
+def read(path): return json.loads((root/path).read_text())
+def git(*args): return subprocess.check_output(['git', *args], cwd=repo)
+raw, safe, source = read('RAW_MANIFEST.json'), read('SAFE_SHARE.json'), read('SOURCE_BINDINGS.json')
+assert raw['count'] == len(raw['files']) == len({item['path'] for item in raw['files']})
+assert safe['count'] == len(safe['files']) == len({item['path'] for item in safe['files']})
+for item in raw['files']:
+    data = (root/item['path']).read_bytes()
+    assert sha(data) == item['sha256'] and len(data) == item['bytes']
+spec = importlib.util.spec_from_file_location('publication_scan', repo/'scripts/check_publication.py')
+scanner = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(scanner)
+for item in safe['files']:
+    data, public = (root/item['path']).read_bytes(), (root/'safe-share'/item['path']).read_bytes()
+    assert sha(data) == item['raw_sha256'] and len(data) == item['raw_bytes']
+    assert public == data.replace(bytes([47,104,111,109,101,47,108,107,120]), b'$HOME')
+    assert sha(public) == item['public_sha256'] and len(public) == item['public_bytes']
+    assert not scanner.inspect('progress/evidence/generic/'+item['path'], public)
+    assert not re.search(rb'(?i)(authorization|x-csrf-token|cookie)["\x27]?\s*[:=]\s*["\x27]?[A-Za-z0-9_+/=-]{16,}', public)
+cache = {}
+def blob(identifier):
+    if identifier not in cache: cache[identifier] = git('cat-file', 'blob', identifier)
+    return cache[identifier]
+maps = []
+for item in raw['files']:
+    if not item['path'].endswith('/before.json'): continue
+    before, after = read(item['path']), read(item['path'].replace('/before.json', '/after.json'))
+    assert before == after and before['all_exact'] and not before['status']
+    tree = {}
+    for entry in git('ls-tree', '-r', '-z', before['head']).split(b'\0'):
+        if not entry: continue
+        metadata, name = entry.split(b'\t'); name = name.decode()
+        if not name.startswith('progress/'): tree[name] = metadata.decode().split()[2]
+    assert set(tree) == set(before['inputs']) and len(tree) == before['count']
+    for path, row in before['inputs'].items():
+        data = blob(tree[path])
+        assert row.get('git_blob', tree[path]) == tree[path] and row['equal']
+        assert sha(data) == row['sha256'] == row['git_sha256'] and len(data) == row['size']
+    maps.append({'stage': item['path'].split('/')[0], 'head': before['head'], 'count': before['count']})
+assert git('rev-parse', source['final_head']+'^{tree}').decode().strip() == source['final_tree']
+assert sha(git('show', source['final_head']+':PRODUCT_DESIGN.md')) == source['spec_sha256']
+for path, row in source['changed_paths'].items():
+    identifier = git('rev-parse', source['final_head']+':'+path).decode().strip()
+    assert identifier == row['git_blob'] and sha(blob(identifier)) == row['sha256'] and len(blob(identifier)) == row['bytes']
+for path in source['unchanged_original_paths']:
+    assert git('show', source['base']+':'+path) == git('show', source['final_head']+':'+path)
+for stage in ['owner-final-01', 'static-final-01', 'prior-original-green-02']:
+    assert read(stage+'/before.json')['head'] == source['final_head']
+    assert read(stage+'/before.json')['count'] == 1424
+    receipt = read(stage+'/receipt.json')
+    assert receipt.get('exit_code', 0) == 0 and all(item['exit_code'] == 0 for item in receipt.get('results', []))
+assert '171 passed, 2 warnings in 177.42s' in (root/'owner-final-01/run.log').read_text()
+for item in read('GATE_HISTORY.json')['stages']:
+    receipt = read(item['stage']+'/receipt.json')
+    assert receipt['head'] == item['head'] and receipt['exit_code'] == item['exit'] and receipt['before_equals_after']
+    assert sha((root/item['stage']/'run.log').read_bytes()) == item['log_sha256']
+binding = read('prior_history_original_binding_v2.json')
+original = git('show', binding['original_commit']+':'+binding['path']).decode()
+def function_bytes(text):
+    node = next(item for item in ast.parse(text).body if isinstance(item, ast.FunctionDef) and item.name == binding['function'])
+    return ('\n'.join(text.splitlines()[node.lineno-1:node.end_lineno])+'\n').encode()
+probe = (root/'prior_history_original_probe_v2.py').read_bytes()
+assert sha(probe) == binding['probe_sha256']
+assert function_bytes(original) == function_bytes(probe.decode())
+assert sha(function_bytes(original)) == binding['function_bytes_sha256']
+if '--skip-outer' not in sys.argv and (root/'PUBLIC_OUTER_ALLOWLIST.json').exists():
+    for item in read('PUBLIC_OUTER_ALLOWLIST.json')['files']:
+        data = (root/item['path']).read_bytes()
+        assert sha(data) == item['sha256'] and len(data) == item['bytes']
+        assert not scanner.inspect('progress/evidence/generic/'+item['path'], data)
+print(json.dumps({'status': 'PASS', 'raw_count': raw['count'], 'safe_count': safe['count'],
+    'source_head': source['final_head'], 'fixed_maps': maps, 'scope': 'Read-only evidence and Git; no product execution.'}, indent=2))
