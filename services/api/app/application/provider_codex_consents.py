@@ -20,6 +20,7 @@ from .codex_bootstrap_access import current_control_access
 from .codex_turn_context import damaged
 from .codex_turn_models import TurnProviderBound
 from .codex_turn_execution_models import RunnableTurnInput, RunnableTurnContext, UnavailableHistoryContext, CodexCompletedHistory
+from .codex_turn_preparation_models import UnavailablePreparationContext
 from .codex_turn_context import select_history, wrapped
 from .errors import ApiError
 from .provider_budget import ProofRegistry
@@ -74,7 +75,7 @@ class CodexConsentsService:
                 source.material.preparation.request.expected_session_revision)
             size=len(context.messages[0].content)+len(source.material.preparation.request.message)+sum(len(wrapped(item)) for item in context.evidence)
             kept,omitted=select_history(prior,size)
-            if isinstance(context,(RunnableTurnContext,UnavailableHistoryContext)):
+            if isinstance(context,(RunnableTurnContext,UnavailableHistoryContext,UnavailablePreparationContext)):
                 if context.history != kept or context.omitted_history != omitted:
                     raise damaged()
                 if ('CODEX_CONTEXT_HISTORY_OMITTED' in [warning.code for warning in context.warnings]) != bool(omitted):

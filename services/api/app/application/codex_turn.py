@@ -54,7 +54,7 @@ def missing() -> ApiError:
 class CodexTurnService:
     def __init__(self, database: Database, bootstrap: CodexBootstrapService, proofs: ProofRegistry | None = None):
         self.database, self.bootstrap = database, bootstrap
-        self.context = CodexTurnContext(database)
+        self.context = CodexTurnContext(database, bootstrap)
         self._cursor_key = secrets.token_bytes(32)
         self.proofs = (proofs or ProofRegistry()).codex
         self.outbound_owner: CodexConsentsService | None = None
@@ -347,7 +347,8 @@ class CodexTurnService:
                 actor_session_id=current.id, session_id=session_id, turn_id='turn_' + uuid4().hex,
                 job_id='job_' + uuid4().hex, request=body, provider=provider, runtime=available if available is not None else runtime))
             repo.jobs.create(value.job_id, 'codex_turn', value)
-            context = self.context.prepare_turn(conn, current, value, now, previous)
+            context = self.context.prepare_turn(conn, current, value, now, previous,
+                bootstrap_snapshot=original if available is None else None)
             summary = self.context.summary(context)
             ack = CodexTurnPreparationView(id='turnprep_' + uuid4().hex, preparation_sha256='0' * 64,
                 actor_session_id=current.id, session_id=session_id, session_revision=revision + 1,

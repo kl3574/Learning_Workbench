@@ -9,6 +9,7 @@ from ..infrastructure.security import SessionIdentity
 from .codex_turn_models import TurnContext, TurnInput, TurnProviderBound, TurnStarted, TurnLifecycle
 from .provider_models import DispatchLease
 from .codex_turn_execution_models import RunnableTurnInput, RunnableTurnContext, UnavailableHistoryContext
+from .codex_turn_preparation_models import UnavailablePreparationContext
 
 
 class CodexOutboundMaterial(dm.StrictModel):
@@ -18,7 +19,8 @@ class CodexOutboundMaterial(dm.StrictModel):
     preparation: CodexTurnPreparationView
     job_revision: dm.Revision
     input: Annotated[TurnInput | RunnableTurnInput, Field(discriminator='version')]
-    context: Annotated[TurnContext | RunnableTurnContext | UnavailableHistoryContext, Field(discriminator='version')]
+    context: Annotated[TurnContext | RunnableTurnContext | UnavailableHistoryContext | UnavailablePreparationContext,
+                       Field(discriminator='version')]
 
 
 class CodexOutboundSourceState(dm.StrictModel):
