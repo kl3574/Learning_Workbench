@@ -142,3 +142,22 @@ test('original form restore rereads actor before showing safe identifiers or sav
  fireEvent.click(screen.getByText(`恢复审批表单 ${original.draft_id} · 1`)); await screen.findByText(/审批当前权限或原 actor 已变化/)
  expect((screen.getByLabelText('审批来源 turn ID') as HTMLInputElement).value).toBe(''); expect(Object.keys(await forms.load(approvalWorkspace))).toEqual([original.snapshot_id]); expect(p.decide).not.toHaveBeenCalled()
 })
+
+test.each(['learner', 'independent', 'open_book'] as const)('prior rejected approve preserves its original facts while %s can explicitly decline a fresh pending safe control', async mode => {
+ const p = port(), store = local(), forms = local()
+ vi.mocked(p.decide).mockRejectedValueOnce(new ApiError(503, 'runtime became unavailable', 'CODEX_RUNTIME_UNAVAILABLE')).mockResolvedValue(approvalAck('decline'))
+ const view = render(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted port={p} store={store} formStore={forms} />)
+ await readDetail(); approve(); await screen.findByText(/BLOCKED：当前操作或固定运行证明不可用/)
+ const first = vi.mocked(p.decide).mock.calls[0], original = (await store.load(approvalWorkspace))[first[2]].text
+ vi.mocked(p.session).mockResolvedValue({ ...approvalSession(), role: mode === 'learner' ? 'learner' : 'author', active_independent_attempt_id: mode === 'independent' ? 'attempt_independent' : null, active_open_book_attempt_id: mode === 'open_book' ? 'attempt_open_book' : null })
+ view.rerender(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted={false} port={p} store={store} formStore={forms} />)
+ await readControl(); const reads = vi.mocked(p.read).mock.calls.length
+ const decline = screen.getByText('明确拒绝这一次操作 approval_synthetic') as HTMLButtonElement
+ expect(decline.disabled, 'a prior academic approve command must not block explicit safe decline of a still-pending operation').toBe(false)
+ fireEvent.click(decline); await screen.findByText(/审批原 ACK 已保存/)
+ expect(p.decide).toHaveBeenCalledTimes(2); const second = vi.mocked(p.decide).mock.calls[1]
+ expect(second[2]).not.toBe(first[2]); expect(second[1]).toEqual({ expected_revision: 1, operation_sha256: '5'.repeat(64), decision: 'decline' })
+ expect((await store.load(approvalWorkspace))[first[2]].text).toBe(original); expect(p.read).toHaveBeenCalledTimes(reads)
+ const reduced = readApprovalCommand((await store.load(approvalWorkspace))[second[2]], approvalWorkspace)
+ expect(reduced.basis).toEqual({ kind: 'decline', control: approvalControl() }); expect(reduced.ack).toEqual(approvalAck('decline'))
+})
