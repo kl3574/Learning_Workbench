@@ -174,14 +174,18 @@ def test_new_binding_damage_fails_closed_on_ordinary_get_and_owner_read_without_
     with case.app.state.database.transaction() as conn:
         if damage in {'binding_tail', 'bindings_all', 'batch'}:
             # Deliberate synthetic integrity damage, not a normal deletion API.
+            conn.execute('DROP TRIGGER codex_import_previews_delete')
+            conn.execute('DROP TRIGGER codex_import_bindings_delete')
             conn.execute('DELETE FROM codex_import_previews WHERE import_id=?', (last.import_id,))
             conn.execute('DELETE FROM codex_import_bindings WHERE import_id=?', (last.import_id,))
             if damage != 'binding_tail':
                 conn.execute('DELETE FROM codex_import_previews')
                 conn.execute('DELETE FROM codex_import_bindings')
             if damage == 'batch':
+                conn.execute('DROP TRIGGER codex_import_batches_delete')
                 conn.execute('DELETE FROM codex_import_batches')
         elif damage == 'ordinal':
+            conn.execute('DROP TRIGGER codex_import_bindings_update')
             conn.execute('UPDATE codex_import_bindings SET ordinal=7 WHERE import_id=?', (first.import_id,))
         elif damage == 'job_input':
             conn.execute("UPDATE jobs SET input_json='{}' WHERE id=?", (first.import_job_id,))
@@ -190,6 +194,7 @@ def test_new_binding_damage_fails_closed_on_ordinary_get_and_owner_read_without_
         elif damage == 'original_artifact':
             conn.execute("UPDATE artifacts SET profile='import_asset' WHERE job_id=?", (first.import_job_id,))
         elif damage == 'preview_receipt':
+            conn.execute('DROP TRIGGER codex_import_previews_delete')
             conn.execute('DELETE FROM codex_import_previews WHERE import_id=?', (first.import_id,))
         elif damage == 'preview_tail':
             conn.execute("DELETE FROM job_events WHERE job_id=? AND type='awaiting_approval'", (first.import_job_id,))
@@ -231,6 +236,8 @@ def test_complete_member_discovery_and_child_status_cannot_hide_damage(tmp_path,
     binding, = stage(case, service, identity, [source(identity)])
     with case.app.state.database.transaction() as conn:
         if damage == 'all_binding_family':
+            conn.execute('DROP TRIGGER codex_import_bindings_delete')
+            conn.execute('DROP TRIGGER codex_import_batches_delete')
             conn.execute('DELETE FROM codex_import_bindings')
             conn.execute('DELETE FROM codex_import_batches')
         else:
