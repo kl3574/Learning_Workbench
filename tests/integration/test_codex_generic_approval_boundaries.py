@@ -262,13 +262,18 @@ def test_original_acks_survive_application_reconstruction(consent_case):
             names = [row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND (name GLOB 'codex_*' OR name GLOB 'provider_codex_*' OR name IN ('jobs','job_events','runs','threads','approvals','context_snapshots')) ORDER BY name")]
             return {name: [tuple(row) for row in conn.execute('SELECT * FROM '+name+' ORDER BY rowid')] for name in names}
     retained = retained_owners()
-    with TestClient(app, base_url=case.app.state.settings.origin) as client:
-        client.cookies.update(case.client.cookies)
-        # Existing startup invalidates recommendations. It is not a pure GET.
-        # The actual owner facts remain byte-identical; subsequent reads/replay
-        # must also leave the full database unchanged from this new boundary.
+    with TestClient(app, base_url=case.app.state.settings.origin):
+        # Existing startup workers invalidate recommendations asynchronously.
+        # Their unrelated writes are not part of an approval GET measurement.
         owners_unchanged = retained_owners() == retained
         assert owners_unchanged
+    owners_unchanged = retained_owners() == retained
+    assert owners_unchanged
+    client = TestClient(app, base_url=case.app.state.settings.origin)
+    client.cookies.update(case.client.cookies)
+    try:
+        # Measure real HTTP on the rebuilt application after startup workers
+        # have actually stopped, without adding a sleep or timing assertion.
         before_reads = case.dump()
         response = client.post('/api/v1/approvals/'+identifier+'/decision', json=original[0][0],
             headers={**case.headers, 'Idempotency-Key': 'decision'})
@@ -278,5 +283,7 @@ def test_original_acks_survive_application_reconstruction(consent_case):
         assert client.get('/api/v1/codex/turns/'+prepared['turn_id']).json()['approval_ids'] == [identifier]
         reads_unchanged = case.dump() == before_reads
         assert reads_unchanged
+    finally:
+        client.close()
     owners_unchanged = retained_owners() == retained
     assert owners_unchanged and len(runtime.calls) == 1
