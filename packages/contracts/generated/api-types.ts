@@ -593,6 +593,44 @@ export type CodexConsentControl = {
   "status": "active" | "revoked" | "expired";
 };
 
+export type CodexConsentCreateAck = {
+  "id": string;
+  "revision": 1;
+  "status": "active";
+  "actor_session_id": string;
+  "proposal_id": string;
+  "proposal_sha256": string;
+  "summary": CodexFrozenOutboundSummary;
+};
+
+export type CodexConsentCreateWrite = {
+  "proposal_id": string;
+  "proposal_sha256": string;
+};
+
+export type CodexConsentProposalView = {
+  "id": string;
+  "proposal_sha256": string;
+  "summary": CodexFrozenOutboundSummary;
+  "validity": "current" | "stale" | "expired" | "unavailable";
+  "consent_id": (string | null);
+  "warnings": Array<ProposalWarning>;
+};
+
+export type CodexConsentView = {
+  "id": string;
+  "revision": number;
+  "status": "active" | "revoked" | "expired";
+  "actor_session_id": string;
+  "proposal_id": string;
+  "proposal_sha256": string;
+  "summary": CodexFrozenOutboundSummary;
+  "created_at": string;
+  "expires_at": string;
+  "revoked_at": (string | null);
+  "dispatch": (CodexDispatchView | null);
+};
+
 export type CodexCurrentFeatures = {
   "approvals": boolean;
   "interrupt": boolean;
@@ -608,15 +646,79 @@ export type CodexCurrentSessionView = {
   "capabilities": CodexCurrentFeatures;
 };
 
+export type CodexDispatchView = {
+  "id": string;
+  "job": JobRef;
+  "started_at": (string | null);
+  "finished_at": (string | null);
+  "consumed_provider_calls": number;
+  "input_tokens": (number | null);
+  "output_tokens": (number | null);
+  "elapsed_ms": (number | null);
+  "cost": (UnknownUsageCost | EstimatedUsageCost | ActualUsageCost);
+  "outcome": ("completed" | "failed" | "incomplete" | "cancelled" | "unknown" | null);
+  "error_code": ("CODEX_PROTOCOL_INVALID" | "CODEX_PROFILE_CHANGED" | "CODEX_RUNTIME_UNAVAILABLE" | "CODEX_BINDING_INVALID" | "CODEX_HISTORY_DAMAGED" | "CODEX_INPUT_PROOF_UNAVAILABLE" | "CODEX_OPERATION_UNSUPPORTED" | "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED" | "CODEX_TIMEOUT" | "CODEX_RESOURCE_LIMIT" | "CODEX_CANCELLED" | "CODEX_OUTCOME_UNKNOWN" | "CODEX_OPERATION_FAILED" | "CODEX_ARTIFACT_REJECTED" | "CODEX_ARTIFACT_MISSING" | "CODEX_SOURCE_CHANGED" | "CODEX_SOURCE_UNAVAILABLE" | "CODEX_APPROVAL_EXPIRED" | "CODEX_CONSENT_EXPIRED" | "CODEX_CONSENT_REVOKED" | "CODEX_BUDGET_EXCEEDED" | "POLICY_DENIED" | "ASSESSMENT_ACTIVE" | "CAPABILITY_UNSUPPORTED" | "PROVIDER_CONFIGURATION_CHANGED" | "PROVIDER_SECRET_UNAVAILABLE" | "OUTBOUND_SOURCE_CHANGED" | "OUTBOUND_SOURCE_UNAVAILABLE" | "CONSENT_REQUIRED" | "CONSENT_REVOKED" | "CONSENT_EXPIRED" | "OUTBOUND_BUDGET_EXCEEDED" | "PROVIDER_TIMEOUT" | "PROVIDER_CANCELLED" | "PROVIDER_TRANSPORT_ERROR" | "PROVIDER_PROTOCOL_ERROR" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_USAGE_INCONSISTENT" | "PROVIDER_REFUSAL" | "PROVIDER_INCOMPLETE" | null);
+};
+
 export type CodexFeatures = {
   "approvals": boolean;
   "interrupt": boolean;
   "artifacts": boolean;
 };
 
+export type CodexFrozenOutboundSummary = {
+  "version": "codex-outbound-summary-v1";
+  "preparation_id": string;
+  "preparation_sha256": string;
+  "session_id": string;
+  "turn_id": string;
+  "job_id": string;
+  "source_job_revision": number;
+  "source_input_sha256": string;
+  "provider_id": string;
+  "provider_revision": number;
+  "config_sha256": string;
+  "adapter": "codex_app_server";
+  "adapter_version": string;
+  "endpoint": string;
+  "endpoint_policy": "public_https" | "explicit_loopback";
+  "model": string;
+  "context_snapshot_id": string;
+  "context_snapshot_sha256": string;
+  "input_sha256": string;
+  "request_body_sha256": string;
+  "messages": Array<MessageSummary>;
+  "references": Array<ReferenceSummary>;
+  "input_character_count": number;
+  "input_token_assurance": (LocalExactInputTokens | LocalUpperBoundInputTokens);
+  "budget": CodexOutboundBudgetWrite;
+  "tools": CodexLocalToolBudget;
+  "runtime": CodexTurnRuntimeSummary;
+  "cost_estimate": (UnknownCostEstimate | EstimatedCostEstimate);
+  "created_at": string;
+  "expires_at": string;
+};
+
 export type CodexLocalToolBudget = {
   "max_tool_calls": number;
   "wall_seconds": number;
+};
+
+export type CodexOutboundBudgetWrite = {
+  "max_input_tokens": number;
+  "max_output_tokens": number;
+  "max_provider_calls": 1;
+  "max_search_calls": 0;
+  "max_cost_usd": (number | null);
+};
+
+export type CodexOutboundPreviewWrite = {
+  "preparation_id": string;
+  "preparation_sha256": string;
+  "expected_job_revision": number;
+  "expected_provider_revision": number;
+  "budget": CodexOutboundBudgetWrite;
+  "expires_at": string;
 };
 
 export type CodexSandboxRoot = {

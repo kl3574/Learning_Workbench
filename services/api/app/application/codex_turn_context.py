@@ -10,6 +10,7 @@ from ..serialization import canonical_json, content_sha256
 from ..infrastructure.database import Database
 from ..infrastructure.security import SessionIdentity
 from .codex_turn_models import TurnInput, TurnContext, context_digest
+from .codex_turn_execution_models import RunnableTurnInput, RunnableTurnContext, CodexCompletedHistory
 from .content_retrieval import ContentRetrievalSource
 from .errors import ApiError
 
@@ -31,7 +32,8 @@ class CodexTurnContext:
     def __init__(self, database: Database):
         self.content = ContentRetrievalSource(database)
 
-    def prepare_turn(self, conn: sqlite3.Connection, identity: SessionIdentity, value: TurnInput, now: str) -> TurnContext:
+    def prepare_turn(self, conn: sqlite3.Connection, identity: SessionIdentity, value: TurnInput | RunnableTurnInput,
+                     now: str, history: list[CodexCompletedHistory] | None = None) -> TurnContext | RunnableTurnContext:
         messages = [dm.GenerationMessage(role='system', content=TEMPLATE),
                     dm.GenerationMessage(role='user', content=value.request.message)]
         size = sum(len(item.content) for item in messages)
@@ -62,22 +64,40 @@ class CodexTurnContext:
             evidence.append(item)
             materials.append(ReferenceSummary(ref=ref, title=block.title, locator=locator,
                 character_count=len(text), excerpt_sha256=actual.body_sha256))
-        warnings = [dm.Warning(code='CODEX_INPUT_PROOF_UNAVAILABLE', severity='warning',
+        warnings = [] if isinstance(value, RunnableTurnInput) else [dm.Warning(code='CODEX_INPUT_PROOF_UNAVAILABLE', severity='warning',
             message='已保存本地准备；尚无完整执行与输入计量证明，不能批准或开始外发。')]
         if omitted:
             warnings.append(dm.Warning(code='CODEX_CONTEXT_MATERIAL_OMITTED', severity='warning',
                 message='完整所选材料超出上下文资源上限，已整项省略；未截断消息或正文。'))
+        retained_history: list[CodexCompletedHistory] = []
+        omitted_history: list[CodexCompletedHistory] = []
+        for previous in reversed(history or []):
+            if size + len(previous.user) + len(previous.answer) > 12000:
+                omitted_history.insert(0, previous)
+            else:
+                retained_history.insert(0, previous)
+                size += len(previous.user) + len(previous.answer)
+        if retained_history:
+            messages = [messages[0], *[message for item in retained_history for message in
+                [dm.GenerationMessage(role='user', content=item.user), dm.GenerationMessage(role='assistant', content=item.answer)]], messages[-1]]
+        if omitted_history:
+            warnings.append(dm.Warning(code='CODEX_CONTEXT_HISTORY_OMITTED', severity='warning',
+                message='完整旧轮次超出上下文资源上限，已整轮省略；未截断原回答。'))
         snapshot = dm.ContextSnapshot(id='context_' + uuid4().hex, created_at=now, policy='authoring',
             request_sha256=content_sha256(value.request), resolved_refs=[item.ref for item in evidence],
             character_count=size, snapshot_sha256='0' * 64)
-        context = TurnContext(version='codex-turn-context-v1', input=value, snapshot=snapshot,
-            messages=messages, evidence=evidence, scopes=scopes, materials=materials, omitted_refs=omitted, omitted_scopes=omitted_scopes, warnings=warnings)
+        fields = dict(snapshot=snapshot, messages=messages, evidence=evidence, scopes=scopes,
+            materials=materials, omitted_refs=omitted, omitted_scopes=omitted_scopes, warnings=warnings)
+        context = (RunnableTurnContext.model_validate(dict(version='codex-turn-context-v2', input=value, history=retained_history,
+            omitted_history=omitted_history, **fields)) if isinstance(value, RunnableTurnInput) else
+            TurnContext.model_validate(dict(version='codex-turn-context-v1', input=value, **fields)))
         context.snapshot.snapshot_sha256 = context_digest(context)
         conn.execute('INSERT INTO context_snapshots(id,workspace_id,snapshot_sha256,envelope_json,created_at) VALUES(?,?,?,?,?)',
             (snapshot.id, identity.workspace_id, context.snapshot.snapshot_sha256, canonical_json(context), now))
         return context
 
-    def verify_turn(self, conn: sqlite3.Connection, identity: SessionIdentity, value: TurnInput, summary: CodexTurnPreparationSummary) -> TurnContext:
+    def verify_turn(self, conn: sqlite3.Connection, identity: SessionIdentity, value: TurnInput | RunnableTurnInput,
+                    summary: CodexTurnPreparationSummary) -> TurnContext | RunnableTurnContext:
         if not conn.in_transaction:
             raise damaged()
         row = conn.execute('SELECT * FROM context_snapshots WHERE id=? AND workspace_id=?',
@@ -85,15 +105,19 @@ class CodexTurnContext:
         if row is None:
             raise damaged()
         try:
-            result = TurnContext.model_validate(strict_json(row['envelope_json']))
+            result = (RunnableTurnContext if isinstance(value, RunnableTurnInput) else TurnContext).model_validate(strict_json(row['envelope_json']))
+            expected_messages = [dm.GenerationMessage(role='system', content=TEMPLATE)]
+            if isinstance(result, RunnableTurnContext):
+                expected_messages.extend(message for item in result.history for message in
+                    [dm.GenerationMessage(role='user', content=item.user), dm.GenerationMessage(role='assistant', content=item.answer)])
+            expected_messages.append(dm.GenerationMessage(role='user', content=value.request.message))
             if (canonical_json(result) != row['envelope_json'] or result.input != value
                     or result.snapshot.snapshot_sha256 != context_digest(result)
                     or result.snapshot.snapshot_sha256 != row['snapshot_sha256']
                     or result.snapshot.id != row['id'] or result.snapshot.created_at != row['created_at']
                     or result.snapshot.request_sha256 != content_sha256(value.request)
                     or row['private_input_blob_sha256'] is not None
-                    or result.messages != [dm.GenerationMessage(role='system', content=TEMPLATE),
-                        dm.GenerationMessage(role='user', content=value.request.message)]):
+                    or result.messages != expected_messages):
                 raise damaged()
             if not len(result.evidence) == len(result.materials) == len(result.scopes):
                 raise damaged()
@@ -126,21 +150,22 @@ class CodexTurnContext:
             raise damaged() from None
 
     @staticmethod
-    def summary(value: TurnContext) -> CodexTurnPreparationSummary:
+    def summary(value: TurnContext | RunnableTurnContext) -> CodexTurnPreparationSummary:
         runtime = value.input.runtime
-        limits = runtime.model_dump(exclude={'version', 'implemented', 'bootstrap_sha256', 'template_version', 'tools'})
+        limits = {name: getattr(runtime, name) for name in CodexTurnRuntimeSummary.model_fields if name != 'profile_sha256'}
         # This is the actual local prepared envelope, explicitly NOT a final
         # model request/token proof. The whole private profile is bound too.
-        prepared = content_sha256({'version': 'codex-prepared-input-unavailable-v1',
+        prepared = content_sha256({'version': 'codex-prepared-input-v2' if isinstance(value, RunnableTurnContext) else 'codex-prepared-input-unavailable-v1',
             'input': value.input.model_dump(mode='json'), 'context': value.model_dump(mode='json')})
         return CodexTurnPreparationSummary(context_snapshot_id=value.snapshot.id,
             snapshot_sha256=value.snapshot.snapshot_sha256, job_input_sha256=content_sha256(value.input),
             prepared_input_sha256=prepared,
             runtime=CodexTurnRuntimeSummary(profile_sha256=content_sha256(runtime), **limits),
             character_count=value.snapshot.character_count, materials=value.materials,
-            history_turn_ids=[], tools=runtime.tools, warnings=[CodexTurnWarning.model_validate(item.model_dump(mode="json")) for item in value.warnings])
+            history_turn_ids=[item.turn_id for item in value.history] if isinstance(value, RunnableTurnContext) else [],
+            tools=runtime.tools, warnings=[CodexTurnWarning.model_validate(item.model_dump(mode="json")) for item in value.warnings])
 
-    def current(self, conn: sqlite3.Connection, identity: SessionIdentity, context: TurnContext) -> bool:
+    def current(self, conn: sqlite3.Connection, identity: SessionIdentity, context: TurnContext | RunnableTurnContext) -> bool:
         try:
             for scope in [*context.scopes, *context.omitted_scopes]:
                 self.content.revalidate_scope(conn, identity, scope)

@@ -3621,6 +3621,223 @@
         "title": "CodexConsentControl",
         "type": "object"
       },
+      "CodexConsentCreateAck": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_session_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Actor Session Id",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "proposal_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Proposal Id",
+            "type": "string"
+          },
+          "proposal_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Proposal Sha256",
+            "type": "string"
+          },
+          "revision": {
+            "const": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "status": {
+            "const": "active",
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/CodexFrozenOutboundSummary"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "status",
+          "actor_session_id",
+          "proposal_id",
+          "proposal_sha256",
+          "summary"
+        ],
+        "title": "CodexConsentCreateAck",
+        "type": "object"
+      },
+      "CodexConsentCreateWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "proposal_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Proposal Id",
+            "type": "string"
+          },
+          "proposal_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Proposal Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "proposal_sha256"
+        ],
+        "title": "CodexConsentCreateWrite",
+        "type": "object"
+      },
+      "CodexConsentProposalView": {
+        "additionalProperties": false,
+        "properties": {
+          "consent_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consent Id"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "proposal_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Proposal Sha256",
+            "type": "string"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/CodexFrozenOutboundSummary"
+          },
+          "validity": {
+            "enum": [
+              "current",
+              "stale",
+              "expired",
+              "unavailable"
+            ],
+            "title": "Validity",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ProposalWarning"
+            },
+            "maxItems": 8,
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "proposal_sha256",
+          "summary",
+          "validity",
+          "consent_id",
+          "warnings"
+        ],
+        "title": "CodexConsentProposalView",
+        "type": "object"
+      },
+      "CodexConsentView": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_session_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Actor Session Id",
+            "type": "string"
+          },
+          "created_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dispatch": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CodexDispatchView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expires_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "proposal_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Proposal Id",
+            "type": "string"
+          },
+          "proposal_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Proposal Sha256",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "revoked",
+              "expired"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/CodexFrozenOutboundSummary"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "status",
+          "actor_session_id",
+          "proposal_id",
+          "proposal_sha256",
+          "summary",
+          "created_at",
+          "expires_at",
+          "revoked_at",
+          "dispatch"
+        ],
+        "title": "CodexConsentView",
+        "type": "object"
+      },
       "CodexCurrentFeatures": {
         "additionalProperties": false,
         "properties": {
@@ -3702,6 +3919,198 @@
         "title": "CodexCurrentSessionView",
         "type": "object"
       },
+      "CodexDispatchView": {
+        "additionalProperties": false,
+        "properties": {
+          "consumed_provider_calls": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Consumed Provider Calls",
+            "type": "integer"
+          },
+          "cost": {
+            "discriminator": {
+              "mapping": {
+                "actual": "#/components/schemas/ActualUsageCost",
+                "estimated": "#/components/schemas/EstimatedUsageCost",
+                "unknown": "#/components/schemas/UnknownUsageCost"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/UnknownUsageCost"
+              },
+              {
+                "$ref": "#/components/schemas/EstimatedUsageCost"
+              },
+              {
+                "$ref": "#/components/schemas/ActualUsageCost"
+              }
+            ],
+            "title": "Cost"
+          },
+          "elapsed_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Elapsed Ms"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "CODEX_PROTOCOL_INVALID",
+                  "CODEX_PROFILE_CHANGED",
+                  "CODEX_RUNTIME_UNAVAILABLE",
+                  "CODEX_BINDING_INVALID",
+                  "CODEX_HISTORY_DAMAGED",
+                  "CODEX_INPUT_PROOF_UNAVAILABLE",
+                  "CODEX_OPERATION_UNSUPPORTED",
+                  "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED",
+                  "CODEX_TIMEOUT",
+                  "CODEX_RESOURCE_LIMIT",
+                  "CODEX_CANCELLED",
+                  "CODEX_OUTCOME_UNKNOWN",
+                  "CODEX_OPERATION_FAILED",
+                  "CODEX_ARTIFACT_REJECTED",
+                  "CODEX_ARTIFACT_MISSING",
+                  "CODEX_SOURCE_CHANGED",
+                  "CODEX_SOURCE_UNAVAILABLE",
+                  "CODEX_APPROVAL_EXPIRED",
+                  "CODEX_CONSENT_EXPIRED",
+                  "CODEX_CONSENT_REVOKED",
+                  "CODEX_BUDGET_EXCEEDED",
+                  "POLICY_DENIED",
+                  "ASSESSMENT_ACTIVE"
+                ],
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "CAPABILITY_UNSUPPORTED",
+                  "PROVIDER_CONFIGURATION_CHANGED",
+                  "PROVIDER_SECRET_UNAVAILABLE",
+                  "OUTBOUND_SOURCE_CHANGED",
+                  "OUTBOUND_SOURCE_UNAVAILABLE",
+                  "CONSENT_REQUIRED",
+                  "CONSENT_REVOKED",
+                  "CONSENT_EXPIRED",
+                  "OUTBOUND_BUDGET_EXCEEDED",
+                  "PROVIDER_TIMEOUT",
+                  "PROVIDER_CANCELLED",
+                  "PROVIDER_TRANSPORT_ERROR",
+                  "PROVIDER_PROTOCOL_ERROR",
+                  "PROVIDER_OUTCOME_UNKNOWN",
+                  "PROVIDER_USAGE_INCONSISTENT",
+                  "PROVIDER_REFUSAL",
+                  "PROVIDER_INCOMPLETE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "input_tokens": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Tokens"
+          },
+          "job": {
+            "$ref": "#/components/schemas/JobRef"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "enum": [
+                  "completed",
+                  "failed",
+                  "incomplete",
+                  "cancelled",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "output_tokens": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Tokens"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          }
+        },
+        "required": [
+          "id",
+          "job",
+          "started_at",
+          "finished_at",
+          "consumed_provider_calls",
+          "input_tokens",
+          "output_tokens",
+          "elapsed_ms",
+          "cost",
+          "outcome",
+          "error_code"
+        ],
+        "title": "CodexDispatchView",
+        "type": "object"
+      },
       "CodexFeatures": {
         "additionalProperties": false,
         "properties": {
@@ -3726,6 +4135,228 @@
         "title": "CodexFeatures",
         "type": "object"
       },
+      "CodexFrozenOutboundSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "adapter": {
+            "const": "codex_app_server",
+            "title": "Adapter",
+            "type": "string"
+          },
+          "adapter_version": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Adapter Version",
+            "type": "string"
+          },
+          "budget": {
+            "$ref": "#/components/schemas/CodexOutboundBudgetWrite"
+          },
+          "config_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Config Sha256",
+            "type": "string"
+          },
+          "context_snapshot_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Context Snapshot Id",
+            "type": "string"
+          },
+          "context_snapshot_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Context Snapshot Sha256",
+            "type": "string"
+          },
+          "cost_estimate": {
+            "discriminator": {
+              "mapping": {
+                "estimated": "#/components/schemas/EstimatedCostEstimate",
+                "unknown": "#/components/schemas/UnknownCostEstimate"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/UnknownCostEstimate"
+              },
+              {
+                "$ref": "#/components/schemas/EstimatedCostEstimate"
+              }
+            ],
+            "title": "Cost Estimate"
+          },
+          "created_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Created At",
+            "type": "string"
+          },
+          "endpoint": {
+            "minLength": 1,
+            "title": "Endpoint",
+            "type": "string"
+          },
+          "endpoint_policy": {
+            "enum": [
+              "public_https",
+              "explicit_loopback"
+            ],
+            "title": "Endpoint Policy",
+            "type": "string"
+          },
+          "expires_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "input_character_count": {
+            "maximum": 12000.0,
+            "minimum": 1.0,
+            "title": "Input Character Count",
+            "type": "integer"
+          },
+          "input_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Input Sha256",
+            "type": "string"
+          },
+          "input_token_assurance": {
+            "discriminator": {
+              "mapping": {
+                "local_exact": "#/components/schemas/LocalExactInputTokens",
+                "local_upper_bound": "#/components/schemas/LocalUpperBoundInputTokens"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LocalExactInputTokens"
+              },
+              {
+                "$ref": "#/components/schemas/LocalUpperBoundInputTokens"
+              }
+            ],
+            "title": "Input Token Assurance"
+          },
+          "job_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/MessageSummary"
+            },
+            "maxItems": 6,
+            "minItems": 2,
+            "title": "Messages",
+            "type": "array"
+          },
+          "model": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Model",
+            "type": "string"
+          },
+          "preparation_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Preparation Id",
+            "type": "string"
+          },
+          "preparation_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Preparation Sha256",
+            "type": "string"
+          },
+          "provider_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "provider_revision": {
+            "minimum": 1.0,
+            "title": "Provider Revision",
+            "type": "integer"
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceSummary"
+            },
+            "maxItems": 8,
+            "title": "References",
+            "type": "array"
+          },
+          "request_body_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Request Body Sha256",
+            "type": "string"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/CodexTurnRuntimeSummary"
+          },
+          "session_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "source_input_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Input Sha256",
+            "type": "string"
+          },
+          "source_job_revision": {
+            "minimum": 1.0,
+            "title": "Source Job Revision",
+            "type": "integer"
+          },
+          "tools": {
+            "$ref": "#/components/schemas/CodexLocalToolBudget"
+          },
+          "turn_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "version": {
+            "const": "codex-outbound-summary-v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "preparation_id",
+          "preparation_sha256",
+          "session_id",
+          "turn_id",
+          "job_id",
+          "source_job_revision",
+          "source_input_sha256",
+          "provider_id",
+          "provider_revision",
+          "config_sha256",
+          "adapter",
+          "adapter_version",
+          "endpoint",
+          "endpoint_policy",
+          "model",
+          "context_snapshot_id",
+          "context_snapshot_sha256",
+          "input_sha256",
+          "request_body_sha256",
+          "messages",
+          "references",
+          "input_character_count",
+          "input_token_assurance",
+          "budget",
+          "tools",
+          "runtime",
+          "cost_estimate",
+          "created_at",
+          "expires_at"
+        ],
+        "title": "CodexFrozenOutboundSummary",
+        "type": "object"
+      },
       "CodexLocalToolBudget": {
         "additionalProperties": false,
         "properties": {
@@ -3747,6 +4378,95 @@
           "wall_seconds"
         ],
         "title": "CodexLocalToolBudget",
+        "type": "object"
+      },
+      "CodexOutboundBudgetWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "max_cost_usd": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Cost Usd"
+          },
+          "max_input_tokens": {
+            "minimum": 1.0,
+            "title": "Max Input Tokens",
+            "type": "integer"
+          },
+          "max_output_tokens": {
+            "minimum": 1.0,
+            "title": "Max Output Tokens",
+            "type": "integer"
+          },
+          "max_provider_calls": {
+            "const": 1,
+            "title": "Max Provider Calls",
+            "type": "integer"
+          },
+          "max_search_calls": {
+            "const": 0,
+            "title": "Max Search Calls",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "max_input_tokens",
+          "max_output_tokens",
+          "max_provider_calls",
+          "max_search_calls",
+          "max_cost_usd"
+        ],
+        "title": "CodexOutboundBudgetWrite",
+        "type": "object"
+      },
+      "CodexOutboundPreviewWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "budget": {
+            "$ref": "#/components/schemas/CodexOutboundBudgetWrite"
+          },
+          "expected_job_revision": {
+            "minimum": 1.0,
+            "title": "Expected Job Revision",
+            "type": "integer"
+          },
+          "expected_provider_revision": {
+            "minimum": 1.0,
+            "title": "Expected Provider Revision",
+            "type": "integer"
+          },
+          "expires_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "preparation_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Preparation Id",
+            "type": "string"
+          },
+          "preparation_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Preparation Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "preparation_id",
+          "preparation_sha256",
+          "expected_job_revision",
+          "expected_provider_revision",
+          "budget",
+          "expires_at"
+        ],
+        "title": "CodexOutboundPreviewWrite",
         "type": "object"
       },
       "CodexSandboxRoot": {
@@ -20707,6 +21427,837 @@
           }
         ],
         "summary": "Capabilities",
+        "tags": [
+          "codex"
+        ]
+      }
+    },
+    "/api/v1/codex/consent-previews": {
+      "post": {
+        "operationId": "preview_api_v1_codex_consent_previews_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "title": "Origin",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodexOutboundPreviewWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexConsentProposalView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Preview",
+        "tags": [
+          "codex"
+        ]
+      }
+    },
+    "/api/v1/codex/consent-proposals/{id}": {
+      "get": {
+        "operationId": "proposal_api_v1_codex_consent_proposals__id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexConsentProposalView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Proposal",
+        "tags": [
+          "codex"
+        ]
+      }
+    },
+    "/api/v1/codex/consents": {
+      "post": {
+        "operationId": "grant_api_v1_codex_consents_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "title": "Origin",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodexConsentCreateWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexConsentCreateAck"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Grant",
+        "tags": [
+          "codex"
+        ]
+      }
+    },
+    "/api/v1/codex/consents/{id}": {
+      "get": {
+        "operationId": "consent_api_v1_codex_consents__id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexConsentView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Consent",
+        "tags": [
+          "codex"
+        ]
+      }
+    },
+    "/api/v1/codex/consents/{id}/revoke": {
+      "post": {
+        "operationId": "revoke_api_v1_codex_consents__id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "title": "Origin",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConsentRevoke"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MutationAck"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Revoke",
         "tags": [
           "codex"
         ]

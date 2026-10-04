@@ -8,11 +8,12 @@ from packages.contracts.canonical import strict_json
 from ..application.codex_bootstrap_models import BootstrapSnapshot
 from ..application.codex_turn_context import CodexTurnContext, damaged
 from ..application.codex_turn_models import (
-    SessionAnchor, EventEnvelope, TurnPrepared, CancelCommand, preparation_digest,
+    SessionAnchor, EventEnvelope, TurnPrepared, TurnProviderBound, CancelCommand, preparation_digest,
 )
+from ..application.codex_turn_execution_models import ControlEventEnvelope, RunnableTurnPrepared
 from ..application.errors import ApiError
 from ..application.providers import checked_provider_configuration
-from ..codex_turn_dto import CodexTurnControlView
+from ..codex_turn_dto import CodexTurnControlView, CodexConsentControl
 from ..serialization import canonical_json, content_sha256
 from .codex_turn_jobs import CodexTurnJobs
 from .security import SessionIdentity, historical_session_belongs_to
@@ -20,9 +21,10 @@ from .security import SessionIdentity, historical_session_belongs_to
 
 @dataclass
 class CheckedTurn:
-    prepared: TurnPrepared
+    prepared: TurnPrepared | RunnableTurnPrepared
     control: CodexTurnControlView
     sequence: int
+    provider_bindings: list[TurnProviderBound] = field(default_factory=list)
 
 
 @dataclass
@@ -30,7 +32,7 @@ class CheckedSession:
     anchor: SessionAnchor
     revision: int
     active_turn_id: str | None
-    envelopes: list[EventEnvelope] = field(default_factory=list)
+    envelopes: list[EventEnvelope | ControlEventEnvelope] = field(default_factory=list)
     turns: dict[str, CheckedTurn] = field(default_factory=dict)
 
 
@@ -44,7 +46,7 @@ def decode(model, raw: str):
         raise damaged() from None
 
 
-def turn_control(prepared: TurnPrepared, finished: str | None = None) -> CodexTurnControlView:
+def turn_control(prepared: TurnPrepared | RunnableTurnPrepared, finished: str | None = None) -> CodexTurnControlView:
     view = prepared.command.ack
     terminal = finished is not None
     return CodexTurnControlView(id=view.turn_id, session_id=view.session_id,
@@ -93,8 +95,7 @@ class CodexTurnRepository:
                 or {row['job_id'] for row in members} != self.jobs.member_ids()
                 or {(row['session_id'], row['seq'], row['record_sha256']) for row in events}
                     != {(row['session_id'], row['seq'], row['record_sha256']) for row in witnesses}
-                or {(row['session_id'], row['seq']) for row in events}
-                    != {(row['session_id'], row['seq']) for row in commands}):
+                ):
             raise damaged()
         # Core Run/thread membership independently detects deletion of the
         # entire Codex table family without rebuilding an empty default.
@@ -103,6 +104,7 @@ class CodexTurnRepository:
             raise damaged()
         result = {}
         seen_members = set()
+        seen_commands = set()
         for row in anchors:
             anchor = decode(SessionAnchor, row['record_json'])
             original = bootstrap.get(anchor.session_id)
@@ -123,21 +125,26 @@ class CodexTurnRepository:
             if len(selected) != head['event_count']:
                 raise damaged()
             for seq, stored in enumerate(selected, 1):
-                envelope = decode(EventEnvelope, stored['record_json'])
+                raw = strict_json(stored['record_json'])
+                envelope = decode(ControlEventEnvelope if raw.get('version') == 'codex-turn-event-v2' else EventEnvelope, stored['record_json'])
                 if (envelope.session_id != anchor.session_id or envelope.workspace_id != self.workspace
                         or envelope.seq != seq or stored['seq'] != seq or envelope.previous_sha256 != digest
                         or content_sha256(envelope) != stored['record_sha256']):
                     raise damaged()
-                event, command = envelope.event, envelope.event.command
-                registration = next(item for item in commands if item['session_id'] == anchor.session_id and item['seq'] == seq)
-                if (command.workspace_id != self.workspace or registration['actor_session_id'] != command.actor_session_id
+                event, command = envelope.event, getattr(envelope.event, 'command', None)
+                if command is not None:
+                    registration = next((item for item in commands if item['session_id'] == anchor.session_id and item['seq'] == seq), None)
+                    if (registration is None or command.workspace_id != self.workspace or registration['actor_session_id'] != command.actor_session_id
                         or registration['route'] != command.route or registration['target_id'] != command.target_id
                         or registration['command_key'] != command.key or registration['command_sha256'] != content_sha256(command)
                         or not historical_session_belongs_to(self.conn, self.workspace, command.actor_session_id)):
-                    raise damaged()
-                if isinstance(event, TurnPrepared):
+                        raise damaged()
+                    seen_commands.add((anchor.session_id, seq))
+                if isinstance(event, (TurnPrepared, RunnableTurnPrepared)):
                     self._prepared(state, event, envelope, members)
                     seen_members.add(event.input.turn_id)
+                elif isinstance(event, TurnProviderBound):
+                    self._provider_bound(state, event)
                 else:
                     turn = state.turns.get(event.turn_id)
                     if turn is None or not isinstance(command, CancelCommand) or command.target_id != turn.control.job.id:
@@ -147,7 +154,7 @@ class CodexTurnRepository:
                     if event.kind == 'cancelled':
                         if state.active_turn_id != event.turn_id or turn.control.execution != 'not_started':
                             raise damaged()
-                        turn.control = turn_control(turn.prepared, envelope.occurred_at)
+                        turn.control = self.cancelled_control(turn.control, envelope.occurred_at)
                         if (event.requested_session_revision != state.revision + 1
                                 or event.terminal_session_revision != state.revision + 2):
                             raise damaged()
@@ -166,7 +173,8 @@ class CodexTurnRepository:
             for turn in state.turns.values():
                 self._run(state.anchor, turn)
             result[anchor.session_id] = state
-        if seen_members != {row['turn_id'] for row in members}:
+        if (seen_members != {row['turn_id'] for row in members}
+                or seen_commands != {(row['session_id'], row['seq']) for row in commands}):
             raise damaged()
         return result
 
@@ -185,7 +193,8 @@ class CodexTurnRepository:
                 or ack.actor_session_id != value.actor_session_id or ack.session_id != value.session_id
                 or ack.turn_id != value.turn_id or ack.job != dm.JobRef(id=value.job_id, status='awaiting_approval')
                 or ack.request != value.request or ack.summary.tools != value.request.tools
-                or ack.session_revision != state.revision + 1 or ack.validity != 'unavailable'
+                or ack.session_revision != state.revision + 1
+                or ack.validity != ('current' if isinstance(event, RunnableTurnPrepared) else 'unavailable')
                 or ack.proposal_id is not None or ack.consent_id is not None
                 or ack.created_at != envelope.occurred_at or preparation_digest(self.workspace, ack) != ack.preparation_sha256
                 or member['session_id'] != value.session_id or member['job_id'] != value.job_id
@@ -203,6 +212,33 @@ class CodexTurnRepository:
         state.revision += 1
         state.active_turn_id = value.turn_id
         state.turns[value.turn_id] = CheckedTurn(event, turn_control(event), envelope.seq)
+
+    @staticmethod
+    def cancelled_control(control: CodexTurnControlView, now: str) -> CodexTurnControlView:
+        return CodexTurnControlView.model_validate({**control.model_dump(), 'job': {'id':control.job.id,'status':'cancelled'},
+            'job_revision':control.job_revision+1,'run_revision':control.run_revision+1,'last_seq':control.last_seq+1,
+            'cancel_requested':True,'execution':'terminal','outcome':'cancelled','finished_at':now,'error_code':'CODEX_CANCELLED'})
+
+    @staticmethod
+    def _provider_bound(state: CheckedSession, event: TurnProviderBound) -> None:
+        turn = state.turns.get(event.turn_id)
+        if turn is None:
+            raise damaged()
+        previous = turn.provider_bindings[-1] if turn.provider_bindings else None
+        if (event.provider_seq != (previous.provider_seq+1 if previous else 1)
+                or previous is not None and event.proposal_id != previous.proposal_id
+                or previous is not None and previous.consent_id is not None and event.consent_id != previous.consent_id
+                or (event.consent_id is None) != (event.consent_revision is None)
+                or (event.consent_id is None) != (event.consent_status is None)):
+            raise damaged()
+        control = None
+        if event.consent_id is not None:
+            if event.consent_revision is None or event.consent_status is None:
+                raise damaged()
+            control = CodexConsentControl(id=event.consent_id, revision=event.consent_revision, status=event.consent_status)
+        turn.control = CodexTurnControlView.model_validate({**turn.control.model_dump(),
+            'consent_control':control.model_dump() if control else None})
+        turn.provider_bindings.append(event)
 
     def _run(self, anchor, turn):
         row = self.jobs.load(turn.control.job.id)
@@ -234,30 +270,42 @@ class CodexTurnRepository:
         self.conn.execute('INSERT INTO codex_turn_heads VALUES(?,?,2,0,?,NULL)', (anchor.session_id, self.workspace, digest))
         return CheckedSession(anchor, 2, None)
 
-    def append(self, state: CheckedSession, event, now: str) -> EventEnvelope:
+    def append(self, state: CheckedSession, event, now: str) -> EventEnvelope | ControlEventEnvelope:
         seq = len(state.envelopes) + 1
         previous = content_sha256(state.envelopes[-1]) if state.envelopes else content_sha256(state.anchor)
-        envelope = EventEnvelope(version='codex-turn-event-v1', workspace_id=self.workspace,
-            session_id=state.anchor.session_id, seq=seq, previous_sha256=previous, occurred_at=now, event=event)
+        extended = isinstance(event, (RunnableTurnPrepared, TurnProviderBound))
+        envelope: ControlEventEnvelope | EventEnvelope
+        if extended:
+            envelope = ControlEventEnvelope(version='codex-turn-event-v2', workspace_id=self.workspace,
+                session_id=state.anchor.session_id, seq=seq, previous_sha256=previous, occurred_at=now, event=event)
+        else:
+            envelope = EventEnvelope(version='codex-turn-event-v1', workspace_id=self.workspace,
+                session_id=state.anchor.session_id, seq=seq, previous_sha256=previous, occurred_at=now, event=event)
         digest = content_sha256(envelope)
         self.conn.execute('INSERT INTO codex_turn_events VALUES(?,?,?,?,?)',
             (state.anchor.session_id, self.workspace, seq, canonical_json(envelope), digest))
         self.conn.execute('INSERT INTO codex_turn_event_members VALUES(?,?,?,?)', (state.anchor.session_id, self.workspace, seq, digest))
-        command = event.command
-        self.conn.execute('INSERT INTO codex_turn_commands VALUES(?,?,?,?,?,?,?,?)',
-            (self.workspace, command.actor_session_id, command.route, command.target_id, command.key,
-             state.anchor.session_id, seq, content_sha256(command)))
-        if isinstance(event, TurnPrepared):
-            view = command.ack
+        command = getattr(event, 'command', None)
+        if command is not None:
+            self.conn.execute('INSERT INTO codex_turn_commands VALUES(?,?,?,?,?,?,?,?)',
+                (self.workspace, command.actor_session_id, command.route, command.target_id, command.key,
+                 state.anchor.session_id, seq, content_sha256(command)))
+        if isinstance(event, (TurnPrepared, RunnableTurnPrepared)):
+            view = event.command.ack
             self.conn.execute('INSERT INTO codex_turn_members(sequence,turn_id,session_id,workspace_id,job_id,preparation_id,preparation_sha256,prepared_seq) VALUES(?,?,?,?,?,?,?,?)',
                 (event.creation_sequence, view.turn_id, view.session_id, self.workspace, view.job.id, view.id, view.preparation_sha256, seq))
             self.conn.execute('INSERT INTO runs VALUES(?,?,?,?)',
                 (view.job.id, state.anchor.thread_id, view.summary.context_snapshot_id, canonical_json(turn_control(event))))
             revision, active = state.revision + 1, view.turn_id
         elif event.kind == 'cancelled':
-            control = turn_control(state.turns[event.turn_id].prepared, now)
+            control = self.cancelled_control(state.turns[event.turn_id].control, now)
             self.conn.execute('UPDATE runs SET snapshot_json=? WHERE id=?', (canonical_json(control), control.job.id))
             revision, active = state.revision + 2, None
+        elif isinstance(event, TurnProviderBound):
+            self._provider_bound(state, event)
+            control = state.turns[event.turn_id].control
+            self.conn.execute('UPDATE runs SET snapshot_json=? WHERE id=?', (canonical_json(control), control.job.id))
+            revision, active = state.revision, state.active_turn_id
         else:
             revision, active = state.revision, state.active_turn_id
         updated = self.conn.execute('UPDATE codex_turn_heads SET revision=?,event_count=?,head_sha256=?,active_turn_id=? WHERE session_id=? AND revision=? AND event_count=? AND head_sha256=?',
@@ -270,8 +318,8 @@ class CodexTurnRepository:
     def replay(history, identity: SessionIdentity, route: str, target: str, key: str, body: BaseModel):
         for state in history.values():
             for envelope in state.envelopes:
-                command = envelope.event.command
-                if (command.actor_session_id, command.route, command.target_id, command.key) == (identity.id, route, target, key):
+                command = getattr(envelope.event, 'command', None)
+                if command is not None and (command.actor_session_id, command.route, command.target_id, command.key) == (identity.id, route, target, key):
                     if canonical_json(command.body) != canonical_json(body):
                         raise ApiError(409, 'IDEMPOTENCY_CONFLICT', '原命令与本次完整输入不一致。')
                     return command.ack

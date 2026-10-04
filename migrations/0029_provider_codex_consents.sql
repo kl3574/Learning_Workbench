@@ -1,0 +1,16 @@
+-- Provider-owned Codex outbound history; old Provider wire and tables stay intact.
+CREATE TABLE provider_codex_heads(workspace_id TEXT NOT NULL REFERENCES workspace(id),turn_id TEXT PRIMARY KEY,event_count INTEGER NOT NULL CHECK(event_count>0),head_sha256 TEXT NOT NULL);
+CREATE TABLE provider_codex_events(workspace_id TEXT NOT NULL REFERENCES workspace(id),turn_id TEXT NOT NULL,seq INTEGER NOT NULL CHECK(seq>0),record_json TEXT NOT NULL CHECK(json_valid(record_json)),record_sha256 TEXT NOT NULL,PRIMARY KEY(turn_id,seq));
+CREATE TABLE provider_codex_members(workspace_id TEXT NOT NULL REFERENCES workspace(id),turn_id TEXT NOT NULL,seq INTEGER NOT NULL,record_sha256 TEXT NOT NULL,PRIMARY KEY(turn_id,seq));
+CREATE TABLE provider_codex_commands(workspace_id TEXT NOT NULL REFERENCES workspace(id),actor_session_id TEXT NOT NULL REFERENCES local_sessions(id),route TEXT NOT NULL,command_key TEXT NOT NULL,turn_id TEXT NOT NULL,seq INTEGER NOT NULL,command_sha256 TEXT NOT NULL,PRIMARY KEY(workspace_id,actor_session_id,route,command_key),UNIQUE(turn_id,seq));
+CREATE TRIGGER provider_codex_heads_delete BEFORE DELETE ON provider_codex_heads BEGIN SELECT RAISE(ABORT,'immutable codex provider history'); END;
+CREATE TRIGGER provider_codex_heads_insert BEFORE INSERT ON provider_codex_heads WHEN EXISTS(SELECT 1 FROM provider_codex_heads WHERE turn_id=NEW.turn_id) BEGIN SELECT RAISE(ABORT,'immutable codex provider history'); END;
+CREATE TRIGGER provider_codex_events_update BEFORE UPDATE ON provider_codex_events BEGIN SELECT RAISE(ABORT,'immutable codex provider history'); END;
+CREATE TRIGGER provider_codex_events_delete BEFORE DELETE ON provider_codex_events BEGIN SELECT RAISE(ABORT,'immutable codex provider history'); END;
+CREATE TRIGGER provider_codex_events_insert BEFORE INSERT ON provider_codex_events WHEN EXISTS(SELECT 1 FROM provider_codex_events WHERE turn_id=NEW.turn_id AND seq=NEW.seq) BEGIN SELECT RAISE(ABORT,'immutable codex provider history'); END;
+CREATE TRIGGER provider_codex_members_update BEFORE UPDATE ON provider_codex_members BEGIN SELECT RAISE(ABORT,'immutable codex provider history'); END;
+CREATE TRIGGER provider_codex_members_delete BEFORE DELETE ON provider_codex_members BEGIN SELECT RAISE(ABORT,'immutable codex provider history'); END;
+CREATE TRIGGER provider_codex_members_insert BEFORE INSERT ON provider_codex_members WHEN EXISTS(SELECT 1 FROM provider_codex_members WHERE turn_id=NEW.turn_id AND seq=NEW.seq) BEGIN SELECT RAISE(ABORT,'immutable codex provider history'); END;
+CREATE TRIGGER provider_codex_commands_update BEFORE UPDATE ON provider_codex_commands BEGIN SELECT RAISE(ABORT,'immutable codex provider history'); END;
+CREATE TRIGGER provider_codex_commands_delete BEFORE DELETE ON provider_codex_commands BEGIN SELECT RAISE(ABORT,'immutable codex provider history'); END;
+CREATE TRIGGER provider_codex_commands_insert BEFORE INSERT ON provider_codex_commands WHEN EXISTS(SELECT 1 FROM provider_codex_commands WHERE turn_id=NEW.turn_id AND seq=NEW.seq OR workspace_id=NEW.workspace_id AND actor_session_id=NEW.actor_session_id AND route=NEW.route AND command_key=NEW.command_key) BEGIN SELECT RAISE(ABORT,'immutable codex provider history'); END;
