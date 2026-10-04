@@ -129,7 +129,7 @@ def observe_interrupt(source: InterruptProtocolSource, exchange: InterruptExchan
             member = ObservedInterruptReply(kind='control_reply', frame=frame, wire=reply)
             matches = type(reply.id) is type(original.request.wire.id) and reply.id == original.request.wire.id
         _validate_frame(_schemas(checked), body, member.kind)
-    except (ValueError, SchemaError):
+    except (ValueError, SchemaError, RecursionError):
         return rejected('unsupported_shape')
     if not matches:
         return rejected('unpaired')
