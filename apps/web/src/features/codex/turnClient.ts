@@ -1,4 +1,4 @@
-import type { JobRef, SessionResponse } from '../../../../../packages/contracts/generated/api-types'
+import type { JobSnapshot, SessionResponse } from '../../../../../packages/contracts/generated/api-types'
 import type { CodexCurrentSessionView, CodexTurnControlView, CodexTurnPage, CodexTurnPreparationView, CodexTurnPrepareWrite } from '../../../../../packages/contracts/generated/codex-turn-types'
 import schemas from '../../../../../packages/contracts/generated/codex-turn-schemas.json'
 import { request } from '../../api/client'
@@ -72,6 +72,12 @@ export function checkedTurn<N extends keyof TurnWire>(name: N, raw: unknown): Tu
  } catch { return invalid() }
 }
 function identity(id: string) { if (!validIdentity(id)) invalid(); return id }
+/** Preserve the Jobs owner's complete ACK; it remains a historical fact, not current control. */
+export function checkedTurnJob(raw: unknown, jobId: string, workspace?: string): JobSnapshot {
+ const value = checkedProvider<JobSnapshot>('JobSnapshot', raw)
+ if (value.id !== jobId || value.kind !== 'codex_turn' || workspace !== undefined && value.workspace_id !== workspace) invalid()
+ return value
+}
 export type TurnPageQuery = { cursor?: string; limit?: number }
 export type TurnPort = {
  session(): Promise<SessionResponse>
@@ -80,7 +86,7 @@ export type TurnPort = {
  preparation(id: string): Promise<CodexTurnPreparationView>
  control(id: string): Promise<CodexTurnControlView>
  turns(id: string, query?: TurnPageQuery): Promise<CodexTurnPage>
- cancel(jobId: string, expectedRevision: number, key: string): Promise<JobRef>
+ cancel(jobId: string, expectedRevision: number, key: string): Promise<JobSnapshot>
 }
 export const turnClient: TurnPort = {
  session: bootstrapClient.session,
@@ -111,7 +117,6 @@ export const turnClient: TurnPort = {
  },
  cancel: async (jobId, expectedRevision, key) => {
   const body = checkedProvider<{ expected_revision: number }>('JobCancelRequest', { expected_revision: expectedRevision })
-  const value = checkedProvider<JobRef>('JobRef', await request('POST /api/v1/jobs/{id}/cancel', body, { 'Idempotency-Key': key }, { path: { id: identity(jobId) } }))
-  if (value.id !== jobId) invalid(); return value
+  return checkedTurnJob(await request('POST /api/v1/jobs/{id}/cancel', body, { 'Idempotency-Key': key }, { path: { id: identity(jobId) } }), jobId)
  },
 }
