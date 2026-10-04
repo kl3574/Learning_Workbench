@@ -41,7 +41,7 @@ export function CodexTurnPanel({ workspace, writeAdmitted, port, store, formStor
    <p>只发送明确选定的完整公开块修订。切换阅读位置不会替换已选引用；是否仍可读取由服务端重新核验。</p>
    <button disabled={state.busy || !state.canPrepare} onClick={() => void state.prepare()}>明确准备回合并预约 Job</button>
    <p>每次编辑保存独立本机快照，关闭后保留，恢复需再次明确选择。旧未知命令不随表单修改；重放须使用下面的原 key。</p>
-   {state.forms.map(value => <button key={value.snapshot_id} disabled={state.busy} onClick={() => state.restoreForm(value)}>恢复原表单 {value.draft_id} · {value.sequence}</button>)}
+   {state.forms.map(value => <button key={value.snapshot_id} disabled={state.busy} onClick={() => void state.restoreForm(value)}>恢复原表单 {value.draft_id} · {value.sequence}</button>)}
   </section>}
   <section aria-label="回合原命令与历史 ACK"><h4>原命令与历史 ACK</h4>
    <p>准备正文只向原作者且当前策略允许时显示。已保存表单和未知命令在权限变化后仍保留；历史 ACK 不更新当前 GET。</p>

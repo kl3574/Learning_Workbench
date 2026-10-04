@@ -7,7 +7,7 @@ import { sameValue } from '../providers/providerSchema'
 import { checkedBootstrap } from './bootstrapClient'
 import { checkedTurn, turnClient, type TurnPort } from './turnClient'
 import { decodeTurnCommand, persistTurnCommand, readTurnCommand, turnCancelCommand, turnIdentity, turnPrepareCommand, turnStore, type TurnCommand } from './turnCommands'
-import { emptyTurnFields, persistTurnForm, readTurnForm, snapshotTurnForm, turnFormBody, turnFormStore, type TurnFields, type TurnForm } from './turnForms'
+import { decodeTurnForm, emptyTurnFields, persistTurnForm, readTurnForm, snapshotTurnForm, turnFormBody, turnFormStore, type TurnFields, type TurnForm } from './turnForms'
 import { heldTurnCommands, heldTurnForms, releaseTurnCommand, releaseTurnForm, retainTurnCommand, retainTurnForm, subscribeTurnMemory, turnMemoryVersion } from './turnMemory'
 
 const academic = (s: SessionResponse) => s.role === 'author' && !s.active_independent_attempt_id && !s.active_open_book_attempt_id
@@ -87,15 +87,32 @@ export function useCodexTurns(workspace: string, writeAdmitted: boolean, port: T
   if (!ready || working.current) return
   edit({ session_id: id }); setSelected(id); setCurrent(null); setPage(null); setControls({}); setDetail(null)
  }
- const restoreForm = (value: TurnForm) => {
-  if (!allowed || working.current || value.actor_session_id !== identity.actor_session_id) return
-  // Editing a restored snapshot creates a separate branch; the original remains recoverable.
-  const next = snapshotTurnForm(workspace, identity.actor_session_id, value.fields, null)
-  formRef.current = next; setForm(next); setSelected(value.fields.session_id); setCurrent(null); setPage(null); setControls({}); setDetail(null)
-  retainTurnForm(next)
-  const saving = writer(() => currentScope() && actorRef.current?.actor_session_id === next.actor_session_id && academic(actorRef.current) && writeAdmitted)
-  void persistTurnForm(next, formStore, saving.guard).then(() => { releaseTurnForm(next); if (currentScope()) setForms(v => [...v, next]) })
-   .catch(() => { if (currentScope()) setError('恢复表单尚未保存；隔离内存保留原输入。') }).finally(saving.done)
+ const restoreForm = async (value: TurnForm) => {
+  if (!allowed || value.workspace_id !== workspace || value.actor_session_id !== identity.actor_session_id) return
+  const actor = identity.actor_session_id, token = begin(); if (token === null) return
+  const saving = writer(() => valid(token) && actorRef.current?.actor_session_id === actor && academic(actorRef.current) && writeAdmitted)
+  try {
+   const original = decodeTurnForm(JSON.stringify(value), workspace)
+   await fresh(token, true, actor)
+   const record = (await formStore.load(workspace))[original.snapshot_id]
+   if (!valid(token)) return
+   const held = heldTurnForms(workspace).find(v => v.snapshot_id === original.snapshot_id)
+   // A displayed list item is not a fresh local baseline. Recheck the complete
+   // immutable original; damaged durable data cannot fall back to memory.
+   const checked = record ? readTurnForm(record, workspace) : held
+   if (!checked || !sameValue(checked, original) || held && !sameValue(held, original)) throw new Error('Saved form changed')
+   await fresh(token, true, actor)
+   // Only an admitted restore creates a new branch. Its original always stays.
+   const next = snapshotTurnForm(workspace, actor, original.fields, null)
+   retainTurnForm(next)
+   await persistTurnForm(next, formStore, saving.guard); releaseTurnForm(next)
+   if (!valid(token)) return
+   await fresh(token, true, actor)
+   if (valid(token)) {
+    formRef.current = next; setForm(next); setSelected(original.fields.session_id); setCurrent(null); setPage(null); setControls({}); setDetail(null)
+    setForms(v => [...v, next]); setMessage('原表单已核验并恢复为独立本机分支；未发送准备或取消请求。')
+   }
+  } catch (reason) { if (valid(token)) fail(reason) } finally { saving.done(); finish(token) }
  }
  const readCurrent = async () => {
   if (!ready || !turnIdentity(selected)) return
