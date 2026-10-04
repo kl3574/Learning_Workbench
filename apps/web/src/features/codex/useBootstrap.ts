@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { SessionResponse } from '../../../../../packages/contracts/generated/api-types'
-import type { CodexBootstrapPreparationView, CodexSessionView } from '../../../../../packages/contracts/generated/codex-bootstrap-types'
+import type { CodexBootstrapPreparationView } from '../../../../../packages/contracts/generated/codex-bootstrap-types'
+import type { CodexCurrentSessionView } from '../../../../../packages/contracts/generated/codex-turn-types'
 import { ApiError, getSessionGeneration, subscribeSessionAccess } from '../../api/client'
 import { type DraftStore } from '../../workbench/DraftStore'
 import { validIdentity } from '../providers/providerSchema'
@@ -24,7 +25,7 @@ export function useBootstrap(workspace: string, writeAdmitted: boolean, port: Bo
  const [renderScope, setRenderScope] = useState({ owner, port, store }), [identity, setIdentity] = useState<SessionResponse | null>(null)
  const [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState('')
  const [commands, setCommands] = useState<BootstrapCommand[]>([]), [current, setCurrent] = useState<CodexBootstrapPreparationView | null>(null)
- const [sessions, setSessions] = useState<Record<string, CodexSessionView>>({})
+ const [sessions, setSessions] = useState<Record<string, CodexCurrentSessionView>>({})
  const currentScope = () => live.current && scope.current.owner === owner && scope.current.port === port && scope.current.store === store && access === getSessionGeneration()
  const valid = (token: number) => currentScope() && sequence.current === token
  const visible = renderScope.owner === owner && renderScope.port === port && renderScope.store === store
@@ -120,9 +121,9 @@ export function useBootstrap(workspace: string, writeAdmitted: boolean, port: Bo
    if (value.id !== id) throw new Error('Wrong preparation')
    if (!valid(token)) return
    setIdentity(session); setCurrent(value)
-   let linked: CodexSessionView | null = null
+   let linked: CodexCurrentSessionView | null = null
    if (value.session_id) {
-    linked = checkedBootstrap<CodexSessionView>('CodexSessionView', await port.read(value.session_id))
+    linked = checkedBootstrap<CodexCurrentSessionView>('CodexCurrentSessionView', await port.read(value.session_id))
     if (linked.id !== value.session_id || linked.adapter_version !== value.scope.adapter_version) throw new Error('Wrong session binding')
    }
    if (valid(token)) { setIdentity(session); setCurrent(value); if (linked) setSessions(previous => ({ ...previous, [linked.id]: linked! })) }

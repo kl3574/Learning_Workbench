@@ -1,6 +1,8 @@
 import type { ApprovalDecision, SessionResponse } from '../../../../../packages/contracts/generated/api-types'
 import type { CodexBootstrapDecisionAck, CodexBootstrapPreparationView, CodexBootstrapPreparationWrite, CodexBootstrapScope, CodexSessionCreateAck, CodexSessionCreateWrite, CodexSessionView } from '../../../../../packages/contracts/generated/codex-bootstrap-types'
 import bootstrapSchemas from '../../../../../packages/contracts/generated/codex-bootstrap-schemas.json'
+import type { CodexCurrentSessionView } from '../../../../../packages/contracts/generated/codex-turn-types'
+import turnSchemas from '../../../../../packages/contracts/generated/codex-turn-schemas.json'
 import { request } from '../../api/client'
 import { checkedProvider } from '../providers/providerSchema'
 
@@ -10,7 +12,7 @@ export type BootstrapPort = {
   preparation(id: string): Promise<CodexBootstrapPreparationView>
   decide(id: string, body: ApprovalDecision, key: string): Promise<CodexBootstrapDecisionAck>
   create(body: CodexSessionCreateWrite, key: string): Promise<CodexSessionCreateAck>
-  read(id: string): Promise<CodexSessionView>
+  read(id: string): Promise<CodexCurrentSessionView>
 }
 
 const invalid = (): never => { throw new Error('Inconsistent bootstrap metadata') }
@@ -28,7 +30,9 @@ function safeLabel(value: string) {
 function scope(value: CodexBootstrapScope) { safeLabel(value.sandbox_label); safeLabel(value.adapter_version) }
 export function checkedBootstrap<T>(name: string, raw: unknown): T {
   try {
-    const checked = checkedProvider<T>(name, raw, name in bootstrapSchemas.schemas ? bootstrapSchemas.schemas : undefined)
+    const schemas = name === 'CodexCurrentSessionView' ? turnSchemas.schemas
+      : name in bootstrapSchemas.schemas ? bootstrapSchemas.schemas : undefined
+    const checked = checkedProvider<T>(name, raw, schemas)
     if (name === 'CodexBootstrapPreparationView') {
       const value = checked as CodexBootstrapPreparationView
       scope(value.scope)
@@ -41,6 +45,13 @@ export function checkedBootstrap<T>(name: string, raw: unknown): T {
       const value = checked as CodexBootstrapDecisionAck
       utcMicros(value.decided_at)
       if ((value.consent_id !== null) !== (value.decision === 'approve_once')) invalid()
+    } else if (name === 'CodexCurrentSessionView') {
+      const value = checked as CodexCurrentSessionView
+      safeLabel(value.adapter_version)
+      const empty = value.active_turn_id === null && !Object.values(value.capabilities).some(Boolean)
+      if (value.status === 'ready') {
+        if (value.revision < 2 || value.revision === 2 && !empty) invalid()
+      } else if (value.revision !== (value.status === 'initializing' ? 1 : 2) || !empty) invalid()
     } else if (name === 'CodexSessionView' || name === 'CodexSessionCreateAck') {
       const value = checked as CodexSessionView | CodexSessionCreateAck
       safeLabel(value.adapter_version)
@@ -58,5 +69,5 @@ export const bootstrapClient: BootstrapPort = {
   preparation: async id => checkedBootstrap('CodexBootstrapPreparationView', await request('GET /api/v1/codex/session-preparations/{id}', undefined, undefined, { path: { id } })),
   decide: async (id, body, key) => checkedBootstrap('CodexBootstrapDecisionAck', await request('POST /api/v1/codex/session-preparations/{id}/decision', body, keyHeader(key), { path: { id } })),
   create: async (body, key) => checkedBootstrap('CodexSessionCreateAck', await request('POST /api/v1/codex/sessions', body, keyHeader(key))),
-  read: async id => checkedBootstrap('CodexSessionView', await request('GET /api/v1/codex/sessions/{id}', undefined, undefined, { path: { id } })),
+  read: async id => checkedBootstrap('CodexCurrentSessionView', await request('GET /api/v1/codex/sessions/{id}', undefined, undefined, { path: { id } })),
 }

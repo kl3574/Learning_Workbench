@@ -43,6 +43,6 @@ export function CodexBootstrapPanel({ workspace, writeAdmitted, port, store, onS
    {value.status === 'ready' ? <p>ready 仅表示已核验 thread 映射；不代表账号授权、模型能力或进程仍在运行。</p>
     : value.status === 'unknown' ? <p>旧实例结果未知。不会自动再启动；如需另试，须另建准备并重新批准。</p>
     : value.status === 'initializing' ? <p>开始许可已登记，尚不能断言 thread 已建立。</p> : <p>本次本地会话创建失败；保留原事实。</p>}
-   <p>active_turn_id：null；审批、interrupt、artifacts：false。</p></section>)}
+   <p>active_turn_id：{value.active_turn_id ?? 'null'}；审批、interrupt、artifacts：{String(value.capabilities.approvals)}、{String(value.capabilities.interrupt)}、{String(value.capabilities.artifacts)}。</p></section>)}
  </section>
 }
