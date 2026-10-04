@@ -13,6 +13,7 @@ export function CodexArtifactsPanel({ workspace, writeAdmitted, port, store, for
  const [preview, setPreview] = useState<{ workspace: string; actor: string; target: RecoveryId } | null>(null)
  const [previewState, setPreviewState] = useState<{ dirty: boolean; safe: boolean; discardForms?: () => void }>({ dirty: false, safe: true })
  const previewAllowed = state.allowed && preview?.workspace === workspace && preview.actor === state.actor
+ const canOpenPreview = !preview || !previewAllowed && previewState.safe && !previewState.dirty
  const dirty = state.dirty || previewState.dirty, safe = state.safe && previewState.safe, isolated = state.isolated && previewState.safe
  useEffect(() => { callback.current?.({ dirty, safe, isolated, discardForms: previewState.discardForms }) }, [dirty, safe, isolated, previewState.discardForms])
  const m = state.manifest, selection = state.fields.selection, using = !!m && !!selection && sameValue(selection.basis, m)
@@ -58,14 +59,19 @@ export function CodexArtifactsPanel({ workspace, writeAdmitted, port, store, for
    {state.aggregate && <section aria-label="回导聚合当前 GET"><h4>回导聚合与 Import 子项</h4><p>聚合 Job {state.aggregate.view.job.id} · {state.aggregate.view.job.status}；原 actor {state.aggregate.view.actor_session_id}。</p>
     <p>聚合 completed 仅表示预览准备完成，不授予人工质量批准。</p>
     <ol>{state.aggregate.view.items.map(item => <li key={item.artifact_id}><p>{item.artifact_id} → Import {item.import_id}；子 Job {item.job.id} · {item.job.status}</p><code style={{ overflowWrap: 'anywhere' }}>{item.source_sha256}</code>
-     <button disabled={state.busy || !!preview} onClick={() => void open(item.import_id)}>打开普通 Import 预览 {item.import_id}</button></li>)}</ol>
+     <button disabled={state.busy || !canOpenPreview} onClick={() => void open(item.import_id)}>打开普通 Import 预览 {item.import_id}</button></li>)}</ol>
    </section>}
   </>}
+  {preview && !previewAllowed && <section aria-label="已隔离的旧 Import 预览">
+   <p>旧作者或工作区的预览已隔离。原回导命令和表单保留；无临时设置时可明确打开当前子项。</p>
+   {previewState.dirty ? <button disabled={!previewState.safe} onClick={() => { if (previewState.safe) { previewState.discardForms?.(); setPreview(null) } }}>保留原命令，明确丢弃旧预览临时设置并关闭</button>
+    : <button disabled={!previewState.safe} onClick={() => setPreview(null)}>关闭已隔离的只读预览</button>}
+  </section>}
   {preview && <div hidden={!previewAllowed}>
    <p>已进入普通 Import 流程。请明确读取原候选；任何后续确认或审核仍需单独操作。</p>
    {previewState.dirty && <button disabled={!previewState.safe} onClick={() => previewState.discardForms?.()}>保留原回导事实，丢弃当前预览临时设置</button>}
    <button disabled={!previewState.safe || previewState.dirty} onClick={() => setPreview(null)}>关闭普通 Import 预览</button>
-   <ImportWorkflow workspaceId={preview.workspace} paused={!previewAllowed} requestedImport={preview.target} close={() => { if (previewState.safe && !previewState.dirty) setPreview(null) }} onState={setPreviewState} />
+   <ImportWorkflow key={`${preview.workspace}:${preview.actor}:${preview.target.importId}`} workspaceId={preview.workspace} paused={!previewAllowed} requestedImport={preview.target} close={() => { if (previewState.safe && !previewState.dirty) setPreview(null) }} onState={setPreviewState} />
   </div>}
  </section>
 }
