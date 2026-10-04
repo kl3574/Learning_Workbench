@@ -76,7 +76,7 @@ class CodexTurnRepository:
         try:
             return self._checked(bootstrap)
         except ApiError as error:
-            if error.code in {"PROVIDER_INTEGRITY_INVALID", "AUTHORING_INTEGRITY_ERROR", "JOB_MISSING"}:
+            if error.code in {"PROVIDER_INTEGRITY_INVALID", "PROVIDER_MISSING", "AUTHORING_INTEGRITY_ERROR", "JOB_MISSING"}:
                 raise damaged() from None
             raise
         except (ValueError, TypeError, KeyError, IndexError, RecursionError):

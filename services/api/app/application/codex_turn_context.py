@@ -142,8 +142,9 @@ class CodexTurnContext:
 
     def current(self, conn: sqlite3.Connection, identity: SessionIdentity, context: TurnContext) -> bool:
         try:
-            for scope, item in zip(context.scopes, context.evidence, strict=True):
+            for scope in [*context.scopes, *context.omitted_scopes]:
                 self.content.revalidate_scope(conn, identity, scope)
+            for scope, item in zip(context.scopes, context.evidence, strict=True):
                 actual = self.content.read_material(conn, identity, scope, item.ref)
                 if actual.body != item.text.encode('utf-8'):
                     return False

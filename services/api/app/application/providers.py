@@ -55,7 +55,9 @@ def checked_provider_configuration(connection: sqlite3.Connection, identity: Ses
         raise ApiError(409, 'TRANSACTION_REQUIRED', '提供商核验需要当前事务。')
     current_session_identity(connection, identity)
     identifier(provider_id)
-    return ProviderRepository(connection, identity.workspace_id).config(provider_id, revision)
+    repository = ProviderRepository(connection, identity.workspace_id)
+    current = repository.config(provider_id)
+    return current if revision is None else repository.config(provider_id, revision)
 
 
 class ProviderService:
