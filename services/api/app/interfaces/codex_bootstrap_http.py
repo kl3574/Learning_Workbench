@@ -6,8 +6,9 @@ from ..application.codex_bootstrap import CodexBootstrapService
 from ..application.errors import ApiError
 from ..codex_bootstrap_dto import (
     CodexBootstrapPreparationWrite, CodexBootstrapPreparationView, CodexBootstrapDecisionAck,
-    CodexSessionCreateWrite, CodexSessionCreateAck, CodexSessionView,
+    CodexSessionCreateWrite, CodexSessionCreateAck,
 )
+from ..codex_turn_dto import CodexCurrentSessionView
 from .content_http import query_fields
 from .http import current_identity, verify_write
 from .practice_http import private_response
@@ -19,7 +20,7 @@ async def no_control_body(request: Request) -> None:
         raise ApiError(422, 'SCHEMA_INVALID', '本地控制读取不接受请求正文。')
 
 
-def create_codex_bootstrap_router(service: CodexBootstrapService) -> APIRouter:
+def create_codex_bootstrap_router(service: CodexBootstrapService, current_sessions) -> APIRouter:
     router = APIRouter(prefix='/api/v1/codex', tags=['codex'], dependencies=[Depends(current_identity),
         Depends(unique_control_headers), Depends(private_response), Depends(query_fields())])
 
@@ -43,8 +44,8 @@ def create_codex_bootstrap_router(service: CodexBootstrapService) -> APIRouter:
     def create(body: CodexSessionCreateWrite, request: Request) -> CodexSessionCreateAck:
         return service.create_session(request.state.identity, body, command_key(request))
 
-    @router.get('/sessions/{id}', response_model=CodexSessionView, dependencies=[Depends(no_control_body)])
-    def session(id: dm.Id, request: Request) -> CodexSessionView:
-        return service.read_session(request.state.identity, id)
+    @router.get('/sessions/{id}', response_model=CodexCurrentSessionView, dependencies=[Depends(no_control_body)])
+    def session(id: dm.Id, request: Request) -> CodexCurrentSessionView:
+        return current_sessions.read_session(request.state.identity, id)
 
     return router

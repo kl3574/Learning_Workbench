@@ -44,6 +44,15 @@ class CodexBootstrapService:
         repository = CodexBootstrapRepository(connection, identity.workspace_id, self.runtime)
         return repository, repository.checked()
 
+    def checked_sessions(self, connection, identity) -> dict[str, BootstrapSnapshot]:
+        """Named original-mapping port in the caller's transaction; zero CLI.
+
+        The full original ledger and receipt are checked by this owner. A turn
+        cannot replace the historical r2 ACK with its newer current projection.
+        """
+        _, history = self._history(connection, identity, write=False)
+        return {item.session.id: item for item in history.values() if item.session is not None}
+
     @staticmethod
     def _replay(history, command):
         for snapshot in history.values():

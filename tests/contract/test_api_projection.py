@@ -78,9 +78,9 @@ def test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec():
     assert {('POST', '/api/v1/codex/session-preparations'), ('GET', '/api/v1/codex/session-preparations/{id}'),
             ('POST', '/api/v1/codex/session-preparations/{id}/decision'), ('POST', '/api/v1/codex/sessions'),
             ('GET', '/api/v1/codex/sessions/{id}')} <= projection
-    assert len(projection) == 116
+    assert len(projection) == 120
     assert len(SPEC_ROUTES) == 147
-    assert len(SPEC_ROUTES - projection) == 31
+    assert len(SPEC_ROUTES - projection) == 27
 
 
 OPERATIONS = [(path, method, operation) for path, methods in create_app().openapi()["paths"].items()
@@ -157,3 +157,15 @@ def test_saved_openapi_matches_actual_registered_handlers_and_coverage():
     assert not registered & backlog
     assert registered | backlog == declared
     assert coverage["product_acceptance"] == "NOT_RUN"
+
+
+def test_codex_turn_slice_registers_only_its_real_four_preparation_and_control_operations():
+    from services.api.app.main import create_app
+    paths = create_app().openapi()['paths']
+    assert paths['/api/v1/codex/sessions/{id}/turn-preparations']['post']['responses']['202']['content']['application/json']['schema']['$ref'].endswith('/CodexTurnPreparationView')
+    assert paths['/api/v1/codex/turn-preparations/{id}']['get']['responses']['200']['content']['application/json']['schema']['$ref'].endswith('/CodexTurnPreparationView')
+    assert paths['/api/v1/codex/sessions/{id}/turns']['get']['responses']['200']['content']['application/json']['schema']['$ref'].endswith('/CodexTurnPage')
+    assert paths['/api/v1/codex/turns/{id}']['get']['responses']['200']['content']['application/json']['schema']['$ref'].endswith('/CodexTurnControlView')
+    assert 'post' not in paths['/api/v1/codex/sessions/{id}/turns']
+    assert '/api/v1/codex/consent-previews' not in paths
+    assert '/api/v1/codex/turns/{id}/result' not in paths

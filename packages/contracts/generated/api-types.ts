@@ -520,6 +520,21 @@ export type Citation = {
   "verification": "verified" | "unverified" | "user_supplied";
 };
 
+export type CodexApprovalControl = {
+  "id": string;
+  "revision": number;
+  "operation_sha256": string;
+  "decision": "pending" | "approve_once" | "decline";
+  "validity": "current" | "expired" | "changed" | "unavailable" | "closed";
+};
+
+export type CodexBlockRef = {
+  "entity": "block";
+  "id": string;
+  "revision": number;
+  "sha256": string;
+};
+
 export type CodexBootstrapDecisionAck = {
   "preparation_id": string;
   "revision": 2;
@@ -572,10 +587,36 @@ export type CodexCapabilities = {
   "capabilities": CodexFeatures;
 };
 
+export type CodexConsentControl = {
+  "id": string;
+  "revision": number;
+  "status": "active" | "revoked" | "expired";
+};
+
+export type CodexCurrentFeatures = {
+  "approvals": boolean;
+  "interrupt": boolean;
+  "artifacts": boolean;
+};
+
+export type CodexCurrentSessionView = {
+  "id": string;
+  "revision": number;
+  "status": "initializing" | "ready" | "failed" | "unknown";
+  "active_turn_id": (string | null);
+  "adapter_version": string;
+  "capabilities": CodexCurrentFeatures;
+};
+
 export type CodexFeatures = {
   "approvals": boolean;
   "interrupt": boolean;
   "artifacts": boolean;
+};
+
+export type CodexLocalToolBudget = {
+  "max_tool_calls": number;
+  "wall_seconds": number;
 };
 
 export type CodexSandboxRoot = {
@@ -597,13 +638,87 @@ export type CodexSessionCreateWrite = {
   "allowed_actions": [];
 };
 
-export type CodexSessionView = {
+export type CodexTurnControlView = {
   "id": string;
-  "revision": number;
-  "status": "initializing" | "ready" | "failed" | "unknown";
-  "active_turn_id": null;
-  "adapter_version": string;
-  "capabilities": CodexBootstrapFeatures;
+  "session_id": string;
+  "actor_session_id": string;
+  "job": JobRef;
+  "job_revision": number;
+  "run_revision": number;
+  "last_seq": number;
+  "cancel_requested": boolean;
+  "execution": "not_started" | "active" | "terminal";
+  "outcome": ("completed" | "failed" | "incomplete" | "cancelled" | "unknown" | null);
+  "approval_ids": Array<string>;
+  "approval_controls": Array<CodexApprovalControl>;
+  "consent_control": (CodexConsentControl | null);
+  "manifest_id": (string | null);
+  "created_at": string;
+  "started_at": (string | null);
+  "finished_at": (string | null);
+  "error_code": ("CODEX_PROTOCOL_INVALID" | "CODEX_PROFILE_CHANGED" | "CODEX_RUNTIME_UNAVAILABLE" | "CODEX_BINDING_INVALID" | "CODEX_HISTORY_DAMAGED" | "CODEX_INPUT_PROOF_UNAVAILABLE" | "CODEX_OPERATION_UNSUPPORTED" | "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED" | "CODEX_TIMEOUT" | "CODEX_RESOURCE_LIMIT" | "CODEX_CANCELLED" | "CODEX_OUTCOME_UNKNOWN" | "CODEX_OPERATION_FAILED" | "CODEX_ARTIFACT_REJECTED" | "CODEX_ARTIFACT_MISSING" | "CODEX_SOURCE_CHANGED" | "CODEX_SOURCE_UNAVAILABLE" | "CODEX_APPROVAL_EXPIRED" | "CODEX_CONSENT_EXPIRED" | "CODEX_CONSENT_REVOKED" | "CODEX_BUDGET_EXCEEDED" | "POLICY_DENIED" | "ASSESSMENT_ACTIVE" | "CAPABILITY_UNSUPPORTED" | "PROVIDER_CONFIGURATION_CHANGED" | "PROVIDER_SECRET_UNAVAILABLE" | "OUTBOUND_SOURCE_CHANGED" | "OUTBOUND_SOURCE_UNAVAILABLE" | "CONSENT_REQUIRED" | "CONSENT_REVOKED" | "CONSENT_EXPIRED" | "OUTBOUND_BUDGET_EXCEEDED" | "PROVIDER_TIMEOUT" | "PROVIDER_CANCELLED" | "PROVIDER_TRANSPORT_ERROR" | "PROVIDER_PROTOCOL_ERROR" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_USAGE_INCONSISTENT" | "PROVIDER_REFUSAL" | "PROVIDER_INCOMPLETE" | null);
+};
+
+export type CodexTurnPage = {
+  "items": Array<CodexTurnControlView>;
+  "next_cursor": (string | null);
+};
+
+export type CodexTurnPreparationSummary = {
+  "context_snapshot_id": string;
+  "snapshot_sha256": string;
+  "job_input_sha256": string;
+  "prepared_input_sha256": string;
+  "runtime": CodexTurnRuntimeSummary;
+  "character_count": number;
+  "materials": Array<ReferenceSummary>;
+  "history_turn_ids": Array<string>;
+  "tools": CodexLocalToolBudget;
+  "warnings": Array<CodexTurnWarning>;
+};
+
+export type CodexTurnPreparationView = {
+  "id": string;
+  "preparation_sha256": string;
+  "actor_session_id": string;
+  "session_id": string;
+  "session_revision": number;
+  "turn_id": string;
+  "job": JobRef;
+  "request": CodexTurnPrepareWrite;
+  "summary": CodexTurnPreparationSummary;
+  "created_at": string;
+  "proposal_id": (string | null);
+  "consent_id": (string | null);
+  "validity": "current" | "changed" | "unavailable" | "closed";
+};
+
+export type CodexTurnPrepareWrite = {
+  "message": string;
+  "context_refs": Array<CodexBlockRef>;
+  "expected_session_revision": number;
+  "provider_id": string;
+  "tools": CodexLocalToolBudget;
+};
+
+export type CodexTurnRuntimeSummary = {
+  "profile_sha256": string;
+  "cpu_seconds": 60;
+  "memory_bytes": 2147483648;
+  "file_bytes": 16777216;
+  "protocol_output_bytes": 16777216;
+  "file_descriptors": 128;
+  "processes": 16;
+  "core_bytes": 0;
+  "command_network": "denied";
+  "writable_area": "turn_outputs";
+};
+
+export type CodexTurnWarning = {
+  "code": string;
+  "message": string;
+  "locator": (string | null);
+  "severity": "info" | "warning" | "error";
 };
 
 export type Concept = {
