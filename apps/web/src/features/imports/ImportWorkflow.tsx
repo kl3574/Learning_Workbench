@@ -6,7 +6,7 @@ import { FailedOriginal } from './FailedOriginal'
 import { ReviewWarnings } from './ReviewWarnings'
 import { UploadForm } from './UploadForm'
 import { useImportWorkflow } from './useImportWorkflow'
-import { validImportId } from './recovery'
+import { validImportId, type RecoveryId } from './recovery'
 import { emptyReviewPanelState, pendingReviewForms, discardReviewForms, subscribeReviewForms, reviewFormMemoryVersion, type ReviewPanelState } from '../draftReview/reviewFormMemory'
 import { ReviewPanel } from '../draftReview/ReviewPanel'
 import './imports.css'
@@ -14,15 +14,17 @@ import './imports.css'
 const statusLabels = { staged: '原件已暂存', parsing: '正在解析', preview_ready: '预览已就绪，等待确认', committed: '已确认入库', cancelled: '已取消', failed: '导入失败' }
 const jobLabels = { queued: '排队中', running: '运行中', awaiting_approval: '等待确认', completed: '任务已完成', failed: '任务失败', cancelled: '任务已取消' }
 
-export function ImportWorkflow({ workspaceId, paused = false, close, openCourse, onState }: { workspaceId: string; paused?: boolean; close: () => void; openCourse?: (ref: ContentRef) => void; onState?: (value: { dirty: boolean; safe: boolean; discardForms?: () => void }) => void }) {
+export function ImportWorkflow({ workspaceId, paused = false, close, openCourse, onState, requestedImport }: { workspaceId: string; paused?: boolean; requestedImport?: RecoveryId; close: () => void; openCourse?: (ref: ContentRef) => void; onState?: (value: { dirty: boolean; safe: boolean; discardForms?: () => void }) => void }) {
   const state = useImportWorkflow(workspaceId, paused)
   const [manualId, setManualId] = useState('')
   const [reviewOpen, setReviewOpen] = useState(false), [reviewState, setReviewState] = useState<ReviewPanelState>(emptyReviewPanelState)
   const callback = useRef(onState); callback.current = onState
   useSyncExternalStore(subscribeReviewForms, reviewFormMemoryVersion, reviewFormMemoryVersion)
   const heldReviewForms = pendingReviewForms(workspaceId, 'import')
-  const discardForms = useCallback(() => { reviewState.discardForms(); discardReviewForms(workspaceId, 'import') }, [workspaceId, reviewState.discardForms])
-  useEffect(() => { callback.current?.({ ...reviewState, dirty: reviewState.dirty || heldReviewForms, discardForms }) }, [reviewState, heldReviewForms, discardForms])
+  const discardForms = useCallback(() => { reviewState.discardForms(); discardReviewForms(workspaceId, 'import'); if (requestedImport) { state.setAccepted([]); state.setMapping([]); state.setConfirmed(false) } }, [workspaceId, reviewState.discardForms, requestedImport, state.setAccepted, state.setMapping, state.setConfirmed])
+  const requestedDirty = !!requestedImport && (state.accepted.length > 0 || state.mapping.length > 0 || state.confirmed || !!state.originalFile)
+  const requestedSafe = !requestedImport || !state.busy && !state.draftBusy
+  useEffect(() => { callback.current?.({ ...reviewState, dirty: reviewState.dirty || heldReviewForms || requestedDirty, safe: reviewState.safe && requestedSafe, discardForms }) }, [reviewState, heldReviewForms, requestedDirty, requestedSafe, discardForms])
   useEffect(() => () => callback.current?.({ dirty: pendingReviewForms(workspaceId, 'import'), safe: true, discardForms }), [workspaceId, discardForms])
   const snapshot = state.snapshot
   const blockers = snapshot?.warnings.some(warning => warning.severity === 'error') ?? false
@@ -38,7 +40,7 @@ export function ImportWorkflow({ workspaceId, paused = false, close, openCourse,
   if (!suspended) lastOperation.current = { role: state.auth?.role ?? lastOperation.current.role, status: snapshot?.status ?? lastOperation.current.status }
   const operationRole = !state.roleChanging && state.auth ? state.auth.role : lastOperation.current.role
   return <div className="import-workflow">
-    <UploadForm suspended={suspended || !!state.active} disabled={state.busy || !state.auth || activeTest} courses={state.courses} moreCourses={!!state.courseCursor} onMoreCourses={() => void state.loadCourses()} submit={state.upload} />
+    {!requestedImport && <UploadForm suspended={suspended || !!state.active} disabled={state.busy || !state.auth || activeTest} courses={state.courses} moreCourses={!!state.courseCursor} onMoreCourses={() => void state.loadCourses()} submit={state.upload} />}
     {suspended ? <div role="status">{operationRole && <p>操作角色：{operationRole === 'author' ? '作者' : '学习者'}（上次确认，正在重新核验）</p>}{lastOperation.current.status && <p>上次确认的流程状态：<span>{statusLabels[lastOperation.current.status]}</span>；当前不能预览或确认。</p>}<p>正在核验导入访问权限。测试限制期间，材料预览与原件下载暂不可用。</p><p>当前导入记录、已选择的本机文件与未提交设置仍保留。权限恢复后会重新读取服务端内容。</p></div> : <>
     <div className="import-role"><span>操作角色：{state.auth ? state.auth.role === 'author' ? '作者' : '学习者' : '正在核对会话…'}</span><button disabled={!state.auth || state.busy || activeTest} onClick={() => void state.changeRole()}>{state.auth?.role === 'author' ? '切换为学习者角色' : '切换为作者角色'}</button></div>
     <p className="muted">含私有材料的学习包及原件需要作者角色；切换角色须由你明确操作。</p>
@@ -47,6 +49,7 @@ export function ImportWorkflow({ workspaceId, paused = false, close, openCourse,
     {state.cacheError && <p className="import-warning" role="status">{state.cacheError}</p>}
     {state.busy && <p role="status">正在等待服务端响应…</p>}
     {!state.active && <>
+      {requestedImport && <button disabled={state.busy || !state.auth || activeTest || !validImportId(requestedImport.importId) || !!requestedImport.jobId && !validImportId(requestedImport.jobId)} onClick={() => void state.resume(requestedImport)}>读取指定回导预览 {requestedImport.importId}</button>}
       <details open={state.recovery.length > 0}><summary>恢复已有导入</summary><p className="muted">浏览器只保存任务 ID。原件、正文、警告和提交结果均从服务端重新读取。</p>
         {state.recovery.length > 0 && <div className="import-history">{state.recovery.map(item => <button key={item.importId} disabled={state.busy || !state.auth} onClick={() => void state.resume(item)}>恢复 {item.importId}</button>)}</div>}
         <div className="import-fields"><label>服务端导入 ID<input value={manualId} onChange={event => setManualId(event.target.value)} /></label></div>

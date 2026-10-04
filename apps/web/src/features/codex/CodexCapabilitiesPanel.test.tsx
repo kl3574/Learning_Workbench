@@ -19,7 +19,7 @@ test('explicit check reads session then capabilities, displays only this Broker 
   p.capabilities = vi.fn(async () => { order.push('capabilities'); return capabilities() })
   render(<CodexCapabilitiesPanel workspace={workspace} admitted port={p} />)
   expect(p.session).not.toHaveBeenCalled(); expect(p.capabilities).not.toHaveBeenCalled()
-  expect(screen.getByText(/受控 Codex 任务导出与产物回导尚未实现；当前可下载四项本地需求说明；该本地需求说明不调用 Codex/)).toBeTruthy()
+  expect(screen.getByText(/受控 Codex 任务导出尚未实现；已有受检产物可从下方清单明确选择回导预览。当前可下载四项本地需求说明；该本地需求说明不调用 Codex/)).toBeTruthy()
   check(); await screen.findByText('未连接 Codex：此工作区的隔离 Broker 尚未授权。')
   expect(order).toEqual(['session', 'capabilities']); expect(screen.getAllByText('不可用')).toHaveLength(3)
   expect(screen.getByText('codex-cli/0.160.0')).toBeTruthy()
