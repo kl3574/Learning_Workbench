@@ -422,3 +422,33 @@ def test_start_is_committed_before_interpreter_and_cannot_be_reentered(consent_c
             worker.execute_operation(identifier)
     _, _, _, calls = exercise(consent_case, observe, monkeypatch)
     assert len(calls) == 1
+
+
+def test_replacement_after_durable_claim_never_invokes_new_wrapper(consent_case, monkeypatch):
+    replacements = []
+    def observe(case, prep, worker, owner, identifier, body, *rest):
+        ack = decision(case, identifier, body)
+        assert ack.status_code == 200
+        append = owner._append
+        def after_claim(*args):
+            append(*args)
+            if args[4].kind == 'started':
+                def changed(*unused):
+                    replacements.append(True)
+                    raise AssertionError('Changed wrapper must never run')
+                monkeypatch.setattr(owner.operations, 'execute', changed)
+        monkeypatch.setattr(owner, '_append', after_claim)
+        with pytest.raises(ApiError) as denied:
+            worker.execute_operation(identifier)
+        assert denied.value.code == 'CODEX_OUTCOME_UNKNOWN'
+        view = case.client.get('/api/v1/approvals/'+identifier).json()
+        assert view['execution'] == 'unknown' and view['revision'] == 4
+        assert view['started_at'] is not None and view['result_sha256'] is None
+        before = case.dump()
+        with pytest.raises(ApiError):
+            worker.execute_operation(identifier)
+        assert decision(case, identifier, body).content == ack.content
+        assert case.dump() == before and replacements == []
+    case, prep, identifier, calls = exercise(consent_case, observe, monkeypatch)
+    assert case.get('turns/'+prep['turn_id']).json()['outcome'] == 'unknown'
+    assert len(calls) == 1 and replacements == []
