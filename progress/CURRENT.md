@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-04T09:40:11Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
+更新：2026-10-04T10:57:30Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
 
-仓库发布：VERIFIED；Issues 同步：VERIFIED_ISSUE32_0846_BODY_ONLY_LATER_TERMINAL_SYNC_PENDING
+仓库发布：VERIFIED；Issues 同步：VERIFIED_ISSUE32_1055_BODY_ONLY_LATEST_COMBINED_NOT_RUN
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
 
-闭合新的grant两项真实P2及固定门禁、独立读回整合后，在专属TMPDIR/basetemp运行最新完整Python/Web/静态；新turn准备/安全控制UI并行实施。当前公开690双CI全部成功与本地ff完整失败分开；生产proof缺失零外发，整个M6.3未完成。
+冻结最新组合b344及本次文档检查点，运行完整Python/Web/静态门禁并按实际终态验收；隔离树继续逐操作GenericApproval与受控工具合同。随后核公开候选、普通push并读回draftPR56实际CI；manifest与普通Import草稿回导仍须实现。生产完整proof缺失零外发，整个M6.3/AC21及M7未完成。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -301,6 +301,10 @@
 - m6_3_690_actual_ci: Actual push37170415116/PR37170416801 all12jobsSUCCESS; push690/PRcheckout6692 same09c22 tree. Each825backend809contract2143integration+2numericENVskip1058Web130native; actual12APIlogs retained with original empty-log collector failure, no source/result conflation.
 - m6_3_turn_client_counterevidence: Actual97 test-only counterexamples41PASS and1109fullWeb/strict/build1407inputsGitexact; same5c production bytes. Peer originalnewlineP2 withdrawnFALSE_POSITIVE in separate immutableclosure. Localnormalmergef11 exact2newfiles, all1405 existing nonprogress paths unchanged; panel/realexecution stillincomplete.
 - m6_3_690_numeric_artifacts: Four actual690 push/PR single/restore artifact IDs11291717091/11291407336/11291472698/11291288003 independently checked metadata+archives+sixJSON. All physicalBLOCKED_ENVIRONMENT/exit1/outputnull/noassertions, publication409PUBLISH_NUMERIC_REQUIRED.23qualifiedsafe candidates;SEAL.py excluded with explicit two-prefix transformerrata.
+- m6_3_latest_checkpoint: 本地b344正常整合已审grant e399、dispatch351、UI b149，1433completeGit inputs；127实际/147声明/20未注册。最新组合全量NOT_RUN，规范v3.0.15 b140不变；公开source仍690。
+- m6_3_fixed_0dc_complete_gate: 0dc1417Git完整Python4010PASS/2真实数值ENVskip/2warnings、4012收集、2373.33s、exit0；static Ruff/mypy266/generator82/spec54core147/1109Web148files/strict/buildPASS。早先ff两完整FAIL与7case定向PASS分别保留；不覆盖latestb344未跑门禁。
+- m6_3_dispatch_related: 固定351真实start/result与保守possible-send+originalconsent/Jobs原子消费、协议memory1request相关241PASS/2warnings、6staticPASS；正常合2b3，全部25owner路径精确。生产proof/executor无注册，actualCLI/model/resource/工具未验收。
+- m6_3_turn_ui_latest: 固定b1491201Web154files+strict/build/spec+214ownerPASS，1419Git逐blob before/afterexact；真实Chrome原prepare/cancelACK丢失、刷新0自动POST、显式samekey/fullbody byteexactreplay、完整JobSnapshot durableACK与再次刷新/APIrestartPASS。1433输入normalmerge b344，当前combinedNOT_RUN。原5restoreFAIL、1wireFAIL、6非法关系FAIL及fixture/harness更正保留。
 
 ## 阻塞与待决项
 

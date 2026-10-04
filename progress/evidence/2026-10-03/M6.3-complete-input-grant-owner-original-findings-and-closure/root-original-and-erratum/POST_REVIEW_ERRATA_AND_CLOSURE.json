@@ -1,0 +1,37 @@
+{
+  "recorded_at": "2026-10-04T09:40:11.002911+00:00",
+  "status": "EARLIER_REVIEW_OMISSIONS_RECORDED_FINAL_TWO_FIXES_CLOSED_STATIC",
+  "original_root_report_sha256": "8b02900cded64a542cc996934a8a0bbc4f9c7424b4eb6dc4e203661276a1ae71",
+  "original_source": "f36b650ebd1ebce413608d55b482d152a4c59132",
+  "fixed_source": "e399a66f85e701207d469511f9726abfc5fa2069",
+  "missed_findings": [
+    {
+      "kind": "Grant expiry crossed between current projection and durable admission",
+      "original_actual": "13654d7f one real failing HTTP case expectedCONSENT_EXPIRED, actualHISTORY_DAMAGED; no grant committed",
+      "fix": "Direct expiry check on actual durable event timestamp before append; originalkey replay remains earlier",
+      "closure": "CLOSED_STATIC; author same counterexample passes at fixed d974/e399, root did not rerun it"
+    },
+    {
+      "kind": "Non-object validJSON event shape raisesAttributeError before DTOdecode",
+      "original_actual": "349c6199 three real failing HTTP cases actual500; []/null/1 immutable history corruption should safe409",
+      "fix": "Explicitdict shapeguard beforeversion.get, no blanketAttributeErrorcatch",
+      "closure": "CLOSED_STATIC; author same3counterexamples pass at e399; root static only"
+    }
+  ],
+  "input_sha256": {
+    "services/api/app/application/provider_codex_consents.py": "4af996cfa6baf95e3e05527cf77e7b6d6474458a09c3e766221c5e77f78c2d05",
+    "services/api/app/infrastructure/codex_turn_repository.py": "6b84b2170aa6876e348b4935e137451d556459b223daf9471622246203b0babb",
+    "tests/integration/test_codex_turn_consent_http.py": "da2bcb69f55a151cfbe7c28a18a46c1bc73926c5c32c057c8d37af05e89250f4"
+  },
+  "delta_sha256": "f057f33a8f0e4fb9de256b43b965103c730db850e7084ac5f668c1eb4497094b",
+  "author_gate_readback": {
+    "head": "e399a66f85e701207d469511f9726abfc5fa2069",
+    "exit": 0,
+    "summary": "81PASS/2warnings/76.44s across4existingCodex files, separatefromoldf36 290",
+    "source_count": 1413,
+    "before_after_equal": true,
+    "log_sha256": "d70a5885952bb938eb0670f0d884a013cc94f1d037b68189e78a464f6114c402"
+  },
+  "remaining": "Actualdispatch/start/tools/manifest/productionproof and completefinal combinedsuite still not accepted",
+  "boundary": "Independent root readback/static closure and explicit corrections, not two rootsubagentreviews or root runtime execution."
+}

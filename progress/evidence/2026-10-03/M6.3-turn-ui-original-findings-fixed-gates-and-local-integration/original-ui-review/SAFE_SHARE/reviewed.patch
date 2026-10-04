@@ -1,0 +1,1034 @@
+diff --git a/apps/web/src/features/authoring/AuthoringPanel.tsx b/apps/web/src/features/authoring/AuthoringPanel.tsx
+index 770ae985..488345d2 100644
+--- a/apps/web/src/features/authoring/AuthoringPanel.tsx
++++ b/apps/web/src/features/authoring/AuthoringPanel.tsx
+@@ -16,21 +16,25 @@ import { CodexCapabilitiesPanel } from '../codex/CodexCapabilitiesPanel'
+ import type { BootstrapPort } from '../codex/bootstrapClient'
+ import type { DraftStore } from '../../workbench/DraftStore'
+ import { CodexBootstrapPanel, type BootstrapPanelState } from '../codex/CodexBootstrapPanel'
++import { CodexTurnPanel, type TurnPanelState } from '../codex/CodexTurnPanel'
++import type { TurnPort } from '../codex/turnClient'
+ import './authoring.css'
+ export type AuthoringPanelState = { dirty: boolean; safe: boolean; isolated: boolean; discardForms?: () => void; isolationLabel?: '保留本地会话隔离内存，丢弃临时表单并前往角色控制' }
+-export function AuthoringPanel({ workspace, paused, currentBlock, onState, port = authoringClient, provider, bootstrap, bootstrapStore }: { workspace: string; paused: boolean; currentBlock: ContentRef | null; onState: (value: AuthoringPanelState) => void; port?: AuthoringPort; provider?: ProviderPort; bootstrap?: BootstrapPort; bootstrapStore?: DraftStore }) {
++export function AuthoringPanel({ workspace, paused, currentBlock, onState, port = authoringClient, provider, bootstrap, bootstrapStore, turn, turnStore, turnFormStore }: { workspace: string; paused: boolean; currentBlock: ContentRef | null; onState: (value: AuthoringPanelState) => void; port?: AuthoringPort; provider?: ProviderPort; bootstrap?: BootstrapPort; bootstrapStore?: DraftStore; turn?: TurnPort; turnStore?: DraftStore; turnFormStore?: DraftStore }) {
+   const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
+   const state = useAuthoring(workspace, paused, port), [formDirty, setFormDirty] = useState(false), [consentState, setConsentState] = useState({ dirty: false, safe: true })
+   const [reviewOpen, setReviewOpen] = useState(false), [reviewState, setReviewState] = useState<ReviewPanelState>(emptyReviewPanelState)
+   const [impactsOpen, setImpactsOpen] = useState(false), [impactState, setImpactState] = useState<ImpactState>({ dirty: false, safe: true, isolated: false })
+   const [bootstrapState, setBootstrapState] = useState<BootstrapPanelState>({ dirty: false, safe: true, isolated: false })
++  const [turnState, setTurnState] = useState<TurnPanelState>({ dirty: false, safe: true, isolated: false }), [selectedCodexSession, setSelectedCodexSession] = useState<string | null>(null)
+   const callback = useRef(onState); callback.current = onState
+   useSyncExternalStore(subscribeReviewForms, reviewFormMemoryVersion, reviewFormMemoryVersion)
+   const heldReviewForms = pendingReviewForms(workspace, 'authoring')
+   const discardForms = useCallback(() => { reviewState.discardForms(); discardReviewForms(workspace, 'authoring') }, [workspace, reviewState.discardForms])
+   useEffect(() => { if (!state.academic) { setFormDirty(false); setConsentState({ dirty: false, safe: true }) } }, [state.academic, workspace, access])
+-  const dirty = heldReviewForms || state.academic && formDirty || consentState.dirty || state.commands.some(v => !v.ack) || reviewState.dirty || impactState.dirty || bootstrapState.dirty, otherSafe = state.ready && !state.busy && consentState.safe && (!reviewOpen || reviewState.safe), safe = otherSafe && impactState.safe && bootstrapState.safe, isolated = otherSafe && (impactState.isolated || bootstrapState.isolated) && (impactState.safe || impactState.isolated) && (bootstrapState.safe || bootstrapState.isolated)
+-  useEffect(() => { callback.current({ dirty, safe, isolated, discardForms, isolationLabel: bootstrapState.isolated ? '保留本地会话隔离内存，丢弃临时表单并前往角色控制' : undefined }) }, [dirty, safe, isolated, discardForms, bootstrapState.isolated])
++  useEffect(() => { setSelectedCodexSession(null) }, [workspace, access, bootstrap, turn])
++  const dirty = heldReviewForms || state.academic && formDirty || consentState.dirty || state.commands.some(v => !v.ack) || reviewState.dirty || impactState.dirty || bootstrapState.dirty || turnState.dirty, otherSafe = state.ready && !state.busy && consentState.safe && (!reviewOpen || reviewState.safe), safe = otherSafe && impactState.safe && bootstrapState.safe && turnState.safe, isolated = otherSafe && (impactState.isolated || bootstrapState.isolated || turnState.isolated) && (impactState.safe || impactState.isolated) && (bootstrapState.safe || bootstrapState.isolated) && (turnState.safe || turnState.isolated)
++  useEffect(() => { callback.current({ dirty, safe, isolated, discardForms, isolationLabel: bootstrapState.isolated || turnState.isolated ? '保留本地会话隔离内存，丢弃临时表单并前往角色控制' : undefined }) }, [dirty, safe, isolated, discardForms, bootstrapState.isolated, turnState.isolated])
+   const detail = state.detail, draft = state.draft, numeric = state.numeric
+   return <div className="authoring-panel"><p>可以准备例题、教材小节、习题集与测试题组草稿。模型调用与数值执行分别授权；生成完成不会自动获得数学、来源或教学质量批准。</p>
+     <button disabled={state.busy} onClick={() => void state.refresh()}>刷新安全任务列表与当前权限</button>
+@@ -55,7 +59,8 @@ export function AuthoringPanel({ workspace, paused, currentBlock, onState, port
+       {numeric && <NumericCheckPanel key={`${numeric.id}:${numeric.revision}:${numeric.operation_sha256}`} value={numeric} approvalBlocked={!!draft && !('root' in draft) && draft.state === 'published'} busy={state.busy || !state.ready} commandExists={state.commands.some(v => (v.kind === 'numeric_decision' || v.kind === 'group_numeric_decision') && v.check_id === numeric.id && (!v.rejection || !!v.ack))} decide={body => void state.create({ kind: 'target' in numeric ? 'group_numeric_decision' : 'numeric_decision', check_id: numeric.id, body })} refresh={() => void state.readNumeric(numeric.id)} />}
+     </div>}
+     <CodexCapabilitiesPanel workspace={workspace} admitted={state.academic && state.ready} />
+-    <CodexBootstrapPanel port={bootstrap} store={bootstrapStore} workspace={workspace} writeAdmitted={state.academic && state.ready && !paused} onState={setBootstrapState} />
++    <CodexBootstrapPanel port={bootstrap} store={bootstrapStore} workspace={workspace} writeAdmitted={state.academic && state.ready && !paused} onState={setBootstrapState} onSessionSelect={setSelectedCodexSession} />
++    <CodexTurnPanel port={turn} store={turnStore} formStore={turnFormStore} workspace={workspace} writeAdmitted={state.academic && state.ready && !paused} currentBlock={state.academic ? currentBlock : null} selectedSession={selectedCodexSession} onState={setTurnState} />
+     {impactsOpen && <ContentImpactsPanel workspace={workspace} paused={paused || !state.academic} onState={setImpactState} />}
+     {reviewOpen && (draft && 'root' in draft
+       ? <ReviewPanel formScope="authoring" formOwner="authoring_group" workspace={workspace} paused={paused || !state.academic} candidate={state.academic ? draft.candidate : null} candidateState="draft" onState={setReviewState} />
+diff --git a/apps/web/src/features/authoring/AuthoringTurn.test.tsx b/apps/web/src/features/authoring/AuthoringTurn.test.tsx
+new file mode 100644
+index 00000000..bbb760e5
+--- /dev/null
++++ b/apps/web/src/features/authoring/AuthoringTurn.test.tsx
+@@ -0,0 +1,60 @@
++import 'fake-indexeddb/auto'
++import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
++import { IDBFactory } from 'fake-indexeddb'
++import { afterEach, expect, test, vi } from 'vitest'
++import { DraftStore } from '../../workbench/DraftStore'
++import { AuthoringPanel } from './AuthoringPanel'
++import type { AuthoringPort } from './authoringClient'
++import { actor, bootstrapPort, codexSession, deferred, preparation, session, workspace } from '../codex/bootstrapTestFixtures'
++import { heldTurnCommands, heldTurnForms, releaseTurnCommand, releaseTurnForm } from '../codex/turnMemory'
++import { turnBody, turnPort, turnPreparation } from '../codex/turnTestFixtures'
++import { persistBootstrapCommand, prepareCommand } from '../codex/bootstrapCommands'
++const stores: DraftStore[] = []
++const db = () => { const store = new DraftStore({ name: crypto.randomUUID(), factory: new IDBFactory() }); stores.push(store); return store }
++afterEach(async () => { cleanup(); heldTurnCommands(workspace).forEach(releaseTurnCommand); heldTurnForms(workspace).forEach(releaseTurnForm); await Promise.all(stores.splice(0).map(v => v.close())) })
++const authoring = (): AuthoringPort => {
++ const unexpected = vi.fn(async (): Promise<never> => { throw new Error('Unexpected academic operation') })
++ return { session: vi.fn(async () => session()), list: vi.fn(async () => ({ items: [], next_cursor: null })), prepare: unexpected, read: unexpected, draft: unexpected, preview: unexpected, numeric: unexpected, decide: unexpected, job: unexpected, cancel: unexpected }
++}
++test('bootstrap selection passes only a session ID; turn preparation still requires independent current GET and keeps bootstrap bytes intact', async () => {
++ const port = authoring(), bootstrap = bootstrapPort(), turn = turnPort(), bootstrapStore = db(), turnStore = db(), formStore = db()
++ const original = prepareCommand(workspace, actor)
++ if (original.kind !== 'prepare') throw new Error('Expected prepare')
++ await persistBootstrapCommand({ ...original, ack: preparation() }, bootstrapStore)
++ const before = await bootstrapStore.load(workspace)
++ vi.mocked(bootstrap.preparation).mockResolvedValue(preparation('consumed'))
++ render(<AuthoringPanel workspace={workspace} paused={false} currentBlock={null} port={port} bootstrap={bootstrap} bootstrapStore={bootstrapStore} turn={turn} turnStore={turnStore} turnFormStore={formStore} onState={() => {}} />)
++ fireEvent.click(screen.getByText('读取本地会话记录')); await screen.findByText('读取准备当前状态 preparation_test')
++ fireEvent.click(screen.getByText('读取准备当前状态 preparation_test')); await screen.findByText(`用于回合准备 ${codexSession().id}`)
++ fireEvent.click(screen.getByText(`用于回合准备 ${codexSession().id}`))
++ fireEvent.click(screen.getByText('读取回合记录与权限')); await screen.findByText(/已读取本机记录/)
++ fireEvent.click(screen.getByText(`选择已核验会话 ${codexSession().id}`))
++ fireEvent.change(screen.getByLabelText('回合原文'), { target: { value: turnBody().message } })
++ fireEvent.change(screen.getByLabelText('Provider ID'), { target: { value: turnBody().provider_id } })
++ expect((screen.getByText('明确准备回合并预约 Job') as HTMLButtonElement).disabled).toBe(true)
++ expect(turn.current).not.toHaveBeenCalled(); expect(turn.prepare).not.toHaveBeenCalled()
++ fireEvent.click(screen.getByText('独立读取当前 session')); await screen.findByLabelText('独立 GET 当前 session')
++ fireEvent.click(screen.getByText('明确准备回合并预约 Job')); await screen.findByText(/准备原 ACK 已保存/)
++ expect(turn.prepare).toHaveBeenCalledOnce(); expect(await bootstrapStore.load(workspace)).toEqual(before)
++ expect(bootstrap.create).not.toHaveBeenCalled(); expect(bootstrap.decide).not.toHaveBeenCalled(); expect(bootstrap.prepare).not.toHaveBeenCalled()
++})
++test('parent navigation guard preserves dirty/safe/isolated and does not discard late turn facts with other forms', async () => {
++ const port = authoring(), turn = turnPort(), pending = deferred<ReturnType<typeof turnPreparation>>(), changed = vi.fn(), store = db(), formStore = db()
++ vi.mocked(turn.prepare).mockReturnValue(pending.promise)
++ const view = render(<AuthoringPanel workspace={workspace} paused={false} currentBlock={null} port={port} turn={turn} turnStore={store} turnFormStore={formStore} onState={changed} />)
++ await waitFor(() => expect(changed.mock.calls.at(-1)?.[0].safe).toBe(true))
++ fireEvent.click(screen.getByText('读取回合记录与权限')); await screen.findByText(/已读取本机记录/)
++ fireEvent.change(screen.getByLabelText('已建立的 session ID'), { target: { value: codexSession().id } })
++ fireEvent.click(screen.getByText('独立读取当前 session')); await screen.findByLabelText('独立 GET 当前 session')
++ fireEvent.change(screen.getByLabelText('回合原文'), { target: { value: turnBody().message } })
++ fireEvent.change(screen.getByLabelText('Provider ID'), { target: { value: turnBody().provider_id } })
++ await waitFor(() => expect(changed.mock.calls.at(-1)?.[0]).toMatchObject({ dirty: true, safe: true, isolated: false }))
++ fireEvent.click(screen.getByText('明确准备回合并预约 Job')); await waitFor(() => expect(turn.prepare).toHaveBeenCalledOnce())
++ expect(changed.mock.calls.at(-1)?.[0].safe).toBe(false)
++ view.rerender(<AuthoringPanel workspace={workspace} paused currentBlock={null} port={port} turn={turn} turnStore={store} turnFormStore={formStore} onState={changed} />)
++ await act(async () => pending.resolve(turnPreparation()))
++ await waitFor(() => expect(changed.mock.calls.at(-1)?.[0]).toMatchObject({ dirty: true, safe: false, isolated: true, isolationLabel: '保留本地会话隔离内存，丢弃临时表单并前往角色控制' }))
++ act(() => changed.mock.calls.at(-1)?.[0].discardForms())
++ expect(heldTurnCommands(workspace)[0].ack).toEqual(turnPreparation())
++ expect(turn.prepare).toHaveBeenCalledOnce(); expect(screen.queryByLabelText('回合原文')).toBeNull()
++})
+diff --git a/apps/web/src/features/codex/CodexBootstrapPanel.tsx b/apps/web/src/features/codex/CodexBootstrapPanel.tsx
+index bf2ce044..fb70f7c5 100644
+--- a/apps/web/src/features/codex/CodexBootstrapPanel.tsx
++++ b/apps/web/src/features/codex/CodexBootstrapPanel.tsx
+@@ -3,8 +3,8 @@ import type { DraftStore } from '../../workbench/DraftStore'
+ import type { BootstrapPort } from './bootstrapClient'
+ import { useBootstrap } from './useBootstrap'
+ export type BootstrapPanelState = { dirty: boolean; safe: boolean; isolated: boolean }
+-export function CodexBootstrapPanel({ workspace, writeAdmitted, port, store, onState }: {
+- workspace: string; writeAdmitted: boolean; port?: BootstrapPort; store?: DraftStore; onState?: (value: BootstrapPanelState) => void
++export function CodexBootstrapPanel({ workspace, writeAdmitted, port, store, onState, onSessionSelect }: {
++ workspace: string; writeAdmitted: boolean; port?: BootstrapPort; store?: DraftStore; onState?: (value: BootstrapPanelState) => void; onSessionSelect?: (id: string) => void
+ }) {
+  const state = useBootstrap(workspace, writeAdmitted, port, store), callback = useRef(onState); callback.current = onState
+  useEffect(() => { callback.current?.({ dirty: state.dirty, safe: state.safe, isolated: state.isolated }) }, [state.dirty, state.safe, state.isolated])
+@@ -43,6 +43,7 @@ export function CodexBootstrapPanel({ workspace, writeAdmitted, port, store, onS
+    {value.status === 'ready' ? <p>ready 仅表示已核验 thread 映射；不代表账号授权、模型能力或进程仍在运行。</p>
+     : value.status === 'unknown' ? <p>旧实例结果未知。不会自动再启动；如需另试，须另建准备并重新批准。</p>
+     : value.status === 'initializing' ? <p>开始许可已登记，尚不能断言 thread 已建立。</p> : <p>本次本地会话创建失败；保留原事实。</p>}
+-   <p>active_turn_id：{value.active_turn_id ?? 'null'}；审批、interrupt、artifacts：{String(value.capabilities.approvals)}、{String(value.capabilities.interrupt)}、{String(value.capabilities.artifacts)}。</p></section>)}
++   <p>active_turn_id：{value.active_turn_id ?? 'null'}；审批、interrupt、artifacts：{String(value.capabilities.approvals)}、{String(value.capabilities.interrupt)}、{String(value.capabilities.artifacts)}。</p>
++   {onSessionSelect && value.status === 'ready' && <button disabled={state.busy} onClick={() => onSessionSelect(value.id)}>用于回合准备 {value.id}</button>}</section>)}
+  </section>
+ }
+diff --git a/apps/web/src/features/codex/CodexTurnPanel.test.tsx b/apps/web/src/features/codex/CodexTurnPanel.test.tsx
+new file mode 100644
+index 00000000..28867156
+--- /dev/null
++++ b/apps/web/src/features/codex/CodexTurnPanel.test.tsx
+@@ -0,0 +1,297 @@
++import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
++import { IDBFactory } from 'fake-indexeddb'
++import { afterEach, expect, test, vi } from 'vitest'
++import { DraftStore } from '../../workbench/DraftStore'
++import { actor, codexSession, deferred, session, workspace } from './bootstrapTestFixtures'
++import { CodexTurnPanel } from './CodexTurnPanel'
++import { turnBody, turnControl, turnPort, turnPreparation } from './turnTestFixtures'
++import { ApiError, request } from '../../api/client'
++import { heldTurnCommands, heldTurnForms, releaseTurnCommand, releaseTurnForm } from './turnMemory'
++import { decodeTurnCommand, persistTurnCommand, readTurnCommand, turnPrepareCommand } from './turnCommands'
++import type { TurnPort } from './turnClient'
++const stores: DraftStore[] = []
++const local = () => { const value = new DraftStore({ name: `turn-test-${crypto.randomUUID()}`, factory: new IDBFactory() }); stores.push(value); return value }
++afterEach(async () => {
++ cleanup()
++ for (const space of [workspace, 'workspace_other']) {
++  heldTurnCommands(space).forEach(releaseTurnCommand); heldTurnForms(space).forEach(releaseTurnForm)
++ }
++ await Promise.all(stores.splice(0).map(value => value.close()))
++ vi.unstubAllGlobals()
++})
++const enabled = async (label: string) => waitFor(() => expect((screen.getByText(label) as HTMLButtonElement).disabled).toBe(false))
++const refresh = async () => { fireEvent.click(screen.getByText('读取回合记录与权限')); await enabled('读取回合记录与权限'); await screen.findByText(/已读取本机记录/) }
++async function enter() {
++ fireEvent.click(screen.getByText('读取回合记录与权限'))
++ await waitFor(() => expect(screen.getByLabelText('回合原文')).toBeTruthy())
++ await waitFor(() => expect((screen.getByLabelText('已建立的 session ID') as HTMLInputElement).disabled).toBe(false))
++ fireEvent.change(screen.getByLabelText('已建立的 session ID'), { target: { value: codexSession().id } })
++ fireEvent.click(screen.getByText('独立读取当前 session'))
++ await screen.findByLabelText('独立 GET 当前 session')
++ fireEvent.change(screen.getByLabelText('回合原文'), { target: { value: turnBody().message } })
++ fireEvent.change(screen.getByLabelText('Provider ID'), { target: { value: turnBody().provider_id } })
++}
++test('explicit preparation persists original actor/key/body/current GET basis before POST; ACK is not current', async () => {
++ const port = turnPort(), store = local(), formStore = local()
++ vi.mocked(port.prepare).mockImplementation(async (id, body, key) => {
++  const records = await store.load(workspace), command = JSON.parse(records[key].text)
++  expect(command.actor_session_id).toBe(actor); expect(command.session_id).toBe(id)
++  expect(command.body).toEqual(turnBody()); expect(command.basis).toEqual(codexSession()); expect(command.ack).toBeNull()
++  return turnPreparation(body)
++ })
++ render(<CodexTurnPanel workspace={workspace} writeAdmitted port={port} store={store} formStore={formStore} />)
++ expect(port.session).not.toHaveBeenCalled(); expect(port.prepare).not.toHaveBeenCalled()
++ await enter()
++ await waitFor(() => expect((screen.getByText('明确准备回合并预约 Job') as HTMLButtonElement).disabled).toBe(false))
++ fireEvent.click(screen.getByText('明确准备回合并预约 Job'))
++ await waitFor(() => expect(port.prepare).toHaveBeenCalledTimes(1))
++ await screen.findByText(/准备原 ACK 已保存/)
++ expect(port.current).toHaveBeenCalledTimes(1)
++ expect(port.preparation).not.toHaveBeenCalled(); expect(port.cancel).not.toHaveBeenCalled()
++ expect(screen.queryByLabelText('当前回合准备详情')).toBeNull()
++})
++
++test('unknown preparation survives remount and only explicitly replays original actor/key/body/basis', async () => {
++ const port = turnPort(), store = local(), formStore = local()
++ vi.mocked(port.prepare).mockRejectedValueOnce(new Error('lost synthetic ACK'))
++ const view = render(<CodexTurnPanel workspace={workspace} writeAdmitted port={port} store={store} formStore={formStore} />)
++ await enter(); fireEvent.click(screen.getByText('明确准备回合并预约 Job'))
++ await screen.findByText(/操作结果或本机保存尚未确认/)
++ const original = vi.mocked(port.prepare).mock.calls[0], command = readTurnCommand((await store.load(workspace))[original[2]], workspace)
++ if (command.kind !== 'prepare') throw new Error('Expected original preparation')
++ expect(command.ack).toBeNull(); expect(command.body.message).toBe(turnBody().message)
++ view.unmount()
++ render(<CodexTurnPanel workspace={workspace} writeAdmitted port={port} store={store} formStore={formStore} />)
++ expect(port.prepare).toHaveBeenCalledTimes(1)
++ await refresh(); expect(port.prepare).toHaveBeenCalledTimes(1)
++ fireEvent.click(screen.getByText(`显式回放回合原 key ${original[2]}`))
++ await screen.findByText(/准备原 ACK 已保存/)
++ expect(vi.mocked(port.prepare).mock.calls[1]).toEqual(original)
++ expect(port.current).toHaveBeenCalledTimes(1)
++})
++
++test.each([412, 409])('HTTP %s retains original readonly basis; reading a new current never edits or resends the command', async status => {
++ const port = turnPort(), store = local(), formStore = local()
++ vi.mocked(port.prepare).mockRejectedValueOnce(new ApiError(status, 'private provider body', 'CODEX_SOURCE_CHANGED'))
++ render(<CodexTurnPanel workspace={workspace} writeAdmitted port={port} store={store} formStore={formStore} />)
++ await enter(); fireEvent.click(screen.getByText('明确准备回合并预约 Job'))
++ await screen.findByText(status === 412 ? /版本已变化（412）/ : /操作绑定冲突（409）/)
++ const call = vi.mocked(port.prepare).mock.calls[0]
++ vi.mocked(port.current).mockResolvedValue({ ...codexSession(), revision: 9, active_turn_id: 'turn_existing' })
++ fireEvent.click(screen.getByText('独立读取当前 session')); await screen.findByLabelText('独立 GET 当前 session')
++ const command = readTurnCommand((await store.load(workspace))[call[2]], workspace)
++ if (command.kind !== 'prepare') throw new Error('Expected original preparation')
++ expect(command.basis.revision).toBe(2); expect(command.error?.status).toBe(status)
++ expect(port.prepare).toHaveBeenCalledTimes(1); expect(screen.queryByText(/private provider body/)).toBeNull()
++ expect((screen.getByText('明确准备回合并预约 Job') as HTMLButtonElement).disabled).toBe(true)
++})
++
++test.each(['learner', 'independent', 'open_book'] as const)('safe session/page/control/cancel remain available under %s, protected form and detail do not', async mode => {
++ const port = turnPort(), store = local(), formStore = local()
++ vi.mocked(port.session).mockResolvedValue({ ...session(), role: mode === 'learner' ? 'learner' : 'author', active_independent_attempt_id: mode === 'independent' ? 'attempt_test' : null, active_open_book_attempt_id: mode === 'open_book' ? 'attempt_open' : null })
++ vi.mocked(port.cancel).mockImplementation(async (id, revision, key) => {
++  const command = readTurnCommand((await store.load(workspace))[key], workspace)
++  expect(command.kind).toBe('cancel'); expect(command.actor_session_id).toBe(actor)
++  expect(command.basis).toEqual(turnControl()); expect(command.body).toEqual({ expected_revision: revision })
++  return { id, status: 'cancelled' }
++ })
++ render(<CodexTurnPanel workspace={workspace} writeAdmitted={false} port={port} store={store} formStore={formStore} />)
++ await refresh(); expect(screen.queryByLabelText('回合原文')).toBeNull()
++ fireEvent.change(screen.getByLabelText('已建立的 session ID'), { target: { value: codexSession().id } })
++ fireEvent.click(screen.getByText('独立读取当前 session')); await screen.findByLabelText('独立 GET 当前 session')
++ fireEvent.click(screen.getByText('读取安全回合分页')); await screen.findByLabelText('安全回合分页')
++ fireEvent.click(screen.getByText('读取回合控制 turn_test')); await screen.findByLabelText('当前回合控制 turn_test')
++ fireEvent.click(screen.getByText('明确取消回合 Job job_turn_test')); await screen.findByText(/取消原 ACK 已保存/)
++ expect(port.cancel).toHaveBeenCalledTimes(1); expect(port.prepare).not.toHaveBeenCalled(); expect(port.preparation).not.toHaveBeenCalled()
++})
++
++test('unsent Unicode and precise chosen block survive reload; current reader change cannot replace the frozen choice', async () => {
++ const port = turnPort(), store = local(), formStore = local(), ref = { entity: 'block' as const, id: 'block_original', revision: 1, sha256: 'a'.repeat(64) }
++ const view = render(<CodexTurnPanel workspace={workspace} writeAdmitted port={port} store={store} formStore={formStore} currentBlock={ref} />)
++ await enter(); fireEvent.click(screen.getByText('选择当前完整公开块'))
++ await waitFor(() => expect(heldTurnForms(workspace)).toHaveLength(0))
++ view.rerender(<CodexTurnPanel workspace={workspace} writeAdmitted port={port} store={store} formStore={formStore} currentBlock={{ ...ref, id: 'block_other', revision: 2 }} />)
++ expect(screen.getByLabelText('本次精确材料引用').textContent).toContain('block_original')
++ view.unmount()
++ render(<CodexTurnPanel workspace={workspace} writeAdmitted port={port} store={store} formStore={formStore} />)
++ await refresh(); expect(port.prepare).not.toHaveBeenCalled()
++ fireEvent.click(screen.getByText(/恢复原表单/))
++ expect((screen.getByLabelText('回合原文') as HTMLTextAreaElement).value).toBe(turnBody().message)
++ expect(JSON.parse(screen.getByLabelText('本次精确材料引用').textContent!)).toEqual([ref])
++ expect(screen.queryByLabelText('独立 GET 当前 session')).toBeNull()
++ fireEvent.click(screen.getByText('独立读取当前 session')); await screen.findByLabelText('独立 GET 当前 session')
++ fireEvent.click(screen.getByText('明确准备回合并预约 Job')); await screen.findByText(/准备原 ACK 已保存/)
++ expect(vi.mocked(port.prepare).mock.calls[0][1]).toEqual({ ...turnBody(), context_refs: [ref] })
++})
++
++test.each(['admission', 'workspace', 'port', 'store', 'unmount'] as const)('late ACK after %s change is isolated under original actor and never delivered as current', async change => {
++ const port = turnPort(), store = local(), formStore = local(), response = deferred<Awaited<ReturnType<TurnPort['prepare']>>>()
++ vi.mocked(port.prepare).mockReturnValue(response.promise)
++ const changed = vi.fn(), view = render(<CodexTurnPanel workspace={workspace} writeAdmitted port={port} store={store} formStore={formStore} onState={changed} />)
++ await enter(); fireEvent.click(screen.getByText('明确准备回合并预约 Job'))
++ await waitFor(() => expect(port.prepare).toHaveBeenCalledTimes(1))
++ if (change === 'unmount') view.unmount()
++ else view.rerender(<CodexTurnPanel workspace={change === 'workspace' ? 'workspace_other' : workspace} writeAdmitted={change !== 'admission'} port={change === 'port' ? turnPort() : port} store={change === 'store' ? local() : store} formStore={formStore} onState={changed} />)
++ await act(async () => { response.resolve(turnPreparation()) })
++ expect(heldTurnCommands(workspace)).toHaveLength(1)
++ expect(heldTurnCommands(workspace)[0].ack).toEqual(turnPreparation())
++ expect(screen.queryByText(/准备原 ACK 已保存/)).toBeNull(); expect(screen.queryByLabelText('当前回合准备详情')).toBeNull()
++ expect(port.prepare).toHaveBeenCalledTimes(1)
++ if (change === 'admission') {
++  expect(changed).toHaveBeenLastCalledWith({ dirty: true, safe: false, isolated: true })
++  vi.mocked(port.session).mockResolvedValue({ ...session(), role: 'learner' })
++  await refresh(); expect(screen.queryByLabelText('回合原文')).toBeNull(); expect(screen.queryByText(/核对回合原命令/)).toBeNull()
++  fireEvent.click(screen.getByText('仅保存原回合本机事实')); await screen.findByText(/仅保存原 actor/)
++  expect(heldTurnCommands(workspace)).toHaveLength(0)
++  const saved = Object.values(await store.load(workspace)).map(v => readTurnCommand(v, workspace))[0]
++  expect(saved.actor_session_id).toBe(actor); expect(saved.ack).toEqual(turnPreparation()); expect(port.prepare).toHaveBeenCalledTimes(1)
++ }
++})
++
++test('another actor cannot see or replay the original preparation, prompt, or form after refresh', async () => {
++ const port = turnPort(), store = local(), formStore = local()
++ vi.mocked(port.prepare).mockRejectedValue(new Error('unknown'))
++ render(<CodexTurnPanel workspace={workspace} writeAdmitted port={port} store={store} formStore={formStore} />)
++ await enter(); fireEvent.click(screen.getByText('明确准备回合并预约 Job')); await screen.findByText(/操作结果或本机保存尚未确认/)
++ vi.mocked(port.session).mockResolvedValue({ ...session(), actor_session_id: 'actor_other' })
++ await refresh()
++ expect(screen.queryByText(/核对回合原命令/)).toBeNull(); expect(screen.queryByText(/恢复原表单/)).toBeNull()
++ expect((screen.getByLabelText('回合原文') as HTMLTextAreaElement).value).toBe('')
++ fireEvent.click(screen.getByText('独立读取当前 session')); await screen.findByLabelText('独立 GET 当前 session')
++ expect((screen.getByText('明确准备回合并预约 Job') as HTMLButtonElement).disabled).toBe(true)
++ fireEvent.click(screen.getByText('明确准备回合并预约 Job'))
++ expect(port.prepare).toHaveBeenCalledTimes(1)
++})
++
++test('storage failure prevents every POST and preserves unsent form/original command in navigation isolation', async () => {
++ const port = turnPort(), store = local(), formStore = local(), changed = vi.fn()
++ vi.spyOn(store, 'save').mockRejectedValue(new Error('synthetic quota'))
++ render(<CodexTurnPanel workspace={workspace} writeAdmitted port={port} store={store} formStore={formStore} onState={changed} />)
++ await enter(); fireEvent.click(screen.getByText('明确准备回合并预约 Job')); await screen.findByText(/操作结果或本机保存尚未确认/)
++ expect(port.prepare).not.toHaveBeenCalled(); expect(heldTurnCommands(workspace)[0].body).toEqual(turnBody())
++ expect(changed).toHaveBeenLastCalledWith({ dirty: true, safe: false, isolated: true })
++})
++
++test('fresh permission check after durable command save blocks a changed actor before POST', async () => {
++ const port = turnPort(), store = local(), formStore = local(), save = store.save.bind(store)
++ vi.spyOn(store, 'save').mockImplementation(async (...args) => {
++  const result = await save(...args); vi.mocked(port.session).mockResolvedValue({ ...session(), actor_session_id: 'actor_other' }); return result
++ })
++ render(<CodexTurnPanel workspace={workspace} writeAdmitted port={port} store={store} formStore={formStore} />)
++ await enter(); fireEvent.click(screen.getByText('明确准备回合并预约 Job')); await screen.findByText(/当前权限或原 actor 已变化/)
++ expect(port.prepare).not.toHaveBeenCalled(); expect(Object.keys(await store.load(workspace))).toHaveLength(1)
++ expect(screen.queryByLabelText('回合原文')).toBeNull()
++})
++
++test('current preparation details are an explicit academic GET and honestly show unavailable', async () => {
++ const port = turnPort(), store = local(), formStore = local()
++ render(<CodexTurnPanel workspace={workspace} writeAdmitted port={port} store={store} formStore={formStore} />)
++ await enter(); fireEvent.click(screen.getByText('明确准备回合并预约 Job')); await screen.findByText(/准备原 ACK 已保存/)
++ expect(port.preparation).not.toHaveBeenCalled()
++ fireEvent.click(screen.getByText('独立读取准备详情 turn_preparation_test'))
++ const detail = await screen.findByLabelText('当前回合准备详情')
++ expect(within(detail).getByText(/CODEX_INPUT_PROOF_UNAVAILABLE/)).toBeTruthy()
++ expect(port.prepare).toHaveBeenCalledTimes(1)
++ vi.mocked(port.preparation).mockRejectedValue(new ApiError(403, 'secret body', 'ASSESSMENT_ACTIVE'))
++ fireEvent.click(screen.getByText('独立读取准备详情 turn_preparation_test')); await screen.findByText(/当前权限或原 actor 已变化/)
++ expect(screen.queryByLabelText('当前回合准备详情')).toBeNull(); expect(screen.queryByLabelText('回合原文')).toBeNull()
++ expect(screen.queryByText(/secret body/)).toBeNull()
++})
++
++test.each([['工具调用上限', '17'], ['工具调用上限', '-1'], ['工具调用上限', '1e1'], ['回合 wall 秒数', '0'], ['回合 wall 秒数', '301'], ['回合 wall 秒数', ''], ['Provider ID', '../bad'], ['回合原文', ' \n ']])('invalid %s %s preserves form and cannot allocate/send a command', async (label, value) => {
++ const port = turnPort(), store = local(), formStore = local()
++ render(<CodexTurnPanel workspace={workspace} writeAdmitted port={port} store={store} formStore={formStore} />)
++ await enter(); fireEvent.change(screen.getByLabelText(label), { target: { value } })
++ expect((screen.getByText('明确准备回合并预约 Job') as HTMLButtonElement).disabled).toBe(true)
++ expect((screen.getByLabelText(label) as HTMLInputElement).value).toBe(value)
++ expect(port.prepare).not.toHaveBeenCalled(); expect(Object.keys(await store.load(workspace))).toHaveLength(0)
++})
++
++test('changed frozen body in a current preparation response cannot replace the original request', async () => {
++ const port = turnPort(), store = local(), formStore = local()
++ render(<CodexTurnPanel workspace={workspace} writeAdmitted port={port} store={store} formStore={formStore} />)
++ await enter(); fireEvent.click(screen.getByText('明确准备回合并预约 Job')); await screen.findByText(/准备原 ACK 已保存/)
++ vi.mocked(port.preparation).mockResolvedValue(turnPreparation({ ...turnBody(), message: 'different frozen request' }))
++ fireEvent.click(screen.getByText('独立读取准备详情 turn_preparation_test'))
++ await enabled('读取回合记录与权限')
++ expect(screen.queryByLabelText('当前回合准备详情')).toBeNull()
++ expect(screen.queryByText(/different frozen request/)).toBeNull()
++})
++
++test('access generation changes invalidate a pending current GET without automatic reads or POST', async () => {
++ const port = turnPort(), store = local(), formStore = local(), pending = deferred<ReturnType<typeof codexSession>>()
++ vi.mocked(port.current).mockReturnValue(pending.promise)
++ render(<CodexTurnPanel workspace={workspace} writeAdmitted port={port} store={store} formStore={formStore} />)
++ await refresh()
++ fireEvent.change(screen.getByLabelText('已建立的 session ID'), { target: { value: codexSession().id } })
++ fireEvent.click(screen.getByText('独立读取当前 session')); await waitFor(() => expect(port.current).toHaveBeenCalledOnce())
++ vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(session()), { status: 200 })))
++ await act(async () => { await request('POST /api/v1/session/role', { role: 'learner' }, { 'Idempotency-Key': 'synthetic_access_change' }) })
++ await act(async () => pending.resolve(codexSession()))
++ expect(screen.queryByLabelText('独立 GET 当前 session')).toBeNull()
++ expect(screen.queryByLabelText('回合原文')).toBeNull(); expect(port.current).toHaveBeenCalledOnce(); expect(port.prepare).not.toHaveBeenCalled()
++})
++
++test('late ACK followed by a changed actual actor remains original isolated history with no protected delivery', async () => {
++ const port = turnPort(), store = local(), formStore = local(), pending = deferred<ReturnType<typeof turnPreparation>>()
++ vi.mocked(port.prepare).mockReturnValue(pending.promise)
++ render(<CodexTurnPanel workspace={workspace} writeAdmitted port={port} store={store} formStore={formStore} />)
++ await enter(); fireEvent.click(screen.getByText('明确准备回合并预约 Job')); await waitFor(() => expect(port.prepare).toHaveBeenCalledOnce())
++ vi.mocked(port.session).mockResolvedValue({ ...session(), actor_session_id: 'actor_after_send' })
++ await act(async () => pending.resolve(turnPreparation()))
++ await screen.findByText(/当前权限或原 actor 已变化/)
++ expect(heldTurnCommands(workspace)[0].actor_session_id).toBe(actor); expect(heldTurnCommands(workspace)[0].ack).toEqual(turnPreparation())
++ expect(screen.queryByLabelText('回合原文')).toBeNull(); expect(screen.queryByText(/核对回合原命令/)).toBeNull()
++ expect(port.prepare).toHaveBeenCalledOnce()
++})
++
++test('unknown cancellation persists the original safe reader and revision across remount; original key replay needs no academic access', async () => {
++ const port = turnPort(), store = local(), formStore = local()
++ vi.mocked(port.session).mockResolvedValue({ ...session(), role: 'learner', actor_session_id: 'learner_cancel' })
++ vi.mocked(port.cancel).mockRejectedValueOnce(new Error('lost cancel ACK'))
++ const view = render(<CodexTurnPanel workspace={workspace} writeAdmitted={false} port={port} store={store} formStore={formStore} />)
++ await refresh(); fireEvent.change(screen.getByLabelText('已建立的 session ID'), { target: { value: codexSession().id } })
++ fireEvent.click(screen.getByText('读取安全回合分页')); await screen.findByLabelText('安全回合分页')
++ fireEvent.click(screen.getByText('读取回合控制 turn_test')); await screen.findByLabelText('当前回合控制 turn_test')
++ fireEvent.click(screen.getByText('明确取消回合 Job job_turn_test')); await screen.findByText(/操作结果或本机保存尚未确认/)
++ const original = vi.mocked(port.cancel).mock.calls[0]
++ view.unmount(); render(<CodexTurnPanel workspace={workspace} writeAdmitted={false} port={port} store={store} formStore={formStore} />)
++ await refresh(); expect(port.cancel).toHaveBeenCalledOnce()
++ fireEvent.click(screen.getByText(`显式回放回合原 key ${original[2]}`)); await screen.findByText(/取消原 ACK 已保存/)
++ expect(vi.mocked(port.cancel).mock.calls[1]).toEqual(original)
++ expect(port.control).toHaveBeenCalledOnce(); expect(port.preparation).not.toHaveBeenCalled()
++})
++
++test('failed form persistence protects navigation/unload, survives unmount in memory, and can be explicitly saved without POST', async () => {
++ const port = turnPort(), store = local(), formStore = local(), changed = vi.fn(), save = vi.spyOn(formStore, 'save').mockRejectedValue(new Error('synthetic storage failure'))
++ const view = render(<CodexTurnPanel workspace={workspace} writeAdmitted port={port} store={store} formStore={formStore} onState={changed} />)
++ await enter(); await screen.findByText(/表单尚未全部保存/)
++ expect(changed).toHaveBeenLastCalledWith({ dirty: true, safe: false, isolated: true })
++ const event = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(event); expect(event.defaultPrevented).toBe(true)
++ view.unmount(); save.mockRestore()
++ render(<CodexTurnPanel workspace={workspace} writeAdmitted port={port} store={store} formStore={formStore} />)
++ await refresh(); fireEvent.click(screen.getByText('仅保存原回合本机事实')); await screen.findByText(/仅保存原 actor/)
++ expect(heldTurnForms(workspace)).toHaveLength(0)
++ fireEvent.click(screen.getByText(/恢复原表单/))
++ expect((screen.getByLabelText('回合原文') as HTMLTextAreaElement).value).toBe(turnBody().message)
++ expect(port.prepare).not.toHaveBeenCalled(); expect(port.cancel).not.toHaveBeenCalled()
++})
++
++test.each(['unknown', 'failed', 'initializing'] as const)('bootstrap session %s cannot supply a preparation baseline', async status => {
++ const port = turnPort(), store = local(), formStore = local()
++ vi.mocked(port.current).mockResolvedValue(codexSession(status))
++ render(<CodexTurnPanel workspace={workspace} writeAdmitted port={port} store={store} formStore={formStore} />)
++ await enter(); expect((screen.getByText('明确准备回合并预约 Job') as HTMLButtonElement).disabled).toBe(true)
++ expect(port.prepare).not.toHaveBeenCalled()
++})
++
++test('an ACK persisted by another view before explicit replay prevents POST and releases the weaker pending memory', async () => {
++ const port = turnPort(), store = local(), formStore = local(), original = turnPrepareCommand(workspace, actor, codexSession(), turnBody()), changed = vi.fn()
++ await persistTurnCommand(original, store)
++ render(<CodexTurnPanel workspace={workspace} writeAdmitted port={port} store={store} formStore={formStore} onState={changed} />)
++ await refresh()
++ await persistTurnCommand(decodeTurnCommand(JSON.stringify({ ...original, ack: turnPreparation() }), workspace), store)
++ fireEvent.click(screen.getByText(`显式回放回合原 key ${original.command_id}`)); await enabled('读取回合记录与权限')
++ expect(port.prepare).not.toHaveBeenCalled(); expect(heldTurnCommands(workspace)).toHaveLength(0)
++ expect(changed).toHaveBeenLastCalledWith({ dirty: false, safe: true, isolated: false })
++})
+diff --git a/apps/web/src/features/codex/CodexTurnPanel.tsx b/apps/web/src/features/codex/CodexTurnPanel.tsx
+new file mode 100644
+index 00000000..7735fb88
+--- /dev/null
++++ b/apps/web/src/features/codex/CodexTurnPanel.tsx
+@@ -0,0 +1,73 @@
++import { useEffect, useRef } from 'react'
++import type { ContentRef } from '../../../../../packages/contracts/generated/api-types'
++import type { TurnPort } from './turnClient'
++import type { DraftStore } from '../../workbench/DraftStore'
++import { useCodexTurns } from './useCodexTurns'
++export type TurnPanelState = { dirty: boolean; safe: boolean; isolated: boolean }
++export function CodexTurnPanel({ workspace, writeAdmitted, port, store, formStore, currentBlock = null, selectedSession = null, onState }: {
++ workspace: string; writeAdmitted: boolean; port?: TurnPort; store?: DraftStore; formStore?: DraftStore; currentBlock?: ContentRef | null;
++ selectedSession?: string | null; onState?: (value: TurnPanelState) => void
++}) {
++ const state = useCodexTurns(workspace, writeAdmitted, port, store, formStore), callback = useRef(onState); callback.current = onState
++ useEffect(() => { callback.current?.({ dirty: state.dirty, safe: state.safe, isolated: state.isolated }) }, [state.dirty, state.safe, state.isolated])
++ const blocked = state.busy || !state.ready, current = state.current
++ return <section aria-label="Codex 回合准备与安全控制"><h3>Codex 回合准备与安全控制</h3>
++  <p>明确准备只冻结原输入并预约一个 Job。本面板尚未接入外发许可、开始或结果读取，不会调用模型或工具。</p>
++  <button disabled={!workspace || state.busy} onClick={() => void state.refresh()}>读取回合记录与权限</button>
++  {!state.ready && <p>先读取当前权限和本机记录；不会自动恢复发送。</p>}
++  {state.ready && !state.allowed && <p>当前仅开放安全控制。原文、材料和准备详情已收起；本机原记录保留，须原作者且当前策略允许后显式恢复。</p>}
++  {state.error && <p role="status">{state.error}</p>}{state.message && <p role="status">{state.message}</p>}
++  {state.busy && <p role="status">正在处理本次明确操作。</p>}
++  {state.retained > 0 && <p>有尚未落盘的隔离回合事实或表单；关闭和刷新前请保存，原 actor 归属不变。</p>}
++  {state.canSave && <button disabled={state.busy} onClick={() => void state.saveMemory()}>仅保存原回合本机事实</button>}
++  <label>已建立的 session ID<input disabled={blocked} value={state.selected} onChange={e => state.select(e.target.value)} /></label>
++  {selectedSession && <button disabled={blocked} onClick={() => state.select(selectedSession)}>选择已核验会话 {selectedSession}</button>}
++  <button disabled={blocked || !state.selected} onClick={() => void state.readCurrent()}>独立读取当前 session</button>
++  <button disabled={blocked || !state.selected} onClick={() => void state.readPage()}>读取安全回合分页</button>
++  {current && <section aria-label="独立 GET 当前 session"><p>{current.id} · {current.status} · r{current.revision} · 活动回合 {current.active_turn_id ?? '无'}</p>
++   <p>ready 仅表示原本地映射已核验。当前 GET 不执行；准备只使用这次 GET 的版本。</p>
++   {current.active_turn_id && <button disabled={blocked} onClick={() => void state.readControl(current.active_turn_id!)}>读取回合控制 {current.active_turn_id}</button>}
++  </section>}
++  {state.allowed && <section aria-label="回合原输入表单">
++   <label>回合原文<textarea disabled={state.busy} value={state.fields.message} onChange={e => state.edit({ message: e.target.value })} /></label>
++   <p>原 Unicode、空格与换行保持原样；1..8000 个字符，不能只有空白。</p>
++   <label>Provider ID<input disabled={state.busy} value={state.fields.provider_id} onChange={e => state.edit({ provider_id: e.target.value })} /></label>
++   <label>工具调用上限<input inputMode="numeric" disabled={state.busy} value={state.fields.max_tool_calls} onChange={e => state.edit({ max_tool_calls: e.target.value })} /></label>
++   <label>回合 wall 秒数<input inputMode="numeric" disabled={state.busy} value={state.fields.wall_seconds} onChange={e => state.edit({ wall_seconds: e.target.value })} /></label>
++   <p>工具默认 0，最多 16；wall 1..300 秒。预算不批准任何具体操作。</p>
++   <button disabled={state.busy} onClick={() => state.edit({ context_refs: [] })}>明确不附加材料 []</button>
++   <button disabled={state.busy || currentBlock?.entity !== 'block'} onClick={() => { if (currentBlock?.entity === 'block') state.edit({ context_refs: [{ ...currentBlock, entity: 'block' }] }) }}>选择当前完整公开块</button>
++   <pre aria-label="本次精确材料引用">{JSON.stringify(state.fields.context_refs, null, 2)}</pre>
++   <p>只发送明确选定的完整公开块修订。切换阅读位置不会替换已选引用；是否仍可读取由服务端重新核验。</p>
++   <button disabled={state.busy || !state.canPrepare} onClick={() => void state.prepare()}>明确准备回合并预约 Job</button>
++   <p>每次编辑保存独立本机快照，关闭后保留，恢复需再次明确选择。旧未知命令不随表单修改；重放须使用下面的原 key。</p>
++   {state.forms.map(value => <button key={value.snapshot_id} disabled={state.busy} onClick={() => state.restoreForm(value)}>恢复原表单 {value.draft_id} · {value.sequence}</button>)}
++  </section>}
++  <section aria-label="回合原命令与历史 ACK"><h4>原命令与历史 ACK</h4>
++   <p>准备正文只向原作者且当前策略允许时显示。已保存表单和未知命令在权限变化后仍保留；历史 ACK 不更新当前 GET。</p>
++   {state.commands.map(command => <article key={command.command_id}>
++    <p>{command.kind === 'prepare' ? '准备回合' : '取消回合 Job'} · {command.ack ? '原 ACK 已记录，不是当前状态' : command.error ? `安全错误 ${command.error.status} ${command.error.code ?? ''}；原基准保留` : '结果未知；原 key 与完整命令保留'}</p>
++    {command.actor_session_id !== state.actor && <p>其他 actor 的安全控制记录只读；不能接管或重放。</p>}
++    <details><summary>核对回合原命令 {command.command_id}</summary><p>原 actor {command.actor_session_id}</p><pre>{JSON.stringify({ session_id: command.session_id, body: command.body, basis: command.basis, ack: command.ack }, null, 2)}</pre></details>
++    <button disabled={state.busy || !state.canReplay(command)} onClick={() => void state.execute(command)}>显式回放回合原 key {command.command_id}</button>
++    {command.kind === 'prepare' && command.ack && <button disabled={state.busy || !state.allowed} onClick={() => void state.readPreparation(command)}>独立读取准备详情 {command.ack.id}</button>}
++   </article>)}
++  </section>
++  {state.detail && <section aria-label="当前回合准备详情"><h4>独立 GET 的准备详情</h4><p>{state.detail.id} · {state.detail.validity} · Job {state.detail.job.id} · {state.detail.job.status}</p>
++   {state.detail.validity === 'unavailable' && <p>当前准备不可用于执行（unavailable），原准备仍保留。缺完整输入证明时服务端拒绝 CODEX_INPUT_PROOF_UNAVAILABLE；本面板未外发。</p>}
++   <pre>{JSON.stringify(state.detail.request, null, 2)}</pre><pre>{JSON.stringify(state.detail.summary, null, 2)}</pre>
++   <p>字符数不是完整 token 证明；生成、数学、来源与独立教学审查均未验收。</p>
++  </section>}
++  {state.page && <section aria-label="安全回合分页"><h4>本次只读分页快照</h4>{!state.page.items.length && <p>此页没有回合。</p>}
++   {state.page.items.map(value => <article key={value.id}><p>{value.id} · {value.job.status} · {value.execution} · {value.outcome ?? '尚无终态'}</p><button disabled={blocked} onClick={() => void state.readControl(value.id)}>读取回合控制 {value.id}</button></article>)}
++   {state.page.next_cursor && <button disabled={blocked} onClick={() => void state.readPage(true)}>继续读取安全回合</button>}
++  </section>}
++  {Object.values(state.controls).map(value => <section key={value.id} aria-label={`当前回合控制 ${value.id}`}><h4>当前安全控制 {value.id}</h4>
++   <p>Job {value.job.id} · {value.job.status} · r{value.job_revision}；Run r{value.run_revision} · seq {value.last_seq}</p>
++   <p>{value.execution} · {value.outcome ?? '尚无终态'} · cancel_requested={String(value.cancel_requested)} {value.error_code}</p>
++   <button disabled={blocked} onClick={() => void state.readControl(value.id)}>刷新安全控制 {value.id}</button>
++   <button disabled={blocked} onClick={() => void state.cancel(value)}>明确取消回合 Job {value.job.id}</button>
++   <p>取消使用本次控制 GET 的 Job revision；ACK 和取消请求不证明远端已经停止。</p>
++  </section>)}
++ </section>
++}
+diff --git a/apps/web/src/features/codex/turnCommands.test.ts b/apps/web/src/features/codex/turnCommands.test.ts
+new file mode 100644
+index 00000000..8648d00e
+--- /dev/null
++++ b/apps/web/src/features/codex/turnCommands.test.ts
+@@ -0,0 +1,66 @@
++import { IDBFactory } from 'fake-indexeddb'
++import { expect, test } from 'vitest'
++import { DraftStore } from '../../workbench/DraftStore'
++import { actor, codexSession, workspace } from './bootstrapTestFixtures'
++import { decodeTurnCommand, persistTurnCommand, readTurnCommand, turnCancelCommand, turnPrepareCommand, type TurnCommand } from './turnCommands'
++import { turnBody, turnControl, turnPreparation } from './turnTestFixtures'
++import { emptyTurnFields, persistTurnForm, readTurnForm, snapshotTurnForm } from './turnForms'
++const command = () => turnPrepareCommand(workspace, actor, codexSession(), turnBody())
++test.each([
++ (v: TurnCommand) => { v.actor_session_id = 'actor_other' },
++ (v: TurnCommand) => { v.session_id = 'session_other' },
++ (v: TurnCommand) => { v.command_id += '\n' },
++ (v: TurnCommand) => { if (v.kind === 'prepare') v.basis.revision = 9 },
++ (v: TurnCommand) => { if (v.kind === 'prepare') v.basis.active_turn_id = 'turn_existing' },
++ (v: TurnCommand) => { if (v.kind === 'prepare') v.basis.status = 'unknown' },
++ (v: TurnCommand) => { if (v.kind === 'prepare') v.body.message += 'changed' },
++ (v: TurnCommand) => { if (v.kind === 'prepare' && v.ack) v.ack.session_revision = 4 },
++ (v: TurnCommand) => { if (v.kind === 'prepare' && v.ack) v.ack.job.status = 'running' },
++ (v: TurnCommand) => { if (v.kind === 'prepare' && v.ack) v.ack.consent_id = 'consent_bootstrap' },
++ (v: TurnCommand) => { Object.assign(v, { csrf_token: 'synthetic-only' }) },
++])('damaged original actor/body/readonly basis/ACK cannot be accepted as a saved command %#', corrupt => {
++ const value = decodeTurnCommand(JSON.stringify({ ...command(), ack: turnPreparation() }), workspace)
++ corrupt(value); expect(() => decodeTurnCommand(JSON.stringify(value), workspace)).toThrow()
++})
++test('cancellation basis belongs to the actual target Job; the cancelling actor may be a different safe reader', () => {
++ const value = turnCancelCommand(workspace, 'learner_new', turnControl())
++ expect(value.actor_session_id).toBe('learner_new')
++ expect(value.body).toEqual({ expected_revision: 1 })
++ expect(() => decodeTurnCommand(JSON.stringify({ ...value, body: { expected_revision: 2 } }), workspace)).toThrow()
++ expect(() => decodeTurnCommand(JSON.stringify({ ...value, ack: { id: 'job_other', status: 'cancelled' } }), workspace)).toThrow()
++})
++test('fresh store read preserves original command; concurrent ACK and pending writers retain the checked ACK', async () => {
++ const factory = new IDBFactory(), name = `turn-command-${crypto.randomUUID()}`, first = new DraftStore({ name, factory }), second = new DraftStore({ name, factory })
++ const original = command(), ack = decodeTurnCommand(JSON.stringify({ ...original, ack: turnPreparation() }), workspace)
++ await persistTurnCommand(original, first)
++ await Promise.all([persistTurnCommand(ack, first), persistTurnCommand(original, second)])
++ const record = (await second.load(workspace))[original.command_id]
++ expect(readTurnCommand(record, workspace)).toEqual(ack)
++ expect(record.text).not.toMatch(/csrf|cookie|synthetic-only-not-persisted/)
++ await expect(persistTurnCommand({ ...original, actor_session_id: 'actor_other' }, second)).rejects.toThrow()
++ const controller = new AbortController(); controller.abort()
++ await expect(persistTurnCommand(original, first, { allowed: () => false, signal: controller.signal })).rejects.toThrow()
++ expect(readTurnCommand((await first.load(workspace))[original.command_id], workspace)).toEqual(ack)
++ await first.close(); await second.close()
++})
++test('incompatible concurrent original commands fail closed while both stored candidates remain available', async () => {
++ const db = new DraftStore({ name: crypto.randomUUID(), factory: new IDBFactory() }), original = command()
++ await persistTurnCommand(original, db)
++ await db.save(workspace, original.command_id, JSON.stringify({ ...original, actor_session_id: 'actor_other' }), 0)
++ const raw = (await db.load(workspace))[original.command_id]
++ expect(raw.conflicts).toHaveLength(1)
++ expect(() => readTurnCommand(raw, workspace)).toThrow()
++ await expect(persistTurnCommand(original, db)).rejects.toThrow()
++ expect((await db.load(workspace))[original.command_id]).toEqual(raw)
++ await db.close()
++})
++test('out-of-order form saves and reload preserve latest and older unsent snapshots without overwriting either', async () => {
++ const factory = new IDBFactory(), name = crypto.randomUUID(), first = new DraftStore({ name, factory }), second = new DraftStore({ name, factory })
++ const one = snapshotTurnForm(workspace, actor, { ...emptyTurnFields(), message: '原 α\n ' }, null)
++ const two = snapshotTurnForm(workspace, actor, { ...one.fields, message: '原 α\n 😀 final ' }, one)
++ await persistTurnForm(two, first); await persistTurnForm(one, first)
++ const recovered = Object.values(await second.load(workspace)).map(v => readTurnForm(v, workspace))
++ expect(recovered).toHaveLength(2); expect(recovered).toContainEqual(one); expect(recovered).toContainEqual(two)
++ await expect(persistTurnForm({ ...two, fields: { ...two.fields, message: 'replacement' } }, first)).rejects.toThrow()
++ await first.close(); await second.close()
++})
+diff --git a/apps/web/src/features/codex/turnCommands.ts b/apps/web/src/features/codex/turnCommands.ts
+new file mode 100644
+index 00000000..772f1427
+--- /dev/null
++++ b/apps/web/src/features/codex/turnCommands.ts
+@@ -0,0 +1,73 @@
++import type { JobRef } from '../../../../../packages/contracts/generated/api-types'
++import type { CodexCurrentSessionView, CodexTurnControlView, CodexTurnPreparationView, CodexTurnPrepareWrite } from '../../../../../packages/contracts/generated/codex-turn-types'
++import { assertDraftWriteAllowed, DraftStore, type DraftRecord, type DraftWriteGuard } from '../../workbench/DraftStore'
++import { checkedProvider, exactObject, sameValue, validIdentity } from '../providers/providerSchema'
++import { checkedBootstrap } from './bootstrapClient'
++import { checkedTurn } from './turnClient'
++
++type Base = { version: 1; workspace_id: string; actor_session_id: string; command_id: string; session_id: string; error: { status: number; code: string | null } | null }
++export type TurnCommand = Base & (
++ { kind: 'prepare'; basis: CodexCurrentSessionView; body: CodexTurnPrepareWrite; ack: CodexTurnPreparationView | null }
++ | { kind: 'cancel'; basis: CodexTurnControlView; body: { expected_revision: number }; ack: JobRef | null })
++export const turnStore = new DraftStore({ name: 'learning-workbench.codex-turn-commands.v1' })
++const fail = (): never => { throw new Error('原回合命令或基准无法核验；本机记录保留。') }
++export const turnIdentity = (value: unknown): value is string => validIdentity(value) && value.trim() === value
++const immutable = (value: TurnCommand) => ({ ...value, ack: null, error: null })
++export function decodeTurnCommand(raw: string, workspace: string): TurnCommand {
++ const value = JSON.parse(raw) as TurnCommand
++ if (!exactObject(value, ['version', 'workspace_id', 'actor_session_id', 'command_id', 'session_id', 'kind', 'basis', 'body', 'ack', 'error'])
++  || value.version !== 1 || !turnIdentity(workspace) || value.workspace_id !== workspace
++  || !turnIdentity(value.actor_session_id) || !turnIdentity(value.command_id) || !turnIdentity(value.session_id)) fail()
++ if (value.error !== null && (!exactObject(value.error, ['status', 'code']) || !Number.isSafeInteger(value.error.status)
++  || value.error.status < 400 || value.error.status > 599 || value.ack !== null
++  || value.error.code !== null && (typeof value.error.code !== 'string' || !/^[A-Z][A-Z0-9_]{0,79}$/.test(value.error.code) || value.error.code.trim() !== value.error.code))) fail()
++ if (value.kind === 'prepare') {
++  const basis = checkedBootstrap<CodexCurrentSessionView>('CodexCurrentSessionView', value.basis)
++  checkedTurn('CodexTurnPrepareWrite', value.body)
++  if (basis.id !== value.session_id || basis.status !== 'ready' || basis.active_turn_id !== null || basis.revision !== value.body.expected_session_revision) fail()
++  if (value.ack !== null) {
++   const ack = checkedTurn('CodexTurnPreparationView', value.ack)
++   if (ack.session_id !== value.session_id || ack.actor_session_id !== value.actor_session_id || !sameValue(ack.request, value.body)
++    || ack.session_revision !== basis.revision + 1 || ack.job.status !== 'awaiting_approval' || ack.proposal_id !== null || ack.consent_id !== null) fail()
++  }
++ } else if (value.kind === 'cancel') {
++  const basis = checkedTurn('CodexTurnControlView', value.basis)
++  checkedProvider('JobCancelRequest', value.body)
++  if (basis.session_id !== value.session_id || value.body.expected_revision !== basis.job_revision) fail()
++  if (value.ack !== null && checkedProvider<JobRef>('JobRef', value.ack).id !== basis.job.id) fail()
++ } else fail()
++ return value
++}
++export function turnPrepareCommand(workspace: string, actor: string, basis: CodexCurrentSessionView, body: CodexTurnPrepareWrite): TurnCommand {
++ return decodeTurnCommand(JSON.stringify({ version: 1, workspace_id: workspace, actor_session_id: actor, command_id: `codexturn_${crypto.randomUUID()}`,
++  session_id: basis.id, kind: 'prepare', basis, body, ack: null, error: null }), workspace)
++}
++export function turnCancelCommand(workspace: string, actor: string, basis: CodexTurnControlView): TurnCommand {
++ return decodeTurnCommand(JSON.stringify({ version: 1, workspace_id: workspace, actor_session_id: actor, command_id: `codexturn_${crypto.randomUUID()}`,
++  session_id: basis.session_id, kind: 'cancel', basis, body: { expected_revision: basis.job_revision }, ack: null, error: null }), workspace)
++}
++export function readTurnCommand(record: DraftRecord, workspace: string): TurnCommand {
++ const values = [record.text, ...record.conflicts.map(v => v.text)].map(raw => decodeTurnCommand(raw, workspace)), first = values[0]
++ if (record.objectId !== first.command_id || values.some(v => !sameValue(immutable(v), immutable(first)))) fail()
++ const confirmed = values.filter(v => v.ack)
++ if (confirmed.some(v => !sameValue(v.ack, confirmed[0].ack))) fail()
++ return confirmed[0] ?? values.find(v => v.error) ?? first
++}
++export async function persistTurnCommand(command: TurnCommand, store = turnStore, guard?: DraftWriteGuard): Promise<TurnCommand> {
++ let desired = decodeTurnCommand(JSON.stringify(command), command.workspace_id)
++ for (let attempt = 0; attempt < 4; attempt++) {
++  assertDraftWriteAllowed(guard)
++  const old = (await store.load(command.workspace_id))[command.command_id]
++  assertDraftWriteAllowed(guard)
++  if (old) {
++   const current = readTurnCommand(old, command.workspace_id)
++   if (!sameValue(immutable(current), immutable(desired)) || current.ack && desired.ack && !sameValue(current.ack, desired.ack)) fail()
++   if (current.ack || !desired.ack && !desired.error && current.error) desired = current
++   if (!old.conflicts.length && sameValue(current, desired)) return current
++  }
++  const saved = await store.save(command.workspace_id, command.command_id, JSON.stringify(desired), old?.revision ?? 0, old?.conflicts.map(v => v.id) ?? [], guard)
++  const actual = readTurnCommand(saved.record, command.workspace_id)
++  if (!saved.record.conflicts.length && sameValue(actual, desired)) return actual
++ }
++ throw new Error('回合命令仍有并发保存；原 key 与完整内容保留。')
++}
+diff --git a/apps/web/src/features/codex/turnForms.ts b/apps/web/src/features/codex/turnForms.ts
+new file mode 100644
+index 00000000..921c0112
+--- /dev/null
++++ b/apps/web/src/features/codex/turnForms.ts
+@@ -0,0 +1,50 @@
++import type { CodexBlockRef, CodexTurnPrepareWrite } from '../../../../../packages/contracts/generated/codex-turn-types'
++import { assertDraftWriteAllowed, DraftStore, type DraftRecord, type DraftWriteGuard } from '../../workbench/DraftStore'
++import { checkedProvider, exactObject, sameValue } from '../providers/providerSchema'
++import { turnIdentity } from './turnCommands'
++import { checkedTurn } from './turnClient'
++export type TurnFields = { session_id: string; message: string; provider_id: string; max_tool_calls: string; wall_seconds: string; context_refs: CodexBlockRef[] }
++export type TurnForm = { version: 1; workspace_id: string; actor_session_id: string; snapshot_id: string; draft_id: string; sequence: number; fields: TurnFields }
++export const turnFormStore = new DraftStore({ name: 'learning-workbench.codex-turn-forms.v1' })
++export const emptyTurnFields = (): TurnFields => ({ session_id: '', message: '', provider_id: '', max_tool_calls: '0', wall_seconds: '30', context_refs: [] })
++const fail = (): never => { throw new Error('回合表单快照无法核验；原记录保留。') }
++export function decodeTurnForm(raw: string, workspace: string): TurnForm {
++ const value = JSON.parse(raw) as TurnForm
++ if (!exactObject(value, ['version', 'workspace_id', 'actor_session_id', 'snapshot_id', 'draft_id', 'sequence', 'fields']) || value.version !== 1
++  || !turnIdentity(workspace) || value.workspace_id !== workspace || !turnIdentity(value.actor_session_id) || !turnIdentity(value.snapshot_id)
++  || !turnIdentity(value.draft_id) || !Number.isSafeInteger(value.sequence) || value.sequence < 1
++  || !exactObject(value.fields, ['session_id', 'message', 'provider_id', 'max_tool_calls', 'wall_seconds', 'context_refs'])
++  || ['session_id', 'message', 'provider_id', 'max_tool_calls', 'wall_seconds'].some(k => typeof value.fields[k as keyof TurnFields] !== 'string')
++  || !Array.isArray(value.fields.context_refs) || value.fields.context_refs.length > 1) fail()
++ for (const ref of value.fields.context_refs) {
++  checkedProvider('ContentRef', ref)
++  if (ref.entity !== 'block' || !turnIdentity(ref.id) || !/^[a-f0-9]{64}$/.test(ref.sha256) || ref.sha256.length !== 64) fail()
++ }
++ return value
++}
++export function snapshotTurnForm(workspace: string, actor: string, fields: TurnFields, previous: TurnForm | null): TurnForm {
++ return decodeTurnForm(JSON.stringify({ version: 1, workspace_id: workspace, actor_session_id: actor,
++  snapshot_id: `turnform_${crypto.randomUUID()}`, draft_id: previous?.draft_id ?? `turndraft_${crypto.randomUUID()}`, sequence: (previous?.sequence ?? 0) + 1, fields }), workspace)
++}
++export function readTurnForm(record: DraftRecord, workspace: string): TurnForm {
++ const values = [record.text, ...record.conflicts.map(v => v.text)].map(raw => decodeTurnForm(raw, workspace)), first = values[0]
++ if (record.objectId !== first.snapshot_id || values.some(v => !sameValue(v, first))) fail()
++ return first
++}
++/** Immutable edit snapshots prevent delayed saves or another tab from replacing an unsent form. */
++export async function persistTurnForm(form: TurnForm, store = turnFormStore, guard?: DraftWriteGuard): Promise<void> {
++ const checked = decodeTurnForm(JSON.stringify(form), form.workspace_id)
++ assertDraftWriteAllowed(guard)
++ const old = (await store.load(form.workspace_id))[form.snapshot_id]
++ assertDraftWriteAllowed(guard)
++ if (old) { if (!sameValue(readTurnForm(old, form.workspace_id), checked)) fail(); return }
++ const saved = await store.save(form.workspace_id, form.snapshot_id, JSON.stringify(checked), 0, [], guard)
++ if (!sameValue(readTurnForm(saved.record, form.workspace_id), checked)) fail()
++}
++export function turnFormBody(fields: TurnFields, revision: number): CodexTurnPrepareWrite {
++ // Number('') and Number('1e1') must not silently invent a chosen integer.
++ if (!/^(0|[1-9][0-9]*)$/.test(fields.max_tool_calls) || fields.max_tool_calls.trim() !== fields.max_tool_calls
++  || !/^[1-9][0-9]*$/.test(fields.wall_seconds) || fields.wall_seconds.trim() !== fields.wall_seconds) fail()
++ return checkedTurn('CodexTurnPrepareWrite', { message: fields.message, context_refs: fields.context_refs, provider_id: fields.provider_id,
++  expected_session_revision: revision, tools: { max_tool_calls: Number(fields.max_tool_calls), wall_seconds: Number(fields.wall_seconds) } })
++}
+diff --git a/apps/web/src/features/codex/turnMemory.ts b/apps/web/src/features/codex/turnMemory.ts
+new file mode 100644
+index 00000000..b1924075
+--- /dev/null
++++ b/apps/web/src/features/codex/turnMemory.ts
+@@ -0,0 +1,34 @@
++import { sameValue } from '../providers/providerSchema'
++import { decodeTurnCommand, type TurnCommand } from './turnCommands'
++import { decodeTurnForm, type TurnForm } from './turnForms'
++const commands = new Map<string, TurnCommand>(), forms = new Map<string, TurnForm>(), listeners = new Set<() => void>()
++let revision = 0
++const changed = () => { revision++; listeners.forEach(listener => listener()) }
++export const subscribeTurnMemory = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } }
++export const turnMemoryVersion = () => revision
++export const heldTurnCommands = (workspace: string) => [...commands.values()].filter(v => v.workspace_id === workspace).map(v => structuredClone(v))
++export const heldTurnForms = (workspace: string) => [...forms.values()].filter(v => v.workspace_id === workspace).map(v => structuredClone(v))
++export function retainTurnCommand(command: TurnCommand) {
++ const next = decodeTurnCommand(JSON.stringify(command), command.workspace_id), old = commands.get(next.command_id)
++ const basis = (v: TurnCommand) => ({ ...v, ack: null, error: null })
++ if (old && (!sameValue(basis(old), basis(next)) || old.ack && next.ack && !sameValue(old.ack, next.ack))) throw new Error('Original turn command changed')
++ commands.set(next.command_id, old?.ack ? old : next); changed()
++}
++export function releaseTurnCommand(command: TurnCommand) {
++ const old = commands.get(command.command_id), basis = (v: TurnCommand) => ({ ...v, ack: null, error: null })
++ // A checked durable ACK also covers an older pending copy. Never release a
++ // newer ACK merely because its earlier pending command reached storage.
++ if (old && (sameValue(old, command) || sameValue(basis(old), basis(command)) && !old.ack
++  && (command.ack || !old.error && command.error))) { commands.delete(command.command_id); changed() }
++}
++export function retainTurnForm(form: TurnForm) {
++ const next = decodeTurnForm(JSON.stringify(form), form.workspace_id), old = forms.get(next.snapshot_id)
++ if (old && !sameValue(old, next)) throw new Error('Original turn form changed')
++ forms.set(next.snapshot_id, next); changed()
++}
++export function releaseTurnForm(form: TurnForm) {
++ if (sameValue(forms.get(form.snapshot_id), form)) { forms.delete(form.snapshot_id); changed() }
++}
++if (typeof window !== 'undefined') window.addEventListener('beforeunload', event => {
++ if (commands.size || forms.size) { event.preventDefault(); event.returnValue = '' }
++})
+diff --git a/apps/web/src/features/codex/turnTestFixtures.ts b/apps/web/src/features/codex/turnTestFixtures.ts
+new file mode 100644
+index 00000000..d5a12999
+--- /dev/null
++++ b/apps/web/src/features/codex/turnTestFixtures.ts
+@@ -0,0 +1,22 @@
++import { vi } from 'vitest'
++import type { CodexTurnControlView, CodexTurnPreparationView, CodexTurnPrepareWrite } from '../../../../../packages/contracts/generated/codex-turn-types'
++import { actor, codexSession, session } from './bootstrapTestFixtures'
++import type { TurnPort } from './turnClient'
++export const turnBody = (): CodexTurnPrepareWrite => ({ message: '  原文 α\n中文😀  ', context_refs: [], expected_session_revision: 2, provider_id: 'codex_local', tools: { max_tool_calls: 0, wall_seconds: 30 } })
++export const turnPreparation = (request = turnBody()): CodexTurnPreparationView => ({
++ id: 'turn_preparation_test', preparation_sha256: 'a'.repeat(64), actor_session_id: actor, session_id: codexSession().id,
++ session_revision: 3, turn_id: 'turn_test', job: { id: 'job_turn_test', status: 'awaiting_approval' }, request,
++ summary: { context_snapshot_id: 'snapshot_test', snapshot_sha256: 'a'.repeat(64), job_input_sha256: 'a'.repeat(64), prepared_input_sha256: 'a'.repeat(64),
++  runtime: { profile_sha256: 'a'.repeat(64), cpu_seconds: 60, memory_bytes: 2147483648, file_bytes: 16777216, protocol_output_bytes: 16777216, file_descriptors: 128, processes: 16, core_bytes: 0, command_network: 'denied', writable_area: 'turn_outputs' },
++  character_count: 100, materials: [], history_turn_ids: [], tools: request.tools, warnings: [] },
++ created_at: '2026-10-04T00:00:00Z', proposal_id: null, consent_id: null, validity: 'unavailable',
++})
++export const turnControl = (): CodexTurnControlView => ({ id: 'turn_test', session_id: codexSession().id, actor_session_id: actor,
++ job: { id: 'job_turn_test', status: 'awaiting_approval' }, job_revision: 1, run_revision: 1, last_seq: 1, cancel_requested: false,
++ execution: 'not_started', outcome: null, approval_ids: [], approval_controls: [], consent_control: null, manifest_id: null,
++ created_at: '2026-10-04T00:00:00Z', started_at: null, finished_at: null, error_code: null })
++export const turnPort = (): TurnPort => ({ session: vi.fn(async () => session()), current: vi.fn(async () => codexSession()),
++ prepare: vi.fn<TurnPort['prepare']>(async (_id, request) => turnPreparation(request)), preparation: vi.fn(async () => turnPreparation()),
++ control: vi.fn(async () => turnControl()), turns: vi.fn(async () => ({ items: [turnControl()], next_cursor: null })),
++ cancel: vi.fn<TurnPort['cancel']>(async id => ({ id, status: 'cancelled' })),
++})
+diff --git a/apps/web/src/features/codex/useCodexTurns.ts b/apps/web/src/features/codex/useCodexTurns.ts
+new file mode 100644
+index 00000000..b7098576
+--- /dev/null
++++ b/apps/web/src/features/codex/useCodexTurns.ts
+@@ -0,0 +1,238 @@
++import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
++import type { SessionResponse } from '../../../../../packages/contracts/generated/api-types'
++import type { CodexCurrentSessionView, CodexTurnControlView, CodexTurnPage, CodexTurnPreparationView } from '../../../../../packages/contracts/generated/codex-turn-types'
++import { ApiError, getSessionGeneration, subscribeSessionAccess } from '../../api/client'
++import type { DraftStore, DraftWriteGuard } from '../../workbench/DraftStore'
++import { sameValue } from '../providers/providerSchema'
++import { checkedBootstrap } from './bootstrapClient'
++import { checkedTurn, turnClient, type TurnPort } from './turnClient'
++import { decodeTurnCommand, persistTurnCommand, readTurnCommand, turnCancelCommand, turnIdentity, turnPrepareCommand, turnStore, type TurnCommand } from './turnCommands'
++import { emptyTurnFields, persistTurnForm, readTurnForm, snapshotTurnForm, turnFormBody, turnFormStore, type TurnFields, type TurnForm } from './turnForms'
++import { heldTurnCommands, heldTurnForms, releaseTurnCommand, releaseTurnForm, retainTurnCommand, retainTurnForm, subscribeTurnMemory, turnMemoryVersion } from './turnMemory'
++
++const academic = (s: SessionResponse) => s.role === 'author' && !s.active_independent_attempt_id && !s.active_open_book_attempt_id
++const denied = (e: unknown) => e instanceof ApiError && ([401, 403].includes(e.status) || ['POLICY_DENIED', 'ASSESSMENT_ACTIVE', 'ASSESSMENT_ANSWER_PROTECTED'].includes(e.code ?? ''))
++export function useCodexTurns(workspace: string, writeAdmitted: boolean, port: TurnPort = turnClient, store: DraftStore = turnStore, formStore: DraftStore = turnFormStore) {
++ const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
++ useSyncExternalStore(subscribeTurnMemory, turnMemoryVersion, turnMemoryVersion)
++ const priorAdmission = useRef(writeAdmitted), revocation = useRef(0)
++ if (priorAdmission.current && !writeAdmitted) ++revocation.current
++ priorAdmission.current = writeAdmitted
++ const owner = JSON.stringify([workspace, access, revocation.current]), scope = useRef({ owner, port, store, formStore }); scope.current = { owner, port, store, formStore }
++ const live = useRef(false), working = useRef(false), sequence = useRef(0), writers = useRef(new Set<AbortController>())
++ const [renderScope, setRenderScope] = useState({ owner, port, store, formStore }), [identity, setIdentity] = useState<SessionResponse | null>(null)
++ const actorRef = useRef<SessionResponse | null>(null)
++ const [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState('')
++ const [commands, setCommands] = useState<TurnCommand[]>([]), [forms, setForms] = useState<TurnForm[]>([])
++ const [selected, setSelected] = useState(''), [form, setForm] = useState<TurnForm | null>(null), formRef = useRef<TurnForm | null>(null)
++ const [current, setCurrent] = useState<CodexCurrentSessionView | null>(null), [page, setPage] = useState<CodexTurnPage | null>(null)
++ const [controls, setControls] = useState<Record<string, CodexTurnControlView>>({}), [detail, setDetail] = useState<CodexTurnPreparationView | null>(null)
++ const currentScope = () => live.current && scope.current.owner === owner && scope.current.port === port && scope.current.store === store && scope.current.formStore === formStore && access === getSessionGeneration()
++ const valid = (token: number) => currentScope() && sequence.current === token
++ const visible = renderScope.owner === owner && renderScope.port === port && renderScope.store === store && renderScope.formStore === formStore
++ const ready = visible && identity !== null, allowed = ready && writeAdmitted && academic(identity)
++ const hide = () => { actorRef.current = null; setIdentity(null); setCurrent(null); setPage(null); setControls({}); setDetail(null); setCommands([]); setForms([]) }
++ const acceptIdentity = (value: SessionResponse) => { actorRef.current = value; setIdentity(value) }
++ const begin = () => { if (!currentScope() || !workspace || working.current) return null; working.current = true; setBusy(true); setError(''); setMessage(''); return ++sequence.current }
++ const finish = (token: number) => { if (valid(token)) { working.current = false; setBusy(false) } }
++ const fail = (reason: unknown) => {
++  if (denied(reason)) hide()
++  setError(denied(reason) ? '当前权限或原 actor 已变化；原回合命令与表单保留，请重新读取权限。'
++   : reason instanceof ApiError && reason.status === 412 ? '版本已变化（412）；原 key、完整命令与只读基准保留。请独立读取当前状态。'
++   : reason instanceof ApiError && reason.status === 409 ? '操作绑定冲突（409）；原 key 与基准保留，不自动另建回合。'
++   : '操作结果或本机保存尚未确认；原命令和表单保留，不自动重发。')
++ }
++ async function fresh(token: number, write: boolean, actor?: string) {
++  const value = checkedBootstrap<SessionResponse>('SessionResponse', await port.session())
++  if (!valid(token)) throw new Error('Scope changed')
++  if (value.workspace_id !== workspace || actor && value.actor_session_id !== actor || write && (!writeAdmitted || !academic(value))) {
++   hide(); throw new ApiError(403, 'Original turn access changed')
++  }
++  acceptIdentity(value); return value
++ }
++ const loadCommands = async () => Object.values(await store.load(workspace)).map(v => readTurnCommand(v, workspace))
++ const loadForms = async () => Object.values(await formStore.load(workspace)).map(v => readTurnForm(v, workspace))
++ function writer(allowed: () => boolean) {
++  const controller = new AbortController(); writers.current.add(controller)
++  const unsubscribe = subscribeSessionAccess(() => controller.abort())
++  return { guard: { allowed, signal: controller.signal } satisfies DraftWriteGuard,
++   done: () => { unsubscribe(); writers.current.delete(controller) } }
++ }
++ useEffect(() => {
++  live.current = true; ++sequence.current; working.current = false; setRenderScope({ owner, port, store, formStore })
++  hide(); setSelected(''); setForm(null); formRef.current = null; setBusy(false); setError(''); setMessage('')
++  return () => { live.current = false; ++sequence.current; working.current = false; for (const value of writers.current) value.abort() }
++ }, [owner, port, store, formStore])
++ const refresh = async () => {
++  const token = begin(); if (token === null) return
++  hide()
++  try {
++   const session = await fresh(token, false), values = await loadCommands(), drafts = await loadForms()
++   await fresh(token, false, session.actor_session_id)
++   if (valid(token)) { setCommands(values); setForms(drafts); setMessage('已读取本机记录；当前 session、回合与准备须分别显式读取。') }
++  } catch (reason) { if (valid(token)) fail(reason) } finally { finish(token) }
++ }
++ const edit = (patch: Partial<TurnFields>) => {
++  if (!allowed || working.current || !currentScope()) return
++  const previous = formRef.current?.actor_session_id === identity.actor_session_id ? formRef.current : null
++  const next = snapshotTurnForm(workspace, identity.actor_session_id, { ...(previous?.fields ?? emptyTurnFields()), session_id: selected, ...patch }, previous)
++  formRef.current = next; setForm(next); retainTurnForm(next)
++  const saving = writer(() => currentScope() && actorRef.current?.actor_session_id === next.actor_session_id && academic(actorRef.current) && writeAdmitted)
++  void persistTurnForm(next, formStore, saving.guard).then(() => {
++   releaseTurnForm(next)
++   if (currentScope()) setForms(values => [...values.filter(v => v.snapshot_id !== next.snapshot_id), next])
++  }).catch(() => { if (currentScope()) setError('表单尚未全部保存；原输入保留在隔离内存中，离开前请仅保存本机事实。') }).finally(saving.done)
++ }
++ const select = (id: string) => {
++  if (!ready || working.current) return
++  edit({ session_id: id }); setSelected(id); setCurrent(null); setPage(null); setControls({}); setDetail(null)
++ }
++ const restoreForm = (value: TurnForm) => {
++  if (!allowed || working.current || value.actor_session_id !== identity.actor_session_id) return
++  // Editing a restored snapshot creates a separate branch; the original remains recoverable.
++  const next = snapshotTurnForm(workspace, identity.actor_session_id, value.fields, null)
++  formRef.current = next; setForm(next); setSelected(value.fields.session_id); setCurrent(null); setPage(null); setControls({}); setDetail(null)
++  retainTurnForm(next)
++  const saving = writer(() => currentScope() && actorRef.current?.actor_session_id === next.actor_session_id && academic(actorRef.current) && writeAdmitted)
++  void persistTurnForm(next, formStore, saving.guard).then(() => { releaseTurnForm(next); if (currentScope()) setForms(v => [...v, next]) })
++   .catch(() => { if (currentScope()) setError('恢复表单尚未保存；隔离内存保留原输入。') }).finally(saving.done)
++ }
++ const readCurrent = async () => {
++  if (!ready || !turnIdentity(selected)) return
++  const id = selected, actor = identity.actor_session_id, token = begin(); if (token === null) return
++  setCurrent(null)
++  try {
++   await fresh(token, false, actor)
++   const value = checkedBootstrap<CodexCurrentSessionView>('CodexCurrentSessionView', await port.current(id))
++   if (value.id !== id) throw new Error('Wrong session')
++   await fresh(token, false, actor)
++   if (valid(token)) setCurrent(value)
++  } catch (reason) { if (valid(token)) fail(reason) } finally { finish(token) }
++ }
++ const readPage = async (next = false) => {
++  if (!ready || !turnIdentity(selected) || next && !page?.next_cursor) return
++  const id = selected, actor = identity.actor_session_id, token = begin(); if (token === null) return
++  const cursor = next ? page!.next_cursor! : undefined
++  setPage(null); setControls({})
++  try {
++   await fresh(token, false, actor)
++   const value = checkedTurn('CodexTurnPage', await port.turns(id, cursor ? { cursor, limit: 20 } : { limit: 20 }))
++   if (value.items.some(v => v.session_id !== id)) throw new Error('Wrong page')
++   await fresh(token, false, actor)
++   if (valid(token)) setPage(value)
++  } catch (reason) { if (valid(token)) fail(reason) } finally { finish(token) }
++ }
++ const readControl = async (id: string) => {
++  if (!ready || !turnIdentity(id)) return
++  const sessionId = selected, actor = identity.actor_session_id, token = begin(); if (token === null) return
++  setControls(values => { const next = { ...values }; delete next[id]; return next })
++  try {
++   await fresh(token, false, actor)
++   const value = checkedTurn('CodexTurnControlView', await port.control(id))
++   if (value.id !== id || value.session_id !== sessionId) throw new Error('Wrong control')
++   await fresh(token, false, actor)
++   if (valid(token)) setControls(values => ({ ...values, [id]: value }))
++  } catch (reason) { if (valid(token)) fail(reason) } finally { finish(token) }
++ }
++ const readPreparation = async (command: TurnCommand) => {
++  if (!allowed || command.kind !== 'prepare' || !command.ack || command.actor_session_id !== identity.actor_session_id) return
++  const id = command.ack.id, actor = identity.actor_session_id, token = begin(); if (token === null) return
++  setDetail(null)
++  try {
++   await fresh(token, true, actor)
++   const value = checkedTurn('CodexTurnPreparationView', await port.preparation(id))
++   // Current projections may change validity and Job status, never the frozen input.
++   if (value.id !== id || value.actor_session_id !== actor || value.session_id !== command.session_id
++    || value.preparation_sha256 !== command.ack.preparation_sha256 || value.turn_id !== command.ack.turn_id || value.job.id !== command.ack.job.id
++    || value.created_at !== command.ack.created_at || value.session_revision !== command.ack.session_revision
++    || !sameValue(value.request, command.ack.request) || !sameValue(value.summary, command.ack.summary)) throw new Error('Wrong preparation')
++   await fresh(token, true, actor)
++   if (valid(token)) setDetail(value)
++  } catch (reason) { if (valid(token)) fail(reason) } finally { finish(token) }
++ }
++ const execute = async (command: TurnCommand) => {
++  if (!ready || command.workspace_id !== workspace || command.actor_session_id !== identity.actor_session_id || command.ack || command.kind === 'prepare' && !allowed) return
++  const token = begin(); if (token === null) return
++  const saving = writer(() => valid(token)); let original = command
++  try {
++   await fresh(token, command.kind === 'prepare', command.actor_session_id)
++   retainTurnCommand(command)
++   original = await persistTurnCommand(command, store, saving.guard)
++   releaseTurnCommand(original)
++   if (!valid(token)) return
++   const values = await loadCommands()
++   if (!valid(token)) return
++   setCommands(values)
++   await fresh(token, original.kind === 'prepare', original.actor_session_id)
++   if (original.ack) return
++   if (original.kind === 'prepare') setCurrent(null)
++   else setControls(values => { const next = { ...values }; delete next[original.basis.id]; return next })
++   const raw = original.kind === 'prepare' ? await port.prepare(original.session_id, original.body, original.command_id)
++    : await port.cancel(original.basis.job.id, original.body.expected_revision, original.command_id)
++   // Preserve the checked original fact before any scope/access check. A late
++   // response belongs to its original actor even after unmount or revocation.
++   const acknowledged = decodeTurnCommand(JSON.stringify({ ...original, ack: raw, error: null }), workspace)
++   retainTurnCommand(acknowledged)
++   if (!valid(token)) return
++   await fresh(token, original.kind === 'prepare', original.actor_session_id)
++   const saved = await persistTurnCommand(acknowledged, store, saving.guard); releaseTurnCommand(saved)
++   const confirmed = await loadCommands()
++   if (valid(token)) { setCommands(confirmed); setMessage(original.kind === 'prepare' ? '准备原 ACK 已保存；只预约 Job，未执行。当前状态须独立 GET。' : '取消原 ACK 已保存；当前控制须独立 GET，取消请求不证明远端已停止。') }
++  } catch (reason) {
++   if (reason instanceof ApiError && reason.status >= 400 && reason.status <= 599 && !heldTurnCommands(workspace).some(v => v.command_id === original.command_id && v.ack)) {
++    const rejected = decodeTurnCommand(JSON.stringify({ ...original, error: { status: reason.status,
++     code: /^[A-Z][A-Z0-9_]{0,79}$/.test(reason.code ?? '') && reason.code?.trim() === reason.code ? reason.code : null } }), workspace)
++    retainTurnCommand(rejected)
++    if (valid(token) && !denied(reason)) {
++     try { const saved = await persistTurnCommand(rejected, store, saving.guard); releaseTurnCommand(saved); const values = await loadCommands(); if (valid(token)) setCommands(values) } catch { /* Retained original fact remains isolated. */ }
++    }
++   }
++   if (valid(token)) fail(reason)
++  } finally { saving.done(); finish(token) }
++ }
++ const prepare = async () => {
++  const input = formRef.current
++  if (!allowed || !input || input.actor_session_id !== identity.actor_session_id || input.workspace_id !== workspace || input.fields.session_id !== selected
++   || !current || current.id !== selected || current.status !== 'ready' || current.active_turn_id !== null || working.current) return
++  try { await execute(turnPrepareCommand(workspace, identity.actor_session_id, current, turnFormBody(input.fields, current.revision))) }
++  catch { setError('请保留原 Unicode 文字，填写 Provider ID、0..16 次工具与 1..300 秒；只允许明确选择的精确公开块。') }
++ }
++ const cancel = async (value: CodexTurnControlView) => {
++  if (!ready || working.current || controls[value.id] !== value) return
++  await execute(turnCancelCommand(workspace, identity.actor_session_id, value))
++ }
++ const saveMemory = async () => {
++  if (!ready) return
++  const actor = identity.actor_session_id, token = begin(); if (token === null) return
++  const saving = writer(() => valid(token))
++  try {
++   await fresh(token, false, actor)
++   // Blind local persistence is recovery, not access to another actor's prompt,
++   // a role transition, a remote replay, or consent to any server operation.
++   for (const value of heldTurnCommands(workspace)) { const saved = await persistTurnCommand(value, store, saving.guard); releaseTurnCommand(saved) }
++   for (const value of heldTurnForms(workspace)) { await persistTurnForm(value, formStore, saving.guard); releaseTurnForm(value) }
++   const values = await loadCommands(), drafts = await loadForms()
++   await fresh(token, false, actor)
++   if (valid(token)) { setCommands(values); setForms(drafts); setMessage('仅保存原 actor 的本机事实和表单；未发送准备或取消请求。') }
++  } catch (reason) { if (valid(token)) fail(reason) } finally { saving.done(); finish(token) }
++ }
++ const held = heldTurnCommands(workspace), heldForms = heldTurnForms(workspace)
++ const all = new Map(commands.map(v => [v.command_id, v]))
++ for (const value of held) if (!all.get(value.command_id)?.ack || value.ack) all.set(value.command_id, value)
++ const allForms = new Map([...forms, ...heldForms].map(v => [v.snapshot_id, v]))
++ const latest = new Map<string, TurnForm>()
++ for (const value of allForms.values()) if (allowed && value.actor_session_id === identity.actor_session_id && (!latest.has(value.draft_id) || latest.get(value.draft_id)!.sequence < value.sequence)) latest.set(value.draft_id, value)
++ const visibleCommands = ready ? [...all.values()].filter(v => v.kind === 'cancel' || allowed && v.actor_session_id === identity.actor_session_id) : []
++ const retained = held.length + heldForms.length
++ let canPrepare = false
++ try { if (allowed && form?.actor_session_id === identity.actor_session_id && form.workspace_id === workspace && form.fields.session_id === selected
++  && current?.id === selected && current.status === 'ready' && current.active_turn_id === null) { turnFormBody(form.fields, current.revision); canPrepare = true } } catch { /* The original form remains editable and saved. */ }
++ return { ready, allowed, busy: visible && busy, actor: ready ? identity.actor_session_id : null, selected: ready ? selected : '',
++  fields: allowed && form?.actor_session_id === identity.actor_session_id ? form.fields : emptyTurnFields(), forms: [...latest.values()], commands: visibleCommands,
++  current: ready ? current : null, page: ready ? page : null, controls: ready ? controls : {}, detail: allowed ? detail : null,
++  error: visible ? error : '', message: visible ? message : '', canPrepare,
++  dirty: retained > 0 || allForms.size > 0 || [...all.values()].some(v => !v.ack), safe: !working.current && retained === 0, isolated: !working.current && retained > 0,
++  retained, canSave: ready && retained > 0, refresh, edit, select, restoreForm, readCurrent, readPage, readControl, readPreparation, execute, prepare, cancel, saveMemory,
++  canReplay: (value: TurnCommand) => ready && value.actor_session_id === identity.actor_session_id && (value.kind === 'cancel' || allowed) && !value.ack && !held.some(v => v.command_id === value.command_id && v.ack),
++ }
++}

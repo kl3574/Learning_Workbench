@@ -1,0 +1,109 @@
+diff --git a/tests/integration/test_codex_turn_dispatch_http.py b/tests/integration/test_codex_turn_dispatch_http.py
+index 0d8a9cc7..2e9277b2 100644
+--- a/tests/integration/test_codex_turn_dispatch_http.py
++++ b/tests/integration/test_codex_turn_dispatch_http.py
+@@ -6,15 +6,22 @@ from packages.contracts.canonical import canonical_bytes
+ from services.api.app.application.codex_turn_worker import SyntheticCodexExecutor
+ from services.api.app.application.provider_codex_execution import SyntheticCodexResponse
+ from services.api.app.main import create_app
+-from tests.integration.test_codex_bootstrap_http import Case
+-from tests.integration.test_codex_turn_consent_http import consent_case as base_fixture, grant_fixture
++from tests.integration.test_codex_bootstrap_http import Case, make_case
++from tests.integration.test_codex_turn_consent_http import consent_case as base_fixture, grant_fixture, make_consent_case
++
++from tests.integration.test_assessment_learning_port import assessment_learning_state
+ 
+ base_consent_case = base_fixture
++assessment_state = assessment_learning_state
+ 
+ 
+ @pytest.fixture
+ def consent_case(base_consent_case):
+-    case,runtime,sid,proofs,bootstrap_body,bootstrap_ack=base_consent_case
++    yield from make_dispatch_case(base_consent_case)
++
++
++def make_dispatch_case(base_values):
++    case,runtime,sid,proofs,bootstrap_body,bootstrap_ack=base_values
+     calls=[]
+     def transport(body,endpoint,max_output):
+         calls.append((body,endpoint,max_output))
+@@ -509,3 +516,78 @@ def test_missing_production_proof_is_not_reported_as_only_missing_adapter(consen
+         assert case.dump()==before and case.app.state.synthetic_transport_calls==[]
+     finally:
+         client.close()
++
++
++def test_actual_logout_after_request_keeps_response_but_new_actor_cannot_restart(consent_case):
++    case,runtime,sid,proofs,_,_=consent_case
++    prep,_,body,_=queued(consent_case)
++    executor=case.app.state.synthetic_executor
++    original=executor.transport
++    def transport(*args):
++        assert case.client.post('/api/v1/session/logout',json={},headers=case.headers).status_code==200
++        return original(*args)
++    executor.transport=transport
++    assert case.app.state.codex_turn_worker.run_once() is True
++    assert case.get('turns/'+prep['turn_id']).status_code==401
++    new=make_case(case.app.state.settings.data_dir,codex_bootstrap_runtime=runtime,codex_proofs=proofs)
++    try:
++        assert new.actor_id!=case.actor_id
++        before=case.dump()
++        result=new.get('turns/'+prep['turn_id']+'/result')
++        assert result.status_code==200 and result.json()['answer_markdown']=='Synthetic exact answer α\n'
++        assert result.json()['control']['outcome']=='failed' and result.json()['control']['error_code']=='POLICY_DENIED'
++        assert new.post(f'sessions/{sid}/turns',body,'start').status_code==403
++        assert new.get('sessions/'+sid).json()['revision']==5
++        assert case.dump()==before and len(case.app.state.synthetic_transport_calls)==1
++    finally:
++        new.client.close()
++
++
++def test_real_open_book_policy_stops_queued_dispatch_without_a_request(assessment_state):
++    from tests.integration.test_assessment_policy import start
++    from tests.integration.test_codex_turn_preparation_http import identity
++    database,_,fixture,assessment=assessment_state
++    for original in make_consent_case(database.settings.data_dir):
++        for values in make_dispatch_case(original):
++            case,_,sid,_,_,_=values
++            prep,_,_,_=queued(values)
++            start((database,identity(case),fixture,assessment),mode='open_book')
++            assert case.app.state.codex_turn_worker.run_once() is True
++            control=case.get('turns/'+prep['turn_id'])
++            assert control.status_code==200 and control.json()['outcome']=='failed'
++            assert control.json()['error_code'] in {'POLICY_DENIED','ASSESSMENT_ACTIVE'}
++            assert case.get('turns/'+prep['turn_id']+'/result').status_code==409
++            assert case.get('sessions/'+sid).json()['revision']==5
++            assert case.app.state.synthetic_transport_calls==[]
++
++
++@pytest.mark.parametrize('damage',['provider_tail','codex_tail','job_tail','run','lease','context'])
++def test_dispatch_current_and_original_ack_reject_damaged_owned_graph(consent_case,damage):
++    from contextlib import ExitStack
++    case,_,sid,_,_,_=consent_case
++    prep,_,body,_=queued(consent_case)
++    if damage=='lease':
++        with ExitStack() as stack:
++            assert case.app.state.codex_turn_worker._claim(stack)
++    else:
++        assert case.app.state.codex_turn_worker.run_once() is True
++    with case.app.state.database.transaction() as conn:
++        for row in conn.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND (name LIKE 'provider_codex_%' OR name LIKE 'codex_turn_%')").fetchall():
++            conn.execute('DROP TRIGGER '+row[0])
++        if damage=='provider_tail':
++            conn.execute('DELETE FROM provider_codex_events WHERE turn_id=? AND seq=(SELECT MAX(seq) FROM provider_codex_events WHERE turn_id=?)',(prep['turn_id'],prep['turn_id']))
++        elif damage=='codex_tail':
++            conn.execute('DELETE FROM codex_turn_events WHERE session_id=? AND seq=(SELECT MAX(seq) FROM codex_turn_events WHERE session_id=?)',(sid,sid))
++        elif damage=='job_tail':
++            conn.execute('DELETE FROM job_events WHERE job_id=? AND seq=(SELECT MAX(seq) FROM job_events WHERE job_id=?)',(prep['job']['id'],prep['job']['id']))
++        elif damage=='run':
++            conn.execute("UPDATE runs SET snapshot_json='{}' WHERE id=?",(prep['job']['id'],))
++        elif damage=='lease':
++            conn.execute("UPDATE jobs SET lease_owner='lease_other' WHERE id=?",(prep['job']['id'],))
++        else:
++            conn.execute("UPDATE context_snapshots SET envelope_json='{}' WHERE id=?",(prep['summary']['context_snapshot_id'],))
++    before=case.dump()
++    responses=[case.get('turns/'+prep['turn_id']),case.get('turns/'+prep['turn_id']+'/result'),
++        case.get('sessions/'+sid),case.post(f'sessions/{sid}/turns',body,'start')]
++    assert [(response.status_code,response.json()['error']['code']) for response in responses]==[(409,'CODEX_HISTORY_DAMAGED')]*4
++    assert case.dump()==before

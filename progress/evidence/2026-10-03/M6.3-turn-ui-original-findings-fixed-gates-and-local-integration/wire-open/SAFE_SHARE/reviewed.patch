@@ -1,0 +1,279 @@
+diff --git a/apps/web/src/features/codex/CodexTurnPanel.test.tsx b/apps/web/src/features/codex/CodexTurnPanel.test.tsx
+index 708e7eb7..f2675899 100644
+--- a/apps/web/src/features/codex/CodexTurnPanel.test.tsx
++++ b/apps/web/src/features/codex/CodexTurnPanel.test.tsx
+@@ -4,7 +4,7 @@ import { afterEach, expect, test, vi } from 'vitest'
+ import { DraftStore } from '../../workbench/DraftStore'
+ import { actor, codexSession, deferred, session, workspace } from './bootstrapTestFixtures'
+ import { CodexTurnPanel } from './CodexTurnPanel'
+-import { turnBody, turnControl, turnPort, turnPreparation } from './turnTestFixtures'
++import { turnBody, turnCancelledJob, turnControl, turnPort, turnPreparation } from './turnTestFixtures'
+ import { ApiError, request } from '../../api/client'
+ import { heldTurnCommands, heldTurnForms, releaseTurnCommand, releaseTurnForm } from './turnMemory'
+ import { decodeTurnCommand, persistTurnCommand, readTurnCommand, turnPrepareCommand } from './turnCommands'
+@@ -93,7 +93,7 @@ test.each(['learner', 'independent', 'open_book'] as const)('safe session/page/c
+   const command = readTurnCommand((await store.load(workspace))[key], workspace)
+   expect(command.kind).toBe('cancel'); expect(command.actor_session_id).toBe(actor)
+   expect(command.basis).toEqual(turnControl()); expect(command.body).toEqual({ expected_revision: revision })
+-  return { id, status: 'cancelled' }
++  return { ...turnCancelledJob(), id }
+  })
+  render(<CodexTurnPanel workspace={workspace} writeAdmitted={false} port={port} store={store} formStore={formStore} />)
+  await refresh(); expect(screen.queryByLabelText('回合原文')).toBeNull()
+diff --git a/apps/web/src/features/codex/turnCancelWire.test.tsx b/apps/web/src/features/codex/turnCancelWire.test.tsx
+new file mode 100644
+index 00000000..8cfe1cad
+--- /dev/null
++++ b/apps/web/src/features/codex/turnCancelWire.test.tsx
+@@ -0,0 +1,59 @@
++import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
++import { IDBFactory } from 'fake-indexeddb'
++import { afterEach, expect, test, vi } from 'vitest'
++import type { JobSnapshot } from '../../../../../packages/contracts/generated/api-types'
++import { DraftStore } from '../../workbench/DraftStore'
++import { actor, codexSession, workspace } from './bootstrapTestFixtures'
++import { CodexTurnPanel } from './CodexTurnPanel'
++import { turnClient } from './turnClient'
++import { readTurnCommand } from './turnCommands'
++import { heldTurnCommands, heldTurnForms, releaseTurnCommand, releaseTurnForm } from './turnMemory'
++import { turnControl, turnPort } from './turnTestFixtures'
++
++// POST /jobs/{id}/cancel returns the closed JobSnapshot owner contract, not JobRef.
++const cancelled = (): JobSnapshot => ({ id: 'job_turn_test', workspace_id: workspace, kind: 'codex_turn',
++ status: 'cancelled', revision: 2, created_at: '2026-10-04T00:00:00Z', updated_at: '2026-10-04T00:00:01Z',
++ progress: { completed: 0, total: null, label: 'cancelled' }, result_refs: [], warnings: [], error: null })
++const stores: DraftStore[] = []
++const local = () => { const value = new DraftStore({ name: `turn-wire-${crypto.randomUUID()}`, factory: new IDBFactory() }); stores.push(value); return value }
++afterEach(async () => {
++ cleanup(); heldTurnCommands(workspace).forEach(releaseTurnCommand); heldTurnForms(workspace).forEach(releaseTurnForm)
++ await Promise.all(stores.splice(0).map(value => value.close())); vi.unstubAllGlobals()
++})
++
++test('real cancellation wire is retained completely through client, explicit replay, and durable reload', async () => {
++ const store = local(), formStore = local(), port = { ...turnPort(), cancel: turnClient.cancel }
++ const posts: Array<{ path: string; key: string; body: unknown }> = []
++ const fetch = vi.fn(async (path: string, init: RequestInit) => {
++  const key = new Headers(init.headers).get('Idempotency-Key')!, body = JSON.parse(init.body as string)
++  const original = readTurnCommand((await store.load(workspace))[key], workspace)
++  expect(original.kind).toBe('cancel'); expect(original.actor_session_id).toBe(actor)
++  expect(original.basis).toEqual(turnControl()); expect(original.body).toEqual(body); expect(original.ack).toBeNull()
++  posts.push({ path, key, body })
++  if (posts.length === 1) throw new Error('synthetic lost cancellation ACK')
++  return new Response(JSON.stringify(cancelled()), { status: 200 })
++ })
++ vi.stubGlobal('fetch', fetch)
++ let view = render(<CodexTurnPanel workspace={workspace} writeAdmitted port={port} store={store} formStore={formStore} />)
++ const refresh = async () => { fireEvent.click(screen.getByText('读取回合记录与权限')); await screen.findByText(/已读取本机记录/) }
++ await refresh()
++ fireEvent.change(screen.getByLabelText('已建立的 session ID'), { target: { value: codexSession().id } })
++ fireEvent.click(screen.getByText('读取安全回合分页')); await screen.findByLabelText('安全回合分页')
++ fireEvent.click(screen.getByText('读取回合控制 turn_test')); await screen.findByLabelText('当前回合控制 turn_test')
++ fireEvent.click(screen.getByText('明确取消回合 Job job_turn_test')); await screen.findByText(/操作结果或本机保存尚未确认/)
++ expect(posts).toHaveLength(1)
++ const original = posts[0], savedOriginal = readTurnCommand((await store.load(workspace))[original.key], workspace)
++ view.unmount(); view = render(<CodexTurnPanel workspace={workspace} writeAdmitted port={port} store={store} formStore={formStore} />)
++ await refresh(); expect(posts).toHaveLength(1)
++ fireEvent.click(screen.getByText(`显式回放回合原 key ${original.key}`))
++ await waitFor(async () => expect(readTurnCommand((await store.load(workspace))[original.key], workspace).ack).toEqual(cancelled()))
++ await screen.findByText(/取消原 ACK 已保存/)
++ expect(posts).toEqual([original, original]); expect(original.path).toBe('/api/v1/jobs/job_turn_test/cancel')
++ expect(original.body).toEqual({ expected_revision: 1 })
++ expect(readTurnCommand((await store.load(workspace))[original.key], workspace)).toEqual({ ...savedOriginal, ack: cancelled() })
++ view.unmount(); render(<CodexTurnPanel workspace={workspace} writeAdmitted port={port} store={store} formStore={formStore} />)
++ await refresh(); expect(posts).toHaveLength(2)
++ expect(screen.getByText('取消回合 Job · 原 ACK 已记录，不是当前状态')).toBeTruthy()
++ expect(readTurnCommand((await store.load(workspace))[original.key], workspace).ack).toEqual(cancelled())
++ expect(port.prepare).not.toHaveBeenCalled(); expect(port.current).not.toHaveBeenCalled()
++})
+diff --git a/apps/web/src/features/codex/turnClient.test.ts b/apps/web/src/features/codex/turnClient.test.ts
+index bfaffac4..0dc95594 100644
+--- a/apps/web/src/features/codex/turnClient.test.ts
++++ b/apps/web/src/features/codex/turnClient.test.ts
+@@ -2,6 +2,7 @@ import { afterEach, expect, test, vi } from 'vitest'
+ import type { CodexTurnControlView, CodexTurnPreparationView, CodexTurnPrepareWrite } from '../../../../../packages/contracts/generated/codex-turn-types'
+ import { codexSession } from './bootstrapTestFixtures'
+ import { checkedTurn, turnClient } from './turnClient'
++import { turnCancelledJob } from './turnTestFixtures'
+ 
+ // Synthetic wire fixtures prove client admission/transport, never server history or runtime proof.
+ afterEach(() => vi.unstubAllGlobals())
+@@ -52,12 +53,27 @@ test('subject/current/control/page reads carry no replay key or body and retain
+ })
+ 
+ test('cancellation sends the explicitly read job revision, no implicit new preparation or retry', async () => {
+- const fetch = respond({ id: 'job_test', status: 'cancelled' })
+- expect(await turnClient.cancel('job_test', 7, 'cancel_original')).toEqual({ id: 'job_test', status: 'cancelled' })
++ const ack = { ...turnCancelledJob(), id: 'job_test', revision: 8 }, fetch = respond(ack)
++ expect(await turnClient.cancel('job_test', 7, 'cancel_original')).toEqual(ack)
+  const [path, init] = fetch.mock.calls[0] as unknown as [string, RequestInit]
+  expect(path).toBe('/api/v1/jobs/job_test/cancel'); expect(JSON.parse(init.body as string)).toEqual({ expected_revision: 7 })
+  expect(new Headers(init.headers).get('Idempotency-Key')).toBe('cancel_original'); expect(fetch).toHaveBeenCalledTimes(1)
+ })
++test.each([
++ { id: 'job_turn_test', status: 'cancelled' },
++ { ...turnCancelledJob(), kind: 'authoring' },
++ { ...turnCancelledJob(), unexpected: 'closed response' },
++])('cancellation rejects incomplete or foreign-owner ACK without retry %#', async ack => {
++ const fetch = respond(ack)
++ await expect(turnClient.cancel('job_turn_test', 1, 'cancel_original')).rejects.toThrow()
++ expect(fetch).toHaveBeenCalledTimes(1)
++})
++test('terminal observation and pending cancellation ACK are full historical snapshots, not an invented stopped state', async () => {
++ for (const status of ['running', 'failed', 'completed'] as const) {
++  const ack = { ...turnCancelledJob(), status, progress: { completed: 0, total: null, label: status } }
++  respond(ack); expect(await turnClient.cancel('job_turn_test', 2, 'cancel_original')).toEqual(ack)
++ }
++})
+ 
+ test.each([
+  (v: CodexTurnPreparationView) => { v.session_revision = 2 },
+@@ -117,7 +133,7 @@ test('server response for another object/command/session is rejected instead of
+  respond({ ...codexSession(), id: 'wrong_session' }); await expect(turnClient.current('session_test')).rejects.toThrow()
+  respond({ items: [{ ...control(), session_id: 'wrong_session' }], next_cursor: null })
+  await expect(turnClient.turns('session_test')).rejects.toThrow()
+- respond({ id: 'wrong_job', status: 'cancelled' }); await expect(turnClient.cancel('job_test', 1, 'cancel_original')).rejects.toThrow()
++ respond({ ...turnCancelledJob(), id: 'wrong_job' }); await expect(turnClient.cancel('job_test', 1, 'cancel_original')).rejects.toThrow()
+ })
+ 
+ test('duplicate/mixed-session pages and invalid local controls issue zero requests', async () => {
+diff --git a/apps/web/src/features/codex/turnClient.ts b/apps/web/src/features/codex/turnClient.ts
+index 88bbbf78..a36563c9 100644
+--- a/apps/web/src/features/codex/turnClient.ts
++++ b/apps/web/src/features/codex/turnClient.ts
+@@ -1,4 +1,4 @@
+-import type { JobRef, SessionResponse } from '../../../../../packages/contracts/generated/api-types'
++import type { JobSnapshot, SessionResponse } from '../../../../../packages/contracts/generated/api-types'
+ import type { CodexCurrentSessionView, CodexTurnControlView, CodexTurnPage, CodexTurnPreparationView, CodexTurnPrepareWrite } from '../../../../../packages/contracts/generated/codex-turn-types'
+ import schemas from '../../../../../packages/contracts/generated/codex-turn-schemas.json'
+ import { request } from '../../api/client'
+@@ -72,6 +72,12 @@ export function checkedTurn<N extends keyof TurnWire>(name: N, raw: unknown): Tu
+  } catch { return invalid() }
+ }
+ function identity(id: string) { if (!validIdentity(id)) invalid(); return id }
++/** Preserve the Jobs owner's complete ACK; it remains a historical fact, not current control. */
++export function checkedTurnJob(raw: unknown, jobId: string, workspace?: string): JobSnapshot {
++ const value = checkedProvider<JobSnapshot>('JobSnapshot', raw)
++ if (value.id !== jobId || value.kind !== 'codex_turn' || workspace !== undefined && value.workspace_id !== workspace) invalid()
++ return value
++}
+ export type TurnPageQuery = { cursor?: string; limit?: number }
+ export type TurnPort = {
+  session(): Promise<SessionResponse>
+@@ -80,7 +86,7 @@ export type TurnPort = {
+  preparation(id: string): Promise<CodexTurnPreparationView>
+  control(id: string): Promise<CodexTurnControlView>
+  turns(id: string, query?: TurnPageQuery): Promise<CodexTurnPage>
+- cancel(jobId: string, expectedRevision: number, key: string): Promise<JobRef>
++ cancel(jobId: string, expectedRevision: number, key: string): Promise<JobSnapshot>
+ }
+ export const turnClient: TurnPort = {
+  session: bootstrapClient.session,
+@@ -111,7 +117,6 @@ export const turnClient: TurnPort = {
+  },
+  cancel: async (jobId, expectedRevision, key) => {
+   const body = checkedProvider<{ expected_revision: number }>('JobCancelRequest', { expected_revision: expectedRevision })
+-  const value = checkedProvider<JobRef>('JobRef', await request('POST /api/v1/jobs/{id}/cancel', body, { 'Idempotency-Key': key }, { path: { id: identity(jobId) } }))
+-  if (value.id !== jobId) invalid(); return value
++  return checkedTurnJob(await request('POST /api/v1/jobs/{id}/cancel', body, { 'Idempotency-Key': key }, { path: { id: identity(jobId) } }), jobId)
+  },
+ }
+diff --git a/apps/web/src/features/codex/turnCommands.test.ts b/apps/web/src/features/codex/turnCommands.test.ts
+index 8648d00e..3c63944e 100644
+--- a/apps/web/src/features/codex/turnCommands.test.ts
++++ b/apps/web/src/features/codex/turnCommands.test.ts
+@@ -3,7 +3,7 @@ import { expect, test } from 'vitest'
+ import { DraftStore } from '../../workbench/DraftStore'
+ import { actor, codexSession, workspace } from './bootstrapTestFixtures'
+ import { decodeTurnCommand, persistTurnCommand, readTurnCommand, turnCancelCommand, turnPrepareCommand, type TurnCommand } from './turnCommands'
+-import { turnBody, turnControl, turnPreparation } from './turnTestFixtures'
++import { turnBody, turnCancelledJob, turnControl, turnPreparation } from './turnTestFixtures'
+ import { emptyTurnFields, persistTurnForm, readTurnForm, snapshotTurnForm } from './turnForms'
+ const command = () => turnPrepareCommand(workspace, actor, codexSession(), turnBody())
+ test.each([
+@@ -27,7 +27,28 @@ test('cancellation basis belongs to the actual target Job; the cancelling actor
+  expect(value.actor_session_id).toBe('learner_new')
+  expect(value.body).toEqual({ expected_revision: 1 })
+  expect(() => decodeTurnCommand(JSON.stringify({ ...value, body: { expected_revision: 2 } }), workspace)).toThrow()
+- expect(() => decodeTurnCommand(JSON.stringify({ ...value, ack: { id: 'job_other', status: 'cancelled' } }), workspace)).toThrow()
++ expect(() => decodeTurnCommand(JSON.stringify({ ...value, ack: { ...turnCancelledJob(), id: 'job_other' } }), workspace)).toThrow()
++})
++test.each([
++ { id: 'job_other' }, { workspace_id: 'workspace_other' }, { kind: 'authoring' },
++ { revision: 0 }, { revision: true }, { progress: { completed: 0, total: null } },
++ { warnings: 'omitted' }, { error: {} }, { extra: 'not in Jobs contract' },
++])('full cancellation ACK rejects wrong owner/target and malformed closed JobSnapshot %#', change => {
++ const original = turnCancelCommand(workspace, 'learner_new', turnControl())
++ expect(() => decodeTurnCommand(JSON.stringify({ ...original, ack: { ...turnCancelledJob(), ...change } }), workspace)).toThrow()
++})
++test('truncated JobRef cannot replace full cancellation ACK; durable ACK survives a pending writer and rejects a changed snapshot', async () => {
++ const db = new DraftStore({ name: crypto.randomUUID(), factory: new IDBFactory() })
++ try {
++  const original = turnCancelCommand(workspace, actor, turnControl())
++  const acknowledged = decodeTurnCommand(JSON.stringify({ ...original, ack: turnCancelledJob() }), workspace)
++  expect(() => decodeTurnCommand(JSON.stringify({ ...original, ack: { id: 'job_turn_test', status: 'cancelled' } }), workspace)).toThrow()
++  await persistTurnCommand(original, db); await persistTurnCommand(acknowledged, db); await persistTurnCommand(original, db)
++  expect(readTurnCommand((await db.load(workspace))[original.command_id], workspace)).toEqual(acknowledged)
++  const changed = decodeTurnCommand(JSON.stringify({ ...acknowledged, ack: { ...turnCancelledJob(), updated_at: '2026-10-04T00:00:02Z' } }), workspace)
++  await expect(persistTurnCommand(changed, db)).rejects.toThrow()
++  expect(readTurnCommand((await db.load(workspace))[original.command_id], workspace)).toEqual(acknowledged)
++ } finally { await db.close() }
+ })
+ test('fresh store read preserves original command; concurrent ACK and pending writers retain the checked ACK', async () => {
+  const factory = new IDBFactory(), name = `turn-command-${crypto.randomUUID()}`, first = new DraftStore({ name, factory }), second = new DraftStore({ name, factory })
+diff --git a/apps/web/src/features/codex/turnCommands.ts b/apps/web/src/features/codex/turnCommands.ts
+index 772f1427..e6ef9246 100644
+--- a/apps/web/src/features/codex/turnCommands.ts
++++ b/apps/web/src/features/codex/turnCommands.ts
+@@ -1,14 +1,14 @@
+-import type { JobRef } from '../../../../../packages/contracts/generated/api-types'
++import type { JobSnapshot } from '../../../../../packages/contracts/generated/api-types'
+ import type { CodexCurrentSessionView, CodexTurnControlView, CodexTurnPreparationView, CodexTurnPrepareWrite } from '../../../../../packages/contracts/generated/codex-turn-types'
+ import { assertDraftWriteAllowed, DraftStore, type DraftRecord, type DraftWriteGuard } from '../../workbench/DraftStore'
+ import { checkedProvider, exactObject, sameValue, validIdentity } from '../providers/providerSchema'
+ import { checkedBootstrap } from './bootstrapClient'
+-import { checkedTurn } from './turnClient'
++import { checkedTurn, checkedTurnJob } from './turnClient'
+ 
+ type Base = { version: 1; workspace_id: string; actor_session_id: string; command_id: string; session_id: string; error: { status: number; code: string | null } | null }
+ export type TurnCommand = Base & (
+  { kind: 'prepare'; basis: CodexCurrentSessionView; body: CodexTurnPrepareWrite; ack: CodexTurnPreparationView | null }
+- | { kind: 'cancel'; basis: CodexTurnControlView; body: { expected_revision: number }; ack: JobRef | null })
++ | { kind: 'cancel'; basis: CodexTurnControlView; body: { expected_revision: number }; ack: JobSnapshot | null })
+ export const turnStore = new DraftStore({ name: 'learning-workbench.codex-turn-commands.v1' })
+ const fail = (): never => { throw new Error('原回合命令或基准无法核验；本机记录保留。') }
+ export const turnIdentity = (value: unknown): value is string => validIdentity(value) && value.trim() === value
+@@ -34,7 +34,7 @@ export function decodeTurnCommand(raw: string, workspace: string): TurnCommand {
+   const basis = checkedTurn('CodexTurnControlView', value.basis)
+   checkedProvider('JobCancelRequest', value.body)
+   if (basis.session_id !== value.session_id || value.body.expected_revision !== basis.job_revision) fail()
+-  if (value.ack !== null && checkedProvider<JobRef>('JobRef', value.ack).id !== basis.job.id) fail()
++  if (value.ack !== null) checkedTurnJob(value.ack, basis.job.id, workspace)
+  } else fail()
+  return value
+ }
+diff --git a/apps/web/src/features/codex/turnTestFixtures.ts b/apps/web/src/features/codex/turnTestFixtures.ts
+index d5a12999..bf287d4c 100644
+--- a/apps/web/src/features/codex/turnTestFixtures.ts
++++ b/apps/web/src/features/codex/turnTestFixtures.ts
+@@ -1,6 +1,7 @@
+ import { vi } from 'vitest'
++import type { JobSnapshot } from '../../../../../packages/contracts/generated/api-types'
+ import type { CodexTurnControlView, CodexTurnPreparationView, CodexTurnPrepareWrite } from '../../../../../packages/contracts/generated/codex-turn-types'
+-import { actor, codexSession, session } from './bootstrapTestFixtures'
++import { actor, codexSession, session, workspace } from './bootstrapTestFixtures'
+ import type { TurnPort } from './turnClient'
+ export const turnBody = (): CodexTurnPrepareWrite => ({ message: '  原文 α\n中文😀  ', context_refs: [], expected_session_revision: 2, provider_id: 'codex_local', tools: { max_tool_calls: 0, wall_seconds: 30 } })
+ export const turnPreparation = (request = turnBody()): CodexTurnPreparationView => ({
+@@ -15,8 +16,11 @@ export const turnControl = (): CodexTurnControlView => ({ id: 'turn_test', sessi
+  job: { id: 'job_turn_test', status: 'awaiting_approval' }, job_revision: 1, run_revision: 1, last_seq: 1, cancel_requested: false,
+  execution: 'not_started', outcome: null, approval_ids: [], approval_controls: [], consent_control: null, manifest_id: null,
+  created_at: '2026-10-04T00:00:00Z', started_at: null, finished_at: null, error_code: null })
++export const turnCancelledJob = (): JobSnapshot => ({ id: 'job_turn_test', workspace_id: workspace, kind: 'codex_turn',
++ status: 'cancelled', revision: 2, created_at: '2026-10-04T00:00:00Z', updated_at: '2026-10-04T00:00:01Z',
++ progress: { completed: 0, total: null, label: 'cancelled' }, result_refs: [], warnings: [], error: null })
+ export const turnPort = (): TurnPort => ({ session: vi.fn(async () => session()), current: vi.fn(async () => codexSession()),
+  prepare: vi.fn<TurnPort['prepare']>(async (_id, request) => turnPreparation(request)), preparation: vi.fn(async () => turnPreparation()),
+  control: vi.fn(async () => turnControl()), turns: vi.fn(async () => ({ items: [turnControl()], next_cursor: null })),
+- cancel: vi.fn<TurnPort['cancel']>(async id => ({ id, status: 'cancelled' })),
++ cancel: vi.fn<TurnPort['cancel']>(async id => ({ ...turnCancelledJob(), id })),
+ })

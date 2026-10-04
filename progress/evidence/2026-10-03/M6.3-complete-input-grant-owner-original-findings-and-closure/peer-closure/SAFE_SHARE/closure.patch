@@ -1,0 +1,64 @@
+diff --git a/services/api/app/application/provider_codex_consents.py b/services/api/app/application/provider_codex_consents.py
+index f00af404..70d31900 100644
+--- a/services/api/app/application/provider_codex_consents.py
++++ b/services/api/app/application/provider_codex_consents.py
+@@ -234,6 +234,8 @@ class CodexConsentsService:
+             ack=CodexConsentCreateAck(id='codexconsent_'+uuid4().hex,revision=1,status='active',actor_session_id=current.id,
+                 proposal_id=original.id,proposal_sha256=original.proposal_sha256,summary=original.summary)
+             now=utc_now()
++            if instant(now) >= instant(original.summary.expires_at):
++                raise ApiError(409,'CODEX_CONSENT_EXPIRED','原外发提案已到期，不能批准。')
+             event=CodexGranted(kind='granted',command=CodexGrantCommand(route='grant',actor_session_id=current.id,key=key,body=body,ack=ack))
+             envelope=repo.append(original.summary.turn_id,event,now,state)
+             self._bind(conn,current,state,envelope)
+diff --git a/services/api/app/infrastructure/codex_turn_repository.py b/services/api/app/infrastructure/codex_turn_repository.py
+index 9700c416..6dbd2494 100644
+--- a/services/api/app/infrastructure/codex_turn_repository.py
++++ b/services/api/app/infrastructure/codex_turn_repository.py
+@@ -126,6 +126,8 @@ class CodexTurnRepository:
+                 raise damaged()
+             for seq, stored in enumerate(selected, 1):
+                 raw = strict_json(stored['record_json'])
++                if not isinstance(raw, dict):
++                    raise damaged()
+                 envelope = decode(ControlEventEnvelope if raw.get('version') == 'codex-turn-event-v2' else EventEnvelope, stored['record_json'])
+                 if (envelope.session_id != anchor.session_id or envelope.workspace_id != self.workspace
+                         or envelope.seq != seq or stored['seq'] != seq or envelope.previous_sha256 != digest
+diff --git a/tests/integration/test_codex_turn_consent_http.py b/tests/integration/test_codex_turn_consent_http.py
+index e676da61..c38ebc2c 100644
+--- a/tests/integration/test_codex_turn_consent_http.py
++++ b/tests/integration/test_codex_turn_consent_http.py
+@@ -420,3 +420,33 @@ def test_expired_projection_never_rewrites_durable_run_when_cancelling(consent_c
+         repo = CodexTurnRepository(conn, actor, case.app.state.codex_turn_service.context)
+         retained = repo.checked(original)[sid].turns[prep.json()['turn_id']]
+         assert retained.control.consent_control.model_dump() == {'id': consent.json()['id'], 'revision': 1, 'status': 'active'}
++
++
++def test_grant_crossing_expiry_is_normal_refusal_not_history_corruption(consent_case, monkeypatch):
++    from services.api.app.application import provider_codex_consents
++    case, _, sid, _, _, _ = consent_case
++    _, preparation = consent_preparation(case, sid)
++    proposal = case.post('consent-previews', full_preview_body(preparation.json()), 'preview')
++    assert proposal.status_code == 201
++    value = proposal.json()
++    instants = iter([value['summary']['created_at'], value['summary']['expires_at']])
++    monkeypatch.setattr(provider_codex_consents, 'utc_now', lambda: next(instants))
++    before = case.dump()
++    result = case.post('consents', {'proposal_id': value['id'], 'proposal_sha256': value['proposal_sha256']}, 'boundary-grant')
++    assert result.status_code == 409 and result.json()['error']['code'] == 'CODEX_CONSENT_EXPIRED'
++    assert case.dump() == before
++
++
++@pytest.mark.parametrize('damaged_json', ['[]', 'null', '1'])
++def test_non_object_turn_envelope_is_classified_as_damaged_history(consent_case, damaged_json):
++    case, _, sid, _, _, _ = consent_case
++    body, prep = consent_preparation(case, sid)
++    with case.app.state.database.transaction() as conn:
++        for row in conn.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='codex_turn_events'").fetchall():
++            conn.execute('DROP TRIGGER ' + row[0])
++        conn.execute('UPDATE codex_turn_events SET record_json=? WHERE seq=1', (damaged_json,))
++    before = case.dump()
++    for response in [case.get('turns/' + prep.json()['turn_id']),
++        case.post(f'sessions/{sid}/turn-preparations', body, 'turn')]:
++        assert response.status_code == 409 and response.json()['error']['code'] == 'CODEX_HISTORY_DAMAGED'
++    assert case.dump() == before

@@ -1,0 +1,2616 @@
+diff --git a/migrations/0029_provider_codex_consents.sql b/migrations/0029_provider_codex_consents.sql
+new file mode 100644
+index 00000000..577b184f
+--- /dev/null
++++ b/migrations/0029_provider_codex_consents.sql
+@@ -0,0 +1,16 @@
++-- Provider-owned Codex outbound history; old Provider wire and tables stay intact.
++CREATE TABLE provider_codex_heads(workspace_id TEXT NOT NULL REFERENCES workspace(id),turn_id TEXT PRIMARY KEY,event_count INTEGER NOT NULL CHECK(event_count>0),head_sha256 TEXT NOT NULL);
++CREATE TABLE provider_codex_events(workspace_id TEXT NOT NULL REFERENCES workspace(id),turn_id TEXT NOT NULL,seq INTEGER NOT NULL CHECK(seq>0),record_json TEXT NOT NULL CHECK(json_valid(record_json)),record_sha256 TEXT NOT NULL,PRIMARY KEY(turn_id,seq));
++CREATE TABLE provider_codex_members(workspace_id TEXT NOT NULL REFERENCES workspace(id),turn_id TEXT NOT NULL,seq INTEGER NOT NULL,record_sha256 TEXT NOT NULL,PRIMARY KEY(turn_id,seq));
++CREATE TABLE provider_codex_commands(workspace_id TEXT NOT NULL REFERENCES workspace(id),actor_session_id TEXT NOT NULL REFERENCES local_sessions(id),route TEXT NOT NULL,command_key TEXT NOT NULL,turn_id TEXT NOT NULL,seq INTEGER NOT NULL,command_sha256 TEXT NOT NULL,PRIMARY KEY(workspace_id,actor_session_id,route,command_key),UNIQUE(turn_id,seq));
++CREATE TRIGGER provider_codex_heads_delete BEFORE DELETE ON provider_codex_heads BEGIN SELECT RAISE(ABORT,'immutable codex provider history'); END;
++CREATE TRIGGER provider_codex_heads_insert BEFORE INSERT ON provider_codex_heads WHEN EXISTS(SELECT 1 FROM provider_codex_heads WHERE turn_id=NEW.turn_id) BEGIN SELECT RAISE(ABORT,'immutable codex provider history'); END;
++CREATE TRIGGER provider_codex_events_update BEFORE UPDATE ON provider_codex_events BEGIN SELECT RAISE(ABORT,'immutable codex provider history'); END;
++CREATE TRIGGER provider_codex_events_delete BEFORE DELETE ON provider_codex_events BEGIN SELECT RAISE(ABORT,'immutable codex provider history'); END;
++CREATE TRIGGER provider_codex_events_insert BEFORE INSERT ON provider_codex_events WHEN EXISTS(SELECT 1 FROM provider_codex_events WHERE turn_id=NEW.turn_id AND seq=NEW.seq) BEGIN SELECT RAISE(ABORT,'immutable codex provider history'); END;
++CREATE TRIGGER provider_codex_members_update BEFORE UPDATE ON provider_codex_members BEGIN SELECT RAISE(ABORT,'immutable codex provider history'); END;
++CREATE TRIGGER provider_codex_members_delete BEFORE DELETE ON provider_codex_members BEGIN SELECT RAISE(ABORT,'immutable codex provider history'); END;
++CREATE TRIGGER provider_codex_members_insert BEFORE INSERT ON provider_codex_members WHEN EXISTS(SELECT 1 FROM provider_codex_members WHERE turn_id=NEW.turn_id AND seq=NEW.seq) BEGIN SELECT RAISE(ABORT,'immutable codex provider history'); END;
++CREATE TRIGGER provider_codex_commands_update BEFORE UPDATE ON provider_codex_commands BEGIN SELECT RAISE(ABORT,'immutable codex provider history'); END;
++CREATE TRIGGER provider_codex_commands_delete BEFORE DELETE ON provider_codex_commands BEGIN SELECT RAISE(ABORT,'immutable codex provider history'); END;
++CREATE TRIGGER provider_codex_commands_insert BEFORE INSERT ON provider_codex_commands WHEN EXISTS(SELECT 1 FROM provider_codex_commands WHERE turn_id=NEW.turn_id AND seq=NEW.seq OR workspace_id=NEW.workspace_id AND actor_session_id=NEW.actor_session_id AND route=NEW.route AND command_key=NEW.command_key) BEGIN SELECT RAISE(ABORT,'immutable codex provider history'); END;
+diff --git a/services/api/app/application/codex_turn.py b/services/api/app/application/codex_turn.py
+index b6c7a1cd..55a0ea6d 100644
+--- a/services/api/app/application/codex_turn.py
++++ b/services/api/app/application/codex_turn.py
+@@ -4,7 +4,7 @@ import hashlib
+ import hmac
+ import secrets
+ from uuid import uuid4
+-from typing import TypeVar
++from typing import TYPE_CHECKING, TypeVar
+ 
+ from packages.contracts import domain_models as dm
+ from packages.contracts.canonical import strict_json
+@@ -25,6 +25,13 @@ from .codex_turn_models import (
+ )
+ from .errors import ApiError
+ from .providers import checked_provider_configuration, validate_key
++from .provider_codex_ports import CodexOutboundMaterial
++from .provider_codex_ports import CodexOutboundSourceState
++from .provider_budget import ProofRegistry
++from .codex_turn_execution_models import RunnableTurnInput, RunnableTurnPrepared
++
++if TYPE_CHECKING:
++    from .provider_codex_consents import CodexConsentsService
+ 
+ 
+ Delivery = TypeVar("Delivery")
+@@ -35,10 +42,12 @@ def missing() -> ApiError:
+ 
+ 
+ class CodexTurnService:
+-    def __init__(self, database: Database, bootstrap: CodexBootstrapService):
++    def __init__(self, database: Database, bootstrap: CodexBootstrapService, proofs: ProofRegistry | None = None):
+         self.database, self.bootstrap = database, bootstrap
+         self.context = CodexTurnContext(database)
+         self._cursor_key = secrets.token_bytes(32)
++        self.proofs = (proofs or ProofRegistry()).codex
++        self.outbound_owner: CodexConsentsService | None = None
+ 
+     def _deliver(self, identity: SessionIdentity, value: Delivery, *, subject: bool) -> Delivery:
+         # A prior WAL read snapshot cannot observe a concurrently committed
+@@ -71,11 +80,78 @@ class CodexTurnService:
+         return self._deliver(identity, self._turns(identity, session_id, cursor, limit), subject=False)
+ 
+     def _state(self, conn, identity, *, subject=False):
++        current, original, repository, history = self._base_state(conn, identity, subject=subject)
++        if self.outbound_owner is not None:
++            self.outbound_owner.verify_links(conn, current, self._source_views(conn, current, history))
++        return current, original, repository, history
++
++    def _control_views(self, conn, identity, history):
++        # Derived expiry belongs only to a response. Mutation reducers must keep
++        # the original grant/revocation facts in the immutable Run projection.
++        controls = self.outbound_owner.verify_links(conn, identity, self._source_views(conn, identity, history)) if self.outbound_owner else {}
++        result = {}
++        for state in history.values():
++            for turn in state.turns.values():
++                consent = controls.get(turn.control.id, turn.control.consent_control)
++                result[turn.control.id] = CodexTurnControlView.model_validate({**turn.control.model_dump(),
++                    'consent_control':consent.model_dump() if consent else None})
++        return result
++
++    def _base_state(self, conn, identity, *, subject=False):
+         current = current_control_access(conn, identity, write=subject)
+         original = self.bootstrap.checked_sessions(conn, current)
+         repository = CodexTurnRepository(conn, current, self.context)
+         return current, original, repository, repository.checked(original)
+ 
++    def _source_views(self, transaction, identity, history):
++        result = {}
++        for state in history.values():
++            for turn in state.turns.values():
++                context = self.context.verify_turn(transaction, identity, turn.prepared.input, turn.prepared.command.ack.summary)
++                material = CodexOutboundMaterial(version='codex-outbound-material-v1', workspace_id=identity.workspace_id,
++                    actor_session_id=turn.prepared.input.actor_session_id, preparation=turn.prepared.command.ack,
++                    job_revision=turn.control.job_revision, input=turn.prepared.input, context=context)
++                result[turn.control.id] = CodexOutboundSourceState(material=material, control=turn.control,
++                    provider_bindings=turn.provider_bindings)
++        return result
++
++    def outbound_sources(self, transaction, identity):
++        current, _, _, history = self._base_state(transaction, identity)
++        return self._source_views(transaction, current, history)
++
++    def current_outbound_material(self, transaction, identity, material):
++        current_control_access(transaction, identity, write=True)
++        actual = self.outbound_sources(transaction, identity).get(material.preparation.turn_id)
++        if actual is None or actual.material.model_dump(exclude={'job_revision'}) != material.model_dump(exclude={'job_revision'}):
++            raise damaged()
++        return self.context.current(transaction, identity, material.context)
++
++    def bind_outbound_event(self, transaction, identity, event, occurred_at):
++        current, original, repository, history = self._base_state(transaction, identity)
++        state, turn = self._find(history, event.turn_id)
++        repository.append(state, event, occurred_at)
++        repository.checked(original)
++
++    def read_outbound_preparation(self, transaction, identity: SessionIdentity,
++                                 preparation_id: str, expected_job_revision: int) -> CodexOutboundMaterial:
++        """Trusted Provider source, retaining the actual caller transaction."""
++        if not transaction.in_transaction:
++            raise damaged()
++        current, _, _, history = self._state(transaction, identity, subject=True)
++        state, turn = self._find(history, preparation_id, preparation=True)
++        if turn.prepared.input.actor_session_id != current.id:
++            raise ApiError(403, 'POLICY_DENIED', '新操作者不能接管原本地任务。')
++        if expected_job_revision != turn.control.job_revision:
++            raise ApiError(412, 'REVISION_MISMATCH', '任务修订已改变，请读取当前事实。')
++        if state.active_turn_id != turn.control.id or turn.control.execution == 'terminal':
++            raise ApiError(409, 'OUTBOUND_SOURCE_UNAVAILABLE', '原任务已不可建立新的外发许可。')
++        context = self.context.verify_turn(transaction, current, turn.prepared.input, turn.prepared.command.ack.summary)
++        if not self.context.current(transaction, current, context):
++            raise ApiError(409, 'CODEX_SOURCE_CHANGED', '原冻结来源已改变，不能继续授权。')
++        return CodexOutboundMaterial(version='codex-outbound-material-v1', workspace_id=current.workspace_id,
++            actor_session_id=current.id, preparation=turn.prepared.command.ack,
++            job_revision=turn.control.job_revision, input=turn.prepared.input, context=context)
++
+     @staticmethod
+     def _find(history, identifier, *, job=False, preparation=False) -> tuple[CheckedSession, CheckedTurn]:
+         for state in history.values():
+@@ -118,19 +194,21 @@ class CodexTurnService:
+                 bootstrap_sha256=state.anchor.bootstrap_sha256, template_version='codex-local-task-v1', tools=body.tools,
+                 cpu_seconds=60, memory_bytes=2147483648, file_bytes=16777216, protocol_output_bytes=16777216,
+                 file_descriptors=128, processes=16, core_bytes=0, command_network='denied', writable_area='turn_outputs')
+-            value = TurnInput(version='codex-turn-input-v1', workspace_id=current.workspace_id,
++            available = self.proofs.freeze(state.anchor.bootstrap_sha256, body.tools, config=provider)
++            value = (RunnableTurnInput if available is not None else TurnInput).model_validate(dict(
++                version='codex-turn-input-v2' if available is not None else 'codex-turn-input-v1', workspace_id=current.workspace_id,
+                 actor_session_id=current.id, session_id=session_id, turn_id='turn_' + uuid4().hex,
+-                job_id='job_' + uuid4().hex, request=body, provider=provider, runtime=runtime)
++                job_id='job_' + uuid4().hex, request=body, provider=provider, runtime=available if available is not None else runtime))
+             repo.jobs.create(value.job_id, 'codex_turn', value)
+             context = self.context.prepare_turn(conn, current, value, now)
+             summary = self.context.summary(context)
+             ack = CodexTurnPreparationView(id='turnprep_' + uuid4().hex, preparation_sha256='0' * 64,
+                 actor_session_id=current.id, session_id=session_id, session_revision=revision + 1,
+                 turn_id=value.turn_id, job=dm.JobRef(id=value.job_id, status='awaiting_approval'), request=body,
+-                summary=summary, created_at=now, proposal_id=None, consent_id=None, validity='unavailable')
++                summary=summary, created_at=now, proposal_id=None, consent_id=None, validity='current' if available is not None else 'unavailable')
+             ack.preparation_sha256 = preparation_digest(current.workspace_id, ack)
+-            event = TurnPrepared(kind='prepared', creation_sequence=repo.next_creation_sequence(), input=value, command=PrepareCommand(workspace_id=current.workspace_id,
+-                actor_session_id=current.id, route='prepare', target_id=session_id, key=key, body=body, ack=ack))
++            event = (RunnableTurnPrepared if available is not None else TurnPrepared).model_validate(dict(kind='prepared', creation_sequence=repo.next_creation_sequence(), input=value, command=PrepareCommand(workspace_id=current.workspace_id,
++                actor_session_id=current.id, route='prepare', target_id=session_id, key=key, body=body, ack=ack)))
+             repo.append(state, event, now)
+             # Verify the actual graph before committing: Job/Run/context and
+             # immutable command must either all survive or all roll back.
+@@ -146,18 +224,23 @@ class CodexTurnService:
+             ack, value = turn.prepared.command.ack, turn.prepared.input
+             validity = 'closed' if turn.control.execution == 'terminal' else 'unavailable'
+             if validity != 'closed':
++                if isinstance(value, RunnableTurnInput):
++                    validity = self.proofs.current(value.runtime)
+                 context = self.context.verify_turn(conn, current, value, ack.summary)
+                 provider = checked_provider_configuration(conn, current, value.provider.id)
+                 if provider != value.provider or not self.context.current(conn, current, context):
+                     validity = 'changed'
++            binding = turn.provider_bindings[-1] if turn.provider_bindings else None
+             return CodexTurnPreparationView.model_validate({**ack.model_dump(), 'job': turn.control.job.model_dump(),
+-                'validity': validity})
++                'validity': validity, 'proposal_id':binding.proposal_id if binding else None,
++                'consent_id':binding.consent_id if binding else None})
+ 
+     def _read_control(self, identity: SessionIdentity, identifier: str) -> CodexTurnControlView:
+         with self.database.transaction(immediate=False) as conn:
+             conn.execute('PRAGMA query_only=ON')
+-            _, _, _, history = self._state(conn, identity)
+-            return self._find(history, identifier)[1].control
++            current, _, _, history = self._state(conn, identity)
++            turn = self._find(history, identifier)[1]
++            return self._control_views(conn, current, history)[turn.control.id]
+ 
+     def _read_session(self, identity: SessionIdentity, identifier: str) -> CodexCurrentSessionView:
+         with self.database.transaction(immediate=False) as conn:
+@@ -241,4 +324,5 @@ class CodexTurnService:
+                 raw = canonical_json({'workspace': current.workspace_id, 'session': session_id,
+                     'limit': limit, 'high': high, 'position': selected[limit - 1].sequence}).encode()
+                 next_cursor = base64.urlsafe_b64encode(hmac.new(self._cursor_key, raw, hashlib.sha256).digest() + raw).decode().rstrip('=')
+-            return CodexTurnPage(items=[item.control for item in selected[:limit]], next_cursor=next_cursor)
++            controls = self._control_views(conn, current, history)
++            return CodexTurnPage(items=[controls[item.control.id] for item in selected[:limit]], next_cursor=next_cursor)
+diff --git a/services/api/app/application/codex_turn_context.py b/services/api/app/application/codex_turn_context.py
+index 043be7a4..678c775a 100644
+--- a/services/api/app/application/codex_turn_context.py
++++ b/services/api/app/application/codex_turn_context.py
+@@ -10,6 +10,7 @@ from ..serialization import canonical_json, content_sha256
+ from ..infrastructure.database import Database
+ from ..infrastructure.security import SessionIdentity
+ from .codex_turn_models import TurnInput, TurnContext, context_digest
++from .codex_turn_execution_models import RunnableTurnInput, RunnableTurnContext, CodexCompletedHistory
+ from .content_retrieval import ContentRetrievalSource
+ from .errors import ApiError
+ 
+@@ -31,7 +32,8 @@ class CodexTurnContext:
+     def __init__(self, database: Database):
+         self.content = ContentRetrievalSource(database)
+ 
+-    def prepare_turn(self, conn: sqlite3.Connection, identity: SessionIdentity, value: TurnInput, now: str) -> TurnContext:
++    def prepare_turn(self, conn: sqlite3.Connection, identity: SessionIdentity, value: TurnInput | RunnableTurnInput,
++                     now: str, history: list[CodexCompletedHistory] | None = None) -> TurnContext | RunnableTurnContext:
+         messages = [dm.GenerationMessage(role='system', content=TEMPLATE),
+                     dm.GenerationMessage(role='user', content=value.request.message)]
+         size = sum(len(item.content) for item in messages)
+@@ -62,22 +64,40 @@ class CodexTurnContext:
+             evidence.append(item)
+             materials.append(ReferenceSummary(ref=ref, title=block.title, locator=locator,
+                 character_count=len(text), excerpt_sha256=actual.body_sha256))
+-        warnings = [dm.Warning(code='CODEX_INPUT_PROOF_UNAVAILABLE', severity='warning',
++        warnings = [] if isinstance(value, RunnableTurnInput) else [dm.Warning(code='CODEX_INPUT_PROOF_UNAVAILABLE', severity='warning',
+             message='已保存本地准备；尚无完整执行与输入计量证明，不能批准或开始外发。')]
+         if omitted:
+             warnings.append(dm.Warning(code='CODEX_CONTEXT_MATERIAL_OMITTED', severity='warning',
+                 message='完整所选材料超出上下文资源上限，已整项省略；未截断消息或正文。'))
++        retained_history: list[CodexCompletedHistory] = []
++        omitted_history: list[CodexCompletedHistory] = []
++        for previous in reversed(history or []):
++            if size + len(previous.user) + len(previous.answer) > 12000:
++                omitted_history.insert(0, previous)
++            else:
++                retained_history.insert(0, previous)
++                size += len(previous.user) + len(previous.answer)
++        if retained_history:
++            messages = [messages[0], *[message for item in retained_history for message in
++                [dm.GenerationMessage(role='user', content=item.user), dm.GenerationMessage(role='assistant', content=item.answer)]], messages[-1]]
++        if omitted_history:
++            warnings.append(dm.Warning(code='CODEX_CONTEXT_HISTORY_OMITTED', severity='warning',
++                message='完整旧轮次超出上下文资源上限，已整轮省略；未截断原回答。'))
+         snapshot = dm.ContextSnapshot(id='context_' + uuid4().hex, created_at=now, policy='authoring',
+             request_sha256=content_sha256(value.request), resolved_refs=[item.ref for item in evidence],
+             character_count=size, snapshot_sha256='0' * 64)
+-        context = TurnContext(version='codex-turn-context-v1', input=value, snapshot=snapshot,
+-            messages=messages, evidence=evidence, scopes=scopes, materials=materials, omitted_refs=omitted, omitted_scopes=omitted_scopes, warnings=warnings)
++        fields = dict(snapshot=snapshot, messages=messages, evidence=evidence, scopes=scopes,
++            materials=materials, omitted_refs=omitted, omitted_scopes=omitted_scopes, warnings=warnings)
++        context = (RunnableTurnContext.model_validate(dict(version='codex-turn-context-v2', input=value, history=retained_history,
++            omitted_history=omitted_history, **fields)) if isinstance(value, RunnableTurnInput) else
++            TurnContext.model_validate(dict(version='codex-turn-context-v1', input=value, **fields)))
+         context.snapshot.snapshot_sha256 = context_digest(context)
+         conn.execute('INSERT INTO context_snapshots(id,workspace_id,snapshot_sha256,envelope_json,created_at) VALUES(?,?,?,?,?)',
+             (snapshot.id, identity.workspace_id, context.snapshot.snapshot_sha256, canonical_json(context), now))
+         return context
+ 
+-    def verify_turn(self, conn: sqlite3.Connection, identity: SessionIdentity, value: TurnInput, summary: CodexTurnPreparationSummary) -> TurnContext:
++    def verify_turn(self, conn: sqlite3.Connection, identity: SessionIdentity, value: TurnInput | RunnableTurnInput,
++                    summary: CodexTurnPreparationSummary) -> TurnContext | RunnableTurnContext:
+         if not conn.in_transaction:
+             raise damaged()
+         row = conn.execute('SELECT * FROM context_snapshots WHERE id=? AND workspace_id=?',
+@@ -85,15 +105,19 @@ class CodexTurnContext:
+         if row is None:
+             raise damaged()
+         try:
+-            result = TurnContext.model_validate(strict_json(row['envelope_json']))
++            result = (RunnableTurnContext if isinstance(value, RunnableTurnInput) else TurnContext).model_validate(strict_json(row['envelope_json']))
++            expected_messages = [dm.GenerationMessage(role='system', content=TEMPLATE)]
++            if isinstance(result, RunnableTurnContext):
++                expected_messages.extend(message for item in result.history for message in
++                    [dm.GenerationMessage(role='user', content=item.user), dm.GenerationMessage(role='assistant', content=item.answer)])
++            expected_messages.append(dm.GenerationMessage(role='user', content=value.request.message))
+             if (canonical_json(result) != row['envelope_json'] or result.input != value
+                     or result.snapshot.snapshot_sha256 != context_digest(result)
+                     or result.snapshot.snapshot_sha256 != row['snapshot_sha256']
+                     or result.snapshot.id != row['id'] or result.snapshot.created_at != row['created_at']
+                     or result.snapshot.request_sha256 != content_sha256(value.request)
+                     or row['private_input_blob_sha256'] is not None
+-                    or result.messages != [dm.GenerationMessage(role='system', content=TEMPLATE),
+-                        dm.GenerationMessage(role='user', content=value.request.message)]):
++                    or result.messages != expected_messages):
+                 raise damaged()
+             if not len(result.evidence) == len(result.materials) == len(result.scopes):
+                 raise damaged()
+@@ -126,21 +150,22 @@ class CodexTurnContext:
+             raise damaged() from None
+ 
+     @staticmethod
+-    def summary(value: TurnContext) -> CodexTurnPreparationSummary:
++    def summary(value: TurnContext | RunnableTurnContext) -> CodexTurnPreparationSummary:
+         runtime = value.input.runtime
+-        limits = runtime.model_dump(exclude={'version', 'implemented', 'bootstrap_sha256', 'template_version', 'tools'})
++        limits = {name: getattr(runtime, name) for name in CodexTurnRuntimeSummary.model_fields if name != 'profile_sha256'}
+         # This is the actual local prepared envelope, explicitly NOT a final
+         # model request/token proof. The whole private profile is bound too.
+-        prepared = content_sha256({'version': 'codex-prepared-input-unavailable-v1',
++        prepared = content_sha256({'version': 'codex-prepared-input-v2' if isinstance(value, RunnableTurnContext) else 'codex-prepared-input-unavailable-v1',
+             'input': value.input.model_dump(mode='json'), 'context': value.model_dump(mode='json')})
+         return CodexTurnPreparationSummary(context_snapshot_id=value.snapshot.id,
+             snapshot_sha256=value.snapshot.snapshot_sha256, job_input_sha256=content_sha256(value.input),
+             prepared_input_sha256=prepared,
+             runtime=CodexTurnRuntimeSummary(profile_sha256=content_sha256(runtime), **limits),
+             character_count=value.snapshot.character_count, materials=value.materials,
+-            history_turn_ids=[], tools=runtime.tools, warnings=[CodexTurnWarning.model_validate(item.model_dump(mode="json")) for item in value.warnings])
++            history_turn_ids=[item.turn_id for item in value.history] if isinstance(value, RunnableTurnContext) else [],
++            tools=runtime.tools, warnings=[CodexTurnWarning.model_validate(item.model_dump(mode="json")) for item in value.warnings])
+ 
+-    def current(self, conn: sqlite3.Connection, identity: SessionIdentity, context: TurnContext) -> bool:
++    def current(self, conn: sqlite3.Connection, identity: SessionIdentity, context: TurnContext | RunnableTurnContext) -> bool:
+         try:
+             for scope in [*context.scopes, *context.omitted_scopes]:
+                 self.content.revalidate_scope(conn, identity, scope)
+diff --git a/services/api/app/application/codex_turn_execution_models.py b/services/api/app/application/codex_turn_execution_models.py
+new file mode 100644
+index 00000000..6c521cd4
+--- /dev/null
++++ b/services/api/app/application/codex_turn_execution_models.py
+@@ -0,0 +1,69 @@
++"""New execution-capable records; original unavailable v1 decoders stay fixed."""
++from typing import Annotated, Literal
++
++from pydantic import Field
++from packages.contracts import domain_models as dm
++from ..codex_turn_dto import CodexTurnModel
++from ..codex_turn_dto import CodexTurnPrepareWrite
++from ..provider_dto import ProviderConfigView, ReferenceSummary
++from .retrieval_models import RetrievalScopeSnapshot
++from .provider_codex_profile import CodexRuntimeProfile
++from .codex_turn_models import (
++    PrepareCommand, TurnCancelled, TurnProviderBound, TurnStarted, TurnLifecycle,
++)
++
++
++class CodexCompletedHistory(CodexTurnModel):
++    turn_id: dm.Id
++    user: Annotated[str, Field(min_length=1, max_length=8000)]
++    answer: Annotated[str, Field(max_length=400000)]
++    receipt_sha256: dm.Sha256
++    output_sha256: dm.Sha256 | None
++
++
++class RunnableTurnInput(dm.StrictModel):
++    version: Literal['codex-turn-input-v2']
++    workspace_id: dm.Id
++    actor_session_id: dm.Id
++    session_id: dm.Id
++    turn_id: dm.Id
++    job_id: dm.Id
++    request: CodexTurnPrepareWrite
++    provider: ProviderConfigView
++    runtime: CodexRuntimeProfile
++
++
++class RunnableTurnContext(dm.StrictModel):
++    version: Literal['codex-turn-context-v2']
++    input: RunnableTurnInput
++    snapshot: dm.ContextSnapshot
++    messages: Annotated[list[dm.GenerationMessage], Field(min_length=2, max_length=6)]
++    evidence: Annotated[list[dm.EvidenceChunk], Field(max_length=8)]
++    scopes: Annotated[list[RetrievalScopeSnapshot], Field(max_length=8)]
++    materials: Annotated[list[ReferenceSummary], Field(max_length=8)]
++    omitted_refs: Annotated[list[dm.ContentRef], Field(max_length=8)]
++    omitted_scopes: Annotated[list[RetrievalScopeSnapshot], Field(max_length=8)]
++    warnings: Annotated[list[dm.Warning], Field(max_length=32)]
++    history: Annotated[list[CodexCompletedHistory], Field(max_length=2)]
++    omitted_history: Annotated[list[CodexCompletedHistory], Field(max_length=2)]
++
++
++class RunnableTurnPrepared(dm.StrictModel):
++    kind: Literal['prepared']
++    creation_sequence: dm.Revision
++    input: RunnableTurnInput
++    command: PrepareCommand
++
++
++NewTurnEvent = Annotated[RunnableTurnPrepared | TurnProviderBound | TurnStarted | TurnLifecycle | TurnCancelled,
++                         Field(discriminator='kind')]
++
++
++class ControlEventEnvelope(dm.StrictModel):
++    version: Literal['codex-turn-event-v2']
++    workspace_id: dm.Id
++    session_id: dm.Id
++    seq: dm.Revision
++    previous_sha256: dm.Sha256 | None
++    occurred_at: dm.UTC
++    event: NewTurnEvent
+diff --git a/services/api/app/application/codex_turn_models.py b/services/api/app/application/codex_turn_models.py
+index 99377479..5a9cd6f8 100644
+--- a/services/api/app/application/codex_turn_models.py
++++ b/services/api/app/application/codex_turn_models.py
+@@ -1,9 +1,10 @@
+ """Versioned private preparation/control records; none is an execution proof."""
+ from typing import Annotated, Literal
+ 
+-from pydantic import Field
++from pydantic import BaseModel, Field
+ from packages.contracts import domain_models as dm
+-from ..codex_turn_dto import CodexTurnPrepareWrite, CodexTurnPreparationView, CodexLocalToolBudget
++from ..codex_turn_dto import (CodexTurnPrepareWrite, CodexTurnPreparationView, CodexLocalToolBudget,
++    CodexTurnStartWrite, CodexTurnStartAck, CodexTurnControlView)
+ from ..import_dto import JobCancelRequest, JobSnapshot
+ from ..provider_dto import ProviderConfigView, ReferenceSummary
+ from ..serialization import content_sha256
+@@ -52,7 +53,7 @@ class TurnContext(dm.StrictModel):
+     warnings: Annotated[list[dm.Warning], Field(max_length=32)]
+ 
+ 
+-def context_digest(value: TurnContext) -> str:
++def context_digest(value: BaseModel) -> str:
+     body = value.model_dump(mode='json')
+     del body['snapshot']['snapshot_sha256']
+     return content_sha256(body)
+@@ -116,6 +117,43 @@ class EventEnvelope(dm.StrictModel):
+     event: TurnEvent
+ 
+ 
++class StartCommand(dm.StrictModel):
++    workspace_id: dm.Id
++    actor_session_id: dm.Id
++    route: Literal['start']
++    target_id: dm.Id
++    key: str
++    body: CodexTurnStartWrite
++    ack: CodexTurnStartAck
++
++
++class TurnProviderBound(dm.StrictModel):
++    kind: Literal['provider_bound']
++    turn_id: dm.Id
++    provider_seq: dm.Revision
++    provider_sha256: dm.Sha256
++    proposal_id: dm.Id
++    consent_id: dm.Id | None
++    consent_revision: dm.Revision | None
++    consent_status: Literal['active', 'revoked'] | None
++
++
++class TurnStarted(dm.StrictModel):
++    kind: Literal['start_queued']
++    turn_id: dm.Id
++    dispatch_id: dm.Id
++    command: StartCommand
++
++
++class TurnLifecycle(dm.StrictModel):
++    kind: Literal['lifecycle']
++    turn_id: dm.Id
++    phase: Literal['claim', 'terminal']
++    control: CodexTurnControlView
++    provider_seq: dm.Revision
++    provider_sha256: dm.Sha256
++
++
+ def preparation_digest(workspace: str, view: CodexTurnPreparationView) -> str:
+     return content_sha256({'version': 'codex-turn-preparation-v1', 'workspace_id': workspace,
+         'actor_session_id': view.actor_session_id, 'session_id': view.session_id, 'turn_id': view.turn_id,
+diff --git a/services/api/app/application/provider_budget.py b/services/api/app/application/provider_budget.py
+index 2e58827a..b189420b 100644
+--- a/services/api/app/application/provider_budget.py
++++ b/services/api/app/application/provider_budget.py
+@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
+ from datetime import datetime
+ from decimal import Decimal
+ import math
+-from typing import Literal
++from typing import TYPE_CHECKING, Literal
+ 
+ from pydantic import TypeAdapter
+ 
+@@ -32,6 +32,9 @@ from ..infrastructure.database import utc_now
+ ADAPTER_VERSION = 'text-request-v2'
+ INPUT_SHAPE = 'text-messages-with-delimited-evidence-v2'
+ 
++if TYPE_CHECKING:
++    from .provider_codex_profile import CodexProofRegistry
++
+ 
+ def unsupported() -> ApiError:
+     return ApiError(409, 'CAPABILITY_UNSUPPORTED', '此模型没有可用的完整输入计量依据。')
+@@ -83,7 +86,10 @@ class InputProof:
+ 
+ 
+ class ProofRegistry:
+-    def __init__(self, proofs: Iterable[InputProof] = (), *, withdrawn_proofs: Iterable[str] = ()):
++    def __init__(self, proofs: Iterable[InputProof] = (), *, withdrawn_proofs: Iterable[str] = (),
++                 codex: 'CodexProofRegistry | None' = None):
++        from .provider_codex_profile import CodexProofRegistry
++        self._codex = codex if codex is not None else CodexProofRegistry()
+         # Trusted composition supplies known withdrawals; it is never an HTTP
+         # capability or a volatile user toggle. Original proof bytes stay intact.
+         self._withdrawn = frozenset(TypeAdapter(dm.Sha256).validate_python(value) for value in withdrawn_proofs)
+@@ -112,6 +118,11 @@ class ProofRegistry:
+                 TypeAdapter(dm.UTC).validate_python(proof.valid_until)
+             self._proofs[key] = proof
+ 
++    @property
++    def codex(self) -> 'CodexProofRegistry':
++        """Separate named admission; ordinary text proofs never become Codex."""
++        return self._codex
++
+     @staticmethod
+     def _identity(adapter: ProviderAdapter, model: str, base_url: str, policy: EndpointPolicy) -> tuple[str, str, str, str]:
+         endpoint = validate_endpoint(base_url, policy)
+diff --git a/services/api/app/application/provider_codex_consents.py b/services/api/app/application/provider_codex_consents.py
+new file mode 100644
+index 00000000..f00af404
+--- /dev/null
++++ b/services/api/app/application/provider_codex_consents.py
+@@ -0,0 +1,280 @@
++"""Provider-owned Codex proposals/grants; no ordinary text-adapter fallback."""
++from datetime import timedelta
++from uuid import uuid4
++
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import sha256_bytes
++from ..codex_turn_dto import (
++    CodexOutboundPreviewWrite, CodexConsentProposalView, CodexFrozenOutboundSummary,
++    CodexConsentCreateWrite, CodexConsentCreateAck,
++)
++from ..provider_dto import ConsentRevoke, ProposalWarning, MessageSummary
++from ..infrastructure.database import Database, utc_now
++from ..infrastructure.consent_repository import instant
++from ..infrastructure.provider_repository import ProviderRepository
++from ..infrastructure.provider_codex_repository import CodexProviderRepository
++from ..infrastructure.provider_secret_store import SecretStore
++from ..infrastructure.security import SessionIdentity
++from ..serialization import content_sha256
++from .codex_bootstrap_access import current_control_access
++from .codex_turn_context import damaged
++from .codex_turn_models import TurnProviderBound
++from .codex_turn_execution_models import RunnableTurnInput
++from .errors import ApiError
++from .provider_budget import ProofRegistry
++from .provider_codex_models import CodexProposed, CodexGranted, CodexRevoked, CodexPreviewCommand, CodexGrantCommand, CodexRevokeCommand
++from .provider_codex_ports import CodexOutboundSourcePort
++from .provider_codex_profile import PreparedCodexRequest, unavailable
++from .providers import checked_provider_configuration, validate_key
++
++
++def missing() -> ApiError:
++    return ApiError(404, 'REFERENCE_MISSING', '本工作区没有此 Codex 外发记录。')
++
++
++class CodexConsentsService:
++    def __init__(self, database: Database, source: CodexOutboundSourcePort,
++                 secrets: SecretStore, proofs: ProofRegistry):
++        self.database, self.source, self.secrets, self.proofs = database, source, secrets, proofs.codex
++
++    def _deliver(self, identity, value, *, subject=True):
++        with self.database.transaction(immediate=False) as conn:
++            conn.execute('PRAGMA query_only=ON')
++            current_control_access(conn, identity, write=subject)
++        return value
++
++    def _states(self, conn, identity):
++        states = CodexProviderRepository(conn, identity.workspace_id).checked()
++        sources = self.source.outbound_sources(conn, identity)
++        self._verify_links(states, sources)
++        return states, sources
++
++    def verify_links(self, conn, identity, sources):
++        states = CodexProviderRepository(conn, identity.workspace_id).checked()
++        self._verify_links(states, sources)
++        return {turn: state.consent_control(utc_now()) for turn, state in states.items()}
++
++    @staticmethod
++    def _verify_links(states, sources):
++        if set(states) != {turn for turn, source in sources.items() if source.provider_bindings}:
++            raise damaged()
++        for turn, state in states.items():
++            source = sources[turn]
++            if (state.proposed.material.model_dump(exclude={'job_revision'}) != source.material.model_dump(exclude={'job_revision'})
++                    or len(source.provider_bindings) != len(state.envelopes)):
++                raise damaged()
++            consent, revision, status = None, None, None
++            for envelope, binding in zip(state.envelopes, source.provider_bindings, strict=True):
++                event = envelope.event
++                if isinstance(event, CodexGranted):
++                    consent, revision, status = event.command.ack.id, 1, 'active'
++                elif isinstance(event, CodexRevoked):
++                    revision, status = 2, 'revoked'
++                if (binding.turn_id != turn or binding.provider_seq != envelope.seq
++                        or binding.provider_sha256 != content_sha256(envelope)
++                        or binding.proposal_id != state.proposed.command.ack.id
++                        or (binding.consent_id,binding.consent_revision,binding.consent_status) != (consent,revision,status)):
++                    raise damaged()
++            raw_control = source.control.consent_control
++            if ((raw_control is None) != (consent is None) or raw_control is not None
++                    and (raw_control.id,raw_control.revision,raw_control.status) != (consent,revision,status)):
++                raise damaged()
++
++    def _bind(self, conn, identity, state, envelope):
++        # The Provider fact and the consumer's independent witness commit together.
++        if isinstance(envelope.event, CodexProposed):
++            proposal, grant, revoked = envelope.event.command.ack.id, None, False
++        else:
++            proposal = state.proposed.command.ack.id
++            grant = (envelope.event.command.ack if isinstance(envelope.event, CodexGranted)
++                     else state.granted.command.ack if state.granted else None)
++            revoked = isinstance(envelope.event, CodexRevoked) or state.revoked_at is not None
++        event = TurnProviderBound(kind='provider_bound', turn_id=envelope.turn_id,
++            provider_seq=envelope.seq, provider_sha256=content_sha256(envelope), proposal_id=proposal,
++            consent_id=grant.id if grant else None, consent_revision=(2 if revoked else 1) if grant else None,
++            consent_status=('revoked' if revoked else 'active') if grant else None)
++        self.source.bind_outbound_event(conn, identity, event, envelope.occurred_at)
++
++    @staticmethod
++    def _find(states, identifier, *, consent=False):
++        for state in states.values():
++            candidate = (state.granted.command.ack.id if state.granted else None) if consent else state.proposed.command.ack.id
++            if candidate == identifier:
++                return state
++        raise missing()
++
++    @staticmethod
++    def _warnings(summary):
++        return [ProposalWarning(code='price_unknown' if summary.cost_estimate.kind == 'unknown' else 'estimate_not_guaranteed',
++            message='费用未知或仅为估算；不表示账单硬保证，输入、输出和单次请求限制仍有效。')]
++
++    def preview(self, identity: SessionIdentity, body: CodexOutboundPreviewWrite, key: str) -> CodexConsentProposalView:
++        return self._deliver(identity, self._preview(identity, body, key))
++
++    def _preview(self, identity, body, key):
++        key = validate_key(key)
++        body = CodexOutboundPreviewWrite.model_validate(body.model_dump(mode='json'))
++        with self.database.transaction() as conn:
++            current = current_control_access(conn, identity, write=True)
++            states, _ = self._states(conn, current)
++            repo = CodexProviderRepository(conn, current.workspace_id)
++            replay = repo.replay(states, current.id, 'preview', key, body)
++            if replay is not None:
++                return CodexConsentProposalView.model_validate(replay.model_dump())
++            material = self.source.read_outbound_preparation(conn, current, body.preparation_id, body.expected_job_revision)
++            if material.preparation.preparation_sha256 != body.preparation_sha256:
++                raise ApiError(409, 'CODEX_BINDING_INVALID', '外发预览必须对应原准备的确切摘要。')
++            if material.preparation.turn_id in states:
++                raise ApiError(409, 'CODEX_BINDING_INVALID', '原准备已存在唯一提案；不能换 key 重建。')
++            config = checked_provider_configuration(conn, current, material.input.provider.id)
++            if config.revision != body.expected_provider_revision:
++                raise ApiError(412, 'PROVIDER_VERSION_CONFLICT', '提供商预览基准已改变。')
++            if config != material.input.provider:
++                raise ApiError(409, 'PROVIDER_CONFIGURATION_CHANGED', '原任务的提供商配置已改变。')
++            now = utc_now()
++            if not instant(now) < instant(body.expires_at) <= instant(now) + timedelta(minutes=10):
++                raise ApiError(422, 'CONSENT_EXPIRY_INVALID', '新提案须在当前时间后十分钟内到期。')
++            if not isinstance(material.input, RunnableTurnInput):
++                raise unavailable()
++            prepared = self.proofs.prepare(config, material.input.runtime, material.context.messages, material.context.evidence, body.budget)
++            providers = ProviderRepository(conn, current.workspace_id)
++            locator = providers.secret_locator(config.id, config.revision)
++            if providers.backup_disabled() or locator is None or not self.secrets.available(locator):
++                raise ApiError(409, 'PROVIDER_SECRET_UNAVAILABLE', '原配置的秘密当前不可用。')
++            source = material.preparation
++            summary = CodexFrozenOutboundSummary(version='codex-outbound-summary-v1', preparation_id=source.id,
++                preparation_sha256=source.preparation_sha256, session_id=source.session_id, turn_id=source.turn_id,
++                job_id=source.job.id, source_job_revision=material.job_revision, source_input_sha256=source.summary.job_input_sha256,
++                provider_id=config.id, provider_revision=config.revision, config_sha256=config.config_sha256,
++                adapter='codex_app_server', adapter_version=prepared.adapter_version, endpoint=prepared.endpoint,
++                endpoint_policy=config.endpoint_policy, model=config.model,
++                context_snapshot_id=source.summary.context_snapshot_id, context_snapshot_sha256=source.summary.snapshot_sha256,
++                input_sha256=source.summary.prepared_input_sha256, request_body_sha256=sha256_bytes(prepared.body),
++                messages=[MessageSummary(role=x.role,character_count=len(x.content),content_sha256=sha256_bytes(x.content.encode())) for x in material.context.messages],
++                references=source.summary.materials, input_character_count=prepared.input_character_count,
++                input_token_assurance=prepared.input_token_assurance, budget=body.budget, tools=source.request.tools,
++                runtime=source.summary.runtime,cost_estimate=prepared.cost_estimate,created_at=now,expires_at=body.expires_at)
++            view = CodexConsentProposalView(id='codexproposal_'+uuid4().hex,
++                proposal_sha256=content_sha256({'version':'codex-consent-proposal-v1','workspace_id':current.workspace_id,
++                    'actor_session_id':current.id,'summary':summary.model_dump(mode='json')}),
++                summary=summary,validity='current',consent_id=None,warnings=self._warnings(summary))
++            event = CodexProposed(kind='proposed',material=material,request_body=prepared.body.decode('utf-8'),
++                command=CodexPreviewCommand(route='preview',actor_session_id=current.id,key=key,body=body,ack=view))
++            envelope = repo.append(source.turn_id,event,now,None)
++            self._bind(conn,current,None,envelope)
++            self._states(conn,current)
++            current_control_access(conn,current,write=True)
++            return view
++
++    def _current(self, conn, identity, state, source):
++        original, material = state.proposed.command.ack, state.proposed.material
++        summary = original.summary
++        config = checked_provider_configuration(conn,identity,summary.provider_id)
++        validity = 'current'
++        if config != material.input.provider or source.control.execution == 'terminal' or not self.source.current_outbound_material(conn,identity,material):
++            validity = 'stale'
++        else:
++            try:
++                if not isinstance(material.input,RunnableTurnInput):
++                    raise unavailable()
++                frozen = PreparedCodexRequest(body=state.proposed.request_body.encode(),adapter_version=summary.adapter_version,
++                    input_character_count=summary.input_character_count,input_token_assurance=summary.input_token_assurance,
++                    cost_estimate=summary.cost_estimate,endpoint=summary.endpoint)
++                self.proofs.verify(config,material.input.runtime,material.context.messages,material.context.evidence,summary.budget,frozen)
++                providers = ProviderRepository(conn,identity.workspace_id)
++                locator = providers.secret_locator(config.id,config.revision)
++                if providers.backup_disabled() or locator is None or not self.secrets.available(locator):
++                    validity = 'unavailable'
++            except ApiError as error:
++                if error.code not in {'CODEX_INPUT_PROOF_UNAVAILABLE','CODEX_PROFILE_CHANGED'}:
++                    raise
++                validity = 'unavailable' if error.code=='CODEX_INPUT_PROOF_UNAVAILABLE' else 'stale'
++        if instant(utc_now()) >= instant(summary.expires_at):
++            validity = 'expired'
++        return CodexConsentProposalView.model_validate({**original.model_dump(),'validity':validity,
++            'consent_id':state.granted.command.ack.id if state.granted else None})
++
++    def proposal(self, identity, identifier):
++        with self.database.transaction(immediate=False) as conn:
++            conn.execute('PRAGMA query_only=ON')
++            current = current_control_access(conn,identity,write=True)
++            states,sources = self._states(conn,current)
++            state = self._find(states,identifier)
++            result = self._current(conn,current,state,sources[state.proposed.material.preparation.turn_id])
++        return self._deliver(identity,result)
++
++    def grant(self, identity, body, key):
++        return self._deliver(identity,self._grant(identity,body,key))
++
++    def _grant(self, identity, body, key):
++        key=validate_key(key)
++        body=CodexConsentCreateWrite.model_validate(body.model_dump(mode='json'))
++        with self.database.transaction() as conn:
++            current=current_control_access(conn,identity,write=True)
++            states,sources=self._states(conn,current)
++            repo=CodexProviderRepository(conn,current.workspace_id)
++            replay=repo.replay(states,current.id,'grant',key,body)
++            if replay is not None:
++                return CodexConsentCreateAck.model_validate(replay.model_dump())
++            state=self._find(states,body.proposal_id)
++            original=state.proposed.command.ack
++            if state.proposed.command.actor_session_id!=current.id:
++                raise ApiError(403,'POLICY_DENIED','新操作者不能接管原外发批准。')
++            if body.proposal_sha256!=original.proposal_sha256:
++                raise ApiError(412,'PROPOSAL_VERSION_CONFLICT','批准须对应原提案摘要。')
++            if state.granted is not None:
++                raise ApiError(409,'CODEX_BINDING_INVALID','原提案已有唯一许可。')
++            source=sources[original.summary.turn_id]
++            view=self._current(conn,current,state,source)
++            if view.validity!='current':
++                raise ApiError(503 if view.validity=='unavailable' else 409,
++                    'CODEX_INPUT_PROOF_UNAVAILABLE' if view.validity=='unavailable' else
++                    'CODEX_CONSENT_EXPIRED' if view.validity=='expired' else 'CODEX_SOURCE_CHANGED',
++                    '原外发提案当前不可批准。')
++            ack=CodexConsentCreateAck(id='codexconsent_'+uuid4().hex,revision=1,status='active',actor_session_id=current.id,
++                proposal_id=original.id,proposal_sha256=original.proposal_sha256,summary=original.summary)
++            now=utc_now()
++            event=CodexGranted(kind='granted',command=CodexGrantCommand(route='grant',actor_session_id=current.id,key=key,body=body,ack=ack))
++            envelope=repo.append(original.summary.turn_id,event,now,state)
++            self._bind(conn,current,state,envelope)
++            self._states(conn,current)
++            current_control_access(conn,current,write=True)
++            return ack
++
++    def consent(self, identity, identifier):
++        with self.database.transaction(immediate=False) as conn:
++            conn.execute('PRAGMA query_only=ON')
++            current=current_control_access(conn,identity,write=True)
++            states,sources=self._states(conn,current)
++            state=self._find(states,identifier,consent=True)
++            result=state.consent_view(utc_now(),sources[state.proposed.material.preparation.turn_id].control.job)
++        return self._deliver(identity,result)
++
++    def revoke(self, identity, identifier, body, key):
++        return self._deliver(identity,self._revoke(identity,identifier,body,key),subject=False)
++
++    def _revoke(self, identity, identifier, body, key):
++        key=validate_key(key)
++        body=ConsentRevoke.model_validate(body.model_dump(mode='json'))
++        with self.database.transaction() as conn:
++            current=current_control_access(conn,identity,write=False)
++            states,_=self._states(conn,current)
++            repo=CodexProviderRepository(conn,current.workspace_id)
++            # The target is part of the complete replay comparison too.
++            replay=repo.replay(states,current.id,'revoke',key,body)
++            if replay is not None:
++                if replay.id!=identifier:
++                    raise ApiError(409,'IDEMPOTENCY_CONFLICT','原 key 不属于本许可。')
++                return dm.MutationAck.model_validate(replay.model_dump())
++            state=self._find(states,identifier,consent=True)
++            if body.expected_revision!=state.revision:
++                raise ApiError(412,'REVISION_MISMATCH','许可修订已改变。')
++            applied=state.revoked_at is None
++            ack=dm.MutationAck(id=identifier,revision=2,applied=applied)
++            event=CodexRevoked(kind='revoked' if applied else 'revoke_observed',
++                command=CodexRevokeCommand(route='revoke',actor_session_id=current.id,key=key,body=body,ack=ack))
++            envelope=repo.append(state.proposed.material.preparation.turn_id,event,utc_now(),state)
++            self._bind(conn,current,state,envelope)
++            self._states(conn,current)
++            current_control_access(conn,current,write=False)
++            return ack
+diff --git a/services/api/app/application/provider_codex_models.py b/services/api/app/application/provider_codex_models.py
+new file mode 100644
+index 00000000..d87cec50
+--- /dev/null
++++ b/services/api/app/application/provider_codex_models.py
+@@ -0,0 +1,92 @@
++"""Versioned Provider-owned Codex consent/dispatch history, never credentials."""
++from typing import Annotated, Literal
++
++from pydantic import Field
++from packages.contracts import domain_models as dm
++from ..codex_turn_dto import (
++    CodexTurnModel, CodexOutboundPreviewWrite, CodexConsentProposalView,
++    CodexConsentCreateWrite, CodexConsentCreateAck, SafeCode, Outcome,
++)
++from ..provider_dto import ConsentRevoke
++from .provider_codex_ports import CodexOutboundMaterial
++from .provider_models import DispatchLease, UsageSnapshot
++
++
++class CodexPreviewCommand(CodexTurnModel):
++    route: Literal['preview']
++    actor_session_id: dm.Id
++    key: Annotated[str, Field(pattern=r'^[A-Za-z0-9_-]{1,128}$')]
++    body: CodexOutboundPreviewWrite
++    ack: CodexConsentProposalView
++
++
++class CodexGrantCommand(CodexTurnModel):
++    route: Literal['grant']
++    actor_session_id: dm.Id
++    key: Annotated[str, Field(pattern=r'^[A-Za-z0-9_-]{1,128}$')]
++    body: CodexConsentCreateWrite
++    ack: CodexConsentCreateAck
++
++
++class CodexRevokeCommand(CodexTurnModel):
++    route: Literal['revoke']
++    actor_session_id: dm.Id
++    key: Annotated[str, Field(pattern=r'^[A-Za-z0-9_-]{1,128}$')]
++    body: ConsentRevoke
++    ack: dm.MutationAck
++
++
++class CodexProposed(CodexTurnModel):
++    kind: Literal['proposed']
++    material: CodexOutboundMaterial
++    request_body: Annotated[str, Field(min_length=1, max_length=16777216)]
++    command: CodexPreviewCommand
++
++
++class CodexGranted(CodexTurnModel):
++    kind: Literal['granted']
++    command: CodexGrantCommand
++
++
++class CodexRevoked(CodexTurnModel):
++    kind: Literal['revoked', 'revoke_observed']
++    command: CodexRevokeCommand
++
++
++class CodexDispatchQueued(CodexTurnModel):
++    kind: Literal['queued']
++    dispatch_id: dm.Id
++    consent_id: dm.Id
++    start_command_sha256: dm.Sha256
++
++
++class CodexDispatchStarted(CodexTurnModel):
++    kind: Literal['started']
++    dispatch_id: dm.Id
++    request_body_sha256: dm.Sha256
++    lease: DispatchLease
++
++
++class CodexDispatchFinished(CodexTurnModel):
++    kind: Literal['terminal']
++    dispatch_id: dm.Id
++    outcome: Outcome
++    error_code: SafeCode | None
++    answer: Annotated[str, Field(max_length=400000)]
++    usage: UsageSnapshot
++    elapsed_ms: Annotated[int, Field(strict=True, ge=0)] | None
++
++
++CodexProviderEvent = Annotated[
++    CodexProposed | CodexGranted | CodexRevoked | CodexDispatchQueued |
++    CodexDispatchStarted | CodexDispatchFinished, Field(discriminator='kind')]
++
++
++class CodexProviderEnvelope(CodexTurnModel):
++    version: Literal['provider-codex-ledger-v1']
++    workspace_id: dm.Id
++    turn_id: dm.Id
++    seq: dm.Revision
++    previous_sha256: dm.Sha256 | None
++    occurred_at: dm.UTC
++    event: CodexProviderEvent
+diff --git a/services/api/app/application/provider_codex_ports.py b/services/api/app/application/provider_codex_ports.py
+new file mode 100644
+index 00000000..f0bd4196
+--- /dev/null
++++ b/services/api/app/application/provider_codex_ports.py
+@@ -0,0 +1,41 @@
++"""Provider-owned Codex request source; never a text-adapter impersonation."""
++import sqlite3
++from typing import Annotated, Literal, Protocol
++from pydantic import Field
++
++from packages.contracts import domain_models as dm
++from ..codex_turn_dto import CodexTurnPreparationView, CodexTurnControlView
++from ..infrastructure.security import SessionIdentity
++from .codex_turn_models import TurnContext, TurnInput, TurnProviderBound
++from .codex_turn_execution_models import RunnableTurnInput, RunnableTurnContext
++
++
++class CodexOutboundMaterial(dm.StrictModel):
++    version: Literal['codex-outbound-material-v1']
++    workspace_id: dm.Id
++    actor_session_id: dm.Id
++    preparation: CodexTurnPreparationView
++    job_revision: dm.Revision
++    input: Annotated[TurnInput | RunnableTurnInput, Field(discriminator='version')]
++    context: Annotated[TurnContext | RunnableTurnContext, Field(discriminator='version')]
++
++
++class CodexOutboundSourceState(dm.StrictModel):
++    material: CodexOutboundMaterial
++    control: CodexTurnControlView
++    provider_bindings: list[TurnProviderBound]
++
++
++class CodexOutboundSourcePort(Protocol):
++    """Only real owner reads in the caller's active SQLite transaction."""
++
++    def read_outbound_preparation(self, transaction: sqlite3.Connection, identity: SessionIdentity,
++                                 preparation_id: str, expected_job_revision: int) -> CodexOutboundMaterial: ...
++
++    def outbound_sources(self, transaction: sqlite3.Connection, identity: SessionIdentity) -> dict[str, CodexOutboundSourceState]: ...
++
++    def bind_outbound_event(self, transaction: sqlite3.Connection, identity: SessionIdentity,
++                            event: TurnProviderBound, occurred_at: str) -> None: ...
++
++    def current_outbound_material(self, transaction: sqlite3.Connection, identity: SessionIdentity,
++                                  material: CodexOutboundMaterial) -> bool: ...
+diff --git a/services/api/app/application/provider_codex_profile.py b/services/api/app/application/provider_codex_profile.py
+new file mode 100644
+index 00000000..9062ee2a
+--- /dev/null
++++ b/services/api/app/application/provider_codex_profile.py
+@@ -0,0 +1,399 @@
++"""Complete-input admission for an explicitly registered synthetic protocol peer.
++
++This is not a production CLI profile. No process, socket, filesystem discovery,
++real model tokenizer, credential, or HTTP registration is used here. The closed
++peer language defines one input token per complete request octet, including its
++entire private runtime envelope. Its upper-bound proof rounds that exact count
++up to a multiple of eight. Neither rule applies to an actual model.
++
++Only trusted application construction can install a registration. The Provider
++owner must still check current source/secret/consent/dispatch history. Preparing
++or verifying bytes does not authorize execution or enforce a dispatch ledger.
++"""
++from __future__ import annotations
++
++import base64
++from collections.abc import Iterable
++from dataclasses import dataclass, field
++from datetime import datetime
++from typing import Annotated, Final, Literal, Self
++
++from pydantic import AfterValidator, BeforeValidator, ConfigDict, Field, TypeAdapter, model_validator
++
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import canonical_bytes, sha256_bytes, strict_json
++from ..codex_turn_dto import (
++    CodexLocalToolBudget, CodexOutboundBudgetWrite, CodexTurnModel,
++)
++from ..provider_dto import (
++    CostEstimate, FrozenOutboundBudget, LocalExactInputTokens, LocalUpperBoundInputTokens,
++    NonEmpty, One, PositiveInt, ProviderConfigView, TrueOnly, Zero,
++)
++from ..infrastructure.database import utc_now
++from ..infrastructure.provider_network import validate_endpoint
++from .errors import ApiError
++
++ADAPTER_VERSION: Final = 'codex-synthetic-request-v1'
++CHECKER_VERSION: Final = 'codex-synthetic-byte-token-checker-v1'
++
++
++def unavailable() -> ApiError:
++    return ApiError(503, 'CODEX_INPUT_PROOF_UNAVAILABLE', '没有可核验的完整 Codex 输入证明。')
++
++
++def changed() -> ApiError:
++    return ApiError(409, 'CODEX_PROFILE_CHANGED', '冻结的 Codex 运行配置已改变。')
++
++
++def exceeded() -> ApiError:
++    return ApiError(409, 'CODEX_BUDGET_EXCEEDED', '完整 Codex 请求超过已冻结预算。')
++
++
++class PrivateModel(CodexTurnModel):
++    model_config = ConfigDict(frozen=True, revalidate_instances='always')
++
++
++def _base64(value: str) -> str:
++    try:
++        raw = base64.b64decode(value, validate=True)
++    except ValueError:
++        raise ValueError('Canonical complete private bytes are required') from None
++    if not raw or base64.b64encode(raw).decode('ascii') != value:
++        raise ValueError('Canonical complete private bytes are required')
++    return value
++
++
++PrivateBytes = Annotated[str, Field(min_length=4, max_length=400000), AfterValidator(_base64)]
++
++
++def _integer(value: object) -> object:
++    if type(value) is not int:
++        raise ValueError('An integer literal is required')
++    return value
++
++
++class CodexSyntheticClosure(PrivateModel):
++    """Full bytes, not unverifiable SHA placeholders; never part of public DTOs."""
++    version: Literal['codex-synthetic-private-closure-v1']
++    peer_definition: PrivateBytes
++    deployment: PrivateBytes
++    protocol_schema: PrivateBytes
++    configuration: PrivateBytes
++    environment: PrivateBytes
++    initialization: PrivateBytes
++    resume: PrivateBytes
++    turn: PrivateBytes
++    network: PrivateBytes
++    resources: PrivateBytes
++    proof_evidence: PrivateBytes
++
++
++class CodexRuntimeProfile(PrivateModel):
++    version: Literal['codex-synthetic-runtime-profile-v1']
++    implemented: TrueOnly
++    bootstrap_sha256: dm.Sha256
++    template_version: Literal['codex-local-task-v1']
++    tools: CodexLocalToolBudget
++    registration_id: dm.Id
++    proof_sha256: dm.Sha256
++    closure: CodexSyntheticClosure
++    cpu_seconds: Annotated[Literal[60], BeforeValidator(_integer)]
++    memory_bytes: Annotated[Literal[2147483648], BeforeValidator(_integer)]
++    file_bytes: Annotated[Literal[16777216], BeforeValidator(_integer)]
++    protocol_output_bytes: Annotated[Literal[16777216], BeforeValidator(_integer)]
++    file_descriptors: Annotated[Literal[128], BeforeValidator(_integer)]
++    processes: Annotated[Literal[16], BeforeValidator(_integer)]
++    core_bytes: Zero
++    command_network: Literal['denied']
++    writable_area: Literal['turn_outputs']
++
++
++class SyntheticInitialization(PrivateModel):
++    method: Literal['synthetic/initialize']
++    protocol: Literal['codex-synthetic-peer-v1']
++    process: Literal['none']
++
++
++class SyntheticResume(PrivateModel):
++    method: Literal['synthetic/resume']
++    bootstrap_sha256: dm.Sha256
++    history_source: Literal['complete_turn_messages_only']
++    directory_inputs: Literal['none']
++    unknown_execution: Literal['forbidden']
++
++
++class SyntheticToolDefinition(PrivateModel):
++    name: Literal['command', 'file_change']
++    approval: Literal['exact_operation_once']
++    execution: Literal['protocol_data_only']
++    network: Literal['denied']
++
++
++class SyntheticTurn(PrivateModel):
++    method: Literal['synthetic/turn']
++    messages: Annotated[list[dm.GenerationMessage], Field(min_length=2, max_length=6)]
++    evidence: Annotated[list[dm.EvidenceChunk], Field(max_length=8)]
++    tools: CodexLocalToolBudget
++    tool_definitions: Annotated[list[SyntheticToolDefinition], Field(max_length=2)]
++    max_output_tokens: PositiveInt
++    truncation: Literal['disabled']
++
++    @model_validator(mode='after')
++    def complete_input_shape(self) -> Self:
++        # A system template, zero to two whole user/answer pairs, current user.
++        expected = ['system'] + ['user', 'assistant'] * ((len(self.messages) - 2) // 2) + ['user']
++        if [item.role for item in self.messages] != expected:
++            raise ValueError('Only whole selected history pairs are supported')
++        if len({canonical_bytes(item.ref) for item in self.evidence}) != len(self.evidence):
++            raise ValueError('Evidence references must be distinct')
++        definitions = ['command', 'file_change'] if self.tools.max_tool_calls else []
++        if [item.name for item in self.tool_definitions] != definitions:
++            raise ValueError('Tool definitions must match the complete tool budget')
++        return self
++
++
++class SyntheticCompleteRequest(PrivateModel):
++    version: Literal['codex-synthetic-model-request-v1']
++    adapter: Literal['codex_app_server']
++    adapter_version: Literal['codex-synthetic-request-v1']
++    endpoint: NonEmpty
++    provider: ProviderConfigView
++    runtime: CodexRuntimeProfile
++    initialization: SyntheticInitialization
++    resume: SyntheticResume
++    turn: SyntheticTurn
++    max_provider_calls: One
++    max_search_calls: Zero
++    retries: Zero
++    redirects: Zero
++    auxiliary_requests: Zero
++
++
++class SyntheticCodexProof(PrivateModel):
++    version: Literal['codex-synthetic-proof-v1']
++    registration_id: dm.Id
++    config: ProviderConfigView
++    bootstrap_sha256: dm.Sha256
++    model_versions: Annotated[list[NonEmpty], Field(min_length=1, max_length=16)]
++    kind: Literal['local_exact', 'local_upper_bound']
++    max_input_tokens: PositiveInt
++    max_output_tokens: PositiveInt
++    shared_context_tokens: PositiveInt | None
++    valid_until: dm.UTC | None
++    checker_version: Literal['codex-synthetic-byte-token-checker-v1']
++    closure: CodexSyntheticClosure
++
++    @model_validator(mode='after')
++    def reviewed_synthetic_scope(self) -> Self:
++        if (self.config.endpoint_policy != 'explicit_loopback'
++                or self.config.adapter != 'official_responses'
++                or not self.config.secret_present
++                or self.config.model not in self.model_versions
++                or any(not value.startswith('synthetic-') or '*' in value for value in self.model_versions)
++                or len(set(self.model_versions)) != len(self.model_versions)):
++            raise ValueError('Only explicit synthetic model and peer registrations are supported')
++        _endpoint(self.config)
++        if self.closure != _closure(self.model_dump(mode='json', exclude={'closure'})):
++            raise ValueError('Complete synthetic closure differs from the reviewed protocol')
++        return self
++
++    @property
++    def sha256(self) -> str:
++        return sha256_bytes(canonical_bytes(self))
++
++    @classmethod
++    def create(cls, *, registration_id: str, config: ProviderConfigView, bootstrap_sha256: str,
++               model_versions: list[str], kind: Literal['local_exact', 'local_upper_bound'],
++               max_input_tokens: int, max_output_tokens: int, shared_context_tokens: int | None,
++               valid_until: str | None) -> SyntheticCodexProof:
++        """Trusted test composition only; does not admit HTTP supplied material."""
++        values = dict(version='codex-synthetic-proof-v1', registration_id=registration_id,
++            config=config.model_dump(mode='json'), bootstrap_sha256=bootstrap_sha256,
++            model_versions=model_versions, kind=kind, max_input_tokens=max_input_tokens,
++            max_output_tokens=max_output_tokens, shared_context_tokens=shared_context_tokens,
++            valid_until=valid_until, checker_version=CHECKER_VERSION)
++        return cls.model_validate(values | {'closure': _closure(values)})
++
++
++def _endpoint(config: ProviderConfigView) -> str:
++    endpoint = validate_endpoint(config.base_url, config.endpoint_policy)
++    host = f'[{endpoint.host}]' if ':' in endpoint.host else endpoint.host
++    return f'{endpoint.scheme}://{host}:{endpoint.port}{endpoint.base_path}/codex-peer/model'
++
++
++def _initialization() -> SyntheticInitialization:
++    return SyntheticInitialization(method='synthetic/initialize', protocol='codex-synthetic-peer-v1', process='none')
++
++
++def _resume(bootstrap: str) -> SyntheticResume:
++    return SyntheticResume(method='synthetic/resume', bootstrap_sha256=bootstrap,
++        history_source='complete_turn_messages_only', directory_inputs='none', unknown_execution='forbidden')
++
++
++RESOURCE_VALUES = dict(cpu_seconds=60, memory_bytes=2147483648, file_bytes=16777216,
++    protocol_output_bytes=16777216, file_descriptors=128, processes=16, core_bytes=0,
++    command_network='denied', writable_area='turn_outputs')
++
++
++def _blob(value: object) -> str:
++    return base64.b64encode(canonical_bytes(value)).decode('ascii')
++
++
++def _closure(values: dict) -> CodexSyntheticClosure:
++    # These are a full, versioned protocol-peer equivalent, not host deployment
++    # claims. No runtime library, environment, directory, or implicit history is
++    # allowed to add input. An actual CLI would require a different registration.
++    return CodexSyntheticClosure(version='codex-synthetic-private-closure-v1',
++        peer_definition=_blob({'version': 'synthetic-peer-language-v1', 'binary': None,
++            'input': 'canonical SyntheticCompleteRequest bytes', 'token': 'one raw request octet',
++            'output_limit': 'turn.max_output_tokens', 'hidden_input': [], 'execution': 'protocol_data_only'}),
++        deployment=_blob({'version': 'synthetic-deployment-v1', 'mode': 'in_memory_protocol_peer',
++            'binary': None, 'libraries': [], 'processes_started': 0, 'files_read': [], 'files_written': []}),
++        protocol_schema=_blob(SyntheticCompleteRequest.model_json_schema()),
++        configuration=_blob(values),
++        environment=_blob({'version': 'synthetic-environment-v1', 'variables': [], 'inherit': False,
++            'working_directory': None, 'read_directories': [], 'external_configuration': []}),
++        initialization=_blob(_initialization()), resume=_blob(_resume(values['bootstrap_sha256'])),
++        turn=_blob({'version': 'synthetic-turn-shape-v1', 'schema': SyntheticTurn.model_json_schema(),
++            'template_version': 'codex-local-task-v1', 'history': 'all_and_only_turn_messages',
++            'files': 'all_and_only_turn_evidence', 'append_after_freeze': False}),
++        network=_blob({'version': 'synthetic-network-v1', 'transport': 'in_memory_peer_only',
++            'socket_creation': False, 'requests': 1, 'search': 0, 'retry': 0, 'redirect': 0,
++            'auxiliary': 0, 'commands': 'denied', 'tools': 'denied'}),
++        resources=_blob({'version': 'synthetic-resource-policy-v1', **RESOURCE_VALUES,
++            'wall_seconds': 'exact_runtime_tools_wall_seconds', 'max_wall_seconds': 300,
++            'enforcement': 'no_external_process_files_or_network',
++            'host_execution_authorized': False, 'artifact_total_bytes': 16777216}),
++        proof_evidence=_blob({'version': 'synthetic-complete-byte-proof-v1',
++            'domain': 'only_complete_canonical_SyntheticCompleteRequest',
++            'exact': 'Every raw request octet is one token by the synthetic peer language definition.',
++            'upper_bound': '8*ceil(N/8)>=N for every nonnegative complete byte count N.',
++            'capacity': 'N<=max_input; requested_output<=max_output; N+requested_output<=shared_if_present.',
++            'invalidity': 'registry_absent_or_withdrawn_or_expired_or_any_binding_or_closure_changed',
++            'production_model_claim': False}))
++
++
++@dataclass(frozen=True)
++class PreparedCodexRequest:
++    body: bytes = field(repr=False)
++    adapter_version: str
++    input_character_count: int
++    input_token_assurance: LocalExactInputTokens | LocalUpperBoundInputTokens
++    cost_estimate: CostEstimate
++    endpoint: str
++
++
++class CodexProofRegistry:
++    """Provider-owned, explicit construction seam; production defaults empty."""
++    def __init__(self, proofs: Iterable[SyntheticCodexProof] = (), *, withdrawn_proofs: Iterable[str] = ()):
++        self._withdrawn = frozenset(TypeAdapter(dm.Sha256).validate_python(value) for value in withdrawn_proofs)
++        # Keep immutable canonical original bytes, not externally mutable models.
++        self._proofs: dict[str, bytes] = {}
++        names: set[str] = set()
++        for value in proofs:
++            if not isinstance(value, SyntheticCodexProof):
++                raise ValueError('A named synthetic Codex proof is required')
++            proof = SyntheticCodexProof.model_validate(strict_json(canonical_bytes(value)))
++            if proof.bootstrap_sha256 in self._proofs or proof.registration_id in names:
++                raise ValueError('Duplicate synthetic Codex proof registration')
++            names.add(proof.registration_id)
++            self._proofs[proof.bootstrap_sha256] = canonical_bytes(proof)
++
++    def _resolve(self, bootstrap_sha256: str) -> SyntheticCodexProof | None:
++        raw = self._proofs.get(bootstrap_sha256)
++        if raw is None:
++            return None
++        proof = SyntheticCodexProof.model_validate(strict_json(raw))
++        if (proof.sha256 in self._withdrawn or proof.valid_until is not None
++                and datetime.fromisoformat(utc_now().replace('Z', '+00:00'))
++                    >= datetime.fromisoformat(proof.valid_until.replace('Z', '+00:00'))):
++            return None
++        return proof
++
++    def freeze(self, bootstrap_sha256: str, tools: CodexLocalToolBudget, *,
++               config: ProviderConfigView | None = None) -> CodexRuntimeProfile | None:
++        TypeAdapter(dm.Sha256).validate_python(bootstrap_sha256)
++        tools = CodexLocalToolBudget.model_validate(strict_json(canonical_bytes(tools)))
++        proof = self._resolve(bootstrap_sha256)
++        if proof is None or config is not None and canonical_bytes(config) != canonical_bytes(proof.config):
++            return None
++        return CodexRuntimeProfile.model_validate(dict(version='codex-synthetic-runtime-profile-v1', implemented=True,
++            bootstrap_sha256=bootstrap_sha256, template_version='codex-local-task-v1', tools=tools,
++            registration_id=proof.registration_id, proof_sha256=proof.sha256, closure=proof.closure,
++            **RESOURCE_VALUES))
++
++    def current(self, profile: CodexRuntimeProfile) -> Literal['current', 'changed', 'unavailable']:
++        if not isinstance(profile, CodexRuntimeProfile):
++            return 'unavailable'
++        try:
++            profile = CodexRuntimeProfile.model_validate(strict_json(canonical_bytes(profile)))
++            frozen = self.freeze(profile.bootstrap_sha256, profile.tools)
++        except (ValueError, TypeError, KeyError):
++            return 'unavailable'
++        if frozen is None:
++            return 'unavailable'
++        return 'current' if canonical_bytes(frozen) == canonical_bytes(profile) else 'changed'
++
++    def prepare(self, config: ProviderConfigView, profile: CodexRuntimeProfile,
++                messages: list[dm.GenerationMessage], evidence: list[dm.EvidenceChunk],
++                budget: CodexOutboundBudgetWrite) -> PreparedCodexRequest:
++        state = self.current(profile)
++        if state == 'unavailable':
++            raise unavailable()
++        if state == 'changed':
++            raise changed()
++        proof = self._resolve(profile.bootstrap_sha256)
++        if proof is None or canonical_bytes(config) != canonical_bytes(proof.config):
++            raise unavailable()
++        try:
++            budget = CodexOutboundBudgetWrite.model_validate(strict_json(canonical_bytes(budget)))
++            definitions = [SyntheticToolDefinition(name=name, approval='exact_operation_once',
++                execution='protocol_data_only', network='denied') for name in ('command', 'file_change')
++                if profile.tools.max_tool_calls]
++            turn = SyntheticTurn(method='synthetic/turn',
++                messages=[dm.GenerationMessage.model_validate(item.model_dump()) for item in messages],
++                evidence=[dm.EvidenceChunk.model_validate(item.model_dump()) for item in evidence],
++                tools=profile.tools, tool_definitions=definitions, max_output_tokens=budget.max_output_tokens,
++                truncation='disabled')
++            request = SyntheticCompleteRequest(version='codex-synthetic-model-request-v1', adapter='codex_app_server',
++                adapter_version=ADAPTER_VERSION, endpoint=_endpoint(config), provider=config, runtime=profile,
++                initialization=_initialization(), resume=_resume(profile.bootstrap_sha256), turn=turn,
++                max_provider_calls=1, max_search_calls=0, retries=0, redirects=0, auxiliary_requests=0)
++            body = canonical_bytes(request)
++            # Schema/decoder closure is itself frozen and strict, including all
++            # referenced definitions; no hidden fields or reserialization later.
++            if canonical_bytes(SyntheticCompleteRequest.model_validate(strict_json(body))) != body:
++                raise ValueError('Noncanonical synthetic request')
++        except (ValueError, TypeError, KeyError, AttributeError):
++            raise unavailable() from None
++        characters = sum(len(item.content) for item in turn.messages) + sum(
++            len('<reference>\n' + canonical_bytes(item).decode() + '\n</reference>') for item in turn.evidence)
++        bound = len(body) if proof.kind == 'local_exact' else ((len(body) + 7) // 8) * 8
++        if (not 1 <= characters <= 12000 or bound > min(budget.max_input_tokens, proof.max_input_tokens)
++                or budget.max_output_tokens > proof.max_output_tokens
++                or proof.shared_context_tokens is not None
++                    and bound + budget.max_output_tokens > proof.shared_context_tokens):
++            raise exceeded()
++        identity = dict(checker_version=proof.checker_version, proof_sha256=proof.sha256,
++            request_body_sha256=sha256_bytes(body))
++        assurance = (LocalExactInputTokens(kind='local_exact', input_tokens=bound, **identity)
++            if proof.kind == 'local_exact' else LocalUpperBoundInputTokens(kind='local_upper_bound',
++                input_tokens_upper_bound=bound, **identity))
++        from .provider_budget import cost_estimate
++        cost_budget = FrozenOutboundBudget(max_input_tokens=budget.max_input_tokens,
++            max_output_tokens=budget.max_output_tokens, max_provider_calls=1, max_search_calls=0,
++            max_tool_calls=0, timeout_seconds=profile.tools.wall_seconds, max_cost_usd=budget.max_cost_usd)
++        try:
++            cost = cost_estimate(config, bound, cost_budget)
++        except ApiError:
++            raise exceeded() from None
++        return PreparedCodexRequest(body=body, adapter_version=ADAPTER_VERSION,
++            input_character_count=characters, input_token_assurance=assurance, cost_estimate=cost,
++            endpoint=request.endpoint)
++
++    def verify(self, config: ProviderConfigView, profile: CodexRuntimeProfile,
++               messages: list[dm.GenerationMessage], evidence: list[dm.EvidenceChunk],
++               budget: CodexOutboundBudgetWrite, prepared: PreparedCodexRequest) -> None:
++        current = self.prepare(config, profile, messages, evidence, budget)
++        if current != prepared:
++            raise ApiError(409, 'CODEX_SOURCE_CHANGED', '实际完整请求与冻结的 Codex 请求不一致。')
+diff --git a/services/api/app/infrastructure/codex_turn_repository.py b/services/api/app/infrastructure/codex_turn_repository.py
+index fee105e6..9700c416 100644
+--- a/services/api/app/infrastructure/codex_turn_repository.py
++++ b/services/api/app/infrastructure/codex_turn_repository.py
+@@ -8,11 +8,12 @@ from packages.contracts.canonical import strict_json
+ from ..application.codex_bootstrap_models import BootstrapSnapshot
+ from ..application.codex_turn_context import CodexTurnContext, damaged
+ from ..application.codex_turn_models import (
+-    SessionAnchor, EventEnvelope, TurnPrepared, CancelCommand, preparation_digest,
++    SessionAnchor, EventEnvelope, TurnPrepared, TurnProviderBound, CancelCommand, preparation_digest,
+ )
++from ..application.codex_turn_execution_models import ControlEventEnvelope, RunnableTurnPrepared
+ from ..application.errors import ApiError
+ from ..application.providers import checked_provider_configuration
+-from ..codex_turn_dto import CodexTurnControlView
++from ..codex_turn_dto import CodexTurnControlView, CodexConsentControl
+ from ..serialization import canonical_json, content_sha256
+ from .codex_turn_jobs import CodexTurnJobs
+ from .security import SessionIdentity, historical_session_belongs_to
+@@ -20,9 +21,10 @@ from .security import SessionIdentity, historical_session_belongs_to
+ 
+ @dataclass
+ class CheckedTurn:
+-    prepared: TurnPrepared
++    prepared: TurnPrepared | RunnableTurnPrepared
+     control: CodexTurnControlView
+     sequence: int
++    provider_bindings: list[TurnProviderBound] = field(default_factory=list)
+ 
+ 
+ @dataclass
+@@ -30,7 +32,7 @@ class CheckedSession:
+     anchor: SessionAnchor
+     revision: int
+     active_turn_id: str | None
+-    envelopes: list[EventEnvelope] = field(default_factory=list)
++    envelopes: list[EventEnvelope | ControlEventEnvelope] = field(default_factory=list)
+     turns: dict[str, CheckedTurn] = field(default_factory=dict)
+ 
+ 
+@@ -44,7 +46,7 @@ def decode(model, raw: str):
+         raise damaged() from None
+ 
+ 
+-def turn_control(prepared: TurnPrepared, finished: str | None = None) -> CodexTurnControlView:
++def turn_control(prepared: TurnPrepared | RunnableTurnPrepared, finished: str | None = None) -> CodexTurnControlView:
+     view = prepared.command.ack
+     terminal = finished is not None
+     return CodexTurnControlView(id=view.turn_id, session_id=view.session_id,
+@@ -93,8 +95,7 @@ class CodexTurnRepository:
+                 or {row['job_id'] for row in members} != self.jobs.member_ids()
+                 or {(row['session_id'], row['seq'], row['record_sha256']) for row in events}
+                     != {(row['session_id'], row['seq'], row['record_sha256']) for row in witnesses}
+-                or {(row['session_id'], row['seq']) for row in events}
+-                    != {(row['session_id'], row['seq']) for row in commands}):
++                ):
+             raise damaged()
+         # Core Run/thread membership independently detects deletion of the
+         # entire Codex table family without rebuilding an empty default.
+@@ -103,6 +104,7 @@ class CodexTurnRepository:
+             raise damaged()
+         result = {}
+         seen_members = set()
++        seen_commands = set()
+         for row in anchors:
+             anchor = decode(SessionAnchor, row['record_json'])
+             original = bootstrap.get(anchor.session_id)
+@@ -123,21 +125,26 @@ class CodexTurnRepository:
+             if len(selected) != head['event_count']:
+                 raise damaged()
+             for seq, stored in enumerate(selected, 1):
+-                envelope = decode(EventEnvelope, stored['record_json'])
++                raw = strict_json(stored['record_json'])
++                envelope = decode(ControlEventEnvelope if raw.get('version') == 'codex-turn-event-v2' else EventEnvelope, stored['record_json'])
+                 if (envelope.session_id != anchor.session_id or envelope.workspace_id != self.workspace
+                         or envelope.seq != seq or stored['seq'] != seq or envelope.previous_sha256 != digest
+                         or content_sha256(envelope) != stored['record_sha256']):
+                     raise damaged()
+-                event, command = envelope.event, envelope.event.command
+-                registration = next(item for item in commands if item['session_id'] == anchor.session_id and item['seq'] == seq)
+-                if (command.workspace_id != self.workspace or registration['actor_session_id'] != command.actor_session_id
++                event, command = envelope.event, getattr(envelope.event, 'command', None)
++                if command is not None:
++                    registration = next((item for item in commands if item['session_id'] == anchor.session_id and item['seq'] == seq), None)
++                    if (registration is None or command.workspace_id != self.workspace or registration['actor_session_id'] != command.actor_session_id
+                         or registration['route'] != command.route or registration['target_id'] != command.target_id
+                         or registration['command_key'] != command.key or registration['command_sha256'] != content_sha256(command)
+                         or not historical_session_belongs_to(self.conn, self.workspace, command.actor_session_id)):
+-                    raise damaged()
+-                if isinstance(event, TurnPrepared):
++                        raise damaged()
++                    seen_commands.add((anchor.session_id, seq))
++                if isinstance(event, (TurnPrepared, RunnableTurnPrepared)):
+                     self._prepared(state, event, envelope, members)
+                     seen_members.add(event.input.turn_id)
++                elif isinstance(event, TurnProviderBound):
++                    self._provider_bound(state, event)
+                 else:
+                     turn = state.turns.get(event.turn_id)
+                     if turn is None or not isinstance(command, CancelCommand) or command.target_id != turn.control.job.id:
+@@ -147,7 +154,7 @@ class CodexTurnRepository:
+                     if event.kind == 'cancelled':
+                         if state.active_turn_id != event.turn_id or turn.control.execution != 'not_started':
+                             raise damaged()
+-                        turn.control = turn_control(turn.prepared, envelope.occurred_at)
++                        turn.control = self.cancelled_control(turn.control, envelope.occurred_at)
+                         if (event.requested_session_revision != state.revision + 1
+                                 or event.terminal_session_revision != state.revision + 2):
+                             raise damaged()
+@@ -166,7 +173,8 @@ class CodexTurnRepository:
+             for turn in state.turns.values():
+                 self._run(state.anchor, turn)
+             result[anchor.session_id] = state
+-        if seen_members != {row['turn_id'] for row in members}:
++        if (seen_members != {row['turn_id'] for row in members}
++                or seen_commands != {(row['session_id'], row['seq']) for row in commands}):
+             raise damaged()
+         return result
+ 
+@@ -185,7 +193,8 @@ class CodexTurnRepository:
+                 or ack.actor_session_id != value.actor_session_id or ack.session_id != value.session_id
+                 or ack.turn_id != value.turn_id or ack.job != dm.JobRef(id=value.job_id, status='awaiting_approval')
+                 or ack.request != value.request or ack.summary.tools != value.request.tools
+-                or ack.session_revision != state.revision + 1 or ack.validity != 'unavailable'
++                or ack.session_revision != state.revision + 1
++                or ack.validity != ('current' if isinstance(event, RunnableTurnPrepared) else 'unavailable')
+                 or ack.proposal_id is not None or ack.consent_id is not None
+                 or ack.created_at != envelope.occurred_at or preparation_digest(self.workspace, ack) != ack.preparation_sha256
+                 or member['session_id'] != value.session_id or member['job_id'] != value.job_id
+@@ -204,6 +213,33 @@ class CodexTurnRepository:
+         state.active_turn_id = value.turn_id
+         state.turns[value.turn_id] = CheckedTurn(event, turn_control(event), envelope.seq)
+ 
++    @staticmethod
++    def cancelled_control(control: CodexTurnControlView, now: str) -> CodexTurnControlView:
++        return CodexTurnControlView.model_validate({**control.model_dump(), 'job': {'id':control.job.id,'status':'cancelled'},
++            'job_revision':control.job_revision+1,'run_revision':control.run_revision+1,'last_seq':control.last_seq+1,
++            'cancel_requested':True,'execution':'terminal','outcome':'cancelled','finished_at':now,'error_code':'CODEX_CANCELLED'})
++
++    @staticmethod
++    def _provider_bound(state: CheckedSession, event: TurnProviderBound) -> None:
++        turn = state.turns.get(event.turn_id)
++        if turn is None:
++            raise damaged()
++        previous = turn.provider_bindings[-1] if turn.provider_bindings else None
++        if (event.provider_seq != (previous.provider_seq+1 if previous else 1)
++                or previous is not None and event.proposal_id != previous.proposal_id
++                or previous is not None and previous.consent_id is not None and event.consent_id != previous.consent_id
++                or (event.consent_id is None) != (event.consent_revision is None)
++                or (event.consent_id is None) != (event.consent_status is None)):
++            raise damaged()
++        control = None
++        if event.consent_id is not None:
++            if event.consent_revision is None or event.consent_status is None:
++                raise damaged()
++            control = CodexConsentControl(id=event.consent_id, revision=event.consent_revision, status=event.consent_status)
++        turn.control = CodexTurnControlView.model_validate({**turn.control.model_dump(),
++            'consent_control':control.model_dump() if control else None})
++        turn.provider_bindings.append(event)
++
+     def _run(self, anchor, turn):
+         row = self.jobs.load(turn.control.job.id)
+         if (row['status'] != turn.control.job.status or row['revision'] != turn.control.job_revision
+@@ -234,30 +270,42 @@ class CodexTurnRepository:
+         self.conn.execute('INSERT INTO codex_turn_heads VALUES(?,?,2,0,?,NULL)', (anchor.session_id, self.workspace, digest))
+         return CheckedSession(anchor, 2, None)
+ 
+-    def append(self, state: CheckedSession, event, now: str) -> EventEnvelope:
++    def append(self, state: CheckedSession, event, now: str) -> EventEnvelope | ControlEventEnvelope:
+         seq = len(state.envelopes) + 1
+         previous = content_sha256(state.envelopes[-1]) if state.envelopes else content_sha256(state.anchor)
+-        envelope = EventEnvelope(version='codex-turn-event-v1', workspace_id=self.workspace,
+-            session_id=state.anchor.session_id, seq=seq, previous_sha256=previous, occurred_at=now, event=event)
++        extended = isinstance(event, (RunnableTurnPrepared, TurnProviderBound))
++        envelope: ControlEventEnvelope | EventEnvelope
++        if extended:
++            envelope = ControlEventEnvelope(version='codex-turn-event-v2', workspace_id=self.workspace,
++                session_id=state.anchor.session_id, seq=seq, previous_sha256=previous, occurred_at=now, event=event)
++        else:
++            envelope = EventEnvelope(version='codex-turn-event-v1', workspace_id=self.workspace,
++                session_id=state.anchor.session_id, seq=seq, previous_sha256=previous, occurred_at=now, event=event)
+         digest = content_sha256(envelope)
+         self.conn.execute('INSERT INTO codex_turn_events VALUES(?,?,?,?,?)',
+             (state.anchor.session_id, self.workspace, seq, canonical_json(envelope), digest))
+         self.conn.execute('INSERT INTO codex_turn_event_members VALUES(?,?,?,?)', (state.anchor.session_id, self.workspace, seq, digest))
+-        command = event.command
+-        self.conn.execute('INSERT INTO codex_turn_commands VALUES(?,?,?,?,?,?,?,?)',
+-            (self.workspace, command.actor_session_id, command.route, command.target_id, command.key,
+-             state.anchor.session_id, seq, content_sha256(command)))
+-        if isinstance(event, TurnPrepared):
+-            view = command.ack
++        command = getattr(event, 'command', None)
++        if command is not None:
++            self.conn.execute('INSERT INTO codex_turn_commands VALUES(?,?,?,?,?,?,?,?)',
++                (self.workspace, command.actor_session_id, command.route, command.target_id, command.key,
++                 state.anchor.session_id, seq, content_sha256(command)))
++        if isinstance(event, (TurnPrepared, RunnableTurnPrepared)):
++            view = event.command.ack
+             self.conn.execute('INSERT INTO codex_turn_members(sequence,turn_id,session_id,workspace_id,job_id,preparation_id,preparation_sha256,prepared_seq) VALUES(?,?,?,?,?,?,?,?)',
+                 (event.creation_sequence, view.turn_id, view.session_id, self.workspace, view.job.id, view.id, view.preparation_sha256, seq))
+             self.conn.execute('INSERT INTO runs VALUES(?,?,?,?)',
+                 (view.job.id, state.anchor.thread_id, view.summary.context_snapshot_id, canonical_json(turn_control(event))))
+             revision, active = state.revision + 1, view.turn_id
+         elif event.kind == 'cancelled':
+-            control = turn_control(state.turns[event.turn_id].prepared, now)
++            control = self.cancelled_control(state.turns[event.turn_id].control, now)
+             self.conn.execute('UPDATE runs SET snapshot_json=? WHERE id=?', (canonical_json(control), control.job.id))
+             revision, active = state.revision + 2, None
++        elif isinstance(event, TurnProviderBound):
++            self._provider_bound(state, event)
++            control = state.turns[event.turn_id].control
++            self.conn.execute('UPDATE runs SET snapshot_json=? WHERE id=?', (canonical_json(control), control.job.id))
++            revision, active = state.revision, state.active_turn_id
+         else:
+             revision, active = state.revision, state.active_turn_id
+         updated = self.conn.execute('UPDATE codex_turn_heads SET revision=?,event_count=?,head_sha256=?,active_turn_id=? WHERE session_id=? AND revision=? AND event_count=? AND head_sha256=?',
+@@ -270,8 +318,8 @@ class CodexTurnRepository:
+     def replay(history, identity: SessionIdentity, route: str, target: str, key: str, body: BaseModel):
+         for state in history.values():
+             for envelope in state.envelopes:
+-                command = envelope.event.command
+-                if (command.actor_session_id, command.route, command.target_id, command.key) == (identity.id, route, target, key):
++                command = getattr(envelope.event, 'command', None)
++                if command is not None and (command.actor_session_id, command.route, command.target_id, command.key) == (identity.id, route, target, key):
+                     if canonical_json(command.body) != canonical_json(body):
+                         raise ApiError(409, 'IDEMPOTENCY_CONFLICT', '原命令与本次完整输入不一致。')
+                     return command.ack
+diff --git a/services/api/app/infrastructure/provider_codex_repository.py b/services/api/app/infrastructure/provider_codex_repository.py
+new file mode 100644
+index 00000000..9380f315
+--- /dev/null
++++ b/services/api/app/infrastructure/provider_codex_repository.py
+@@ -0,0 +1,232 @@
++"""Provider-owned append-only Codex consent and single-dispatch ledger."""
++from dataclasses import dataclass, field
++import sqlite3
++from typing import Literal
++
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import strict_json, sha256_bytes
++from ..application.codex_turn_context import damaged
++from ..application.errors import ApiError
++from ..application.provider_codex_models import (
++    CodexProviderEnvelope, CodexProposed, CodexGranted, CodexRevoked,
++    CodexDispatchQueued, CodexDispatchStarted, CodexDispatchFinished,
++)
++from ..codex_turn_dto import CodexConsentView, CodexDispatchView, CodexConsentControl
++from ..provider_dto import MessageSummary, UnknownUsageCost
++from ..serialization import canonical_json, content_sha256
++from .consent_repository import instant
++from .provider_repository import ProviderRepository
++from .security import historical_session_belongs_to
++
++
++@dataclass
++class CodexProviderState:
++    proposed: CodexProposed
++    envelopes: list[CodexProviderEnvelope] = field(default_factory=list)
++    granted: CodexGranted | None = None
++    granted_at: str | None = None
++    revoked_at: str | None = None
++    queued: CodexDispatchQueued | None = None
++    started: CodexDispatchStarted | None = None
++    started_at: str | None = None
++    finished: CodexDispatchFinished | None = None
++    finished_at: str | None = None
++
++    @property
++    def revision(self) -> int:
++        return 2 if self.revoked_at else 1
++
++    @property
++    def digest(self) -> str:
++        return content_sha256(self.envelopes[-1])
++
++    def consent_control(self, now: str) -> CodexConsentControl | None:
++        if self.granted is None:
++            return None
++        status: Literal['active', 'revoked', 'expired'] = 'revoked' if self.revoked_at else ('expired' if instant(now) >= instant(self.proposed.command.ack.summary.expires_at) else 'active')
++        return CodexConsentControl(id=self.granted.command.ack.id, revision=self.revision, status=status)
++
++    def consent_view(self, now: str, job: dm.JobRef) -> CodexConsentView:
++        control = self.consent_control(now)
++        if control is None or self.granted is None or self.granted_at is None:
++            raise damaged()
++        ack = self.granted.command.ack
++        dispatch = None
++        if self.queued is not None:
++            terminal = self.finished
++            dispatch = CodexDispatchView(id=self.queued.dispatch_id, job=job, started_at=self.started_at,
++                finished_at=self.finished_at, consumed_provider_calls=int(self.started is not None),
++                input_tokens=terminal.usage.input_tokens if terminal else None,
++                output_tokens=terminal.usage.output_tokens if terminal else None,
++                elapsed_ms=terminal.elapsed_ms if terminal else None, cost=UnknownUsageCost(kind='unknown', currency='USD'),
++                outcome=terminal.outcome if terminal else None, error_code=terminal.error_code if terminal else None)
++        return CodexConsentView(id=control.id, revision=control.revision, status=control.status,
++            actor_session_id=ack.actor_session_id, proposal_id=ack.proposal_id,
++            proposal_sha256=ack.proposal_sha256, summary=ack.summary, created_at=self.granted_at,
++            expires_at=ack.summary.expires_at, revoked_at=self.revoked_at, dispatch=dispatch)
++
++
++class CodexProviderRepository:
++    def __init__(self, connection: sqlite3.Connection, workspace: str):
++        if not connection.in_transaction:
++            raise damaged()
++        self.conn, self.workspace = connection, workspace
++
++    def rows(self, name: str):
++        return self.conn.execute(f'SELECT * FROM provider_codex_{name} WHERE workspace_id=?', (self.workspace,)).fetchall()
++
++    def checked(self) -> dict[str, CodexProviderState]:
++        try:
++            return self._checked()
++        except (ValueError, TypeError, KeyError, IndexError, RecursionError):
++            raise damaged() from None
++
++    def _checked(self):
++        heads, rows, witnesses, commands = (self.rows(name) for name in ('heads', 'events', 'members', 'commands'))
++        ids = {row['turn_id'] for row in heads}
++        if (ids != {row['turn_id'] for row in rows}
++                or {(row['turn_id'], row['seq'], row['record_sha256']) for row in rows}
++                    != {(row['turn_id'], row['seq'], row['record_sha256']) for row in witnesses}):
++            raise damaged()
++        states, seen_commands = {}, set()
++        for head in heads:
++            selected = sorted((row for row in rows if row['turn_id'] == head['turn_id']), key=lambda row: row['seq'])
++            if len(selected) != head['event_count']:
++                raise damaged()
++            state, previous = None, None
++            for seq, row in enumerate(selected, 1):
++                envelope = CodexProviderEnvelope.model_validate(strict_json(row['record_json']))
++                if (canonical_json(envelope) != row['record_json'] or content_sha256(envelope) != row['record_sha256']
++                        or envelope.workspace_id != self.workspace or envelope.turn_id != head['turn_id']
++                        or envelope.seq != seq or row['seq'] != seq or envelope.previous_sha256 != previous):
++                    raise damaged()
++                event = envelope.event
++                command = getattr(event, 'command', None)
++                if command is not None:
++                    actual = next((r for r in commands if r['turn_id'] == envelope.turn_id and r['seq'] == seq), None)
++                    if (actual is None or actual['actor_session_id'] != command.actor_session_id
++                            or actual['route'] != command.route or actual['command_key'] != command.key
++                            or actual['command_sha256'] != content_sha256(command)
++                            or not historical_session_belongs_to(self.conn, self.workspace, command.actor_session_id)):
++                        raise damaged()
++                    seen_commands.add((envelope.turn_id, seq))
++                if isinstance(event, CodexProposed):
++                    if state is not None or seq != 1:
++                        raise damaged()
++                    self._proposal(envelope)
++                    state = CodexProviderState(event)
++                elif state is None:
++                    raise damaged()
++                else:
++                    self._reduce(state, envelope)
++                state.envelopes.append(envelope)
++                previous = row['record_sha256']
++            if state is None or previous != head['head_sha256']:
++                raise damaged()
++            states[head['turn_id']] = state
++        if seen_commands != {(r['turn_id'], r['seq']) for r in commands}:
++            raise damaged()
++        return states
++
++    def _proposal(self, envelope):
++        event = envelope.event
++        material, command = event.material, event.command
++        view, source = command.ack, material.preparation
++        summary, config = view.summary, material.input.provider
++        if (material.workspace_id != self.workspace or material.actor_session_id != source.actor_session_id
++                or command.actor_session_id != material.actor_session_id or envelope.turn_id != source.turn_id
++                or command.body.preparation_id != source.id or command.body.preparation_sha256 != source.preparation_sha256
++                or command.body.expected_job_revision != material.job_revision
++                or command.body.expected_provider_revision != config.revision
++                or summary.preparation_id != source.id or summary.preparation_sha256 != source.preparation_sha256
++                or summary.session_id != source.session_id or summary.turn_id != source.turn_id
++                or summary.job_id != source.job.id or summary.source_job_revision != material.job_revision
++                or summary.source_input_sha256 != source.summary.job_input_sha256
++                or (summary.provider_id, summary.provider_revision, summary.config_sha256, summary.model, summary.endpoint_policy)
++                    != (config.id, config.revision, config.config_sha256, config.model, config.endpoint_policy)
++                or summary.context_snapshot_id != material.context.snapshot.id
++                or summary.context_snapshot_sha256 != material.context.snapshot.snapshot_sha256
++                or summary.input_sha256 != source.summary.prepared_input_sha256
++                or summary.request_body_sha256 != sha256_bytes(event.request_body.encode())
++                or summary.messages != [MessageSummary(role=m.role, character_count=len(m.content), content_sha256=sha256_bytes(m.content.encode())) for m in material.context.messages]
++                or summary.references != source.summary.materials or summary.tools != source.request.tools
++                or summary.runtime != source.summary.runtime or summary.budget != command.body.budget
++                or summary.created_at != envelope.occurred_at or summary.expires_at != command.body.expires_at
++                or view.validity != 'current' or view.consent_id is not None
++                or view.proposal_sha256 != content_sha256({'version':'codex-consent-proposal-v1',
++                    'workspace_id':self.workspace,'actor_session_id':material.actor_session_id,'summary':summary.model_dump(mode='json')})):
++            raise damaged()
++
++    def _reduce(self, state: CodexProviderState, envelope: CodexProviderEnvelope):
++        event, original = envelope.event, state.proposed.command.ack
++        if isinstance(event, CodexGranted):
++            command, ack = event.command, event.command.ack
++            if (state.granted is not None or command.actor_session_id != state.proposed.command.actor_session_id
++                    or command.body.proposal_id != original.id or command.body.proposal_sha256 != original.proposal_sha256
++                    or ack.actor_session_id != command.actor_session_id or ack.proposal_id != original.id
++                    or ack.proposal_sha256 != original.proposal_sha256 or ack.summary != original.summary
++                    or not instant(original.summary.created_at) <= instant(envelope.occurred_at) < instant(original.summary.expires_at)):
++                raise damaged()
++            state.granted, state.granted_at = event, envelope.occurred_at
++        elif isinstance(event, CodexRevoked):
++            if (state.granted is None or event.command.body.expected_revision != state.revision
++                    or event.command.ack.id != state.granted.command.ack.id):
++                raise damaged()
++            applied = state.revoked_at is None
++            if (event.kind != ('revoked' if applied else 'revoke_observed')
++                    or event.command.ack != dm.MutationAck(id=state.granted.command.ack.id, revision=2, applied=applied)):
++                raise damaged()
++            if applied:
++                state.revoked_at = envelope.occurred_at
++        elif isinstance(event, CodexDispatchQueued):
++            if (state.queued is not None or state.granted is None or event.consent_id != state.granted.command.ack.id
++                    or state.revoked_at is not None or instant(envelope.occurred_at) >= instant(original.summary.expires_at)):
++                raise damaged()
++            state.queued = event
++        elif isinstance(event, CodexDispatchStarted):
++            if (state.queued is None or event.dispatch_id != state.queued.dispatch_id or state.started is not None
++                    or state.finished is not None or state.revoked_at is not None
++                    or event.request_body_sha256 != original.summary.request_body_sha256
++                    or instant(envelope.occurred_at) >= instant(original.summary.expires_at)
++                    or instant(event.lease.expires_at) <= instant(envelope.occurred_at)):
++                raise damaged()
++            state.started, state.started_at = event, envelope.occurred_at
++        elif isinstance(event, CodexDispatchFinished):
++            if (state.queued is None or event.dispatch_id != state.queued.dispatch_id or state.finished is not None
++                    or state.started is None and (event.outcome == 'completed' or event.answer or event.usage.input_tokens is not None or event.usage.output_tokens is not None)
++                    or (event.outcome == 'completed') != (event.error_code is None)
++                    or state.started_at is not None and instant(envelope.occurred_at) < instant(state.started_at)):
++                raise damaged()
++            state.finished, state.finished_at = event, envelope.occurred_at
++        else:
++            raise damaged()
++
++    def append(self, turn_id: str, event, now: str, state: CodexProviderState | None) -> CodexProviderEnvelope:
++        ProviderRepository(self.conn, self.workspace).writable()
++        seq, previous = (len(state.envelopes)+1, state.digest) if state else (1, None)
++        envelope = CodexProviderEnvelope(version='provider-codex-ledger-v1', workspace_id=self.workspace,
++            turn_id=turn_id, seq=seq, previous_sha256=previous, occurred_at=now, event=event)
++        digest = content_sha256(envelope)
++        self.conn.execute('INSERT INTO provider_codex_events VALUES(?,?,?,?,?)', (self.workspace,turn_id,seq,canonical_json(envelope),digest))
++        self.conn.execute('INSERT INTO provider_codex_members VALUES(?,?,?,?)', (self.workspace,turn_id,seq,digest))
++        command = getattr(event, 'command', None)
++        if command is not None:
++            self.conn.execute('INSERT INTO provider_codex_commands VALUES(?,?,?,?,?,?,?)',
++                (self.workspace,command.actor_session_id,command.route,command.key,turn_id,seq,content_sha256(command)))
++        if state is None:
++            self.conn.execute('INSERT INTO provider_codex_heads VALUES(?,?,?,?)', (self.workspace,turn_id,seq,digest))
++        elif self.conn.execute('UPDATE provider_codex_heads SET event_count=?,head_sha256=? WHERE workspace_id=? AND turn_id=? AND event_count=? AND head_sha256=?',
++                (seq,digest,self.workspace,turn_id,seq-1,previous)).rowcount != 1:
++            raise damaged()
++        return envelope
++
++    @staticmethod
++    def replay(states, actor: str, route: str, key: str, body):
++        for state in states.values():
++            for envelope in state.envelopes:
++                command = getattr(envelope.event, 'command', None)
++                if command is not None and (command.actor_session_id,command.route,command.key)==(actor,route,key):
++                    if canonical_json(command.body)!=canonical_json(body):
++                        raise ApiError(409,'IDEMPOTENCY_CONFLICT','原命令与本次完整输入不一致。')
++                    return command.ack
++        return None
+diff --git a/services/api/app/interfaces/codex_consent_http.py b/services/api/app/interfaces/codex_consent_http.py
+new file mode 100644
+index 00000000..4bba88f1
+--- /dev/null
++++ b/services/api/app/interfaces/codex_consent_http.py
+@@ -0,0 +1,45 @@
++"""Actual Provider-owned Codex preview, grant, read and revoke operations."""
++from fastapi import APIRouter, Depends, Request
++from packages.contracts import domain_models as dm
++
++from ..application.provider_codex_consents import CodexConsentsService
++from ..codex_turn_dto import (CodexOutboundPreviewWrite, CodexConsentProposalView, CodexConsentCreateWrite,
++    CodexConsentCreateAck, CodexConsentView)
++from ..provider_dto import ConsentRevoke
++from .codex_bootstrap_http import no_control_body
++from .content_http import query_fields
++from .http import current_identity, verify_write
++from .practice_http import private_response
++from .provider_http import unique_control_headers, command_key, COMMAND_PARAMETER
++
++
++def create_codex_consent_router(service: CodexConsentsService) -> APIRouter:
++    router = APIRouter(prefix='/api/v1/codex', tags=['codex'], dependencies=[Depends(current_identity),
++        Depends(unique_control_headers), Depends(private_response)])
++
++    @router.post('/consent-previews', response_model=CodexConsentProposalView, status_code=201,
++        dependencies=[Depends(verify_write), Depends(query_fields())], openapi_extra={'parameters': [COMMAND_PARAMETER]})
++    def preview(body: CodexOutboundPreviewWrite, request: Request) -> CodexConsentProposalView:
++        return service.preview(request.state.identity, body, command_key(request))
++
++    @router.get('/consent-proposals/{id}', response_model=CodexConsentProposalView,
++        dependencies=[Depends(no_control_body), Depends(query_fields())])
++    def proposal(id: dm.Id, request: Request) -> CodexConsentProposalView:
++        return service.proposal(request.state.identity, id)
++
++    @router.post('/consents', response_model=CodexConsentCreateAck, status_code=201,
++        dependencies=[Depends(verify_write), Depends(query_fields())], openapi_extra={'parameters': [COMMAND_PARAMETER]})
++    def grant(body: CodexConsentCreateWrite, request: Request) -> CodexConsentCreateAck:
++        return service.grant(request.state.identity, body, command_key(request))
++
++    @router.get('/consents/{id}', response_model=CodexConsentView,
++        dependencies=[Depends(no_control_body), Depends(query_fields())])
++    def consent(id: dm.Id, request: Request) -> CodexConsentView:
++        return service.consent(request.state.identity, id)
++
++    @router.post('/consents/{id}/revoke', response_model=dm.MutationAck,
++        dependencies=[Depends(verify_write), Depends(query_fields())], openapi_extra={'parameters': [COMMAND_PARAMETER]})
++    def revoke(id: dm.Id, body: ConsentRevoke, request: Request) -> dm.MutationAck:
++        return service.revoke(request.state.identity, id, body, command_key(request))
++
++    return router
+diff --git a/services/api/app/main.py b/services/api/app/main.py
+index b2b42f7e..e069a27c 100644
+--- a/services/api/app/main.py
++++ b/services/api/app/main.py
+@@ -54,6 +54,8 @@ from .interfaces.static import WorkbenchStaticMount
+ from .application.codex_bootstrap import CodexBootstrapService
+ from .application.codex_turn import CodexTurnService
+ from .interfaces.codex_turn_http import create_codex_turn_router
++from .application.provider_codex_consents import CodexConsentsService
++from .interfaces.codex_consent_http import create_codex_consent_router
+ from .application.codex_bootstrap_ports import CodexBootstrapRuntime
+ from .infrastructure.codex_bootstrap_runtime import LocalCodexBootstrapRuntime
+ from .interfaces.codex_bootstrap_http import create_codex_bootstrap_router
+@@ -88,6 +90,7 @@ from .infrastructure.authoring_numeric_runtime import NumericRuntime
+ def create_app(settings: Settings | None = None, *,
+                outbound_sources: OutboundSourceRegistry | None = None,
+                request_preparer: ProviderRequestPreparer | None = None,
++               codex_proofs: ProofRegistry | None = None,
+                codex_probe: CodexCapabilityProbe | None = None,
+                codex_bootstrap_runtime: CodexBootstrapRuntime | None = None) -> FastAPI:
+     settings = settings or Settings.from_env()
+@@ -140,7 +143,10 @@ def create_app(settings: Settings | None = None, *,
+     content_impacts = ContentImpactDecisionService(database, artifacts)
+     codex_bootstrap = CodexBootstrapService(database, codex_bootstrap_runtime if codex_bootstrap_runtime is not None
+         else LocalCodexBootstrapRuntime(settings.data_dir, settings.codex_executable))
+-    codex_turn = CodexTurnService(database, codex_bootstrap)
++    codex_registry = codex_proofs if codex_proofs is not None else ProofRegistry()
++    codex_turn = CodexTurnService(database, codex_bootstrap, codex_registry)
++    codex_consents = CodexConsentsService(database, codex_turn, provider_secrets, codex_registry)
++    codex_turn.outbound_owner = codex_consents
+     jobs = JobService(database, review=review_service, restore_numeric=restore_numeric_service, codex_turn=codex_turn)
+ 
+     @asynccontextmanager
+@@ -228,6 +234,7 @@ def create_app(settings: Settings | None = None, *,
+         codex_probe if codex_probe is not None else LocalCodexProbe(settings.data_dir, settings.codex_executable))))
+     application.include_router(create_codex_bootstrap_router(codex_bootstrap, codex_turn))
+     application.include_router(create_codex_turn_router(codex_turn))
++    application.include_router(create_codex_consent_router(codex_consents))
+     application.include_router(create_concept_state_router(database))
+     application.include_router(create_recommendation_router(database))
+     application.include_router(create_retrieval_router(database))
+diff --git a/tests/contract/test_api_projection.py b/tests/contract/test_api_projection.py
+index 26b254e7..9f49de57 100644
+--- a/tests/contract/test_api_projection.py
++++ b/tests/contract/test_api_projection.py
+@@ -78,9 +78,9 @@ def test_router_and_openapi_are_bidirectionally_equal_and_subset_of_spec():
+     assert {('POST', '/api/v1/codex/session-preparations'), ('GET', '/api/v1/codex/session-preparations/{id}'),
+             ('POST', '/api/v1/codex/session-preparations/{id}/decision'), ('POST', '/api/v1/codex/sessions'),
+             ('GET', '/api/v1/codex/sessions/{id}')} <= projection
+-    assert len(projection) == 120
++    assert len(projection) == 125
+     assert len(SPEC_ROUTES) == 147
+-    assert len(SPEC_ROUTES - projection) == 27
++    assert len(SPEC_ROUTES - projection) == 22
+ 
+ 
+ OPERATIONS = [(path, method, operation) for path, methods in create_app().openapi()["paths"].items()
+@@ -159,7 +159,7 @@ def test_saved_openapi_matches_actual_registered_handlers_and_coverage():
+     assert coverage["product_acceptance"] == "NOT_RUN"
+ 
+ 
+-def test_codex_turn_slice_registers_only_its_real_four_preparation_and_control_operations():
++def test_codex_turn_slice_registers_real_preparation_control_and_permit_operations():
+     from services.api.app.main import create_app
+     paths = create_app().openapi()['paths']
+     assert paths['/api/v1/codex/sessions/{id}/turn-preparations']['post']['responses']['202']['content']['application/json']['schema']['$ref'].endswith('/CodexTurnPreparationView')
+@@ -167,5 +167,12 @@ def test_codex_turn_slice_registers_only_its_real_four_preparation_and_control_o
+     assert paths['/api/v1/codex/sessions/{id}/turns']['get']['responses']['200']['content']['application/json']['schema']['$ref'].endswith('/CodexTurnPage')
+     assert paths['/api/v1/codex/turns/{id}']['get']['responses']['200']['content']['application/json']['schema']['$ref'].endswith('/CodexTurnControlView')
+     assert 'post' not in paths['/api/v1/codex/sessions/{id}/turns']
+-    assert '/api/v1/codex/consent-previews' not in paths
++    for path, method, status, dto in [
++        ('/api/v1/codex/consent-previews', 'post', '201', 'CodexConsentProposalView'),
++        ('/api/v1/codex/consent-proposals/{id}', 'get', '200', 'CodexConsentProposalView'),
++        ('/api/v1/codex/consents', 'post', '201', 'CodexConsentCreateAck'),
++        ('/api/v1/codex/consents/{id}', 'get', '200', 'CodexConsentView'),
++        ('/api/v1/codex/consents/{id}/revoke', 'post', '200', 'MutationAck'),
++    ]:
++        assert paths[path][method]['responses'][status]['content']['application/json']['schema']['$ref'].endswith('/' + dto)
+     assert '/api/v1/codex/turns/{id}/result' not in paths
+diff --git a/tests/integration/test_codex_turn_consent_http.py b/tests/integration/test_codex_turn_consent_http.py
+new file mode 100644
+index 00000000..e676da61
+--- /dev/null
++++ b/tests/integration/test_codex_turn_consent_http.py
+@@ -0,0 +1,422 @@
++"""Real Provider/Codex local consent seams; never an external model request."""
++from datetime import datetime, timedelta, timezone
++
++from fastapi.testclient import TestClient
++import pytest
++
++from services.api.app.application.provider_budget import ProofRegistry
++from services.api.app.application.provider_codex_profile import CodexProofRegistry, SyntheticCodexProof
++from services.api.app.infrastructure.security import author_execution_identity
++from services.api.app.main import create_app
++from services.api.app.provider_dto import ProviderConfigView
++from services.api.app.serialization import content_sha256
++from tests.integration.test_codex_bootstrap_http import Case, ControlledRuntime, approve, make_case
++from tests.integration.test_codex_turn_preparation_http import prepared, turn_case
++from tests.integration.test_assessment_learning_port import assessment_learning_state
++
++assessment_state = assessment_learning_state
++
++__all__ = ['turn_case']
++
++
++def preview_body(value, provider_revision=1):
++    return {'preparation_id': value['id'], 'preparation_sha256': value['preparation_sha256'],
++        'expected_job_revision': 1, 'expected_provider_revision': provider_revision,
++        'budget': {'max_input_tokens': 4096, 'max_output_tokens': 64, 'max_provider_calls': 1,
++                   'max_search_calls': 0, 'max_cost_usd': None},
++        'expires_at': (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat().replace('+00:00', 'Z')}
++
++
++def test_unregistered_codex_complete_input_proof_refuses_real_preview_without_mutation(turn_case, monkeypatch):
++    case, runtime, _, _, _ = turn_case
++    value = prepared(turn_case).json()
++    def forbidden(*args, **kwargs):
++        raise AssertionError('local preview attempted bootstrap or external execution')
++    monkeypatch.setattr(runtime, 'execute', forbidden)
++    before = case.dump()
++    response = case.post('consent-previews', preview_body(value), 'preview-original')
++    assert response.status_code == 503
++    assert response.json()['error']['code'] == 'CODEX_INPUT_PROOF_UNAVAILABLE'
++    assert case.dump() == before
++    assert case.get('turn-preparations/' + value['id']).json() == value
++
++
++@pytest.fixture
++def consent_case(tmp_path):
++    yield from make_consent_case(tmp_path)
++
++
++def make_consent_case(tmp_path):
++    """Explicit trusted synthetic profile; all product records use actual owners."""
++    runtime = ControlledRuntime()
++    original = make_case(tmp_path, codex_bootstrap_runtime=runtime)
++    original.app.state.provider_service.secret_store.initialize()
++    response = original.client.put('/api/v1/providers/codex_peer/config', json={
++        'expected_revision': 0, 'adapter': 'official_responses', 'base_url': 'http://127.0.0.1:43871',
++        'model': 'synthetic-peer', 'embedding_model': None, 'endpoint_policy': 'explicit_loopback', 'pricing': None,
++    }, headers={**original.headers, 'Idempotency-Key': 'peer-config'})
++    assert response.status_code == 200
++    response = original.client.post('/api/v1/providers/codex_peer/secret',
++        json={'expected_revision': 1, 'secret': 'synthetic-codex-peer-value'},
++        headers={**original.headers, 'Idempotency-Key': 'peer-secret'})
++    assert response.status_code == 200
++    config = ProviderConfigView.model_validate(original.client.get('/api/v1/providers/codex_peer/config').json())
++    _, _, bootstrap_body = approve(original)
++    bootstrap_ack = original.post('sessions', bootstrap_body, 'bootstrap-session')
++    assert bootstrap_ack.status_code == 201
++    sid = bootstrap_ack.json()['id']
++    with original.app.state.database.transaction(immediate=False) as conn:
++        identity = author_execution_identity(conn, original.app.state.database.workspace_id(), original.actor_id)
++        bootstrap = original.app.state.codex_bootstrap_service.checked_sessions(conn, identity)[sid]
++    proof = SyntheticCodexProof.create(registration_id='synthetic_http_peer', config=config,
++        bootstrap_sha256=content_sha256(bootstrap), model_versions=['synthetic-peer'], kind='local_exact',
++        max_input_tokens=1000000, max_output_tokens=1024, shared_context_tokens=2000000, valid_until=None)
++    proofs = ProofRegistry(codex=CodexProofRegistry([proof]))
++    app = create_app(original.app.state.settings, codex_bootstrap_runtime=runtime, codex_proofs=proofs)
++    client = TestClient(app, base_url=app.state.settings.origin)
++    client.cookies.update(original.client.cookies)
++    case = Case(app, client, original.headers, original.actor_id)
++    try:
++        yield case, runtime, sid, proofs, bootstrap_body, bootstrap_ack.content
++    finally:
++        client.close()
++        original.client.close()
++
++
++def consent_preparation(case, sid, revision=2, key='turn'):
++    body = {'message': 'Synthetic exact Unicode α\nOnly an explicit request.', 'context_refs': [],
++        'expected_session_revision': revision, 'provider_id': 'codex_peer',
++        'tools': {'max_tool_calls': 0, 'wall_seconds': 30}}
++    response = case.post(f'sessions/{sid}/turn-preparations', body, key)
++    assert response.status_code == 202
++    assert response.json()['validity'] == 'current'
++    return body, response
++
++
++def full_preview_body(preparation):
++    body = preview_body(preparation, 2)
++    body['budget']['max_input_tokens'] = 1000000
++    return body
++
++
++def test_real_preview_grant_safe_revoke_original_acks_and_current_get(consent_case, monkeypatch):
++    case, runtime, sid, _, bootstrap_body, bootstrap_ack = consent_case
++    def forbidden(*args, **kwargs):
++        pytest.fail('preview/grant/revoke attempted execution')
++    monkeypatch.setattr(runtime, 'execute', forbidden)
++    body, prepared_ack = consent_preparation(case, sid)
++    preparation = prepared_ack.json()
++    preview = full_preview_body(preparation)
++    proposal_ack = case.post('consent-previews', preview, 'preview-original')
++    assert proposal_ack.status_code == 201
++    proposal = proposal_ack.json()
++    assert proposal['summary']['adapter'] == 'codex_app_server'
++    assert proposal['summary']['input_token_assurance']['kind'] == 'local_exact'
++    grant = {'proposal_id': proposal['id'], 'proposal_sha256': proposal['proposal_sha256']}
++    grant_ack = case.post('consents', grant, 'grant-original')
++    assert grant_ack.status_code == 201
++    consent = grant_ack.json()
++    before = case.dump()
++    assert case.get('consent-proposals/' + proposal['id']).json()['consent_id'] == consent['id']
++    assert case.get('consents/' + consent['id']).json()['dispatch'] is None
++    current = case.get('turn-preparations/' + preparation['id']).json()
++    assert (current['proposal_id'], current['consent_id']) == (proposal['id'], consent['id'])
++    assert current['preparation_sha256'] == preparation['preparation_sha256']
++    control = case.get('turns/' + preparation['turn_id']).json()
++    assert control['consent_control'] == {'id': consent['id'], 'revision': 1, 'status': 'active'}
++    assert case.get('sessions/' + sid).json()['revision'] == 3 and case.dump() == before
++    assert case.client.post('/api/v1/session/role', json={'role': 'learner'},
++        headers={**case.headers, 'Idempotency-Key': 'learner'}).status_code == 200
++    before = case.dump()
++    assert case.get('consent-proposals/' + proposal['id']).status_code == 403
++    assert case.get('consents/' + consent['id']).status_code == 403
++    assert case.get('turns/' + preparation['turn_id']).json()['consent_control']['revision'] == 1
++    assert case.dump() == before
++    revoked = case.post('consents/' + consent['id'] + '/revoke', {'expected_revision': 1}, 'revoke-original')
++    assert revoked.status_code == 200 and revoked.json() == {'id': consent['id'], 'revision': 2, 'applied': True}
++    assert case.get('turns/' + preparation['turn_id']).json()['consent_control']['status'] == 'revoked'
++    assert case.client.post('/api/v1/session/role', json={'role': 'author'},
++        headers={**case.headers, 'Idempotency-Key': 'author-again'}).status_code == 200
++    before = case.dump()
++    assert case.post(f'sessions/{sid}/turn-preparations', body, 'turn').content == prepared_ack.content
++    assert case.post('consent-previews', preview, 'preview-original').content == proposal_ack.content
++    assert case.post('consents', grant, 'grant-original').content == grant_ack.content
++    assert case.post('consents/' + consent['id'] + '/revoke', {'expected_revision': 1}, 'revoke-original').content == revoked.content
++    assert case.post('sessions', bootstrap_body, 'bootstrap-session').content == bootstrap_ack
++    assert case.dump() == before and len(runtime.calls) == 1
++
++
++def grant_fixture(consent_case):
++    case, _, sid, _, _, _ = consent_case
++    body, preparation = consent_preparation(case, sid)
++    preview = full_preview_body(preparation.json())
++    proposal = case.post('consent-previews', preview, 'preview')
++    assert proposal.status_code == 201
++    grant = {'proposal_id': proposal.json()['id'], 'proposal_sha256': proposal.json()['proposal_sha256']}
++    consent = case.post('consents', grant, 'grant')
++    assert consent.status_code == 201
++    return body, preparation, preview, proposal, grant, consent
++
++
++@pytest.mark.parametrize('variant,status', [('job_cas', 412), ('provider_cas', 412), ('preparation_sha', 409),
++    ('input_budget', 409), ('output_budget', 409), ('expired', 422), ('too_long', 422), ('unknown_field', 422)])
++def test_preview_admission_rejects_without_any_partial_record(consent_case, variant, status):
++    case, _, sid, _, _, _ = consent_case
++    _, value = consent_preparation(case, sid)
++    body = full_preview_body(value.json())
++    if variant == 'job_cas':
++        body['expected_job_revision'] = 2
++    elif variant == 'provider_cas':
++        body['expected_provider_revision'] = 1
++    elif variant == 'preparation_sha':
++        body['preparation_sha256'] = '0' * 64
++    elif variant == 'input_budget':
++        body['budget']['max_input_tokens'] = 1
++    elif variant == 'output_budget':
++        body['budget']['max_output_tokens'] = 1025
++    elif variant in {'expired', 'too_long'}:
++        body['expires_at'] = (datetime.now(timezone.utc) + timedelta(minutes=-1 if variant == 'expired' else 11)).isoformat()
++    else:
++        body['proof'] = 'untrusted-http-proof'
++    before = case.dump()
++    result = case.post('consent-previews', body, 'invalid-preview')
++    assert result.status_code == status
++    assert case.dump() == before
++
++
++def test_immutable_full_key_body_one_proposal_one_grant_and_strong_cas(consent_case):
++    case, _, _, _, _, _ = consent_case
++    _, preparation, preview, proposal, grant, consent = grant_fixture(consent_case)
++    before = case.dump()
++    for body, key in [(preview, 'other-preview'), ({**preview, 'expected_job_revision': 2}, 'preview')]:
++        assert case.post('consent-previews', body, key).status_code == 409
++    assert case.post('consents', grant, 'other-grant').status_code == 409
++    assert case.post('consents', {**grant, 'proposal_sha256': '0' * 64}, 'grant').status_code == 409
++    assert case.post('consents', {**grant, 'proposal_sha256': '0' * 64}, 'fresh-bad-grant').status_code == 412
++    assert case.post('consents/' + consent.json()['id'] + '/revoke', {'expected_revision': 2}, 'bad-cas').status_code == 412
++    assert case.dump() == before
++    assert case.get('turns/' + preparation.json()['turn_id']).json()['consent_control']['id'] == consent.json()['id']
++    assert case.get('consent-proposals/' + proposal.json()['id']).json()['consent_id'] == consent.json()['id']
++
++
++@pytest.mark.parametrize('table,mutation', [('heads', 'all'), ('events', 'tail'), ('members', 'tail'),
++    ('commands', 'tail'), ('commands', 'key'), ('events', 'hash'), ('family', 'all')])
++def test_complete_owner_history_loss_or_tampering_blocks_reads_and_original_ack(consent_case, table, mutation):
++    case, _, sid, _, _, _ = consent_case
++    _, preparation, preview, proposal, grant, consent = grant_fixture(consent_case)
++    with case.app.state.database.transaction() as conn:
++        for row in conn.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND name LIKE 'provider_codex_%'").fetchall():
++            conn.execute('DROP TRIGGER ' + row[0])
++        if table == 'family':
++            for name in ['heads', 'events', 'members', 'commands']:
++                conn.execute('DELETE FROM provider_codex_' + name)
++        elif mutation == 'all':
++            conn.execute('DELETE FROM provider_codex_' + table)
++        elif mutation == 'tail':
++            conn.execute('DELETE FROM provider_codex_' + table + ' WHERE seq=2')
++        elif mutation == 'key':
++            conn.execute("UPDATE provider_codex_commands SET command_key='damaged-command' WHERE seq=2")
++        else:
++            conn.execute("UPDATE provider_codex_events SET record_sha256=? WHERE seq=2", ('0' * 64,))
++    before = case.dump()
++    for path in ['consent-proposals/' + proposal.json()['id'], 'consents/' + consent.json()['id'],
++        'turn-preparations/' + preparation.json()['id'], 'turns/' + preparation.json()['turn_id'], 'sessions/' + sid]:
++        result = case.get(path)
++        assert result.status_code == 409 and result.json()['error']['code'] == 'CODEX_HISTORY_DAMAGED'
++    assert case.post('consent-previews', preview, 'preview').status_code == 409
++    assert case.post('consents', grant, 'grant').status_code == 409
++    assert case.dump() == before
++
++
++@pytest.mark.parametrize('operation', ['preview', 'grant', 'revoke'])
++def test_provider_and_codex_witness_commit_atomically(consent_case, operation):
++    case, _, sid, _, _, _ = consent_case
++    _, prep = consent_preparation(case, sid)
++    path, body, key = 'consent-previews', full_preview_body(prep.json()), 'preview'
++    if operation in {'grant', 'revoke'}:
++        proposal = case.post(path, body, key)
++        assert proposal.status_code == 201
++        path, body, key = 'consents', {'proposal_id': proposal.json()['id'], 'proposal_sha256': proposal.json()['proposal_sha256']}, 'grant'
++    if operation == 'revoke':
++        consent = case.post(path, body, key)
++        assert consent.status_code == 201
++        path, body, key = 'consents/' + consent.json()['id'] + '/revoke', {'expected_revision': 1}, 'revoke'
++    with case.app.state.database.transaction() as conn:
++        conn.execute("CREATE TRIGGER paired_owner_failure BEFORE INSERT ON codex_turn_events BEGIN SELECT RAISE(ABORT,'synthetic paired rollback'); END;")
++    before = case.dump()
++    assert case.post(path, body, key).status_code == 500
++    assert case.dump() == before
++
++
++def test_current_expiry_and_proof_withdrawal_do_not_rewrite_original_ack(consent_case, monkeypatch):
++    from services.api.app.application import provider_codex_consents
++    case, runtime, sid, proofs, _, _ = consent_case
++    _, prep, preview, proposal, grant, consent = grant_fixture(consent_case)
++    before = case.dump()
++    monkeypatch.setattr(provider_codex_consents, 'utc_now', lambda: proposal.json()['summary']['expires_at'])
++    assert case.get('consent-proposals/' + proposal.json()['id']).json()['validity'] == 'expired'
++    assert case.get('consents/' + consent.json()['id']).json()['status'] == 'expired'
++    assert case.get('turns/' + prep.json()['turn_id']).json()['consent_control']['status'] == 'expired'
++    assert case.post('consent-previews', preview, 'preview').content == proposal.content
++    assert case.post('consents', grant, 'grant').content == consent.content
++    assert case.dump() == before
++    monkeypatch.undo()
++    restarted = create_app(case.app.state.settings, codex_bootstrap_runtime=runtime, codex_proofs=ProofRegistry())
++    client = TestClient(restarted, base_url=restarted.state.settings.origin)
++    try:
++        client.cookies.update(case.client.cookies)
++        other = Case(restarted, client, case.headers, case.actor_id)
++        assert other.get('consent-proposals/' + proposal.json()['id']).json()['validity'] == 'unavailable'
++        assert other.get('turn-preparations/' + prep.json()['id']).json()['validity'] == 'unavailable'
++        assert other.post('consents', grant, 'grant').content == consent.content
++        assert other.get('sessions/' + sid).json()['revision'] == 3
++        assert other.dump() == before
++    finally:
++        client.close()
++    assert proofs.codex is not None and len(runtime.calls) == 1
++
++
++def test_concurrent_same_key_preview_and_grant_create_only_original_facts(consent_case):
++    from concurrent.futures import ThreadPoolExecutor
++    from threading import Barrier
++    case, _, sid, _, _, _ = consent_case
++    _, prep = consent_preparation(case, sid)
++    for path, body in [('consent-previews', full_preview_body(prep.json()))]:
++        barrier = Barrier(2)
++        def preview_request(_):
++            barrier.wait()
++            return case.post(path, body, 'same-preview')
++        with ThreadPoolExecutor(max_workers=2) as pool:
++            results = list(pool.map(preview_request, range(2)))
++        assert [result.status_code for result in results] == [201, 201]
++        assert results[0].content == results[1].content
++        proposal = results[0].json()
++    barrier = Barrier(2)
++    def grant_request(_):
++        barrier.wait()
++        return case.post('consents', {'proposal_id': proposal['id'], 'proposal_sha256': proposal['proposal_sha256']}, 'same-grant')
++    with ThreadPoolExecutor(max_workers=2) as pool:
++        results = list(pool.map(grant_request, range(2)))
++    assert [result.status_code for result in results] == [201, 201]
++    assert results[0].content == results[1].content
++    with case.app.state.database.transaction(immediate=False) as conn:
++        assert conn.execute('SELECT COUNT(*) FROM provider_codex_events').fetchone()[0] == 2
++    assert case.get('sessions/' + sid).json()['revision'] == 3
++
++
++def test_new_actor_can_revoke_but_cannot_take_original_grant_or_preview(consent_case, tmp_path):
++    case, runtime, sid, _, _, _ = consent_case
++    _, preparation = consent_preparation(case, sid)
++    preview = full_preview_body(preparation.json())
++    other = make_case(tmp_path, codex_bootstrap_runtime=runtime)
++    try:
++        before = case.dump()
++        assert other.post('consent-previews', preview, 'takeover-preview').status_code == 403
++        assert case.dump() == before
++        proposal = case.post('consent-previews', preview, 'preview')
++        assert proposal.status_code == 201
++        grant = {'proposal_id': proposal.json()['id'], 'proposal_sha256': proposal.json()['proposal_sha256']}
++        before = case.dump()
++        assert other.post('consents', grant, 'takeover-grant').status_code == 403
++        assert case.dump() == before
++        consent = case.post('consents', grant, 'grant')
++        assert consent.status_code == 201
++        assert other.client.post('/api/v1/session/role', json={'role': 'learner'},
++            headers={**other.headers, 'Idempotency-Key': 'other-learner'}).status_code == 200
++        control = other.get('turns/' + preparation.json()['turn_id']).json()
++        assert control['actor_session_id'] == case.actor_id
++        assert control['consent_control']['id'] == consent.json()['id']
++        revoked = other.post('consents/' + consent.json()['id'] + '/revoke', {'expected_revision': 1}, 'safe-revoke')
++        assert revoked.status_code == 200
++        assert case.get('consents/' + consent.json()['id']).json()['actor_session_id'] == case.actor_id
++    finally:
++        other.client.close()
++
++
++@pytest.mark.parametrize('path_kind,change,expected', [('proposal', 'learner', 403), ('consent', 'learner', 403),
++    ('proposal', 'logout', 401), ('consent', 'workspace', 401)])
++def test_subject_delivery_rechecks_new_transaction_after_concurrent_access_loss(consent_case, monkeypatch, path_kind, change, expected):
++    from concurrent.futures import ThreadPoolExecutor
++    from threading import Event
++    case, _, _, _, _, _ = consent_case
++    _, _, _, proposal, _, consent = grant_fixture(consent_case)
++    owner = case.app.state.codex_turn_service.outbound_owner
++    actual = owner._states
++    entered, release = Event(), Event()
++    def held(*args):
++        result = actual(*args)
++        entered.set()
++        assert release.wait(10)
++        return result
++    monkeypatch.setattr(owner, '_states', held)
++    path = 'consent-proposals/' + proposal.json()['id'] if path_kind == 'proposal' else 'consents/' + consent.json()['id']
++    with ThreadPoolExecutor(max_workers=1) as pool:
++        future = pool.submit(case.get, path)
++        try:
++            assert entered.wait(10)
++            if change == 'learner':
++                assert case.client.post('/api/v1/session/role', json={'role': 'learner'},
++                    headers={**case.headers, 'Idempotency-Key': 'delivery-learner'}).status_code == 200
++            else:
++                with case.app.state.database.transaction() as conn:
++                    if change == 'logout':
++                        conn.execute("UPDATE local_sessions SET revoked_at='2026-01-01T00:00:00Z' WHERE id=?", (case.actor_id,))
++                    else:
++                        conn.execute("INSERT INTO workspace(id,title,created_at) VALUES('other_workspace','Synthetic','2026-01-01T00:00:00Z')")
++                        conn.execute("UPDATE local_sessions SET workspace_id='other_workspace' WHERE id=?", (case.actor_id,))
++            before = case.dump()
++        finally:
++            release.set()
++        response = future.result(timeout=10)
++    assert response.status_code == expected
++    assert 'summary' not in response.json() and case.dump() == before
++
++
++@pytest.mark.parametrize('mode', ['independent', 'open_book'])
++def test_assessment_policy_blocks_subject_and_grant_but_keeps_revoke(assessment_state, mode):
++    from tests.integration.test_assessment_policy import start
++    from tests.integration.test_codex_turn_preparation_http import identity, cancel
++    from services.api.app.application.errors import ApiError
++    database, _, fixture, assessment = assessment_state
++    for values in make_consent_case(database.settings.data_dir):
++        case, _, sid, _, _, _ = values
++        _, preparation, preview, proposal, grant, consent = grant_fixture(values)
++        owner_state = database, identity(case), fixture, assessment
++        if mode == 'independent':
++            before = case.dump()
++            with pytest.raises(ApiError) as refused:
++                start(owner_state, mode=mode)
++            assert refused.value.code == 'SUBJECT_WORK_ACTIVE' and case.dump() == before
++            assert cancel(case, preparation.json()['job']['id']).status_code == 200
++        start(owner_state, mode=mode)
++        before = case.dump()
++        assert case.get('consent-proposals/' + proposal.json()['id']).status_code == 409
++        assert case.get('consents/' + consent.json()['id']).status_code == 409
++        assert case.post('consent-previews', preview, 'preview').status_code == 409
++        assert case.post('consents', grant, 'grant').status_code == 409
++        control = case.get('turns/' + preparation.json()['turn_id']).json()
++        assert control['consent_control']['id'] == consent.json()['id']
++        assert case.get('sessions/' + sid).status_code == 200 and case.dump() == before
++        assert case.post('consents/' + consent.json()['id'] + '/revoke', {'expected_revision': 1}, 'assessment-revoke').status_code == 200
++
++
++def test_expired_projection_never_rewrites_durable_run_when_cancelling(consent_case, monkeypatch):
++    from services.api.app.application import provider_codex_consents
++    from tests.integration.test_codex_turn_preparation_http import cancel
++    case, _, sid, _, _, _ = consent_case
++    _, prep, _, proposal, _, consent = grant_fixture(consent_case)
++    monkeypatch.setattr(provider_codex_consents, 'utc_now', lambda: proposal.json()['summary']['expires_at'])
++    assert case.get('turns/' + prep.json()['turn_id']).json()['consent_control']['status'] == 'expired'
++    result = cancel(case, prep.json()['job']['id'])
++    assert result.status_code == 200
++    current = case.get('turns/' + prep.json()['turn_id']).json()
++    assert current['outcome'] == 'cancelled' and current['consent_control']['status'] == 'expired'
++    assert case.get('sessions/' + sid).json()['revision'] == 5
++    with case.app.state.database.transaction(immediate=False) as conn:
++        from services.api.app.infrastructure.codex_turn_repository import CodexTurnRepository
++        from tests.integration.test_codex_turn_preparation_http import identity
++        actor = identity(case)
++        original = case.app.state.codex_bootstrap_service.checked_sessions(conn, actor)
++        repo = CodexTurnRepository(conn, actor, case.app.state.codex_turn_service.context)
++        retained = repo.checked(original)[sid].turns[prep.json()['turn_id']]
++        assert retained.control.consent_control.model_dump() == {'id': consent.json()['id'], 'revision': 1, 'status': 'active'}
+diff --git a/tests/unit/test_provider_codex_profile.py b/tests/unit/test_provider_codex_profile.py
+new file mode 100644
+index 00000000..a4ee24d3
+--- /dev/null
++++ b/tests/unit/test_provider_codex_profile.py
+@@ -0,0 +1,237 @@
++"""Synthetic complete-request proof checks; no runtime, sockets or model calls."""
++from dataclasses import replace
++import base64
++
++import pytest
++
++from packages.contracts import domain_models as dm
++from packages.contracts.canonical import canonical_bytes, sha256_bytes, strict_json
++from services.api.app.application.errors import ApiError
++from services.api.app.application.provider_budget import ProofRegistry
++from services.api.app.codex_turn_dto import CodexLocalToolBudget, CodexOutboundBudgetWrite
++from services.api.app.provider_dto import ProviderConfigView
++
++
++BOOTSTRAP = 'a' * 64
++
++
++def tools():
++    return CodexLocalToolBudget(max_tool_calls=2, wall_seconds=30)
++
++
++def config(**changes):
++    value = dict(id='provider_peer', revision=2, config_sha256='b' * 64,
++        adapter='official_responses', base_url='http://127.0.0.1:4321/synthetic',
++        model='synthetic-byte-token-model-v1', embedding_model=None,
++        endpoint_policy='explicit_loopback', pricing=None, configured=True, secret_present=True)
++    return ProviderConfigView(**(value | changes))
++
++
++def budget(**changes):
++    value = dict(max_input_tokens=500000, max_output_tokens=100,
++        max_provider_calls=1, max_search_calls=0, max_cost_usd=None)
++    return CodexOutboundBudgetWrite(**(value | changes))
++
++
++def messages(text='Explain 完整输入 😀 e\u0301'):
++    return [dm.GenerationMessage(role='system', content='Only the frozen inputs.'),
++        dm.GenerationMessage(role='user', content=text)]
++
++
++def proof(**changes):
++    from services.api.app.application.provider_codex_profile import SyntheticCodexProof
++    values = dict(registration_id='controlled_peer', config=config(), bootstrap_sha256=BOOTSTRAP,
++        model_versions=['synthetic-byte-token-model-v1'], kind='local_exact',
++        max_input_tokens=1000000, max_output_tokens=1000,
++        shared_context_tokens=1001000, valid_until=None)
++    return SyntheticCodexProof.create(**(values | changes))
++
++
++def registry(*proofs, **changes):
++    from services.api.app.application.provider_codex_profile import CodexProofRegistry
++    return ProofRegistry(codex=CodexProofRegistry(proofs or [proof()], **changes)).codex
++
++
++def assert_error(code, action, status=409):
++    with pytest.raises(ApiError) as caught:
++        action()
++    assert (caught.value.status, caught.value.code) == (status, code)
++
++
++def test_default_registry_exposes_empty_codex_admission():
++    # Existing Provider-owned registry is the sole entry, never ordinary proofs.
++    assert ProofRegistry().codex.freeze(BOOTSTRAP, tools()) is None
++
++
++@pytest.mark.parametrize('text', ['ASCII', '中文', '😀 e\u0301', 'repeat ' * 80])
++@pytest.mark.parametrize('kind', ['local_exact', 'local_upper_bound'])
++def test_complete_synthetic_request_count_and_full_closure(text, kind):
++    selected = proof(kind=kind)
++    actual = registry(selected)
++    profile = actual.freeze(BOOTSTRAP, tools())
++    prepared = actual.prepare(config(), profile, messages(text), [], budget())
++    body = strict_json(prepared.body)
++    assert body['adapter'] == 'codex_app_server'
++    assert body['version'] == 'codex-synthetic-model-request-v1'
++    assert body['runtime'] == profile.model_dump(mode='json')
++    assert body['turn']['messages'] == [value.model_dump() for value in messages(text)]
++    assert body['turn']['max_output_tokens'] == 100
++    assert body['resume']['bootstrap_sha256'] == BOOTSTRAP
++    assert prepared.endpoint == 'http://127.0.0.1:4321/synthetic/codex-peer/model'
++    for field in type(profile.closure).model_fields:
++        if field != 'version':
++            assert base64.b64decode(getattr(profile.closure, field), validate=True)
++    count = (prepared.input_token_assurance.input_tokens if kind == 'local_exact'
++        else prepared.input_token_assurance.input_tokens_upper_bound)
++    assert count == (len(prepared.body) if kind == 'local_exact' else ((len(prepared.body) + 7) // 8) * 8)
++    assert prepared.input_token_assurance.request_body_sha256 == sha256_bytes(prepared.body)
++    assert prepared.cost_estimate.kind == 'unknown'
++    assert actual.current(profile) == 'current'
++    actual.verify(config(), profile, messages(text), [], budget(), prepared)
++
++
++def test_absent_expired_withdrawn_and_replaced_proofs():
++    selected = proof()
++    actual = registry(selected)
++    profile = actual.freeze(BOOTSTRAP, tools())
++    prepared = actual.prepare(config(), profile, messages(), [], budget())
++    for unavailable in [ProofRegistry().codex,
++            registry(selected, withdrawn_proofs=[selected.sha256]),
++            registry(proof(valid_until='2000-01-01T00:00:00Z'))]:
++        assert unavailable.freeze(BOOTSTRAP, tools()) is None
++        assert unavailable.current(profile) == 'unavailable'
++        assert_error('CODEX_INPUT_PROOF_UNAVAILABLE',
++            lambda: unavailable.verify(config(), profile, messages(), [], budget(), prepared), 503)
++    assert actual.freeze('c' * 64, tools()) is None
++    replacement = registry(proof(max_input_tokens=999999))
++    assert replacement.current(profile) == 'changed'
++    assert_error('CODEX_PROFILE_CHANGED',
++        lambda: replacement.prepare(config(), profile, messages(), [], budget()))
++
++
++def test_byte_changes_and_metadata_changes_rejected():
++    actual = registry()
++    profile = actual.freeze(BOOTSTRAP, tools())
++    prepared = actual.prepare(config(), profile, messages(), [], budget())
++    for altered in [replace(prepared, body=prepared.body + b' '),
++            replace(prepared, body=prepared.body.replace(b'Only', b'Also')),
++            replace(prepared, endpoint='http://127.0.0.1:4321/elsewhere'),
++            replace(prepared, adapter_version='text-request-v2')]:
++        assert_error('CODEX_SOURCE_CHANGED',
++            lambda: actual.verify(config(), profile, messages(), [], budget(), altered))
++    assert_error('CODEX_SOURCE_CHANGED',
++        lambda: actual.verify(config(), profile, messages('changed'), [], budget(), prepared))
++
++
++@pytest.mark.parametrize('changes', [dict(model='another'), dict(revision=3),
++    dict(config_sha256='c' * 64), dict(base_url='http://127.0.0.1:4322/synthetic'),
++    dict(base_url='http://127.0.0.1:4321/changed'), dict(adapter='compatible_chat'),
++    dict(secret_present=False)])
++def test_provider_destination_model_revision_secret_binding(changes):
++    actual = registry()
++    profile = actual.freeze(BOOTSTRAP, tools())
++    assert actual.freeze(BOOTSTRAP, tools(), config=config(**changes)) is None
++    assert_error('CODEX_INPUT_PROOF_UNAVAILABLE',
++        lambda: actual.prepare(config(**changes), profile, messages(), [], budget()), 503)
++
++
++def test_shared_capacity_input_output_and_cost_budgets():
++    actual = registry()
++    profile = actual.freeze(BOOTSTRAP, tools())
++    for selected_budget in [budget(max_input_tokens=1), budget(max_output_tokens=1001)]:
++        assert_error('CODEX_BUDGET_EXCEEDED',
++            lambda: actual.prepare(config(), profile, messages(), [], selected_budget))
++    shared = registry(proof(shared_context_tokens=100))
++    assert_error('CODEX_BUDGET_EXCEEDED',
++        lambda: shared.prepare(config(), shared.freeze(BOOTSTRAP, tools()), messages(), [], budget()))
++    priced = config(pricing={'input_usd_per_million': 1.0, 'output_usd_per_million': 2.0, 'source_note': 'test'})
++    priced_registry = registry(proof(config=priced))
++    assert_error('CODEX_BUDGET_EXCEEDED', lambda: priced_registry.prepare(priced,
++        priced_registry.freeze(BOOTSTRAP, tools()), messages(), [], budget(max_cost_usd=0.0)))
++
++
++def test_strict_profile_closed_full_material_and_runtime_changes():
++    from pydantic import ValidationError
++    from services.api.app.application.provider_codex_profile import CodexRuntimeProfile
++    actual = registry()
++    profile = actual.freeze(BOOTSTRAP, tools())
++    for changes in [dict(cpu_seconds=True), dict(extra='hidden'), dict(tools={'max_tool_calls': True, 'wall_seconds': 30})]:
++        with pytest.raises(ValidationError):
++            CodexRuntimeProfile.model_validate(profile.model_dump() | changes)
++    mutated = profile.model_dump()
++    mutated['closure']['environment'] = base64.b64encode(b'changed environment').decode()
++    changed = CodexRuntimeProfile.model_validate(mutated)
++    assert actual.current(changed) == 'changed'
++    assert_error('CODEX_PROFILE_CHANGED', lambda: actual.prepare(config(), changed, messages(), [], budget()))
++    for field in ['version', 'closure', 'proof_sha256']:
++        missing = profile.model_dump()
++        del missing[field]
++        with pytest.raises(ValidationError):
++            CodexRuntimeProfile.model_validate(missing)
++    schema = CodexRuntimeProfile.model_json_schema()
++    assert schema['additionalProperties'] is False
++    assert set(schema['required']) == set(schema['properties'])
++
++
++def test_evidence_history_tool_definitions_and_all_fields_are_counted():
++    actual = registry()
++    profile = actual.freeze(BOOTSTRAP, tools())
++    evidence = [dm.EvidenceChunk(ref=dm.ContentRef(entity='block', id='block_1', revision=1,
++        sha256='d' * 64), locator='block:block_1@r1', text='材料 😀')]
++    history = [messages()[0], dm.GenerationMessage(role='user', content='old task'),
++        dm.GenerationMessage(role='assistant', content='old full answer'), messages()[1]]
++    prepared = actual.prepare(config(), profile, history, evidence, budget())
++    body = strict_json(prepared.body)
++    assert body['turn']['evidence'] == [evidence[0].model_dump()]
++    assert body['turn']['messages'] == [value.model_dump() for value in history]
++    assert body['turn']['tools']['max_tool_calls'] == 2
++    assert len(body['turn']['tool_definitions']) == 2
++    assert prepared.input_token_assurance.input_tokens == len(prepared.body)
++    hidden = strict_json(prepared.body)
++    hidden['hidden_prompt'] = 'not allowed'
++    assert_error('CODEX_SOURCE_CHANGED', lambda: actual.verify(config(), profile, history,
++        evidence, budget(), replace(prepared, body=canonical_bytes(hidden))))
++
++
++def test_ordinary_registry_remains_unavailable_even_with_codex_proof():
++    actual = ProofRegistry(codex=registry())
++    assert_error('CAPABILITY_UNSUPPORTED', lambda: actual.resolve(config()))
++
++
++def test_registration_rejects_malformed_closure_real_models_and_borrowed_proofs():
++    from pydantic import ValidationError
++    from services.api.app.application.provider_codex_profile import CodexProofRegistry, SyntheticCodexProof
++    selected = proof()
++    corrupted = selected.model_dump()
++    corrupted['closure']['network'] = base64.b64encode(b'allow network').decode()
++    with pytest.raises(ValidationError):
++        SyntheticCodexProof.model_validate(corrupted)
++    with pytest.raises(ValidationError):
++        proof(config=config(model='production-model'), model_versions=['production-model'])
++    with pytest.raises(ValidationError):
++        proof(config=config(base_url='https://example.com/v1', endpoint_policy='public_https'))
++    with pytest.raises(ValueError):
++        CodexProofRegistry([selected, selected])
++    with pytest.raises(ValueError):
++        CodexProofRegistry([object()])
++    # Registration stores canonical private bytes; later caller mutation cannot
++    # rewrite its reviewed config or actual model-version scope.
++    installed = registry(selected)
++    frozen = installed.freeze(BOOTSTRAP, tools())
++    selected.config.model = 'changed'
++    selected.model_versions.append('synthetic-extra')
++    assert installed.current(frozen) == 'current'
++
++
++def test_tools_history_and_shape_limits_never_extend_frozen_bytes():
++    actual = registry()
++    profile = actual.freeze(BOOTSTRAP, tools())
++    prepared = actual.prepare(config(), profile, messages(), [], budget())
++    new_profile = actual.freeze(BOOTSTRAP, CodexLocalToolBudget(max_tool_calls=0, wall_seconds=20))
++    assert_error('CODEX_SOURCE_CHANGED',
++        lambda: actual.verify(config(), new_profile, messages(), [], budget(), prepared))
++    for unsupported in [[messages()[0]], messages() + [messages()[1]], messages() * 4]:
++        assert_error('CODEX_INPUT_PROOF_UNAVAILABLE',
++            lambda: actual.prepare(config(), profile, unsupported, [], budget()), 503)
++    assert_error('CODEX_BUDGET_EXCEEDED',
++        lambda: actual.prepare(config(), profile, messages('中' * 12001), [], budget()))
