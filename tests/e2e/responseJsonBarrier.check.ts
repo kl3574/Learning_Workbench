@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
 import { createServer } from 'node:http'
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { stripTypeScriptTypes } from 'node:module'
 import { resolve } from 'node:path'
 
@@ -78,7 +78,9 @@ for (const invalid of [false, true]) test(`JSON ${invalid ? 'rejection' : 'value
   }
 })
 
-test('the exact observer returns the original fetch/json promises and leaves an unrelated request alone', async ({ page }) => {
+test('the exact observer returns the original fetch/json promises and leaves an unrelated request alone', async ({ page }, info) => {
+  const phase = (name: string) => writeFileSync(info.outputPath('identity-phase.json'), JSON.stringify({ phase: name }))
+  phase('starting')
   const owned = await fixture(page)
   await page.evaluate(() => {
     const fixture = (window as any).barrierFixture, fetch = window.fetch
@@ -87,6 +89,7 @@ test('the exact observer returns the original fetch/json promises and leaves an 
   })
   const barrier = await observation(page)
   try {
+    phase('before-browser-identity')
     const facts = await page.evaluate(async target => {
       const fixture = (window as any).barrierFixture
       const other = fetch('/unrelated'), unrelatedPromiseSame = other === fixture.fetchPromise
@@ -97,11 +100,18 @@ test('the exact observer returns the original fetch/json promises and leaves an 
       fixture.release(); await parsed
       return { unrelatedPromiseSame, unrelatedDidNotReadJson, fetchPromiseSame, jsonPromiseSame, fetchRestoredAfterOne: window.fetch === fixture.recordingFetch }
     }, target)
+    phase('browser-identity-returned')
     expect(facts).toEqual({ unrelatedPromiseSame: true, unrelatedDidNotReadJson: true, fetchPromiseSame: true, jsonPromiseSame: true, fetchRestoredAfterOne: true })
+    phase('before-barrier')
     expect((await barrier.wait()).outcome).toBe('fulfilled'); expect(owned.requests()).toBe(1)
+    phase('assertions-complete')
   } finally {
+    phase('before-dispose')
     await barrier.dispose()
+    phase('before-restore')
     await page.evaluate(() => { const fixture = (window as any).barrierFixture; fixture.release(); fixture.restore(); window.fetch = fixture.nativeFetch })
+    phase('before-owned-close')
     await owned.close()
+    phase('closed')
   }
 })
