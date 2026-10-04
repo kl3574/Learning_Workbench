@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-04T13:59:15Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
+更新：2026-10-04T15:27:52Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
 
-仓库发布：VERIFIED；Issues 同步：VERIFIED_ISSUE32_LOCAL79AC_ORIGINAL_RUNNING_NATIVE_TERMINAL_PUBLIC4B_12CI_SUCCESS; terminal local checkpoint awaits next remote body sync
+仓库发布：VERIFIED；Issues 同步：VERIFIED_PR56_CONCRETE_BODY_ISSUE32_PUBLIC1A_TERMINAL_PUSH_FAIL_PR_SUCCESS_AND_ORIGINAL_COUNT_CORRECTED
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
 
-同步79ac完整本地终态与公开4b精确12CI证据，普通源码push后独立核新branch/PR56/Issue32与CI。继续独审/正常整合已封9a Artifact及普通Import原子草稿，补已声明只读SSE及产物UI；新组合重新冻结验收，不借79ac门禁。生产完整proof/实际Broker/真实Provider与数值/质量仍未完成；不上传密钥、不GitHubmerge/release/deploy。
+正常整合512 Artifact/普通Import已审窄修，核所有owner/非重叠原字节并固定组合门禁；继续SSE generator2RED→新fixedGREEN/独审与组合回归，再交付UI固定API基线。保留1a真实push Tutor FAIL并读取原件定位，不能借PR/本地PASS判同因或已修。完整InputProof/实际Broker/真实Provider、数值环境与来源数学教学质量及M6.3/AC21/M7仍未完成。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -49,7 +49,7 @@
 - real_provider: 历史2026-09-15独立DeepSeek直连GET models200/Chat200、usage14/1/15仅有进度记录，未找到可独立核验的原始HTTP回执。PLATFORM_AGENT_NOT_RUN：生产RequestPreparer(ProofRegistry())注册表为空，无符合唯一规范§20.5的托管完整输入证明；用户密钥未进入本轮测试或仓库。
 - real_codex: NOT_RUN
 - learning_effectiveness: NOT_RUN
-- ci: 当前已发布c2双CI终态均FAILURE，12job=10success2browserFAIL；push与PR各116nativePASS1FAIL，各integration2016PASS2SKIP。两checkout不同但tree相同，12原log/2ZIP及失败图全部本地归档；未重跑、未推断数值物理PASS。Import入口已本地修复，Review备注空仍UNKNOWN；后续CI未运行。
+- ci: 当前1a实际push5success1browserFAIL(129P1F，Tutor148原因UNKNOWN)；PR6success/native130。12原日志/真实checkout/tree已核，每event911backend/956spec/2358integration+2actualnumericENVskip/1278Web，overlap不相加；旧失败均保留，整体M6.3未验。
 - m4_1_development: 开发和独立审查的所有原失败/修复、环境诊断已保留；最终源码新验收通过，不覆盖历史失败。
 - m4_1_exact: 5bd8157新lint/types/spec/247web/build/74native均PASS，504源码前后相同；同SHA双workflow12checks成功。
 - m4_1_layout_repair: PASS:真实412布局及焦点回归；原失败保留，限定机制归因；新74完整套件通过。
@@ -314,6 +314,7 @@
 - m6_3_current_complete79ac_input_binding: 1465complete nonprogress Git inputs exact Python/static. Native all1465maps retain5actualoutputs changed;1455outside tenprelisted generated destinations unchanged. Eleven explicit PNGs rootviewed;no restore/copyback.
 - m6_3_current_public4b_CI: Each event:953contracts;888unit/security;2258integration/2actualnumericENVskip/2warnings;1201Web/154files;130native. Counts overlap; not current79ac CI. Both actualruns success/12jobs success;actualPRcheckout parents/tree independently verified. New79ac CI NOT_RUN.
 - m6_3_current_real_model: NOT_RUN;0 actual external model requests this continuation;DeepSeek key not used, stored or uploaded. Production complete input proof/executor unavailable.
+- previous_general_ci_note_before1a: 当前已发布c2双CI终态均FAILURE，12job=10success2browserFAIL；push与PR各116nativePASS1FAIL，各integration2016PASS2SKIP。两checkout不同但tree相同，12原log/2ZIP及失败图全部本地归档；未重跑、未推断数值物理PASS。Import入口已本地修复，Review备注空仍UNKNOWN；后续CI未运行。
 
 ## 阻塞与待决项
 
@@ -361,5 +362,6 @@
 - M63_DCF_COMPLETE_PYTHON_FAILURE: DCF原3683PASS1FAIL2setupERROR2ENVskip/exit1封存不变；b51仅修历史备份oracle，65相关PASS。新固定184同命令无筛选完整3686PASS0F0E2ENVskip/exit0，1381工程输入逐Git前后不变且root独立回读；旧两个setup原因UNKNOWN不改。
 - M63_DCF_SETUP_ERRORS_CAUSE_UNKNOWN: Provider-owner[single]与Review guards[extra_body-decision]在setup缺终态，正文未执行。精确关联后只读合成数据库状态为running r3/r2；UTC/monotonic差值已记，不足以证明租约/宿主原因。未恢复原实例或削弱租约/权限。
 - M63_E913_CI_BACKEND_ROUTE_AND_STATIC_BOUNDARY: 原e913两个backend822PASS1FAIL封存；db14仅无static823PASS保留，00cb生产API/static边界受控RED→完整824PASS并整合。4ecc已发布且实际双CI各backend824PASS/Ruff/mypy252PASS；旧FAIL不重标。
+- M63_1A_PUSH_TUTOR_NATIVE_FAILURE: Actual1a push37207897702 browser111452843003 129PASS1FAIL at tutor.spec.ts148;PR sixsuccess/native130 doesnoterasepushFAIL. 12 original joblogs/checkouts/treeverified;preciseTutorcauseunknown.
 
 许可证待所有者选择。真实 Provider、Codex 和学习效果分别验收；接口或结构检查不代表业务完成。
