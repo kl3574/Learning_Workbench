@@ -123,6 +123,11 @@ class CodexArtifactsService:
             value = record.manifest
         return self.turns._deliver(identity, value, subject=True)
 
+    def check_download_delivery(self, identity):
+        # The registered Codex download alone requires fresh author/Policy;
+        # ordinary Import readers retain their existing disclosure contract.
+        self.turns._deliver(identity, None, subject=True)
+
     def read_artifact(self, conn, identity, identifier):
         current = current_control_access(conn, identity, write=True)
         _, _, history = self.turns._owned_state(conn, current.workspace_id)

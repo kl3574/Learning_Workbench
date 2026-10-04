@@ -157,7 +157,9 @@ def create_app(settings: Settings | None = None, *,
     codex_turn.approvals = CodexApprovalsService(codex_turn)
     codex_turn.artifacts = CodexArtifactsService(codex_turn, codex_answer_materializer)
     codex_artifact_imports = CodexArtifactImports(codex_turn.artifacts, import_service)
-    artifacts = ArtifactsService(database, {**review_service.readers(), ('codex_turn_output_v1', 'codex_turn'): codex_turn.artifacts})
+    artifacts = ArtifactsService(database,
+        {**review_service.readers(), ('codex_turn_output_v1', 'codex_turn'): codex_turn.artifacts},
+        download_guards={('codex_turn_output_v1', 'codex_turn'): codex_turn.artifacts.check_download_delivery})
     content_impacts = ContentImpactDecisionService(database, artifacts)
     codex_turn_worker = CodexTurnWorker(codex_turn,codex_consents,codex_executor)
     codex_turn_worker.imports = codex_artifact_imports
