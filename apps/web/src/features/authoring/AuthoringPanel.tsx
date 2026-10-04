@@ -17,6 +17,7 @@ import type { BootstrapPort } from '../codex/bootstrapClient'
 import type { DraftStore } from '../../workbench/DraftStore'
 import { CodexBootstrapPanel, type BootstrapPanelState } from '../codex/CodexBootstrapPanel'
 import { CodexTurnPanel, type TurnPanelState } from '../codex/CodexTurnPanel'
+import { CodexApprovalsPanel, type ApprovalPanelState } from '../codex/CodexApprovalsPanel'
 import type { TurnPort } from '../codex/turnClient'
 import { CodexArtifactsPanel, type ArtifactsPanelState } from '../codex/CodexArtifactsPanel'
 import type { ArtifactPort } from '../codex/artifactClient'
@@ -30,14 +31,15 @@ export function AuthoringPanel({ workspace, paused, currentBlock, onState, port 
   const [bootstrapState, setBootstrapState] = useState<BootstrapPanelState>({ dirty: false, safe: true, isolated: false })
   const [turnState, setTurnState] = useState<TurnPanelState>({ dirty: false, safe: true, isolated: false }), [selectedCodexSession, setSelectedCodexSession] = useState<string | null>(null)
   const [artifactState, setArtifactState] = useState<ArtifactsPanelState>({ dirty: false, safe: true, isolated: false })
+  const [approvalState, setApprovalState] = useState<ApprovalPanelState>({ dirty: false, safe: true, isolated: false })
   const callback = useRef(onState); callback.current = onState
   useSyncExternalStore(subscribeReviewForms, reviewFormMemoryVersion, reviewFormMemoryVersion)
   const heldReviewForms = pendingReviewForms(workspace, 'authoring')
   const discardForms = useCallback(() => { reviewState.discardForms(); artifactState.discardForms?.(); discardReviewForms(workspace, 'authoring') }, [workspace, reviewState.discardForms, artifactState.discardForms])
   useEffect(() => { if (!state.academic) { setFormDirty(false); setConsentState({ dirty: false, safe: true }) } }, [state.academic, workspace, access])
   useEffect(() => { setSelectedCodexSession(null) }, [workspace, access, bootstrap, turn])
-  const dirty = heldReviewForms || state.academic && formDirty || consentState.dirty || state.commands.some(v => !v.ack) || reviewState.dirty || impactState.dirty || bootstrapState.dirty || turnState.dirty || artifactState.dirty, otherSafe = state.ready && !state.busy && consentState.safe && (!reviewOpen || reviewState.safe), safe = otherSafe && impactState.safe && bootstrapState.safe && turnState.safe && artifactState.safe, isolated = otherSafe && (impactState.isolated || bootstrapState.isolated || turnState.isolated || artifactState.isolated) && (impactState.safe || impactState.isolated) && (bootstrapState.safe || bootstrapState.isolated) && (turnState.safe || turnState.isolated) && (artifactState.safe || artifactState.isolated)
-  useEffect(() => { callback.current({ dirty, safe, isolated, discardForms, isolationLabel: bootstrapState.isolated || turnState.isolated || artifactState.isolated ? '保留本地会话隔离内存，丢弃临时表单并前往角色控制' : undefined }) }, [dirty, safe, isolated, discardForms, bootstrapState.isolated, turnState.isolated, artifactState.isolated])
+  const dirty = heldReviewForms || state.academic && formDirty || consentState.dirty || state.commands.some(v => !v.ack) || reviewState.dirty || impactState.dirty || bootstrapState.dirty || turnState.dirty || artifactState.dirty || approvalState.dirty, otherSafe = state.ready && !state.busy && consentState.safe && (!reviewOpen || reviewState.safe), safe = otherSafe && impactState.safe && bootstrapState.safe && turnState.safe && artifactState.safe && approvalState.safe, isolated = otherSafe && (impactState.isolated || bootstrapState.isolated || turnState.isolated || artifactState.isolated || approvalState.isolated) && (impactState.safe || impactState.isolated) && (bootstrapState.safe || bootstrapState.isolated) && (turnState.safe || turnState.isolated) && (artifactState.safe || artifactState.isolated) && (approvalState.safe || approvalState.isolated)
+  useEffect(() => { callback.current({ dirty, safe, isolated, discardForms, isolationLabel: bootstrapState.isolated || turnState.isolated || artifactState.isolated || approvalState.isolated ? '保留本地会话隔离内存，丢弃临时表单并前往角色控制' : undefined }) }, [dirty, safe, isolated, discardForms, bootstrapState.isolated, turnState.isolated, artifactState.isolated, approvalState.isolated])
   const detail = state.detail, draft = state.draft, numeric = state.numeric
   return <div className="authoring-panel"><p>可以准备例题、教材小节、习题集与测试题组草稿。模型调用与数值执行分别授权；生成完成不会自动获得数学、来源或教学质量批准。</p>
     <button disabled={state.busy} onClick={() => void state.refresh()}>刷新安全任务列表与当前权限</button>
@@ -64,6 +66,7 @@ export function AuthoringPanel({ workspace, paused, currentBlock, onState, port 
     <CodexCapabilitiesPanel workspace={workspace} admitted={state.academic && state.ready} />
     <CodexBootstrapPanel port={bootstrap} store={bootstrapStore} workspace={workspace} writeAdmitted={state.academic && state.ready && !paused} onState={setBootstrapState} onSessionSelect={setSelectedCodexSession} />
     <CodexTurnPanel port={turn} store={turnStore} formStore={turnFormStore} workspace={workspace} writeAdmitted={state.academic && state.ready && !paused} currentBlock={state.academic ? currentBlock : null} selectedSession={selectedCodexSession} onState={setTurnState} />
+    <CodexApprovalsPanel workspace={workspace} writeAdmitted={state.academic && state.ready && !paused} onState={setApprovalState} />
     <CodexArtifactsPanel workspace={workspace} writeAdmitted={state.academic && state.ready && !paused} port={artifact} store={artifactStore} formStore={artifactFormStore} onState={setArtifactState} />
     {impactsOpen && <ContentImpactsPanel workspace={workspace} paused={paused || !state.academic} onState={setImpactState} />}
     {reviewOpen && (draft && 'root' in draft
