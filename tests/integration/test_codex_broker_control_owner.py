@@ -36,7 +36,7 @@ def test_owned_cancel_pairs_one_rpc_without_treating_empty_ack_as_stop(consent_c
             assert len(calls) == 1
             with case.app.state.database.transaction(immediate=False) as conn:
                 snapshot = worker.controls.read_control(conn, identity(case), prep['turn_id'])
-                assert snapshot.exchange.reply_observed and not snapshot.exchange.terminal_observed
+                assert snapshot.exchange.control_reply_observed and not snapshot.exchange.terminal_notification_observed
                 assert snapshot.mapping.upstream_thread_id != snapshot.mapping.local_thread_id
                 assert json.loads(calls[0])['params']['threadId'] == snapshot.mapping.upstream_thread_id
         except Exception as error:
