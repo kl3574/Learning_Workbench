@@ -83,7 +83,7 @@ test('a delayed old review response cannot restore history or academic context a
   try {
     await other.goto(`${new URL(page.url()).origin}/?assessment=${encodeURIComponent(JSON.stringify({ assessment_ref: fixture.assessment, course_ref: fixture.course }))}`)
     await other.getByRole('checkbox', { name: '我已核对内容状态与模式，确认开始未评分测试', exact: true }).check(); await other.getByRole('button', { name: '明确开始本次测试', exact: true }).click(); await expect(other.getByText('独立测试进行中', { exact: true }).first()).toBeVisible()
-    release(); await expect(page.getByRole('region', { name: '完整评分历史' })).toHaveCount(0); await expect(page.getByText('当前测试复盘上下文', { exact: true })).toHaveCount(0)
+    release(); await page.unrouteAll({ behavior: 'wait' }); await expect(page.getByRole('region', { name: '完整评分历史' })).toHaveCount(0); await expect(page.getByText('当前测试复盘上下文', { exact: true })).toHaveCount(0)
     expect((await page.request.get(`/api/v1/attempts/${attempt.id}/result`)).status()).toBe(409)
-  } finally { release(); await page.unroute(routePattern); await other.close() }
+  } finally { release(); await page.unrouteAll({ behavior: 'wait' }); await other.close() }
 })
