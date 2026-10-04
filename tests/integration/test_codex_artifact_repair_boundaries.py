@@ -9,8 +9,10 @@ import pytest
 from services.api.app.infrastructure.import_worker import ImportWorker
 from tests.integration.test_codex_artifact_import_http import selected, consent_case, base_consent_case
 from tests.integration.test_codex_artifact_manifest import execute
+from tests.integration.test_assessment_learning_port import assessment_learning_state
 
 __all__ = ['consent_case', 'base_consent_case']
+assessment_state = assessment_learning_state
 
 
 @pytest.mark.parametrize('table', ['codex_import_batches', 'codex_import_bindings', 'codex_import_previews'])
@@ -91,6 +93,37 @@ def test_download_rechecks_actor_after_original_transaction_has_closed(consent_c
         response = future.result(timeout=10)
     assert response.status_code == expected
     assert original.content not in response.content
-    assert response.json()['error']['code'] in {'ROLE_REQUIRED', 'SESSION_REQUIRED'}
+    assert response.json()['error']['code'] in {'POLICY_DENIED', 'SESSION_REQUIRED'}
     assert case.dump() == before
     assert len(case.app.state.synthetic_transport_calls) == 1
+
+
+@pytest.mark.parametrize('mode', ['independent', 'open_book'])
+def test_download_rechecks_real_policy_started_after_original_transaction(assessment_state, monkeypatch, mode):
+    from services.api.app.infrastructure.content_repository import reference
+    from tests.integration.test_codex_turn_consent_http import make_consent_case
+    from tests.integration.test_codex_turn_dispatch_http import make_dispatch_case
+    database, _, fixture, _ = assessment_state
+    for original in make_consent_case(database.settings.data_dir):
+        for values in make_dispatch_case(original):
+            case, sid, prep, _, _, _ = execute(values)
+            manifest = case.get(f'sessions/{sid}/turns/{prep["turn_id"]}/artifacts').json()['manifest']
+            path = '/api/v1/artifacts/'+manifest['entries'][0]['artifact_id']+'/download'
+            entered, release = pause_after_download_transaction(case.app.state.database, monkeypatch)
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(case.client.get, path)
+                try:
+                    assert entered.wait(10)
+                    started = case.client.post('/api/v1/assessments/'+fixture.assessment.id+'/attempts',
+                        json={'assessment_ref':reference(fixture.assessment).model_dump(), 'mode':mode},
+                        headers={**case.headers, 'Idempotency-Key':'late-policy'})
+                    assert started.status_code == 201
+                    before = case.dump()
+                finally:
+                    release.set()
+                response = future.result(timeout=10)
+            assert response.status_code == 409
+            assert response.json()['error']['code'] == 'ASSESSMENT_ACTIVE'
+            assert b'Synthetic exact answer' not in response.content
+            assert case.dump() == before
+            assert len(case.app.state.synthetic_transport_calls) == 1
