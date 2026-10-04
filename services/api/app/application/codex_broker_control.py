@@ -146,6 +146,11 @@ class CodexBrokerControls:
         snapshot, live = snapshots.get(turn_id), self._live.get(turn_id)
         if snapshot is None or snapshot.closed is not None:
             return False
+        owned_callback = self._callback_owner() == (workspace, turn_id, snapshot.mapping.execution_owner_id, threading.get_ident())
+        if turn.control.execution != 'terminal' and not owned_callback:
+            # Another live worker/lease is not ours to close. Existing worker
+            # recovery establishes inactive owner + expiry before Job unknown.
+            return False
         if (live is not None and live.mapping == snapshot.mapping
                 and self._active(self.turns, conn, workspace, state, turn, states.get(turn_id), live.mapping.execution_owner_id)):
             return False
