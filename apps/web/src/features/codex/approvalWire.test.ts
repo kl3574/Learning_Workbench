@@ -23,3 +23,35 @@ test('actual generated decision POST persists original actor, key, complete oper
   expect(JSON.parse((await store.load(approvalWorkspace))[command.command_id].text)).toEqual(result)
  } finally { await store.close() }
 })
+
+test('generated approval GET preserves the complete body and rejects wrong target, extra keys and incomplete operation', async () => {
+ const value = approvalView(), calls: Array<[string, string | undefined]> = []
+ vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => { calls.push([url, init.method]); return new Response(JSON.stringify(value)) }))
+ expect(await approvalClient.read(value.id)).toEqual(value)
+ expect(calls).toEqual([['/api/v1/approvals/approval_synthetic', 'GET']])
+ await expect(approvalClient.read('approval_other')).rejects.toThrow()
+ vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ...value, private_extra: 'not_allowed' }))))
+ await expect(approvalClient.read(value.id)).rejects.toThrow()
+ vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ...value, operation: { kind: 'command', command_text: 'partial description' } }))))
+ await expect(approvalClient.read(value.id)).rejects.toThrow()
+})
+test('actual safe decline transport retains full control and learner ACK, never requests academic approval details', async () => {
+ const { approvalControl } = await import('./approvalFixtures'), { makeApprovalCommand } = await import('./approvalCommands')
+ const store = new DraftStore({ name: `approval-decline-wire-${crypto.randomUUID()}`, factory: new IDBFactory() }), paths: string[] = [], actor = 'learner_actual_decision'
+ const original = makeApprovalCommand(approvalWorkspace, actor, { kind: 'decline', control: approvalControl() }, 'approval_synthetic')
+ try {
+  vi.stubGlobal('fetch', vi.fn(async (path: string, init: RequestInit) => {
+   paths.push(path); expect(init.method).toBe('POST'); expect(JSON.parse(init.body as string).expected_revision).toBe(1)
+   expect(JSON.parse((await store.load(approvalWorkspace))[original.command_id].text)).toEqual(original)
+   return new Response(JSON.stringify(approvalAck('decline', actor)))
+  }))
+  const result = await dispatchApprovalCommand(original, approvalClient, store)
+  expect(result.ack).toEqual(approvalAck('decline', actor)); expect(paths).toEqual(['/api/v1/approvals/approval_synthetic/decision'])
+ } finally { await store.close() }
+})
+test('actual generated POST propagates owner CAS failure without automatic retry or replacement key', async () => {
+ const calls: RequestInit[] = [], body = { expected_revision: 1, operation_sha256: '5'.repeat(64), decision: 'approve_once' as const }
+ vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => { calls.push(init); return new Response(JSON.stringify({ error: { code: 'REVISION_MISMATCH', message: 'synthetic CAS failure' } }), { status: 412 }) }))
+ await expect(approvalClient.decide('approval_synthetic', body, 'original_cas_key')).rejects.toMatchObject({ status: 412, code: 'REVISION_MISMATCH' })
+ expect(calls).toHaveLength(1); expect(new Headers(calls[0].headers).get('Idempotency-Key')).toBe('original_cas_key'); expect(JSON.parse(calls[0].body as string)).toEqual(body)
+})
