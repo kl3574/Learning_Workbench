@@ -14,7 +14,7 @@ from services.api.app.infrastructure.provider_transport import ProviderTransport
 from services.api.app.infrastructure.codex_probe import LocalCodexProbe
 from services.api.app.main import create_app
 from services.api.app.serialization import canonical_json, content_sha256
-from tests.integration.test_codex_bootstrap_http import Case, ControlledRuntime, approve, make_case
+from tests.integration.test_codex_bootstrap_http import ControlledRuntime, approve, make_case
 from tests.integration.test_codex_turn_preparation_http import turn_body
 from tests.integration.test_codex_turn_consent_http import preview_body
 
