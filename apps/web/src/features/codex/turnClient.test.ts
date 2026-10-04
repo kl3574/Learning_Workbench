@@ -6,7 +6,7 @@ import { checkedTurn, turnClient } from './turnClient'
 // Synthetic wire fixtures prove client admission/transport, never server history or runtime proof.
 afterEach(() => vi.unstubAllGlobals())
 const hash = 'a'.repeat(64), time = '2026-10-04T00:00:00Z'
-const ref = (id: string) => ({ entity: 'block' as const, id, revision: 1 })
+const ref = (id: string) => ({ entity: 'block' as const, id, revision: 1, sha256: hash })
 const material = (id: string) => ({ ref: ref(id), title: 'Synthetic source', locator: 'line 1', character_count: 20, excerpt_sha256: hash })
 const body = (): CodexTurnPrepareWrite => ({ message: '  Original α\n中文😀  ', context_refs: [ref('block_one'), ref('block_two')],
  expected_session_revision: 2, provider_id: 'codex_local', tools: { max_tool_calls: 0, wall_seconds: 30 } })
