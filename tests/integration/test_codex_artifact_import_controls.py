@@ -39,6 +39,21 @@ def test_active_policy_keeps_safe_job_get_cancel_without_subject_material(assess
             created = case.post(f'sessions/{sid}/artifacts/import', body, 'policy-import')
             assert created.status_code == 202
             identifier = created.json()['id']
+            if mode == 'independent':
+                from services.api.app.application.errors import ApiError
+                # Real exclusive assessment admission must not be bypassed to
+                # fabricate a queued-work/independent state. First stop the
+                # owned children; then verify safe terminal observation there.
+                before = case.dump()
+                with pytest.raises(ApiError) as blocked:
+                    start((database, identity(case), fixture, assessment), mode=mode)
+                assert blocked.value.code == 'SUBJECT_WORK_ACTIVE' and case.dump() == before
+                basis = case.client.get('/api/v1/jobs/'+identifier)
+                assert basis.status_code == 200
+                stopped = case.client.post('/api/v1/jobs/'+identifier+'/cancel',
+                    json={'expected_revision':basis.json()['revision']},
+                    headers={**case.headers, 'Idempotency-Key':'before-independent'})
+                assert stopped.status_code == 200 and stopped.json()['status'] == 'cancelled'
             start((database, identity(case), fixture, assessment), mode=mode)
             before = case.dump()
             current = case.client.get('/api/v1/jobs/'+identifier)
