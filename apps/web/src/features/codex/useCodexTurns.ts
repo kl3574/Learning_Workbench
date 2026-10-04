@@ -6,7 +6,7 @@ import type { DraftStore, DraftWriteGuard } from '../../workbench/DraftStore'
 import { sameValue } from '../providers/providerSchema'
 import { checkedBootstrap } from './bootstrapClient'
 import { checkedTurn, turnClient, type TurnPort } from './turnClient'
-import { decodeTurnCommand, persistTurnCommand, readTurnCommand, turnCancelCommand, turnIdentity, turnPrepareCommand, turnStore, type TurnCommand } from './turnCommands'
+import { decodeTurnCommand, persistTurnCommand, readTurnCommand, turnCancelCommand, turnIdentity, turnInterruptCommand, turnPrepareCommand, turnStore, type TurnCommand } from './turnCommands'
 import { decodeTurnForm, emptyTurnFields, persistTurnForm, readTurnForm, snapshotTurnForm, turnFormBody, turnFormStore, type TurnFields, type TurnForm } from './turnForms'
 import { heldTurnCommands, heldTurnForms, releaseTurnCommand, releaseTurnForm, retainTurnCommand, retainTurnForm, subscribeTurnMemory, turnMemoryVersion } from './turnMemory'
 
@@ -183,10 +183,11 @@ export function useCodexTurns(workspace: string, writeAdmitted: boolean, port: T
    setCommands(values)
    await fresh(token, original.kind === 'prepare', original.actor_session_id)
    if (original.ack) return
-   if (original.kind === 'prepare') setCurrent(null)
-   else setControls(values => { const next = { ...values }; delete next[original.basis.id]; return next })
+   if (original.kind === 'prepare' || original.kind === 'interrupt') setCurrent(null)
+   if (original.kind !== 'prepare') setControls(values => { const next = { ...values }; delete next[original.kind === 'cancel' ? original.basis.id : original.basis.turn.id]; return next })
    const raw = original.kind === 'prepare' ? await port.prepare(original.session_id, original.body, original.command_id)
-    : await port.cancel(original.basis.job.id, original.body.expected_revision, original.command_id)
+    : original.kind === 'cancel' ? await port.cancel(original.basis.job.id, original.body.expected_revision, original.command_id)
+    : await port.interrupt(original.session_id, original.body, original.command_id)
    // Preserve the checked original fact before any scope/access check. A late
    // response belongs to its original actor even after unmount or revocation.
    const acknowledged = decodeTurnCommand(JSON.stringify({ ...original, ack: raw, error: null }), workspace)
@@ -195,7 +196,7 @@ export function useCodexTurns(workspace: string, writeAdmitted: boolean, port: T
    await fresh(token, original.kind === 'prepare', original.actor_session_id)
    const saved = await persistTurnCommand(acknowledged, store, saving.guard); releaseTurnCommand(saved)
    const confirmed = await loadCommands()
-   if (valid(token)) { setCommands(confirmed); setMessage(original.kind === 'prepare' ? '准备原 ACK 已保存；只预约 Job，未执行。当前状态须独立 GET。' : '取消原 ACK 已保存；当前控制须独立 GET，取消请求不证明远端已停止。') }
+   if (valid(token)) { setCommands(confirmed); setMessage(original.kind === 'prepare' ? '准备原 ACK 已保存；只预约 Job，未执行。当前状态须独立 GET。' : original.kind === 'cancel' ? '取消原 ACK 已保存；当前控制须独立 GET，取消请求不证明远端已停止。' : '中断原 ACK 已保存；当前 session 与回合控制须分别独立 GET，中断请求不证明远端已停止。') }
   } catch (reason) {
    if (reason instanceof ApiError && reason.status >= 400 && reason.status <= 599 && !heldTurnCommands(workspace).some(v => v.command_id === original.command_id && v.ack)) {
     const rejected = decodeTurnCommand(JSON.stringify({ ...original, error: { status: reason.status,
@@ -219,6 +220,13 @@ export function useCodexTurns(workspace: string, writeAdmitted: boolean, port: T
   if (!ready || working.current || controls[value.id] !== value) return
   await execute(turnCancelCommand(workspace, identity.actor_session_id, value))
  }
+ const canInterrupt = (value: CodexTurnControlView) => ready && !working.current && controls[value.id] === value
+  && current !== null && current.id === selected && current.id === value.session_id
+  && (value.execution === 'terminal' || current.active_turn_id === value.id)
+ const interrupt = async (value: CodexTurnControlView) => {
+  if (!canInterrupt(value) || !current) return
+  await execute(turnInterruptCommand(workspace, identity!.actor_session_id, current, value))
+ }
  const saveMemory = async () => {
   if (!ready) return
   const actor = identity.actor_session_id, token = begin(); if (token === null) return
@@ -240,7 +248,7 @@ export function useCodexTurns(workspace: string, writeAdmitted: boolean, port: T
  const allForms = new Map([...forms, ...heldForms].map(v => [v.snapshot_id, v]))
  const latest = new Map<string, TurnForm>()
  for (const value of allForms.values()) if (allowed && value.actor_session_id === identity.actor_session_id && (!latest.has(value.draft_id) || latest.get(value.draft_id)!.sequence < value.sequence)) latest.set(value.draft_id, value)
- const visibleCommands = ready ? [...all.values()].filter(v => v.kind === 'cancel' || allowed && v.actor_session_id === identity.actor_session_id) : []
+ const visibleCommands = ready ? [...all.values()].filter(v => v.kind !== 'prepare' || allowed && v.actor_session_id === identity.actor_session_id) : []
  const retained = held.length + heldForms.length
  let canPrepare = false
  try { if (allowed && form?.actor_session_id === identity.actor_session_id && form.workspace_id === workspace && form.fields.session_id === selected
@@ -250,7 +258,7 @@ export function useCodexTurns(workspace: string, writeAdmitted: boolean, port: T
   current: ready ? current : null, page: ready ? page : null, controls: ready ? controls : {}, detail: allowed ? detail : null,
   error: visible ? error : '', message: visible ? message : '', canPrepare,
   dirty: retained > 0 || allForms.size > 0 || [...all.values()].some(v => !v.ack), safe: !working.current && retained === 0, isolated: !working.current && retained > 0,
-  retained, canSave: ready && retained > 0, refresh, edit, select, restoreForm, readCurrent, readPage, readControl, readPreparation, execute, prepare, cancel, saveMemory,
-  canReplay: (value: TurnCommand) => ready && value.actor_session_id === identity.actor_session_id && (value.kind === 'cancel' || allowed) && !value.ack && !held.some(v => v.command_id === value.command_id && v.ack),
+  retained, canSave: ready && retained > 0, refresh, edit, select, restoreForm, readCurrent, readPage, readControl, readPreparation, execute, prepare, cancel, interrupt, canInterrupt, saveMemory,
+  canReplay: (value: TurnCommand) => ready && value.actor_session_id === identity.actor_session_id && (value.kind !== 'prepare' || allowed) && !value.ack && !held.some(v => v.command_id === value.command_id && v.ack),
  }
 }

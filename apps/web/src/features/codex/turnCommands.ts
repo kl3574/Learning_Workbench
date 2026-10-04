@@ -1,5 +1,5 @@
 import type { JobSnapshot } from '../../../../../packages/contracts/generated/api-types'
-import type { CodexCurrentSessionView, CodexTurnControlView, CodexTurnPreparationView, CodexTurnPrepareWrite } from '../../../../../packages/contracts/generated/codex-turn-types'
+import type { CodexCurrentSessionView, CodexInterruptAck, CodexInterruptWrite, CodexTurnControlView, CodexTurnPreparationView, CodexTurnPrepareWrite } from '../../../../../packages/contracts/generated/codex-turn-types'
 import { assertDraftWriteAllowed, DraftStore, type DraftRecord, type DraftWriteGuard } from '../../workbench/DraftStore'
 import { checkedProvider, exactObject, sameValue, validIdentity } from '../providers/providerSchema'
 import { checkedBootstrap } from './bootstrapClient'
@@ -8,7 +8,8 @@ import { checkedTurn, checkedTurnJob } from './turnClient'
 type Base = { version: 1; workspace_id: string; actor_session_id: string; command_id: string; session_id: string; error: { status: number; code: string | null } | null }
 export type TurnCommand = Base & (
  { kind: 'prepare'; basis: CodexCurrentSessionView; body: CodexTurnPrepareWrite; ack: CodexTurnPreparationView | null }
- | { kind: 'cancel'; basis: CodexTurnControlView; body: { expected_revision: number }; ack: JobSnapshot | null })
+ | { kind: 'cancel'; basis: CodexTurnControlView; body: { expected_revision: number }; ack: JobSnapshot | null }
+ | { kind: 'interrupt'; basis: { session: CodexCurrentSessionView; turn: CodexTurnControlView }; body: CodexInterruptWrite; ack: CodexInterruptAck | null })
 export const turnStore = new DraftStore({ name: 'learning-workbench.codex-turn-commands.v1' })
 const fail = (): never => { throw new Error('原回合命令或基准无法核验；本机记录保留。') }
 export const turnIdentity = (value: unknown): value is string => validIdentity(value) && value.trim() === value
@@ -40,6 +41,18 @@ export function decodeTurnCommand(raw: string, workspace: string): TurnCommand {
    const status = observed ? basis.job.status : basis.job.status === 'running' ? 'running' : 'cancelled'
    if (ack.status !== status || ack.revision !== basis.job_revision + (observed ? 0 : 1)) fail()
   }
+ } else if (value.kind === 'interrupt') {
+  if (!exactObject(value.basis, ['session', 'turn'])) fail()
+  const session = checkedBootstrap<CodexCurrentSessionView>('CodexCurrentSessionView', value.basis.session)
+  const turn = checkedTurn('CodexTurnControlView', value.basis.turn)
+  checkedTurn('CodexInterruptWrite', value.body)
+  if (session.id !== value.session_id || turn.session_id !== value.session_id || turn.id !== value.body.turn_id
+   || session.revision !== value.body.expected_session_revision
+   || turn.execution !== 'terminal' && session.active_turn_id !== turn.id) fail()
+  if (value.ack !== null) {
+   const ack = checkedTurn('CodexInterruptAck', value.ack)
+   if (ack.id !== value.session_id || ack.turn_id !== turn.id || turn.execution === 'terminal' && ack.status !== 'already_terminal') fail()
+  }
  } else fail()
  return value
 }
@@ -50,6 +63,10 @@ export function turnPrepareCommand(workspace: string, actor: string, basis: Code
 export function turnCancelCommand(workspace: string, actor: string, basis: CodexTurnControlView): TurnCommand {
  return decodeTurnCommand(JSON.stringify({ version: 1, workspace_id: workspace, actor_session_id: actor, command_id: `codexturn_${crypto.randomUUID()}`,
   session_id: basis.session_id, kind: 'cancel', basis, body: { expected_revision: basis.job_revision }, ack: null, error: null }), workspace)
+}
+export function turnInterruptCommand(workspace: string, actor: string, session: CodexCurrentSessionView, turn: CodexTurnControlView): TurnCommand {
+ return decodeTurnCommand(JSON.stringify({ version: 1, workspace_id: workspace, actor_session_id: actor, command_id: `codexturn_${crypto.randomUUID()}`,
+  session_id: session.id, kind: 'interrupt', basis: { session, turn }, body: { turn_id: turn.id, expected_session_revision: session.revision }, ack: null, error: null }), workspace)
 }
 export function readTurnCommand(record: DraftRecord, workspace: string): TurnCommand {
  const values = [record.text, ...record.conflicts.map(v => v.text)].map(raw => decodeTurnCommand(raw, workspace)), first = values[0]
