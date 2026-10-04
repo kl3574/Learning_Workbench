@@ -12,7 +12,7 @@ from services.api.app.application.codex_turn_models import EventEnvelope
 from services.api.app.infrastructure.database import Database
 from services.api.app.serialization import canonical_json, content_sha256
 from services.api.app.main import create_app
-from tests.integration.test_codex_turn_preparation_http import turn_case as fixture, prepared, turn_body, cancel, identity
+from tests.integration.test_codex_turn_preparation_http import turn_case as fixture, prepared, turn_body, cancel
 from tests.integration.test_codex_bootstrap_http import ControlledRuntime, approve, make_case
 from tests.integration.test_authoring_numeric_provider_history import table_hashes
 
@@ -46,14 +46,16 @@ def test_safe_get_fresh_delivery_retains_learner_but_rejects_invalid_identity(tu
                     if change == 'logout':
                         conn.execute("UPDATE local_sessions SET revoked_at='2026-01-01T00:00:00Z' WHERE id=?", (case.actor_id,))
                     else:
-                        conn.execute("INSERT INTO workspace VALUES('other_workspace','Synthetic','2026-01-01T00:00:00Z')")
+                        conn.execute("INSERT INTO workspace(id,title,created_at) VALUES('other_workspace','Synthetic','2026-01-01T00:00:00Z')")
                         conn.execute("UPDATE local_sessions SET workspace_id='other_workspace' WHERE id=?", (case.actor_id,))
             before = case.dump()
         finally:
             release.set()
         response = future.result(timeout=10)
     assert response.status_code == expected
-    assert 'message' not in response.text and 'context_refs' not in response.text
+    assert turn_body()['message'] not in response.text and 'context_refs' not in response.text
+    if response.status_code == 200:
+        assert 'message' not in response.json()
     assert case.dump() == before
 
 
@@ -175,7 +177,7 @@ def test_forward_migration_preserves_original_bootstrap_and_all_existing_rows(tm
         replay = current.post('/api/v1/codex/sessions', json=body, headers={**headers, 'Idempotency-Key': 'legacy-session'})
         assert replay.content == response.content
         read = current.get('/api/v1/codex/sessions/' + response.json()['id'])
-        assert read.status_code == 200 and read.json() == response.json()
+        assert read.status_code == 200 and read.json() == {**response.json(), 'active_turn_id': None}
         assert len(runtime.calls) == 1
     finally:
         current.close()
