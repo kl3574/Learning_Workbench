@@ -4,7 +4,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 import { DraftStore } from '../../workbench/DraftStore'
 import { actor, codexSession, deferred, session, workspace } from './bootstrapTestFixtures'
 import { CodexTurnPanel } from './CodexTurnPanel'
-import { turnBody, turnControl, turnPort, turnPreparation } from './turnTestFixtures'
+import { turnBody, turnCancelledJob, turnControl, turnPort, turnPreparation } from './turnTestFixtures'
 import { ApiError, request } from '../../api/client'
 import { heldTurnCommands, heldTurnForms, releaseTurnCommand, releaseTurnForm } from './turnMemory'
 import { decodeTurnCommand, persistTurnCommand, readTurnCommand, turnPrepareCommand } from './turnCommands'
@@ -93,7 +93,7 @@ test.each(['learner', 'independent', 'open_book'] as const)('safe session/page/c
   const command = readTurnCommand((await store.load(workspace))[key], workspace)
   expect(command.kind).toBe('cancel'); expect(command.actor_session_id).toBe(actor)
   expect(command.basis).toEqual(turnControl()); expect(command.body).toEqual({ expected_revision: revision })
-  return { id, status: 'cancelled' }
+  return { ...turnCancelledJob(), id }
  })
  render(<CodexTurnPanel workspace={workspace} writeAdmitted={false} port={port} store={store} formStore={formStore} />)
  await refresh(); expect(screen.queryByLabelText('回合原文')).toBeNull()

@@ -1,14 +1,14 @@
-import type { JobRef } from '../../../../../packages/contracts/generated/api-types'
+import type { JobSnapshot } from '../../../../../packages/contracts/generated/api-types'
 import type { CodexCurrentSessionView, CodexTurnControlView, CodexTurnPreparationView, CodexTurnPrepareWrite } from '../../../../../packages/contracts/generated/codex-turn-types'
 import { assertDraftWriteAllowed, DraftStore, type DraftRecord, type DraftWriteGuard } from '../../workbench/DraftStore'
 import { checkedProvider, exactObject, sameValue, validIdentity } from '../providers/providerSchema'
 import { checkedBootstrap } from './bootstrapClient'
-import { checkedTurn } from './turnClient'
+import { checkedTurn, checkedTurnJob } from './turnClient'
 
 type Base = { version: 1; workspace_id: string; actor_session_id: string; command_id: string; session_id: string; error: { status: number; code: string | null } | null }
 export type TurnCommand = Base & (
  { kind: 'prepare'; basis: CodexCurrentSessionView; body: CodexTurnPrepareWrite; ack: CodexTurnPreparationView | null }
- | { kind: 'cancel'; basis: CodexTurnControlView; body: { expected_revision: number }; ack: JobRef | null })
+ | { kind: 'cancel'; basis: CodexTurnControlView; body: { expected_revision: number }; ack: JobSnapshot | null })
 export const turnStore = new DraftStore({ name: 'learning-workbench.codex-turn-commands.v1' })
 const fail = (): never => { throw new Error('原回合命令或基准无法核验；本机记录保留。') }
 export const turnIdentity = (value: unknown): value is string => validIdentity(value) && value.trim() === value
@@ -34,7 +34,7 @@ export function decodeTurnCommand(raw: string, workspace: string): TurnCommand {
   const basis = checkedTurn('CodexTurnControlView', value.basis)
   checkedProvider('JobCancelRequest', value.body)
   if (basis.session_id !== value.session_id || value.body.expected_revision !== basis.job_revision) fail()
-  if (value.ack !== null && checkedProvider<JobRef>('JobRef', value.ack).id !== basis.job.id) fail()
+  if (value.ack !== null) checkedTurnJob(value.ack, basis.job.id, workspace)
  } else fail()
  return value
 }

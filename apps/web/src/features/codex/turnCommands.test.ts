@@ -3,7 +3,7 @@ import { expect, test } from 'vitest'
 import { DraftStore } from '../../workbench/DraftStore'
 import { actor, codexSession, workspace } from './bootstrapTestFixtures'
 import { decodeTurnCommand, persistTurnCommand, readTurnCommand, turnCancelCommand, turnPrepareCommand, type TurnCommand } from './turnCommands'
-import { turnBody, turnControl, turnPreparation } from './turnTestFixtures'
+import { turnBody, turnCancelledJob, turnControl, turnPreparation } from './turnTestFixtures'
 import { emptyTurnFields, persistTurnForm, readTurnForm, snapshotTurnForm } from './turnForms'
 const command = () => turnPrepareCommand(workspace, actor, codexSession(), turnBody())
 test.each([
@@ -27,7 +27,28 @@ test('cancellation basis belongs to the actual target Job; the cancelling actor 
  expect(value.actor_session_id).toBe('learner_new')
  expect(value.body).toEqual({ expected_revision: 1 })
  expect(() => decodeTurnCommand(JSON.stringify({ ...value, body: { expected_revision: 2 } }), workspace)).toThrow()
- expect(() => decodeTurnCommand(JSON.stringify({ ...value, ack: { id: 'job_other', status: 'cancelled' } }), workspace)).toThrow()
+ expect(() => decodeTurnCommand(JSON.stringify({ ...value, ack: { ...turnCancelledJob(), id: 'job_other' } }), workspace)).toThrow()
+})
+test.each([
+ { id: 'job_other' }, { workspace_id: 'workspace_other' }, { kind: 'authoring' },
+ { revision: 0 }, { revision: true }, { progress: { completed: 0, total: null } },
+ { warnings: 'omitted' }, { error: {} }, { extra: 'not in Jobs contract' },
+])('full cancellation ACK rejects wrong owner/target and malformed closed JobSnapshot %#', change => {
+ const original = turnCancelCommand(workspace, 'learner_new', turnControl())
+ expect(() => decodeTurnCommand(JSON.stringify({ ...original, ack: { ...turnCancelledJob(), ...change } }), workspace)).toThrow()
+})
+test('truncated JobRef cannot replace full cancellation ACK; durable ACK survives a pending writer and rejects a changed snapshot', async () => {
+ const db = new DraftStore({ name: crypto.randomUUID(), factory: new IDBFactory() })
+ try {
+  const original = turnCancelCommand(workspace, actor, turnControl())
+  const acknowledged = decodeTurnCommand(JSON.stringify({ ...original, ack: turnCancelledJob() }), workspace)
+  expect(() => decodeTurnCommand(JSON.stringify({ ...original, ack: { id: 'job_turn_test', status: 'cancelled' } }), workspace)).toThrow()
+  await persistTurnCommand(original, db); await persistTurnCommand(acknowledged, db); await persistTurnCommand(original, db)
+  expect(readTurnCommand((await db.load(workspace))[original.command_id], workspace)).toEqual(acknowledged)
+  const changed = decodeTurnCommand(JSON.stringify({ ...acknowledged, ack: { ...turnCancelledJob(), updated_at: '2026-10-04T00:00:02Z' } }), workspace)
+  await expect(persistTurnCommand(changed, db)).rejects.toThrow()
+  expect(readTurnCommand((await db.load(workspace))[original.command_id], workspace)).toEqual(acknowledged)
+ } finally { await db.close() }
 })
 test('fresh store read preserves original command; concurrent ACK and pending writers retain the checked ACK', async () => {
  const factory = new IDBFactory(), name = `turn-command-${crypto.randomUUID()}`, first = new DraftStore({ name, factory }), second = new DraftStore({ name, factory })

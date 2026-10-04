@@ -2,6 +2,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 import type { CodexTurnControlView, CodexTurnPreparationView, CodexTurnPrepareWrite } from '../../../../../packages/contracts/generated/codex-turn-types'
 import { codexSession } from './bootstrapTestFixtures'
 import { checkedTurn, turnClient } from './turnClient'
+import { turnCancelledJob } from './turnTestFixtures'
 
 // Synthetic wire fixtures prove client admission/transport, never server history or runtime proof.
 afterEach(() => vi.unstubAllGlobals())
@@ -52,11 +53,26 @@ test('subject/current/control/page reads carry no replay key or body and retain 
 })
 
 test('cancellation sends the explicitly read job revision, no implicit new preparation or retry', async () => {
- const fetch = respond({ id: 'job_test', status: 'cancelled' })
- expect(await turnClient.cancel('job_test', 7, 'cancel_original')).toEqual({ id: 'job_test', status: 'cancelled' })
+ const ack = { ...turnCancelledJob(), id: 'job_test', revision: 8 }, fetch = respond(ack)
+ expect(await turnClient.cancel('job_test', 7, 'cancel_original')).toEqual(ack)
  const [path, init] = fetch.mock.calls[0] as unknown as [string, RequestInit]
  expect(path).toBe('/api/v1/jobs/job_test/cancel'); expect(JSON.parse(init.body as string)).toEqual({ expected_revision: 7 })
  expect(new Headers(init.headers).get('Idempotency-Key')).toBe('cancel_original'); expect(fetch).toHaveBeenCalledTimes(1)
+})
+test.each([
+ { id: 'job_turn_test', status: 'cancelled' },
+ { ...turnCancelledJob(), kind: 'authoring' },
+ { ...turnCancelledJob(), unexpected: 'closed response' },
+])('cancellation rejects incomplete or foreign-owner ACK without retry %#', async ack => {
+ const fetch = respond(ack)
+ await expect(turnClient.cancel('job_turn_test', 1, 'cancel_original')).rejects.toThrow()
+ expect(fetch).toHaveBeenCalledTimes(1)
+})
+test('terminal observation and pending cancellation ACK are full historical snapshots, not an invented stopped state', async () => {
+ for (const status of ['running', 'failed', 'completed'] as const) {
+  const ack = { ...turnCancelledJob(), status, progress: { completed: 0, total: null, label: status } }
+  respond(ack); expect(await turnClient.cancel('job_turn_test', 2, 'cancel_original')).toEqual(ack)
+ }
 })
 
 test.each([
@@ -117,7 +133,7 @@ test('server response for another object/command/session is rejected instead of 
  respond({ ...codexSession(), id: 'wrong_session' }); await expect(turnClient.current('session_test')).rejects.toThrow()
  respond({ items: [{ ...control(), session_id: 'wrong_session' }], next_cursor: null })
  await expect(turnClient.turns('session_test')).rejects.toThrow()
- respond({ id: 'wrong_job', status: 'cancelled' }); await expect(turnClient.cancel('job_test', 1, 'cancel_original')).rejects.toThrow()
+ respond({ ...turnCancelledJob(), id: 'wrong_job' }); await expect(turnClient.cancel('job_test', 1, 'cancel_original')).rejects.toThrow()
 })
 
 test('duplicate/mixed-session pages and invalid local controls issue zero requests', async () => {
