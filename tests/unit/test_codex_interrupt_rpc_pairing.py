@@ -16,6 +16,21 @@ def test_local_interrupt_reply_and_terminal_are_separate_exact_observations():
     assert exchange.implemented is False
     assert exchange.production_qualification == 'unregistered'
     assert not exchange.control_reply_observed
+
+
+def test_original_exchange_detects_missing_observation_members():
+    from services.api.app.infrastructure.codex_interrupt_protocol import (
+        observe_interrupt, prepare_interrupt, read_interrupt_source, verify_interrupt_exchange,
+    )
+    import pytest
+
+    source = read_interrupt_source()
+    exchange = prepare_interrupt(source, b'{"id":7,"method":"turn/interrupt","params":{"threadId":"t","turnId":"u"}}')
+    acknowledged = observe_interrupt(source, exchange, b'{"id":7,"result":{}}').exchange
+    assert acknowledged.observation_count == 1
+    acknowledged.observations.clear()
+    with pytest.raises(ValueError):
+        verify_interrupt_exchange(source, acknowledged)
     assert not exchange.terminal_notification_observed
     reply = b'{"id":7,"result":{}}'
     acknowledged = observe_interrupt(source, exchange, reply)
