@@ -2,6 +2,7 @@
 import json
 
 from tests.integration.test_codex_turn_dispatch_http import consent_case, base_consent_case, queued
+from tests.integration.test_codex_turn_preparation_http import identity
 
 __all__ = ['consent_case', 'base_consent_case']
 
@@ -34,7 +35,7 @@ def test_owned_cancel_pairs_one_rpc_without_treating_empty_ack_as_stop(consent_c
             assert case.dump() == before
             assert len(calls) == 1
             with case.app.state.database.transaction(immediate=False) as conn:
-                snapshot = worker.controls.read_control(conn, case.actor_id, prep['turn_id'])
+                snapshot = worker.controls.read_control(conn, identity(case), prep['turn_id'])
                 assert snapshot.exchange.reply_observed and not snapshot.exchange.terminal_observed
                 assert snapshot.mapping.upstream_thread_id != snapshot.mapping.local_thread_id
                 assert json.loads(calls[0])['params']['threadId'] == snapshot.mapping.upstream_thread_id
