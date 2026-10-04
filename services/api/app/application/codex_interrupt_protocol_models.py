@@ -6,7 +6,7 @@ process exit nor a stable artifact directory. No model here grants authority.
 """
 from typing import Annotated, Final, Literal, Self
 
-from pydantic import BeforeValidator, Field, model_validator
+from pydantic import BaseModel, BeforeValidator, Field, model_validator
 
 from packages.contracts import domain_models as dm
 from packages.contracts.canonical import sha256_bytes, strict_json
@@ -34,6 +34,24 @@ INTERRUPT_PROJECTION_SHA256: Final = '9bbb226ad6cf51c1d5fee39beb389ba37d5438d072
 MAX_FRAME_BYTES: Final = 16384
 
 
+class InterruptModel(ProtocolModel):
+    @model_validator(mode='before')
+    @classmethod
+    def typed_wire_aliases(cls, value: object) -> object:
+        # Revalidating a typed nested model must use its upstream aliases.
+        # Plain dictionaries keep their supplied keys, so Python field-name
+        # aliases are still forbidden at every original raw-wire seam.
+        def aliases(node: object) -> object:
+            if isinstance(node, BaseModel):
+                return node.model_dump(by_alias=True)
+            if isinstance(node, dict):
+                return {key: aliases(item) for key, item in node.items()}
+            if isinstance(node, list):
+                return [aliases(item) for item in node]
+            return node
+        return aliases(value)
+
+
 def _integer(value: object) -> object:
     if type(value) is not int:
         raise ValueError('An integer literal is required')
@@ -44,7 +62,7 @@ Int64 = Annotated[int, BeforeValidator(_integer), Field(ge=-(2**63), le=2**63-1)
 RequestId = Annotated[str, Field(min_length=1, max_length=240)] | Int64
 
 
-class InterruptSchemaIdentity(ProtocolModel):
+class InterruptSchemaIdentity(InterruptModel):
     path: InterruptSchemaPath
     size: Annotated[int, Field(ge=1, le=262144)]
     sha256: dm.Sha256
@@ -76,7 +94,7 @@ class InterruptSchemaOriginal(InterruptSchemaIdentity):
         return self
 
 
-class InterruptSourceSummary(ProtocolModel):
+class InterruptSourceSummary(InterruptModel):
     version: Literal['codex-offline-interrupt-source-summary-v1']
     scope: Literal['manually_checked_selected8_only']
     original_receipt_sha256: Literal['b64f43cd1b5a7024bcdcb421292cef93b61721ba76a4f325e7663be93931cd9c']
@@ -95,7 +113,7 @@ class InterruptSourceSummary(ProtocolModel):
         return self
 
 
-class InterruptProtocolSource(ProtocolModel):
+class InterruptProtocolSource(InterruptModel):
     version: Literal['codex-offline-interrupt-source-v1']
     implemented: FalseOnly
     production_qualification: Literal['unregistered']
@@ -115,7 +133,7 @@ class InterruptProtocolSource(ProtocolModel):
         return self
 
 
-class PrivateProtocolFrame(ProtocolModel):
+class PrivateProtocolFrame(InterruptModel):
     raw: Annotated[bytes, Field(min_length=1, max_length=MAX_FRAME_BYTES, repr=False)]
     sha256: dm.Sha256
 
@@ -126,22 +144,22 @@ class PrivateProtocolFrame(ProtocolModel):
         return self
 
 
-class InterruptRequest(ProtocolModel):
+class InterruptRequest(InterruptModel):
     id: RequestId
     method: Literal['turn/interrupt']
     params: ClosedTurnInterruptParams
 
 
-class EmptyInterruptResult(ProtocolModel):
+class EmptyInterruptResult(InterruptModel):
     pass
 
 
-class InterruptReply(ProtocolModel):
+class InterruptReply(InterruptModel):
     id: RequestId
     result: EmptyInterruptResult
 
 
-class EmptyItemTerminalTurn(ProtocolModel):
+class EmptyItemTerminalTurn(InterruptModel):
     id: Annotated[str, Field(min_length=1, max_length=240)]
     items: Annotated[list[EmptyInterruptResult], Field(max_length=0)]
     status: Literal['completed', 'interrupted', 'failed']
@@ -152,17 +170,17 @@ class EmptyItemTerminalTurn(ProtocolModel):
     items_view: Literal['full', 'summary', 'notLoaded'] | None = Field(default=None, alias='itemsView')
 
 
-class TerminalParams(ProtocolModel):
+class TerminalParams(InterruptModel):
     thread_id: Annotated[str, Field(min_length=1, max_length=240)] = Field(alias='threadId')
     turn: EmptyItemTerminalTurn
 
 
-class TerminalNotification(ProtocolModel):
+class TerminalNotification(InterruptModel):
     method: Literal['turn/completed']
     params: TerminalParams
 
 
-class CapturedInterruptRequest(ProtocolModel):
+class CapturedInterruptRequest(InterruptModel):
     frame: PrivateProtocolFrame
     wire: InterruptRequest
 
@@ -173,7 +191,7 @@ class CapturedInterruptRequest(ProtocolModel):
         return self
 
 
-class ObservedInterruptReply(ProtocolModel):
+class ObservedInterruptReply(InterruptModel):
     kind: Literal['control_reply']
     frame: PrivateProtocolFrame
     wire: InterruptReply
@@ -185,7 +203,7 @@ class ObservedInterruptReply(ProtocolModel):
         return self
 
 
-class ObservedTerminalNotification(ProtocolModel):
+class ObservedTerminalNotification(InterruptModel):
     kind: Literal['terminal_notification']
     frame: PrivateProtocolFrame
     wire: TerminalNotification
@@ -197,7 +215,7 @@ class ObservedTerminalNotification(ProtocolModel):
         return self
 
 
-class InterruptExchange(ProtocolModel):
+class InterruptExchange(InterruptModel):
     version: Literal['codex-local-interrupt-exchange-v1']
     scope: Literal['locally_supplied_frames_only']
     implemented: FalseOnly
@@ -232,7 +250,7 @@ class InterruptExchange(ProtocolModel):
 RejectionReason = Literal['invalid_json', 'unsupported_shape', 'unknown_method', 'unpaired', 'duplicate']
 
 
-class InterruptObservation(ProtocolModel):
+class InterruptObservation(InterruptModel):
     accepted: bool
     reason: RejectionReason | None
     frame: PrivateProtocolFrame

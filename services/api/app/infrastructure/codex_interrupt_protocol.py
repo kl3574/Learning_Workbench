@@ -81,7 +81,7 @@ def verify_interrupt_exchange(source: InterruptProtocolSource, exchange: Interru
     checked = verify_interrupt_source(source)
     if not isinstance(exchange, InterruptExchange):
         raise ValueError('An original local interrupt exchange is required')
-    original = InterruptExchange.model_validate(exchange.model_dump())
+    original = InterruptExchange.model_validate(exchange.model_dump(by_alias=True))
     schemas = _schemas(checked)
     _validate_request(schemas, strict_json(original.request.frame.raw))
     for member in original.observations:
@@ -128,5 +128,5 @@ def observe_interrupt(source: InterruptProtocolSource, exchange: InterruptExchan
         return rejected('unpaired')
     if any(m.kind == member.kind for m in original.observations):
         return rejected('duplicate')
-    advanced = InterruptExchange(**{**original.model_dump(), 'observations': [*original.observations, member]})
+    advanced = InterruptExchange(**{**original.model_dump(by_alias=True), 'observations': [*original.observations, member]})
     return InterruptObservation(accepted=True, reason=None, frame=frame, exchange=advanced)
