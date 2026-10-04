@@ -5,11 +5,14 @@ import type { DraftStore } from '../../workbench/DraftStore'
 import { useCodexTurns } from './useCodexTurns'
 import { CodexTurnOutboundPanel } from './CodexTurnOutboundPanel'
 import type { TurnOutboundPort } from './turnOutboundClient'
+import { CodexTurnEventsPanel } from './CodexTurnEventsPanel'
+import type { CodexEventPort } from './turnEventClient'
 export type TurnPanelState = { dirty: boolean; safe: boolean; isolated: boolean }
-export function CodexTurnPanel({ workspace, writeAdmitted, port, store, formStore, outboundPort, outboundStore, outboundFormStore, currentBlock = null, selectedSession = null, onState }: {
+export function CodexTurnPanel({ workspace, writeAdmitted, port, store, formStore, outboundPort, outboundStore, outboundFormStore, eventPort, currentBlock = null, selectedSession = null, onState }: {
  workspace: string; writeAdmitted: boolean; port?: TurnPort; store?: DraftStore; formStore?: DraftStore; currentBlock?: ContentRef | null;
  selectedSession?: string | null; onState?: (value: TurnPanelState) => void
  outboundPort?: TurnOutboundPort; outboundStore?: DraftStore; outboundFormStore?: DraftStore
+ eventPort?: CodexEventPort
 }) {
  const state = useCodexTurns(workspace, writeAdmitted, port, store, formStore), callback = useRef(onState); callback.current = onState
  const [outbound, setOutbound] = useState<TurnPanelState>({ dirty: false, safe: true, isolated: false })
@@ -72,6 +75,7 @@ export function CodexTurnPanel({ workspace, writeAdmitted, port, store, formStor
    <button disabled={blocked} onClick={() => void state.readControl(value.id)}>刷新安全控制 {value.id}</button>
    <button disabled={blocked} onClick={() => void state.cancel(value)}>明确取消回合 Job {value.job.id}</button>
    <p>取消使用本次控制 GET 的 Job revision；ACK 和取消请求不证明远端已经停止。</p>
+   <CodexTurnEventsPanel workspace={workspace} turn={value.id} run={value.job.id} admitted={state.allowed} port={eventPort} />
   </section>)}
   <CodexTurnOutboundPanel workspace={workspace} writeAdmitted={writeAdmitted} port={outboundPort} store={outboundStore} formStore={outboundFormStore} onState={setOutbound} />
  </section>
