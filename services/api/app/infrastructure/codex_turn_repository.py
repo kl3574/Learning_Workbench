@@ -13,6 +13,7 @@ from ..application.codex_turn_models import (
 from ..application.codex_turn_execution_models import ControlEventEnvelope, RunnableTurnPrepared
 from ..application.codex_approval_models import ApprovalControlEnvelope, TurnApprovalBound
 from ..application.codex_operation_models import OperationControlEnvelope, TurnOperationBound
+from ..application.codex_artifact_models import ArtifactControlEnvelope, TurnManifestReady
 from ..application.errors import ApiError
 from ..application.providers import retained_provider_configuration
 from ..codex_turn_dto import CodexTurnControlView, CodexConsentControl
@@ -30,6 +31,7 @@ class CheckedTurn:
     start: TurnStarted | None = None
     lifecycle: list[TurnLifecycle] = field(default_factory=list)
     approval_bindings: list[TurnApprovalBound | TurnOperationBound] = field(default_factory=list)
+    manifest: TurnManifestReady | None = None
 
 
 @dataclass
@@ -37,7 +39,7 @@ class CheckedSession:
     anchor: SessionAnchor
     revision: int
     active_turn_id: str | None
-    envelopes: list[EventEnvelope | ControlEventEnvelope | ApprovalControlEnvelope | OperationControlEnvelope] = field(default_factory=list)
+    envelopes: list[EventEnvelope | ControlEventEnvelope | ApprovalControlEnvelope | OperationControlEnvelope | ArtifactControlEnvelope] = field(default_factory=list)
     turns: dict[str, CheckedTurn] = field(default_factory=dict)
 
 
@@ -133,7 +135,7 @@ class CodexTurnRepository:
                 raw = strict_json(stored['record_json'])
                 if not isinstance(raw, dict):
                     raise damaged()
-                model = (OperationControlEnvelope if raw.get('version') == 'codex-turn-event-v5' else ApprovalControlEnvelope if raw.get('version') == 'codex-turn-event-v3' else
+                model = (ArtifactControlEnvelope if raw.get('version') == 'codex-turn-event-v6' else OperationControlEnvelope if raw.get('version') == 'codex-turn-event-v5' else ApprovalControlEnvelope if raw.get('version') == 'codex-turn-event-v3' else
                     ControlEventEnvelope if raw.get('version') == 'codex-turn-event-v2' else EventEnvelope)
                 envelope = decode(model, stored['record_json'])
                 if (envelope.session_id != anchor.session_id or envelope.workspace_id != self.workspace
@@ -156,6 +158,8 @@ class CodexTurnRepository:
                     self._provider_bound(state, event)
                 elif isinstance(event, (TurnApprovalBound, TurnOperationBound)):
                     self._approval_bound(state, event)
+                elif isinstance(event, TurnManifestReady):
+                    self._manifest_ready(state, event, envelope.occurred_at)
                 elif isinstance(event, TurnStarted):
                     turn = state.turns.get(event.turn_id)
                     if turn is None or turn.start is not None or turn.control.job.status != 'awaiting_approval':
@@ -266,11 +270,11 @@ class CodexTurnRepository:
             'execution':'active','started_at':now})
 
     @staticmethod
-    def terminal_control(control: CodexTurnControlView, now: str, outcome, error_code) -> CodexTurnControlView:
+    def terminal_control(control: CodexTurnControlView, now: str, outcome, error_code, manifest_id=None) -> CodexTurnControlView:
         status = 'completed' if outcome == 'completed' else 'cancelled' if outcome == 'cancelled' else 'failed'
         return CodexTurnControlView.model_validate({**control.model_dump(), 'job': {'id':control.job.id,'status':status},
             'job_revision':control.job_revision+1,'run_revision':control.run_revision+1,'last_seq':control.last_seq+1,
-            'execution':'terminal','outcome':outcome,'finished_at':now,'error_code':error_code})
+            'execution':'terminal','outcome':outcome,'finished_at':now,'error_code':error_code,'manifest_id':manifest_id})
 
     @staticmethod
     def cancel_requested_control(control: CodexTurnControlView) -> CodexTurnControlView:
@@ -293,7 +297,8 @@ class CodexTurnRepository:
         else:
             if event.control.outcome is None:
                 raise damaged()
-            expected = cls.terminal_control(turn.control, now, event.control.outcome, event.control.error_code)
+            expected = cls.terminal_control(turn.control, now, event.control.outcome, event.control.error_code,
+                turn.manifest.manifest.manifest.id if turn.manifest else None)
             state.revision += 1
             state.active_turn_id = None
         if event.control != expected:
@@ -340,6 +345,10 @@ class CodexTurnRepository:
             expected_result = ({'version':'codex-turn-job-result-v1','turn_id':turn.control.id,
                 'outcome':turn.control.outcome,'dispatch_id':turn.start.dispatch_id if turn.start else None}
                 if terminal else {'cancelled_before_execution': True})
+            if turn.manifest is not None:
+                expected_result = {**expected_result, 'version': 'codex-turn-job-result-v2',
+                    'manifest_sha256': turn.manifest.manifest.manifest_sha256,
+                    'terminal_receipt_sha256': turn.manifest.receipt_sha256}
             if row['result_json'] != canonical_json(expected_result):
                 raise damaged()
         run = self.conn.execute('SELECT * FROM runs WHERE id=?', (row['id'],)).fetchone()
@@ -381,6 +390,19 @@ class CodexTurnRepository:
         # into the immutable event; the surrogate is never pagination authority.
         return self.conn.execute('SELECT COALESCE(MAX(sequence),0)+1 FROM codex_turn_members').fetchone()[0]
 
+    @staticmethod
+    def _manifest_ready(state: CheckedSession, event: TurnManifestReady, now: str) -> None:
+        turn = state.turns.get(event.turn_id)
+        value = event.manifest.manifest
+        if (turn is None or turn.manifest is not None or turn.start is None
+                or turn.control.execution != 'active' or state.active_turn_id != event.turn_id
+                or value.turn_id != event.turn_id or value.session_id != state.anchor.session_id
+                or value.source_job_id != turn.control.job.id or value.created_at != now
+                or event.receipt_sha256 != value.terminal_receipt_sha256
+                or value.runtime_profile_sha256 != turn.prepared.command.ack.summary.runtime.profile_sha256):
+            raise damaged()
+        turn.manifest = event
+
     def establish(self, anchor: SessionAnchor) -> CheckedSession:
         raw, digest = canonical_json(anchor), content_sha256(anchor)
         self.conn.execute('INSERT INTO threads(id,workspace_id,scope_json,title,created_at) VALUES(?,?,?,?,?)',
@@ -390,12 +412,15 @@ class CodexTurnRepository:
         self.conn.execute('INSERT INTO codex_turn_heads VALUES(?,?,2,0,?,NULL)', (anchor.session_id, self.workspace, digest))
         return CheckedSession(anchor, 2, None)
 
-    def append(self, state: CheckedSession, event, now: str) -> EventEnvelope | ControlEventEnvelope | ApprovalControlEnvelope | OperationControlEnvelope:
+    def append(self, state: CheckedSession, event, now: str) -> EventEnvelope | ControlEventEnvelope | ApprovalControlEnvelope | OperationControlEnvelope | ArtifactControlEnvelope:
         seq = len(state.envelopes) + 1
         previous = content_sha256(state.envelopes[-1]) if state.envelopes else content_sha256(state.anchor)
         extended = isinstance(event, (RunnableTurnPrepared, TurnProviderBound, TurnStarted, TurnLifecycle, TurnCancelRequested))
-        envelope: ControlEventEnvelope | EventEnvelope | ApprovalControlEnvelope | OperationControlEnvelope
-        if isinstance(event, TurnOperationBound):
+        envelope: ControlEventEnvelope | EventEnvelope | ApprovalControlEnvelope | OperationControlEnvelope | ArtifactControlEnvelope
+        if isinstance(event, TurnManifestReady):
+            envelope = ArtifactControlEnvelope(version='codex-turn-event-v6', workspace_id=self.workspace,
+                session_id=state.anchor.session_id, seq=seq, previous_sha256=previous, occurred_at=now, event=event)
+        elif isinstance(event, TurnOperationBound):
             envelope = OperationControlEnvelope(version='codex-turn-event-v5', workspace_id=self.workspace,
                 session_id=state.anchor.session_id, seq=seq, previous_sha256=previous, occurred_at=now, event=event)
         elif isinstance(event, TurnApprovalBound):
@@ -453,6 +478,9 @@ class CodexTurnRepository:
             self._approval_bound(state, event)
             control = state.turns[event.turn_id].control
             self.conn.execute('UPDATE runs SET snapshot_json=? WHERE id=?', (canonical_json(control), control.job.id))
+            revision, active = state.revision, state.active_turn_id
+        elif isinstance(event, TurnManifestReady):
+            self._manifest_ready(state, event, now)
             revision, active = state.revision, state.active_turn_id
         else:
             revision, active = state.revision, state.active_turn_id

@@ -37,6 +37,7 @@ from .provider_models import UsageSnapshot, DispatchLease
 if TYPE_CHECKING:
     from .provider_codex_consents import CodexConsentsService
     from .codex_approvals import CodexApprovalsService
+    from .codex_artifacts import CodexArtifactsService
 
 
 Delivery = TypeVar("Delivery")
@@ -54,6 +55,7 @@ class CodexTurnService:
         self.proofs = (proofs or ProofRegistry()).codex
         self.outbound_owner: CodexConsentsService | None = None
         self.approvals: CodexApprovalsService | None = None
+        self.artifacts: CodexArtifactsService | None = None
         self.execution_available: Callable[[CodexRuntimeProfile], bool] = lambda profile: False
 
     def _deliver(self, identity: SessionIdentity, value: Delivery, *, subject: bool) -> Delivery:
@@ -92,6 +94,8 @@ class CodexTurnService:
             self.outbound_owner.verify_links(conn, current, self._source_views(conn, current, history))
         if self.approvals is not None:
             self.approvals.verify_history(conn, current.workspace_id, history)
+        if self.artifacts is not None:
+            self.artifacts.verify_sources(conn, current.workspace_id, history)
         return current, original, repository, history
 
     def _control_views(self, conn, identity, history):
@@ -112,7 +116,10 @@ class CodexTurnService:
         current = current_control_access(conn, identity, write=subject)
         original = self.bootstrap.checked_sessions(conn, current)
         repository = CodexTurnRepository(conn, current, self.context)
-        return current, original, repository, repository.checked(original)
+        history = repository.checked(original)
+        from ..infrastructure.codex_artifact_repository import CodexArtifactRepository
+        CodexArtifactRepository(conn, current.workspace_id).checked(history)
+        return current, original, repository, history
 
     def _source_views(self, transaction, identity, history):
         return self._owned_source_views(transaction, identity.workspace_id, history)
@@ -121,7 +128,10 @@ class CodexTurnService:
         """Private persistence facts; deliberately not an access identity."""
         original = self.bootstrap.checked_owned_sessions(conn, workspace_id)
         repository = CodexTurnRepository(conn, workspace_id, self.context)
-        return original, repository, repository.checked(original)
+        history = repository.checked(original)
+        from ..infrastructure.codex_artifact_repository import CodexArtifactRepository
+        CodexArtifactRepository(conn, workspace_id).checked(history)
+        return original, repository, history
 
     def _owned_source_views(self, transaction, workspace_id, history):
         result = {}
