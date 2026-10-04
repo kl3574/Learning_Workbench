@@ -9,7 +9,7 @@ from typing import Annotated, Final, Literal, Self
 from pydantic import BaseModel, BeforeValidator, Field, model_validator
 
 from packages.contracts import domain_models as dm
-from packages.contracts.canonical import sha256_bytes, strict_json
+from packages.contracts.canonical import canonical_bytes, sha256_bytes, strict_json
 from .codex_turn_protocol_models import (
     ClosedTurnInterruptParams, OfflineTurnProtocolCatalog, ProtocolModel, verify_internal_refs,
 )
@@ -215,6 +215,13 @@ class ObservedTerminalNotification(InterruptModel):
         return self
 
 
+def observation_membership_sha256(request_sha256: str,
+        observations: list[ObservedInterruptReply | ObservedTerminalNotification]) -> str:
+    # An in-memory original membership check, not an authoritative owner head.
+    return sha256_bytes(canonical_bytes({'request_sha256': request_sha256,
+        'observations': [{'kind': m.kind, 'sha256': m.frame.sha256} for m in observations]}))
+
+
 class InterruptExchange(InterruptModel):
     version: Literal['codex-local-interrupt-exchange-v1']
     scope: Literal['locally_supplied_frames_only']
@@ -223,9 +230,14 @@ class InterruptExchange(InterruptModel):
     source_summary_sha256: Literal['9bbb226ad6cf51c1d5fee39beb389ba37d5438d0722cd308c642bdc0fd0cf9c9']
     request: CapturedInterruptRequest
     observations: Annotated[list[ObservedInterruptReply | ObservedTerminalNotification], Field(max_length=2)]
+    observation_count: Annotated[int, BeforeValidator(_integer), Field(ge=0, le=2)]
+    observations_sha256: dm.Sha256
 
     @model_validator(mode='after')
     def paired_originals(self) -> Self:
+        if (self.observation_count != len(self.observations)
+                or self.observations_sha256 != observation_membership_sha256(self.request.frame.sha256, self.observations)):
+            raise ValueError('The original local observation membership differs')
         kinds = [m.kind for m in self.observations]
         if len(kinds) != len(set(kinds)):
             raise ValueError('A control reply or terminal observation cannot be repeated')

@@ -15,7 +15,7 @@ from ..application.codex_interrupt_protocol_models import (
     INTERRUPT_PROJECTION_SHA256, INTERRUPT_SCHEMA_FILES, CapturedInterruptRequest,
     InterruptExchange, InterruptObservation, InterruptProtocolSource, InterruptReply, InterruptRequest,
     InterruptSchemaOriginal, InterruptSourceSummary, ObservedInterruptReply, ObservedTerminalNotification,
-    PrivateProtocolFrame, RejectionReason, TerminalNotification,
+    PrivateProtocolFrame, RejectionReason, TerminalNotification, observation_membership_sha256,
 )
 from .codex_turn_protocol_catalog import _read_member, read_catalog
 
@@ -74,7 +74,8 @@ def prepare_interrupt(source: InterruptProtocolSource, raw_request: bytes) -> In
     _validate_request(_schemas(checked), body)
     return InterruptExchange(version='codex-local-interrupt-exchange-v1', scope='locally_supplied_frames_only',
         implemented=False, production_qualification='unregistered', source_summary_sha256=checked.source_summary_sha256,
-        request=CapturedInterruptRequest(frame=frame, wire=wire), observations=[])
+        request=CapturedInterruptRequest(frame=frame, wire=wire), observations=[], observation_count=0,
+        observations_sha256=observation_membership_sha256(frame.sha256, []))
 
 
 def verify_interrupt_exchange(source: InterruptProtocolSource, exchange: InterruptExchange) -> InterruptExchange:
@@ -128,5 +129,7 @@ def observe_interrupt(source: InterruptProtocolSource, exchange: InterruptExchan
         return rejected('unpaired')
     if any(m.kind == member.kind for m in original.observations):
         return rejected('duplicate')
-    advanced = InterruptExchange(**{**original.model_dump(by_alias=True), 'observations': [*original.observations, member]})
+    members = [*original.observations, member]
+    advanced = InterruptExchange(**{**original.model_dump(by_alias=True), 'observations': members,
+        'observation_count': len(members), 'observations_sha256': observation_membership_sha256(original.request.frame.sha256, members)})
     return InterruptObservation(accepted=True, reason=None, frame=frame, exchange=advanced)
