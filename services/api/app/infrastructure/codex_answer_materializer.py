@@ -14,7 +14,7 @@ import stat
 from uuid import uuid4
 
 from packages.contracts.canonical import sha256_bytes
-from ..application.codex_artifact_models import AnswerCollection, AnswerSource, OutputFile
+from ..application.codex_artifact_models import AnswerCollection, AnswerSource, OutputFile, SCAN_PROFILE_V1_SHA256
 from ..application.errors import ApiError
 from ..serialization import content_sha256
 from .blobs import BlobStore
@@ -41,7 +41,16 @@ def rejected() -> ApiError:
 
 
 def unavailable() -> ApiError:
-    return ApiError(503, 'CODEX_RUNTIME_UNAVAILABLE', '原产物受控副本暂不可用。')
+    return ApiError(503, 'CODEX_SOURCE_UNAVAILABLE', '原产物受控副本暂不可用。')
+
+
+def artifact_error(error: ApiError) -> ApiError:
+    """Translate only known file-copy failures, never swallow owner corruption."""
+    if error.code == 'BLOB_STORAGE_UNAVAILABLE':
+        return unavailable()
+    if error.code in {'CONTENT_HASH_MISMATCH', 'BLOB_TOO_LARGE'}:
+        return rejected()
+    return error
 
 
 def _directory(stack: ExitStack, path: Path) -> int:
@@ -118,6 +127,8 @@ class CheckedAnswerMaterializer:
 
     def collect(self, source: AnswerSource, answer: str) -> AnswerCollection:
         source = AnswerSource.model_validate(source.model_dump(mode='json'))
+        if content_sha256(SCAN_PROFILE) != SCAN_PROFILE_V1_SHA256:
+            raise unavailable()
         try:
             raw = answer.encode('utf-8')
         except (UnicodeError, AttributeError):
@@ -148,6 +159,8 @@ class CheckedAnswerMaterializer:
                 # inventory still to agree before returning an owner receipt.
                 if _scan(directory, raw) != checked or self.blobs.read(info.sha256, info.size) != checked:
                     raise rejected()
+        except ApiError as error:
+            raise artifact_error(error) from None
         except OSError:
             raise unavailable() from None
         return AnswerCollection(version='codex-checked-answer-collection-v1', source=source,

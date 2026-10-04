@@ -6,6 +6,13 @@ from packages.contracts import domain_models as dm
 from ..codex_turn_dto import CodexArtifactManifestView, SafeCode
 
 
+# Frozen descriptor of the original v1 scan contract. This identifies historical
+# application checks, not a proof of physical runtime isolation/code closure.
+# Future producers need their own version/decoder; never reinterpret old facts
+# using a mutable current policy.
+SCAN_PROFILE_V1_SHA256 = '7d17e2f9aa292425ad787453cfdf62772707c08add6c1f90dee08420cf9c836e'
+
+
 class AnswerSource(dm.StrictModel):
     version: Literal['codex-checked-answer-source-v1']
     workspace_id: dm.Id
@@ -39,7 +46,8 @@ class AnswerCollection(dm.StrictModel):
 
     @model_validator(mode='after')
     def original_bytes(self) -> Self:
-        if self.files[0].sha256 != self.source.answer_sha256 or self.files[0].size != self.source.answer_bytes:
+        if (self.scan_profile_sha256 != SCAN_PROFILE_V1_SHA256
+                or self.files[0].sha256 != self.source.answer_sha256 or self.files[0].size != self.source.answer_bytes):
             raise ValueError('The real output must be the exact original answer UTF-8 bytes')
         return self
 

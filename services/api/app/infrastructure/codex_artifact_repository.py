@@ -5,7 +5,6 @@ from ..import_dto import DownloadArtifact
 from ..serialization import canonical_json, content_sha256
 from .artifact_repository import ArtifactRepository
 from .codex_turn_repository import decode
-from .codex_answer_materializer import SCAN_PROFILE
 
 
 class CodexArtifactRepository:
@@ -33,7 +32,6 @@ class CodexArtifactRepository:
                     or content_sha256(record) != row['record_sha256'] or source.workspace_id != self.workspace
                     or source.turn_id != turn.control.id or source.session_id != turn.control.session_id
                     or source.job_id != turn.control.job.id or turn.control.manifest_id != view.manifest.id
-                    or record.receipt.collection.scan_profile_sha256 != content_sha256(SCAN_PROFILE)
                     or turn.control.execution != 'terminal' or turn.control.outcome != record.receipt.source_outcome
                     or turn.control.error_code != record.receipt.error_code):
                 raise damaged()

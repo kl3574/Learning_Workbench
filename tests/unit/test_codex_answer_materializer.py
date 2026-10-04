@@ -93,3 +93,22 @@ def test_late_extra_candidate_rejects_even_after_blob_copy(tmp_path, monkeypatch
     assert error.value.code == 'CODEX_ARTIFACT_REJECTED'
     # An unreferenced content-addressed file is not an accessible artifact.
     assert materializer.blobs.read(sha256_bytes(b'answer'), 6) == b'answer'
+
+
+def test_unknown_current_scan_descriptor_is_unavailable_before_any_file_write(tmp_path, monkeypatch):
+    monkeypatch.setitem(owner.SCAN_PROFILE, 'content_checks', 'future-policy-v2')
+    with pytest.raises(ApiError) as error:
+        owner.CheckedAnswerMaterializer(tmp_path).collect(source(b'answer'), 'answer')
+    assert error.value.code == 'CODEX_SOURCE_UNAVAILABLE'
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize('code', ['CODEX_HISTORY_DAMAGED', 'SCHEMA_INVALID'])
+def test_unrecognized_blob_errors_are_never_recast_as_normal_scan_failure(tmp_path, monkeypatch, code):
+    materializer = owner.CheckedAnswerMaterializer(tmp_path)
+    def fail(*args, **kwargs):
+        raise ApiError(409, code, 'Synthetic owner failure')
+    monkeypatch.setattr(materializer.blobs, 'write', fail)
+    with pytest.raises(ApiError) as error:
+        materializer.collect(source(b'answer'), 'answer')
+    assert error.value.code == code

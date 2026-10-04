@@ -9,7 +9,7 @@ from dataclasses import dataclass
 import sqlite3
 import threading
 import time
-from typing import Protocol
+from typing import Protocol, TYPE_CHECKING
 from uuid import uuid4
 
 from pydantic import TypeAdapter
@@ -18,6 +18,7 @@ from ..codex_turn_dto import CodexFrozenOutboundSummary, SafeCode
 from ..infrastructure.codex_bootstrap_execution import CodexExecutionOwners
 from ..infrastructure.database import utc_now
 from ..infrastructure.codex_turn_jobs import CodexTurnJobs
+from ..infrastructure.codex_answer_materializer import artifact_error
 from ..serialization import content_sha256
 from .codex_turn import CodexTurnService
 from .codex_turn_models import TurnLifecycle
@@ -25,6 +26,9 @@ from .errors import ApiError
 from .provider_codex_consents import CodexConsentsService
 from .provider_codex_execution import CodexExecutionResult, CodexRequestGate, SyntheticCodexExecution, SyntheticTransport
 from .provider_codex_profile import CodexRuntimeProfile, PreparedCodexRequest
+
+if TYPE_CHECKING:
+    from .codex_artifact_imports import CodexArtifactImports
 
 
 class CodexTurnExecutor(Protocol):
@@ -59,6 +63,7 @@ class CodexTurnWorker:
         self._thread: threading.Thread | None = None
         self.last_error_code: str | None = None
         self._callback_context: tuple[str, str, str, int] | None = None
+        self.imports: CodexArtifactImports | None = None
 
     def available(self, profile: CodexRuntimeProfile) -> bool:
         return self.executor is not None and self.executor.available(profile)
@@ -94,6 +99,8 @@ class CodexTurnWorker:
                     self.recover()
                     next_recovery=time.monotonic()+1
                 worked=self.run_once()
+                if self.imports is not None:
+                    worked = self.imports.run_once() or worked
                 self.last_error_code=None
             except (ApiError,sqlite3.Error) as error:
                 self.last_error_code=error.code if isinstance(error,ApiError) else 'CODEX_HISTORY_DAMAGED'
@@ -128,13 +135,23 @@ class CodexTurnWorker:
         if collection is not None:
             if self.turns.artifacts is None:
                 raise ApiError(409, 'CODEX_HISTORY_DAMAGED', '原产物所有者缺失。')
-            _, _, history = self.turns._owned_state(conn, workspace)
-            manifest, manifest_time = self.turns.artifacts.record_manifest(conn, workspace, history,
-                state, turn, provider_state, execution_result, collection, outcome, code)
-            state.envelopes.append(repo.append(state, manifest, manifest_time))
-            result = {**result, 'version': 'codex-turn-job-result-v2',
-                'manifest_sha256': manifest.manifest.manifest_sha256,
-                'terminal_receipt_sha256': manifest.receipt_sha256}
+            conn.execute('SAVEPOINT codex_artifact_terminal')
+            try:
+                _, _, history = self.turns._owned_state(conn, workspace)
+                manifest, manifest_time = self.turns.artifacts.record_manifest(conn, workspace, history,
+                    state, turn, provider_state, execution_result, collection, outcome, code)
+                envelope = repo.append(state, manifest, manifest_time)
+            except ApiError as error:
+                conn.execute('ROLLBACK TO codex_artifact_terminal')
+                conn.execute('RELEASE codex_artifact_terminal')
+                outcome, code = 'failed', self.safe_failure(artifact_error(error))
+                result['outcome'] = outcome
+            else:
+                conn.execute('RELEASE codex_artifact_terminal')
+                state.envelopes.append(envelope)
+                result = {**result, 'version': 'codex-turn-job-result-v2',
+                    'manifest_sha256': manifest.manifest.manifest_sha256,
+                    'terminal_receipt_sha256': manifest.receipt_sha256}
         status='completed' if outcome=='completed' else 'cancelled' if outcome=='cancelled' else 'failed'
         repo.jobs.transition(repo.jobs.load(turn.control.job.id),status,result=result)
         now=repo.jobs.snapshot(turn.control.job.id).updated_at

@@ -57,6 +57,8 @@ from .application.codex_approvals import CodexApprovalsService
 from .interfaces.codex_approval_http import create_codex_approval_router
 from .application.codex_turn_worker import CodexTurnExecutor, CodexTurnWorker
 from .application.codex_artifacts import CodexArtifactsService
+from .application.codex_artifact_imports import CodexArtifactImports
+from .interfaces.codex_artifact_http import create_codex_artifact_router
 from .infrastructure.codex_answer_materializer import CheckedAnswerMaterializer
 from .interfaces.codex_turn_http import create_codex_turn_router
 from .application.provider_codex_consents import CodexConsentsService
@@ -154,11 +156,14 @@ def create_app(settings: Settings | None = None, *,
     codex_turn.outbound_owner = codex_consents
     codex_turn.approvals = CodexApprovalsService(codex_turn)
     codex_turn.artifacts = CodexArtifactsService(codex_turn, codex_answer_materializer)
+    codex_artifact_imports = CodexArtifactImports(codex_turn.artifacts, import_service)
     artifacts = ArtifactsService(database, {**review_service.readers(), ('codex_turn_output_v1', 'codex_turn'): codex_turn.artifacts})
     content_impacts = ContentImpactDecisionService(database, artifacts)
     codex_turn_worker = CodexTurnWorker(codex_turn,codex_consents,codex_executor)
+    codex_turn_worker.imports = codex_artifact_imports
     codex_turn.execution_available = codex_turn_worker.available
-    jobs = JobService(database, review=review_service, restore_numeric=restore_numeric_service, codex_turn=codex_turn)
+    jobs = JobService(database, review=review_service, restore_numeric=restore_numeric_service, codex_turn=codex_turn,
+        codex_artifact_imports=codex_artifact_imports)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
@@ -207,6 +212,7 @@ def create_app(settings: Settings | None = None, *,
     application.state.provider_service = providers
     application.state.consent_service = consents
     application.state.codex_turn_worker = codex_turn_worker
+    application.state.codex_artifact_imports = codex_artifact_imports
     application.state.provider_dispatch = provider_dispatch
     application.state.tutor_service = tutor_service
     application.state.tutor_worker = tutor_worker
@@ -249,6 +255,7 @@ def create_app(settings: Settings | None = None, *,
         codex_probe if codex_probe is not None else LocalCodexProbe(settings.data_dir, settings.codex_executable))))
     application.include_router(create_codex_bootstrap_router(codex_bootstrap, codex_turn))
     application.include_router(create_codex_turn_router(codex_turn))
+    application.include_router(create_codex_artifact_router(codex_artifact_imports))
     application.include_router(create_codex_approval_router(codex_turn.approvals))
     application.include_router(create_codex_consent_router(codex_consents))
     application.include_router(create_concept_state_router(database))

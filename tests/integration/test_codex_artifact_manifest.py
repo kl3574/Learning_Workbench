@@ -110,3 +110,25 @@ def test_late_actor_loss_keeps_files_but_refuses_subject_delivery(consent_case):
     manifest = case.get(manifest_path(sid, prep)).json()['manifest']
     assert manifest['source_outcome'] == 'failed'
     assert manifest['entries'][0]['sha256'] == sha256_bytes('Synthetic exact answer α\n'.encode())
+
+
+def test_blob_loss_at_final_registration_keeps_real_response_without_partial_manifest(consent_case, monkeypatch):
+    from services.api.app.application.errors import ApiError
+    case, _, sid, _, _, _ = consent_case
+    artifacts = case.app.state.codex_turn_service.artifacts
+    artifacts.producer = CheckedAnswerMaterializer(case.app.state.settings.data_dir)
+    prep, _, _, _ = queued(consent_case)
+    def unavailable(*args, **kwargs):
+        raise ApiError(503, 'BLOB_STORAGE_UNAVAILABLE', 'Synthetic registration read failure')
+    monkeypatch.setattr(artifacts.blobs, 'read', unavailable)
+    assert case.app.state.codex_turn_worker.run_once() is True
+    control = case.get('turns/'+prep['turn_id']).json()
+    assert control['outcome'] == 'failed' and control['error_code'] == 'CODEX_SOURCE_UNAVAILABLE'
+    assert case.get(manifest_path(sid, prep)).status_code == 404
+    with case.app.state.database.transaction(immediate=False) as conn:
+        states, _ = case.app.state.codex_turn_service.outbound_owner.owned_states(conn, case.app.state.database.workspace_id())
+        assert states[prep['turn_id']].finished.execution_result.outcome == 'completed'
+        assert conn.execute('SELECT count(*) FROM codex_artifact_records').fetchone()[0] == 0
+        assert conn.execute("SELECT count(*) FROM artifacts WHERE profile='codex_turn_output_v1'").fetchone()[0] == 0
+    assert case.app.state.codex_turn_worker.run_once() is False
+    assert len(case.app.state.synthetic_transport_calls) == 1

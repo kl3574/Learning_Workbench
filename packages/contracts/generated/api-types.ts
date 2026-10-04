@@ -543,6 +543,28 @@ export type CodexArtifactExcluded = {
   "reason": ("CODEX_PROTOCOL_INVALID" | "CODEX_PROFILE_CHANGED" | "CODEX_RUNTIME_UNAVAILABLE" | "CODEX_BINDING_INVALID" | "CODEX_HISTORY_DAMAGED" | "CODEX_INPUT_PROOF_UNAVAILABLE" | "CODEX_OPERATION_UNSUPPORTED" | "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED" | "CODEX_TIMEOUT" | "CODEX_RESOURCE_LIMIT" | "CODEX_CANCELLED" | "CODEX_OUTCOME_UNKNOWN" | "CODEX_OPERATION_FAILED" | "CODEX_ARTIFACT_REJECTED" | "CODEX_ARTIFACT_MISSING" | "CODEX_SOURCE_CHANGED" | "CODEX_SOURCE_UNAVAILABLE" | "CODEX_APPROVAL_EXPIRED" | "CODEX_CONSENT_EXPIRED" | "CODEX_CONSENT_REVOKED" | "CODEX_BUDGET_EXCEEDED" | "POLICY_DENIED" | "ASSESSMENT_ACTIVE" | "CAPABILITY_UNSUPPORTED" | "PROVIDER_CONFIGURATION_CHANGED" | "PROVIDER_SECRET_UNAVAILABLE" | "OUTBOUND_SOURCE_CHANGED" | "OUTBOUND_SOURCE_UNAVAILABLE" | "CONSENT_REQUIRED" | "CONSENT_REVOKED" | "CONSENT_EXPIRED" | "OUTBOUND_BUDGET_EXCEEDED" | "PROVIDER_TIMEOUT" | "PROVIDER_CANCELLED" | "PROVIDER_TRANSPORT_ERROR" | "PROVIDER_PROTOCOL_ERROR" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_USAGE_INCONSISTENT" | "PROVIDER_REFUSAL" | "PROVIDER_INCOMPLETE");
 };
 
+export type CodexArtifactImportItem = {
+  "artifact_id": string;
+  "source_sha256": string;
+  "import_id": string;
+  "job": JobRef;
+};
+
+export type CodexArtifactImportView = {
+  "job": JobRef;
+  "session_id": string;
+  "turn_id": string;
+  "manifest_sha256": string;
+  "actor_session_id": string;
+  "items": Array<CodexArtifactImportItem>;
+};
+
+export type CodexArtifactImportWrite = {
+  "turn_id": string;
+  "artifact_ids": Array<string>;
+  "expected_manifest_sha256": string;
+};
+
 export type CodexArtifactManifest = {
   "version": "codex-artifact-manifest-v1";
   "id": string;
