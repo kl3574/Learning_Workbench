@@ -8,7 +8,7 @@ import pytest
 
 from packages.contracts.canonical import sha256_bytes
 from services.api.app.application.codex_turn_protocol_models import (
-    ClosedOperationDenial, ClosedTurnInterruptParams, OfflineTurnProtocolCatalog,
+    ClosedOperationDenial, ClosedTurnInterruptParams, OfflineProtocolSourceSummary, OfflineTurnProtocolCatalog,
     verify_internal_refs,
 )
 from services.api.app.infrastructure import codex_turn_protocol_catalog as codecs
@@ -148,6 +148,32 @@ def test_interrupt_is_a_closed_exact_shape(params):
         codecs.serialize_interrupt(codecs.read_catalog(), params)
 
 
+@pytest.mark.parametrize('representation', ['bytes', 'text', 'typed'])
+def test_interrupt_serialization_preserves_the_same_supported_shape(representation):
+    body = {'threadId': 'fixture-thread', 'turnId': 'fixture-turn'}
+    params = (json.dumps(body).encode() if representation == 'bytes' else
+              json.dumps(body) if representation == 'text' else ClosedTurnInterruptParams.model_validate(body))
+    assert codecs.serialize_interrupt(codecs.read_catalog(), params) == (
+        b'{"threadId":"fixture-thread","turnId":"fixture-turn"}')
+
+
+@pytest.mark.parametrize('field,value', [('original_receipt_size', 55893.0), ('historical_generated_files', 314.0), ('historical_exit_code', False)])
+def test_source_summary_historical_numbers_reject_aliases(field, value):
+    body = codecs.read_catalog().source_projection.model_dump()
+    body[field] = value
+    with pytest.raises(ValueError):
+        OfflineProtocolSourceSummary.model_validate(body)
+
+
+def test_duplicate_manifest_json_does_not_hide_an_unverified_member(package_copy):
+    path = package_copy / 'manifest.json'
+    raw = path.read_text().replace('"implemented": false,', '"implemented": false,"implemented": false,')
+    path.write_text(raw)
+    with pytest.raises(ValueError):
+        codecs.read_catalog()
+    assert path.read_text() == raw
+
+
 @pytest.mark.parametrize('kind', ['command', 'file_change'])
 @pytest.mark.parametrize('decision', ['accept', 'acceptForSession', 'allow', None, True, {'acceptWithExecpolicyAmendment': {}}])
 def test_denial_codec_never_opens_approval_or_permissions(kind, decision):
@@ -179,7 +205,7 @@ def test_internal_pointer_escapes_lists_and_cycles_are_resolved_without_expansio
 def test_normative_bytes_and_summary_have_no_physical_receipt_paths():
     catalog = codecs.read_catalog()
     assert '/home/' not in catalog.source_projection_utf8
-    assert 'command' not in catalog.source_projection.model_fields
+    assert 'command' not in type(catalog.source_projection).model_fields
     assert catalog.source_projection.scope == 'manually_checked_selected9_only'
     for schema in catalog.schemas:
         assert sha256_bytes(schema.raw_utf8.encode()) == schema.sha256
