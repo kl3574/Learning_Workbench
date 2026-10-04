@@ -132,3 +132,24 @@ test('duplicate/mixed-session pages and invalid local controls issue zero reques
  await expect(turnClient.prepare('session_test', { ...body(), context_refs: [ref('block_one'), ref('block_one')] }, 'original_key')).rejects.toThrow()
  expect(fetch).not.toHaveBeenCalled()
 })
+
+test.each([
+ (v: CodexTurnPreparationView) => { v.created_at += '\n' },
+ (v: CodexTurnPreparationView) => { v.actor_session_id += '\n' },
+ (v: CodexTurnPreparationView) => { v.job.id += '\n' },
+ (v: CodexTurnPreparationView) => { v.preparation_sha256 += '\n' },
+ (v: CodexTurnPreparationView) => { v.summary.snapshot_sha256 += '\n' },
+ (v: CodexTurnPreparationView) => { v.summary.runtime.profile_sha256 += '\n' },
+ (v: CodexTurnPreparationView) => { v.request.context_refs[0].id += '\n' },
+ (v: CodexTurnPreparationView) => { v.request.context_refs[0].sha256 += '\n' },
+ (v: CodexTurnPreparationView) => { v.summary.materials[0].excerpt_sha256 += '\n' },
+])('anchored IDs/SHA/time must consume the entire original scalar %#', corrupt => {
+ const value = prepared(); corrupt(value)
+ expect(() => checkedTurn('CodexTurnPreparationView', value)).toThrow()
+})
+
+test('invalid path identity ending in newline cannot issue even one GET', async () => {
+ const fetch = respond(control())
+ await expect(turnClient.control('turn_test\n')).rejects.toThrow()
+ expect(fetch).not.toHaveBeenCalled()
+})
