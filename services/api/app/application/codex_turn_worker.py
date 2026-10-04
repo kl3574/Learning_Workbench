@@ -139,21 +139,33 @@ class CodexTurnWorker:
             owner='codex_owner_'+uuid4().hex
             if not stack.enter_context(self.owners.hold(owner)):
                 raise ApiError(503,'CODEX_RUNTIME_UNAVAILABLE','执行实例不可用。')
+            conn.execute('SAVEPOINT codex_claim')
             lease=repo.jobs.claim(turn.control.job.id,profile.tools.wall_seconds+30)
             now=repo.jobs.snapshot(turn.control.job.id).updated_at
+            try:
+                self.provider.valid_at(provider_state,now)
+            except ApiError:
+                # Expiry can cross while the real Jobs owner stamps its claim.
+                # Roll back that uncommitted claim, then close the still-queued
+                # dispatch without inventing any possible-send consumption.
+                conn.execute('ROLLBACK TO codex_claim')
+                conn.execute('RELEASE codex_claim')
+                self._terminal(conn,workspace,repo,state,turn,provider_state,
+                    outcome='failed',code='CODEX_CONSENT_EXPIRED')
+                return False
             event,binding=self.provider.record_start(conn,workspace,turn.control.id,provider_state,lease.dispatch(),owner,now)
             state.envelopes.append(repo.append(state,binding,now))
             control=repo.active_control(turn.control,now)
             repo.append(state,TurnLifecycle(kind='lifecycle',turn_id=turn.control.id,phase='claim',control=control,
                 provider_seq=event.seq,provider_sha256=content_sha256(event)),now)
             self.provider.owned_states(conn,workspace)
+            conn.execute('RELEASE codex_claim')
             return workspace,turn.control.id,owner,prepared,provider_state.proposed.command.ack.summary,profile
 
     def _guard(self, workspace, turn_id, owner, started):
         if self._stop.is_set():
             raise ApiError(409,'CODEX_CANCELLED','本机执行正在停止。')
-        with self.database.transaction(immediate=False) as conn:
-            conn.execute('PRAGMA query_only=ON')
+        with self.database.transaction() as conn:
             provider_state,_,_=self.provider.admit_execution(conn,workspace,turn_id,already_started=True)
             _,repo,history=self.turns._owned_state(conn,workspace)
             _,turn=self.turns._find(history,turn_id)
@@ -162,6 +174,7 @@ class CodexTurnWorker:
             if (permit is None or permit.execution_owner_id!=owner or row['lease_owner']!=permit.lease.owner_id
                     or row['status']!='running' or row['lease_until']<=utc_now()):
                 raise ApiError(409,'CODEX_OUTCOME_UNKNOWN','原开始许可不能继续派发。')
+            self.provider.valid_at(provider_state,utc_now())
             if row['cancel_requested']:
                 raise ApiError(409,'CODEX_CANCELLED','原任务已请求停止。')
             if time.monotonic()-started>=provider_state.proposed.command.ack.summary.tools.wall_seconds:

@@ -191,8 +191,15 @@ class CodexConsentsService:
         self.require_current(conn, current, state, sources[turn_id])
         event = CodexDispatchQueued(kind='queued', dispatch_id='codexdispatch_'+uuid4().hex,
             consent_id=consent_id, start_command_sha256=command_sha256)
-        envelope = CodexProviderRepository(conn, current.workspace_id).append(turn_id,event,utc_now(),state)
+        now=utc_now()
+        self.valid_at(state,now)
+        envelope = CodexProviderRepository(conn, current.workspace_id).append(turn_id,event,now,state)
         return envelope, self.binding(state,envelope)
+
+    @staticmethod
+    def valid_at(state, now):
+        if instant(now) >= instant(state.proposed.command.ack.summary.expires_at):
+            raise ApiError(409,'CODEX_CONSENT_EXPIRED','原许可已到期，不能开始新的执行。')
 
     def require_current(self, conn, identity, state, source):
         view = self._current(conn,identity,state,source)
@@ -230,6 +237,7 @@ class CodexConsentsService:
         The Codex coordinator adds its independent witness and claim control in
         this same transaction. No transport is performed by this record port.
         """
+        self.valid_at(state,now)
         self.source.verify_dispatch_lease(conn,workspace_id,state.proposed.material.input.job_id,lease)
         event=CodexDispatchStarted(kind='started',dispatch_id=state.queued.dispatch_id,
             request_body_sha256=state.proposed.command.ack.summary.request_body_sha256,
