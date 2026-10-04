@@ -77,3 +77,31 @@ for (const invalid of [false, true]) test(`JSON ${invalid ? 'rejection' : 'value
     await barrier.dispose(); await page.unrouteAll({ behavior: 'wait' }); await owned.close()
   }
 })
+
+test('the exact observer returns the original fetch/json promises and leaves an unrelated request alone', async ({ page }) => {
+  const owned = await fixture(page)
+  await page.evaluate(() => {
+    const fixture = (window as any).barrierFixture, fetch = window.fetch
+    fixture.recordingFetch = function (this: Window, ...args: Parameters<typeof fetch>) { const promise = Reflect.apply(fetch, this, args); fixture.fetchPromise = promise; return promise }
+    window.fetch = fixture.recordingFetch
+  })
+  const barrier = await observation(page)
+  try {
+    const facts = await page.evaluate(async target => {
+      const fixture = (window as any).barrierFixture
+      const other = fetch('/unrelated'), unrelatedPromiseSame = other === fixture.fetchPromise
+      await (await other).text()
+      const unrelatedDidNotReadJson = !fixture.state.started
+      const request = fetch(target), fetchPromiseSame = request === fixture.fetchPromise
+      const response = await request, parsed = response.json(), jsonPromiseSame = parsed === fixture.state.jsonPromise
+      fixture.release(); await parsed
+      return { unrelatedPromiseSame, unrelatedDidNotReadJson, fetchPromiseSame, jsonPromiseSame, fetchRestoredAfterOne: window.fetch === fixture.recordingFetch }
+    }, target)
+    expect(facts).toEqual({ unrelatedPromiseSame: true, unrelatedDidNotReadJson: true, fetchPromiseSame: true, jsonPromiseSame: true, fetchRestoredAfterOne: true })
+    expect((await barrier.wait()).outcome).toBe('fulfilled'); expect(owned.requests()).toBe(1)
+  } finally {
+    await barrier.dispose()
+    await page.evaluate(() => { const fixture = (window as any).barrierFixture; fixture.release(); fixture.restore(); window.fetch = fixture.nativeFetch })
+    await owned.close()
+  }
+})
