@@ -1,18 +1,22 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ContentRef } from '../../../../../packages/contracts/generated/api-types'
 import type { TurnPort } from './turnClient'
 import type { DraftStore } from '../../workbench/DraftStore'
 import { useCodexTurns } from './useCodexTurns'
+import { CodexTurnOutboundPanel } from './CodexTurnOutboundPanel'
+import type { TurnOutboundPort } from './turnOutboundClient'
 export type TurnPanelState = { dirty: boolean; safe: boolean; isolated: boolean }
-export function CodexTurnPanel({ workspace, writeAdmitted, port, store, formStore, currentBlock = null, selectedSession = null, onState }: {
+export function CodexTurnPanel({ workspace, writeAdmitted, port, store, formStore, outboundPort, outboundStore, outboundFormStore, currentBlock = null, selectedSession = null, onState }: {
  workspace: string; writeAdmitted: boolean; port?: TurnPort; store?: DraftStore; formStore?: DraftStore; currentBlock?: ContentRef | null;
  selectedSession?: string | null; onState?: (value: TurnPanelState) => void
+ outboundPort?: TurnOutboundPort; outboundStore?: DraftStore; outboundFormStore?: DraftStore
 }) {
  const state = useCodexTurns(workspace, writeAdmitted, port, store, formStore), callback = useRef(onState); callback.current = onState
- useEffect(() => { callback.current?.({ dirty: state.dirty, safe: state.safe, isolated: state.isolated }) }, [state.dirty, state.safe, state.isolated])
+ const [outbound, setOutbound] = useState<TurnPanelState>({ dirty: false, safe: true, isolated: false })
+ useEffect(() => { callback.current?.({ dirty: state.dirty || outbound.dirty, safe: state.safe && outbound.safe, isolated: state.isolated || outbound.isolated }) }, [state.dirty, state.safe, state.isolated, outbound])
  const blocked = state.busy || !state.ready, current = state.current
  return <section aria-label="Codex 回合准备与安全控制"><h3>Codex 回合准备与安全控制</h3>
-  <p>明确准备只冻结原输入并预约一个 Job。本面板尚未接入外发许可、开始或结果读取，不会调用模型或工具。</p>
+  <p>明确准备只冻结原输入并预约一个 Job。外发预览、批准、开始和结果读取须在下方逐次明确操作；准备本身不调用模型或工具。</p>
   <button disabled={!workspace || state.busy} onClick={() => void state.refresh()}>读取回合记录与权限</button>
   {!state.ready && <p>先读取当前权限和本机记录；不会自动恢复发送。</p>}
   {state.ready && !state.allowed && <p>当前仅开放安全控制。原文、材料和准备详情已收起；本机原记录保留，须原作者且当前策略允许后显式恢复。</p>}
@@ -54,7 +58,7 @@ export function CodexTurnPanel({ workspace, writeAdmitted, port, store, formStor
    </article>)}
   </section>
   {state.detail && <section aria-label="当前回合准备详情"><h4>独立 GET 的准备详情</h4><p>{state.detail.id} · {state.detail.validity} · Job {state.detail.job.id} · {state.detail.job.status}</p>
-   {state.detail.validity === 'unavailable' && <p>当前准备不可用于执行（unavailable），原准备仍保留。缺完整输入证明时服务端拒绝 CODEX_INPUT_PROOF_UNAVAILABLE；本面板未外发。</p>}
+   {state.detail.validity === 'unavailable' && <p>当前准备不可用于执行（unavailable），原准备仍保留。缺完整输入证明时服务端拒绝 CODEX_INPUT_PROOF_UNAVAILABLE。</p>}
    <pre>{JSON.stringify(state.detail.request, null, 2)}</pre><pre>{JSON.stringify(state.detail.summary, null, 2)}</pre>
    <p>字符数不是完整 token 证明；生成、数学、来源与独立教学审查均未验收。</p>
   </section>}
@@ -69,5 +73,6 @@ export function CodexTurnPanel({ workspace, writeAdmitted, port, store, formStor
    <button disabled={blocked} onClick={() => void state.cancel(value)}>明确取消回合 Job {value.job.id}</button>
    <p>取消使用本次控制 GET 的 Job revision；ACK 和取消请求不证明远端已经停止。</p>
   </section>)}
+  <CodexTurnOutboundPanel workspace={workspace} writeAdmitted={writeAdmitted} port={outboundPort} store={outboundStore} formStore={outboundFormStore} onState={setOutbound} />
  </section>
 }
