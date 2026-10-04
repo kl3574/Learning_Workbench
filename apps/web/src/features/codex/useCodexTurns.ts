@@ -184,7 +184,10 @@ export function useCodexTurns(workspace: string, writeAdmitted: boolean, port: T
    await fresh(token, original.kind === 'prepare', original.actor_session_id)
    if (original.ack) return
    if (original.kind === 'prepare' || original.kind === 'interrupt') setCurrent(null)
-   if (original.kind !== 'prepare') setControls(values => { const next = { ...values }; delete next[original.kind === 'cancel' ? original.basis.id : original.basis.turn.id]; return next })
+   if (original.kind !== 'prepare') {
+    const target = original.kind === 'cancel' ? original.basis.id : original.basis.turn.id
+    setControls(values => { const next = { ...values }; delete next[target]; return next })
+   }
    const raw = original.kind === 'prepare' ? await port.prepare(original.session_id, original.body, original.command_id)
     : original.kind === 'cancel' ? await port.cancel(original.basis.job.id, original.body.expected_revision, original.command_id)
     : await port.interrupt(original.session_id, original.body, original.command_id)

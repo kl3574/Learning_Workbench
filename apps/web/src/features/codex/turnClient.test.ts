@@ -169,3 +169,34 @@ test('invalid path identity ending in newline cannot issue even one GET', async 
  await expect(turnClient.control('turn_test\n')).rejects.toThrow()
  expect(fetch).not.toHaveBeenCalled()
 })
+
+test('session interrupt sends exactly the original turn and current session revision/key with one POST', async () => {
+ const ack = { id: 'session_test', turn_id: 'turn_test', status: 'interrupt_requested' }, fetch = respond(ack)
+ const body = { turn_id: 'turn_test', expected_session_revision: 7 }
+ expect(await turnClient.interrupt('session_test', body, 'original_interrupt')).toEqual(ack)
+ const [path, init] = fetch.mock.calls[0] as unknown as [string, RequestInit]
+ expect(path).toBe('/api/v1/codex/sessions/session_test/interrupt')
+ expect(init.method).toBe('POST'); expect(JSON.parse(init.body as string)).toEqual(body)
+ expect(new Headers(init.headers).get('Idempotency-Key')).toBe('original_interrupt')
+ expect(fetch).toHaveBeenCalledOnce()
+})
+test.each([
+ { id: 'different_session', turn_id: 'turn_test', status: 'interrupt_requested' },
+ { id: 'session_test', turn_id: 'different_turn', status: 'interrupt_requested' },
+ { id: 'session_test', turn_id: 'turn_test', status: 'stopped' },
+ { id: 'session_test', turn_id: 'turn_test', status: 'already_terminal', extra: 'unrecognized' },
+ {},
+])('interrupt rejects malformed or differently bound ACK without retry %#', async ack => {
+ const fetch = respond(ack)
+ await expect(turnClient.interrupt('session_test', { turn_id: 'turn_test', expected_session_revision: 7 }, 'original_interrupt')).rejects.toThrow()
+ expect(fetch).toHaveBeenCalledOnce()
+})
+test('invalid interrupt body or path cannot send a request', async () => {
+ const fetch = respond({})
+ for (const body of [{ turn_id: 'turn_test', expected_session_revision: true }, { turn_id: 'turn_test', expected_session_revision: 0 },
+  { turn_id: 'turn_test\n', expected_session_revision: 7 }, { turn_id: 'turn_test', expected_session_revision: 7, extra: 'unknown' }]) {
+  await expect(turnClient.interrupt('session_test', body as { turn_id: string; expected_session_revision: number }, 'original_interrupt')).rejects.toThrow()
+ }
+ await expect(turnClient.interrupt('../escape', { turn_id: 'turn_test', expected_session_revision: 7 }, 'original_interrupt')).rejects.toThrow()
+ expect(fetch).not.toHaveBeenCalled()
+})

@@ -1,9 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { IDBFactory } from 'fake-indexeddb'
 import { afterEach, expect, test, vi } from 'vitest'
 import { DraftStore } from '../../workbench/DraftStore'
 import { CodexTurnPanel } from './CodexTurnPanel'
-import { actor, codexSession, session, workspace } from './bootstrapTestFixtures'
+import { actor, codexSession, deferred, session, workspace } from './bootstrapTestFixtures'
+import { ApiError } from '../../api/client'
 import { heldTurnCommands, heldTurnForms, releaseTurnCommand, releaseTurnForm } from './turnMemory'
 import { readTurnCommand } from './turnCommands'
 import { turnControl, turnPort } from './turnTestFixtures'
@@ -22,11 +23,6 @@ afterEach(async () => {
 const current = () => ({ ...codexSession(), revision: 4, active_turn_id: turnControl().id })
 const ack = () => ({ id: current().id, turn_id: turnControl().id, status: 'interrupt_requested' as const })
 const enabled = async (text: string) => waitFor(() => expect((screen.getByText(text) as HTMLButtonElement).disabled).toBe(false))
-async function refresh() {
- fireEvent.click(screen.getByText('读取回合记录与权限'))
- await screen.findByText(/已读取本机记录/)
- await enabled('独立读取当前 session')
-}
 async function readBasis() {
  fireEvent.change(screen.getByLabelText('已建立的 session ID'), { target: { value: current().id } })
  fireEvent.click(screen.getByText('独立读取当前 session'))
@@ -83,4 +79,42 @@ test('lost interrupt ACK survives remount and only explicit replay sends its ori
  await screen.findByText(/中断原 ACK 已保存/)
  expect(port.interrupt.mock.calls[1]).toEqual(call)
  expect(port.current).toHaveBeenCalledOnce(); expect(port.control).toHaveBeenCalledOnce()
+})
+
+test('stale session CAS keeps the original command; a fresh session read does not rewrite or resend it', async () => {
+ const store = local(), formStore = local(), port = turnPort()
+ vi.mocked(port.current).mockResolvedValue(current())
+ vi.mocked(port.session).mockResolvedValue({ ...session(), role: 'learner' })
+ vi.mocked(port.interrupt).mockRejectedValueOnce(new ApiError(412, 'not for display', 'REVISION_MISMATCH'))
+ render(<CodexTurnPanel workspace={workspace} writeAdmitted={false} port={port} store={store} formStore={formStore} />)
+ fireEvent.click(screen.getByText('读取回合记录与权限')); await screen.findByText(/已读取本机记录/)
+ await readBasis(); fireEvent.click(screen.getByText('明确中断会话回合 turn_test'))
+ await screen.findByText(/版本已变化（412）/)
+ const call = vi.mocked(port.interrupt).mock.calls[0]
+ vi.mocked(port.current).mockResolvedValue({ ...current(), revision: 9 })
+ fireEvent.click(screen.getByText('独立读取当前 session')); await screen.findByLabelText('独立 GET 当前 session')
+ const original = readTurnCommand((await store.load(workspace))[call[2]], workspace)
+ expect(original.body).toEqual({ turn_id: 'turn_test', expected_session_revision: 4 })
+ expect(original.error).toEqual({ status: 412, code: 'REVISION_MISMATCH' })
+ expect(port.interrupt).toHaveBeenCalledOnce(); expect(screen.queryByText('not for display')).toBeNull()
+})
+test('late interrupt ACK remains the original actor fact after unmount; a new actor cannot replay it', async () => {
+ const store = local(), formStore = local(), port = turnPort(), pending = deferred<ReturnType<typeof ack>>()
+ vi.mocked(port.current).mockResolvedValue(current())
+ vi.mocked(port.session).mockResolvedValue({ ...session(), role: 'learner' })
+ vi.mocked(port.interrupt).mockImplementation(() => pending.promise)
+ const view = render(<CodexTurnPanel workspace={workspace} writeAdmitted={false} port={port} store={store} formStore={formStore} />)
+ fireEvent.click(screen.getByText('读取回合记录与权限')); await screen.findByText(/已读取本机记录/)
+ await readBasis(); fireEvent.click(screen.getByText('明确中断会话回合 turn_test'))
+ await waitFor(() => expect(port.interrupt).toHaveBeenCalledOnce())
+ const call = vi.mocked(port.interrupt).mock.calls[0]
+ view.unmount(); await act(async () => pending.resolve(ack()))
+ expect(heldTurnCommands(workspace)[0].actor_session_id).toBe(actor)
+ expect(heldTurnCommands(workspace)[0].ack).toEqual(ack())
+ vi.mocked(port.session).mockResolvedValue({ ...session(), role: 'learner', actor_session_id: 'new_safe_actor' })
+ render(<CodexTurnPanel workspace={workspace} writeAdmitted={false} port={port} store={store} formStore={formStore} />)
+ fireEvent.click(screen.getByText('读取回合记录与权限')); await screen.findByText(/已读取本机记录/)
+ expect((screen.getByText(`显式回放回合原 key ${call[2]}`) as HTMLButtonElement).disabled).toBe(true)
+ expect(port.interrupt).toHaveBeenCalledOnce()
+ expect(screen.getByText('其他 actor 的安全控制记录只读；不能接管或重放。')).toBeTruthy()
 })

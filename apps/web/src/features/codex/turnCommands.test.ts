@@ -2,7 +2,7 @@ import { IDBFactory } from 'fake-indexeddb'
 import { expect, test } from 'vitest'
 import { DraftStore } from '../../workbench/DraftStore'
 import { actor, codexSession, workspace } from './bootstrapTestFixtures'
-import { decodeTurnCommand, persistTurnCommand, readTurnCommand, turnCancelCommand, turnPrepareCommand, type TurnCommand } from './turnCommands'
+import { decodeTurnCommand, persistTurnCommand, readTurnCommand, turnCancelCommand, turnInterruptCommand, turnPrepareCommand, type TurnCommand } from './turnCommands'
 import { turnBody, turnCancelledJob, turnControl, turnPreparation } from './turnTestFixtures'
 import { emptyTurnFields, persistTurnForm, readTurnForm, snapshotTurnForm } from './turnForms'
 const command = () => turnPrepareCommand(workspace, actor, codexSession(), turnBody())
@@ -84,4 +84,34 @@ test('out-of-order form saves and reload preserve latest and older unsent snapsh
  expect(recovered).toHaveLength(2); expect(recovered).toContainEqual(one); expect(recovered).toContainEqual(two)
  await expect(persistTurnForm({ ...two, fields: { ...two.fields, message: 'replacement' } }, first)).rejects.toThrow()
  await first.close(); await second.close()
+})
+
+const interrupt = () => turnInterruptCommand(workspace, 'safe_new_actor', { ...codexSession(), revision: 4, active_turn_id: turnControl().id }, turnControl())
+test.each([
+ (v: Extract<TurnCommand, { kind: 'interrupt' }>) => { v.body.expected_session_revision++ },
+ (v: Extract<TurnCommand, { kind: 'interrupt' }>) => { v.body.turn_id = 'other_turn' },
+ (v: Extract<TurnCommand, { kind: 'interrupt' }>) => { v.basis.session.id = 'other_session' },
+ (v: Extract<TurnCommand, { kind: 'interrupt' }>) => { v.basis.session.active_turn_id = 'other_turn' },
+ (v: Extract<TurnCommand, { kind: 'interrupt' }>) => { v.basis.turn.session_id = 'other_session' },
+ (v: Extract<TurnCommand, { kind: 'interrupt' }>) => { v.basis.turn.approval_ids = ['missing_approval'] },
+ (v: Extract<TurnCommand, { kind: 'interrupt' }>) => { Object.assign(v.basis, { extra: 'unknown' }) },
+ (v: Extract<TurnCommand, { kind: 'interrupt' }>) => { v.ack = { id: v.session_id, turn_id: 'wrong', status: 'already_terminal' } },
+])('interrupt frozen current-session/turn basis, body and ACK cannot drift %#', corrupt => {
+ const original = interrupt()
+ if (original.kind !== 'interrupt') throw new Error('Expected interrupt')
+ corrupt(original)
+ expect(() => decodeTurnCommand(JSON.stringify(original), workspace)).toThrow()
+})
+test('interrupt history preserves its complete original actor/body/key/basis and ACK under concurrent pending writer', async () => {
+ const store = new DraftStore({ name: crypto.randomUUID(), factory: new IDBFactory() }), original = interrupt()
+ try {
+  const acknowledged = decodeTurnCommand(JSON.stringify({ ...original, ack: { id: original.session_id, turn_id: 'turn_test', status: 'already_terminal' } }), workspace)
+  await persistTurnCommand(original, store)
+  await Promise.all([persistTurnCommand(acknowledged, store), persistTurnCommand(original, store)])
+  const actual = readTurnCommand((await store.load(workspace))[original.command_id], workspace)
+  expect(actual).toEqual(acknowledged)
+  expect(JSON.stringify(actual)).not.toMatch(/csrf|cookie/)
+  await expect(persistTurnCommand({ ...original, actor_session_id: 'different_actor' }, store)).rejects.toThrow()
+  expect(readTurnCommand((await store.load(workspace))[original.command_id], workspace)).toEqual(acknowledged)
+ } finally { await store.close() }
 })
