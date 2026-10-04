@@ -329,6 +329,10 @@ class ImportWorker:
         except _Stopped:
             return True
         except ApiError as error:
+            if error.code == 'CODEX_IMPORT_HISTORY_DAMAGED':
+                # Broken frozen membership is not successful work or repairable
+                # parser output. Let the ordinary loop back off without rewriting it.
+                return False
             if lease is not None and error.code != "ASSESSMENT_ACTIVE":
                 self.fail(lease, error)
             return True
