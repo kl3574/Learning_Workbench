@@ -189,6 +189,7 @@ def test_cross_owner_original_binding_damage_cannot_return_partial_success(turn_
         elif damage == 'job':
             conn.execute("DELETE FROM job_events WHERE job_id=?", (value['job']['id'],))
         else:
+            conn.execute("DROP TRIGGER provider_config_history_no_update")
             conn.execute("UPDATE provider_config_history SET config_json='{}' WHERE provider_id='codex_local'")
     before = case.dump()
     assert case.get('sessions/' + sid).status_code == 409
@@ -221,9 +222,8 @@ def test_prepare_atomic_rollback_keeps_session_revision_job_run_context_and_comm
     with case.app.state.database.transaction() as conn:
         conn.execute("CREATE TRIGGER controlled_failure BEFORE INSERT ON codex_turn_event_members BEGIN SELECT RAISE(ABORT,'synthetic rollback'); END;")
     before = case.dump()
-    import sqlite3
-    with pytest.raises(sqlite3.IntegrityError, match='synthetic rollback'):
-        case.post(f'sessions/{sid}/turn-preparations', turn_body(), 'rollback')
+    response = case.post(f'sessions/{sid}/turn-preparations', turn_body(), 'rollback')
+    assert response.status_code == 500 and response.json()['error']['code'] == 'INTERNAL_ERROR'
     assert case.dump() == before
     assert case.get('sessions/' + sid).json()['revision'] == 2
 
@@ -240,3 +240,12 @@ def test_current_provider_revision_changes_eligibility_never_original_ack(turn_c
     assert case.get('turn-preparations/' + original.json()['id']).json()['validity'] == 'changed'
     assert case.post(f'sessions/{sid}/turn-preparations', turn_body(), 'turn').content == original.content
     assert case.dump() == before
+
+
+def test_first_cancel_persists_request_and_release_as_two_session_changes(turn_case):
+    case, _, sid, _, _ = turn_case
+    original = prepared(turn_case).json()
+    assert original['session_revision'] == 3
+    assert cancel(case, original['job']['id']).status_code == 200
+    assert case.get('sessions/' + sid).json()['revision'] == 5
+    assert case.get('turns/' + original['turn_id']).json()['last_seq'] == 2
