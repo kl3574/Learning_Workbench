@@ -1,9 +1,9 @@
-"""Four real preparation/control routes; no fake execution endpoints."""
+"""Real local preparation, consent consumption and checked control reads."""
 from fastapi import APIRouter, Depends, Request
 from packages.contracts import domain_models as dm
 from ..application.codex_turn import CodexTurnService
 from ..application.errors import ApiError
-from ..codex_turn_dto import CodexTurnPrepareWrite, CodexTurnPreparationView, CodexTurnPage, CodexTurnControlView
+from ..codex_turn_dto import CodexTurnPrepareWrite, CodexTurnPreparationView, CodexTurnPage, CodexTurnControlView, CodexTurnStartWrite, CodexTurnStartAck, CodexTurnResultView
 from .codex_bootstrap_http import no_control_body
 from .content_http import query_fields
 from .http import current_identity, verify_write
@@ -21,6 +21,11 @@ def create_codex_turn_router(service: CodexTurnService) -> APIRouter:
     def prepare(id: dm.Id, body: CodexTurnPrepareWrite, request: Request) -> CodexTurnPreparationView:
         return service.prepare_turn(request.state.identity, id, body, command_key(request))
 
+    @router.post('/sessions/{id}/turns', response_model=CodexTurnStartAck, status_code=202,
+        dependencies=[Depends(verify_write),Depends(query_fields())],openapi_extra={'parameters':[COMMAND_PARAMETER]})
+    def start(id: dm.Id, body: CodexTurnStartWrite, request: Request) -> CodexTurnStartAck:
+        return service.start_turn(request.state.identity,id,body,command_key(request))
+
     @router.get('/turn-preparations/{id}', response_model=CodexTurnPreparationView,
         dependencies=[Depends(no_control_body), Depends(query_fields())])
     def preparation(id: dm.Id, request: Request) -> CodexTurnPreparationView:
@@ -30,6 +35,11 @@ def create_codex_turn_router(service: CodexTurnService) -> APIRouter:
         dependencies=[Depends(no_control_body), Depends(query_fields())])
     def turn(id: dm.Id, request: Request) -> CodexTurnControlView:
         return service.read_control(request.state.identity, id)
+
+    @router.get('/turns/{id}/result', response_model=CodexTurnResultView,
+        dependencies=[Depends(no_control_body), Depends(query_fields())])
+    def result(id: dm.Id, request: Request) -> CodexTurnResultView:
+        return service.read_result(request.state.identity,id)
 
     @router.get('/sessions/{id}/turns', response_model=CodexTurnPage,
         dependencies=[Depends(no_control_body), Depends(query_fields('cursor', 'limit'))],

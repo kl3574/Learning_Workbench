@@ -8,11 +8,11 @@ from packages.contracts.canonical import strict_json
 from ..application.codex_bootstrap_models import BootstrapSnapshot
 from ..application.codex_turn_context import CodexTurnContext, damaged
 from ..application.codex_turn_models import (
-    SessionAnchor, EventEnvelope, TurnPrepared, TurnProviderBound, CancelCommand, preparation_digest,
+    SessionAnchor, EventEnvelope, TurnPrepared, TurnProviderBound, TurnStarted, TurnLifecycle, TurnCancelRequested, CancelCommand, preparation_digest,
 )
 from ..application.codex_turn_execution_models import ControlEventEnvelope, RunnableTurnPrepared
 from ..application.errors import ApiError
-from ..application.providers import checked_provider_configuration
+from ..application.providers import retained_provider_configuration
 from ..codex_turn_dto import CodexTurnControlView, CodexConsentControl
 from ..serialization import canonical_json, content_sha256
 from .codex_turn_jobs import CodexTurnJobs
@@ -25,6 +25,8 @@ class CheckedTurn:
     control: CodexTurnControlView
     sequence: int
     provider_bindings: list[TurnProviderBound] = field(default_factory=list)
+    start: TurnStarted | None = None
+    lifecycle: list[TurnLifecycle] = field(default_factory=list)
 
 
 @dataclass
@@ -60,11 +62,11 @@ def turn_control(prepared: TurnPrepared | RunnableTurnPrepared, finished: str | 
 
 
 class CodexTurnRepository:
-    def __init__(self, conn: sqlite3.Connection, identity: SessionIdentity, context: CodexTurnContext):
+    def __init__(self, conn: sqlite3.Connection, identity: SessionIdentity | str, context: CodexTurnContext):
         if not conn.in_transaction:
             raise damaged()
-        self.conn, self.identity, self.context = conn, identity, context
-        self.workspace = identity.workspace_id
+        self.conn, self.context = conn, context
+        self.workspace = identity if isinstance(identity, str) else identity.workspace_id
         self.jobs = CodexTurnJobs(conn, self.workspace)
 
     def rows(self, suffix: str):
@@ -147,6 +149,36 @@ class CodexTurnRepository:
                     seen_members.add(event.input.turn_id)
                 elif isinstance(event, TurnProviderBound):
                     self._provider_bound(state, event)
+                elif isinstance(event, TurnStarted):
+                    turn = state.turns.get(event.turn_id)
+                    if turn is None or turn.start is not None or turn.control.job.status != 'awaiting_approval':
+                        raise damaged()
+                    command = event.command
+                    ack, preparation = command.ack, turn.prepared.command.ack
+                    if (state.active_turn_id != event.turn_id or command.actor_session_id != state.anchor.actor_session_id
+                            or command.target_id != state.anchor.session_id or command.body.expected_session_revision != state.revision
+                            or command.body.preparation_id != preparation.id or command.body.preparation_sha256 != preparation.preparation_sha256
+                            or turn.control.consent_control is None or command.body.consent_id != turn.control.consent_control.id
+                            or ack.turn_id != event.turn_id or ack.session_revision != state.revision + 1
+                            or ack.job != dm.JobRef(id=turn.control.job.id, status='queued')):
+                        raise damaged()
+                    turn.start, turn.control = event, self.queued_control(turn.control)
+                    state.revision += 1
+                elif isinstance(event, TurnLifecycle):
+                    self._lifecycle(state, event, envelope.occurred_at)
+                elif isinstance(event, TurnCancelRequested):
+                    turn = state.turns.get(event.turn_id)
+                    requested = event.kind == 'cancel_requested'
+                    if (turn is None or turn.control.execution != 'active' or turn.control.cancel_requested == requested
+                            or state.active_turn_id != event.turn_id or event.session_revision != (state.revision+1 if requested else None)
+                            or event.command.target_id != turn.control.job.id
+                            or event.command.body.expected_revision != turn.control.job_revision):
+                        raise damaged()
+                    if requested:
+                        turn.control = self.cancel_requested_control(turn.control)
+                    if event.command.ack != self.jobs.snapshot(turn.control.job.id,turn.control.job_revision):
+                        raise damaged()
+                    state.revision += int(requested)
                 else:
                     turn = state.turns.get(event.turn_id)
                     if turn is None or not isinstance(command, CancelCommand) or command.target_id != turn.control.job.id:
@@ -206,14 +238,61 @@ class CodexTurnRepository:
         row = self.jobs.load(value.job_id)
         if row['input_json'] != canonical_json(value) or row['input_sha256'] != ack.summary.job_input_sha256:
             raise damaged()
-        if checked_provider_configuration(self.conn, self.identity, value.provider.id, value.provider.revision) != value.provider:
+        if retained_provider_configuration(self.conn, self.workspace, value.provider.id, value.provider.revision) != value.provider:
             raise damaged()
-        context = self.context.verify_turn(self.conn, self.identity, value, ack.summary)
+        context = self.context.verify_owned_turn(self.conn, self.workspace, value, ack.summary)
         if context.snapshot.created_at != ack.created_at:
             raise damaged()
         state.revision += 1
         state.active_turn_id = value.turn_id
         state.turns[value.turn_id] = CheckedTurn(event, turn_control(event), envelope.seq)
+
+    @staticmethod
+    def queued_control(control: CodexTurnControlView) -> CodexTurnControlView:
+        return CodexTurnControlView.model_validate({**control.model_dump(), 'job': {'id':control.job.id,'status':'queued'},
+            'job_revision':control.job_revision+1,'run_revision':control.run_revision+1,'last_seq':control.last_seq+1})
+
+    @staticmethod
+    def active_control(control: CodexTurnControlView, now: str) -> CodexTurnControlView:
+        return CodexTurnControlView.model_validate({**control.model_dump(), 'job': {'id':control.job.id,'status':'running'},
+            'job_revision':control.job_revision+1,'run_revision':control.run_revision+1,'last_seq':control.last_seq+1,
+            'execution':'active','started_at':now})
+
+    @staticmethod
+    def terminal_control(control: CodexTurnControlView, now: str, outcome, error_code) -> CodexTurnControlView:
+        status = 'completed' if outcome == 'completed' else 'cancelled' if outcome == 'cancelled' else 'failed'
+        return CodexTurnControlView.model_validate({**control.model_dump(), 'job': {'id':control.job.id,'status':status},
+            'job_revision':control.job_revision+1,'run_revision':control.run_revision+1,'last_seq':control.last_seq+1,
+            'execution':'terminal','outcome':outcome,'finished_at':now,'error_code':error_code})
+
+    @staticmethod
+    def cancel_requested_control(control: CodexTurnControlView) -> CodexTurnControlView:
+        return CodexTurnControlView.model_validate({**control.model_dump(),'cancel_requested':True,
+            'job_revision':control.job_revision+1,'run_revision':control.run_revision+1,'last_seq':control.last_seq+1})
+
+    @classmethod
+    def _lifecycle(cls, state: CheckedSession, event: TurnLifecycle, now: str) -> None:
+        turn = state.turns.get(event.turn_id)
+        if (turn is None or turn.start is None or state.active_turn_id != event.turn_id
+                or turn.control.execution == 'terminal' or not turn.provider_bindings):
+            raise damaged()
+        bound = turn.provider_bindings[-1]
+        if (event.provider_seq,event.provider_sha256) != (bound.provider_seq,bound.provider_sha256):
+            raise damaged()
+        if event.phase == 'claim':
+            if turn.control.job.status != 'queued' or turn.control.started_at is not None:
+                raise damaged()
+            expected = cls.active_control(turn.control, now)
+        else:
+            if event.control.outcome is None:
+                raise damaged()
+            expected = cls.terminal_control(turn.control, now, event.control.outcome, event.control.error_code)
+            state.revision += 1
+            state.active_turn_id = None
+        if event.control != expected:
+            raise damaged()
+        turn.control = event.control
+        turn.lifecycle.append(event)
 
     @staticmethod
     def cancelled_control(control: CodexTurnControlView, now: str) -> CodexTurnControlView:
@@ -247,8 +326,15 @@ class CodexTurnRepository:
         if (row['status'] != turn.control.job.status or row['revision'] != turn.control.job_revision
                 or bool(row['cancel_requested']) != turn.control.cancel_requested):
             raise damaged()
-        if turn.control.execution == 'terminal' and row['result_json'] != canonical_json({'cancelled_before_execution': True}):
-            raise damaged()
+        if turn.control.execution == 'terminal':
+            terminal = next((event for event in turn.lifecycle if event.phase == 'terminal'), None)
+            if terminal is not None and turn.start is None:
+                raise damaged()
+            expected_result = ({'version':'codex-turn-job-result-v1','turn_id':turn.control.id,
+                'outcome':turn.control.outcome,'dispatch_id':turn.start.dispatch_id if turn.start else None}
+                if terminal else {'cancelled_before_execution': True})
+            if row['result_json'] != canonical_json(expected_result):
+                raise damaged()
         run = self.conn.execute('SELECT * FROM runs WHERE id=?', (row['id'],)).fetchone()
         if run is None or tuple(run) != (row['id'], anchor.thread_id,
                 turn.prepared.command.ack.summary.context_snapshot_id, canonical_json(turn.control)):
@@ -275,7 +361,7 @@ class CodexTurnRepository:
     def append(self, state: CheckedSession, event, now: str) -> EventEnvelope | ControlEventEnvelope:
         seq = len(state.envelopes) + 1
         previous = content_sha256(state.envelopes[-1]) if state.envelopes else content_sha256(state.anchor)
-        extended = isinstance(event, (RunnableTurnPrepared, TurnProviderBound))
+        extended = isinstance(event, (RunnableTurnPrepared, TurnProviderBound, TurnStarted, TurnLifecycle, TurnCancelRequested))
         envelope: ControlEventEnvelope | EventEnvelope
         if extended:
             envelope = ControlEventEnvelope(version='codex-turn-event-v2', workspace_id=self.workspace,
@@ -303,6 +389,23 @@ class CodexTurnRepository:
             control = self.cancelled_control(state.turns[event.turn_id].control, now)
             self.conn.execute('UPDATE runs SET snapshot_json=? WHERE id=?', (canonical_json(control), control.job.id))
             revision, active = state.revision + 2, None
+        elif isinstance(event, TurnStarted):
+            control = self.queued_control(state.turns[event.turn_id].control)
+            self.conn.execute('UPDATE runs SET snapshot_json=? WHERE id=?', (canonical_json(control), control.job.id))
+            revision, active = state.revision + 1, state.active_turn_id
+        elif isinstance(event, TurnLifecycle):
+            prior_revision = state.revision
+            self._lifecycle(state, event, now)
+            control = state.turns[event.turn_id].control
+            self.conn.execute('UPDATE runs SET snapshot_json=? WHERE id=?', (canonical_json(control), control.job.id))
+            revision, active = state.revision, state.active_turn_id
+            # CAS below still compares against the pre-event head.
+            state.revision = prior_revision
+        elif isinstance(event, TurnCancelRequested):
+            requested = event.kind == 'cancel_requested'
+            control = self.cancel_requested_control(state.turns[event.turn_id].control) if requested else state.turns[event.turn_id].control
+            self.conn.execute('UPDATE runs SET snapshot_json=? WHERE id=?', (canonical_json(control), control.job.id))
+            revision, active = state.revision+int(requested), state.active_turn_id
         elif isinstance(event, TurnProviderBound):
             self._provider_bound(state, event)
             control = state.turns[event.turn_id].control

@@ -803,6 +803,18 @@ export type CodexTurnPrepareWrite = {
   "tools": CodexLocalToolBudget;
 };
 
+export type CodexTurnResultView = {
+  "control": CodexTurnControlView;
+  "preparation_id": string;
+  "answer_markdown": string;
+  "output_sha256": (string | null);
+  "output_state": "none" | "partial" | "complete";
+  "usage": UsageSnapshot;
+  "mathematical": "NOT_RUN";
+  "sources": "NOT_RUN";
+  "independent_pedagogy": "NOT_RUN";
+};
+
 export type CodexTurnRuntimeSummary = {
   "profile_sha256": string;
   "cpu_seconds": 60;
@@ -814,6 +826,19 @@ export type CodexTurnRuntimeSummary = {
   "core_bytes": 0;
   "command_network": "denied";
   "writable_area": "turn_outputs";
+};
+
+export type CodexTurnStartAck = {
+  "turn_id": string;
+  "session_revision": number;
+  "job": JobRef;
+};
+
+export type CodexTurnStartWrite = {
+  "preparation_id": string;
+  "preparation_sha256": string;
+  "consent_id": string;
+  "expected_session_revision": number;
 };
 
 export type CodexTurnWarning = {

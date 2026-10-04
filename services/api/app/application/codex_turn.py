@@ -1,15 +1,17 @@
-"""Local Codex preparation and safe control owner; no execution adapter is wired."""
+"""Codex preparation, immutable dispatch control and current safe projections."""
 import base64
 import hashlib
 import hmac
 import secrets
 from uuid import uuid4
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, TypeVar, Literal
+from collections.abc import Callable
 
 from packages.contracts import domain_models as dm
-from packages.contracts.canonical import strict_json
+from packages.contracts.canonical import strict_json, sha256_bytes
 from ..codex_turn_dto import (
     CodexCurrentSessionView, CodexTurnPrepareWrite, CodexTurnPreparationView, CodexTurnControlView, CodexTurnPage,
+    CodexTurnStartWrite, CodexTurnStartAck, CodexTurnResultView,
 )
 from ..import_dto import JobCancelRequest, JobSnapshot
 from ..infrastructure.codex_turn_repository import CodexTurnRepository, CheckedSession, CheckedTurn
@@ -21,7 +23,7 @@ from .codex_bootstrap_access import current_control_access
 from .codex_turn_context import CodexTurnContext, damaged
 from .codex_turn_models import (
     SessionAnchor, TurnRuntimeBinding, TurnInput, TurnPrepared, TurnCancelled, PrepareCommand, CancelCommand,
-    preparation_digest,
+    preparation_digest, StartCommand, TurnStarted, TurnCancelRequested,
 )
 from .errors import ApiError
 from .providers import checked_provider_configuration, validate_key
@@ -29,6 +31,8 @@ from .provider_codex_ports import CodexOutboundMaterial
 from .provider_codex_ports import CodexOutboundSourceState
 from .provider_budget import ProofRegistry
 from .codex_turn_execution_models import RunnableTurnInput, RunnableTurnPrepared
+from .provider_codex_profile import CodexRuntimeProfile
+from .provider_models import UsageSnapshot, DispatchLease
 
 if TYPE_CHECKING:
     from .provider_codex_consents import CodexConsentsService
@@ -48,6 +52,7 @@ class CodexTurnService:
         self._cursor_key = secrets.token_bytes(32)
         self.proofs = (proofs or ProofRegistry()).codex
         self.outbound_owner: CodexConsentsService | None = None
+        self.execution_available: Callable[[CodexRuntimeProfile], bool] = lambda profile: False
 
     def _deliver(self, identity: SessionIdentity, value: Delivery, *, subject: bool) -> Delivery:
         # A prior WAL read snapshot cannot observe a concurrently committed
@@ -104,16 +109,40 @@ class CodexTurnService:
         return current, original, repository, repository.checked(original)
 
     def _source_views(self, transaction, identity, history):
+        return self._owned_source_views(transaction, identity.workspace_id, history)
+
+    def _owned_state(self, conn, workspace_id):
+        """Private persistence facts; deliberately not an access identity."""
+        original = self.bootstrap.checked_owned_sessions(conn, workspace_id)
+        repository = CodexTurnRepository(conn, workspace_id, self.context)
+        return original, repository, repository.checked(original)
+
+    def _owned_source_views(self, transaction, workspace_id, history):
         result = {}
         for state in history.values():
             for turn in state.turns.values():
-                context = self.context.verify_turn(transaction, identity, turn.prepared.input, turn.prepared.command.ack.summary)
-                material = CodexOutboundMaterial(version='codex-outbound-material-v1', workspace_id=identity.workspace_id,
+                context = self.context.verify_owned_turn(transaction, workspace_id, turn.prepared.input, turn.prepared.command.ack.summary)
+                material = CodexOutboundMaterial(version='codex-outbound-material-v1', workspace_id=workspace_id,
                     actor_session_id=turn.prepared.input.actor_session_id, preparation=turn.prepared.command.ack,
                     job_revision=turn.control.job_revision, input=turn.prepared.input, context=context)
                 result[turn.control.id] = CodexOutboundSourceState(material=material, control=turn.control,
-                    provider_bindings=turn.provider_bindings)
+                    provider_bindings=turn.provider_bindings, start=turn.start, lifecycle=turn.lifecycle,
+                    active_lease=self.dispatch_lease(transaction,workspace_id,turn.control.job.id))
         return result
+
+    @staticmethod
+    def dispatch_lease(transaction, workspace_id, job_id):
+        from ..infrastructure.codex_turn_jobs import CodexTurnJobs
+        row=CodexTurnJobs(transaction,workspace_id).load(job_id)
+        return DispatchLease(owner_id=row['lease_owner'],job_revision=row['revision'],expires_at=row['lease_until']) if row['status']=='running' else None
+
+    def verify_dispatch_lease(self, transaction, workspace_id, job_id, lease):
+        if self.dispatch_lease(transaction,workspace_id,job_id) != lease:
+            raise damaged()
+
+    def owned_outbound_sources(self, transaction, workspace_id):
+        _, _, history = self._owned_state(transaction, workspace_id)
+        return self._owned_source_views(transaction, workspace_id, history)
 
     def outbound_sources(self, transaction, identity):
         current, _, _, history = self._base_state(transaction, identity)
@@ -152,6 +181,49 @@ class CodexTurnService:
             actor_session_id=current.id, preparation=turn.prepared.command.ack,
             job_revision=turn.control.job_revision, input=turn.prepared.input, context=context)
 
+    def start_turn(self, identity: SessionIdentity, session_id: str, body: CodexTurnStartWrite, key: str) -> CodexTurnStartAck:
+        return self._deliver(identity, self._start_turn(identity, session_id, body, key), subject=True)
+
+    def _start_turn(self, identity, session_id, body, key):
+        key = validate_key(key)
+        body = CodexTurnStartWrite.model_validate(body.model_dump(mode='json'))
+        with self.database.transaction() as conn:
+            current, original, repo, history = self._state(conn, identity, subject=True)
+            replay = repo.replay(history, current, 'start', session_id, key, body)
+            if replay is not None:
+                return CodexTurnStartAck.model_validate(replay.model_dump())
+            state, turn = self._find(history, body.preparation_id, preparation=True)
+            preparation = turn.prepared.command.ack
+            if current.id != state.anchor.actor_session_id:
+                raise ApiError(403, 'POLICY_DENIED', '新操作者不能消费原任务许可。')
+            if state.anchor.session_id != session_id or preparation.preparation_sha256 != body.preparation_sha256:
+                raise ApiError(409, 'CODEX_BINDING_INVALID', '开始命令须绑定原会话和准备。')
+            if body.expected_session_revision != state.revision:
+                raise ApiError(412, 'REVISION_MISMATCH', '会话控制修订已改变。')
+            if state.active_turn_id != turn.control.id or turn.start is not None or turn.control.job.status != 'awaiting_approval':
+                raise ApiError(409, 'CODEX_BINDING_INVALID', '原任务已消费许可或不能开始。')
+            if not isinstance(turn.prepared.input, RunnableTurnInput):
+                raise ApiError(503, 'CODEX_INPUT_PROOF_UNAVAILABLE', '没有完整请求证明。')
+            if self.outbound_owner is None:
+                raise ApiError(503, 'CODEX_RUNTIME_UNAVAILABLE', '当前部署没有对应的受检执行适配器。')
+            ack = CodexTurnStartAck(turn_id=turn.control.id, session_revision=state.revision+1,
+                job=dm.JobRef(id=turn.control.job.id, status='queued'))
+            command = StartCommand(workspace_id=current.workspace_id, actor_session_id=current.id, route='start',
+                target_id=session_id, key=key, body=body, ack=ack)
+            dispatch, binding = self.outbound_owner.consume(conn, current, turn.control.id, body.consent_id, content_sha256(command))
+            if not self.execution_available(turn.prepared.input.runtime):
+                # Provider proof/current eligibility is checked first. This same
+                # transaction rolls back the tentative consume when no adapter
+                # is registered; no permission or queued Job escapes it.
+                raise ApiError(503, 'CODEX_RUNTIME_UNAVAILABLE', '当前部署没有对应的受检执行适配器。')
+            bound = repo.append(state, binding, dispatch.occurred_at)
+            state.envelopes.append(bound)
+            repo.jobs.transition(repo.jobs.load(turn.control.job.id), 'queued')
+            repo.append(state, TurnStarted(kind='start_queued', turn_id=turn.control.id,
+                dispatch_id=dispatch.event.dispatch_id, command=command), utc_now())
+            self._state(conn, current, subject=True)
+            return ack
+
     @staticmethod
     def _find(history, identifier, *, job=False, preparation=False) -> tuple[CheckedSession, CheckedTurn]:
         for state in history.values():
@@ -185,6 +257,10 @@ class CodexTurnService:
             if state and state.active_turn_id is not None:
                 raise ApiError(409, 'CODEX_BINDING_INVALID', '此会话已有未结束任务。')
             provider = checked_provider_configuration(conn, current, body.provider_id)
+            previous=[]
+            if self.outbound_owner is not None:
+                provider_states,sources=self.outbound_owner.owned_states(conn,current.workspace_id)
+                previous=self.outbound_owner.completed_history(provider_states,sources,session_id,revision)
             now = utc_now()
             if state is None:
                 state = repo.establish(SessionAnchor(version='codex-turn-session-v1', workspace_id=current.workspace_id,
@@ -200,7 +276,7 @@ class CodexTurnService:
                 actor_session_id=current.id, session_id=session_id, turn_id='turn_' + uuid4().hex,
                 job_id='job_' + uuid4().hex, request=body, provider=provider, runtime=available if available is not None else runtime))
             repo.jobs.create(value.job_id, 'codex_turn', value)
-            context = self.context.prepare_turn(conn, current, value, now)
+            context = self.context.prepare_turn(conn, current, value, now, previous)
             summary = self.context.summary(context)
             ack = CodexTurnPreparationView(id='turnprep_' + uuid4().hex, preparation_sha256='0' * 64,
                 actor_session_id=current.id, session_id=session_id, session_revision=revision + 1,
@@ -212,7 +288,7 @@ class CodexTurnService:
             repo.append(state, event, now)
             # Verify the actual graph before committing: Job/Run/context and
             # immutable command must either all survive or all roll back.
-            repo.checked(originals)
+            self._state(conn,current,subject=True)
             current_control_access(conn, current, write=True)
             return ack
 
@@ -241,6 +317,27 @@ class CodexTurnService:
             current, _, _, history = self._state(conn, identity)
             turn = self._find(history, identifier)[1]
             return self._control_views(conn, current, history)[turn.control.id]
+
+    def read_result(self, identity: SessionIdentity, identifier: str) -> CodexTurnResultView:
+        with self.database.transaction(immediate=False) as conn:
+            conn.execute('PRAGMA query_only=ON')
+            current,_,_,history=self._state(conn,identity,subject=True)
+            _,turn=self._find(history,identifier)
+            terminal=None
+            if self.outbound_owner is not None:
+                states,_=self.outbound_owner.owned_states(conn,current.workspace_id)
+                provider=states.get(identifier)
+                terminal=provider.finished if provider else None
+            answer=terminal.answer if terminal else ''
+            output: Literal['none','partial','complete']='none'
+            if answer and terminal and terminal.execution_result:
+                output=terminal.execution_result.output_state
+            value=CodexTurnResultView(control=self._control_views(conn,current,history)[identifier],
+                preparation_id=turn.prepared.command.ack.id,answer_markdown=answer,
+                output_sha256=sha256_bytes(answer.encode()) if answer else None,output_state=output,
+                usage=terminal.usage if terminal else UsageSnapshot(input_tokens=None,output_tokens=None),
+                mathematical='NOT_RUN',sources='NOT_RUN',independent_pedagogy='NOT_RUN')
+        return self._deliver(identity,value,subject=True)
 
     def _read_session(self, identity: SessionIdentity, identifier: str) -> CodexCurrentSessionView:
         with self.database.transaction(immediate=False) as conn:
@@ -274,18 +371,33 @@ class CodexTurnService:
             if body.expected_revision != turn.control.job_revision:
                 raise ApiError(412, 'REVISION_MISMATCH', '任务修订已改变，请读取当前事实。')
             terminal = turn.control.execution == 'terminal'
+            active = turn.control.execution == 'active'
+            already_requested = turn.control.cancel_requested
+            provider_state = None
+            if not terminal and turn.start is not None and self.outbound_owner is not None:
+                provider_state = self.outbound_owner.owned_states(conn,current.workspace_id)[0][turn.control.id]
             if not terminal:
-                if state.active_turn_id != turn.control.id or turn.control.execution != 'not_started':
+                if state.active_turn_id != turn.control.id:
                     raise damaged()
                 repo.jobs.cancel(identifier, body.expected_revision)
             ack = repo.jobs.snapshot(identifier)
-            event = TurnCancelled(kind='cancel_observed' if terminal else 'cancelled', turn_id=turn.control.id,
-                requested_session_revision=None if terminal else state.revision + 1,
-                terminal_session_revision=None if terminal else state.revision + 2,
-                command=CancelCommand(workspace_id=current.workspace_id, actor_session_id=current.id, route='cancel',
-                    target_id=identifier, key=key, body=body, ack=ack))
-            repo.append(state, event, ack.updated_at if not terminal else utc_now())
-            repo.checked(original)
+            command=CancelCommand(workspace_id=current.workspace_id, actor_session_id=current.id, route='cancel',
+                target_id=identifier,key=key,body=body,ack=ack)
+            if provider_state is not None and not active and self.outbound_owner is not None:
+                _, binding = self.outbound_owner.record_terminal(conn,current.workspace_id,turn.control.id,provider_state,
+                    ack.updated_at,outcome='cancelled',error_code='CODEX_CANCELLED')
+                bound = repo.append(state,binding,ack.updated_at)
+                state.envelopes.append(bound)
+            event: TurnCancelled | TurnCancelRequested
+            if active:
+                event = TurnCancelRequested(kind='cancel_request_observed' if already_requested else 'cancel_requested',
+                    turn_id=turn.control.id,session_revision=None if already_requested else state.revision+1,command=command)
+            else:
+                event = TurnCancelled(kind='cancel_observed' if terminal else 'cancelled', turn_id=turn.control.id,
+                    requested_session_revision=None if terminal else state.revision + 1,
+                    terminal_session_revision=None if terminal else state.revision + 2,command=command)
+            repo.append(state, event, ack.updated_at if not terminal and not already_requested else utc_now())
+            self._state(conn,current)
             current_control_access(conn, current, write=False)
             return ack
 

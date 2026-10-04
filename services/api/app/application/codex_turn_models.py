@@ -154,6 +154,13 @@ class TurnLifecycle(dm.StrictModel):
     provider_sha256: dm.Sha256
 
 
+class TurnCancelRequested(dm.StrictModel):
+    kind: Literal['cancel_requested', 'cancel_request_observed']
+    turn_id: dm.Id
+    session_revision: dm.Revision | None
+    command: CancelCommand
+
+
 def preparation_digest(workspace: str, view: CodexTurnPreparationView) -> str:
     return content_sha256({'version': 'codex-turn-preparation-v1', 'workspace_id': workspace,
         'actor_session_id': view.actor_session_id, 'session_id': view.session_id, 'turn_id': view.turn_id,

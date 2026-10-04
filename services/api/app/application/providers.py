@@ -54,8 +54,20 @@ def checked_provider_configuration(connection: sqlite3.Connection, identity: Ses
     if not connection.in_transaction:
         raise ApiError(409, 'TRANSACTION_REQUIRED', '提供商核验需要当前事务。')
     current_session_identity(connection, identity)
+    return retained_provider_configuration(connection, identity.workspace_id, provider_id, revision)
+
+
+def retained_provider_configuration(connection: sqlite3.Connection, workspace_id: str,
+                                    provider_id: str, revision: int | None = None) -> ProviderConfigView:
+    """Internal immutable fact check for owner finalization, not access authority.
+
+    Callers may retain a started outcome after its original actor lost access.
+    This never reads secret bytes or authorizes a request or HTTP delivery.
+    """
+    if not connection.in_transaction:
+        raise ApiError(409, 'TRANSACTION_REQUIRED', '提供商原事实核验需要当前事务。')
     identifier(provider_id)
-    repository = ProviderRepository(connection, identity.workspace_id)
+    repository = ProviderRepository(connection, workspace_id)
     current = repository.config(provider_id)
     return current if revision is None else repository.config(provider_id, revision)
 

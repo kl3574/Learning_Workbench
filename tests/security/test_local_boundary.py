@@ -217,7 +217,7 @@ def test_payload_budget_and_unimplemented_routes(routing_runtime):
     application, client, settings = routing_runtime
     headers = login(application, client, settings)
     assert client.post("/api/v1/session/logout", content=b"x" * (settings.max_request_bytes + 1), headers=headers).status_code == 413
-    # v3.0.15 adds the turn control list; execution is still unregistered.
+    # Current bootstrap and turn GET/POST are real, but session list is absent.
     # Unsupported methods/routes remain JSON errors instead of serving the SPA.
     response = client.get("/api/v1/codex/sessions")
     assert response.status_code == 405
@@ -227,10 +227,12 @@ def test_payload_budget_and_unimplemented_routes(routing_runtime):
     assert set(paths["/api/v1/codex/sessions"]) == {"post"}
     assert "/api/v1/codex/sessions/{id}" in paths
     assert "/api/v1/codex/capabilities" in paths
-    assert set(paths["/api/v1/codex/sessions/{id}/turns"]) == {"get"}
-    unavailable = client.post("/api/v1/codex/sessions/unavailable/turns", json={}, headers=headers)
-    assert unavailable.status_code == 405
-    assert unavailable.json()["error"]["code"] == "METHOD_NOT_ALLOWED"
+    assert set(paths["/api/v1/codex/sessions/{id}/turns"]) == {"get", "post"}
+    invalid = client.post("/api/v1/codex/sessions/unavailable/turns", json={}, headers=headers)
+    assert invalid.status_code == 422 and invalid.json()["error"]["code"] == "SCHEMA_INVALID"
+    unavailable = client.post("/api/v1/codex/turns/unavailable/interrupt", json={}, headers=headers)
+    assert unavailable.status_code == 404
+    assert unavailable.json()["error"]["code"] == "REFERENCE_MISSING"
     unknown = client.get("/api/v1/not-implemented")
     assert unknown.status_code == 404 and unknown.json()["error"]["code"] == "REFERENCE_MISSING"
     assert client.post("/health", headers=headers).status_code == 405

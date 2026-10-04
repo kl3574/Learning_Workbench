@@ -53,6 +53,7 @@ from .interfaces.codex_http import create_codex_router
 from .interfaces.static import WorkbenchStaticMount
 from .application.codex_bootstrap import CodexBootstrapService
 from .application.codex_turn import CodexTurnService
+from .application.codex_turn_worker import CodexTurnExecutor, CodexTurnWorker
 from .interfaces.codex_turn_http import create_codex_turn_router
 from .application.provider_codex_consents import CodexConsentsService
 from .interfaces.codex_consent_http import create_codex_consent_router
@@ -91,6 +92,7 @@ def create_app(settings: Settings | None = None, *,
                outbound_sources: OutboundSourceRegistry | None = None,
                request_preparer: ProviderRequestPreparer | None = None,
                codex_proofs: ProofRegistry | None = None,
+               codex_executor: CodexTurnExecutor | None = None,
                codex_probe: CodexCapabilityProbe | None = None,
                codex_bootstrap_runtime: CodexBootstrapRuntime | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
@@ -147,6 +149,8 @@ def create_app(settings: Settings | None = None, *,
     codex_turn = CodexTurnService(database, codex_bootstrap, codex_registry)
     codex_consents = CodexConsentsService(database, codex_turn, provider_secrets, codex_registry)
     codex_turn.outbound_owner = codex_consents
+    codex_turn_worker = CodexTurnWorker(codex_turn,codex_consents,codex_executor)
+    codex_turn.execution_available = codex_turn_worker.available
     jobs = JobService(database, review=review_service, restore_numeric=restore_numeric_service, codex_turn=codex_turn)
 
     @asynccontextmanager
@@ -154,6 +158,7 @@ def create_app(settings: Settings | None = None, *,
         workspace_id = database.initialize()
         application.state.codex_bootstrap_recovered = await asyncio.to_thread(codex_bootstrap.recover, workspace_id)
         provider_secrets.initialize()
+        application.state.codex_turn_recovered = await asyncio.to_thread(codex_turn_worker.recover)
         # Only consumed, abandoned records are terminated. Recovery cannot make
         # another HTTP attempt and must skip a still-live source owner lease.
         recovered = await asyncio.to_thread(provider_dispatch.recover_unfinished, workspace_id)
@@ -167,9 +172,11 @@ def create_app(settings: Settings | None = None, *,
         group_numeric_worker.start()
         restore_numeric_worker.start()
         review_worker.start()
+        codex_turn_worker.start()
         try:
             yield
         finally:
+            codex_turn_worker.stop()
             review_worker.stop()
             restore_numeric_worker.stop()
             group_numeric_worker.stop()
@@ -192,6 +199,7 @@ def create_app(settings: Settings | None = None, *,
     application.state.import_worker = import_worker
     application.state.provider_service = providers
     application.state.consent_service = consents
+    application.state.codex_turn_worker = codex_turn_worker
     application.state.provider_dispatch = provider_dispatch
     application.state.tutor_service = tutor_service
     application.state.tutor_worker = tutor_worker

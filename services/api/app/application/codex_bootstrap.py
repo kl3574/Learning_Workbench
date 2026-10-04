@@ -53,6 +53,17 @@ class CodexBootstrapService:
         _, history = self._history(connection, identity, write=False)
         return {item.session.id: item for item in history.values() if item.session is not None}
 
+    def checked_owned_sessions(self, connection, workspace_id: str) -> dict[str, BootstrapSnapshot]:
+        """Internal original mapping integrity for stopped-owner finalization.
+
+        No current access grant, HTTP projection, CLI call, or recovery occurs.
+        It permits retaining an already-started fact after actor expiry only.
+        """
+        if not connection.in_transaction:
+            raise conflict()
+        history = CodexBootstrapRepository(connection, workspace_id, self.runtime).checked()
+        return {item.session.id: item for item in history.values() if item.session is not None}
+
     @staticmethod
     def _replay(history, command):
         for snapshot in history.values():

@@ -10,6 +10,7 @@ from ..codex_turn_dto import (
 from ..provider_dto import ConsentRevoke
 from .provider_codex_ports import CodexOutboundMaterial
 from .provider_models import DispatchLease, UsageSnapshot
+from .provider_codex_execution import CodexExecutionResult
 
 
 class CodexPreviewCommand(CodexTurnModel):
@@ -65,6 +66,7 @@ class CodexDispatchStarted(CodexTurnModel):
     dispatch_id: dm.Id
     request_body_sha256: dm.Sha256
     lease: DispatchLease
+    execution_owner_id: Annotated[dm.Id, Field(pattern=r'^codex_owner_[a-f0-9]{32}$')]
 
 
 class CodexDispatchFinished(CodexTurnModel):
@@ -75,6 +77,7 @@ class CodexDispatchFinished(CodexTurnModel):
     answer: Annotated[str, Field(max_length=400000)]
     usage: UsageSnapshot
     elapsed_ms: Annotated[int, Field(strict=True, ge=0)] | None
+    execution_result: CodexExecutionResult | None
 
 
 CodexProviderEvent = Annotated[
