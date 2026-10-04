@@ -81,13 +81,16 @@ test('a delayed old review response cannot restore history or academic context a
   const consumed = await observeNextResponseJson(page, `/api/v1/attempts/${attempt.id}/result`)
   const phases: { event: string; invocation?: number; status?: number }[] = []; let invocations = 0
   const phase = (event: string, invocation?: number, status?: number) => { phases.push({ event, invocation, status }); writeFileSync(info.outputPath('late-response-phases.json'), JSON.stringify(phases)) }
-  await page.route(routePattern, async route => { const invocation = ++invocations; phase('handler-enter', invocation); const response = await route.fetch(); phase('captured', invocation, response.status()); captured(); await gate; phase('fulfill-enter', invocation); try { await route.fulfill({ response }); phase('fulfill-complete', invocation) } catch (error) { phase('fulfill-error', invocation); throw error } })
+  let handled: Promise<void> | undefined
+  // Only the clicked old GET is delayed; later permission reads stay real.
+  // A times:1 handler is removed on entry, so await its own promise as well.
+  await page.route(routePattern, route => { handled = (async () => { const invocation = ++invocations; phase('handler-enter', invocation); const response = await route.fetch(); phase('captured', invocation, response.status()); captured(); await gate; phase('fulfill-enter', invocation); try { await route.fulfill({ response }); phase('fulfill-complete', invocation) } catch (error) { phase('fulfill-error', invocation); throw error } })(); return handled }, { times: 1 })
   await page.getByRole('button', { name: '重新读取评分结果', exact: true }).click(); await ready
   const other = await page.context().newPage()
   try {
     await other.goto(`${new URL(page.url()).origin}/?assessment=${encodeURIComponent(JSON.stringify({ assessment_ref: fixture.assessment, course_ref: fixture.course }))}`)
     await other.getByRole('checkbox', { name: '我已核对内容状态与模式，确认开始未评分测试', exact: true }).check(); await other.getByRole('button', { name: '明确开始本次测试', exact: true }).click(); await expect(other.getByText('独立测试进行中', { exact: true }).first()).toBeVisible()
-    phase('other-independent-visible'); release(); await page.unrouteAll({ behavior: 'wait' }); phase('handlers-drained'); expect(await consumed.wait()).toEqual({ outcome: 'fulfilled', jsonCalls: 1 }); phase('client-chain-observed'); await expect(page.getByRole('region', { name: '完整评分历史' })).toHaveCount(0); await expect(page.getByText('当前测试复盘上下文', { exact: true })).toHaveCount(0)
+    phase('other-independent-visible'); release(); await handled; await page.unrouteAll({ behavior: 'wait' }); expect(invocations).toBe(1); phase('handlers-drained'); expect(await consumed.wait()).toEqual({ outcome: 'fulfilled', jsonCalls: 1 }); phase('client-chain-observed'); await expect(page.getByRole('region', { name: '完整评分历史' })).toHaveCount(0); await expect(page.getByText('当前测试复盘上下文', { exact: true })).toHaveCount(0)
     expect((await page.request.get(`/api/v1/attempts/${attempt.id}/result`)).status()).toBe(409)
-  } finally { release(); await page.unrouteAll({ behavior: 'wait' }); await consumed.dispose(); await other.close() }
+  } finally { release(); await handled; await page.unrouteAll({ behavior: 'wait' }); await consumed.dispose(); await other.close() }
 })
