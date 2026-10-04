@@ -1,0 +1,31 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+rootdir: $HOME/.cache/learning-workbench-acceptance/m62-public-safe-oct02
+configfile: pyproject.toml
+plugins: anyio-4.15.1
+collected 7 items
+
+tests/integration/test_import_parser_exit_race.py ...                    [ 42%]
+tests/integration/test_provider_dispatch.py .                            [ 57%]
+tests/security/test_local_boundary.py FF                                 [ 85%]
+tests/unit/test_provider_protocol.py .                                   [100%]
+
+=================================== FAILURES ===================================
+E   AssertionError: assert '/api/v1/codex/sessions/{id}/turns' not in {'/health': {'get': {'tags': ['runtime'], 'summary': 'Health', 'operationId': 'health_health_get', 'responses': {'200'...summary': 'Logout', 'operationId': 'logout_api_v1_session_logout_post', 'security': [{'LocalSession': []}], ...}}, ...}
+$HOME/.cache/learning-workbench-acceptance/m62-public-safe-oct02/tests/security/test_local_boundary.py:230: AssertionError: assert '/api/v1/codex/sessions/{id}/turns' not in {'/health': {'get': {'tags': ['runtime'], 'summary': 'Health', 'operationId': 'health_health_get', 'responses': {'200'...summary': 'Logout', 'operationId': 'logout_api_v1_session_logout_post', 'security': [{'LocalSession': []}], ...}}, ...}
+E   AssertionError: assert '/api/v1/codex/sessions/{id}/turns' not in {'/health': {'get': {'tags': ['runtime'], 'summary': 'Health', 'operationId': 'health_health_get', 'responses': {'200'...summary': 'Logout', 'operationId': 'logout_api_v1_session_logout_post', 'security': [{'LocalSession': []}], ...}}, ...}
+$HOME/.cache/learning-workbench-acceptance/m62-public-safe-oct02/tests/security/test_local_boundary.py:230: AssertionError: assert '/api/v1/codex/sessions/{id}/turns' not in {'/health': {'get': {'tags': ['runtime'], 'summary': 'Health', 'operationId': 'health_health_get', 'responses': {'200'...summary': 'Logout', 'operationId': 'logout_api_v1_session_logout_post', 'security': [{'LocalSession': []}], ...}}, ...}
+=============================== warnings summary ===============================
+../m62-combined-final-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1
+  $HOME/.cache/learning-workbench-acceptance/m62-combined-final-active/.venv/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../m62-combined-final-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53
+  $HOME/.cache/learning-workbench-acceptance/m62-combined-final-active/.venv/lib/python3.12/site-packages/starlette/testclient.py:53: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = Callable[[], AbstractContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/security/test_local_boundary.py::test_payload_budget_and_unimplemented_routes[without-ui]
+FAILED tests/security/test_local_boundary.py::test_payload_budget_and_unimplemented_routes[with-ui]
+=================== 2 failed, 5 passed, 2 warnings in 6.98s ====================

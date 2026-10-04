@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-04T02:47:45Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
+更新：2026-10-04T09:40:11Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
 
-仓库发布：VERIFIED；Issues 同步：VERIFIED_ISSUE32_APPROVED_V315_BODY_ONLY
+仓库发布：VERIFIED；Issues 同步：VERIFIED_ISSUE32_0846_BODY_ONLY_LATER_TERMINAL_SYNC_PENDING
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
 
-完成真实准备/安全控制GET/取消owner固定门禁与独审闭合，及当前sessionUI严格GET投影修复，按固定来源整合后运行适用完整组合门禁；读取690双CI实际终态再发布下一源码。新的外发许可/dispatch/逐操作执行/manifest仍待后续实施，无完整proof零外发。
+闭合新的grant两项真实P2及固定门禁、独立读回整合后，在专属TMPDIR/basetemp运行最新完整Python/Web/静态；新turn准备/安全控制UI并行实施。当前公开690双CI全部成功与本地ff完整失败分开；生产proof缺失零外发，整个M6.3未完成。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -297,6 +297,10 @@
 - M6.3_v315_contract_adoption: {'status': 'SCOPED_STRUCTURAL_CONTRACTS_PASS_RUNTIME_IN_PROGRESS', 'source': '50ec27381c4e98513bf8aac48128c201e933423f', 'structural': '80generated/54core PASS', 'contracts': '168PASS', 'input_binding': '1386complete nonprogress files Git exact before/after', 'runtime_route_counts': '147declared/116registered/31unregistered', 'evidence': 'progress/evidence/2026-10-03/M6.3-v315-adoption-and-fixed-structural-contract-gates/REPORT.json', 'boundary': 'No new turn/model/tool/manifest runtime acceptance.'}
 - M6.3_strict_turn_DTO: {'status': 'SCOPED_DTO_PASS_LOCAL_INTEGRATED', 'source': '8da88ed890a25ee9ed6753fb6b4599625e449bf8', 'contracts': '342PASS including132newDTO', 'original': '760456PASS NOT_ACCEPTED dueP2; original4RED retained', 'canonical': '764090fa7312565955bc7e781f2f279bf40f9d04', 'root': '42raw/43SAFE/4outer,2complete1393Git maps readback;1394integrated static gateGit exact', 'evidence': 'progress/evidence/2026-10-03/M6.3-strict-turn-DTO-fixed-gates-and-root-review/REPORT.json', 'boundary': '116runtime/147declared. No realnewturn/CLI/model/tool/manifest acceptance.'}
 - M6.3_source_publication_690: {'status': 'ACTUAL_NORMAL_PUSH_DRAFT_READBACK_CI_IN_PROGRESS', 'head': '69029bc1ab355efdbb6e0fdb8a86204c59cea71a', 'push_run': 37170415116, 'pr_run': 37170416801, 'evidence': 'progress/evidence/2026-10-03/M6.3-v315-source-publication-and-observed-CI/REPORT.json', 'scope': 'v315normative/adoption documentarysource only; newer local764 DTO notthisCI.'}
+- m6_3_preparation_current_combined: Fixedff1405Git inputs: static1068WebPASS and controlledChrome/realHTTP/SQLite/IDB r3active to r5null restartPASS. Actual completePython original1939PASS440FAIL1568ERROR1skip, fixedbasetemp3939PASS7FAIL2ENVskip remainFAIL. Sameff TMPDIR+basetemp only5PASS2routeFAIL; b0cf test-only GET/method fix then7PASS, not completePASS.
+- m6_3_690_actual_ci: Actual push37170415116/PR37170416801 all12jobsSUCCESS; push690/PRcheckout6692 same09c22 tree. Each825backend809contract2143integration+2numericENVskip1058Web130native; actual12APIlogs retained with original empty-log collector failure, no source/result conflation.
+- m6_3_turn_client_counterevidence: Actual97 test-only counterexamples41PASS and1109fullWeb/strict/build1407inputsGitexact; same5c production bytes. Peer originalnewlineP2 withdrawnFALSE_POSITIVE in separate immutableclosure. Localnormalmergef11 exact2newfiles, all1405 existing nonprogress paths unchanged; panel/realexecution stillincomplete.
+- m6_3_690_numeric_artifacts: Four actual690 push/PR single/restore artifact IDs11291717091/11291407336/11291472698/11291288003 independently checked metadata+archives+sixJSON. All physicalBLOCKED_ENVIRONMENT/exit1/outputnull/noassertions, publication409PUBLISH_NUMERIC_REQUIRED.23qualifiedsafe candidates;SEAL.py excluded with explicit two-prefix transformerrata.
 
 ## 阻塞与待决项
 
