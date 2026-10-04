@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from .provider_codex_consents import CodexConsentsService
     from .codex_approvals import CodexApprovalsService
     from .codex_artifacts import CodexArtifactsService
+    from .codex_broker_control import CodexBrokerControls
 
 
 Delivery = TypeVar("Delivery")
@@ -60,7 +61,7 @@ class CodexTurnService:
         self.outbound_owner: CodexConsentsService | None = None
         self.approvals: CodexApprovalsService | None = None
         self.artifacts: CodexArtifactsService | None = None
-        self.broker_controls = None
+        self.broker_controls: CodexBrokerControls | None = None
         self.execution_available: Callable[[CodexRuntimeProfile], bool] = lambda profile: False
 
     def _deliver(self, identity: SessionIdentity, value: Delivery, *, subject: bool) -> Delivery:

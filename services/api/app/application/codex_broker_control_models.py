@@ -70,7 +70,7 @@ class BrokerFrameObserved(dm.StrictModel):
 
 class BrokerControlClosed(dm.StrictModel):
     kind: Literal['control_closed']
-    reason: Literal['live_mapping_lost', 'execution_finished', 'transport_unknown']
+    reason: Literal['live_mapping_lost', 'adapter_returned', 'transport_unknown']
 
 
 BrokerEvent = Annotated[BrokerMappingBound | BrokerInterruptPrepared | BrokerInterruptStarted |

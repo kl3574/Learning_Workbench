@@ -65,7 +65,8 @@ class CodexTurnWorker:
         self.last_error_code: str | None = None
         self._callback_context: tuple[str, str, str, int] | None = None
         self.imports: CodexArtifactImports | None = None
-        self.controls = CodexBrokerControls(turns, provider)
+        self.controls = CodexBrokerControls(turns, provider, lambda: self._callback_context
+            if type(self.executor) is SyntheticCodexExecutor else None)
         turns.broker_controls = self.controls
 
     def available(self, profile: CodexRuntimeProfile) -> bool:
@@ -362,5 +363,6 @@ class CodexTurnWorker:
                         continue
                     self._terminal(conn,workspace,repo,state,turn,provider_state,
                         outcome='unknown',code='CODEX_OUTCOME_UNKNOWN')
+                    self.controls.recover_owned(conn, workspace, turn_id)
                     count+=1
         return count
