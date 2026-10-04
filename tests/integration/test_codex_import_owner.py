@@ -221,4 +221,4 @@ def test_current_role_is_checked_before_artifact_port_or_new_stage(tmp_path):
             service.stage_codex_artifacts(conn, identity, session_id=item.session_id,
                 body=CodexArtifactImportWrite(turn_id=item.turn_id, artifact_ids=[item.artifact_id],
                     expected_manifest_sha256=item.manifest_sha256), aggregate_job_id='job_aggregate', source=peer)
-    assert denied.value.status_code == 403 and peer.calls == [] and case.dump() == before
+    assert denied.value.status == 403 and peer.calls == [] and case.dump() == before

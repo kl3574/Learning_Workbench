@@ -72,6 +72,7 @@ class CodexImportRecord(dm.StrictModel):
     filename: str
     media_type: str
     job_input_json: str
+    initial_event_json: str
     created_at: dm.UTC
 
 
@@ -89,6 +90,7 @@ class CodexImportPreviewReceipt(dm.StrictModel):
     binding_sha256: dm.Sha256
     job_revision: dm.Revision
     preview_json: str
+    source_metadata_json: str
     event_prefix_json: str
 
 

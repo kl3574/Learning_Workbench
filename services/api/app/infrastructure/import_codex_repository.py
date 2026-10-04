@@ -66,6 +66,35 @@ class CodexImportRepository:
             raise codex_import_damaged()
         return found[0]
 
+    def aggregate_members(self) -> set[str]:
+        batches = {row[0] for row in self.conn.execute(
+            'SELECT aggregate_job_id FROM codex_import_batches WHERE workspace_id=?', (self.workspace_id,))}
+        bindings = {row[0] for row in self.conn.execute(
+            'SELECT aggregate_job_id FROM codex_import_bindings WHERE workspace_id=?', (self.workspace_id,))}
+        if batches != bindings:
+            raise codex_import_damaged()
+        imports = {item.binding.import_id for aggregate in batches for item in self.batch(aggregate).records}
+        previews = {row[0] for row in self.conn.execute(
+            'SELECT import_id FROM codex_import_previews WHERE workspace_id=?', (self.workspace_id,))}
+        if not previews <= imports:
+            raise codex_import_damaged()
+        return batches
+
+    def check_events(self, record: CodexImportRecord, row: sqlite3.Row) -> None:
+        events = self.conn.execute('SELECT * FROM job_events WHERE job_id=? ORDER BY seq',
+            (record.binding.import_job_id,)).fetchall()
+        if len(events) != row['job_revision'] or not events:
+            raise codex_import_damaged()
+        if canonical_bytes(dict(events[0])).decode() != record.initial_event_json:
+            raise codex_import_damaged()
+        for revision, event in enumerate(events, 1):
+            if (event['seq'] != revision or event['type'] not in
+                    {'queued', 'running', 'awaiting_approval', 'completed', 'failed', 'cancelled'}
+                    or json_object(event['payload_json']) != {'status': event['type'], 'revision': revision}):
+                raise codex_import_damaged()
+        if events[-1]['type'] != row['job_status']:
+            raise codex_import_damaged()
+
     def freeze_preview(self, record: CodexImportRecord, row: sqlite3.Row) -> None:
         binding = record.binding
         if row['status'] != 'preview_ready' or row['job_status'] != 'awaiting_approval':
@@ -75,6 +104,7 @@ class CodexImportRepository:
         value = CodexImportPreviewReceipt(version='codex-import-preview-v1', workspace_id=self.workspace_id,
             import_id=binding.import_id, binding_sha256=sha256_bytes(canonical_bytes(binding)),
             job_revision=row['job_revision'], preview_json=row['preview_json'],
+            source_metadata_json=row['source_metadata'],
             event_prefix_json=canonical_bytes([dict(event) for event in events]).decode())
         raw = canonical_bytes(value)
         self.conn.execute('INSERT INTO codex_import_previews VALUES(?,?,?,?)',
@@ -102,6 +132,15 @@ class CodexImportRepository:
             if (canonical_bytes(preview).decode() != value.preview_json
                     or any(current.get(key) != item for key, item in preview.items())
                     or row['parser_version'] != preview['parser_version']):
+                raise codex_import_damaged()
+            metadata, frozen = json_object(row['source_metadata']), json_object(value.source_metadata_json)
+            if row['status'] == 'committed':
+                if metadata.get('original_symbols') != frozen.get('symbols'):
+                    raise codex_import_damaged()
+                # Ordinary explicit commit remaps symbols and retains their original array.
+                metadata = {**metadata, 'symbols': metadata.get('original_symbols')}
+                del metadata['original_symbols']
+            if metadata != frozen or canonical_bytes(frozen).decode() != value.source_metadata_json:
                 raise codex_import_damaged()
             events = self.conn.execute('SELECT * FROM job_events WHERE job_id=? AND seq<=? ORDER BY seq',
                 (binding.import_job_id, value.job_revision)).fetchall()

@@ -217,6 +217,8 @@ class ImportService:
                 raise codex_import_damaged() from None
         if len({(item.source_job_id, item.terminal_receipt_sha256, item.manifest_id) for item in selected}) != 1:
             raise codex_import_damaged()
+        if sum(item.artifact_size for item in selected) > 16777216:
+            raise ApiError(413, 'IMPORT_SIZE_INVALID', '所选原件总量超过预算。')
         repository = ImportRepository(conn, current.workspace_id)
         records = []
         conn.execute('SAVEPOINT codex_import_stage')
@@ -254,6 +256,32 @@ class ImportService:
             result.append(CheckedCodexImportStage(item, row['status'],
                 dm.JobRef(id=item.import_job_id, status=row['job_status']), receipt is not None, receipt))
         return tuple(result)
+
+    def codex_aggregate_members(self, conn: sqlite3.Connection, workspace_id: str) -> set[str]:
+        """Integrity-only complete Import membership for the aggregate owner."""
+        repository = CodexImportRepository(conn, workspace_id)
+        aggregates = repository.aggregate_members()
+        for aggregate in aggregates:
+            self.check_codex_bindings(conn, workspace_id, tuple(item.binding for item in repository.batch(aggregate).records))
+        return aggregates
+
+    def cancel_codex_imports(self, conn: sqlite3.Connection, workspace_id: str,
+                            expected: tuple[CodexImportBinding, ...]) -> tuple[CheckedCodexImportStage, ...]:
+        """Called only after the Jobs owner admits same-workspace safety control; no material delivery."""
+        checked = self.check_codex_bindings(conn, workspace_id, expected)
+        repository = ImportRepository(conn, workspace_id)
+        conn.execute('SAVEPOINT codex_import_cancel')
+        try:
+            for item in checked:
+                if item.status not in {'committed', 'failed', 'cancelled'}:
+                    self._cancel(repository, repository.load(item.binding.import_id))
+            result = self.check_codex_bindings(conn, workspace_id, expected)
+        except BaseException:
+            conn.execute('ROLLBACK TO codex_import_cancel')
+            conn.execute('RELEASE codex_import_cancel')
+            raise
+        conn.execute('RELEASE codex_import_cancel')
+        return result
 
     def check_codex_source(self, conn: sqlite3.Connection, workspace_id: str,
                            import_id: str) -> CodexImportRecord | None:
@@ -295,7 +323,13 @@ class ImportService:
         if info.size != binding.artifact_size:
             raise codex_import_damaged()
         self.frozen_store(row).read(info.sha256, expected_size=info.size)
-        CodexImportRepository(conn, workspace_id).preview_receipt(record, row)
+        frozen = CodexImportRepository(conn, workspace_id)
+        frozen.check_events(record, row)
+        frozen.preview_receipt(record, row)
+        if row['parser_version'] is not None:
+            for digest in json_object(row['preview_json'])['bodies'].values():
+                body = repository.blob(digest)
+                self.frozen_store(row).read(body.sha256, expected_size=body.size)
         return record
 
     def _stage_one(self, repository: ImportRepository, identity: SessionIdentity, *, data: bytes,
@@ -346,7 +380,9 @@ class ImportService:
         staged = ImportStaged(import_id=import_id, job=dm.JobRef(id=job_id, status="queued"), input_sha256=digest)
         record = None if codex_binding is None else CodexImportRecord(version='codex-import-record-v1',
             binding=codex_binding, original_artifact_id=artifact_id, filename=filename, media_type=media_type,
-            job_input_json=json_text(job_input), created_at=now)
+            job_input_json=json_text(job_input), created_at=now,
+            initial_event_json=json_text(dict(repository.connection.execute(
+                'SELECT * FROM job_events WHERE job_id=? AND seq=1', (job_id,)).fetchone())))
         return staged, record
 
     @staticmethod
