@@ -52,6 +52,8 @@ from .infrastructure.codex_probe import LocalCodexProbe
 from .interfaces.codex_http import create_codex_router
 from .interfaces.static import WorkbenchStaticMount
 from .application.codex_bootstrap import CodexBootstrapService
+from .application.codex_turn import CodexTurnService
+from .interfaces.codex_turn_http import create_codex_turn_router
 from .application.codex_bootstrap_ports import CodexBootstrapRuntime
 from .infrastructure.codex_bootstrap_runtime import LocalCodexBootstrapRuntime
 from .interfaces.codex_bootstrap_http import create_codex_bootstrap_router
@@ -136,9 +138,10 @@ def create_app(settings: Settings | None = None, *,
     authoring_service.verify_publication = publication_service.verify_recorded
     artifacts = ArtifactsService(database, review_service.readers())
     content_impacts = ContentImpactDecisionService(database, artifacts)
-    jobs = JobService(database, review=review_service, restore_numeric=restore_numeric_service)
     codex_bootstrap = CodexBootstrapService(database, codex_bootstrap_runtime if codex_bootstrap_runtime is not None
         else LocalCodexBootstrapRuntime(settings.data_dir, settings.codex_executable))
+    codex_turn = CodexTurnService(database, codex_bootstrap)
+    jobs = JobService(database, review=review_service, restore_numeric=restore_numeric_service, codex_turn=codex_turn)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
@@ -208,6 +211,7 @@ def create_app(settings: Settings | None = None, *,
     application.state.outbound_sources = provider_sources
     application.state.request_preparer = provider_preparer
     application.state.codex_bootstrap_service = codex_bootstrap
+    application.state.codex_turn_service = codex_turn
     install_boundary(application, settings, database)
     application.include_router(create_router(settings, database, worker_ready=import_worker.is_alive))
     application.include_router(create_content_router(database))
@@ -222,7 +226,8 @@ def create_app(settings: Settings | None = None, *,
     application.include_router(create_provider_router(providers, consents))
     application.include_router(create_codex_router(CodexCapabilitiesService(database,
         codex_probe if codex_probe is not None else LocalCodexProbe(settings.data_dir, settings.codex_executable))))
-    application.include_router(create_codex_bootstrap_router(codex_bootstrap))
+    application.include_router(create_codex_bootstrap_router(codex_bootstrap, codex_turn))
+    application.include_router(create_codex_turn_router(codex_turn))
     application.include_router(create_concept_state_router(database))
     application.include_router(create_recommendation_router(database))
     application.include_router(create_retrieval_router(database))

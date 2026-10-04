@@ -109,10 +109,11 @@ def require_pending_import_confirmation(connection: sqlite3.Connection, workspac
 
 class JobService:
     """Dispatch only implemented job kinds to their owning application service."""
-    def __init__(self, database, review: 'ReviewService | None' = None, restore_numeric=None):
+    def __init__(self, database, review: 'ReviewService | None' = None, restore_numeric=None, codex_turn=None):
         self.database = database
         self.review = review
         self.restore_numeric = restore_numeric
+        self.codex_turn = codex_turn
 
     def _owner(self, identity, identifier):
         from .errors import ApiError
@@ -122,6 +123,8 @@ class JobService:
             row = connection.execute("SELECT kind FROM jobs WHERE id=? AND workspace_id=?", (identifier, identity.workspace_id)).fetchone()
         if row is None:
             raise ApiError(404, "JOB_MISSING", "任务不存在或不可访问。")
+        if row['kind'] == 'codex_turn' and self.codex_turn is not None:
+            return self.codex_turn
         if row['kind'] == 'draft_review' and self.review is not None:
             return self.review
         if row["kind"] == "assessment_grading":

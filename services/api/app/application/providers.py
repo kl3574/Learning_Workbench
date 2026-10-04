@@ -43,6 +43,21 @@ def provider_configuration_present(connection: sqlite3.Connection, workspace_id:
     return bool(ProviderRepository(connection, workspace_id).configs())
 
 
+def checked_provider_configuration(connection: sqlite3.Connection, identity: SessionIdentity,
+                                   provider_id: str, revision: int | None = None) -> ProviderConfigView:
+    """Owned configuration facts for local preparation, never secret I/O.
+
+    Historical reads validate the immutable original config and receipt. They
+    grant no permission to transmit or consume any Provider authorization.
+    """
+    from ..infrastructure.security import current_session_identity
+    if not connection.in_transaction:
+        raise ApiError(409, 'TRANSACTION_REQUIRED', '提供商核验需要当前事务。')
+    current_session_identity(connection, identity)
+    identifier(provider_id)
+    return ProviderRepository(connection, identity.workspace_id).config(provider_id, revision)
+
+
 class ProviderService:
     def __init__(self, database: Database, secret_store: SecretStore,
                  preparer: ProviderRequestPreparer | None = None):

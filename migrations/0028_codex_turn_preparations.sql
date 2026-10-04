@@ -1,0 +1,24 @@
+-- Codex-owned preparation/control history. Bootstrap r1/r2 facts stay immutable.
+CREATE TABLE codex_turn_sessions(session_id TEXT PRIMARY KEY,workspace_id TEXT NOT NULL REFERENCES workspace(id),thread_id TEXT NOT NULL UNIQUE REFERENCES threads(id),record_json TEXT NOT NULL CHECK(json_valid(record_json)),record_sha256 TEXT NOT NULL);
+CREATE TABLE codex_turn_heads(session_id TEXT PRIMARY KEY,workspace_id TEXT NOT NULL REFERENCES workspace(id),revision INTEGER NOT NULL CHECK(revision>=2),event_count INTEGER NOT NULL CHECK(event_count>=0),head_sha256 TEXT NOT NULL,active_turn_id TEXT);
+CREATE TABLE codex_turn_events(session_id TEXT NOT NULL,workspace_id TEXT NOT NULL REFERENCES workspace(id),seq INTEGER NOT NULL CHECK(seq>0),record_json TEXT NOT NULL CHECK(json_valid(record_json)),record_sha256 TEXT NOT NULL,PRIMARY KEY(session_id,seq));
+CREATE TABLE codex_turn_event_members(session_id TEXT NOT NULL,workspace_id TEXT NOT NULL REFERENCES workspace(id),seq INTEGER NOT NULL,record_sha256 TEXT NOT NULL,PRIMARY KEY(session_id,seq));
+CREATE TABLE codex_turn_members(sequence INTEGER PRIMARY KEY AUTOINCREMENT,turn_id TEXT NOT NULL UNIQUE,session_id TEXT NOT NULL,workspace_id TEXT NOT NULL REFERENCES workspace(id),job_id TEXT NOT NULL UNIQUE REFERENCES jobs(id),preparation_id TEXT NOT NULL UNIQUE,preparation_sha256 TEXT NOT NULL,prepared_seq INTEGER NOT NULL);
+CREATE TABLE codex_turn_commands(workspace_id TEXT NOT NULL REFERENCES workspace(id),actor_session_id TEXT NOT NULL REFERENCES local_sessions(id),route TEXT NOT NULL,target_id TEXT NOT NULL,command_key TEXT NOT NULL,session_id TEXT NOT NULL,seq INTEGER NOT NULL,command_sha256 TEXT NOT NULL,PRIMARY KEY(workspace_id,actor_session_id,route,target_id,command_key),UNIQUE(session_id,seq));
+CREATE TRIGGER codex_turn_sessions_insert BEFORE INSERT ON codex_turn_sessions WHEN EXISTS(SELECT 1 FROM codex_turn_sessions WHERE session_id=NEW.session_id) BEGIN SELECT RAISE(ABORT,'immutable codex control'); END;
+CREATE TRIGGER codex_turn_sessions_update BEFORE UPDATE ON codex_turn_sessions BEGIN SELECT RAISE(ABORT,'immutable codex control'); END;
+CREATE TRIGGER codex_turn_sessions_delete BEFORE DELETE ON codex_turn_sessions BEGIN SELECT RAISE(ABORT,'immutable codex control'); END;
+CREATE TRIGGER codex_turn_events_insert BEFORE INSERT ON codex_turn_events WHEN EXISTS(SELECT 1 FROM codex_turn_events WHERE session_id=NEW.session_id AND seq=NEW.seq) BEGIN SELECT RAISE(ABORT,'immutable codex control'); END;
+CREATE TRIGGER codex_turn_events_update BEFORE UPDATE ON codex_turn_events BEGIN SELECT RAISE(ABORT,'immutable codex control'); END;
+CREATE TRIGGER codex_turn_events_delete BEFORE DELETE ON codex_turn_events BEGIN SELECT RAISE(ABORT,'immutable codex control'); END;
+CREATE TRIGGER codex_turn_event_members_insert BEFORE INSERT ON codex_turn_event_members WHEN EXISTS(SELECT 1 FROM codex_turn_event_members WHERE session_id=NEW.session_id AND seq=NEW.seq) BEGIN SELECT RAISE(ABORT,'immutable codex control'); END;
+CREATE TRIGGER codex_turn_event_members_update BEFORE UPDATE ON codex_turn_event_members BEGIN SELECT RAISE(ABORT,'immutable codex control'); END;
+CREATE TRIGGER codex_turn_event_members_delete BEFORE DELETE ON codex_turn_event_members BEGIN SELECT RAISE(ABORT,'immutable codex control'); END;
+CREATE TRIGGER codex_turn_members_insert BEFORE INSERT ON codex_turn_members WHEN EXISTS(SELECT 1 FROM codex_turn_members WHERE turn_id=NEW.turn_id OR job_id=NEW.job_id OR preparation_id=NEW.preparation_id OR sequence=NEW.sequence) BEGIN SELECT RAISE(ABORT,'immutable codex control'); END;
+CREATE TRIGGER codex_turn_members_update BEFORE UPDATE ON codex_turn_members BEGIN SELECT RAISE(ABORT,'immutable codex control'); END;
+CREATE TRIGGER codex_turn_members_delete BEFORE DELETE ON codex_turn_members BEGIN SELECT RAISE(ABORT,'immutable codex control'); END;
+CREATE TRIGGER codex_turn_commands_insert BEFORE INSERT ON codex_turn_commands WHEN EXISTS(SELECT 1 FROM codex_turn_commands WHERE workspace_id=NEW.workspace_id AND actor_session_id=NEW.actor_session_id AND route=NEW.route AND target_id=NEW.target_id AND command_key=NEW.command_key OR session_id=NEW.session_id AND seq=NEW.seq) BEGIN SELECT RAISE(ABORT,'immutable codex control'); END;
+CREATE TRIGGER codex_turn_commands_update BEFORE UPDATE ON codex_turn_commands BEGIN SELECT RAISE(ABORT,'immutable codex control'); END;
+CREATE TRIGGER codex_turn_commands_delete BEFORE DELETE ON codex_turn_commands BEGIN SELECT RAISE(ABORT,'immutable codex control'); END;
+CREATE TRIGGER codex_turn_heads_delete BEFORE DELETE ON codex_turn_heads BEGIN SELECT RAISE(ABORT,'immutable codex control head'); END;
+CREATE TRIGGER codex_turn_heads_insert BEFORE INSERT ON codex_turn_heads WHEN EXISTS(SELECT 1 FROM codex_turn_heads WHERE session_id=NEW.session_id) BEGIN SELECT RAISE(ABORT,'immutable codex control head'); END;

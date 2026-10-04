@@ -1,6 +1,6 @@
 // Generated from PRODUCT_DESIGN.md v3.0.15 and actual runtime OpenAPI; do not edit.
 // spec_sha256: b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec
-import type { ApprovalDecision, AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, AuthoringDraftView, AuthoringGroupDraftView, AuthoringGroupNumericCheckView, AuthoringGroupNumericPreviewWrite, AuthoringGroupPrepareWrite, AuthoringJobPage, AuthoringJobReadView, AuthoringPrepareWrite, AuthoringPrivateSolutionView, BlockReadResponse, BootstrapRequest, BootstrapResponse, CodexBootstrapDecisionAck, CodexBootstrapPreparationView, CodexBootstrapPreparationWrite, CodexCapabilities, CodexSessionCreateAck, CodexSessionCreateWrite, CodexSessionView, ConceptStateResponse, ConsentCreate, ConsentCreateAck, ConsentPage, ConsentPreviewWrite, ConsentProposalView, ConsentRevoke, ContentImpactPage, ContentImpactView, ContentRef, ContentRestoreDraftCreateAck, ContentRestoreDraftCreateWrite, ContentRestoreDraftSnapshot, Course, DirectorySearchResponse, DraftCreateWrite, DraftCreated, DraftPatchWrite, DraftPatched, DraftPublishWrite, DraftReviewWrite, EditDraftSnapshot, EmptyRequest, EvidenceApplicabilityDecisionView, EvidenceImpactDecisionReceipt, EvidenceImpactDecisionWrite, HealthResponse, ImpactObjectDecisionReceipt, ImpactObjectDecisionWrite, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearnerProfile, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, NumericCheckDecisionAck, NumericCheckPreviewWrite, NumericCheckView, OutlineResponse, PageAssessment, PageCourse, PageEvidence, PageNote, PagePracticeSet, PageRevision, PageRoute, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ProfileWrite, ProviderCapabilitiesResponse, ProviderConfigAck, ProviderConfigView, ProviderConfigWrite, ProviderSecretAck, ProviderSecretWrite, ReadinessResponse, RecommendationDecisionWrite, RecommendationPage, RegradeRequest, ResponsesWrite, RestoreNumericCheckPreviewWrite, RestoreNumericCheckView, RetrievalIndexOverview, RetrievalIndexRebuildWrite, RetrievalIndexScopeStatus, RetrievalQueryView, RetrievalQueryWrite, ReviewDecisionWrite, ReviewJobAck, RoleRequest, Route, RouteCompletionRequest, SessionResponse, SourceResponse, StoredReviewReceipt, TutorAnswerDeltaEvent, TutorApprovalRequiredEvent, TutorCancelledEvent, TutorCitationEvent, TutorCompletedEvent, TutorContextReadyEvent, TutorFailedEvent, TutorMessagePage, TutorQueuedEvent, TutorRetrievalCompletedEvent, TutorRunCancel, TutorRunControlView, TutorRunCreate, TutorRunView, TutorThreadCreate, TutorThreadPage, TutorThreadView, TutorUsageEvent, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
+import type { ApprovalDecision, AssessmentAttemptCreate, AssessmentGradingJob, AssessmentGradingResult, AttemptResponses, AttemptSnapshot, AttemptSubmit, AuthoringDraftView, AuthoringGroupDraftView, AuthoringGroupNumericCheckView, AuthoringGroupNumericPreviewWrite, AuthoringGroupPrepareWrite, AuthoringJobPage, AuthoringJobReadView, AuthoringPrepareWrite, AuthoringPrivateSolutionView, BlockReadResponse, BootstrapRequest, BootstrapResponse, CodexBootstrapDecisionAck, CodexBootstrapPreparationView, CodexBootstrapPreparationWrite, CodexCapabilities, CodexCurrentSessionView, CodexSessionCreateAck, CodexSessionCreateWrite, CodexTurnControlView, CodexTurnPage, CodexTurnPreparationView, CodexTurnPrepareWrite, ConceptStateResponse, ConsentCreate, ConsentCreateAck, ConsentPage, ConsentPreviewWrite, ConsentProposalView, ConsentRevoke, ContentImpactPage, ContentImpactView, ContentRef, ContentRestoreDraftCreateAck, ContentRestoreDraftCreateWrite, ContentRestoreDraftSnapshot, Course, DirectorySearchResponse, DraftCreateWrite, DraftCreated, DraftPatchWrite, DraftPatched, DraftPublishWrite, DraftReviewWrite, EditDraftSnapshot, EmptyRequest, EvidenceApplicabilityDecisionView, EvidenceImpactDecisionReceipt, EvidenceImpactDecisionWrite, HealthResponse, ImpactObjectDecisionReceipt, ImpactObjectDecisionWrite, ImportCancelRequest, ImportCancelResponse, ImportCommitRequest, ImportCommitResponse, ImportDraftSnapshot, ImportPreview, ImportStaged, ImportUpload, JobCancelRequest, JobRef, JobSnapshot, LearnerProfile, LearningActionRequest, LearningActionResponse, LearningProgress, Lesson, LogoutResponse, MutationAck, Note, NoteDeleted, NumericCheckDecisionAck, NumericCheckPreviewWrite, NumericCheckView, OutlineResponse, PageAssessment, PageCourse, PageEvidence, PageNote, PagePracticeSet, PageRevision, PageRoute, PracticeHint, PracticeHintRequest, PracticeResponsesSaved, PracticeSession, PracticeSessionCreate, PracticeSessionCreated, PracticeSolution, PracticeSolutionRequest, PracticeSubmitRequest, PracticeSubmitted, PreferencesRequest, ProfileWrite, ProviderCapabilitiesResponse, ProviderConfigAck, ProviderConfigView, ProviderConfigWrite, ProviderSecretAck, ProviderSecretWrite, ReadinessResponse, RecommendationDecisionWrite, RecommendationPage, RegradeRequest, ResponsesWrite, RestoreNumericCheckPreviewWrite, RestoreNumericCheckView, RetrievalIndexOverview, RetrievalIndexRebuildWrite, RetrievalIndexScopeStatus, RetrievalQueryView, RetrievalQueryWrite, ReviewDecisionWrite, ReviewJobAck, RoleRequest, Route, RouteCompletionRequest, SessionResponse, SourceResponse, StoredReviewReceipt, TutorAnswerDeltaEvent, TutorApprovalRequiredEvent, TutorCancelledEvent, TutorCitationEvent, TutorCompletedEvent, TutorContextReadyEvent, TutorFailedEvent, TutorMessagePage, TutorQueuedEvent, TutorRetrievalCompletedEvent, TutorRunCancel, TutorRunControlView, TutorRunCreate, TutorRunView, TutorThreadCreate, TutorThreadPage, TutorThreadView, TutorUsageEvent, WorkbenchSaveRequest, WorkbenchSession, WorkspaceResponse } from "./api-types";
 
 import type { RetrievalIndexStatusQuery } from "./retrieval-ports-binding";
 export interface ApiEndpointMap {
@@ -34,7 +34,11 @@ export interface ApiEndpointMap {
   "GET /api/v1/codex/session-preparations/{id}": { request: undefined; response: CodexBootstrapPreparationView; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
   "POST /api/v1/codex/session-preparations/{id}/decision": { request: ApprovalDecision; response: CodexBootstrapDecisionAck; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
   "POST /api/v1/codex/sessions": { request: CodexSessionCreateWrite; response: CodexSessionCreateAck; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
-  "GET /api/v1/codex/sessions/{id}": { request: undefined; response: CodexSessionView; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
+  "GET /api/v1/codex/sessions/{id}": { request: undefined; response: CodexCurrentSessionView; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
+  "POST /api/v1/codex/sessions/{id}/turn-preparations": { request: CodexTurnPrepareWrite; response: CodexTurnPreparationView; headers: { "Idempotency-Key": string }; parameters: { path: { "id": string } }; parametersRequired: true };
+  "GET /api/v1/codex/sessions/{id}/turns": { request: undefined; response: CodexTurnPage; headers: null; parameters: { path: { "id": string }; query?: { "cursor"?: string; "limit"?: number } }; parametersRequired: true };
+  "GET /api/v1/codex/turn-preparations/{id}": { request: undefined; response: CodexTurnPreparationView; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
+  "GET /api/v1/codex/turns/{id}": { request: undefined; response: CodexTurnControlView; headers: null; parameters: { path: { "id": string } }; parametersRequired: true };
   "GET /api/v1/consents": { request: undefined; response: ConsentPage; headers: null; parameters: { query?: { "consent_id"?: (string | null); "cursor"?: (string | null); "limit"?: number } }; parametersRequired: false };
   "POST /api/v1/consents": { request: ConsentCreate; response: ConsentCreateAck; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
   "POST /api/v1/consents/preview": { request: ConsentPreviewWrite; response: ConsentProposalView; headers: { "Idempotency-Key": string }; parameters: Record<string, never>; parametersRequired: false };
@@ -594,6 +598,79 @@ export const API_ENDPOINTS = {
   "GET /api/v1/codex/sessions/{id}": {
     "method": "GET",
     "path": "/api/v1/codex/sessions/{id}",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
+  "POST /api/v1/codex/sessions/{id}/turn-preparations": {
+    "method": "POST",
+    "path": "/api/v1/codex/sessions/{id}/turn-preparations",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
+  "GET /api/v1/codex/sessions/{id}/turns": {
+    "method": "GET",
+    "path": "/api/v1/codex/sessions/{id}/turns",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": [
+      {
+        "name": "cursor",
+        "required": false,
+        "type": "string"
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      }
+    ]
+  },
+  "GET /api/v1/codex/turn-preparations/{id}": {
+    "method": "GET",
+    "path": "/api/v1/codex/turn-preparations/{id}",
+    "responseKind": "json",
+    "requestKind": "json",
+    "multipartFields": [],
+    "pathParameters": [
+      {
+        "name": "id",
+        "required": true,
+        "type": "string"
+      }
+    ],
+    "queryParameters": []
+  },
+  "GET /api/v1/codex/turns/{id}": {
+    "method": "GET",
+    "path": "/api/v1/codex/turns/{id}",
     "responseKind": "json",
     "requestKind": "json",
     "multipartFields": [],

@@ -3201,6 +3201,88 @@
         "title": "Citation",
         "type": "object"
       },
+      "CodexApprovalControl": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "pending",
+              "approve_once",
+              "decline"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "operation_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Operation Sha256",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "validity": {
+            "enum": [
+              "current",
+              "expired",
+              "changed",
+              "unavailable",
+              "closed"
+            ],
+            "title": "Validity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "operation_sha256",
+          "decision",
+          "validity"
+        ],
+        "title": "CodexApprovalControl",
+        "type": "object"
+      },
+      "CodexBlockRef": {
+        "additionalProperties": false,
+        "properties": {
+          "entity": {
+            "const": "block",
+            "title": "Entity",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entity",
+          "id",
+          "revision",
+          "sha256"
+        ],
+        "title": "CodexBlockRef",
+        "type": "object"
+      },
       "CodexBootstrapDecisionAck": {
         "additionalProperties": false,
         "properties": {
@@ -3508,6 +3590,118 @@
         "title": "CodexCapabilities",
         "type": "object"
       },
+      "CodexConsentControl": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "revoked",
+              "expired"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "status"
+        ],
+        "title": "CodexConsentControl",
+        "type": "object"
+      },
+      "CodexCurrentFeatures": {
+        "additionalProperties": false,
+        "properties": {
+          "approvals": {
+            "title": "Approvals",
+            "type": "boolean"
+          },
+          "artifacts": {
+            "title": "Artifacts",
+            "type": "boolean"
+          },
+          "interrupt": {
+            "title": "Interrupt",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "approvals",
+          "interrupt",
+          "artifacts"
+        ],
+        "title": "CodexCurrentFeatures",
+        "type": "object"
+      },
+      "CodexCurrentSessionView": {
+        "additionalProperties": false,
+        "description": "Current projection only; never use this decoder for an old create ACK.",
+        "properties": {
+          "active_turn_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Turn Id"
+          },
+          "adapter_version": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Adapter Version",
+            "type": "string"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/CodexCurrentFeatures"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1.0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "initializing",
+              "ready",
+              "failed",
+              "unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision",
+          "status",
+          "active_turn_id",
+          "adapter_version",
+          "capabilities"
+        ],
+        "title": "CodexCurrentSessionView",
+        "type": "object"
+      },
       "CodexFeatures": {
         "additionalProperties": false,
         "properties": {
@@ -3530,6 +3724,29 @@
           "artifacts"
         ],
         "title": "CodexFeatures",
+        "type": "object"
+      },
+      "CodexLocalToolBudget": {
+        "additionalProperties": false,
+        "properties": {
+          "max_tool_calls": {
+            "maximum": 16.0,
+            "minimum": 0.0,
+            "title": "Max Tool Calls",
+            "type": "integer"
+          },
+          "wall_seconds": {
+            "maximum": 300.0,
+            "minimum": 1.0,
+            "title": "Wall Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "max_tool_calls",
+          "wall_seconds"
+        ],
+        "title": "CodexLocalToolBudget",
         "type": "object"
       },
       "CodexSandboxRoot": {
@@ -3623,52 +3840,579 @@
         "title": "CodexSessionCreateWrite",
         "type": "object"
       },
-      "CodexSessionView": {
+      "CodexTurnControlView": {
         "additionalProperties": false,
         "properties": {
-          "active_turn_id": {
-            "title": "Active Turn Id",
-            "type": "null"
-          },
-          "adapter_version": {
-            "maxLength": 240,
-            "minLength": 1,
-            "title": "Adapter Version",
+          "actor_session_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Actor Session Id",
             "type": "string"
           },
-          "capabilities": {
-            "$ref": "#/components/schemas/CodexBootstrapFeatures"
+          "approval_controls": {
+            "items": {
+              "$ref": "#/components/schemas/CodexApprovalControl"
+            },
+            "maxItems": 64,
+            "title": "Approval Controls",
+            "type": "array"
+          },
+          "approval_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "title": "Approval Ids",
+            "type": "array"
+          },
+          "cancel_requested": {
+            "title": "Cancel Requested",
+            "type": "boolean"
+          },
+          "consent_control": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CodexConsentControl"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "enum": [
+                  "CODEX_PROTOCOL_INVALID",
+                  "CODEX_PROFILE_CHANGED",
+                  "CODEX_RUNTIME_UNAVAILABLE",
+                  "CODEX_BINDING_INVALID",
+                  "CODEX_HISTORY_DAMAGED",
+                  "CODEX_INPUT_PROOF_UNAVAILABLE",
+                  "CODEX_OPERATION_UNSUPPORTED",
+                  "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED",
+                  "CODEX_TIMEOUT",
+                  "CODEX_RESOURCE_LIMIT",
+                  "CODEX_CANCELLED",
+                  "CODEX_OUTCOME_UNKNOWN",
+                  "CODEX_OPERATION_FAILED",
+                  "CODEX_ARTIFACT_REJECTED",
+                  "CODEX_ARTIFACT_MISSING",
+                  "CODEX_SOURCE_CHANGED",
+                  "CODEX_SOURCE_UNAVAILABLE",
+                  "CODEX_APPROVAL_EXPIRED",
+                  "CODEX_CONSENT_EXPIRED",
+                  "CODEX_CONSENT_REVOKED",
+                  "CODEX_BUDGET_EXCEEDED",
+                  "POLICY_DENIED",
+                  "ASSESSMENT_ACTIVE"
+                ],
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "CAPABILITY_UNSUPPORTED",
+                  "PROVIDER_CONFIGURATION_CHANGED",
+                  "PROVIDER_SECRET_UNAVAILABLE",
+                  "OUTBOUND_SOURCE_CHANGED",
+                  "OUTBOUND_SOURCE_UNAVAILABLE",
+                  "CONSENT_REQUIRED",
+                  "CONSENT_REVOKED",
+                  "CONSENT_EXPIRED",
+                  "OUTBOUND_BUDGET_EXCEEDED",
+                  "PROVIDER_TIMEOUT",
+                  "PROVIDER_CANCELLED",
+                  "PROVIDER_TRANSPORT_ERROR",
+                  "PROVIDER_PROTOCOL_ERROR",
+                  "PROVIDER_OUTCOME_UNKNOWN",
+                  "PROVIDER_USAGE_INCONSISTENT",
+                  "PROVIDER_REFUSAL",
+                  "PROVIDER_INCOMPLETE"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "execution": {
+            "enum": [
+              "not_started",
+              "active",
+              "terminal"
+            ],
+            "title": "Execution",
+            "type": "string"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
           },
           "id": {
             "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
             "title": "Id",
             "type": "string"
           },
-          "revision": {
+          "job": {
+            "$ref": "#/components/schemas/JobRef"
+          },
+          "job_revision": {
             "minimum": 1.0,
-            "title": "Revision",
+            "title": "Job Revision",
             "type": "integer"
           },
-          "status": {
-            "enum": [
-              "initializing",
-              "ready",
-              "failed",
-              "unknown"
+          "last_seq": {
+            "minimum": 0.0,
+            "title": "Last Seq",
+            "type": "integer"
+          },
+          "manifest_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Status",
+            "title": "Manifest Id"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "enum": [
+                  "completed",
+                  "failed",
+                  "incomplete",
+                  "cancelled",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "run_revision": {
+            "minimum": 1.0,
+            "title": "Run Revision",
+            "type": "integer"
+          },
+          "session_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          }
+        },
+        "required": [
+          "id",
+          "session_id",
+          "actor_session_id",
+          "job",
+          "job_revision",
+          "run_revision",
+          "last_seq",
+          "cancel_requested",
+          "execution",
+          "outcome",
+          "approval_ids",
+          "approval_controls",
+          "consent_control",
+          "manifest_id",
+          "created_at",
+          "started_at",
+          "finished_at",
+          "error_code"
+        ],
+        "title": "CodexTurnControlView",
+        "type": "object"
+      },
+      "CodexTurnPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CodexTurnControlView"
+            },
+            "maxItems": 100,
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "CodexTurnPage",
+        "type": "object"
+      },
+      "CodexTurnPreparationSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "character_count": {
+            "maximum": 12000.0,
+            "minimum": 1.0,
+            "title": "Character Count",
+            "type": "integer"
+          },
+          "context_snapshot_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Context Snapshot Id",
+            "type": "string"
+          },
+          "history_turn_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "maxItems": 2,
+            "title": "History Turn Ids",
+            "type": "array"
+          },
+          "job_input_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Job Input Sha256",
+            "type": "string"
+          },
+          "materials": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceSummary"
+            },
+            "maxItems": 8,
+            "title": "Materials",
+            "type": "array"
+          },
+          "prepared_input_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Prepared Input Sha256",
+            "type": "string"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/CodexTurnRuntimeSummary"
+          },
+          "snapshot_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Snapshot Sha256",
+            "type": "string"
+          },
+          "tools": {
+            "$ref": "#/components/schemas/CodexLocalToolBudget"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/CodexTurnWarning"
+            },
+            "maxItems": 32,
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "context_snapshot_id",
+          "snapshot_sha256",
+          "job_input_sha256",
+          "prepared_input_sha256",
+          "runtime",
+          "character_count",
+          "materials",
+          "history_turn_ids",
+          "tools",
+          "warnings"
+        ],
+        "title": "CodexTurnPreparationSummary",
+        "type": "object"
+      },
+      "CodexTurnPreparationView": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_session_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Actor Session Id",
+            "type": "string"
+          },
+          "consent_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consent Id"
+          },
+          "created_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "job": {
+            "$ref": "#/components/schemas/JobRef"
+          },
+          "preparation_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Preparation Sha256",
+            "type": "string"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal Id"
+          },
+          "request": {
+            "$ref": "#/components/schemas/CodexTurnPrepareWrite"
+          },
+          "session_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "session_revision": {
+            "minimum": 1.0,
+            "title": "Session Revision",
+            "type": "integer"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/CodexTurnPreparationSummary"
+          },
+          "turn_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "validity": {
+            "enum": [
+              "current",
+              "changed",
+              "unavailable",
+              "closed"
+            ],
+            "title": "Validity",
             "type": "string"
           }
         },
         "required": [
           "id",
-          "revision",
-          "status",
-          "active_turn_id",
-          "adapter_version",
-          "capabilities"
+          "preparation_sha256",
+          "actor_session_id",
+          "session_id",
+          "session_revision",
+          "turn_id",
+          "job",
+          "request",
+          "summary",
+          "created_at",
+          "proposal_id",
+          "consent_id",
+          "validity"
         ],
-        "title": "CodexSessionView",
+        "title": "CodexTurnPreparationView",
+        "type": "object"
+      },
+      "CodexTurnPrepareWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "context_refs": {
+            "items": {
+              "$ref": "#/components/schemas/CodexBlockRef"
+            },
+            "maxItems": 8,
+            "title": "Context Refs",
+            "type": "array"
+          },
+          "expected_session_revision": {
+            "minimum": 1.0,
+            "title": "Expected Session Revision",
+            "type": "integer"
+          },
+          "message": {
+            "maxLength": 8000,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "provider_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "tools": {
+            "$ref": "#/components/schemas/CodexLocalToolBudget"
+          }
+        },
+        "required": [
+          "message",
+          "context_refs",
+          "expected_session_revision",
+          "provider_id",
+          "tools"
+        ],
+        "title": "CodexTurnPrepareWrite",
+        "type": "object"
+      },
+      "CodexTurnRuntimeSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "command_network": {
+            "const": "denied",
+            "title": "Command Network",
+            "type": "string"
+          },
+          "core_bytes": {
+            "const": 0,
+            "title": "Core Bytes",
+            "type": "integer"
+          },
+          "cpu_seconds": {
+            "const": 60,
+            "title": "Cpu Seconds",
+            "type": "integer"
+          },
+          "file_bytes": {
+            "const": 16777216,
+            "title": "File Bytes",
+            "type": "integer"
+          },
+          "file_descriptors": {
+            "const": 128,
+            "title": "File Descriptors",
+            "type": "integer"
+          },
+          "memory_bytes": {
+            "const": 2147483648,
+            "title": "Memory Bytes",
+            "type": "integer"
+          },
+          "processes": {
+            "const": 16,
+            "title": "Processes",
+            "type": "integer"
+          },
+          "profile_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Profile Sha256",
+            "type": "string"
+          },
+          "protocol_output_bytes": {
+            "const": 16777216,
+            "title": "Protocol Output Bytes",
+            "type": "integer"
+          },
+          "writable_area": {
+            "const": "turn_outputs",
+            "title": "Writable Area",
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile_sha256",
+          "cpu_seconds",
+          "memory_bytes",
+          "file_bytes",
+          "protocol_output_bytes",
+          "file_descriptors",
+          "processes",
+          "core_bytes",
+          "command_network",
+          "writable_area"
+        ],
+        "title": "CodexTurnRuntimeSummary",
+        "type": "object"
+      },
+      "CodexTurnWarning": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "locator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locator"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "warning",
+              "error"
+            ],
+            "title": "Severity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "locator",
+          "severity"
+        ],
+        "title": "CodexTurnWarning",
         "type": "object"
       },
       "Concept": {
@@ -20671,7 +21415,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CodexSessionView"
+                  "$ref": "#/components/schemas/CodexCurrentSessionView"
                 }
               }
             },
@@ -20794,6 +21538,655 @@
           }
         ],
         "summary": "Session",
+        "tags": [
+          "codex"
+        ]
+      }
+    },
+    "/api/v1/codex/sessions/{id}/turn-preparations": {
+      "post": {
+        "operationId": "prepare_api_v1_codex_sessions__id__turn_preparations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "title": "Origin",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodexTurnPrepareWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexTurnPreparationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Prepare",
+        "tags": [
+          "codex"
+        ]
+      }
+    },
+    "/api/v1/codex/sessions/{id}/turns": {
+      "get": {
+        "operationId": "turns_api_v1_codex_sessions__id__turns_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexTurnPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Turns",
+        "tags": [
+          "codex"
+        ]
+      }
+    },
+    "/api/v1/codex/turn-preparations/{id}": {
+      "get": {
+        "operationId": "preparation_api_v1_codex_turn_preparations__id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexTurnPreparationView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Preparation",
+        "tags": [
+          "codex"
+        ]
+      }
+    },
+    "/api/v1/codex/turns/{id}": {
+      "get": {
+        "operationId": "turn_api_v1_codex_turns__id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexTurnControlView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Turn",
         "tags": [
           "codex"
         ]
