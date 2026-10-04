@@ -112,13 +112,12 @@ def test_aggregate_history_loss_is_not_repaired_by_get_or_original_ack(consent_c
 
 
 def test_aggregate_and_all_child_stages_rollback_when_permanent_command_cannot_commit(consent_case):
-    import sqlite3
     case, sid, _, body = selected(consent_case)
     with case.app.state.database.transaction() as conn:
         conn.execute("CREATE TRIGGER reject_synthetic_aggregate BEFORE INSERT ON codex_artifact_import_events BEGIN SELECT RAISE(ABORT, 'synthetic aggregate rollback'); END")
     before = case.dump()
-    with pytest.raises(sqlite3.IntegrityError, match='synthetic aggregate rollback'):
-        case.post(f'sessions/{sid}/artifacts/import', body, 'rollback')
+    response = case.post(f'sessions/{sid}/artifacts/import', body, 'rollback')
+    assert response.status_code == 500 and response.json()['error']['code'] == 'INTERNAL_ERROR'
     assert case.dump() == before
     assert len(case.app.state.synthetic_transport_calls) == 1
 
