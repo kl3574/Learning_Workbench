@@ -253,6 +253,24 @@ def test_malformed_artifact_owner_descriptor_is_safe_error_not_unhandled_type(tm
     assert case.dump() == before
 
 
+@pytest.mark.parametrize('missing', ['codex_import_batches', 'codex_import_bindings', 'codex_import_previews', 'all'])
+def test_applied_codex_migration_missing_tables_is_damage_even_for_legacy_source(tmp_path, missing):
+    case, service, identity = fixture(tmp_path)
+    staged = service.stage(identity, data=b'Original legacy material.\n', filename='legacy.md',
+        kind='markdown', key='ordinary-before-damage')
+    with case.app.state.database.transaction() as conn:
+        tables = ['codex_import_previews', 'codex_import_bindings', 'codex_import_batches'] if missing == 'all' else [missing]
+        for table in tables:
+            conn.execute('DROP TABLE ' + table)
+    before = case.dump()
+    with pytest.raises(ApiError) as caught:
+        with case.app.state.database.transaction(immediate=False) as conn:
+            conn.execute('PRAGMA query_only=ON')
+            service.check_codex_source(conn, identity.workspace_id, staged.import_id)
+    assert caught.value.code == 'CODEX_IMPORT_HISTORY_DAMAGED'
+    assert case.dump() == before
+
+
 def test_actual_old_stage_raw_json_hash_and_http_ack_oracle_remain_exact(tmp_path, monkeypatch):
     from services.api.app.application import imports
     oracle = json.loads((Path(__file__).parents[1] / 'fixtures/codex_import_legacy/stage-80d18a93.json').read_text())
