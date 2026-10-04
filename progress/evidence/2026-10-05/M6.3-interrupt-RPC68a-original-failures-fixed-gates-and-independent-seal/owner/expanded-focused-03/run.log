@@ -1,0 +1,25 @@
+...........................................................F............ [ 64%]
+........................................                                 [100%]
+=================================== FAILURES ===================================
+_ test_malformed_duplicate_or_deep_json_is_a_private_rejection[deep-parser-bound] _
+
+source = InterruptProtocolSource()
+frame = b'[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[...]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]'
+
+    @pytest.mark.parametrize('frame', [b'{', b'\xff', b'{"id":7,"id":8,"result":{}}',
+        b'{"id":NaN,"result":{}}', b'{"id":Infinity,"result":{}}', b'['*6000+b'0'+b']'*6000],
+        ids=['syntax', 'utf8', 'duplicate', 'nan', 'infinity', 'deep-parser-bound'])
+    def test_malformed_duplicate_or_deep_json_is_a_private_rejection(source, frame):
+        exchange = protocol.prepare_interrupt(source, REQUEST)
+        observed = protocol.observe_interrupt(source, exchange, frame)
+        assert observed.accepted is False
+>       assert observed.reason == 'invalid_json'
+E       AssertionError: assert 'unsupported_shape' == 'invalid_json'
+E         
+E         - invalid_json
+E         + unsupported_shape
+
+tests/unit/test_codex_interrupt_rpc_pairing.py:242: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_codex_interrupt_rpc_pairing.py::test_malformed_duplicate_or_deep_json_is_a_private_rejection[deep-parser-bound]
+1 failed, 111 passed in 3.49s

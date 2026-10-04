@@ -1,0 +1,83 @@
+...........................................................F..........FF [ 64%]
+........................................                                 [100%]
+=================================== FAILURES ===================================
+_ test_malformed_duplicate_or_deep_json_is_a_private_rejection[deep-parser-bound] _
+
+source = InterruptProtocolSource()
+frame = b'[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[...]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]'
+
+    @pytest.mark.parametrize('frame', [b'{', b'\xff', b'{"id":7,"id":8,"result":{}}',
+        b'{"id":NaN,"result":{}}', b'{"id":Infinity,"result":{}}', b'['*6000+b'0'+b']'*6000],
+        ids=['syntax', 'utf8', 'duplicate', 'nan', 'infinity', 'deep-parser-bound'])
+    def test_malformed_duplicate_or_deep_json_is_a_private_rejection(source, frame):
+        exchange = protocol.prepare_interrupt(source, REQUEST)
+        observed = protocol.observe_interrupt(source, exchange, frame)
+        assert observed.accepted is False
+>       assert observed.reason == 'invalid_json'
+E       AssertionError: assert 'unsupported_shape' == 'invalid_json'
+E         
+E         - invalid_json
+E         + unsupported_shape
+
+tests/unit/test_codex_interrupt_rpc_pairing.py:242: AssertionError
+_______ test_frame_bound_does_not_truncate_or_admit_a_prefix[not-bytes] ________
+
+source = InterruptProtocolSource(), value = 'not-bytes'
+
+    @pytest.mark.parametrize('value', [b'', b'x'*(MAX_FRAME_BYTES+1), 'not-bytes', None])
+    def test_frame_bound_does_not_truncate_or_admit_a_prefix(source, value):
+        exchange = protocol.prepare_interrupt(source, REQUEST)
+        with pytest.raises(ValueError):
+>           protocol.observe_interrupt(source, exchange, value)
+
+tests/unit/test_codex_interrupt_rpc_pairing.py:271: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/api/app/infrastructure/codex_interrupt_protocol.py:101: in observe_interrupt
+    frame = _frame(raw_frame)
+            ^^^^^^^^^^^^^^^^^
+services/api/app/infrastructure/codex_interrupt_protocol.py:65: in _frame
+    return PrivateProtocolFrame(raw=raw, sha256=sha256_bytes(raw))
+                                                ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = 'not-bytes'
+
+    def sha256_bytes(data: bytes) -> str:
+>       return hashlib.sha256(data).hexdigest()
+               ^^^^^^^^^^^^^^^^^^^^
+E       TypeError: Strings must be encoded before hashing
+
+packages/contracts/canonical.py:32: TypeError
+__________ test_frame_bound_does_not_truncate_or_admit_a_prefix[None] __________
+
+source = InterruptProtocolSource(), value = None
+
+    @pytest.mark.parametrize('value', [b'', b'x'*(MAX_FRAME_BYTES+1), 'not-bytes', None])
+    def test_frame_bound_does_not_truncate_or_admit_a_prefix(source, value):
+        exchange = protocol.prepare_interrupt(source, REQUEST)
+        with pytest.raises(ValueError):
+>           protocol.observe_interrupt(source, exchange, value)
+
+tests/unit/test_codex_interrupt_rpc_pairing.py:271: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+services/api/app/infrastructure/codex_interrupt_protocol.py:101: in observe_interrupt
+    frame = _frame(raw_frame)
+            ^^^^^^^^^^^^^^^^^
+services/api/app/infrastructure/codex_interrupt_protocol.py:65: in _frame
+    return PrivateProtocolFrame(raw=raw, sha256=sha256_bytes(raw))
+                                                ^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = None
+
+    def sha256_bytes(data: bytes) -> str:
+>       return hashlib.sha256(data).hexdigest()
+               ^^^^^^^^^^^^^^^^^^^^
+E       TypeError: object supporting the buffer API required
+
+packages/contracts/canonical.py:32: TypeError
+=========================== short test summary info ============================
+FAILED tests/unit/test_codex_interrupt_rpc_pairing.py::test_malformed_duplicate_or_deep_json_is_a_private_rejection[deep-parser-bound]
+FAILED tests/unit/test_codex_interrupt_rpc_pairing.py::test_frame_bound_does_not_truncate_or_admit_a_prefix[not-bytes]
+FAILED tests/unit/test_codex_interrupt_rpc_pairing.py::test_frame_bound_does_not_truncate_or_admit_a_prefix[None]
+3 failed, 109 passed in 3.45s
