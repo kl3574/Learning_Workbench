@@ -77,11 +77,12 @@ export function useCodexTurns(workspace: string, writeAdmitted: boolean, port: T
   const previous = formRef.current?.actor_session_id === identity.actor_session_id ? formRef.current : null
   const next = snapshotTurnForm(workspace, identity.actor_session_id, { ...(previous?.fields ?? emptyTurnFields()), session_id: selected, ...patch }, previous)
   formRef.current = next; setForm(next); retainTurnForm(next)
-  const saving = writer(() => currentScope() && actorRef.current?.actor_session_id === next.actor_session_id && academic(actorRef.current) && writeAdmitted)
+  const admitted = () => currentScope() && actorRef.current?.actor_session_id === next.actor_session_id && academic(actorRef.current) && writeAdmitted
+  const saving = writer(admitted)
   void persistTurnForm(next, formStore, saving.guard).then(() => {
    releaseTurnForm(next)
    if (currentScope()) setForms(values => [...values.filter(v => v.snapshot_id !== next.snapshot_id), next])
-  }).catch(() => { if (currentScope()) setError('表单尚未全部保存；原输入保留在隔离内存中，离开前请仅保存本机事实。') }).finally(saving.done)
+  }).catch(() => { if (admitted()) setError('表单尚未全部保存；原输入保留在隔离内存中，离开前请仅保存本机事实。') }).finally(saving.done)
  }
  const select = (id: string) => {
   if (!ready || working.current) return
