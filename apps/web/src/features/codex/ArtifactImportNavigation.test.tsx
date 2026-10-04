@@ -44,17 +44,17 @@ test('explicit checked aggregate child opens actual ordinary Import GET and draf
  } finally { cleanup(); await store.close(); await forms.close() }
 })
 
-test('a clean isolated preview does not lock the new current actor out of their own checked Import child', async () => {
+test.each(['actor', 'workspace'] as const)('a clean isolated preview does not lock the new current %s out of their own checked Import child', async scope => {
  const store = new DraftStore({ name: `artifact-scope-${crypto.randomUUID()}`, factory: new IDBFactory() }), forms = new DraftStore({ name: `artifact-scopeform-${crypto.randomUUID()}`, factory: new IDBFactory() })
- let currentActor = artifactActor
- const otherActor = 'session_artifact_other', otherAck = { id: 'job_artifact_other', status: 'queued' as const }
+ let currentActor = artifactActor, currentWorkspace = artifactWorkspace
+ const otherActor = scope === 'actor' ? 'session_artifact_other' : artifactActor, otherWorkspace = scope === 'workspace' ? 'workspace_artifact_other' : artifactWorkspace, otherAck = { id: 'job_artifact_other', status: 'queued' as const }
  const first = { ...makeArtifactCommand(artifactWorkspace, artifactActor, artifactManifest(), ['artifact_synthetic_md']), ack: artifactAck }
- const second = { ...makeArtifactCommand(artifactWorkspace, otherActor, artifactManifest(), ['artifact_synthetic_md']), ack: otherAck }
+ const second = { ...makeArtifactCommand(otherWorkspace, otherActor, artifactManifest(), ['artifact_synthetic_md']), ack: otherAck }
  const secondView = { ...artifactImport(), actor_session_id: otherActor, job: { ...otherAck, status: 'completed' as const }, items: [{ ...artifactImport().items[0], import_id: 'import_artifact_other', job: { id: 'job_artifact_other_child', status: 'awaiting_approval' as const } }] }
  const calls: string[] = []
  vi.stubGlobal('fetch', vi.fn(async (path: string, init: RequestInit) => {
   calls.push(`${init.method} ${path}`); expect(init.method).toBe('GET')
-  const body = path === '/api/v1/session' ? { ...session(), workspace_id: artifactWorkspace, actor_session_id: currentActor }
+  const body = path === '/api/v1/session' ? { ...session(), workspace_id: currentWorkspace, actor_session_id: currentActor }
    : path.startsWith('/api/v1/courses') ? { items: [], next_cursor: null }
     : path === '/api/v1/codex/artifact-imports/job_artifact_import' ? artifactImport()
      : path === '/api/v1/codex/artifact-imports/job_artifact_other' ? secondView : null
@@ -63,19 +63,64 @@ test('a clean isolated preview does not lock the new current actor out of their 
  }))
  try {
   await persistArtifactCommand(first, store); await persistArtifactCommand(second, store)
-  const originals = await store.load(artifactWorkspace)
-  render(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={artifactClient} store={store} formStore={forms} />)
+  const originals = await store.load(artifactWorkspace), otherOriginals = await store.load(otherWorkspace)
+  const rendered = render(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={artifactClient} store={store} formStore={forms} />)
   fireEvent.click(screen.getByText('读取产物记录与权限')); await screen.findByText(/产物本机记录已读取/)
   fireEvent.click(screen.getByText('读取回导当前子项 job_artifact_import')); await screen.findByLabelText('回导聚合当前 GET')
   fireEvent.click(screen.getByText('打开普通 Import 预览 import_artifact_child'))
   await waitFor(() => expect((screen.getByText('读取指定回导预览 import_artifact_child') as HTMLButtonElement).disabled).toBe(false))
-  currentActor = otherActor
+  currentActor = otherActor; currentWorkspace = otherWorkspace
+  if (scope === 'workspace') rendered.rerender(<CodexArtifactsPanel workspace={otherWorkspace} writeAdmitted port={artifactClient} store={store} formStore={forms} />)
   fireEvent.click(screen.getByText('读取产物记录与权限')); await screen.findByText('读取回导当前子项 job_artifact_other')
   fireEvent.click(screen.getByText('读取回导当前子项 job_artifact_other')); await screen.findByText(/Import import_artifact_other/)
   const open = screen.getByText('打开普通 Import 预览 import_artifact_other')
   expect((open as HTMLButtonElement).disabled, 'the old clean hidden preview must not lock the current actor child').toBe(false)
   fireEvent.click(open)
   await waitFor(() => expect((screen.getByText('读取指定回导预览 import_artifact_other') as HTMLButtonElement).disabled).toBe(false))
-  expect(await store.load(artifactWorkspace)).toEqual(originals); expect(calls.every(v => v.startsWith('GET '))).toBe(true)
+  expect(await store.load(artifactWorkspace)).toEqual(originals); expect(await store.load(otherWorkspace)).toEqual(otherOriginals); expect(calls.every(v => v.startsWith('GET '))).toBe(true)
+ } finally { cleanup(); await store.close(); await forms.close() }
+})
+
+test('dirty ordinary Import settings survive actor isolation until an explicit local discard, and original journals stay unchanged', async () => {
+ const store = new DraftStore({ name: `artifact-dirty-${crypto.randomUUID()}`, factory: new IDBFactory() }), forms = new DraftStore({ name: `artifact-dirtyform-${crypto.randomUUID()}`, factory: new IDBFactory() })
+ let currentActor = artifactActor
+ const otherActor = 'session_dirty_other', otherAck = { id: 'job_dirty_other', status: 'queued' as const }
+ const commands = [{ ...makeArtifactCommand(artifactWorkspace, artifactActor, artifactManifest(), ['artifact_synthetic_md']), ack: artifactAck }, { ...makeArtifactCommand(artifactWorkspace, otherActor, artifactManifest(), ['artifact_synthetic_md']), ack: otherAck }]
+ const other = { ...artifactImport(), actor_session_id: otherActor, job: { ...otherAck, status: 'completed' as const }, items: [{ ...artifactImport().items[0], import_id: 'import_dirty_other', job: { id: 'job_dirty_child', status: 'awaiting_approval' as const } }] }
+ const snapshot: ImportPreview = { id: 'import_artifact_child', status: 'preview_ready', input_sha256: artifactManifest().manifest.entries[0].sha256, warnings: [], candidate_summary: { course_title: '未确认原预览', lesson_count: 0, block_count: 0, unresolved_refs: [] }, preview_refs: [] }
+ const job: JobSnapshot = { id: 'job_artifact_child', workspace_id: artifactWorkspace, kind: 'import_parse', status: 'awaiting_approval', revision: 3, created_at: '2026-10-04T00:00:00Z', updated_at: '2026-10-04T00:00:00Z', progress: { completed: 1, total: 1, label: 'preview' }, result_refs: [], warnings: [], error: null }
+ const onState = vi.fn()
+ vi.stubGlobal('fetch', vi.fn(async (path: string, init: RequestInit) => {
+  expect(init.method).toBe('GET')
+  const body = path === '/api/v1/session' ? { ...session(), workspace_id: artifactWorkspace, actor_session_id: currentActor }
+   : path.startsWith('/api/v1/courses') ? { items: [], next_cursor: null }
+    : path === '/api/v1/codex/artifact-imports/job_artifact_import' ? artifactImport()
+     : path === '/api/v1/codex/artifact-imports/job_dirty_other' ? other
+      : path === '/api/v1/imports/import_artifact_child' ? snapshot : path === '/api/v1/jobs/job_artifact_child' ? job : null
+  if (!body) throw new Error(`Unexpected route ${path}`)
+  return new Response(JSON.stringify(body))
+ }))
+ try {
+  for (const c of commands) await persistArtifactCommand(c, store)
+  const original = await store.load(artifactWorkspace)
+  render(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={artifactClient} store={store} formStore={forms} onState={onState} />)
+  fireEvent.click(screen.getByText('读取产物记录与权限')); await screen.findByText(/产物本机记录已读取/)
+  fireEvent.click(screen.getByText('读取回导当前子项 job_artifact_import')); await screen.findByLabelText('回导聚合当前 GET')
+  fireEvent.click(screen.getByText('打开普通 Import 预览 import_artifact_child'))
+  const read = await screen.findByText('读取指定回导预览 import_artifact_child'); await waitFor(() => expect((read as HTMLButtonElement).disabled).toBe(false)); fireEvent.click(read)
+  await screen.findByText('未确认原预览'); fireEvent.click(screen.getByText('添加精确映射')); fireEvent.change(screen.getByLabelText('原对象 ID'), { target: { value: 'old_original' } })
+  await waitFor(() => expect(onState.mock.lastCall?.[0].dirty).toBe(true))
+  currentActor = otherActor; fireEvent.click(screen.getByText('读取产物记录与权限')); await screen.findByText('读取回导当前子项 job_dirty_other')
+  fireEvent.click(screen.getByText('读取回导当前子项 job_dirty_other')); await screen.findByText(/Import import_dirty_other/)
+  expect((screen.getByText('打开普通 Import 预览 import_dirty_other') as HTMLButtonElement).disabled).toBe(true)
+  expect(screen.queryByLabelText('原对象 ID')).toBeNull()
+  currentActor = artifactActor; fireEvent.click(screen.getByText('读取产物记录与权限')); await screen.findByText('读取回导当前子项 job_artifact_import')
+  await waitFor(() => expect((screen.getByLabelText('原对象 ID') as HTMLInputElement).value).toBe('old_original'))
+  currentActor = otherActor; fireEvent.click(screen.getByText('读取产物记录与权限')); await screen.findByText('读取回导当前子项 job_dirty_other')
+  fireEvent.click(screen.getByText('读取回导当前子项 job_dirty_other')); await screen.findByText(/Import import_dirty_other/)
+  fireEvent.click(screen.getByText('保留原命令，明确丢弃旧预览临时设置并关闭'))
+  await waitFor(() => expect((screen.getByText('打开普通 Import 预览 import_dirty_other') as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.click(screen.getByText('打开普通 Import 预览 import_dirty_other')); await screen.findByText('读取指定回导预览 import_dirty_other')
+  expect(await store.load(artifactWorkspace)).toEqual(original)
  } finally { cleanup(); await store.close(); await forms.close() }
 })
