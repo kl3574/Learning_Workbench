@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-04T12:49:21Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
+更新：2026-10-04T13:59:15Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
 
-仓库发布：VERIFIED；Issues 同步：VERIFIED_ISSUE32_LOCAL3265_ISOLATED_NATIVE_BODY_ONLY_PUBLIC4B_UNCHANGED
+仓库发布：VERIFIED；Issues 同步：VERIFIED_ISSUE32_LOCAL79AC_ORIGINAL_RUNNING_NATIVE_TERMINAL_PUBLIC4B_12CI_SUCCESS; terminal local checkpoint awaits next remote body sync
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
 
-完成新中断/操作v4-v5同session真实HTTP回归与独立融合静态读回，冻结最新组合完整Python/Web/static及原native门禁；固定来源终态后才普通push并核CI。继续受检answer materializer/终止receipt/manifest与普通Import草稿同TX，生产默认无可靠source和完整proof、零真实外部模型；整个M6.3/AC21和M7未完成。
+同步79ac完整本地终态与公开4b精确12CI证据，普通源码push后独立核新branch/PR56/Issue32与CI。继续独审/正常整合已封9a Artifact及普通Import原子草稿，补已声明只读SSE及产物UI；新组合重新冻结验收，不借79ac门禁。生产完整proof/实际Broker/真实Provider与数值/质量仍未完成；不上传密钥、不GitHubmerge/release/deploy。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -310,6 +310,10 @@
 - m6_3_turn_outbound_ui_current: 固定92完整1278Web/157files/strictbuildspec、214原owner/132新related overlapPASS，真实Chrome32.33s/1443Git exact：4命令原keyACK未知刷新0POST、明确原body完整ACK、真实role/assessment失权安全撤销、failed+complete原响应UTF8hash/APIChrome重启PASS；production0和explicitmemory1分开，actualCLI/providerNOT_RUN；6PNGrootview及24明确候选hash/Git已核。
 - m6_3_one_memory_operation_current: 固定83d226PASS/55focused overlap/6static/1434Git exact，root原纯只读VERIFY实际exit0，peerP2CLOSED_STATIC；所有原9d/3120OPEN/5RED/4RED/6e5FAIL及34source drift保留。生产registry仍空，仅显式合成bounded memory interpreter实际执行，不升级宿主工具。ee融合完整未验。
 - m6_3_shared_history_fusion_static: 固定ee独立review无新增确认融合阻断；1464完整Git、13owner83dblob与1449旧nonoverlap逐字核；原stop/replay34/17方法保留。Reviewer曾作者旧interrupt，明确仅独审root融合，不冒称再次独审自身旧实现。Root已核14明确候选与所有Git blobs。
+- m6_3_current_complete79ac: FIXED79AC_COMPLETE_PYTHON4211_PASS_2_ACTUAL_NUMERIC_ENV_SKIP_WEB1278_STATIC_PASS_NATIVE130_ORIGINAL_WRAPPER_EXIT0; wholeM6.3/AC21 NOT_ACCEPTED
+- m6_3_current_complete79ac_input_binding: 1465complete nonprogress Git inputs exact Python/static. Native all1465maps retain5actualoutputs changed;1455outside tenprelisted generated destinations unchanged. Eleven explicit PNGs rootviewed;no restore/copyback.
+- m6_3_current_public4b_CI: Each event:953contracts;888unit/security;2258integration/2actualnumericENVskip/2warnings;1201Web/154files;130native. Counts overlap; not current79ac CI. Both actualruns success/12jobs success;actualPRcheckout parents/tree independently verified. New79ac CI NOT_RUN.
+- m6_3_current_real_model: NOT_RUN;0 actual external model requests this continuation;DeepSeek key not used, stored or uploaded. Production complete input proof/executor unavailable.
 
 ## 阻塞与待决项
 
