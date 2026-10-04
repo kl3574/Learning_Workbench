@@ -2,6 +2,7 @@ import { expect, test as base, type Page } from '../../apps/web/node_modules/@pl
 import { writeFileSync } from 'node:fs'
 import { RestartRuntime } from './restartRuntime'
 import { originalAssessmentPackage, importAssessmentPackage } from './assessmentTestData'
+import { observeNextResponseJson } from './responseJsonBarrier'
 import type { AssessmentGradingResult, AttemptSnapshot, PageEvidence } from '../../packages/contracts/generated/api-types'
 const test = base.extend<{ runtime: RestartRuntime }>({
   runtime: async ({}, use) => { const runtime = await RestartRuntime.start(); try { await use(runtime) } finally { await runtime.close() } },
@@ -77,13 +78,14 @@ test('a delayed old review response cannot restore history or academic context a
   const { fixture, attempt } = await start(page, 'reviewnativepolicy'); await submit(page); await manual(page); await grade(page, attempt.id, 2); await page.getByRole('button', { name: '打开本次测试复盘', exact: true }).click(); await expect(page.getByRole('region', { name: '当前评分结果' })).toContainText('评分版本 2'); await expect(page.getByRole('button', { name: '重新读取评分结果', exact: true })).toBeEnabled()
   let release!: () => void, captured!: () => void; const gate = new Promise<void>(resolve => { release = resolve }), ready = new Promise<void>(resolve => { captured = resolve })
   const routePattern = `**/api/v1/attempts/${attempt.id}/result`
+  const consumed = await observeNextResponseJson(page, `/api/v1/attempts/${attempt.id}/result`)
   await page.route(routePattern, async route => { const response = await route.fetch(); captured(); await gate; await route.fulfill({ response }) })
   await page.getByRole('button', { name: '重新读取评分结果', exact: true }).click(); await ready
   const other = await page.context().newPage()
   try {
     await other.goto(`${new URL(page.url()).origin}/?assessment=${encodeURIComponent(JSON.stringify({ assessment_ref: fixture.assessment, course_ref: fixture.course }))}`)
     await other.getByRole('checkbox', { name: '我已核对内容状态与模式，确认开始未评分测试', exact: true }).check(); await other.getByRole('button', { name: '明确开始本次测试', exact: true }).click(); await expect(other.getByText('独立测试进行中', { exact: true }).first()).toBeVisible()
-    release(); await page.unrouteAll({ behavior: 'wait' }); await expect(page.getByRole('region', { name: '完整评分历史' })).toHaveCount(0); await expect(page.getByText('当前测试复盘上下文', { exact: true })).toHaveCount(0)
+    release(); await page.unrouteAll({ behavior: 'wait' }); expect(await consumed.wait()).toEqual({ outcome: 'fulfilled', jsonCalls: 1 }); await expect(page.getByRole('region', { name: '完整评分历史' })).toHaveCount(0); await expect(page.getByText('当前测试复盘上下文', { exact: true })).toHaveCount(0)
     expect((await page.request.get(`/api/v1/attempts/${attempt.id}/result`)).status()).toBe(409)
-  } finally { release(); await page.unrouteAll({ behavior: 'wait' }); await other.close() }
+  } finally { release(); await page.unrouteAll({ behavior: 'wait' }); await consumed.dispose(); await other.close() }
 })
