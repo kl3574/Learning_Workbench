@@ -2,6 +2,7 @@
 from dataclasses import replace
 from hashlib import sha256
 import json
+from pathlib import Path
 
 import pytest
 
@@ -250,3 +251,69 @@ def test_malformed_artifact_owner_descriptor_is_safe_error_not_unhandled_type(tm
     with pytest.raises(ApiError):
         stage(case, service, identity, [item])
     assert case.dump() == before
+
+
+def test_actual_old_stage_raw_json_hash_and_http_ack_oracle_remain_exact(tmp_path, monkeypatch):
+    from services.api.app.application import imports
+    oracle = json.loads((Path(__file__).parents[1] / 'fixtures/codex_import_legacy/stage-80d18a93.json').read_text())
+    case = make_case(tmp_path)
+    monkeypatch.setattr(imports, 'identifier', lambda prefix: prefix + '_legacy_oracle')
+    data = oracle['data_utf8'].encode()
+    headers = {**case.headers, 'Idempotency-Key': 'legacy-import'}
+    response = case.client.post('/api/v1/imports', data={'kind': 'markdown'}, files={'file': ('legacy.md', data)}, headers=headers)
+    assert response.status_code == 202 and response.content == oracle['http_ack_utf8'].encode()
+    assert sha256(response.content).hexdigest() == oracle['http_ack_sha256']
+    with case.app.state.database.transaction(immediate=False) as conn:
+        source_row = conn.execute('SELECT metadata_json,rights FROM sources WHERE id=?', ('source_legacy_oracle',)).fetchone()
+        job = conn.execute('SELECT input_json,input_sha256 FROM jobs WHERE id=?', ('job_legacy_oracle',)).fetchone()
+        assert source_row['metadata_json'] == oracle['source_metadata_json'] and source_row['rights'] == oracle['rights']
+        assert job['input_json'] == oracle['job_input_json'] and job['input_sha256'] == oracle['data_sha256']
+        assert conn.execute('SELECT COUNT(*) FROM codex_import_bindings').fetchone()[0] == 0
+    before = case.dump()
+    assert case.client.post('/api/v1/imports', data={'kind': 'markdown'},
+        files={'file': ('legacy.md', data)}, headers=headers).content == response.content
+    assert case.dump() == before
+
+
+def test_selected_author_package_keeps_original_and_preview_private_and_claims_unreviewed(tmp_path):
+    case, service, identity = fixture(tmp_path)
+    data = (Path(__file__).parents[2] / 'fixtures/synthetic/course-author.learnpack.zip').read_bytes()
+    item = replace(source(identity, data), import_kind='learnpack', filename='selected.learnpack.zip',
+        media_type='application/zip')
+    binding, = stage(case, service, identity, [item])
+    assert case.app.state.import_worker.run_once() is True
+    preview = case.client.get('/api/v1/imports/' + binding.import_id)
+    assert preview.status_code == 200 and preview.json()['status'] == 'preview_ready'
+    codes = {warning['code'] for warning in preview.json()['warnings']}
+    assert {'CODEX_IMPORTED_MATERIAL_UNREVIEWED', 'IMPORT_PRIVATE_ANSWERS', 'IMPORT_REVIEW_UNVERIFIED'} <= codes
+    source_view = case.client.get('/api/v1/sources/' + binding.source_id).json()
+    assert case.client.get(source_view['artifact']['download_path']).content == data
+    assert case.client.post('/api/v1/session/role', json={'role': 'learner'},
+        headers={**case.headers, 'Idempotency-Key': 'learner'}).status_code == 200
+    for path in ['/api/v1/imports/' + binding.import_id, '/api/v1/sources/' + binding.source_id,
+            source_view['artifact']['download_path'], '/api/v1/drafts/' + preview.json()['preview_refs'][0]]:
+        assert case.client.get(path).status_code == 403
+
+
+def test_parser_failure_remains_real_failure_with_model_origin_and_zero_publication(tmp_path):
+    case, service, identity = fixture(tmp_path)
+    binding, = bindings = stage(case, service, identity, [source(identity, b'\x00 malformed synthetic markdown')])
+    assert case.app.state.import_worker.run_once() is True
+    view = case.client.get('/api/v1/imports/' + binding.import_id)
+    assert view.status_code == 200 and view.json()['status'] == 'failed'
+    assert 'CODEX_IMPORTED_MATERIAL_UNREVIEWED' in {item['code'] for item in view.json()['warnings']}
+    with case.app.state.database.transaction(immediate=False) as conn:
+        checked = service.check_codex_bindings(conn, identity.workspace_id, bindings)[0]
+    assert checked.status == 'failed' and checked.job.status == 'failed' and not checked.preview_reached
+    assert case.client.get('/api/v1/courses').json()['items'] == []
+
+
+def test_damaged_queued_source_does_not_claim_successful_work_or_repair_it(tmp_path):
+    case, service, identity = fixture(tmp_path)
+    binding, = stage(case, service, identity, [source(identity)])
+    with case.app.state.database.transaction() as conn:
+        conn.execute("UPDATE jobs SET input_json='{}' WHERE id=?", (binding.import_job_id,))
+    assert case.app.state.import_worker.run_once() is False
+    with case.app.state.database.transaction(immediate=False) as conn:
+        row = conn.execute('SELECT status,revision,input_json FROM jobs WHERE id=?', (binding.import_job_id,)).fetchone()
+    assert tuple(row) == ('queued', 1, '{}')
