@@ -8,7 +8,7 @@ freeze, network, approval, Job terminal or registry is touched here.
 from pathlib import Path
 
 from jsonschema import Draft7Validator  # type: ignore[import-untyped]
-from jsonschema.exceptions import ValidationError as SchemaError
+from jsonschema.exceptions import ValidationError as SchemaError  # type: ignore[import-untyped]
 
 from packages.contracts.canonical import sha256_bytes, strict_json
 from ..application.codex_interrupt_protocol_models import (
@@ -80,8 +80,7 @@ def prepare_interrupt(source: InterruptProtocolSource, raw_request: bytes) -> In
         observations_sha256=observation_membership_sha256(frame.sha256, []))
 
 
-def verify_interrupt_exchange(source: InterruptProtocolSource, exchange: InterruptExchange) -> InterruptExchange:
-    checked = verify_interrupt_source(source)
+def _verify_exchange(checked: InterruptProtocolSource, exchange: InterruptExchange) -> InterruptExchange:
     if not isinstance(exchange, InterruptExchange):
         raise ValueError('An original local interrupt exchange is required')
     original = InterruptExchange.model_validate(exchange.model_dump(by_alias=True))
@@ -92,6 +91,10 @@ def verify_interrupt_exchange(source: InterruptProtocolSource, exchange: Interru
     return original
 
 
+def verify_interrupt_exchange(source: InterruptProtocolSource, exchange: InterruptExchange) -> InterruptExchange:
+    return _verify_exchange(verify_interrupt_source(source), exchange)
+
+
 def observe_interrupt(source: InterruptProtocolSource, exchange: InterruptExchange, raw_frame: bytes) -> InterruptObservation:
     """Pair one raw frame, keeping empty ACK and terminal notification distinct.
 
@@ -99,7 +102,8 @@ def observe_interrupt(source: InterruptProtocolSource, exchange: InterruptExchan
     private rejected receipt with the unchanged original exchange. This pure
     interface does not persist it, dispatch anything, or infer cleanup success.
     """
-    original = verify_interrupt_exchange(source, exchange)
+    checked = verify_interrupt_source(source)
+    original = _verify_exchange(checked, exchange)
     frame = _frame(raw_frame)
 
     def rejected(reason: RejectionReason) -> InterruptObservation:
@@ -124,7 +128,7 @@ def observe_interrupt(source: InterruptProtocolSource, exchange: InterruptExchan
             reply = InterruptReply.model_validate(body)
             member = ObservedInterruptReply(kind='control_reply', frame=frame, wire=reply)
             matches = type(reply.id) is type(original.request.wire.id) and reply.id == original.request.wire.id
-        _validate_frame(_schemas(source), body, member.kind)
+        _validate_frame(_schemas(checked), body, member.kind)
     except (ValueError, SchemaError):
         return rejected('unsupported_shape')
     if not matches:
