@@ -34,7 +34,12 @@ export function decodeTurnCommand(raw: string, workspace: string): TurnCommand {
   const basis = checkedTurn('CodexTurnControlView', value.basis)
   checkedProvider('JobCancelRequest', value.body)
   if (basis.session_id !== value.session_id || value.body.expected_revision !== basis.job_revision) fail()
-  if (value.ack !== null) checkedTurnJob(value.ack, basis.job.id, workspace)
+  if (value.ack !== null) {
+   const ack = checkedTurnJob(value.ack, basis.job.id, workspace)
+   const observed = basis.execution === 'terminal' || basis.cancel_requested
+   const status = observed ? basis.job.status : basis.job.status === 'running' ? 'running' : 'cancelled'
+   if (ack.status !== status || ack.revision !== basis.job_revision + (observed ? 0 : 1)) fail()
+  }
  } else fail()
  return value
 }
