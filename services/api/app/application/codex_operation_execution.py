@@ -68,6 +68,7 @@ class CodexOperationExecution(ABC):
             if state.decided is None or state.status != 'approved':
                 raise ApiError(409, 'CODEX_BINDING_INVALID', '原操作尚未批准。')
             ordinal = self.admit_operation(conn, workspace, state, states, history)
+            execute = self.operations.execute
             operation = state.operation
             now = utc_now()
             if instant(now) >= instant(operation.expires_at):
@@ -78,7 +79,7 @@ class CodexOperationExecution(ABC):
             _, _, checked = self.turns._owned_state(conn, workspace)
             self.verify_history(conn, workspace, checked)
         try:
-            result = self.operations.execute(operation.closure, content_sha256(operation))
+            result = execute(operation.closure, content_sha256(operation))
             result = LiteralOperationResult.model_validate(result.model_dump(mode='json'))
             if result.operation_sha256 != content_sha256(operation) or result.text != operation.closure.command.text:
                 raise ValueError('Invalid interpreter receipt')
