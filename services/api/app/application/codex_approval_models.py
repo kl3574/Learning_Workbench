@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field
 from packages.contracts import domain_models as dm
-from ..codex_turn_dto import CodexDeniedOperation, CodexLocalToolBudget, GenericApprovalDecisionAck
+from ..codex_turn_dto import CodexApprovalControl, CodexDeniedOperation, CodexLocalToolBudget, GenericApprovalDecisionAck
 from .provider_models import DispatchLease
 
 
@@ -70,3 +70,21 @@ class ApprovalEnvelope(dm.StrictModel):
     previous_sha256: dm.Sha256 | None
     occurred_at: dm.UTC
     event: Annotated[ApprovalCreated | ApprovalDecided, Field(discriminator='kind')]
+
+
+class TurnApprovalBound(dm.StrictModel):
+    kind: Literal['approval_bound']
+    turn_id: dm.Id
+    approval_seq: dm.Revision
+    approval_sha256: dm.Sha256
+    control: CodexApprovalControl
+
+
+class ApprovalControlEnvelope(dm.StrictModel):
+    version: Literal['codex-turn-event-v3']
+    workspace_id: dm.Id
+    session_id: dm.Id
+    seq: dm.Revision
+    previous_sha256: dm.Sha256 | None
+    occurred_at: dm.UTC
+    event: TurnApprovalBound

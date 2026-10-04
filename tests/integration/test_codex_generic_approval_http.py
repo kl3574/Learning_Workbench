@@ -31,6 +31,9 @@ def callback_turn(values):
 
 def test_unknown_generic_owner_routes_are_registered_and_remain_private(consent_case):
     case = consent_case[0]
+    routes = {(route.path, method) for route in case.app.routes for method in getattr(route, 'methods', [])}
+    assert ('/api/v1/approvals/{id}', 'GET') in routes
+    assert ('/api/v1/approvals/{id}/decision', 'POST') in routes
     response = case.client.get('/api/v1/approvals/missing', headers=case.headers)
     assert response.status_code == 404
     assert response.json()['error']['code'] == 'REFERENCE_MISSING'
