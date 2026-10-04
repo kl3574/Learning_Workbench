@@ -161,3 +161,15 @@ test.each(['learner', 'independent', 'open_book'] as const)('prior rejected appr
  const reduced = readApprovalCommand((await store.load(approvalWorkspace))[second[2]], approvalWorkspace)
  expect(reduced.basis).toEqual({ kind: 'decline', control: approvalControl() }); expect(reduced.ack).toEqual(approvalAck('decline'))
 })
+
+test('unknown approve also permits explicit safe decline while its exact pending journal stays unchanged', async () => {
+ const p = port(), store = local(), forms = local(); vi.mocked(p.decide).mockRejectedValueOnce(new Error('response unavailable')).mockResolvedValue(approvalAck('decline'))
+ const view = render(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted port={p} store={store} formStore={forms} />)
+ await readDetail(); approve(); await screen.findByText(/审批结果或本机保存未知/)
+ const first = vi.mocked(p.decide).mock.calls[0], original = (await store.load(approvalWorkspace))[first[2]].text
+ vi.mocked(p.session).mockResolvedValue({ ...approvalSession(), role: 'learner' }); view.rerender(<CodexApprovalsPanel workspace={approvalWorkspace} writeAdmitted={false} port={p} store={store} formStore={forms} />)
+ await readControl(); fireEvent.click(screen.getByText('明确拒绝这一次操作 approval_synthetic')); await screen.findByText(/审批原 ACK 已保存/)
+ expect(p.decide).toHaveBeenCalledTimes(2); expect(vi.mocked(p.decide).mock.calls[1][2]).not.toBe(first[2]); expect((await store.load(approvalWorkspace))[first[2]].text).toBe(original)
+ fireEvent.click(screen.getByText('独立读取审批安全控制')); await screen.findByLabelText('审批安全控制 GET')
+ expect((screen.getByText('明确拒绝这一次操作 approval_synthetic') as HTMLButtonElement).disabled).toBe(true); expect(p.decide).toHaveBeenCalledTimes(2)
+})
