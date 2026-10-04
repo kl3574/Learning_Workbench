@@ -140,9 +140,10 @@ export function useCodexApprovals(workspace: string, writeAdmitted: boolean, por
  }
  const held = heldApprovalCommands(workspace), heldForms = heldApprovalForms(workspace), all = new Map(commands.map(v => [v.command_id, v]))
  for (const value of held) if (!all.get(value.command_id)?.ack || value.ack) all.set(value.command_id, value)
- const hasCommand = (id: string) => [...all.values()].some(c => c.actor_session_id === identity?.actor_session_id && c.target_id === id)
+ // Prior academic approval facts never remove the separate safe decline action.
+ const hasCommand = (id: string, decision?: 'decline') => [...all.values()].some(c => c.actor_session_id === identity?.actor_session_id && c.target_id === id && (!decision || c.body.decision === decision))
  const decide = async (id: string, decision: 'approve_once' | 'decline') => {
-  if (!ready || hasCommand(id) || decision === 'approve_once' && !allowed) return
+  if (!ready || hasCommand(id, decision === 'decline' ? 'decline' : undefined) || decision === 'approve_once' && !allowed) return
   const basis: ApprovalCommand['basis'] | null = decision === 'decline' && control ? { kind: 'decline', control } : decision === 'approve_once' && detail?.id === id ? { kind: 'approve', view: detail } : null
   if (!basis) return
   const token = begin(); if (token === null) return

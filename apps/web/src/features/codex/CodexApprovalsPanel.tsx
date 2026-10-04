@@ -48,7 +48,7 @@ export function CodexApprovalsPanel({ workspace, writeAdmitted, port, store, for
    {!state.control.approval_controls.length && <p>本次控制没有审批记录；没有构造或猜测操作。</p>}
    {state.control.approval_controls.map(a => <article key={a.id}><p>{a.id} · 审批 r{a.revision} · {a.decision} · {a.validity}</p><p>操作 SHA <code>{a.operation_sha256}</code></p>
     <button disabled={blocked || !state.allowed} onClick={() => void state.read(a.id)}>独立读取完整操作 {a.id}</button>
-    <button disabled={blocked || a.decision !== 'pending' || state.hasCommand(a.id)} onClick={() => void state.decide(a.id, 'decline')}>明确拒绝这一次操作 {a.id}</button>
+    <button disabled={blocked || a.decision !== 'pending' || state.hasCommand(a.id, 'decline')} onClick={() => void state.decide(a.id, 'decline')}>明确拒绝这一次操作 {a.id}</button>
     <p>拒绝以本次完整安全控制的审批 revision/hash 为基准；无需读取操作正文，也不证明远端已经停止。</p>
    </article>)}
   </section>}
