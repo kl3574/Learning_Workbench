@@ -74,6 +74,17 @@ class CodexImportRepository:
         if batches != bindings:
             raise codex_import_damaged()
         imports = {item.binding.import_id for aggregate in batches for item in self.batch(aggregate).records}
+        sources = {item.binding.source_id for aggregate in batches for item in self.batch(aggregate).records}
+        jobs = {item.binding.import_job_id for aggregate in batches for item in self.batch(aggregate).records}
+        source_claims = {row[0] for row in self.conn.execute(
+            "SELECT id FROM sources WHERE workspace_id=? AND (json_type(metadata_json,'$.codex_import_binding') IS NOT NULL "
+            "OR json_extract(metadata_json,'$.origin')='codex_user_selected_unreviewed' "
+            "OR rights='user_selected_model_output; unreviewed; rights_not_verified')", (self.workspace_id,))}
+        job_claims = {row[0] for row in self.conn.execute(
+            "SELECT id FROM jobs WHERE workspace_id=? AND kind='import' AND json_type(input_json,'$.codex_import_binding') IS NOT NULL",
+            (self.workspace_id,))}
+        if sources != source_claims or jobs != job_claims:
+            raise codex_import_damaged()
         previews = {row[0] for row in self.conn.execute(
             'SELECT import_id FROM codex_import_previews WHERE workspace_id=?', (self.workspace_id,))}
         if not previews <= imports:
@@ -81,6 +92,9 @@ class CodexImportRepository:
         return batches
 
     def check_events(self, record: CodexImportRecord, row: sqlite3.Row) -> None:
+        if {'staged': 'queued', 'parsing': 'running', 'preview_ready': 'awaiting_approval',
+                'committed': 'completed', 'failed': 'failed', 'cancelled': 'cancelled'}.get(row['status']) != row['job_status']:
+            raise codex_import_damaged()
         events = self.conn.execute('SELECT * FROM job_events WHERE job_id=? ORDER BY seq',
             (record.binding.import_job_id,)).fetchall()
         if len(events) != row['job_revision'] or not events:

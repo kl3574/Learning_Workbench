@@ -196,11 +196,12 @@ class ImportService:
             if (item.workspace_id != current.workspace_id or item.actor_session_id != current.id
                     or item.session_id != session_id or item.turn_id != request.turn_id
                     or item.manifest_sha256 != request.expected_manifest_sha256 or item.artifact_id != artifact_id
-                    or item.import_kind not in {'markdown', 'html', 'learnpack'}
+                    or type(item.import_kind) is not str or item.import_kind not in {'markdown', 'html', 'learnpack'}
                     or type(item.data) is not bytes or type(item.artifact_size) is not int
                     or item.artifact_size != len(item.data) or sha256_bytes(item.data) != item.artifact_sha256
-                    or not item.filename or safe_filename(item.filename) != item.filename
-                    or not item.media_type or any(ord(char) < 32 for char in item.media_type)):
+                    or type(item.filename) is not str or not item.filename or safe_filename(item.filename) != item.filename
+                    or type(item.media_type) is not str or not item.media_type
+                    or any(ord(char) < 32 for char in item.media_type)):
                 raise codex_import_damaged()
             if not item.data or len(item.data) > self.database.settings.max_upload_bytes:
                 raise ApiError(413, 'IMPORT_SIZE_INVALID', '原件必须非空且不超过配置的大小预算。')
