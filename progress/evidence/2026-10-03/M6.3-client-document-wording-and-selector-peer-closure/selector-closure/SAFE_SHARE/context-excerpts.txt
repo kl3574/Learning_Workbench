@@ -1,0 +1,55 @@
+
+== AGENTS.md @ 06659cea9fdf7746f8758fba863ed167cb1974d6 ==
+1: Read PRODUCT_DESIGN.md completely and follow its implementation, recovery, verification, and publication workflow. It is the sole product and engineering specification.
+
+== PRODUCT_DESIGN.md @ 06659cea9fdf7746f8758fba863ed167cb1974d6 ==
+318: ### 6.1 导入资料并开始学习
+319: 
+320: 用户选择文件 → 服务端检查大小和类型 → 保存不可变原件 → 创建解析任务 → 提取正文/元数据/警告 → 预览章节与公式 → 用户确认映射与用途 → 事务写入规范内容 → 显示在教材目录 → 生成或绑定路线 → 开始阅读。
+321: 
+322: 取消导入必须清理暂存或标记待清理，不产生半本教材。相同文件哈希重复导入要提示“已有原件”；相同内容可以在不同课程中引用，不重复存储原始字节。解析质量差时允许把原文作为只读附件阅读，不能自动把它当作准确 RAG 真值。
+350: ### 6.6 用 Codex 生成教材
+351: 
+352: 用户给主题、先修、目标和证明策略 → Authoring 建立受控任务 → CodexBroker 准备隔离工作目录 → 启动/恢复会话 → 转译工具审批 → 产生 Markdown、题包、计算验证产物 → 验收内容和来源 → 导入草稿 → 人工审阅 → 发布。
+353: 
+354: 普通 LLM 的结构化草稿生成和 Codex 的工具型文件生成是两个适配器，不共享“任意执行权限”。未安装或未授权 Codex 时，提供明确的任务导出/文件回导降级通道，并标注“未连接 Codex”。
+1006: ### 20.3 内容导入、阅读和生成的质量等级
+1007: 
+1008: 内容可作为“参考材料”进入库，不意味着内容被认证。导入时用户确认的是解析预览，不自动获得数学 APPROVED。Reader 显示 source/user_supplied/review 等状态。正式 AI 生成教材发布需要结构检查及所有适用的数学/来源审批；不含数学的内容可标 NOT_APPLICABLE，并写原因；不允许用 NOT_APPLICABLE 绕过包含定理/公式的审核。独立教学评测可以 NOT_RUN，不阻止软件交付，但阻止宣称“教学效果已验证”。
+1569: | POST `/imports` | multipart `file`，`kind:auto|markdown|text|html|pdf|docx|learnpack`，`target_course_id?`；最大字节数按正文 | 202 `{import_id,job:JobRef,input_sha256}`。仅暂存，不改正式课程 |
+1570: | GET `/imports/{id}` | 无 | `{id,status:staged|parsing|preview_ready|committed|cancelled|failed,input_sha256,warnings:Warning[],candidate_summary:{course_title,lesson_count,block_count,unresolved_refs},preview_refs:Id[]}`。预览标识不是已发布 ContentRef |
+1571: | POST `/imports/{id}/commit` | `{expected_input_sha256,accepted_warning_codes:string[],id_mapping:{old_id,new_id}[]}` | `{course_refs:ContentRef[],migration_receipt_id}`；新哈希不一致409；error级警告不可绕过 |
+
+== apps/web/src/features/imports/UploadForm.tsx @ 06659cea9fdf7746f8758fba863ed167cb1974d6 ==
+17:   // Keep the selected File and input choices in memory while access is checked.
+18:   // No material or filename remains in the DOM during suspension.
+19:   if (suspended) return null
+20:   return <form onSubmit={onSubmit}>
+21:     <p>上传后先检查候选正文与警告，再确认入库。原件与候选会保留在本机工作区。</p>
+22:     <div className="import-fields">
+23:       <label className="import-file">选择导入文件<input type="file" disabled={disabled} accept=".md,.markdown,.txt,.html,.htm,.zip,.pdf,.docx" onChange={event => setFile(event.target.files?.[0] ?? null)} /></label>
+24:       <label>解析格式<select disabled={disabled} value={kind} onChange={event => setKind(event.target.value as ImportKind)}>
+25:         <option value="auto">自动识别</option><option value="markdown">Markdown</option><option value="text">UTF-8 文本</option><option value="html">HTML</option><option value="learnpack">学习包（.learnpack.zip）</option>
+26:         <option value="pdf">PDF · 文本提取</option><option value="docx">DOCX · 段落与表格</option>
+27:       </select></label>
+28:       <label>导入目标<select disabled={disabled} value={courseId} onChange={event => setCourseId(event.target.value)}><option value="">创建新课程</option>{courses.map(course => <option key={course.ref.id} value={course.ref.id}>{course.title} · r{course.ref.revision}</option>)}</select></label>
+29:     </div>
+30:     {moreCourses && <button type="button" onClick={onMoreCourses} disabled={disabled}>载入更多目标课程</button>}
+31:     <p className="muted">支持 Markdown、UTF-8 文本、安全 HTML、学习包及 PDF / DOCX 文本提取；默认单原件 50 MiB，实际按本机配置校验。</p>
+
+== apps/web/src/features/imports/DraftPreview.tsx @ 06659cea9fdf7746f8758fba863ed167cb1974d6 ==
+63: export function DraftPreview({ ids, selected, draft, source, sourceError, accessEpoch, loading, error, choose }: {
+64:   ids: string[]; selected: string; draft: DraftSnapshot | null; source: SourceSnapshot | null;
+65:   accessEpoch: RefObject<number>;
+66:   loading: boolean; error: string; sourceError: string; choose: (id: string) => void;
+67: }) {
+68:   const index = ids.indexOf(selected)
+69:   return <section aria-label="候选正文预览"><h3>候选正文预览</h3><p className="muted">这里展示暂存候选。候选 ID 不代表正式发布或内容审核通过。</p>
+70:     <label>选择预览候选<select value={selected} onChange={event => choose(event.target.value)}>{ids.map((id, position) => <option key={id} value={id}>候选 {position + 1} / {ids.length} · {id}</option>)}</select></label>
+71:     <div className="import-buttons"><button disabled={index <= 0 || loading} onClick={() => choose(ids[index - 1])}>上一候选</button><button disabled={index < 0 || index >= ids.length - 1 || loading} onClick={() => choose(ids[index + 1])}>下一候选</button></div>
+72:     {loading && <p role="status">读取候选正文…</p>}
+73:     {error && <div className="import-error" role="alert"><p>{error}</p><button onClick={() => choose(selected)}>重试读取候选</button></div>}
+74:     {draft && <><div className="import-preview" tabIndex={0} aria-label="当前候选正文"><CandidateContent draft={draft} /></div><details><summary>候选修订与校验信息</summary><dl className="import-details"><dt>候选 ID</dt><dd>{draft.id}</dd><dt>候选对象 ID</dt><dd>{'metadata' in draft.payload ? draft.payload.metadata.id : draft.payload.id}</dd><dt>候选修订</dt><dd>{draft.revision}</dd><dt>候选 SHA-256</dt><dd><code className="import-hash">{draft.candidate_sha256}</code></dd></dl></details></>}
+75:     {draft && 'metadata' in draft.payload && <SourceProvenance citations={draft.payload.citations ?? []} />}
+76:     {sourceError && <div className="import-warning" role="status"><p>原件暂不可读取：{sourceError}</p><p>安全候选正文已单独读取。需要作者权限时，可在窗口顶部显式切换角色；这不会自动认证候选内容。</p><button type="button" disabled={loading} onClick={() => choose(selected)}>重试读取原件信息</button></div>}
+77:     {source && <OriginalDownload key={source.id} source={source} accessEpoch={accessEpoch} />}

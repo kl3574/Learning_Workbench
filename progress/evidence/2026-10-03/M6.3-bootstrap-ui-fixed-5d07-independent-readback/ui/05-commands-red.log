@@ -1,0 +1,55 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/codex/bootstrapCommands.test.ts
+
+
+ RUN  v5.0.0 $HOME/.cache/learning-workbench-acceptance/m63-local-session-bootstrap-ui-oct03/apps/web
+
+ ❯ src/features/codex/bootstrapCommands.test.ts (7 tests | 5 failed) 15ms
+   × an approved expired basis cannot create a new session command 4ms
+   × an approved changed basis cannot create a new session command 1ms
+   × an approved unavailable basis cannot create a new session command 0ms
+   × approve needs current, decline tolerates unavailable, neither decides an expired preparation 1ms
+   × read-only other actor and different adapter ACK cannot become this actor command 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/codex/bootstrapCommands.test.ts > an approved expired basis cannot create a new session command
+ FAIL  src/features/codex/bootstrapCommands.test.ts > an approved changed basis cannot create a new session command
+ FAIL  src/features/codex/bootstrapCommands.test.ts > an approved unavailable basis cannot create a new session command
+AssertionError: expected [Function] to throw an error
+ ❯ src/features/codex/bootstrapCommands.test.ts:8:90
+      6|
+      7| test.each(['expired', 'changed', 'unavailable'] as const)('an approved…
+      8|  expect(() => createCommand(workspace, actor, { ...preparation('approv…
+       |                                                                                          ^
+      9| })
+     10| test('approve needs current, decline tolerates unavailable, neither de…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  src/features/codex/bootstrapCommands.test.ts > approve needs current, decline tolerates unavailable, neither decides an expired preparation
+AssertionError: expected [Function] to throw an error
+ ❯ src/features/codex/bootstrapCommands.test.ts:11:112
+      9| })
+     10| test('approve needs current, decline tolerates unavailable, neither de…
+     11|  expect(() => decidedCommand(workspace, actor, { ...preparation(), val…
+       |                                                                                                                ^
+     12|  expect(decidedCommand(workspace, actor, { ...preparation(), validity:…
+     13|  expect(() => decidedCommand(workspace, actor, { ...preparation(), val…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  src/features/codex/bootstrapCommands.test.ts > read-only other actor and different adapter ACK cannot become this actor command
+AssertionError: expected [Function] to throw an error
+ ❯ src/features/codex/bootstrapCommands.test.ts:18:253
+
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 2 passed (7)
+   Start at  20:29:45
+   Duration  513ms (environment 49%, transform 36%, import 10%, tests 4%, worker 1%)
+

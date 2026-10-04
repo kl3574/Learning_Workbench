@@ -1,0 +1,76 @@
+
+> @learning-workbench/web@0.1.0 test
+> vitest run src/features/codex/bootstrapClient.test.ts
+
+
+ RUN  v5.0.0 $HOME/.cache/learning-workbench-acceptance/m63-local-session-bootstrap-ui-oct03/apps/web
+
+ ❯ src/features/codex/bootstrapClient.test.ts (20 tests | 13 failed) 11ms
+   × rejects semantically inconsistent preparation {"revision":2} 3ms
+   × rejects semantically inconsistent preparation {"consent_id":"consent_wrong"} 0ms
+   × rejects semantically inconsistent preparation {"session_id":"session_wrong"} 0ms
+   × rejects semantically inconsistent preparation {"validity":"closed"} 0ms
+   × rejects semantically inconsistent preparation {"expires_at":"2026-10-03T12:10:00.000002Z"} 1ms
+   × rejects semantically inconsistent preparation {"expires_at":"2026-10-03T12:11:00.000001Z"} 0ms
+   × rejects semantically inconsistent preparation {"created_at":"2026-02-30T12:00:00Z","expires_at":"2026-02-30T12:10:00Z"} 0ms
+   × rejects unsafe label "/private/path" 0ms
+   × rejects unsafe label "file://private" 0ms
+   × rejects unsafe label "back\\slash" 0ms
+   × rejects unsafe label "bad\nlabel" 0ms
+   × rejects unsafe label "\u0000" 0ms
+   × closed consumed retains its true session and false features never accept numbers 0ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 13 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/codex/bootstrapClient.test.ts > rejects semantically inconsistent preparation {"revision":2}
+ FAIL  src/features/codex/bootstrapClient.test.ts > rejects semantically inconsistent preparation {"consent_id":"consent_wrong"}
+ FAIL  src/features/codex/bootstrapClient.test.ts > rejects semantically inconsistent preparation {"session_id":"session_wrong"}
+ FAIL  src/features/codex/bootstrapClient.test.ts > rejects semantically inconsistent preparation {"validity":"closed"}
+ FAIL  src/features/codex/bootstrapClient.test.ts > rejects semantically inconsistent preparation {"expires_at":"2026-10-03T12:10:00.000002Z"}
+ FAIL  src/features/codex/bootstrapClient.test.ts > rejects semantically inconsistent preparation {"expires_at":"2026-10-03T12:11:00.000001Z"}
+ FAIL  src/features/codex/bootstrapClient.test.ts > rejects semantically inconsistent preparation {"created_at":"2026-02-30T12:00:00Z","expires_at":"2026-02-30T12:10:00Z"}
+AssertionError: expected [Function] to throw an error
+ ❯ src/features/codex/bootstrapClient.test.ts:14:98
+     12|  { created_at: '2026-02-30T12:00:00Z', expires_at: '2026-02-30T12:10:0…
+     13| ])('rejects semantically inconsistent preparation %j', patch => {
+     14|  expect(() => checkedBootstrap('CodexBootstrapPreparationView', { ...p…
+       |                                                                                                  ^
+     15| })
+     16| test.each(['/private/path', 'file://private', 'back\\slash', 'bad\nlab…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/13]⎯
+
+ FAIL  src/features/codex/bootstrapClient.test.ts > rejects unsafe label "/private/path"
+ FAIL  src/features/codex/bootstrapClient.test.ts > rejects unsafe label "file://private"
+ FAIL  src/features/codex/bootstrapClient.test.ts > rejects unsafe label "back\\slash"
+ FAIL  src/features/codex/bootstrapClient.test.ts > rejects unsafe label "bad\nlabel"
+ FAIL  src/features/codex/bootstrapClient.test.ts > rejects unsafe label "\u0000"
+AssertionError: expected [Function] to throw an error
+ ❯ src/features/codex/bootstrapClient.test.ts:17:145
+     15| })
+     16| test.each(['/private/path', 'file://private', 'back\\slash', 'bad\nlab…
+     17|  expect(() => checkedBootstrap('CodexBootstrapPreparationView', { ...p…
+       |                                                                                                                                                 ^
+     18| })
+     19| test('closed consumed retains its true session and false features neve…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/13]⎯
+
+ FAIL  src/features/codex/bootstrapClient.test.ts > closed consumed retains its true session and false features never accept numbers
+AssertionError: expected [Function] to throw an error
+ ❯ src/features/codex/bootstrapClient.test.ts:20:116
+     18| })
+     19| test('closed consumed retains its true session and false features neve…
+     20|  expect(() => checkedBootstrap('CodexBootstrapPreparationView', { ...p…
+       |                                                                                                                    ^
+     21|  expect(() => checkedBootstrap('CodexSessionView', { ...codexSession()…
+     22|  expect(() => checkedBootstrap('CodexSessionView', { ...codexSession()…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/13]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  13 failed | 7 passed (20)
+   Start at  20:21:43
+   Duration  626ms (environment 55%, transform 33%, import 8%, tests 3%, worker 1%)
+

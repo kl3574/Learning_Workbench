@@ -1,0 +1,930 @@
+commit 356a9ade7b0136f93cad5d3cbd5170afd178c991
+Author:     Kangxin Liu <robinliu97@outlook.com>
+AuthorDate: Sat Oct 3 20:47:06 2026 +0800
+Commit:     Kangxin Liu <robinliu97@outlook.com>
+CommitDate: Sat Oct 3 20:47:06 2026 +0800
+
+    feat(M6.3): add explicit local bootstrap controls and recovery
+
+diff --git a/apps/web/src/features/authoring/AuthoringBootstrap.test.tsx b/apps/web/src/features/authoring/AuthoringBootstrap.test.tsx
+new file mode 100644
+index 00000000..9dd269a8
+--- /dev/null
++++ b/apps/web/src/features/authoring/AuthoringBootstrap.test.tsx
+@@ -0,0 +1,29 @@
++import 'fake-indexeddb/auto'
++import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
++import { IDBFactory } from 'fake-indexeddb'
++import { afterEach, expect, test, vi } from 'vitest'
++import { DraftStore } from '../../workbench/DraftStore'
++import { AuthoringPanel } from './AuthoringPanel'
++import type { AuthoringPort } from './authoringClient'
++import { bootstrapPort, deferred, preparation, session, workspace } from '../codex/bootstrapTestFixtures'
++import { heldBootstrapCommands, releaseBootstrapCommand } from '../codex/bootstrapMemory'
++afterEach(() => { cleanup(); for (const value of heldBootstrapCommands(workspace)) releaseBootstrapCommand(value) })
++test('parent keeps the original close guard and a closed static label for a late bootstrap ACK', async () => {
++ const unexpected = vi.fn(async (): Promise<never> => { throw new Error('No academic write expected') })
++ const port: AuthoringPort = { session: vi.fn(async () => session()), list: vi.fn(async () => ({ items: [], next_cursor: null })), prepare: unexpected, read: unexpected, draft: unexpected, preview: unexpected, numeric: unexpected, decide: unexpected, job: unexpected, cancel: unexpected }
++ const bootstrap = bootstrapPort(), pending = deferred<ReturnType<typeof preparation>>(), state = vi.fn()
++ bootstrap.prepare = vi.fn(() => pending.promise)
++ const db = new DraftStore({ name: 'authoring-bootstrap-parent', factory: new IDBFactory() })
++ const view = render(<AuthoringPanel workspace={workspace} paused={false} currentBlock={null} port={port} bootstrap={bootstrap} bootstrapStore={db} onState={state} />)
++ await waitFor(() => expect(state.mock.calls.at(-1)?.[0].safe).toBe(true))
++ fireEvent.click(screen.getByRole('button', { name: '读取本地会话记录' }))
++ await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
++ fireEvent.click(screen.getByRole('button', { name: '准备本地控制会话' }))
++ await waitFor(() => expect(bootstrap.prepare).toHaveBeenCalledOnce())
++ await waitFor(() => expect(state.mock.calls.at(-1)?.[0].safe).toBe(false))
++ view.rerender(<AuthoringPanel workspace={workspace} paused currentBlock={null} port={port} bootstrap={bootstrap} bootstrapStore={db} onState={state} />)
++ await act(async () => pending.resolve(preparation()))
++ await waitFor(() => expect(state.mock.calls.at(-1)?.[0]).toMatchObject({ dirty: true, safe: false, isolated: true, isolationLabel: '保留本地会话隔离内存，丢弃临时表单并前往角色控制' }))
++ expect(unexpected).not.toHaveBeenCalled(); expect(bootstrap.prepare).toHaveBeenCalledOnce()
++ expect(JSON.parse(Object.values(await db.load(workspace))[0].text).ack).toBeNull()
++})
+diff --git a/apps/web/src/features/authoring/AuthoringPanel.tsx b/apps/web/src/features/authoring/AuthoringPanel.tsx
+index feca68b4..c67bdbc6 100644
+--- a/apps/web/src/features/authoring/AuthoringPanel.tsx
++++ b/apps/web/src/features/authoring/AuthoringPanel.tsx
+@@ -13,20 +13,24 @@ import { emptyReviewPanelState, pendingReviewForms, discardReviewForms, subscrib
+ import { ReviewPanel } from '../draftReview/ReviewPanel'
+ import { ContentImpactsPanel, type ImpactState } from '../contentImpacts/ContentImpactsPanel'
+ import { CodexCapabilitiesPanel } from '../codex/CodexCapabilitiesPanel'
++import type { BootstrapPort } from '../codex/bootstrapClient'
++import type { DraftStore } from '../../workbench/DraftStore'
++import { CodexBootstrapPanel, type BootstrapPanelState } from '../codex/CodexBootstrapPanel'
+ import './authoring.css'
+-export type AuthoringPanelState = { dirty: boolean; safe: boolean; isolated: boolean; discardForms?: () => void }
+-export function AuthoringPanel({ workspace, paused, currentBlock, onState, port = authoringClient, provider }: { workspace: string; paused: boolean; currentBlock: ContentRef | null; onState: (value: AuthoringPanelState) => void; port?: AuthoringPort; provider?: ProviderPort }) {
++export type AuthoringPanelState = { dirty: boolean; safe: boolean; isolated: boolean; discardForms?: () => void; isolationLabel?: '保留本地会话隔离内存，丢弃临时表单并前往角色控制' }
++export function AuthoringPanel({ workspace, paused, currentBlock, onState, port = authoringClient, provider, bootstrap, bootstrapStore }: { workspace: string; paused: boolean; currentBlock: ContentRef | null; onState: (value: AuthoringPanelState) => void; port?: AuthoringPort; provider?: ProviderPort; bootstrap?: BootstrapPort; bootstrapStore?: DraftStore }) {
+   const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
+   const state = useAuthoring(workspace, paused, port), [formDirty, setFormDirty] = useState(false), [consentState, setConsentState] = useState({ dirty: false, safe: true })
+   const [reviewOpen, setReviewOpen] = useState(false), [reviewState, setReviewState] = useState<ReviewPanelState>(emptyReviewPanelState)
+   const [impactsOpen, setImpactsOpen] = useState(false), [impactState, setImpactState] = useState<ImpactState>({ dirty: false, safe: true, isolated: false })
++  const [bootstrapState, setBootstrapState] = useState<BootstrapPanelState>({ dirty: false, safe: true, isolated: false })
+   const callback = useRef(onState); callback.current = onState
+   useSyncExternalStore(subscribeReviewForms, reviewFormMemoryVersion, reviewFormMemoryVersion)
+   const heldReviewForms = pendingReviewForms(workspace, 'authoring')
+   const discardForms = useCallback(() => { reviewState.discardForms(); discardReviewForms(workspace, 'authoring') }, [workspace, reviewState.discardForms])
+   useEffect(() => { if (!state.academic) { setFormDirty(false); setConsentState({ dirty: false, safe: true }) } }, [state.academic, workspace, access])
+-  const dirty = heldReviewForms || state.academic && formDirty || consentState.dirty || state.commands.some(v => !v.ack) || reviewState.dirty || impactState.dirty, otherSafe = state.ready && !state.busy && consentState.safe && (!reviewOpen || reviewState.safe), safe = otherSafe && impactState.safe, isolated = otherSafe && impactState.isolated
+-  useEffect(() => { callback.current({ dirty, safe, isolated, discardForms }) }, [dirty, safe, isolated, discardForms])
++  const dirty = heldReviewForms || state.academic && formDirty || consentState.dirty || state.commands.some(v => !v.ack) || reviewState.dirty || impactState.dirty || bootstrapState.dirty, otherSafe = state.ready && !state.busy && consentState.safe && (!reviewOpen || reviewState.safe), safe = otherSafe && impactState.safe && bootstrapState.safe, isolated = otherSafe && (impactState.isolated || bootstrapState.isolated) && (impactState.safe || impactState.isolated) && (bootstrapState.safe || bootstrapState.isolated)
++  useEffect(() => { callback.current({ dirty, safe, isolated, discardForms, isolationLabel: bootstrapState.isolated ? '保留本地会话隔离内存，丢弃临时表单并前往角色控制' : undefined }) }, [dirty, safe, isolated, discardForms, bootstrapState.isolated])
+   const detail = state.detail, draft = state.draft, numeric = state.numeric
+   return <div className="authoring-panel"><p>可以准备例题、教材小节、习题集与测试题组草稿。模型调用与数值执行分别授权；生成完成不会自动获得数学、来源或教学质量批准。</p>
+     <button disabled={state.busy} onClick={() => void state.refresh()}>刷新安全任务列表与当前权限</button>
+@@ -51,6 +55,7 @@ export function AuthoringPanel({ workspace, paused, currentBlock, onState, port
+       {numeric && <NumericCheckPanel key={`${numeric.id}:${numeric.revision}:${numeric.operation_sha256}`} value={numeric} approvalBlocked={!!draft && !('root' in draft) && draft.state === 'published'} busy={state.busy || !state.ready} commandExists={state.commands.some(v => (v.kind === 'numeric_decision' || v.kind === 'group_numeric_decision') && v.check_id === numeric.id && (!v.rejection || !!v.ack))} decide={body => void state.create({ kind: 'target' in numeric ? 'group_numeric_decision' : 'numeric_decision', check_id: numeric.id, body })} refresh={() => void state.readNumeric(numeric.id)} />}
+     </div>}
+     <CodexCapabilitiesPanel workspace={workspace} admitted={state.academic && state.ready} />
++    <CodexBootstrapPanel port={bootstrap} store={bootstrapStore} workspace={workspace} writeAdmitted={state.academic && state.ready && !paused} onState={setBootstrapState} />
+     {impactsOpen && <ContentImpactsPanel workspace={workspace} paused={paused || !state.academic} onState={setImpactState} />}
+     {reviewOpen && (draft && 'root' in draft
+       ? <ReviewPanel formScope="authoring" formOwner="authoring_group" workspace={workspace} paused={paused || !state.academic} candidate={state.academic ? draft.candidate : null} candidateState="draft" onState={setReviewState} />
+diff --git a/apps/web/src/features/codex/CodexBootstrapPanel.test.tsx b/apps/web/src/features/codex/CodexBootstrapPanel.test.tsx
+new file mode 100644
+index 00000000..08204fce
+--- /dev/null
++++ b/apps/web/src/features/codex/CodexBootstrapPanel.test.tsx
+@@ -0,0 +1,227 @@
++import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
++import { IDBFactory } from 'fake-indexeddb'
++import { afterEach, expect, test, vi } from 'vitest'
++import { ApiError, request } from '../../api/client'
++import { DraftStore } from '../../workbench/DraftStore'
++import { CodexBootstrapPanel } from './CodexBootstrapPanel'
++import { actor, bootstrapPort, codexSession, deferred, preparation, session, workspace } from './bootstrapTestFixtures'
++import { createCommand, persistBootstrapCommand, prepareCommand } from './bootstrapCommands'
++import { heldBootstrapCommands, releaseBootstrapCommand } from './bootstrapMemory'
++afterEach(() => { cleanup(); vi.unstubAllGlobals(); for (const value of heldBootstrapCommands(workspace)) releaseBootstrapCommand(value) })
++const store = () => new DraftStore({ name: `bootstrap-test-${crypto.randomUUID()}`, factory: new IDBFactory() })
++const click = (name: string | RegExp) => fireEvent.click(screen.getByRole('button', { name }))
++
++test('explicit preparation, independent current GET, decision and creation preserve originals', async () => {
++ const port = bootstrapPort(), db = store(), state = vi.fn()
++ render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} onState={state} />)
++ expect(port.session).not.toHaveBeenCalled(); expect(port.prepare).not.toHaveBeenCalled()
++ click('读取本地会话记录'); await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
++ click('准备本地控制会话'); await screen.findByText('准备原 ACK 已保存；须另读当前资格。')
++ expect(port.preparation).not.toHaveBeenCalled(); expect(screen.queryByRole('button', { name: '仅批准这一次本地建会话' })).toBeNull()
++ click('读取准备当前状态 preparation_test'); await screen.findByText('冻结范围：仅本地控制建会话')
++ expect(screen.getByText('允许 actions：[]；零模型、零工具、零学科读取、零网络。')).toBeTruthy()
++ port.preparation = vi.fn(async () => preparation('approved'))
++ click('仅批准这一次本地建会话'); await screen.findByText('决定原 ACK 已保存；须另读当前资格。')
++ expect(port.create).not.toHaveBeenCalled()
++ click('读取准备当前状态 preparation_test'); await screen.findByRole('button', { name: '明确创建这次本地会话' })
++ click('明确创建这次本地会话'); await screen.findByText('原 201 ACK 已保存；ready 仅表示已核验映射。')
++ expect(port.prepare).toHaveBeenCalledTimes(1); expect(port.decide).toHaveBeenCalledTimes(1); expect(port.create).toHaveBeenCalledTimes(1)
++ const records = Object.values(await db.load(workspace)).map(v => v.text).join('\n')
++ expect(records).not.toContain('csrf'); expect(records).not.toContain('synthetic-only-not-persisted')
++ expect(records).toContain('actor_session_id'); expect(records).toContain('operation_sha256')
++ await act(async () => {})
++})
++
++test('unknown prepare ACK survives reload; only same actor explicitly replays identical key/body', async () => {
++ const port = bootstrapPort(), db = store(); port.prepare = vi.fn(async () => { throw new Error('response lost') })
++ const view = render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
++ click('读取本地会话记录'); await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
++ click('准备本地控制会话'); await screen.findByText(/本次操作或结果尚未确认/)
++ const original = vi.mocked(port.prepare).mock.calls[0], saved = Object.values(await db.load(workspace))[0]
++ view.unmount()
++ const refreshed = render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
++ expect(port.prepare).toHaveBeenCalledTimes(1)
++ click('读取本地会话记录'); await screen.findByRole('button', { name: `显式回放原 key ${saved.objectId}` })
++ port.prepare = vi.fn(async () => preparation())
++ click(`显式回放原 key ${saved.objectId}`); await screen.findByText('准备原 ACK 已保存；须另读当前资格。')
++ expect(port.prepare).toHaveBeenCalledExactlyOnceWith(...original)
++ refreshed.unmount()
++})
++
++test.each(['learner', 'independent', 'open_book', 'other_actor'] as const)('fresh %s cannot write or take over, while a valid reader can GET safe metadata', async mode => {
++ const port = bootstrapPort(), db = store()
++ const command = prepareCommand(workspace, actor)
++ await persistBootstrapCommand({ ...command, ack: preparation() } as typeof command, db)
++ port.session = vi.fn(async () => ({ ...session(), ...(mode === 'learner' ? { role: 'learner' as const } : mode === 'independent' ? { active_independent_attempt_id: 'attempt_test' } : mode === 'open_book' ? { active_open_book_attempt_id: 'attempt_test' } : { actor_session_id: 'session_other' }) }))
++ render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
++ click('读取本地会话记录'); await screen.findByRole('button', { name: '读取准备当前状态 preparation_test' })
++ click('读取准备当前状态 preparation_test'); await screen.findByText('冻结范围：仅本地控制建会话')
++ expect((screen.getByRole('button', { name: '仅批准这一次本地建会话' }) as HTMLButtonElement).disabled).toBe(true)
++ expect(port.decide).not.toHaveBeenCalled(); expect(port.create).not.toHaveBeenCalled()
++})
++
++test('new actor cannot replay an original unknown command after refresh', async () => {
++ const port = bootstrapPort(), db = store(), command = prepareCommand(workspace, actor)
++ await persistBootstrapCommand(command, db)
++ port.session = vi.fn(async () => ({ ...session(), actor_session_id: 'session_other' }))
++ render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
++ click('读取本地会话记录'); await screen.findByText('其他原会话的命令仅只读保留，当前 actor 不能接管。')
++ const button = screen.getByRole('button', { name: `显式回放原 key ${command.command_id}` }) as HTMLButtonElement
++ expect(button.disabled).toBe(true); fireEvent.click(button); expect(port.prepare).not.toHaveBeenCalled()
++ expect(Object.values(await db.load(workspace))[0].text).toContain(actor)
++})
++
++test('fresh session is checked again after durable command save and immediately before POST', async () => {
++ const port = bootstrapPort(), db = store()
++ port.session = vi.fn().mockResolvedValueOnce(session()).mockResolvedValueOnce(session()).mockResolvedValue({ ...session(), role: 'learner' })
++ render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
++ click('读取本地会话记录'); await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
++ click('准备本地控制会话'); await screen.findByText(/当前会话无权继续/)
++ expect(port.prepare).not.toHaveBeenCalled(); expect(Object.values(await db.load(workspace))).toHaveLength(1)
++})
++
++test.each(['permission', 'workspace', 'port'] as const)('late ACK after %s change stays in original actor memory, recovery saves only ACK', async mode => {
++ const port = bootstrapPort(), db = store(), pending = deferred<ReturnType<typeof preparation>>()
++ port.prepare = vi.fn(() => pending.promise)
++ const view = render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
++ click('读取本地会话记录'); await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
++ click('准备本地控制会话'); await waitFor(() => expect(port.prepare).toHaveBeenCalledOnce())
++ view.rerender(<CodexBootstrapPanel workspace={mode === 'workspace' ? 'workspace_other' : workspace} writeAdmitted={mode !== 'permission'} port={mode === 'port' ? bootstrapPort() : port} store={db} />)
++ await act(async () => pending.resolve(preparation()))
++ expect(screen.queryByText('准备原 ACK 已保存；须另读当前资格。')).toBeNull()
++ expect(JSON.parse(Object.values(await db.load(workspace))[0].text).ack).toBeNull()
++ view.rerender(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
++ click('读取本地会话记录'); await screen.findByRole('button', { name: '仅保存原会话已收到的事实' })
++ click('仅保存原会话已收到的事实'); await screen.findByText('仅保存已收到的原事实；未发送任何写请求。')
++ expect(port.prepare).toHaveBeenCalledOnce()
++ expect(JSON.parse(Object.values(await db.load(workspace))[0].text).ack).toEqual(preparation())
++})
++
++test('lost create ACK discovers consumed/closed unknown via preparation then session GET; new prepare retains unknown', async () => {
++ const port = bootstrapPort(), db = store(), basis = preparation('approved'), command = createCommand(workspace, actor, basis)
++ await persistBootstrapCommand(command, db)
++ port.preparation = vi.fn(async () => preparation('consumed')); port.read = vi.fn(async () => codexSession('unknown'))
++ render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
++ click('读取本地会话记录'); await screen.findByRole('button', { name: '读取准备当前状态 preparation_test' })
++ click('读取准备当前状态 preparation_test'); await screen.findByText('旧实例结果未知。不会自动再启动；如需另试，须另建准备并重新批准。')
++ expect(port.read).toHaveBeenCalledExactlyOnceWith('codex_session_test'); expect(port.create).not.toHaveBeenCalled()
++ expect(screen.getByText(/已消费许可，绑定 session/)).toBeTruthy()
++ click('准备本地控制会话'); await screen.findByText('准备原 ACK 已保存；须另读当前资格。')
++ expect(screen.getByText(/旧实例结果未知/)).toBeTruthy(); expect(port.create).not.toHaveBeenCalled()
++})
++
++test('unavailable pending scope permits explicit decline but never approval or creation', async () => {
++ const port = bootstrapPort(), db = store(), command = prepareCommand(workspace, actor)
++ await persistBootstrapCommand({ ...command, ack: preparation() } as typeof command, db)
++ port.preparation = vi.fn(async () => ({ ...preparation(), validity: 'unavailable' as const }))
++ render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
++ click('读取本地会话记录'); await screen.findByRole('button', { name: '读取准备当前状态 preparation_test' }); click('读取准备当前状态 preparation_test')
++ await screen.findByRole('button', { name: '拒绝这次本地建会话' })
++ expect((screen.getByRole('button', { name: '仅批准这一次本地建会话' }) as HTMLButtonElement).disabled).toBe(true)
++ click('拒绝这次本地建会话'); await screen.findByText('决定原 ACK 已保存；须另读当前资格。')
++ expect(port.decide).toHaveBeenCalledWith('preparation_test', { expected_revision: 1, decision: 'decline', operation_sha256: 'b'.repeat(64) }, expect.any(String))
++ expect(port.create).not.toHaveBeenCalled()
++})
++
++test('storage failure after a strict ACK retains it; explicit memory recovery sends zero extra POST', async () => {
++ const port = bootstrapPort(), db = store(), realSave = db.save.bind(db), state = vi.fn()
++ vi.spyOn(db, 'save').mockImplementationOnce(realSave).mockRejectedValueOnce(new Error('synthetic IDB commit failure'))
++ render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} onState={state} />)
++ click('读取本地会话记录'); await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
++ click('准备本地控制会话'); await screen.findByRole('button', { name: '仅保存原会话已收到的事实' })
++ await waitFor(() => expect(state).toHaveBeenLastCalledWith({ dirty: true, safe: false, isolated: true }))
++ expect(port.prepare).toHaveBeenCalledOnce(); expect(JSON.parse(Object.values(await db.load(workspace))[0].text).ack).toBeNull()
++ vi.mocked(db.save).mockImplementation(realSave)
++ click('仅保存原会话已收到的事实'); await screen.findByText('仅保存已收到的原事实；未发送任何写请求。')
++ expect(port.prepare).toHaveBeenCalledOnce(); expect(JSON.parse(Object.values(await db.load(workspace))[0].text).ack).toEqual(preparation())
++ await waitFor(() => expect(state).toHaveBeenLastCalledWith({ dirty: false, safe: true, isolated: false }))
++})
++
++test('in-flight access mutation invalidates callbacks, with received ACK retained under original actor only', async () => {
++ const port = bootstrapPort(), db = store(), pending = deferred<ReturnType<typeof preparation>>()
++ port.prepare = vi.fn(() => pending.promise)
++ render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
++ click('读取本地会话记录'); await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
++ click('准备本地控制会话'); await waitFor(() => expect(port.prepare).toHaveBeenCalledOnce())
++ vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ...session(), role: 'learner' }), { status: 200 })))
++ await act(async () => { await request('POST /api/v1/session/role', { role: 'learner' }, { 'Idempotency-Key': 'synthetic-role-key' }) })
++ await act(async () => pending.resolve(preparation()))
++ expect(screen.queryByText(/准备原 ACK 已保存/)).toBeNull(); expect(JSON.parse(Object.values(await db.load(workspace))[0].text).ack).toBeNull()
++ port.session = vi.fn(async () => ({ ...session(), actor_session_id: 'session_other', role: 'learner' as const, active_independent_attempt_id: 'attempt_current_reader' }))
++ click('读取本地会话记录'); await screen.findByText(/其他原会话的命令仅只读保留/)
++ expect(heldBootstrapCommands(workspace, actor)[0].ack).toEqual(preparation())
++ click('仅保存原会话已收到的事实'); await screen.findByText('仅保存已收到的原事实；未发送任何写请求。')
++ const original = JSON.parse(Object.values(await db.load(workspace))[0].text)
++ expect(original.actor_session_id).toBe(actor); expect(original.ack).toEqual(preparation())
++ expect((screen.getByRole('button', { name: `显式回放原 key ${original.command_id}` }) as HTMLButtonElement).disabled).toBe(true)
++ expect(port.prepare).toHaveBeenCalledOnce(); expect(port.decide).not.toHaveBeenCalled(); expect(port.create).not.toHaveBeenCalled()
++})
++
++test('unmount retains a late ACK without GET or POST and same actor can persist it on remount', async () => {
++ const port = bootstrapPort(), db = store(), pending = deferred<ReturnType<typeof preparation>>()
++ port.prepare = vi.fn(() => pending.promise)
++ const view = render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
++ click('读取本地会话记录'); await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
++ click('准备本地控制会话'); await waitFor(() => expect(port.prepare).toHaveBeenCalledOnce())
++ const count = vi.mocked(port.session).mock.calls.length
++ view.unmount(); await act(async () => pending.resolve(preparation()))
++ expect(port.session).toHaveBeenCalledTimes(count); expect(heldBootstrapCommands(workspace, actor)[0].ack).toEqual(preparation())
++ render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
++ click('读取本地会话记录'); await screen.findByRole('button', { name: '仅保存原会话已收到的事实' })
++ click('仅保存原会话已收到的事实'); await screen.findByText(/仅保存已收到的原事实/); expect(port.prepare).toHaveBeenCalledOnce()
++})
++
++test('malformed late ACK cannot be retained or shown and original unknown command remains replayable', async () => {
++ const port = bootstrapPort(), db = store(), pending = deferred<ReturnType<typeof preparation>>()
++ port.prepare = vi.fn(() => pending.promise)
++ const view = render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
++ click('读取本地会话记录'); await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
++ click('准备本地控制会话'); await waitFor(() => expect(port.prepare).toHaveBeenCalledOnce())
++ view.rerender(<CodexBootstrapPanel workspace={workspace} writeAdmitted={false} port={port} store={db} />)
++ await act(async () => pending.resolve({ ...preparation(), actor_session_id: 'session_other' }))
++ expect(heldBootstrapCommands(workspace, actor)).toEqual([])
++ expect(JSON.parse(Object.values(await db.load(workspace))[0].text).ack).toBeNull()
++ expect(screen.queryByText('session_other')).toBeNull()
++})
++
++test.each([401, 403, 409, 412, 503])('safe HTTP %s error never leaks raw detail or allocates a second command', async status => {
++ const port = bootstrapPort(), db = store(); port.prepare = vi.fn(async () => { throw new ApiError(status, 'PRIVATE_RAW_SERVER_DETAIL', status === 503 ? 'CODEX_SESSION_OUTCOME_UNKNOWN' : 'SYNTHETIC_REJECTION') })
++ render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
++ click('读取本地会话记录'); await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
++ click('准备本地控制会话'); await waitFor(() => expect(screen.queryByText('正在处理；不自动重发命令。')).toBeNull())
++ expect(port.prepare).toHaveBeenCalledOnce(); expect(Object.values(await db.load(workspace))).toHaveLength(1)
++ expect(screen.queryByText(/PRIVATE_RAW_SERVER_DETAIL/)).toBeNull(); expect(JSON.stringify(await db.load(workspace))).not.toContain('PRIVATE_RAW_SERVER_DETAIL')
++})
++
++test('a late local record read cannot publish original workspace commands into a new workspace', async () => {
++ const port = bootstrapPort(), other = bootstrapPort(), db = store(), realLoad = db.load.bind(db)
++ const pending = deferred<Awaited<ReturnType<typeof db.load>>>()
++ let originalReads = 0
++ vi.spyOn(db, 'load').mockImplementation(async selected => selected === workspace && ++originalReads === 3 ? pending.promise : realLoad(selected))
++ const view = render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
++ click('读取本地会话记录'); await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
++ click('准备本地控制会话'); await waitFor(() => expect(originalReads).toBe(3))
++ const original = await realLoad(workspace), id = Object.keys(original)[0]
++ other.session = vi.fn(async () => ({ ...session(), workspace_id: 'workspace_other' }))
++ view.rerender(<CodexBootstrapPanel workspace="workspace_other" writeAdmitted port={other} store={db} />)
++ click('读取本地会话记录'); await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
++ await act(async () => pending.resolve(original))
++ expect(screen.queryByText(`核对原控制命令 ${id}`)).toBeNull()
++ expect(port.prepare).not.toHaveBeenCalled(); expect(other.prepare).not.toHaveBeenCalled()
++})
++
++test('expired original actor after received ACK may be replaced by a reader who only saves original ownership', async () => {
++ const port = bootstrapPort(), db = store()
++ port.session = vi.fn().mockResolvedValueOnce(session()).mockResolvedValueOnce(session()).mockResolvedValueOnce(session()).mockRejectedValueOnce(new ApiError(401, 'session expired'))
++ render(<CodexBootstrapPanel workspace={workspace} writeAdmitted port={port} store={db} />)
++ click('读取本地会话记录'); await waitFor(() => expect((screen.getByRole('button', { name: '准备本地控制会话' }) as HTMLButtonElement).disabled).toBe(false))
++ click('准备本地控制会话'); await screen.findByText(/当前会话无权继续/)
++ expect(heldBootstrapCommands(workspace, actor)[0].ack).toEqual(preparation())
++ const before = JSON.parse(Object.values(await db.load(workspace))[0].text)
++ port.session = vi.fn(async () => ({ ...session(), actor_session_id: 'session_replacement', role: 'learner' as const, active_open_book_attempt_id: 'attempt_read_only' }))
++ click('读取本地会话记录'); await screen.findByRole('button', { name: '仅保存原会话已收到的事实' })
++ click('仅保存原会话已收到的事实'); await screen.findByText('仅保存已收到的原事实；未发送任何写请求。')
++ const after = JSON.parse(Object.values(await db.load(workspace))[0].text)
++ expect({ ...after, ack: null }).toEqual(before); expect(after.actor_session_id).toBe(actor)
++ expect(port.prepare).toHaveBeenCalledOnce(); expect(port.decide).not.toHaveBeenCalled(); expect(port.create).not.toHaveBeenCalled()
++})
+diff --git a/apps/web/src/features/codex/CodexBootstrapPanel.tsx b/apps/web/src/features/codex/CodexBootstrapPanel.tsx
+new file mode 100644
+index 00000000..3ba3ea5d
+--- /dev/null
++++ b/apps/web/src/features/codex/CodexBootstrapPanel.tsx
+@@ -0,0 +1,48 @@
++import { useEffect, useRef } from 'react'
++import type { DraftStore } from '../../workbench/DraftStore'
++import type { BootstrapPort } from './bootstrapClient'
++import { useBootstrap } from './useBootstrap'
++export type BootstrapPanelState = { dirty: boolean; safe: boolean; isolated: boolean }
++export function CodexBootstrapPanel({ workspace, writeAdmitted, port, store, onState }: {
++ workspace: string; writeAdmitted: boolean; port?: BootstrapPort; store?: DraftStore; onState?: (value: BootstrapPanelState) => void
++}) {
++ const state = useBootstrap(workspace, writeAdmitted, port, store), callback = useRef(onState); callback.current = onState
++ useEffect(() => { callback.current?.({ dirty: state.dirty, safe: state.safe, isolated: state.isolated }) }, [state.dirty, state.safe, state.isolated])
++ const current = state.current, owns = current?.actor_session_id === state.actor
++ const writable = state.allowed && !state.busy && owns
++ return <section aria-label="本地控制会话"><h3>本地控制会话</h3>
++  <p>仅准备并明确批准一次隔离的本地 thread 映射。不会开启对话、登录、工具或教材读取。</p>
++  <button disabled={!workspace || state.busy} onClick={() => void state.refresh()}>读取本地会话记录</button>
++  <button disabled={!state.allowed || state.busy} onClick={() => void state.make('prepare')}>准备本地控制会话</button>
++  {!state.ready ? <p>尚未读取当前会话与本机原命令。</p> : !state.allowed && <p>当前仅可读取安全控制元数据。新操作需要原作者会话且测试策略允许。</p>}
++  {state.error && <p role="status">{state.error}</p>}{state.message && <p role="status">{state.message}</p>}
++  {state.busy && <p role="status">正在处理；不自动重发命令。</p>}
++  {state.canSave && <p>当前合法读者可仅保存原 actor 归属的控制事实；不改变原命令，也不取得执行权限。</p>}
++  {state.canSave && <button disabled={state.busy} onClick={() => void state.saveMemory()}>仅保存原会话已收到的事实</button>}
++  <section aria-label="本地会话原命令"><h4>原命令与历史 ACK</h4>
++   {state.commands.some(v => !v.ack) && <p>仍有结果未确认的原命令；新准备不会清除旧未知事实，也不继承旧许可。</p>}
++   {state.commands.map(command => <article key={command.command_id}><p>{command.kind} · {command.ack ? '原 ACK 已记录（不是当前资格）' : command.error ? '已收到安全错误；当前实例须另读' : '结果未知，原 key 与完整 body 保留'}</p>
++    {command.actor_session_id !== state.actor && <p>其他原会话的命令仅只读保留，当前 actor 不能接管。</p>}
++    <details><summary>核对原控制命令 {command.command_id}</summary><p>原 actor：{command.actor_session_id}</p><pre>{JSON.stringify(command.body, null, 2)}</pre>{command.ack && <pre>{JSON.stringify(command.ack, null, 2)}</pre>}</details>
++    <button disabled={state.busy || !state.canReplay(command)} onClick={() => void state.execute(command)}>显式回放原 key {command.command_id}</button>
++   </article>)}
++  </section>
++  {state.ids.map(id => <button key={id} disabled={state.busy} onClick={() => void state.readPreparation(id)}>读取准备当前状态 {id}</button>)}
++  {current && <section aria-label="当前冻结准备"><h4>冻结范围：仅本地控制建会话</h4>
++   <p>准备 {current.id} · r{current.revision} · {current.status} · 当前资格 {current.validity}</p>
++   <dl><dt>逻辑根</dt><dd>{current.scope.sandbox_root_id} · {current.scope.sandbox_label}</dd><dt>固定适配版本</dt><dd>{current.scope.adapter_version}</dd>
++    <dt>受限 profile SHA256</dt><dd><code>{current.scope.bootstrap_profile_sha256}</code></dd><dt>完整操作 SHA256</dt><dd><code>{current.operation_sha256}</code></dd>
++    <dt>有效区间（UTC）</dt><dd>{current.created_at} → {current.expires_at}</dd></dl>
++   <p>允许 actions：[]；零模型、零工具、零学科读取、零网络。</p>
++   {current.status === 'pending' && <><button disabled={!writable || current.validity !== 'current' || state.hasOriginal('decision', current.id)} onClick={() => void state.make('approve_once')}>仅批准这一次本地建会话</button>
++    <button disabled={!writable || ['expired', 'closed'].includes(current.validity) || state.hasOriginal('decision', current.id)} onClick={() => void state.make('decline')}>拒绝这次本地建会话</button></>}
++   {current.status === 'approved' && <button disabled={!writable || current.validity !== 'current' || state.hasOriginal('create', current.id)} onClick={() => void state.make('create')}>明确创建这次本地会话</button>}
++   {current.session_id && <p>已消费许可，绑定 session：{current.session_id}。closed 不清除原实例。</p>}
++  </section>}
++  {state.sessions.map(value => <section aria-label={`当前本地会话 ${value.id}`} key={value.id}><h4>当前 session {value.id}</h4><p>真实本地记录：{value.status} · r{value.revision}</p>
++   {value.status === 'ready' ? <p>ready 仅表示已核验 thread 映射；不代表账号授权、模型能力或进程仍在运行。</p>
++    : value.status === 'unknown' ? <p>旧实例结果未知。不会自动再启动；如需另试，须另建准备并重新批准。</p>
++    : value.status === 'initializing' ? <p>开始许可已登记，尚不能断言 thread 已建立。</p> : <p>本次本地会话创建失败；保留原事实。</p>}
++   <p>active_turn_id：null；审批、interrupt、artifacts：false。</p></section>)}
++ </section>
++}
+diff --git a/apps/web/src/features/codex/bootstrapClient.test.ts b/apps/web/src/features/codex/bootstrapClient.test.ts
+new file mode 100644
+index 00000000..17e1b30c
+--- /dev/null
++++ b/apps/web/src/features/codex/bootstrapClient.test.ts
+@@ -0,0 +1,29 @@
++import { expect, test } from 'vitest'
++import { checkedBootstrap } from './bootstrapClient'
++import { codexSession, preparation } from './bootstrapTestFixtures'
++
++test.each(['pending', 'approved', 'declined', 'consumed'] as const)('strict schema accepts coherent %s metadata', status => {
++ const value = preparation(status)
++ expect(checkedBootstrap('CodexBootstrapPreparationView', value)).toEqual(value)
++})
++test.each([
++ { revision: 2 }, { consent_id: 'consent_wrong' }, { session_id: 'session_wrong' }, { validity: 'closed' },
++ { expires_at: '2026-10-03T12:10:00.000002Z' }, { expires_at: '2026-10-03T12:11:00.000001Z' },
++ { created_at: '2026-02-30T12:00:00Z', expires_at: '2026-02-30T12:10:00Z' },
++])('rejects semantically inconsistent preparation %j', patch => {
++ expect(() => checkedBootstrap('CodexBootstrapPreparationView', { ...preparation(), ...patch })).toThrow()
++})
++test.each(['/private/path', 'file://private', 'back\\slash', 'bad\nlabel', '\u0000', '\ud800', '   '])('rejects unsafe label %j', label => {
++ expect(() => checkedBootstrap('CodexBootstrapPreparationView', { ...preparation(), scope: { ...preparation().scope, sandbox_label: label } })).toThrow()
++})
++test('closed consumed retains its true session and false features never accept numbers', () => {
++ expect(() => checkedBootstrap('CodexBootstrapPreparationView', { ...preparation('consumed'), session_id: null })).toThrow()
++ expect(() => checkedBootstrap('CodexSessionView', { ...codexSession(), capabilities: { approvals: 0, interrupt: false, artifacts: false } })).toThrow()
++ expect(() => checkedBootstrap('CodexSessionView', { ...codexSession(), revision: 1 })).toThrow()
++ expect(() => checkedBootstrap('CodexSessionView', { ...codexSession('initializing'), revision: 2 })).toThrow()
++})
++test('empty actions and closed keys are mandatory', () => {
++ expect(() => checkedBootstrap('CodexBootstrapPreparationWrite', { sandbox_root_id: 'workspace_default', allowed_actions: ['read'] })).toThrow()
++ expect(() => checkedBootstrap('CodexSessionView', { ...codexSession(), thread_id: 'external_not_allowed' })).toThrow()
++ expect(() => checkedBootstrap('CodexSessionView', { ...codexSession(), active_turn_id: 'turn_not_allowed' })).toThrow()
++})
+diff --git a/apps/web/src/features/codex/bootstrapClient.ts b/apps/web/src/features/codex/bootstrapClient.ts
+new file mode 100644
+index 00000000..8be78edf
+--- /dev/null
++++ b/apps/web/src/features/codex/bootstrapClient.ts
+@@ -0,0 +1,62 @@
++import type { ApprovalDecision, SessionResponse } from '../../../../../packages/contracts/generated/api-types'
++import type { CodexBootstrapDecisionAck, CodexBootstrapPreparationView, CodexBootstrapPreparationWrite, CodexBootstrapScope, CodexSessionCreateAck, CodexSessionCreateWrite, CodexSessionView } from '../../../../../packages/contracts/generated/codex-bootstrap-types'
++import bootstrapSchemas from '../../../../../packages/contracts/generated/codex-bootstrap-schemas.json'
++import { request } from '../../api/client'
++import { checkedProvider } from '../providers/providerSchema'
++
++export type BootstrapPort = {
++  session(): Promise<SessionResponse>
++  prepare(body: CodexBootstrapPreparationWrite, key: string): Promise<CodexBootstrapPreparationView>
++  preparation(id: string): Promise<CodexBootstrapPreparationView>
++  decide(id: string, body: ApprovalDecision, key: string): Promise<CodexBootstrapDecisionAck>
++  create(body: CodexSessionCreateWrite, key: string): Promise<CodexSessionCreateAck>
++  read(id: string): Promise<CodexSessionView>
++}
++
++const invalid = (): never => { throw new Error('Inconsistent bootstrap metadata') }
++function utcMicros(value: string): bigint {
++  const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?Z$/.exec(value)
++  if (!match || value.startsWith('0000')) return invalid()
++  const millis = Date.parse(match[1] + 'Z')
++  if (!Number.isFinite(millis) || new Date(millis).toISOString().slice(0, 19) !== match[1]) return invalid()
++  // Python's UTC validator retains the wire bytes but datetime uses microseconds.
++  return BigInt(millis) * 1000n + BigInt((match[2] ?? '').slice(0, 6).padEnd(6, '0'))
++}
++function safeLabel(value: string) {
++  if (!value.trim() || /^[\/\\]/.test(value) || value.includes('\\') || value.includes('://') || /[\u0000-\u001f\u007f]/.test(value)) invalid()
++}
++function scope(value: CodexBootstrapScope) { safeLabel(value.sandbox_label); safeLabel(value.adapter_version) }
++export function checkedBootstrap<T>(name: string, raw: unknown): T {
++  try {
++    const checked = checkedProvider<T>(name, raw, name in bootstrapSchemas.schemas ? bootstrapSchemas.schemas : undefined)
++    if (name === 'CodexBootstrapPreparationView') {
++      const value = checked as CodexBootstrapPreparationView
++      scope(value.scope)
++      const revision = { pending: 1, approved: 2, declined: 2, consumed: 3 }[value.status]
++      if (value.revision !== revision || (value.consent_id !== null) !== ['approved', 'consumed'].includes(value.status)
++        || (value.session_id !== null) !== (value.status === 'consumed')
++        || (value.validity === 'closed') !== ['declined', 'consumed'].includes(value.status)
++        || utcMicros(value.expires_at) - utcMicros(value.created_at) !== 600_000_000n) invalid()
++    } else if (name === 'CodexBootstrapDecisionAck') {
++      const value = checked as CodexBootstrapDecisionAck
++      utcMicros(value.decided_at)
++      if ((value.consent_id !== null) !== (value.decision === 'approve_once')) invalid()
++    } else if (name === 'CodexSessionView' || name === 'CodexSessionCreateAck') {
++      const value = checked as CodexSessionView | CodexSessionCreateAck
++      safeLabel(value.adapter_version)
++      if (value.revision !== (value.status === 'initializing' ? 1 : 2)) invalid()
++    } else if (name === 'CodexBootstrapScope') scope(checked as CodexBootstrapScope)
++    return checked
++  }
++  catch { throw new Error('本地会话记录不符合当前契约，原命令保留。') }
++}
++
++const keyHeader = (key: string) => ({ 'Idempotency-Key': key })
++export const bootstrapClient: BootstrapPort = {
++  session: async () => checkedBootstrap('SessionResponse', await request('GET /api/v1/session', undefined)),
++  prepare: async (body, key) => checkedBootstrap('CodexBootstrapPreparationView', await request('POST /api/v1/codex/session-preparations', body, keyHeader(key))),
++  preparation: async id => checkedBootstrap('CodexBootstrapPreparationView', await request('GET /api/v1/codex/session-preparations/{id}', undefined, undefined, { path: { id } })),
++  decide: async (id, body, key) => checkedBootstrap('CodexBootstrapDecisionAck', await request('POST /api/v1/codex/session-preparations/{id}/decision', body, keyHeader(key), { path: { id } })),
++  create: async (body, key) => checkedBootstrap('CodexSessionCreateAck', await request('POST /api/v1/codex/sessions', body, keyHeader(key))),
++  read: async id => checkedBootstrap('CodexSessionView', await request('GET /api/v1/codex/sessions/{id}', undefined, undefined, { path: { id } })),
++}
+diff --git a/apps/web/src/features/codex/bootstrapCommands.test.ts b/apps/web/src/features/codex/bootstrapCommands.test.ts
+new file mode 100644
+index 00000000..0a84eaa4
+--- /dev/null
++++ b/apps/web/src/features/codex/bootstrapCommands.test.ts
+@@ -0,0 +1,40 @@
++import { IDBFactory } from 'fake-indexeddb'
++import { expect, test } from 'vitest'
++import { DraftStore } from '../../workbench/DraftStore'
++import { createCommand, decidedCommand, decodeBootstrapCommand, persistBootstrapCommand, prepareCommand, readBootstrapCommand } from './bootstrapCommands'
++import { actor, preparation, workspace } from './bootstrapTestFixtures'
++
++test.each(['expired', 'changed', 'unavailable'] as const)('an approved %s basis cannot create a new session command', validity => {
++ expect(() => createCommand(workspace, actor, { ...preparation('approved'), validity })).toThrow()
++})
++test('approve needs current, decline tolerates unavailable, neither decides an expired preparation', () => {
++ expect(() => decidedCommand(workspace, actor, { ...preparation(), validity: 'unavailable' }, 'approve_once')).toThrow()
++ expect(decidedCommand(workspace, actor, { ...preparation(), validity: 'unavailable' }, 'decline').kind).toBe('decision')
++ expect(() => decidedCommand(workspace, actor, { ...preparation(), validity: 'expired' }, 'decline')).toThrow()
++})
++test('read-only other actor and different adapter ACK cannot become this actor command', () => {
++ expect(() => decidedCommand(workspace, 'session_other', preparation(), 'approve_once')).toThrow()
++ const value = createCommand(workspace, actor, preparation('approved'))
++ expect(() => decodeBootstrapCommand(JSON.stringify({ ...value, ack: { id: 'codex_session_test', revision: 2, status: 'ready', adapter_version: 'another-profile', capabilities: { approvals: false, interrupt: false, artifacts: false } } }), workspace)).toThrow()
++})
++test('original body/key/basis and ACK survive a fresh store, with no session secrets or rebasing', async () => {
++ const factory = new IDBFactory(), name = `command-${crypto.randomUUID()}`, first = new DraftStore({ name, factory })
++ const value = prepareCommand(workspace, actor)
++ await persistBootstrapCommand(value, first)
++ const second = new DraftStore({ name, factory }), recovered = readBootstrapCommand((await second.load(workspace))[value.command_id], workspace)
++ expect(recovered).toEqual(value)
++ const acknowledged = decodeBootstrapCommand(JSON.stringify({ ...value, ack: preparation() }), workspace)
++ await persistBootstrapCommand(acknowledged, second)
++ expect(await persistBootstrapCommand(value, first)).toEqual(acknowledged)
++ const record = (await first.load(workspace))[value.command_id]
++ expect(record.text).not.toMatch(/csrf|cookie|synthetic-only-not-persisted/)
++ expect(readBootstrapCommand(record, workspace)).toEqual(acknowledged)
++ await expect(persistBootstrapCommand({ ...value, actor_session_id: 'session_other' }, first)).rejects.toThrow()
++})
++test('aborted storage guard preserves the original pending command and received ACK remains caller-owned', async () => {
++ const db = new DraftStore({ name: 'aborted-command', factory: new IDBFactory() }), value = prepareCommand(workspace, actor)
++ await persistBootstrapCommand(value, db)
++ const controller = new AbortController(); controller.abort()
++ await expect(persistBootstrapCommand({ ...value, ack: preparation() } as typeof value, db, { allowed: () => false, signal: controller.signal })).rejects.toThrow()
++ expect(readBootstrapCommand((await db.load(workspace))[value.command_id], workspace)).toEqual(value)
++})
+diff --git a/apps/web/src/features/codex/bootstrapCommands.ts b/apps/web/src/features/codex/bootstrapCommands.ts
+new file mode 100644
+index 00000000..00646239
+--- /dev/null
++++ b/apps/web/src/features/codex/bootstrapCommands.ts
+@@ -0,0 +1,96 @@
++import type { ApprovalDecision } from '../../../../../packages/contracts/generated/api-types'
++import type { CodexBootstrapDecisionAck, CodexBootstrapPreparationView, CodexBootstrapPreparationWrite, CodexSessionCreateAck, CodexSessionCreateWrite } from '../../../../../packages/contracts/generated/codex-bootstrap-types'
++import { assertDraftWriteAllowed, DraftStore, type DraftRecord, type DraftWriteGuard } from '../../workbench/DraftStore'
++import { exactObject, sameValue, validIdentity } from '../providers/providerSchema'
++import { checkedBootstrap } from './bootstrapClient'
++
++type Base = { version: 1; workspace_id: string; actor_session_id: string; command_id: string; error: { status: number; code: string | null } | null }
++export type BootstrapCommand = Base & (
++  { kind: 'prepare'; preparation_id: null; basis: null; body: CodexBootstrapPreparationWrite; ack: CodexBootstrapPreparationView | null }
++  | { kind: 'decision'; preparation_id: string; basis: CodexBootstrapPreparationView; body: ApprovalDecision; ack: CodexBootstrapDecisionAck | null }
++  | { kind: 'create'; preparation_id: string; basis: CodexBootstrapPreparationView; body: CodexSessionCreateWrite; ack: CodexSessionCreateAck | null })
++export const bootstrapStore = new DraftStore({ name: 'learning-workbench.codex-bootstrap-commands.v1' })
++const fail = (): never => { throw new Error('原本地会话命令或绑定无法核验；全部本机记录保留。') }
++const immutable = (value: BootstrapCommand) => ({ ...value, ack: null, error: null })
++
++export function decodeBootstrapCommand(raw: string, workspace: string): BootstrapCommand {
++  const value = JSON.parse(raw) as BootstrapCommand
++  if (!exactObject(value, ['version', 'workspace_id', 'actor_session_id', 'command_id', 'kind', 'preparation_id', 'basis', 'body', 'ack', 'error'])
++    || value.version !== 1 || !validIdentity(workspace) || value.workspace_id !== workspace || !validIdentity(value.actor_session_id) || !validIdentity(value.command_id)) fail()
++  if (value.error !== null && (!exactObject(value.error, ['status', 'code']) || !Number.isSafeInteger(value.error.status)
++    || value.error.status < 400 || value.error.status > 599 || value.error.code !== null && (typeof value.error.code !== 'string' || !/^[A-Z][A-Z0-9_]{0,79}$/.test(value.error.code)) || value.ack !== null)) fail()
++  if (value.kind === 'prepare') {
++    checkedBootstrap('CodexBootstrapPreparationWrite', value.body)
++    if (value.preparation_id !== null || value.basis !== null) fail()
++    if (value.ack !== null) {
++      const ack = checkedBootstrap<CodexBootstrapPreparationView>('CodexBootstrapPreparationView', value.ack)
++      if (ack.actor_session_id !== value.actor_session_id || ack.revision !== 1 || ack.status !== 'pending'
++        || ack.scope.sandbox_root_id !== value.body.sandbox_root_id || !sameValue(ack.scope.allowed_actions, value.body.allowed_actions)
++        || ack.consent_id !== null || ack.session_id !== null) fail()
++    }
++  } else if (value.kind === 'decision' || value.kind === 'create') {
++    const basis = checkedBootstrap<CodexBootstrapPreparationView>('CodexBootstrapPreparationView', value.basis)
++    if (!validIdentity(value.preparation_id) || value.preparation_id !== basis.id || basis.actor_session_id !== value.actor_session_id) fail()
++    if (value.kind === 'decision') {
++      checkedBootstrap('ApprovalDecision', value.body)
++      if (basis.status !== 'pending' || basis.revision !== 1 || ['expired', 'closed'].includes(basis.validity) || value.body.decision === 'approve_once' && basis.validity !== 'current' || value.body.expected_revision !== basis.revision || value.body.operation_sha256 !== basis.operation_sha256) fail()
++      if (value.ack !== null) {
++        const ack = checkedBootstrap<CodexBootstrapDecisionAck>('CodexBootstrapDecisionAck', value.ack)
++        if (ack.preparation_id !== basis.id || ack.actor_session_id !== value.actor_session_id || ack.revision !== 2
++          || ack.decision !== value.body.decision || ack.operation_sha256 !== basis.operation_sha256
++          || (ack.decision === 'decline') !== (ack.consent_id === null)) fail()
++      }
++    } else {
++      checkedBootstrap('CodexSessionCreateWrite', value.body)
++      if (basis.status !== 'approved' || basis.revision !== 2 || basis.validity !== 'current' || !basis.consent_id || value.body.consent_id !== basis.consent_id
++        || value.body.sandbox_root_id !== basis.scope.sandbox_root_id || !sameValue(value.body.allowed_actions, basis.scope.allowed_actions)) fail()
++      if (value.ack !== null) {
++        const ack = checkedBootstrap<CodexSessionCreateAck>('CodexSessionCreateAck', value.ack)
++        if (ack.adapter_version !== basis.scope.adapter_version) fail()
++      }
++    }
++  } else fail()
++  return value
++}
++
++export function prepareCommand(workspace: string, actor: string): BootstrapCommand {
++  return decodeBootstrapCommand(JSON.stringify({ version: 1, workspace_id: workspace, actor_session_id: actor,
++    command_id: `codexcmd_${crypto.randomUUID()}`, kind: 'prepare', preparation_id: null, basis: null,
++    body: { sandbox_root_id: 'workspace_default', allowed_actions: [] }, ack: null, error: null }), workspace)
++}
++export function decidedCommand(workspace: string, actor: string, basis: CodexBootstrapPreparationView, decision: 'approve_once' | 'decline'): BootstrapCommand {
++  return decodeBootstrapCommand(JSON.stringify({ version: 1, workspace_id: workspace, actor_session_id: actor,
++    command_id: `codexcmd_${crypto.randomUUID()}`, kind: 'decision', preparation_id: basis.id, basis,
++    body: { expected_revision: basis.revision, operation_sha256: basis.operation_sha256, decision }, ack: null, error: null }), workspace)
++}
++export function createCommand(workspace: string, actor: string, basis: CodexBootstrapPreparationView): BootstrapCommand {
++  return decodeBootstrapCommand(JSON.stringify({ version: 1, workspace_id: workspace, actor_session_id: actor,
++    command_id: `codexcmd_${crypto.randomUUID()}`, kind: 'create', preparation_id: basis.id, basis,
++    body: { sandbox_root_id: basis.scope.sandbox_root_id, consent_id: basis.consent_id, allowed_actions: [] }, ack: null, error: null }), workspace)
++}
++export function readBootstrapCommand(record: DraftRecord, workspace: string): BootstrapCommand {
++  const values = [record.text, ...record.conflicts.map(item => item.text)].map(raw => decodeBootstrapCommand(raw, workspace)), first = values[0]
++  if (record.objectId !== first.command_id || values.some(item => !sameValue(immutable(item), immutable(first)))) fail()
++  const acknowledged = values.filter(item => item.ack)
++  if (acknowledged.some(item => !sameValue(item.ack, acknowledged[0].ack))) fail()
++  return acknowledged[0] ?? values.find(item => item.error) ?? first
++}
++export async function persistBootstrapCommand(command: BootstrapCommand, store = bootstrapStore, guard?: DraftWriteGuard): Promise<BootstrapCommand> {
++  assertDraftWriteAllowed(guard)
++  let desired = decodeBootstrapCommand(JSON.stringify(command), command.workspace_id)
++  for (let attempt = 0; attempt < 4; attempt++) {
++    assertDraftWriteAllowed(guard)
++    const old = (await store.load(command.workspace_id))[command.command_id]
++    assertDraftWriteAllowed(guard)
++    if (old) {
++      const current = readBootstrapCommand(old, command.workspace_id)
++      if (!sameValue(immutable(current), immutable(desired)) || current.ack && desired.ack && !sameValue(current.ack, desired.ack)) fail()
++      if (current.ack || !desired.ack && current.error) desired = current
++      if (!old.conflicts.length && sameValue(current, desired)) return current
++    }
++    const saved = await store.save(command.workspace_id, command.command_id, JSON.stringify(desired), old?.revision ?? 0, old?.conflicts.map(item => item.id) ?? [], guard)
++    const actual = readBootstrapCommand(saved.record, command.workspace_id)
++    if (!saved.record.conflicts.length && sameValue(actual, desired)) return actual
++  }
++  throw new Error('本机会话命令仍有并发保存，原 key 和内容保留。')
++}
+diff --git a/apps/web/src/features/codex/bootstrapMemory.ts b/apps/web/src/features/codex/bootstrapMemory.ts
+new file mode 100644
+index 00000000..194e3c11
+--- /dev/null
++++ b/apps/web/src/features/codex/bootstrapMemory.ts
+@@ -0,0 +1,22 @@
++import { decodeBootstrapCommand, type BootstrapCommand } from './bootstrapCommands'
++import { sameValue } from '../providers/providerSchema'
++const held = new Map<string, BootstrapCommand>()
++const listeners = new Set<() => void>()
++let revision = 0
++const changed = () => { revision++; listeners.forEach(listener => listener()) }
++export const subscribeBootstrapMemory = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } }
++export const bootstrapMemoryVersion = () => revision
++export const heldBootstrapCommands = (workspace: string, actor?: string) => [...held.values()].filter(v => v.workspace_id === workspace && (!actor || v.actor_session_id === actor)).map(v => structuredClone(v))
++export function retainBootstrapCommand(command: BootstrapCommand) {
++ const next = decodeBootstrapCommand(JSON.stringify(command), command.workspace_id), old = held.get(command.command_id)
++ const basis = (v: BootstrapCommand) => ({ ...v, ack: null, error: null })
++ if (old && (!sameValue(basis(old), basis(next)) || old.ack && next.ack && !sameValue(old.ack, next.ack))) throw new Error('Original bootstrap command changed')
++ held.set(command.command_id, old?.ack ? old : next); changed()
++}
++export function releaseBootstrapCommand(command: BootstrapCommand) {
++ const old = held.get(command.command_id)
++ if (old && sameValue(old, command)) { held.delete(command.command_id); changed() }
++}
++if (typeof window !== 'undefined') window.addEventListener('beforeunload', event => {
++ if (held.size) { event.preventDefault(); event.returnValue = '' }
++})
+diff --git a/apps/web/src/features/codex/bootstrapTestFixtures.ts b/apps/web/src/features/codex/bootstrapTestFixtures.ts
+new file mode 100644
+index 00000000..948fe3de
+--- /dev/null
++++ b/apps/web/src/features/codex/bootstrapTestFixtures.ts
+@@ -0,0 +1,20 @@
++import type { SessionResponse } from '../../../../../packages/contracts/generated/api-types'
++import type { CodexBootstrapPreparationView, CodexSessionView } from '../../../../../packages/contracts/generated/codex-bootstrap-types'
++import { vi } from 'vitest'
++import type { BootstrapPort } from './bootstrapClient'
++export const workspace = 'workspace_bootstrap_test'
++export const actor = 'session_bootstrap_test'
++export const session = (): SessionResponse => ({ workspace_id: workspace, actor_session_id: actor, role: 'author', csrf_token: 'synthetic-only-not-persisted', active_independent_attempt_id: null, active_open_book_attempt_id: null })
++export const preparation = (status: CodexBootstrapPreparationView['status'] = 'pending'): CodexBootstrapPreparationView => ({
++ id: 'preparation_test', revision: status === 'pending' ? 1 : status === 'consumed' ? 3 : 2, actor_session_id: actor, status,
++ scope: { version: 'codex-local-session-bootstrap-v1', sandbox_root_id: 'workspace_default', sandbox_label: '此工作区的隔离 Broker', allowed_actions: [], adapter_version: 'codex-cli/0.160.0', bootstrap_profile_sha256: 'a'.repeat(64) },
++ operation_sha256: 'b'.repeat(64), created_at: '2026-10-03T12:00:00.000001Z', expires_at: '2026-10-03T12:10:00.000001Z',
++ consent_id: ['approved', 'consumed'].includes(status) ? 'consent_bootstrap_test' : null, session_id: status === 'consumed' ? 'codex_session_test' : null, validity: ['declined', 'consumed'].includes(status) ? 'closed' : 'current',
++})
++export const codexSession = (status: CodexSessionView['status'] = 'ready'): CodexSessionView => ({ id: 'codex_session_test', revision: status === 'initializing' ? 1 : 2, status, active_turn_id: null, adapter_version: 'codex-cli/0.160.0', capabilities: { approvals: false, interrupt: false, artifacts: false } })
++export const bootstrapPort = (): BootstrapPort => ({
++ session: vi.fn(async () => session()), prepare: vi.fn(async () => preparation()), preparation: vi.fn(async () => preparation()),
++ decide: vi.fn<BootstrapPort['decide']>(async (id, body) => ({ preparation_id: id, revision: 2, actor_session_id: actor, decision: body.decision, operation_sha256: body.operation_sha256, consent_id: body.decision === 'approve_once' ? 'consent_bootstrap_test' : null, decided_at: '2026-10-03T12:01:00Z' })),
++ create: vi.fn<BootstrapPort['create']>(async () => ({ id: 'codex_session_test', revision: 2, status: 'ready', capabilities: { approvals: false, interrupt: false, artifacts: false }, adapter_version: 'codex-cli/0.160.0' })), read: vi.fn(async () => codexSession()),
++})
++export function deferred<T>() { let resolve!: (value: T) => void; let reject!: (reason: unknown) => void; const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no }); return { promise, resolve, reject } }
+diff --git a/apps/web/src/features/codex/useBootstrap.ts b/apps/web/src/features/codex/useBootstrap.ts
+new file mode 100644
+index 00000000..5f246d7b
+--- /dev/null
++++ b/apps/web/src/features/codex/useBootstrap.ts
+@@ -0,0 +1,155 @@
++import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
++import type { SessionResponse } from '../../../../../packages/contracts/generated/api-types'
++import type { CodexBootstrapPreparationView, CodexSessionView } from '../../../../../packages/contracts/generated/codex-bootstrap-types'
++import { ApiError, getSessionGeneration, subscribeSessionAccess } from '../../api/client'
++import { type DraftStore } from '../../workbench/DraftStore'
++import { validIdentity } from '../providers/providerSchema'
++import { bootstrapClient, checkedBootstrap, type BootstrapPort } from './bootstrapClient'
++import { bootstrapStore, createCommand, decidedCommand, decodeBootstrapCommand, persistBootstrapCommand, prepareCommand, readBootstrapCommand, type BootstrapCommand } from './bootstrapCommands'
++import { bootstrapMemoryVersion, heldBootstrapCommands, releaseBootstrapCommand, retainBootstrapCommand, subscribeBootstrapMemory } from './bootstrapMemory'
++
++const canWrite = (session: SessionResponse) => session.role === 'author' && !session.active_independent_attempt_id && !session.active_open_book_attempt_id
++const denied = (reason: unknown) => reason instanceof ApiError && ([401, 403].includes(reason.status) || ['POLICY_DENIED', 'ASSESSMENT_ACTIVE', 'ASSESSMENT_ANSWER_PROTECTED'].includes(reason.code ?? ''))
++export function useBootstrap(workspace: string, writeAdmitted: boolean, port: BootstrapPort = bootstrapClient, store: DraftStore = bootstrapStore) {
++ const access = useSyncExternalStore(subscribeSessionAccess, getSessionGeneration, getSessionGeneration)
++ useSyncExternalStore(subscribeBootstrapMemory, bootstrapMemoryVersion, bootstrapMemoryVersion)
++ const owner = JSON.stringify([workspace, access, writeAdmitted]), scope = useRef({ owner, port, store }); scope.current = { owner, port, store }
++ const live = useRef(false), working = useRef(false), sequence = useRef(0), writers = useRef(new Set<AbortController>())
++ const [renderScope, setRenderScope] = useState({ owner, port, store }), [identity, setIdentity] = useState<SessionResponse | null>(null)
++ const [busy, setBusy] = useState(false), [error, setError] = useState(''), [message, setMessage] = useState('')
++ const [commands, setCommands] = useState<BootstrapCommand[]>([]), [current, setCurrent] = useState<CodexBootstrapPreparationView | null>(null)
++ const [sessions, setSessions] = useState<Record<string, CodexSessionView>>({})
++ const currentScope = () => live.current && scope.current.owner === owner && scope.current.port === port && scope.current.store === store && access === getSessionGeneration()
++ const valid = (token: number) => currentScope() && sequence.current === token
++ const visible = renderScope.owner === owner && renderScope.port === port && renderScope.store === store
++ const ready = visible && identity !== null
++ const allowed = ready && writeAdmitted && canWrite(identity)
++ const begin = () => { if (!currentScope() || !workspace || working.current) return null; working.current = true; setBusy(true); setError(''); setMessage(''); return ++sequence.current }
++ const finish = (token: number) => { if (valid(token)) { working.current = false; setBusy(false) } }
++ const fail = (reason: unknown) => {
++  if (denied(reason)) { setIdentity(null); setCurrent(null); setSessions({}); setCommands([]) }
++  setError(denied(reason) ? '当前会话无权继续；原命令保留，请重新读取权限。'
++   : reason instanceof ApiError && reason.status === 412 ? '准备版本已变化（412）；原 key 与基准保留，请另读当前状态。'
++   : reason instanceof ApiError && reason.status === 409 ? '原操作或许可绑定冲突（409）；原命令保留，不自动另建。'
++   : '本次操作或结果尚未确认；原命令保留，不自动重发。请显式读取当前状态或回放原 key。')
++ }
++ const load = async () => Object.values(await store.load(workspace)).map(v => readBootstrapCommand(v, workspace))
++ async function fresh(token: number, write: boolean, actor?: string) {
++  const session = checkedBootstrap<SessionResponse>('SessionResponse', await port.session())
++  if (!valid(token)) throw new Error('Access changed')
++  if (session.workspace_id !== workspace || write && (!writeAdmitted || !canWrite(session)) || actor && session.actor_session_id !== actor) {
++   setIdentity(null); setCurrent(null); setSessions({}); setCommands([])
++   throw new ApiError(403, 'Session no longer admits original operation')
++  }
++  return session
++ }
++ const refresh = async () => {
++  const token = begin(); if (token === null) return
++  setIdentity(null); setCurrent(null); setSessions({}); setCommands([])
++  try { const session = await fresh(token, false), values = await load(); if (valid(token)) { setIdentity(session); setCommands(values) } }
++  catch (reason) { if (valid(token)) fail(reason) } finally { finish(token) }
++ }
++ useEffect(() => {
++  live.current = true; ++sequence.current; working.current = false; setRenderScope({ owner, port, store })
++  setIdentity(null); setCurrent(null); setSessions({}); setCommands([]); setBusy(false); setError(''); setMessage('')
++  return () => { live.current = false; ++sequence.current; working.current = false; for (const writer of writers.current) writer.abort() }
++ }, [owner, port, store])
++ const execute = async (command: BootstrapCommand) => {
++  if (!allowed || command.workspace_id !== workspace || command.actor_session_id !== identity.actor_session_id || command.ack) return
++  const token = begin(); if (token === null) return
++  const controller = new AbortController(); writers.current.add(controller)
++  const guard = { allowed: () => valid(token), signal: controller.signal }, unsubscribe = subscribeSessionAccess(() => controller.abort())
++  let original = command
++  try {
++   await fresh(token, true, command.actor_session_id)
++   retainBootstrapCommand(command)
++   original = await persistBootstrapCommand(command, store, guard)
++   releaseBootstrapCommand(original)
++   if (!valid(token)) return
++   const stored = await load()
++   if (!valid(token)) return
++   setCommands(stored); setCurrent(null)
++   await fresh(token, true, original.actor_session_id)
++   if (original.ack) return
++   const raw = original.kind === 'prepare' ? await port.prepare(original.body, original.command_id)
++    : original.kind === 'decision' ? await port.decide(original.preparation_id, original.body, original.command_id)
++    : await port.create(original.body, original.command_id)
++   // Strictly verify and retain the received fact under the captured original
++   // actor before checking current access; a late ACK must not be discarded.
++   const acknowledged = decodeBootstrapCommand(JSON.stringify({ ...original, ack: raw, error: null }), workspace)
++   retainBootstrapCommand(acknowledged)
++   if (!valid(token)) return
++   await fresh(token, true, original.actor_session_id)
++   const saved = await persistBootstrapCommand(acknowledged, store, guard)
++   releaseBootstrapCommand(saved)
++   const values = await load()
++   if (valid(token)) { setCommands(values); setMessage(original.kind === 'prepare' ? '准备原 ACK 已保存；须另读当前资格。' : original.kind === 'decision' ? '决定原 ACK 已保存；须另读当前资格。' : '原 201 ACK 已保存；ready 仅表示已核验映射。') }
++  } catch (reason) {
++   if (valid(token)) {
++    if (!denied(reason) && reason instanceof ApiError && reason.status >= 400 && reason.status <= 599 && !heldBootstrapCommands(workspace, original.actor_session_id).some(v => v.command_id === original.command_id && v.ack)) {
++     const rejected = decodeBootstrapCommand(JSON.stringify({ ...original, error: { status: reason.status, code: /^[A-Z][A-Z0-9_]{0,79}$/.test(reason.code ?? '') ? reason.code : null } }), workspace)
++     retainBootstrapCommand(rejected)
++     try { const saved = await persistBootstrapCommand(rejected, store, guard); releaseBootstrapCommand(saved); const stored = await load(); if (valid(token)) setCommands(stored) } catch { /* Held facts retain the complete command. */ }
++    }
++    if (valid(token)) fail(reason)
++   }
++  } finally { unsubscribe(); writers.current.delete(controller); finish(token) }
++ }
++ const make = async (kind: 'prepare' | 'create' | 'approve_once' | 'decline') => {
++  if (!allowed || working.current) return
++  // No key is allocated until the currently displayed basis is a checked GET.
++  if (kind !== 'prepare' && (!current || current.actor_session_id !== identity.actor_session_id)) return
++  const command = kind === 'prepare' ? prepareCommand(workspace, identity.actor_session_id)
++   : kind === 'create' ? createCommand(workspace, identity.actor_session_id, current!)
++   : decidedCommand(workspace, identity.actor_session_id, current!, kind)
++  await execute(command)
++ }
++ const readPreparation = async (id: string) => {
++  if (!validIdentity(id)) return
++  const token = begin(); if (token === null) return
++  setCurrent(null)
++  try {
++   const session = await fresh(token, false)
++   const value = checkedBootstrap<CodexBootstrapPreparationView>('CodexBootstrapPreparationView', await port.preparation(id))
++   if (value.id !== id) throw new Error('Wrong preparation')
++   if (!valid(token)) return
++   setIdentity(session); setCurrent(value)
++   let linked: CodexSessionView | null = null
++   if (value.session_id) {
++    linked = checkedBootstrap<CodexSessionView>('CodexSessionView', await port.read(value.session_id))
++    if (linked.id !== value.session_id || linked.adapter_version !== value.scope.adapter_version) throw new Error('Wrong session binding')
++   }
++   if (valid(token)) { setIdentity(session); setCurrent(value); if (linked) setSessions(previous => ({ ...previous, [linked.id]: linked! })) }
++  } catch (reason) { if (valid(token)) fail(reason) } finally { finish(token) }
++ }
++ const saveMemory = async () => {
++  if (!ready) return
++  const token = begin(); if (token === null) return
++  const controller = new AbortController(); writers.current.add(controller)
++  const guard = { allowed: () => valid(token), signal: controller.signal }, unsubscribe = subscribeSessionAccess(() => controller.abort())
++  try {
++   await fresh(token, false)
++   // Saving typed control history is a local read-side recovery action. The
++   // original actor/key/basis remain unchanged; this grants no POST authority.
++   for (const command of heldBootstrapCommands(workspace)) {
++    const saved = await persistBootstrapCommand(command, store, guard); releaseBootstrapCommand(saved)
++   }
++   const values = await load(); if (valid(token)) { setCommands(values); setMessage('仅保存已收到的原事实；未发送任何写请求。') }
++  } catch (reason) { if (valid(token)) fail(reason) }
++  finally { unsubscribe(); writers.current.delete(controller); finish(token) }
++ }
++ const retained = heldBootstrapCommands(workspace)
++ const all = ready ? [...commands] : []
++ if (ready) for (const value of retained) {
++  const index = all.findIndex(v => v.command_id === value.command_id)
++  if (index < 0) all.push(value); else if (!all[index].ack || value.ack) all[index] = value
++ }
++ const ids = [...new Set(all.flatMap(v => v.preparation_id ? [v.preparation_id] : v.kind === 'prepare' && v.ack ? [v.ack.id] : []))]
++ return { ready, allowed, busy: visible && busy, error: visible ? error : '', message: visible ? message : '',
++  commands: all, ids, current: ready ? current : null, sessions: ready ? Object.values(sessions) : [], actor: ready ? identity.actor_session_id : null,
++  dirty: retained.length > 0 || ready && all.some(v => !v.ack), safe: !working.current && retained.length === 0, isolated: !working.current && retained.length > 0,
++  canSave: ready && retained.length > 0, refresh, make, execute, readPreparation, saveMemory,
++  canReplay: (value: BootstrapCommand) => allowed && value.actor_session_id === identity.actor_session_id && !value.ack && !retained.some(v => v.command_id === value.command_id && v.ack),
++  hasOriginal: (kind: 'decision' | 'create', id: string) => all.some(v => v.kind === kind && v.preparation_id === id),
++ }
++}
+diff --git a/apps/web/src/features/providers/providerSchema.ts b/apps/web/src/features/providers/providerSchema.ts
+index fdd7bcdd..1bb72ce9 100644
+--- a/apps/web/src/features/providers/providerSchema.ts
++++ b/apps/web/src/features/providers/providerSchema.ts
+@@ -1,7 +1,7 @@
+ import openapi from '../../../../../packages/contracts/generated/openapi.json'
+ 
+ type Shape = {
+-  $ref?: string; type?: string; properties?: Record<string, Shape>; required?: string[]
++  $ref?: string; $defs?: Record<string, Shape>; type?: string; properties?: Record<string, Shape>; required?: string[]
+   additionalProperties?: boolean | Shape; const?: unknown; enum?: unknown[]
+   anyOf?: Shape[]; oneOf?: Shape[]; items?: Shape; minItems?: number; maxItems?: number
+   minimum?: number; maximum?: number; exclusiveMinimum?: number; exclusiveMaximum?: number
+@@ -9,12 +9,12 @@ type Shape = {
+ }
+ const definitions = openapi.components.schemas as Record<string, Shape>
+ const fail = (): never => { throw new Error('提供商记录不符合当前生成契约；原候选保留，未发送。') }
+-function check(shape: Shape, value: unknown, depth = 0): void {
++function check(shape: Shape, value: unknown, depth = 0, schemas = definitions): void {
+   if (depth > 40) fail()
+-  if (shape.$ref) { const next = definitions[shape.$ref.split('/').at(-1)!]; if (!next) fail(); check(next, value, depth + 1); return }
++  if (shape.$ref) { const next = schemas[shape.$ref.split('/').at(-1)!]; if (!next) fail(); check(next, value, depth + 1, schemas); return }
+   if (shape.anyOf || shape.oneOf) {
+     let matches = 0
+-    for (const choice of shape.anyOf ?? shape.oneOf ?? []) { try { check(choice, value, depth + 1); matches++ } catch { /* Only a complete union arm qualifies. */ } }
++    for (const choice of shape.anyOf ?? shape.oneOf ?? []) { try { check(choice, value, depth + 1, schemas); matches++ } catch { /* Only a complete union arm qualifies. */ } }
+     if (!matches || shape.oneOf && matches !== 1) fail()
+     return
+   }
+@@ -39,15 +39,15 @@ function check(shape: Shape, value: unknown, depth = 0): void {
+       if (!Array.isArray(value) || !shape.items) fail()
+       const array = value as unknown[]
+       if (shape.minItems !== undefined && array.length < shape.minItems || shape.maxItems !== undefined && array.length > shape.maxItems) fail()
+-      array.forEach(item => check(shape.items!, item, depth + 1)); return
++      array.forEach(item => check(shape.items!, item, depth + 1, schemas)); return
+     }
+     case 'object': {
+       if (!value || typeof value !== 'object' || Array.isArray(value)) fail()
+       const record = value as Record<string, unknown>, properties = shape.properties ?? {}
+       if (shape.required?.some(key => !(key in record))) fail()
+       for (const [key, item] of Object.entries(record)) {
+-        if (properties[key]) check(properties[key], item, depth + 1)
+-        else if (typeof shape.additionalProperties === 'object') check(shape.additionalProperties, item, depth + 1)
++        if (properties[key]) check(properties[key], item, depth + 1, schemas)
++        else if (typeof shape.additionalProperties === 'object') check(shape.additionalProperties, item, depth + 1, schemas)
+         else fail()
+       }
+       return
+@@ -56,10 +56,10 @@ function check(shape: Shape, value: unknown, depth = 0): void {
+   }
+ }
+ /** Wire shape only. Hash/proof/source truth is verified by the owning server. */
+-export function checkedProvider<T>(name: string, value: unknown): T {
+-  const schema = definitions[name]
++export function checkedProvider<T>(name: string, value: unknown, schemas = definitions): T {
++  const schema = schemas[name]
+   if (!schema) throw new Error('提供商契约尚未生成，未猜测响应类型。')
+-  check(schema, value)
++  check(schema, value, 0, { ...schemas, ...schema.$defs })
+   return structuredClone(value) as T
+ }
+ export const exactObject = (value: unknown, keys: string[]): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === keys.length && Object.keys(value).every(key => keys.includes(key))
+diff --git a/apps/web/src/workbench/Shell.tsx b/apps/web/src/workbench/Shell.tsx
+index 83a2f923..211ba6f5 100644
+--- a/apps/web/src/workbench/Shell.tsx
++++ b/apps/web/src/workbench/Shell.tsx
+@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
+ import { fixture, fixtureRef, findLesson, sameRef, type SyntheticLesson } from '../features/fixture'
+ import { ConflictComparison } from './ConflictComparison'
+ import { PreserveReaderViewport, readerViewportOwner } from './PreserveReaderViewport'
+-import { AuthoringPanel } from '../features/authoring/AuthoringPanel'
++import { AuthoringPanel, type AuthoringPanelState } from '../features/authoring/AuthoringPanel'
+ import { discardForms as discardImpactForms, formsPending as pendingImpactForms } from '../features/contentImpacts/formMemory'
+ import { ImportWorkflow } from '../features/imports/ImportWorkflow'
+ import { Dialog, Splitter } from './Controls'
+@@ -74,7 +74,7 @@ export function Shell() {
+   const [retrievalState, setRetrievalState] = useState({ safe: true })
+   const [providerState, setProviderState] = useState({ dirty: false, safe: true })
+   const [closingProviders, setClosingProviders] = useState(false)
+-  const [authoringState, setAuthoringState] = useState<{ dirty: boolean; safe: boolean; isolated: boolean; discardForms?: () => void }>({ dirty: false, safe: true, isolated: false })
++  const [authoringState, setAuthoringState] = useState<AuthoringPanelState>({ dirty: false, safe: true, isolated: false })
+   const [closingAuthoring, setClosingAuthoring] = useState(false)
+   const [importReviewState, setImportReviewState] = useState<{ dirty: boolean; safe: boolean; discardForms?: () => void }>({ dirty: false, safe: true })
+   const [editorStates, setEditorStates] = useState<Record<string, { dirty: boolean; safe: boolean; closeSafe: boolean }>>({})
+@@ -241,7 +241,7 @@ export function Shell() {
+     {dialog && <Dialog title={dialog} className={dialog === '导入' ? 'import-dialog' : dialog === '笔记' ? 'notes-dialog' : ['设置', '检索材料', '学习目标与基础', '知识画像', '创建路线', '编辑路线', '学习建议'].includes(dialog) ? 'learning-dialog' : ''} close={closeDialog}>{subjectLocked && !['设置', '快捷键', '命令面板', '导入', '创作', '学习目标与基础', '知识画像', '创建路线', '编辑路线', '学习建议'].includes(dialog) ? <p>当前测试策略限制此材料与操作。已有草稿保留；请先返回测试并明确提交或放弃。</p> : dialog === '导入' ? workspaceId ? <ImportWorkflow key={workspaceId} workspaceId={workspaceId} paused={subjectLocked} close={closeDialog} openCourse={ref => { if (!protectLearningDialog()) chooseCourse(ref) }} onState={setImportReviewState} /> : <p>工作区会话尚未连接。连接成功后可上传文件或恢复已有导入。</p> : dialog === '学习目标与基础' ? workspaceId ? <ProfilePanel key={workspaceId} workspace={workspaceId} paused={subjectLocked} port={profileClient} concepts={profileConcepts.value ? conceptChoices(profileConcepts.value) : []} conceptsError={profileConcepts.error} onState={setProfileState} saved={() => setLearningVersion(value => value + 1)} /> : <p>请先连接本机会话。</p> : dialog === '检索材料' ? workspaceId ? <RetrievalPanel key={`${workspaceId}:${active?.id ?? 'none'}`} workspace={workspaceId} paused={subjectLocked} choices={retrievalChoices} initial={retrievalInitial} onState={setRetrievalState} open={target => { if (subjectLocked || protectLearningDialog()) return; if (openReal(target, true)) setDialog(null) }} /> : <p>请先连接本机会话。</p> : dialog === '学习建议' ? workspaceId ? <RecommendationsPanel key={workspaceId} workspace={workspaceId} paused={subjectLocked} course={session.course_ref} port={recommendationClient} onState={setRecommendationState} open={openRecommendation} /> : <p>请先连接本机会话。</p> : dialog === '知识画像' ? workspaceId ? <ConceptStates workspace={workspaceId} paused={subjectLocked} course={session.course_ref} version={learningVersion} onState={setApplicabilityState} /> : <p>请先连接本机会话。</p> : dialog === '创建路线' || dialog === '编辑路线' ? workspaceId ? <RouteEditor key={`${workspaceId}:${dialog}:${dialog === '编辑路线' ? active?.id ?? '' : 'new'}`} workspace={workspaceId} initial={dialog === '编辑路线' ? routeRecord ?? null : null} paused={subjectLocked} onState={setRouteEditState} saved={ref => { setLearningVersion(value => value + 1); openLearningRoute(ref, true); setDialog(null) }} /> : <p>请先连接本机会话。</p> : dialog === '创作' ? workspaceId ? <AuthoringPanel key={workspaceId} workspace={workspaceId} paused={subjectLocked || !!policy.openBookId} currentBlock={!subjectLocked && !policy.openBookId && active?.context.active_ref.entity === 'block' && !activeAssessment && !activePractice && !!realTitles[active.id]?.resolved ? active.context.active_ref : null} onState={setAuthoringState} /> : <p>请先连接本机会话。</p> : dialog === '设置' ? <><button disabled={subjectLocked || !providerState.safe} onClick={() => openAux('学习目标与基础')}>学习目标与基础</button><button disabled={subjectLocked || !providerState.safe} onClick={() => openAux('知识画像')}>概念与技能证据</button>{workspaceId ? <ProviderSettings key={workspaceId} workspace={workspaceId} paused={subjectLocked} port={providerClient} onState={setProviderState} /> : <p>请先连接本机会话。</p>}{subjectLocked && <p>画像和授权摘要暂不可操作；配置、秘密控制和已有授权的撤销仍可使用。</p>}</> : dialog === '命令面板' ? <><label className="sr-only" htmlFor="command-search">筛选命令</label><input id="command-search" className="command-search" value={commandSearch} onChange={event => setCommandSearch(event.target.value)} placeholder="输入命令名称…" /><div className="command-list">{commands.filter(command => command.title.includes(commandSearch)).map(command => <button key={command.title} disabled={command.title === '导入' && subjectLocked} onClick={command.action}>{command.title}<span>↵</span></button>)}</div></> : dialog === '快捷键' ? <ul className="shortcut-list"><li>Ctrl / ⌘ + Shift + P：命令面板</li><li>分隔条：← / → 每次调整 16px</li><li>Home / End：到达宽度边界</li><li>Enter：折叠或恢复侧栏</li><li>Esc：关闭抽屉、对话框或退出专注</li><li>Tab / Shift + Tab：移动焦点</li></ul> : dialog === '笔记' ? workspaceId ? <NotesPanel workspace={workspaceId} selection={noteSelection} initialRefId={noteSelection?.ref.id ?? (active?.context.active_ref.entity === 'block' ? active.context.active_ref.id : undefined)} openAnchor={selection => void openNoteAnchor(selection)} onState={setNoteState} onSaved={() => setProgressVersion(value => value + 1)} /> : <p>请先连接本机会话。</p> : dialog === '本节习题' ? practiceLesson ? <LessonPracticeLinks target={practiceLesson} open={openExercise} /> : <p>请先打开真实教材小节。</p> : dialog === '教材修订' ? session.course_ref ? <CourseRevisions course={session.course_ref} choose={chooseCourse} /> : <p>请先选择教材。</p> : dialog === '课程切换' ? <CoursePicker choose={chooseCourse} loadSynthetic={loadFixture} /> : dialog === '打开对象' ? loaded ? <div className="command-list">{fixture.lessons.map(lesson => <button key={lesson.id} onClick={() => { openLesson(lesson, true); setDialog(null) }}>{lesson.title}</button>)}</div> : <CoursePicker choose={chooseCourse} loadSynthetic={loadFixture} /> : <><p>{auxiliaryText[dialog] ?? '此辅助能力尚未实现。'}</p><p className="muted">能力状态：未实现 · 没有执行业务写入。</p></>}</Dialog>}
+     {closingApplicability && <Dialog title="保留适用性原命令" close={() => setClosingApplicability(false)}><p>关闭不会提交决定。已安全保存的原 key、依据和回执保留；未提交临时表单只在明确关闭后丢弃。</p><button disabled={!applicabilityState.safe} onClick={() => { setClosingApplicability(false); setDialog(null); setApplicabilityState({ dirty: false, safe: true, isolated: false, editing: false }) }}>保留原命令，丢弃临时表单并关闭</button>{applicabilityState.isolated && <><p>原命令或回执仍在本页面隔离内存，不能关闭浏览器。可明确前往角色控制，原会话恢复后再保存。</p><button onClick={() => { setClosingApplicability(false); setDialog('导入'); setApplicabilityState({ dirty: false, safe: true, isolated: false, editing: false }) }}>保留隔离内存，前往角色控制</button></>}<button onClick={() => setClosingApplicability(false)}>返回适用性决定</button></Dialog>}
+     {closingImportReview && <Dialog title="保留审核原命令" close={() => setClosingImportReview(false)}><p>尚有未提交的审核表单、发布确认或保留的原命令。明确关闭会丢弃临时表单；已经安全保存的原命令仍保留，关闭不会提交审核、批准或发布。</p><button disabled={!importReviewState.safe} onClick={() => { importReviewState.discardForms?.(); setClosingImportReview(false); setDialog(null) }}>保留审核原命令，明确丢弃临时表单并关闭</button><button onClick={() => setClosingImportReview(false)}>返回导入与审核</button>{!importReviewState.safe && <p role="alert">审核或发布命令仍在处理中或本机记录未安全读取，请保持页面打开。</p>}</Dialog>}
+-    {closingAuthoring && <Dialog title="保留创作原命令" close={() => setClosingAuthoring(false)}><p>尚有临时教学要求或保留的原命令。返回可继续编辑；明确关闭会丢弃临时表单，已安全存入本机的原命令仍保留，关闭不会批准调用或执行数值检查。</p><button disabled={!authoringState.safe} onClick={() => { authoringState.discardForms?.(); setClosingAuthoring(false); if (workspaceId) discardImpactForms(workspaceId); setDialog(null) }}>保留原命令，明确丢弃临时表单并关闭</button><button onClick={() => setClosingAuthoring(false)}>返回创作</button>{authoringState.isolated && <button onClick={() => { authoringState.discardForms?.(); setClosingAuthoring(false); if (workspaceId) discardImpactForms(workspaceId); setDialog('导入') }}>保留内容决定隔离内存，丢弃临时表单并前往角色控制</button>}{!authoringState.safe && <p role="alert">命令仍在处理中或本机记录未安全读取，请保持页面打开。</p>}</Dialog>}
++    {closingAuthoring && <Dialog title="保留创作原命令" close={() => setClosingAuthoring(false)}><p>尚有临时教学要求或保留的原命令。返回可继续编辑；明确关闭会丢弃临时表单，已安全存入本机的原命令仍保留，关闭不会批准调用或执行数值检查。</p><button disabled={!authoringState.safe} onClick={() => { authoringState.discardForms?.(); setClosingAuthoring(false); if (workspaceId) discardImpactForms(workspaceId); setDialog(null) }}>保留原命令，明确丢弃临时表单并关闭</button><button onClick={() => setClosingAuthoring(false)}>返回创作</button>{authoringState.isolated && <button onClick={() => { authoringState.discardForms?.(); setClosingAuthoring(false); if (workspaceId) discardImpactForms(workspaceId); setDialog('导入') }}>{authoringState.isolationLabel ?? '保留内容决定隔离内存，丢弃临时表单并前往角色控制'}</button>}{!authoringState.safe && <p role="alert">命令仍在处理中或本机记录未安全读取，请保持页面打开。</p>}</Dialog>}
+     {closingProviders && <Dialog title="保留配置与授权候选" close={() => setClosingProviders(false)}><p>尚有未确认命令或临时输入。已持久化的无秘密命令可留待恢复；临时配置、预算和秘密输入将在关闭时丢弃，秘密不能在刷新后恢复。关闭不会发起模型调用。</p><button disabled={!providerState.safe} onClick={() => { setClosingProviders(false); setDialog(null) }}>明确丢弃临时输入，保留本机命令并关闭</button><button onClick={() => setClosingProviders(false)}>返回设置</button>{!providerState.safe && <p role="alert">命令仍在处理中或本机候选尚未安全保存，请保持页面打开。</p>}</Dialog>}
+     {closingLearning && <Dialog title={closingLearning === 'profile' ? '保留未同步画像' : closingLearning === 'route' ? '保留未同步路线' : '保留未同步推荐决定'} close={() => setClosingLearning(null)}><p>尚有本机未同步候选。可以返回编辑保存到服务端，或在本机持久化完成后明确保留候选并关闭。</p><button disabled={!(closingLearning === 'profile' ? profileState.safe : closingLearning === 'route' ? routeEditState.safe : recommendationState.safe)} onClick={() => { setClosingLearning(null); setDialog(null) }}>{closingLearning === 'profile' ? '保留本机画像草稿并关闭' : closingLearning === 'route' ? '保留本机路线草稿并关闭' : '保留本机推荐候选并关闭'}</button><button onClick={() => setClosingLearning(null)}>返回编辑</button></Dialog>}
+     {closingNotes && <Dialog title="保留未同步笔记" close={() => setClosingNotes(false)}><p>笔记仍有未同步内容。可返回编辑并保存到服务端，或明确保留已保存的本机草稿后关闭。</p><button disabled={!noteState.safe} onClick={() => { setClosingNotes(false); setDialog(null) }}>保留本机笔记草稿并关闭</button><button onClick={() => setClosingNotes(false)}>返回编辑</button>{!noteState.safe && <p role="alert">本机草稿尚未安全保存，请保持窗口打开并重试。</p>}</Dialog>}

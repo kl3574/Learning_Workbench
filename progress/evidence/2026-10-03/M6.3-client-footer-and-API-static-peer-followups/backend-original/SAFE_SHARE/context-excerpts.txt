@@ -1,0 +1,218 @@
+
+== AGENTS.md @ db14d96ef03ea1ca7a9a75a9001f6cc0a3282973 ==
+1: Read PRODUCT_DESIGN.md completely and follow its implementation, recovery, verification, and publication workflow. It is the sole product and engineering specification.
+
+== PRODUCT_DESIGN.md @ db14d96ef03ea1ca7a9a75a9001f6cc0a3282973 ==
+1368: #### 20.16.1 问题与范围
+1369: 
+1370: 原附录 A 已规定 POST `/codex/sessions` 必须携带 `consent_id`，以及精确 GET session。现有 Provider consent 必须来自实际 job/provider 的冻结外发输入；它尚不批准 codex，不能把另一个 Authoring/Tutor 的许可拿来创建 Codex session。session 的公开状态及 bootstrap 结果未知时的读回也未闭合。
+1371: 
+1372: 本节仅补齐：本地控制准备 → 阅读冻结范围 → 单次明确决定 → 消费对应许可创建受控 thread 映射 → 当前元数据读回。新增三个准备端点，补充原有两个 session 端点；不修改 Provider consent 合同，不开放 turn、登录、工具、学科文件访问、网络、通用审批或产物回导。`allowed_actions` 本切片只接受 `[]`，包括 `read` 在内的任何非空项均拒绝。建立 Broker 自有控制记录不等于获准读取教材或执行文件操作；不扩大已有隔离目录和固定控制 profile 的文件访问范围。
+1373: 
+1374: 协议依据是此前由固定 Codex CLI 0.160.0 离线生成的 schema，而非本节运行的结果：`ThreadStartParams` 没有 turn 的 `input`，`TurnStartParams` 的 `input/threadId` 必填，两个方法独立。schema 的 nullable、默认值和空 `turns` 不证明无联网。零外发由受检外层隔离强制；首次交付必须另证固定上游确实能在该边界内完成建 thread。若不能证实，保持不支持，不降低隔离、不调用模型来“验证”，不返回虚假成功。
+1375: 
+1376: #### 20.16.2 严格 HTTP 合同
+1377: 
+1378: 以下对象全部闭合；除显式 `|null` 外不可为空，所列字段均 required。沿用 Id、Revision、Sha256、UTC、ApprovalDecision 和安全 ErrorEnvelope；整数拒 bool，字符串合法 Unicode。所有 GET 无 body、拒未知/重复 query、no-store、零数据库写、零 CLI 启动。`EmptyActions` 是长度恰为 0 的数组。
+1429: | 操作 | 请求/返回 | 明确边界 |
+1430: |---|---|---|
+1431: | **新增** POST `/codex/session-preparations` | CodexBootstrapPreparationWrite → 201 CodexBootstrapPreparationView | 冻结实际本地控制计划，初始 r1/pending；不启动 CLI，不创建 thread/Job，不授予许可 |
+1432: | **新增** GET `/codex/session-preparations/{id}` | CodexBootstrapPreparationView | 回读冻结操作、当前资格及已绑定 session ID；只读 |
+1433: | **新增** POST `/codex/session-preparations/{id}/decision` | 原 ApprovalDecision → 200 CodexBootstrapDecisionAck | 只允许一次 approve_once 或 decline，expected_revision 必须对应 r1，操作 SHA 完全一致 |
+1434: | **补充** POST `/codex/sessions` | 保留原三个请求字段 → 201 CodexSessionCreateAck | 仅实际受检 thread 映射成功且本地持久化后返回 201；失败/未知返回安全错误，真实状态另 GET |
+1435: | **补充** GET `/codex/sessions/{id}` | 保留原返回字段 → CodexSessionView | 当前本地受检事实；不启动/恢复 CLI，不补建 thread，不返回外部 thread ID、路径或原始响应 |
+
+== services/api/app/infrastructure/config.py @ db14d96ef03ea1ca7a9a75a9001f6cc0a3282973 ==
+17: @dataclass(frozen=True)
+18: class Settings:
+19:     data_dir: Path = field(default_factory=default_data_dir)
+20:     host: str = "127.0.0.1"
+21:     port: int = 8765
+22:     ui_origin: str | None = None
+23:     migrations_dir: Path = REPOSITORY_ROOT / "migrations"
+24:     static_dir: Path = REPOSITORY_ROOT / "apps/web/dist"
+25:     codex_executable: Path | None = None
+26:     session_seconds: int = 43200
+27:     bootstrap_seconds: int = 120
+28:     recommendation_review_after_days: int = 3
+
+== services/api/app/main.py @ db14d96ef03ea1ca7a9a75a9001f6cc0a3282973 ==
+215:     application.include_router(create_learning_router(database))
+216:     application.include_router(create_evidence_applicability_router(EvidenceApplicabilityService(database, artifacts)))
+217:     application.include_router(create_practice_router(database))
+218:     application.include_router(create_assessment_router(database))
+219:     application.include_router(create_route_router(database))
+220:     application.include_router(create_profile_router(database))
+221:     application.include_router(create_provider_router(providers, consents))
+222:     application.include_router(create_codex_router(CodexCapabilitiesService(database,
+223:         codex_probe if codex_probe is not None else LocalCodexProbe(settings.data_dir, settings.codex_executable))))
+224:     application.include_router(create_codex_bootstrap_router(codex_bootstrap))
+225:     application.include_router(create_concept_state_router(database))
+226:     application.include_router(create_recommendation_router(database))
+227:     application.include_router(create_retrieval_router(database))
+228:     application.include_router(create_tutor_router(tutor_service))
+229:     application.include_router(create_authoring_router(authoring_service, numeric_service, authoring_group_service))
+230:     application.include_router(create_authoring_group_router(authoring_group_service, group_numeric_service))
+231:     application.include_router(create_review_router(review_service))
+232:     application.include_router(create_publication_router(publication_service))
+233:     application.include_router(create_draft_router(draft_edits))
+234:     application.include_router(create_content_restore_router(content_restores))
+235:     application.include_router(create_restore_numeric_router(restore_numeric_service))
+236:     if settings.static_dir.is_dir():
+237:         application.mount("/", StaticFiles(directory=settings.static_dir, html=True), name="workbench")
+238:     return application
+
+== services/api/app/interfaces/codex_bootstrap_http.py @ db14d96ef03ea1ca7a9a75a9001f6cc0a3282973 ==
+1: """Five real local-control operations; bodyless reads never start recovery."""
+2: from fastapi import APIRouter, Depends, Request
+3: 
+4: from packages.contracts import domain_models as dm
+5: from ..application.codex_bootstrap import CodexBootstrapService
+6: from ..application.errors import ApiError
+7: from ..codex_bootstrap_dto import (
+8:     CodexBootstrapPreparationWrite, CodexBootstrapPreparationView, CodexBootstrapDecisionAck,
+9:     CodexSessionCreateWrite, CodexSessionCreateAck, CodexSessionView,
+10: )
+11: from .content_http import query_fields
+12: from .http import current_identity, verify_write
+13: from .practice_http import private_response
+14: from .provider_http import unique_control_headers, command_key, COMMAND_PARAMETER
+15: 
+16: 
+17: async def no_control_body(request: Request) -> None:
+18:     if await request.body():
+19:         raise ApiError(422, 'SCHEMA_INVALID', '本地控制读取不接受请求正文。')
+20: 
+21: 
+22: def create_codex_bootstrap_router(service: CodexBootstrapService) -> APIRouter:
+23:     router = APIRouter(prefix='/api/v1/codex', tags=['codex'], dependencies=[Depends(current_identity),
+24:         Depends(unique_control_headers), Depends(private_response), Depends(query_fields())])
+25: 
+26:     @router.post('/session-preparations', response_model=CodexBootstrapPreparationView, status_code=201,
+27:                  dependencies=[Depends(verify_write)], openapi_extra={'parameters': [COMMAND_PARAMETER]})
+28:     def prepare(body: CodexBootstrapPreparationWrite, request: Request) -> CodexBootstrapPreparationView:
+29:         return service.prepare(request.state.identity, body, command_key(request))
+30: 
+31:     @router.get('/session-preparations/{id}', response_model=CodexBootstrapPreparationView,
+32:                 dependencies=[Depends(no_control_body)])
+33:     def preparation(id: dm.Id, request: Request) -> CodexBootstrapPreparationView:
+34:         return service.read_preparation(request.state.identity, id)
+35: 
+36:     @router.post('/session-preparations/{id}/decision', response_model=CodexBootstrapDecisionAck, status_code=200,
+37:                  dependencies=[Depends(verify_write)], openapi_extra={'parameters': [COMMAND_PARAMETER]})
+38:     def decide(id: dm.Id, body: dm.ApprovalDecision, request: Request) -> CodexBootstrapDecisionAck:
+39:         return service.decide(request.state.identity, id, body, command_key(request))
+40: 
+41:     @router.post('/sessions', response_model=CodexSessionCreateAck, status_code=201,
+42:                  dependencies=[Depends(verify_write)], openapi_extra={'parameters': [COMMAND_PARAMETER]})
+43:     def create(body: CodexSessionCreateWrite, request: Request) -> CodexSessionCreateAck:
+44:         return service.create_session(request.state.identity, body, command_key(request))
+45: 
+46:     @router.get('/sessions/{id}', response_model=CodexSessionView, dependencies=[Depends(no_control_body)])
+47:     def session(id: dm.Id, request: Request) -> CodexSessionView:
+48:         return service.read_session(request.state.identity, id)
+49: 
+50:     return router
+
+== services/api/app/interfaces/boundary.py @ db14d96ef03ea1ca7a9a75a9001f6cc0a3282973 ==
+86: 
+87:     @application.exception_handler(RequestValidationError)
+88:     async def handle_validation(request: Request, error: RequestValidationError) -> JSONResponse:
+89:         return error_response(request, ApiError(422, "SCHEMA_INVALID", "请求字段或字段值不符合接口规范。"))
+90: 
+91:     @application.exception_handler(HTTPException)
+92:     async def handle_http_error(request: Request, error: HTTPException) -> JSONResponse:
+93:         codes = {404: "REFERENCE_MISSING", 405: "METHOD_NOT_ALLOWED"}
+94:         return error_response(request, ApiError(error.status_code, codes.get(error.status_code, "REQUEST_REJECTED"), "请求的资源或操作不可用。"))
+
+== uv.lock @ db14d96ef03ea1ca7a9a75a9001f6cc0a3282973 ==
+521: name = "starlette"
+522: version = "1.6.0"
+523: source = { registry = "https://pypi.org/simple" }
+524: dependencies = [
+525:     { name = "anyio" },
+526:     { name = "typing-extensions" },
+527: ]
+528: sdist = { url = "https://files.pythonhosted.org/packages/b5/b4/205b0d5241d934e8add0c38aa924c4f9fb7330834ff11e5444db964ec3f9/starlette-1.6.0.tar.gz", hash = "sha256:d4e3ac5e546444960c710297a3c9fc3f7ebae1b7e963f3d36173b49da535be9b", size = 2716969, upload-time = "2026-08-08T18:27:57.512Z" }
+
+== installed Starlette routing.py (dependency source read only) ==
+674: 
+675:         if "router" not in scope:
+676:             scope["router"] = self
+677: 
+678:         if scope["type"] == "lifespan":
+679:             await self.lifespan(scope, receive, send)
+680:             return
+681: 
+682:         partial = None
+683: 
+684:         for route in self.routes:
+685:             # Determine if any route matches the incoming scope,
+686:             # and hand over to the matching route if found.
+687:             match, child_scope = route.matches(scope)
+688:             if match == Match.FULL:
+689:                 scope.update(child_scope)
+690:                 await route.handle(scope, receive, send)
+691:                 return
+692:             elif match == Match.PARTIAL and partial is None:
+693:                 partial = route
+694:                 partial_scope = child_scope
+695: 
+696:         if partial is not None:
+697:             #  Handle partial matches. These are cases where an endpoint is
+698:             # able to handle the request, but is not a preferred option.
+699:             # We use this in particular to deal with "405 Method Not Allowed".
+700:             scope.update(partial_scope)
+701:             await partial.handle(scope, receive, send)
+702:             return
+703: 
+704:         route_path = get_route_path(scope)
+
+== installed Starlette staticfiles.py (dependency source read only) ==
+109:     async def get_response(self, path: str, scope: Scope) -> Response:
+110:         """
+111:         Returns an HTTP response, given the incoming path, method and request headers.
+112:         """
+113:         if scope["method"] not in ("GET", "HEAD"):
+114:             raise HTTPException(status_code=405)
+115: 
+116:         try:
+117:             full_path, stat_result = await anyio.to_thread.run_sync(self.lookup_path, path)
+118:         except PermissionError:
+119:             raise HTTPException(status_code=401)
+120:         except OSError as exc:
+121:             # Filename is too long, so it can't be a valid static file.
+122:             if exc.errno == errno.ENAMETOOLONG:
+123:                 raise HTTPException(status_code=404)
+124: 
+125:             raise exc
+126:         except ValueError:
+127:             # Null bytes or other invalid characters in the path.
+128:             raise HTTPException(status_code=404)
+129: 
+130:         if stat_result and stat.S_ISREG(stat_result.st_mode):
+131:             # We have a static file to serve.
+132:             return self.file_response(full_path, stat_result, scope)
+133: 
+134:         elif stat_result and stat.S_ISDIR(stat_result.st_mode) and self.html:
+135:             # We're in HTML mode, and have got a directory URL.
+136:             # Check if we have 'index.html' file to serve.
+137:             index_path = os.path.join(path, "index.html")
+138:             full_path, stat_result = await anyio.to_thread.run_sync(self.lookup_path, index_path)
+139:             if stat_result is not None and stat.S_ISREG(stat_result.st_mode):
+140:                 if not scope["path"].endswith("/"):
+141:                     # Directory URLs should redirect to always end in "/".
+142:                     url = URL(scope=scope)
+143:                     url = url.replace(path=url.path + "/")
+144:                     return RedirectResponse(url=url)
+145:                 return self.file_response(full_path, stat_result, scope)
+146: 
+147:         if self.html:
+148:             # Check for '404.html' if we're in HTML mode.
+149:             full_path, stat_result = await anyio.to_thread.run_sync(self.lookup_path, "404.html")
+150:             if stat_result and stat.S_ISREG(stat_result.st_mode):
+151:                 return FileResponse(full_path, stat_result=stat_result, status_code=404)
+152:         raise HTTPException(status_code=404)
+153: 
+154:     def lookup_path(self, path: str) -> tuple[str, os.stat_result | None]:
+155:         # Reject absolute paths so they cannot escape the served directory.

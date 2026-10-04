@@ -1,0 +1,23 @@
+diff --git a/tests/e2e/local-task-document.spec.ts b/tests/e2e/local-task-document.spec.ts
+index 2a0f1bce..001f6467 100644
+--- a/tests/e2e/local-task-document.spec.ts
++++ b/tests/e2e/local-task-document.spec.ts
+@@ -96,7 +96,8 @@ test('native downloaded requirements enter ordinary Import as unreviewed source-
+     await page.getByRole('button', { name: '导入', exact: true }).click()
+     const imports = page.getByRole('dialog', { name: '导入', exact: true })
+     await expect(imports.getByText('操作角色：作者', { exact: true })).toBeVisible()
+-    await imports.getByLabel('解析格式', { exact: true }).selectOption('markdown')
++    // Implicit select labels contain option text; use their exact accessible names.
++    await imports.getByRole('combobox', { name: '解析格式', exact: true }).selectOption('markdown')
+     // The selected bytes come from the actual download, not a new generated fixture.
+     await imports.getByLabel('选择导入文件', { exact: true }).setInputFiles({ name: download.suggestedFilename(), mimeType: 'text/markdown', buffer: bytes })
+     const uploading = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/v1/imports')
+@@ -114,7 +115,7 @@ test('native downloaded requirements enter ordinary Import as unreviewed source-
+     }
+     expect(selected).not.toBeNull()
+     if (!selected) throw new Error('The actual imported document did not expose its expected unreviewed block')
+-    await imports.getByLabel('选择预览候选', { exact: true }).selectOption(selected.id)
++    await imports.getByRole('combobox', { name: '选择预览候选', exact: true }).selectOption(selected.id)
+     await expect(imports.getByLabel('当前候选正文', { exact: true })).toContainText('本次下载未调用 Codex。')
+     await expect(imports.getByText('这里展示暂存候选。候选 ID 不代表正式发布或内容审核通过。', { exact: true })).toBeVisible()
+     await expect(imports.getByRole('button', { name: '确认导入当前候选', exact: true })).toBeDisabled()

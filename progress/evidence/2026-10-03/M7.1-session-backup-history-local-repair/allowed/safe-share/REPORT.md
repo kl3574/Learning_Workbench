@@ -1,0 +1,38 @@
+# M7.1 historical session identity in sanitized backups
+
+Fixed source: `b6340d913df252e30b920ec548e6cfd580505ec9`, parent `ad49490e78c21174349595da8090c6c2b445bce9`, branch `feat/M7.1-backup-session-history`. This is an isolated local fix. No remote write, original user checkout change, real user database/credential read, external model call or system-level probe was performed. M7.1 stays todo / NOT_RUN as a complete milestone; product restore/export HTTP workflows were not added.
+
+The original `make backup` deleted `local_sessions`, although M6.2 immutable publication/restore/impact/evidence/numeric records retain FK and historical actor membership references. The new Session-owned port only admits an independent file, an active transaction and enabled foreign keys. It preserves historical actor ID/workspace/role/expiry, replaces token/CSRF digests with non-credential sentinels, and revokes every copied session. Original revocation times remain when present. It clears bootstrap and shared idempotency cache inside the same port. The exporter still applies the existing Provider-owned backup downgrade, commits and VACUUMs the independent copy before packaging. Neither permanent owner commands/results nor original Review actor relations are rewritten.
+
+`PRAGMA foreign_keys=ON` is also required on the isolated snapshot: old OFF behavior left orphaned replay bindings when clearing idempotency. The only existing cascades are `assessment_receipts` and `learner_profile_command_receipts`. These bind the lifetime of one shared cache instance, not permanent native facts: migrations/0004_assessment_attempts.sql:19–31 explicitly defines expiration deletion; assessment_repository.py:232–272 validates only the live instance and documents non-permanent allocation; migrations/0008_learner_profile_history.sql:44 uses the same cascade while immutable profile revisions occupy their own table. PRODUCT_DESIGN.md:450 already gives shared idempotency an expiry policy. The backup does remove these temporary cached-ACK bindings; it does not claim all records or all historical ACKs are retained. `backup.py` contains no Assessment/Profile DELETE.
+
+Read-only comparison of five generated synthetic ZIP snapshots is recorded in CASCADE_READBACK.json. Actual differences are precisely listed per fixture: bootstrap/idempotency authentication caches, same-count local session projections, Provider backup projection; the graded Evidence fixture additionally drops three assessment replay bindings, the Content/Profile fixture drops one profile replay binding. All other table rows in those comparisons are exactly equal, including original native attempts/submissions/grades/evidence, private solution versions, immutable profile history, Review/publication/restore/impact/numeric records and original permanent commands. Every ZIP snapshot has integrity=ok and zero FK findings. These comparisons read the archive database itself, not a copy after fresh authentication.
+
+## Executed evidence
+
+| Stage | Actual result | Scope |
+|---|---|---|
+| 01 | 1 FAIL, 3.47 s; actual make backup exit 2 | Original actor-deletion defect. Source tables/files unchanged. |
+| 02 | 4 PASS, 1 FAIL | CLI now succeeds; manually reconstructed test blob file permissions cause BLOB_STORAGE_UNAVAILABLE. Original retained. |
+| 03 | 1 FAIL | Safe diagnostic confirms BLOB_STORAGE_UNAVAILABLE at historical edit GET; corrected test reconstruction to existing BlobStore 0700/0600 rules. |
+| 04 | 5 PASS, 7.97 s | First historical HTTP readback, old-cookie refusal and existing backup tests. |
+| 05 | 11 PASS, 3 FAIL | Two new test route mistakes (405/404); one real CLI FK-OFF orphan-binding failure. All retained. |
+| 06 | 14 PASS, 9.82 s | Correct routes, FK-enabled copy and four actual backup owner cases. |
+| 08 | 4 FAIL, 6.38 s; four actual CLI exit 2 | Final two integration test files, same bytes as fixed source, over untouched ad494 production. |
+| 09 | 15 PASS, 9.36 s | Final focused tests, plus credential-digest exclusion/profile-cascade checks. Execution HEAD still ad494 with final WIP; do not call it execution at b634. |
+| 10 | Ruff PASS, mypy 242 PASS | Pre-commit final WIP static checks. |
+| 11 | **221 PASS, 1 setup ERROR**, 200.48 s | Fixed b634 related-owner gate (222 cases), including all 15 narrow tests. Existing Evidence mutation7 fixture observed Import parsing after run_once, before backup or that case's assertions. This gate is not PASS. |
+| 12 | Ruff six files PASS, mypy 242 PASS | Actual fixed b634 static checks. |
+| 13 | 1 PASS, 1.59 s | Exactly the setup-error case run once diagnostically on b634. Does not erase stage 11 or establish its cause. |
+
+Stage 11's 1,344 complete non-progress tracked input blobs match Git b634 before and after and are byte-identical across execution. Stage 08's 1,340 tracked ad494 inputs remain clean and match Git, with exactly the two explicit integration overlays bound in SOURCE.json. Those two files match fixed b634 byte-for-byte (SHA-256 6a612c76221a41a30e5d0704eec4f3c57f248640c04c0e2be0fd803a78406439 and 47a676481b47fb32bafd26bece84dade7e6b982ee5c65ee9603e815bf6b692ed). Earlier WIP attempts were not captured with complete before/after input manifests; their original logs and diagnostic receipts are retained, not upgraded to that provenance claim.
+
+All 19 early actual CLI receipts report unchanged source logical tables and unchanged source files outside the backup output directory (quiescent synthetic fixtures, including failure paths). The four fixed-stage 11 CLI receipts make the same assertions. The existing dedicated WAL test additionally verifies a committed WAL update is captured while the original source remains intact. No permission widening, shared environment install or dependency copy was performed; commands use uv --frozen --no-sync and a dedicated external TMPDIR.
+
+The positive readback corpus uses actual SQLite, real backup subprocesses, real Import/Edit/Review/Restore/Content/Learning HTTP owners and fresh copied-workspace sessions. Private test extraction reconstructs an archive into a new fixture directory; it is not a product restore endpoint or workspace-ID remapping implementation. Old cookies receive 401; a new actor may read original owner history but does not inherit an old actor's publication command. A queued numeric approval copied from the source is cancelled by the existing worker's revoked-actor check before runtime.check/run_checked. That fixture uses LedgerRuntime, never runs a numerical process, and makes no physical-numeric PASS or academic-approval claim. Existing Provider history/partial-artifact backup tests prove its own permission downgrade and removal of synthetic key/locator/HMAC material separately.
+
+One extra evidence-processing harness attempt used unavailable system-Python sqlite3.deserialize and is recorded in cascade-readback-attempt-01.json; the subsequent read-only comparison used a private temporary extracted file. No product source changed for that harness failure.
+
+## Publication boundary
+
+RAW_MANIFEST.json is a private inventory, including synthetic runtime databases/ZIPs; it must not itself be treated as an upload list. Only SAFE_SHARE.json's exact items and derived files under safe-share/ are candidates. No database, ZIP, token/header/cookie, secret-store material or arbitrary pytest data is in that list. The sole byte transformation replaces the exact private home prefix with `$HOME`; raw SHA-256 and published SHA-256 remain paired. Preserve all RED, test-harness FAIL and the stage-11 ERROR labels. The fixed-stage input maps, source binding and receipts do not claim complete M7, full Python, browser, model or restoration acceptance.

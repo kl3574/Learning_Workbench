@@ -1,0 +1,15 @@
+# Static boundary-test review: db14d96e
+
+Fixed comparison: e91376f0568542050f11e79b2e9b729d1b7df85c...db14d96ef03ea1ca7a9a75a9001f6cc0a3282973. Only tests/security/test_local_boundary.py changes. The owner tree later advanced to 00cb; this report reads immutable db14 Git objects and preserves the original candidate finding. Its later repair is reviewed separately.
+
+## Standards / test correctness
+
+P2 — tests/security/test_local_boundary.py:14-15 leaves Settings.static_dir at its default, while :208 and :217 newly require exact 405 and 404. config.py:24 defaults to the ignored apps/web/dist directory; main.py:236-237 mounts StaticFiles at '/' when that directory exists. In the pinned Starlette 1.6.0 router, a later FULL root mount outranks an earlier PARTIAL method match (routing.py:682-701). Thus GET /api/v1/codex/sessions reaches StaticFiles when a build exists: an ordinary missing file returns 404 rather than the asserted 405. Unknown POST /api/v1/codex/sessions/unavailable/turns likewise reaches StaticFiles, whose method check returns 405 rather than the asserted 404 (staticfiles.py:109-155). The same fixed test can therefore fail merely because a prior web build exists. A synthetic static API shadow file could also satisfy that static lookup; this is source reasoning, not an executed observation here.
+
+The correction should cover both explicit absent and controlled present static directories, with the API namespace remaining outside static handling; merely fixing the test to an absent directory would conceal the actual mounted behavior. The root-reported 823 PASS is limited to its original environment and is not rerun or generalized here.
+
+## Spec
+
+No new endpoint or privilege regression is introduced by this test-only diff. §20.16.1 (:1372) excludes turns and permits only the specified bootstrap scope; :1434-1435 specify POST sessions and GET an exact session. The test now correctly recognizes POST-only /codex/sessions in OpenAPI, an exact session GET and capabilities, and excludes a turn route. It preserves payload 413 and checks JSON content type plus METHOD_NOT_ALLOWED for the unsupported list GET, and REFERENCE_MISSING for turns. These are JSON/error-code assertions, not a complete strict ErrorEnvelope schema check. The production boundary.py:91-94 still owns safe 404/405 translation. The static-routing P2 must be resolved independently of this positive route-contract review.
+
+This is a static review, not application or test execution. No application, DB, browser, network, CLI/model, system probe or previously rejected diagnosis was run. Product sources were not changed. One reviewer applied separate Standards and Spec axes; the earlier subagent attempt reached the thread limit, so this does not claim two independent reviewers. Reported producer/root test outcomes are not credited to this reviewer. The sole v3.0.14 PRODUCT_DESIGN.md remains SHA256 bed7c924955512ec4a6775812c80e6c5ce82e968f19feb403e568099f8dc4144. Earlier DCF complete-gate failures and unexplained setup errors are not reclassified here.

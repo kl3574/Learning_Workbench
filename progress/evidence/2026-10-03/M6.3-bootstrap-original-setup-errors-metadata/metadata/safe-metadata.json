@@ -1,0 +1,103 @@
+{
+  "source_head": "dcfda8c270dff3e6db75011c50ffa7d6f5826512",
+  "association_receipt_sha256": "31ee30bcabd7a1f26cb91959f835233787fd888255319a19e11aab486deb6a93",
+  "queries": {
+    "jobs": "SELECT kind,status,revision,cancel_requested,retry_count,next_retry_at,lease_owner IS NOT NULL AS has_lease_owner,lease_until,created_at,updated_at,json_extract(result_json,'$.error_code') AS error_code,json_extract(result_json,'$.error.code') AS nested_error_code FROM jobs ORDER BY created_at,kind",
+    "imports": "SELECT status,created_at FROM ingestion_imports ORDER BY created_at",
+    "job_event_counts": "SELECT type,count(*) AS count,min(occurred_at) AS first_at,max(occurred_at) AS last_at FROM job_events GROUP BY type ORDER BY type"
+  },
+  "cases": [
+    {
+      "nodeid": "tests/integration/test_draft_candidate_owners.py::test_missing_provider_owner_cannot_reuse_registered_candidate[single]",
+      "synthetic_basetemp_subdirectory": "test_missing_provider_owner_ca0",
+      "query_only": true,
+      "read_only_immutable_uri": true,
+      "database_and_directory_stat_unchanged": true,
+      "rows": {
+        "jobs": [
+          {
+            "kind": "authoring",
+            "status": "running",
+            "revision": 3,
+            "cancel_requested": 0,
+            "retry_count": 0,
+            "next_retry_at": null,
+            "has_lease_owner": 1,
+            "lease_until": "2026-10-03T14:21:46.596729Z",
+            "created_at": "2026-10-03T14:21:16.500455Z",
+            "updated_at": "2026-10-03T14:21:16.596742Z",
+            "error_code": null,
+            "nested_error_code": null
+          }
+        ],
+        "imports": [],
+        "job_event_counts": [
+          {
+            "type": "awaiting_approval",
+            "count": 1,
+            "first_at": "2026-10-03T14:21:16.500455Z",
+            "last_at": "2026-10-03T14:21:16.500455Z"
+          },
+          {
+            "type": "queued",
+            "count": 1,
+            "first_at": "2026-10-03T14:21:16.561744Z",
+            "last_at": "2026-10-03T14:21:16.561744Z"
+          },
+          {
+            "type": "running",
+            "count": 1,
+            "first_at": "2026-10-03T14:21:16.596742Z",
+            "last_at": "2026-10-03T14:21:16.596742Z"
+          }
+        ]
+      }
+    },
+    {
+      "nodeid": "tests/integration/test_review_http.py::test_review_http_write_guards_and_strict_request[extra_body-decision]",
+      "synthetic_basetemp_subdirectory": "test_review_http_write_guards_9",
+      "query_only": true,
+      "read_only_immutable_uri": true,
+      "database_and_directory_stat_unchanged": true,
+      "rows": {
+        "jobs": [
+          {
+            "kind": "import",
+            "status": "running",
+            "revision": 2,
+            "cancel_requested": 0,
+            "retry_count": 0,
+            "next_retry_at": null,
+            "has_lease_owner": 1,
+            "lease_until": "2026-10-03T15:05:01.927348Z",
+            "created_at": "2026-10-03T15:03:31.882405Z",
+            "updated_at": "2026-10-03T15:03:31.927263Z",
+            "error_code": null,
+            "nested_error_code": null
+          }
+        ],
+        "imports": [
+          {
+            "status": "parsing",
+            "created_at": "2026-10-03T15:03:31.882405Z"
+          }
+        ],
+        "job_event_counts": [
+          {
+            "type": "queued",
+            "count": 1,
+            "first_at": "2026-10-03T15:03:31.882603Z",
+            "last_at": "2026-10-03T15:03:31.882603Z"
+          },
+          {
+            "type": "running",
+            "count": 1,
+            "first_at": "2026-10-03T15:03:31.927394Z",
+            "last_at": "2026-10-03T15:03:31.927394Z"
+          }
+        ]
+      }
+    }
+  ],
+  "limits": "No input/body/credential/actor/command/receipt/ledger document read or output. No DB bytes copied or hashed. No process or test body executed. State read after completed full gate; no timing cause inference or recovery attempted."
+}
