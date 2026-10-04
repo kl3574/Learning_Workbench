@@ -1,16 +1,32 @@
 """Real local preparation, consent consumption and checked control reads."""
+import asyncio
+from collections.abc import AsyncIterator
 from fastapi import APIRouter, Depends, Request
+from starlette.concurrency import run_in_threadpool
+from starlette.responses import StreamingResponse
 from packages.contracts import domain_models as dm
+from packages.contracts.canonical import canonical_bytes
 from ..application.codex_turn import CodexTurnService
 from ..application.errors import ApiError
 from ..codex_turn_dto import CodexTurnPrepareWrite, CodexTurnPreparationView, CodexTurnPage, CodexTurnControlView, CodexTurnStartWrite, CodexTurnStartAck, CodexTurnResultView, CodexInterruptWrite, CodexInterruptAck
-from ..codex_turn_dto import CodexArtifactManifestView
+from ..codex_turn_dto import CodexArtifactManifestView, CodexTurnEvent
+from ..infrastructure.security import authenticate
 from .codex_bootstrap_http import no_control_body
 from .content_http import query_fields
 from .http import current_identity, verify_write
 from .practice_http import private_response
 from .provider_http import unique_control_headers, command_key, COMMAND_PARAMETER
-from .tutor_http import PAGE_PARAMETERS
+from .tutor_http import PAGE_PARAMETERS, EVENT_PARAMETERS, event_cursor
+
+
+class CodexStreamResponse(StreamingResponse):
+    media_type = 'text/event-stream'
+
+
+def encode_event(value: CodexTurnEvent) -> bytes:
+    checked = CodexTurnEvent.model_validate(value.model_dump(mode='json'))
+    return (f'id: {checked.run_id}:{checked.seq}\nevent: {checked.payload.type}\ndata: '.encode()
+        + canonical_bytes(checked.model_dump(mode='json')) + b'\n\n')
 
 
 def create_codex_turn_router(service: CodexTurnService) -> APIRouter:
@@ -46,6 +62,53 @@ def create_codex_turn_router(service: CodexTurnService) -> APIRouter:
         dependencies=[Depends(no_control_body), Depends(query_fields())])
     def result(id: dm.Id, request: Request) -> CodexTurnResultView:
         return service.read_result(request.state.identity,id)
+
+    @router.get('/turns/{id}/events', response_model=CodexTurnEvent,
+        response_class=CodexStreamResponse, dependencies=[Depends(no_control_body)],
+        responses={200: {'content': {'text/event-stream': {'schema': {
+            'type':'object', '$ref':'#/components/schemas/CodexTurnEvent'}}}},
+            **{code: {'model': None, 'content': {'application/json': {
+                'schema': {'$ref': '#/components/schemas/ErrorEnvelope'}}}}
+                for code in (400, 401, 403, 404, 405, 409, 412, 413, 422, 500, 503)}},
+        openapi_extra={'parameters': EVENT_PARAMETERS})
+    async def events(id: dm.Id, request: Request) -> CodexStreamResponse:
+        # Original ownership/Policy/history admission precedes cursor parsing.
+        current, _ = await run_in_threadpool(service.event_snapshot, request.state.identity, id)
+        cursor = event_cursor(request, current.job.id, current.last_seq)
+        initial = request.state.identity
+
+        async def observe() -> AsyncIterator[bytes]:
+            nonlocal cursor
+            while not await request.is_disconnected():
+                try:
+                    fresh = await run_in_threadpool(authenticate, request.app.state.database, request)
+                    if (fresh.id, fresh.workspace_id, fresh.role) != (initial.id, initial.workspace_id, initial.role):
+                        return
+                    view, stored = await run_in_threadpool(service.event_snapshot, fresh, id)
+                    for item in stored:
+                        if item.seq <= cursor:
+                            continue
+                        delivery = await run_in_threadpool(authenticate, request.app.state.database, request)
+                        if (delivery.id, delivery.workspace_id, delivery.role) != (initial.id, initial.workspace_id, initial.role):
+                            return
+                        await run_in_threadpool(service.authorize_events, delivery, id)
+                        if (item.turn_id != id or item.run_id != view.job.id or item.seq != cursor + 1):
+                            raise ApiError(409, 'CODEX_HISTORY_DAMAGED', '任务事件顺序未通过核验。')
+                        cursor = item.seq
+                        yield encode_event(item)
+                        if item.payload.type == 'terminal':
+                            return
+                    if view.execution == 'terminal' and cursor == view.last_seq:
+                        return
+                except ApiError:
+                    # No synthetic failure event/body after headers. Closing
+                    # this observer never cancels or starts the actual Job.
+                    return
+                await asyncio.sleep(0.25)
+
+        return CodexStreamResponse(observe(), headers={
+            'Cache-Control':'no-store', 'Vary':'Cookie', 'X-Accel-Buffering':'no',
+        })
 
     @router.get('/sessions/{id}/turns/{turn_id}/artifacts', response_model=CodexArtifactManifestView,
         dependencies=[Depends(no_control_body), Depends(query_fields())])
