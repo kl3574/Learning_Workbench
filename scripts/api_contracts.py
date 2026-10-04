@@ -293,6 +293,12 @@ def api_artifacts(openapi: dict, catalog: dict, provenance: dict[str, str]) -> d
             if response_kind == "sse" and (method, path) not in {
                     ("get", "/api/v1/runs/{id}/events"), ("get", "/api/v1/codex/turns/{id}/events")}:
                 raise ValueError("SSE operation requires its explicit generated adapter")
+            if (method, path) == ('get', '/api/v1/runs/{id}/events'):
+                tutor_models = {'TutorQueuedEvent', 'TutorContextReadyEvent', 'TutorRetrievalCompletedEvent',
+                    'TutorAnswerDeltaEvent', 'TutorCitationEvent', 'TutorApprovalRequiredEvent', 'TutorUsageEvent',
+                    'TutorCompletedEvent', 'TutorFailedEvent', 'TutorCancelledEvent'}
+                if response_kind != 'sse' or response_models != tutor_models:
+                    raise ValueError('Tutor SSE requires its original exact event union, never the Codex wrapper')
             if (method, path) == ('get', '/api/v1/codex/turns/{id}/events'):
                 model = schemas.get('CodexTurnEvent', {})
                 fields = {'turn_id', 'run_id', 'seq', 'occurred_at', 'payload'}
@@ -300,7 +306,7 @@ def api_artifacts(openapi: dict, catalog: dict, provenance: dict[str, str]) -> d
                 names = ['CodexTurnStatusEvent', 'CodexTurnAnswerEvent', 'CodexTurnApprovalEvent',
                     'CodexTurnUsageEvent', 'CodexTurnManifestEvent', 'CodexTurnTerminalEvent']
                 if (response_kind != 'sse' or response_models != {'CodexTurnEvent'}
-                        or model.get('additionalProperties') is not False
+                        or model.get('type') != 'object' or model.get('additionalProperties') is not False
                         or set(model.get('properties', {})) != fields or set(model.get('required', [])) != fields
                         or union.get('discriminator', {}).get('propertyName') != 'type'
                         or union.get('oneOf') != [{'$ref':'#/components/schemas/' + name} for name in names]
