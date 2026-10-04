@@ -14,7 +14,7 @@ from services.api.app.infrastructure.provider_transport import ProviderTransport
 from services.api.app.infrastructure.codex_probe import LocalCodexProbe
 from services.api.app.main import create_app
 from services.api.app.serialization import canonical_json, content_sha256
-from tests.integration.test_codex_bootstrap_http import ControlledRuntime, approve, make_case
+from tests.integration.test_codex_bootstrap_http import Case, ControlledRuntime, approve, make_case
 from tests.integration.test_codex_turn_preparation_http import turn_body
 from tests.integration.test_codex_turn_consent_http import preview_body
 
@@ -37,7 +37,7 @@ class HistoricalOnlyRuntime(ControlledRuntime):
 
 
 @pytest.fixture
-def closure_case(tmp_path):
+def closure_case(tmp_path, request):
     runtime = HistoricalOnlyRuntime()
     case = make_case(tmp_path, codex_bootstrap_runtime=runtime)
     case.app.state.provider_service.secret_store.initialize()
@@ -49,10 +49,24 @@ def closure_case(tmp_path):
     _, _, body = approve(case)
     response = case.post('sessions', body, 'closure-session')
     assert response.status_code == 201
+    case.app.state.closure_bootstrap_body = body
+    case.app.state.closure_bootstrap_ack = response.content
     try:
         yield case, runtime, response.json()['id']
     finally:
         case.client.close()
+        # Optional private evidence records only named counts; no cookies,
+        # messages, SQL, paths, credentials, request/response bodies or IDs.
+        import os
+        import json
+        from pathlib import Path
+        target = os.environ.get('LWB_CLOSURE_CASE_RECEIPTS')
+        counts = getattr(case.app.state, 'closure_observed_execution_seams', None)
+        if target and counts is not None:
+            with Path(target).open('a') as stream:
+                stream.write(json.dumps({'test': request.node.nodeid, 'counts': counts,
+                    'scope': 'new unavailable phase after separately declared synthetic setup',
+                    'synthetic_bootstrap_setup_calls': len(runtime.calls)})+'\n')
 
 
 def owned_material(case, value):
@@ -80,6 +94,7 @@ def freeze_execution_seams(case, runtime, monkeypatch):
     monkeypatch.setattr(SyntheticCodexExecutor, 'execute', forbidden('model_executor'))
     monkeypatch.setattr(ProviderTransport, 'stream', forbidden('model_transport'))
     monkeypatch.setattr(CodexOperationRegistry, 'execute', forbidden('tool'))
+    case.app.state.closure_observed_execution_seams = calls
     return calls
 
 
@@ -286,4 +301,139 @@ def test_learner_reads_safe_control_but_not_private_preparation_and_cannot_chang
     with case.app.state.database.transaction(immediate=False) as conn:
         with pytest.raises(ApiError):
             author_execution_identity(conn, case.app.state.database.workspace_id(), case.actor_id)
+    assert case.dump() == before and not any(calls.values())
+
+
+def completed_pair_setup(case, runtime, sid, large):
+    """Two explicit memory protocol-peer calls in setup, never production proof."""
+    from services.api.app.application.provider_budget import ProofRegistry
+    from services.api.app.application.provider_codex_profile import CodexProofRegistry, SyntheticCodexProof
+    from services.api.app.provider_dto import ProviderConfigView
+    from tests.integration.test_codex_turn_dispatch_http import make_dispatch_case, start_body
+    from tests.integration.test_codex_turn_consent_http import full_preview_body
+    response = case.client.put('/api/v1/providers/codex_peer/config', json={
+        'expected_revision': 0, 'adapter': 'official_responses', 'base_url': 'http://127.0.0.1:43871',
+        'model': 'synthetic-peer', 'embedding_model': None, 'endpoint_policy': 'explicit_loopback', 'pricing': None,
+    }, headers={**case.headers, 'Idempotency-Key': 'peer-config'})
+    assert response.status_code == 200
+    assert case.client.post('/api/v1/providers/codex_peer/secret', json={
+        'expected_revision': 1, 'secret': 'synthetic-memory-peer-only'},
+        headers={**case.headers, 'Idempotency-Key': 'peer-secret'}).status_code == 200
+    config = ProviderConfigView.model_validate(case.client.get('/api/v1/providers/codex_peer/config').json())
+    with case.app.state.database.transaction(immediate=False) as conn:
+        identity = author_execution_identity(conn, case.app.state.database.workspace_id(), case.actor_id)
+        original = case.app.state.codex_bootstrap_service.checked_sessions(conn, identity)[sid]
+    proof = SyntheticCodexProof.create(registration_id='synthetic_closure_history_setup', config=config,
+        bootstrap_sha256=content_sha256(original), model_versions=['synthetic-peer'], kind='local_exact',
+        max_input_tokens=1000000, max_output_tokens=1024, shared_context_tokens=2000000, valid_until=None)
+    factory = make_dispatch_case((case, runtime, sid, ProofRegistry(codex=CodexProofRegistry([proof])), None, b''))
+    peer, _, _, _, _, _ = next(factory)
+    expected = []
+    try:
+        for number in range(2):
+            message = (str(number)*7000) if large else 'Completed memory peer task '+str(number)
+            body = {'message': message, 'context_refs': [], 'expected_session_revision': 2+3*number,
+                    'provider_id': 'codex_peer', 'tools': {'max_tool_calls': 0, 'wall_seconds': 30}}
+            preparation = peer.post(f'sessions/{sid}/turn-preparations', body, 'history-prepare-'+str(number))
+            assert preparation.status_code == 202
+            value = preparation.json()
+            proposal = peer.post('consent-previews', full_preview_body(value), 'history-preview-'+str(number))
+            assert proposal.status_code == 201
+            consent = peer.post('consents', {'proposal_id': proposal.json()['id'],
+                'proposal_sha256': proposal.json()['proposal_sha256']}, 'history-grant-'+str(number))
+            assert consent.status_code == 201
+            assert peer.post(f'sessions/{sid}/turns', start_body(value, consent.json()),
+                'history-start-'+str(number)).status_code == 202
+            assert peer.app.state.codex_turn_worker.run_once() is True
+            assert peer.get('turns/'+value['turn_id']).json()['outcome'] == 'completed'
+            with peer.app.state.database.transaction(immediate=False) as conn:
+                owner = peer.app.state.codex_turn_service.outbound_owner
+                states, _ = owner.owned_states(conn, peer.app.state.database.workspace_id())
+                receipt = states[value['turn_id']].finished
+            expected.append((value['turn_id'], message, receipt.answer))
+        assert len(peer.app.state.synthetic_transport_calls) == 2
+        return expected
+    finally:
+        factory.close()
+
+
+@pytest.mark.parametrize('large', [False, True])
+def test_default_v4_keeps_verified_complete_pairs_or_omits_whole_pairs_without_new_execution(closure_case, large, monkeypatch):
+    case, runtime, sid = closure_case
+    expected = completed_pair_setup(case, runtime, sid, large)
+    calls = freeze_execution_seams(case, runtime, monkeypatch)
+    body = turn_body(8)
+    response = case.post(f'sessions/{sid}/turn-preparations', body, 'after-history')
+    assert response.status_code == 202
+    value = response.json()
+    material = owned_material(case, value)
+    context = material.context
+    assert context.version == 'codex-turn-context-v4'
+    retained = [expected[-1]] if large else expected
+    omitted = expected[:1] if large else []
+    assert [(item.turn_id, item.user, item.answer) for item in context.history] == retained
+    assert [(item.turn_id, item.user, item.answer) for item in context.omitted_history] == omitted
+    assert value['summary']['history_turn_ids'] == [item[0] for item in retained]
+    assert context.input.version == 'codex-turn-input-v1' and context.input.runtime.implemented is False
+    assert case.app.state.codex_turn_worker.executor is None
+    before = case.dump()
+    assert case.get('turn-preparations/'+value['id']).json() == value
+    assert case.post(f'sessions/{sid}/turn-preparations', body, 'after-history').content == response.content
+    assert case.post('sessions', case.app.state.closure_bootstrap_body, 'closure-session').content == case.app.state.closure_bootstrap_ack
+    refused = case.post('consent-previews', preview_body(value), 'history-refuse')
+    assert refused.status_code == 503 and refused.json()['error']['code'] == 'CODEX_INPUT_PROOF_UNAVAILABLE'
+    assert case.dump() == before and not any(calls.values())
+
+
+@pytest.mark.parametrize('with_history', [False, True])
+def test_explicit_legacy_context_factory_and_original_decoder_bytes_remain_readable(closure_case, with_history):
+    """New codec fixture via unchanged legacy factory, never rewriting old facts."""
+    from services.api.app.application.codex_turn_context import CodexTurnContext
+    from services.api.app.application.codex_turn_execution_models import CodexCompletedHistory
+    case, _, sid = closure_case
+    value = prepare(case, sid).json()
+    material = owned_material(case, value)
+    legacy = CodexTurnContext(case.app.state.database)
+    # These are declared manual codec test data, not a claimed Provider receipt.
+    history = [CodexCompletedHistory(turn_id='legacy_codec_pair', user='Prior user', answer='Prior answer',
+        receipt_sha256='a'*64, output_sha256=None)] if with_history else []
+    with case.app.state.database.transaction() as conn:
+        identity = author_execution_identity(conn, case.app.state.database.workspace_id(), case.actor_id)
+        context = legacy.prepare_turn(conn, identity, material.input, '2026-10-01T00:00:00Z', history)
+        summary = legacy.summary(context)
+    expected_version = 'codex-turn-context-v3' if with_history else 'codex-turn-context-v1'
+    assert context.version == expected_version
+    expected = canonical_bytes(context)
+    before = case.dump()
+    with case.app.state.database.transaction(immediate=False) as conn:
+        identity = author_execution_identity(conn, case.app.state.database.workspace_id(), case.actor_id)
+        assert canonical_bytes(legacy.verify_turn(conn, identity, material.input, summary)) == expected
+    assert case.dump() == before
+
+
+def test_unavailable_context_full_reference_source_survives_metadata_advance_as_original_fact(closure_case, monkeypatch):
+    from tests.integration.test_codex_turn_preparation_http import identity
+    from tests.integration.test_retrieval import publish_small
+    from services.api.app.infrastructure.content_repository import reference
+    from services.api.app.application.content import ContentService
+    case, runtime, sid = closure_case
+    blocks, _, _ = publish_small(case.app.state.database, identity(case), 'known-v4-source', ['Exact public source α\n'])
+    calls = freeze_execution_seams(case, runtime, monkeypatch)
+    body = {**turn_body(), 'context_refs': [reference(blocks[0]).model_dump()]}
+    response = case.post(f'sessions/{sid}/turn-preparations', body, 'v4-source')
+    assert response.status_code == 202
+    value = response.json()
+    context = owned_material(case, value).context
+    assert context.evidence[0].text == 'Exact public source α\n'
+    original = canonical_bytes(context)
+    changed = blocks[0].model_copy(update={'revision': 2, 'title': 'Later public metadata'})
+    ContentService(case.app.state.database).publish(identity(case).workspace_id, [changed], {changed.body_path: b'Exact public source \xce\xb1\n'})
+    before = case.dump()
+    read = case.get('turn-preparations/'+value['id'])
+    assert read.status_code == 200 and read.json()['validity'] == 'changed'
+    assert read.json()['summary'] == value['summary']
+    assert case.post(f'sessions/{sid}/turn-preparations', body, 'v4-source').content == response.content
+    with case.app.state.database.transaction(immediate=False) as conn:
+        sources = case.app.state.codex_turn_service.owned_outbound_sources(conn, case.app.state.database.workspace_id())
+        assert canonical_bytes(sources[value['turn_id']].material.context) == original
     assert case.dump() == before and not any(calls.values())
