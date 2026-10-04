@@ -85,7 +85,10 @@ def test_completed_operation_then_interrupt_preserves_full_original_decision(con
         assert stop_ack.status_code == 200 and stop_ack.json()['status'] == 'interrupt_requested'
         replay = decision(case, identifier, body, 'completed-approve')
         assert replay.status_code == 200 and replay.content == original_ack
-        assert approval(case, identifier) == completed
+        control = case.get('turns/' + prepared['turn_id']).json()
+        # The complete decision ACK is immutable; the view projects current Job facts.
+        assert approval(case, identifier) == {**completed,
+            'job': control['job'], 'job_revision': control['job_revision']}
         receipts.append((identifier, body, original_ack, completed, stop_body, stop_ack.content))
     assert run_peer(case, observe) == [True]
     assert len(receipts) == 1 and len(case.app.state.synthetic_transport_calls) == 1
@@ -94,7 +97,8 @@ def test_completed_operation_then_interrupt_preserves_full_original_decision(con
     current = case.get('turns/' + prepared['turn_id'])
     assert current.status_code == 200 and current.json()['outcome'] == 'cancelled'
     assert current.json()['approval_controls'][0]['revision'] == 4
-    assert approval(case, identifier) == completed
+    assert approval(case, identifier) == {**completed,
+        'job': current.json()['job'], 'job_revision': current.json()['job_revision']}
     replay = decision(case, identifier, body, 'completed-approve')
     assert replay.status_code == 200 and replay.content == original_ack
     assert case.post('sessions/' + prepared['session_id'] + '/interrupt',
