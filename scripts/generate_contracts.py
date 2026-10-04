@@ -22,6 +22,7 @@ from scripts.tutor_contracts import tutor_artifacts
 from scripts.authoring_contracts import authoring_artifacts
 from scripts.restore_numeric_contracts import restore_numeric_model_artifacts
 from scripts.codex_bootstrap_contracts import codex_bootstrap_artifacts
+from scripts.codex_turn_contracts import codex_turn_artifacts
 
 
 PROVIDER_OPERATIONS = {
@@ -312,7 +313,8 @@ def artifacts(root: Path = ROOT) -> dict[Path, bytes]:
                         **tutor_artifacts(ports, openapi, provenance),
                         **authoring_artifacts(ports, openapi, provenance),
                         **restore_numeric_model_artifacts(provenance),
-                        **codex_bootstrap_artifacts(provenance)}.items():
+                        **codex_bootstrap_artifacts(provenance),
+                        **codex_turn_artifacts(provenance)}.items():
         target = "packages/contracts/generated/" + name
         if isinstance(value, str):
             output[root / target] = value.encode("utf-8")
