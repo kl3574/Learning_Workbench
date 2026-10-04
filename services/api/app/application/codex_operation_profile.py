@@ -102,13 +102,17 @@ class CodexOperationRegistry:
         closure = LiteralOperationClosure(version='codex-synthetic-literal-operation-v1', profile=profile,
             argv=['synthetic-memory-literal-v1', command.text], environment={}, workspace_id=workspace,
             turn_id=turn, output_namespace='turn_outputs', command=command)
-        operation = CodexCommandOperation(kind='command', command_text=text, cwd='turn_outputs',
-            executable_sha256=profile.executable_sha256, environment_sha256=content_sha256({}), read_files=[],
+        return closure, self.projection(closure)
+
+    @staticmethod
+    def projection(closure: LiteralOperationClosure):
+        operation = CodexCommandOperation(kind='command', command_text=canonical_bytes(closure.command).decode(), cwd='turn_outputs',
+            executable_sha256=closure.profile.executable_sha256, environment_sha256=content_sha256({}), read_files=[],
             writable_area='turn_outputs', filesystem_scope_sha256=content_sha256({
-                'version': 'codex-literal-namespace-v1', 'workspace_id': workspace, 'turn_id': turn,
+                'version': 'codex-literal-namespace-v1', 'workspace_id': closure.workspace_id, 'turn_id': closure.turn_id,
                 'namespace': 'turn_outputs', 'host_paths': [], 'files_read': [], 'files_written': []}),
-            network='denied', operation_profile_sha256=content_sha256(profile))
-        return closure, operation
+            network='denied', operation_profile_sha256=content_sha256(closure.profile))
+        return operation
 
     def execute(self, closure: LiteralOperationClosure, operation_sha256: str) -> LiteralOperationResult:
         if not self.available(closure.profile):

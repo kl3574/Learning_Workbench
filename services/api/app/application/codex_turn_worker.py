@@ -107,7 +107,8 @@ class CodexTurnWorker:
             _, _, full_history = self.turns._owned_state(conn, workspace)
             approvals = self.turns.approvals.verify_history(conn, workspace, full_history)
             pending = [value for value in approvals.values() if value.operation.turn_id == turn.control.id
-                and value.decided is None and value.closed is None]
+                and value.closed is None and value.finished is None
+                and (value.decided is None or value.status == 'approved')]
             if pending and outcome == 'completed':
                 outcome, code = 'failed', 'CODEX_OPERATION_UNSUPPORTED'
             _, _, full_history = self.turns._owned_state(conn, workspace)
@@ -263,6 +264,13 @@ class CodexTurnWorker:
                 or type(self.executor) is not SyntheticCodexExecutor or self.turns.approvals is None):
             raise ApiError(409, 'CODEX_BINDING_INVALID', '没有受检的活跃回调实例。')
         return self.turns.approvals.receive(context[0], context[1], context[2], raw)
+
+    def execute_operation(self, identifier: str):
+        context = self._callback_context
+        if (context is None or context[3] != threading.get_ident()
+                or type(self.executor) is not SyntheticCodexExecutor or self.turns.approvals is None):
+            raise ApiError(409, 'CODEX_BINDING_INVALID', '没有受检的活跃回调实例。')
+        return self.turns.approvals.execute_owned_operation(context[0], context[1], context[2], identifier)
 
     def recover(self) -> int:
         workspace=self.database.workspace_id()

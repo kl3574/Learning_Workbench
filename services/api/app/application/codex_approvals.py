@@ -25,9 +25,15 @@ from .errors import ApiError
 from .providers import validate_key
 
 
-class CodexApprovalsService:
-    def __init__(self, turns):
+from .codex_operation_models import SupportedOperation, SupportedCreated, OperationFinished
+from .codex_operation_profile import CodexOperationRegistry
+from .codex_operation_execution import CodexOperationExecution
+
+
+class CodexApprovalsService(CodexOperationExecution):
+    def __init__(self, turns, operations=None):
         self.turns, self.database = turns, turns.database
+        self.operations = operations if operations is not None else CodexOperationRegistry()
 
     def verify_history(self, conn, workspace, history):
         if self.turns.outbound_owner is None:
@@ -36,8 +42,7 @@ class CodexApprovalsService:
         bootstrap = self.turns.bootstrap.checked_owned_sessions(conn, workspace)
         return CodexApprovalRepository(conn, workspace).checked(history, provider, bootstrap)
 
-    @staticmethod
-    def control(state: CheckedApproval, turn):
+    def control(self, state: CheckedApproval, turn, conn=None, states=None, history=None):
         value = state.control
         validity = value.validity
         if validity != 'closed':
@@ -45,6 +50,14 @@ class CodexApprovalsService:
                 validity = 'closed'
             elif instant(utc_now()) >= instant(state.operation.expires_at):
                 validity = 'expired'
+            elif state.supported and conn is not None:
+                try:
+                    self.admit_operation(conn, state.operation.workspace_id, state, states, history)
+                except ApiError as error:
+                    if error.code == 'CODEX_HISTORY_DAMAGED':
+                        raise
+                    validity = ('unavailable' if error.code == 'CODEX_RUNTIME_UNAVAILABLE' else
+                        'expired' if error.code in {'CODEX_TIMEOUT', 'CODEX_CONSENT_EXPIRED'} else 'changed')
         return value.model_copy(update={'validity': validity})
 
     def read_pending_operation(self, conn, identity, identifier):
@@ -59,10 +72,13 @@ class CodexApprovalsService:
             session_id=operation.session_id, turn_id=operation.turn_id, run_id=operation.job_id,
             job=turn.control.job, job_revision=turn.control.job_revision, operation=operation.operation,
             operation_sha256=content_sha256(operation), created_at=operation.created_at, expires_at=operation.expires_at,
-            decision=state.control.decision, validity=self.control(state, turn).validity, execution='not_started',
+            decision=state.control.decision, validity=self.control(state, turn, conn, states, history).validity,
+            execution=state.finished.outcome if state.finished else 'started' if state.started else 'not_started',
             decided_at=state.events[1].occurred_at if state.decided else None,
-            started_at=None, finished_at=None, result_sha256=None,
-            error_code=state.closed.reason if state.closed else None)
+            started_at=state.events[2].occurred_at if state.started else None,
+            finished_at=state.events[3].occurred_at if state.finished else None,
+            result_sha256=content_sha256(state.finished.result) if state.finished and state.finished.result else None,
+            error_code=state.finished.error_code if state.finished else state.closed.reason if state.closed else None)
 
     def read(self, identity, identifier):
         with self.database.transaction(immediate=False) as conn:
@@ -95,23 +111,27 @@ class CodexApprovalsService:
         if body.decision == 'approve_once':
             if current.id != state.operation.actor_session_id:
                 raise ApiError(403, 'POLICY_DENIED', '新操作者不能接管原操作批准。')
-            raise ApiError(409, 'CODEX_OPERATION_UNSUPPORTED', '该回调缺少可核的完整执行闭包，只能拒绝。')
+            self.admit_operation(conn, current.workspace_id, state, states, history)
         if state.decided is not None or state.closed is not None:
             raise ApiError(409, 'CODEX_BINDING_INVALID', '原操作已经决定或关闭。')
         session, turn = self.turns._find(history, state.operation.turn_id)
         if turn.control.execution != 'active' or session.active_turn_id != turn.control.id:
             raise ApiError(409, 'CODEX_BINDING_INVALID', '原操作已不在活跃任务中。')
         ack = GenericApprovalDecisionAck(id=identifier, revision=2, actor_session_id=current.id,
-            operation_sha256=body.operation_sha256, decision='decline', applied=True,
+            operation_sha256=body.operation_sha256, decision=body.decision, applied=True,
             session_id=state.operation.session_id, turn_id=state.operation.turn_id,
             run_id=state.operation.job_id, job=turn.control.job)
         event = ApprovalDecided(kind='decided', command=ApprovalCommand(actor_session_id=current.id,
             key=key, body=body, ack=ack))
-        self._append(conn, current.workspace_id, history, state, event, utc_now())
+        now = utc_now()
+        if body.decision == 'approve_once' and instant(now) >= instant(state.operation.expires_at):
+            raise ApiError(409, 'CODEX_TIMEOUT', '原工具期限已过。')
+        self._append(conn, current.workspace_id, history, state, event, now)
         # The ordinary Jobs owner records a request; this does not claim a
         # remote cancellation or tool completion. The worker owns convergence.
-        self.turns.request_stop(conn, current, turn.control.job.id,
-            JobCancelRequest(expected_revision=turn.control.job_revision), 'approval-stop-'+identifier)
+        if body.decision == 'decline':
+            self.turns.request_stop(conn, current, turn.control.job.id,
+                JobCancelRequest(expected_revision=turn.control.job_revision), 'approval-stop-'+identifier)
         self.turns._state(conn, current)
         current_control_access(conn, current, write=False)
         return ack
@@ -173,7 +193,16 @@ class CodexApprovalsService:
                 created_at=now, expires_at=expiry.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z'))
             if conn.execute('SELECT 1 FROM approvals WHERE id=?', (operation.approval_id,)).fetchone() is not None:
                 raise ApiError(409, 'CODEX_BINDING_INVALID', '新审批标识与既有事实冲突。')
-            self._append(conn, workspace, history, None, ApprovalCreated(kind='created', operation=operation), now)
+            prepared = self.operations.prepare(workspace, turn_id, callback.request_text) if callback.method == 'command/requestApproval' else None
+            if prepared is not None:
+                closure, projected = prepared
+                supported = SupportedOperation.model_validate({**operation.model_dump(mode='json'),
+                    'version':'codex-supported-memory-operation-v1', 'operation':projected.model_dump(mode='json'),
+                    'closure':closure.model_dump(mode='json')})
+                event: ApprovalCreated | SupportedCreated = SupportedCreated(kind='created', operation=supported)
+            else:
+                event = ApprovalCreated(kind='created', operation=operation)
+            self._append(conn, workspace, history, None, event, now)
             _, _, latest = self.turns._owned_state(conn, workspace)
             self.verify_history(conn, workspace, latest)
             return operation.approval_id
@@ -190,5 +219,10 @@ class CodexApprovalsService:
         states = self.verify_history(conn, workspace, history)
         for state in states.values():
             _, turn = self.turns._find(history, state.operation.turn_id)
-            if state.operation.turn_id == turn_id and turn.control.execution == 'active' and state.decided is None and state.closed is None:
+            if state.operation.turn_id != turn_id or turn.control.execution != 'active' or state.closed or state.finished:
+                continue
+            if state.started is not None:
+                self._append(conn, workspace, history, state, OperationFinished(kind='finished',
+                    outcome='unknown', result=None, error_code='CODEX_OUTCOME_UNKNOWN'), utc_now())
+            elif state.decided is None or state.status == 'approved':
                 self._append(conn, workspace, history, state, ApprovalClosed(kind='closed', reason=reason), utc_now())
