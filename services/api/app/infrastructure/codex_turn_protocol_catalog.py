@@ -66,6 +66,8 @@ def serialize_interrupt(catalog: OfflineTurnProtocolCatalog, params: object) -> 
     """Canonical params only: no RPC envelope, owned mapping or send action."""
     schema = _schema(catalog, 'v2/TurnInterruptParams.json')
     parsed = strict_json(params) if isinstance(params, (str, bytes)) else params
+    if isinstance(parsed, ClosedTurnInterruptParams):
+        parsed = parsed.model_dump(by_alias=True)
     closed = ClosedTurnInterruptParams.model_validate(parsed)
     wire = closed.model_dump(by_alias=True)
     Draft7Validator(schema).validate(wire)
