@@ -10,8 +10,10 @@ from services.api.app.application.errors import ApiError
 from tests.integration.test_codex_generic_approval_http import callback_turn
 from tests.integration.test_codex_turn_dispatch_http import consent_case, base_consent_case
 from tests.integration.test_codex_bootstrap_http import make_case
+from tests.integration.test_assessment_learning_port import assessment_learning_state
 
 __all__ = ['consent_case', 'base_consent_case']
+assessment_state = assessment_learning_state
 
 
 def decision(case, identifier, body, key='decision'):
@@ -287,3 +289,68 @@ def test_original_acks_survive_application_reconstruction(consent_case):
         client.close()
     owners_unchanged = retained_owners() == retained
     assert owners_unchanged and len(runtime.calls) == 1
+
+
+def test_two_same_key_decisions_linearize_one_stop_and_original_ack(consent_case):
+    def observe(case, prepared, raw, identifier):
+        body = body_for(case, prepared['turn_id'])
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = list(pool.map(lambda _: decision(case, identifier, body), range(2)))
+        assert [value.status_code for value in results] == [200, 200]
+        assert results[0].content == results[1].content
+        control = case.get('turns/'+prepared['turn_id']).json()
+        assert control['cancel_requested'] is True and control['job_revision'] == 4
+        with case.app.state.database.transaction(immediate=False) as conn:
+            assert conn.execute('SELECT COUNT(*) FROM codex_approval_events').fetchone()[0] == 2
+            assert conn.execute('SELECT COUNT(*) FROM codex_approval_commands').fetchone()[0] == 1
+    case, prepared, _, _ = exercise(consent_case, observe)
+    assert case.get('sessions/'+prepared['session_id']).json()['revision'] == 6
+
+
+def test_other_workspace_cannot_read_or_decide_an_approval(consent_case, tmp_path):
+    other = make_case(tmp_path/'separate-workspace')
+    def observe(case, prepared, raw, identifier):
+        before, other_before = case.dump(), other.dump()
+        assert other.get('turns/'+prepared['turn_id']).status_code == 404
+        assert other.client.get('/api/v1/approvals/'+identifier).status_code == 404
+        assert decision(other, identifier, body_for(case, prepared['turn_id'])).status_code == 404
+        unchanged = case.dump() == before and other.dump() == other_before
+        assert unchanged
+    try:
+        exercise(consent_case, observe)
+    finally:
+        other.client.close()
+
+
+@pytest.mark.parametrize('mode', ['independent', 'open_book'])
+def test_policy_keeps_safe_control_and_original_decline_ack(assessment_state, mode):
+    from tests.integration.test_assessment_policy import start
+    from tests.integration.test_codex_turn_preparation_http import identity
+    from tests.integration.test_codex_turn_consent_http import make_consent_case
+    from tests.integration.test_codex_turn_dispatch_http import make_dispatch_case
+    database, _, fixture, assessment = assessment_state
+    for base in make_consent_case(database.settings.data_dir):
+        for values in make_dispatch_case(base):
+            original = []
+            def observe(case, prepared, raw, identifier):
+                if mode == 'open_book':
+                    start((database, identity(case), fixture, assessment), mode=mode)
+                    before = case.dump()
+                    assert case.client.get('/api/v1/approvals/'+identifier).status_code == 409
+                    assert case.get('turns/'+prepared['turn_id']).json()['approval_ids'] == [identifier]
+                    unchanged = case.dump() == before
+                    assert unchanged
+                body = body_for(case, prepared['turn_id'])
+                response = decision(case, identifier, body)
+                assert response.status_code == 200
+                original.append((body, response.content))
+            case, prepared, _, identifier = exercise(values, observe)
+            if mode == 'independent':
+                start((database, identity(case), fixture, assessment), mode=mode)
+            before = case.dump()
+            assert case.client.get('/api/v1/approvals/'+identifier).status_code == 409
+            assert case.get('turns/'+prepared['turn_id']).json()['approval_ids'] == [identifier]
+            response = decision(case, identifier, original[0][0])
+            assert response.status_code == 200 and response.content == original[0][1]
+            unchanged = case.dump() == before
+            assert unchanged
