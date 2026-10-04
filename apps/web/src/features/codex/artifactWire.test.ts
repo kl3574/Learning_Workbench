@@ -1,3 +1,4 @@
+import { Blob as BinaryBlob } from 'node:buffer'
 import { IDBFactory } from 'fake-indexeddb'
 import { afterEach, expect, test, vi } from 'vitest'
 import { DraftStore } from '../../workbench/DraftStore'
@@ -30,7 +31,7 @@ test('actual generated manifest, aggregate and binary download routes check orig
  const { artifactImport, artifactData } = await import('./artifactFixtures'), paths: string[] = []
  vi.stubGlobal('fetch', vi.fn(async (path: string, init: RequestInit) => {
   paths.push(path); expect(init.method).toBe('GET')
-  if (path.endsWith('/download')) return new Response(artifactData)
+  if (path.endsWith('/download')) return Object.assign(new Response(artifactData), { blob: async () => new BinaryBlob([artifactData]) })
   return new Response(JSON.stringify(path.includes('artifact-imports') ? artifactImport() : artifactManifest()))
  }))
  const m = await artifactClient.manifest('codex_session_synthetic', 'turn_artifact_synthetic')

@@ -46,3 +46,6 @@ export const artifactManifest = (): CodexArtifactManifestView => ({
 export const artifactData = '# 合成材料 α\n\n未审。\n'
 export const artifactAck = { id: 'job_artifact_import', status: 'queued' as const }
 export const artifactImport = (): CodexArtifactImportView => ({ job: { ...artifactAck, status: 'completed' }, session_id: 'codex_session_synthetic', turn_id: 'turn_artifact_synthetic', manifest_sha256: artifactManifest().manifest_sha256, actor_session_id: artifactActor, items: [{ artifact_id: 'artifact_synthetic_md', source_sha256: artifactManifest().manifest.entries[0].sha256, import_id: 'import_artifact_child', job: { id: 'job_artifact_child', status: 'awaiting_approval' } }] })
+
+export const artifactUnknownManifest = (): CodexArtifactManifestView => { const v = artifactManifest(); v.manifest.source_outcome = 'unknown'; v.manifest_sha256 = 'bc745cf1a1807c0c5252f42a78c8f66540e308c041e8c7db4c53b2713f5de93e'; return v }
+export const artifactEmptyManifest = (): CodexArtifactManifestView => { const v = artifactManifest(); v.manifest.entries = []; v.manifest.total_bytes = 0; v.manifest_sha256 = '62e7edbba47befff0c35b4802cb2b127dcfc9fea9aa413e9bc090b45ba27a4c9'; return v }

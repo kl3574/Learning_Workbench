@@ -35,9 +35,12 @@ export function useCodexArtifacts(workspace: string, writeAdmitted: boolean, por
  const hide = () => { actorRef.current = null; setIdentity(null); clearReads(); setCommands([]); setForms([]) }
  const begin = () => { if (!currentScope() || !workspace || working.current) return null; working.current = true; setBusy(true); setError(''); setMessage(''); return ++sequence.current }
  const finish = (token: number) => { if (valid(token)) { working.current = false; setBusy(false) } }
- const fail = (reason: unknown) => {
+ const fail = (reason: unknown, reading = false) => {
   if (denied(reason)) hide()
   setError(denied(reason) ? '产物操作的当前权限或原 actor 已变化；原命令与表单保留。'
+   : reading && reason instanceof ApiError && reason.status === 404 ? '当前没有可读取的产物记录（404）；未宣称模型已执行或已产生文件。原选择保留。'
+   : reason instanceof ApiError && reason.status === 503 ? 'BLOCKED：当前产物、来源或运行证明不可用（503）；没有启动模型或替换原命令。'
+   : reading ? '当前产物读取或字节核验未完成；未交付新内容，原选择和命令保留。'
    : reason instanceof ApiError && reason.status === 412 ? '产物版本已变化（412）；原 key、完整 body 和只读基准保留，请独立 GET。'
    : reason instanceof ApiError && reason.status === 409 ? '产物绑定冲突（409）；原命令保留，不自动换 key 或替换选择。'
    : reason instanceof ApiError && ['CODEX_INPUT_PROOF_UNAVAILABLE', 'CODEX_RUNTIME_UNAVAILABLE'].includes(reason.code ?? '') ? `BLOCKED：${reason.code}；没有完整证明或可用执行器，未宣称已执行。原命令保留。`
@@ -102,7 +105,7 @@ export function useCodexArtifacts(workspace: string, writeAdmitted: boolean, por
    if (v.manifest.session_id !== captured.fields.session_id || v.manifest.turn_id !== captured.fields.turn_id) throw new Error('Wrong manifest')
    await fresh(token, true, actor)
    if (valid(token) && formRef.current?.snapshot_id === captured.snapshot_id) { setManifest(v); setMessage('当前清单已读取；原选择和原 ACK 保持，没有 POST。') }
-  } catch (e) { if (valid(token)) fail(e) } finally { finish(token) }
+  } catch (e) { if (valid(token)) fail(e, true) } finally { finish(token) }
  }
  const readImports = async (command: ArtifactCommand) => {
   if (!allowed || command.actor_session_id !== identity.actor_session_id || !command.ack) return
@@ -113,7 +116,7 @@ export function useCodexArtifacts(workspace: string, writeAdmitted: boolean, por
    const v = readArtifactImport(await port.imports(command.ack.id), command)
    await fresh(token, true, command.actor_session_id)
    if (valid(token)) setAggregate({ command, view: v })
-  } catch (e) { if (valid(token)) fail(e) } finally { finish(token) }
+  } catch (e) { if (valid(token)) fail(e, true) } finally { finish(token) }
  }
  const openPreview = async (importId: string) => {
   if (!allowed || !aggregate) return null
@@ -125,7 +128,7 @@ export function useCodexArtifacts(workspace: string, writeAdmitted: boolean, por
    if (!item) throw new Error('Wrong Import child')
    await fresh(token, true, actor)
    if (valid(token)) return { importId: item.import_id, jobId: item.job.id }
-  } catch (e) { if (valid(token)) fail(e) } finally { finish(token) }
+  } catch (e) { if (valid(token)) fail(e, true) } finally { finish(token) }
   return null
  }
  const download = async (entry: CodexArtifactEntry) => {
@@ -142,7 +145,7 @@ export function useCodexArtifacts(workspace: string, writeAdmitted: boolean, por
     setTimeout(() => { URL.revokeObjectURL(url); urls.current.delete(url) }, 15000)
     setMessage('已核对实际字节并发起受控下载；内容仍未审校。')
    }
-  } catch (e) { if (valid(token)) fail(e) } finally { finish(token) }
+  } catch (e) { if (valid(token)) fail(e, true) } finally { finish(token) }
  }
  async function execute(command: ArtifactCommand, existingToken?: number) {
   if (!ready || command.workspace_id !== workspace || command.actor_session_id !== identity.actor_session_id || command.ack || !allowed) return

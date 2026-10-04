@@ -1,10 +1,11 @@
+import { Blob as BinaryBlob } from 'node:buffer'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { IDBFactory } from 'fake-indexeddb'
 import { afterEach, expect, test, vi } from 'vitest'
 import { DraftStore } from '../../workbench/DraftStore'
 import { ApiError } from '../../api/client'
 import { deferred, session } from './bootstrapTestFixtures'
-import { artifactAck, artifactActor, artifactData, artifactImport, artifactManifest, artifactWorkspace } from './artifactFixtures'
+import { artifactAck, artifactActor, artifactData, artifactImport, artifactManifest, artifactWorkspace, artifactUnknownManifest, artifactEmptyManifest } from './artifactFixtures'
 import type { ArtifactPort } from './artifactClient'
 import { CodexArtifactsPanel } from './CodexArtifactsPanel'
 import { heldArtifactCommands, heldArtifactForms, releaseArtifactCommand, releaseArtifactForm } from './artifactMemory'
@@ -13,7 +14,7 @@ import { readArtifactCommand } from './artifactCommands'
 const stores: DraftStore[] = []
 const local = () => { const s = new DraftStore({ name: `artifact-panel-${crypto.randomUUID()}`, factory: new IDBFactory() }); stores.push(s); return s }
 const auth = () => ({ ...session(), workspace_id: artifactWorkspace, actor_session_id: artifactActor })
-const port = (): ArtifactPort => ({ session: vi.fn(async () => auth()), manifest: vi.fn(async () => artifactManifest()), import: vi.fn(async () => artifactAck), imports: vi.fn(async () => artifactImport()), download: vi.fn(async () => new Blob([artifactData])) })
+const port = (): ArtifactPort => ({ session: vi.fn(async () => auth()), manifest: vi.fn(async () => artifactManifest()), import: vi.fn(async () => artifactAck), imports: vi.fn(async () => artifactImport()), download: vi.fn(async () => new BinaryBlob([artifactData]) as unknown as Blob) })
 afterEach(async () => { cleanup(); heldArtifactCommands(artifactWorkspace).forEach(releaseArtifactCommand); heldArtifactForms(artifactWorkspace).forEach(releaseArtifactForm); await Promise.all(stores.splice(0).map(s => s.close())); vi.unstubAllGlobals(); vi.restoreAllMocks() })
 const refresh = async () => { fireEvent.click(screen.getByText('读取产物记录与权限')); await screen.findByText(/产物本机记录已读取/); await waitFor(() => expect((screen.getByText('读取产物记录与权限') as HTMLButtonElement).disabled).toBe(false)) }
 async function choose() {
@@ -93,8 +94,41 @@ test('manifest arriving after port replacement is not shown and never causes imp
 })
 test('fresh Policy denial after actual download bytes prevents any browser download delivery', async () => {
  const p = port(), store = local(), forms = local(), click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
- vi.mocked(p.download).mockImplementation(async () => { vi.mocked(p.session).mockResolvedValue({ ...auth(), role: 'learner' }); return new Blob([artifactData]) })
+ vi.mocked(p.download).mockImplementation(async () => { vi.mocked(p.session).mockResolvedValue({ ...auth(), role: 'learner' }); return new BinaryBlob([artifactData]) as unknown as Blob })
  render(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={p} store={store} formStore={forms} />); await choose()
  fireEvent.click(screen.getByText('受控下载 成果/说明.md')); await screen.findByText(/产物操作的当前权限或原 actor 已变化/)
  expect(p.download).toHaveBeenCalledTimes(1); expect(click).not.toHaveBeenCalled()
+})
+
+test('default unavailable manifest is honestly BLOCKED and never starts a model or import', async () => {
+ const p = port(), store = local(), forms = local(); vi.mocked(p.manifest).mockRejectedValue(new ApiError(503, 'private unavailable reason', 'CODEX_SOURCE_UNAVAILABLE'))
+ render(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={p} store={store} formStore={forms} />)
+ await refresh(); fireEvent.change(screen.getByLabelText('产物来源 session ID'), { target: { value: 'codex_session_synthetic' } }); fireEvent.change(screen.getByLabelText('产物来源 turn ID'), { target: { value: 'turn_artifact_synthetic' } })
+ fireEvent.click(screen.getByText('独立读取当前产物清单')); await screen.findByText(/BLOCKED：当前产物、来源或运行证明不可用/)
+ expect(p.import).not.toHaveBeenCalled(); expect(p.download).not.toHaveBeenCalled(); expect(screen.queryByLabelText('当前产物清单 GET')).toBeNull(); expect(screen.queryByText(/private unavailable reason/)).toBeNull()
+})
+test('restore also denies when Policy changes after reading the original local form, without creating a branch', async () => {
+ const p = port(), store = local(), forms = local(), original = snapshotArtifactForm(artifactWorkspace, artifactActor, { session_id: 'codex_session_synthetic', turn_id: 'turn_artifact_synthetic', selection: { basis: artifactManifest(), artifact_ids: ['artifact_synthetic_md'] } }, null)
+ await persistArtifactForm(original, forms)
+ render(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={p} store={store} formStore={forms} />); await refresh()
+ vi.mocked(p.session).mockResolvedValueOnce(auth()).mockResolvedValue({ ...auth(), active_open_book_attempt_id: 'attempt_active' })
+ fireEvent.click(screen.getByText(`恢复产物表单 ${original.draft_id} · 1`)); await screen.findByText(/产物操作的当前权限或原 actor 已变化/)
+ expect(Object.keys(await forms.load(artifactWorkspace))).toEqual([original.snapshot_id]); expect(screen.queryByLabelText('原清单选择')).toBeNull(); expect(p.import).not.toHaveBeenCalled()
+})
+test('new submit rechecks author before any write transport and preserves unsent selected form', async () => {
+ const p = port(), store = local(), forms = local()
+ render(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={p} store={store} formStore={forms} />); await choose()
+ await waitFor(async () => expect(Object.values(await forms.load(artifactWorkspace)).some(r => JSON.parse(r.text).fields.selection?.artifact_ids.length === 1)).toBe(true))
+ vi.mocked(p.session).mockResolvedValue({ ...auth(), role: 'learner' })
+ fireEvent.click(screen.getByText('明确新建所选产物的回导预览')); await screen.findByText(/产物操作的当前权限或原 actor 已变化/)
+ expect(p.import).not.toHaveBeenCalled(); expect(Object.values(await forms.load(artifactWorkspace)).some(r => JSON.parse(r.text).fields.selection?.artifact_ids.length === 1)).toBe(true)
+})
+
+test.each([['unknown', artifactUnknownManifest], ['empty', artifactEmptyManifest]] as const)('%s manifest is shown honestly and cannot become an import command', async (_kind, fixture) => {
+ const p = port(), store = local(), forms = local(); vi.mocked(p.manifest).mockResolvedValue(fixture())
+ render(<CodexArtifactsPanel workspace={artifactWorkspace} writeAdmitted port={p} store={store} formStore={forms} />)
+ await refresh(); fireEvent.change(screen.getByLabelText('产物来源 session ID'), { target: { value: 'codex_session_synthetic' } }); fireEvent.change(screen.getByLabelText('产物来源 turn ID'), { target: { value: 'turn_artifact_synthetic' } })
+ fireEvent.click(screen.getByText('独立读取当前产物清单')); await screen.findByLabelText('当前产物清单 GET')
+ expect((screen.getByText('使用此清单建立新选择') as HTMLButtonElement).disabled).toBe(true)
+ expect(p.import).not.toHaveBeenCalled(); expect(screen.queryByText('明确新建所选产物的回导预览')).toBeNull()
 })
