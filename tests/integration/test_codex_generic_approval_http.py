@@ -48,6 +48,7 @@ def test_real_callback_safe_basis_decline_and_immutable_ack(consent_case):
     case, prepared, request, frame = callback_turn(consent_case)
     worker, executor = case.app.state.codex_turn_worker, case.app.state.synthetic_executor
     receipts = []
+    errors = []
     def peer(gate):
         gate.request(request.body, endpoint=request.endpoint, max_output_tokens=64)
         identifier = worker.receive_operation(frame)
@@ -65,8 +66,17 @@ def test_real_callback_safe_basis_decline_and_immutable_ack(consent_case):
             headers={**case.headers, 'Idempotency-Key': 'original-decline'})
         assert ack.status_code == 200 and ack.json()['revision'] == 2
         receipts.append((identifier, body, ack.content))
-    executor.peer = peer
+    def observed(gate):
+        try:
+            peer(gate)
+        except Exception as error:
+            import traceback
+            errors.append({'type': type(error).__name__, 'code': getattr(error, 'code', None),
+                'frames': [(item.name, item.lineno) for item in traceback.extract_tb(error.__traceback__)]})
+            raise
+    executor.peer = observed
     assert worker.run_once() is True
+    assert errors == [], 'callback must yield checked facts without an internal exception'
     assert len(receipts) == 1, 'actual callback must yield a durable HTTP decision'
     identifier, body, original = receipts[0]
     before = case.dump()
