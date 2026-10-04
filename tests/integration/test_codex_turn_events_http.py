@@ -7,15 +7,15 @@ from starlette.requests import Request
 
 from services.api.app.codex_turn_dto import CodexTurnEvent
 from tests.integration.test_codex_turn_dispatch_http import (
-    base_consent_case, consent_case, queued,
+    base_consent_case, consent_case, queued, make_dispatch_case, assessment_state,
 )
-from tests.integration.test_codex_turn_consent_http import grant_fixture, consent_preparation
+from tests.integration.test_codex_turn_consent_http import grant_fixture, consent_preparation, make_consent_case
 from tests.integration.test_codex_artifact_manifest import execute
 from services.api.app.application.sessions import SessionService
 from services.api.app.dto import RoleRequest
 from services.api.app.infrastructure.security import COOKIE_NAME, authenticate
 
-__all__ = ['base_consent_case', 'consent_case']
+__all__ = ['base_consent_case', 'consent_case', 'assessment_state']
 
 
 def frames(response):
@@ -66,6 +66,7 @@ def test_real_completed_turn_events_replay_exact_answer_usage_without_execution(
     ('after_seq=-1', None, 400, 'SCHEMA_INVALID'),
     ('after_seq=1.0', None, 400, 'SCHEMA_INVALID'),
     ('after_seq=1e2', None, 400, 'SCHEMA_INVALID'),
+    ('after_seq=١', None, 400, 'SCHEMA_INVALID'),
     ('after_seq=9007199254740992', None, 400, 'SCHEMA_INVALID'),
     ('after_seq=00000000000000000', None, 400, 'SCHEMA_INVALID'),
     ('after_seq=0&after_seq=0', None, 400, 'SCHEMA_INVALID'),
@@ -86,6 +87,20 @@ def test_event_cursor_rejection_is_read_only(consent_case, query, header, status
     response = case.client.get('/api/v1/codex/turns/' + prepared['turn_id'] + '/events?' + query,
         headers={'Last-Event-ID':header} if header else {})
     assert response.status_code == status and response.json()['error']['code'] == code
+    assert case.dump() == before and len(case.app.state.synthetic_transport_calls) == 1
+
+
+def test_duplicate_cursor_header_and_missing_ownership_are_read_only(consent_case):
+    case, _, _, _, _, _ = consent_case
+    prep, _, _, _ = queued(consent_case)
+    assert case.app.state.codex_turn_worker.run_once() is True
+    url = '/api/v1/codex/turns/' + prep['turn_id'] + '/events'
+    before = case.dump()
+    cursor = prep['job']['id'] + ':0'
+    response = case.client.get(url, headers=[('Last-Event-ID',cursor),('Last-Event-ID',cursor)])
+    assert response.status_code == 400 and response.json()['error']['code'] == 'SCHEMA_INVALID'
+    response = case.get('turns/turn_missing/events?after_seq=not-decimal')
+    assert response.status_code == 404 and response.json()['error']['code'] == 'REFERENCE_MISSING'
     assert case.dump() == before and len(case.app.state.synthetic_transport_calls) == 1
 
 
@@ -174,3 +189,85 @@ def test_full_owner_damage_precedes_cursor_and_never_repairs(consent_case):
     response = case.get('turns/' + prep['turn_id'] + '/events?after_seq=not-decimal')
     assert response.status_code == 409 and response.json()['error']['code'] == 'CODEX_HISTORY_DAMAGED'
     assert case.dump() == before and len(case.app.state.synthetic_transport_calls) == 1
+
+
+def test_approval_required_is_original_member_once_before_terminal(consent_case):
+    from tests.integration.test_codex_generic_approval_http import callback_turn
+    case, prep, request, frame = callback_turn(consent_case)
+    recorded = []
+    def peer(gate):
+        gate.request(request.body, endpoint=request.endpoint, max_output_tokens=64)
+        identifier = case.app.state.codex_turn_worker.receive_operation(frame)
+        view = case.client.get('/api/v1/approvals/' + identifier).json()
+        body = {'expected_revision':view['revision'], 'operation_sha256':view['operation_sha256'],
+            'decision':'decline'}
+        response = case.client.post('/api/v1/approvals/' + identifier + '/decision', json=body,
+            headers={**case.headers,'Idempotency-Key':'decline-original'})
+        assert response.status_code == 200
+        recorded.append((identifier,body,response.content))
+    case.app.state.synthetic_executor.peer = peer
+    assert case.app.state.codex_turn_worker.run_once() is True and len(recorded) == 1
+    before = case.dump()
+    events = frames(case.get('turns/' + prep['turn_id'] + '/events'))
+    approvals = [e for e in events if e.payload.type == 'approval_required']
+    assert len(approvals) == 1 and approvals[0].payload.approval_id == recorded[0][0]
+    assert approvals[0].seq < events[-1].seq and events[-1].payload.type == 'terminal'
+    assert events[-1].payload.outcome == 'cancelled'
+    assert case.client.post('/api/v1/approvals/' + recorded[0][0] + '/decision',json=recorded[0][1],
+        headers={**case.headers,'Idempotency-Key':'decline-original'}).content == recorded[0][2]
+    assert frames(case.get('turns/' + prep['turn_id'] + '/events')) == events
+    assert case.dump() == before and len(case.app.state.synthetic_transport_calls) == 1
+
+
+def test_failed_turn_replays_original_completed_answer_and_usage(consent_case):
+    from services.api.app.application.errors import ApiError
+    case, _, _, _, _, _ = consent_case
+    prep, _, _, _ = queued(consent_case)
+    owner = case.app.state.codex_turn_service.outbound_owner
+    with case.app.state.database.transaction(immediate=False) as conn:
+        state = owner.owned_states(conn, case.app.state.database.workspace_id())[0][prep['turn_id']]
+        request = owner.prepared_request(state)
+    def peer(gate):
+        gate.request(request.body, endpoint=request.endpoint, max_output_tokens=64)
+        with pytest.raises(ApiError):
+            gate.request(request.body, endpoint=request.endpoint, max_output_tokens=64)
+    case.app.state.synthetic_executor.peer = peer
+    assert case.app.state.codex_turn_worker.run_once() is True
+    before = case.dump()
+    events = frames(case.get('turns/' + prep['turn_id'] + '/events'))
+    assert next(e.payload.text for e in events if e.payload.type == 'answer_delta') == 'Synthetic exact answer α\n'
+    assert next(e.payload.usage for e in events if e.payload.type == 'usage').output_tokens is not None
+    assert events[-1].payload.outcome == 'failed'
+    assert events[-1].payload.error_code == 'CODEX_NEW_OUTBOUND_CONSENT_REQUIRED'
+    assert case.dump() == before and len(case.app.state.synthetic_transport_calls) == 1
+
+
+@pytest.mark.parametrize('mode', ['independent','open_book'])
+def test_real_policy_entry_between_frames_closes_subject_stream(assessment_state, mode):
+    from tests.integration.test_assessment_policy import start
+    from tests.integration.test_codex_turn_preparation_http import identity
+    database, _, fixture, assessment = assessment_state
+    for original in make_consent_case(database.settings.data_dir):
+        for values in make_dispatch_case(original):
+            case, _, _, _, _, _ = values
+            prep, _, _, _ = queued(values)
+            assert case.app.state.codex_turn_worker.run_once() is True
+            endpoint = next(context.original_route.endpoint for context in iter_route_contexts(case.app.routes)
+                if isinstance(context.original_route, APIRoute) and context.path == '/api/v1/codex/turns/{id}/events')
+            async def observe():
+                async def receive():
+                    return {'type':'http.request', 'body':b'', 'more_body':False}
+                request = Request({'type':'http','method':'GET','path':'/api/v1/codex/turns/' + prep['turn_id'] + '/events',
+                    'app':case.app,'query_string':b'', 'headers':[(b'cookie',
+                        (COOKIE_NAME + '=' + case.client.cookies.get(COOKIE_NAME)).encode())]}, receive=receive)
+                request.state.identity = authenticate(case.app.state.database, request)
+                response = await endpoint(prep['turn_id'], request)
+                iterator = response.body_iterator
+                assert b'event: status\n' in await anext(iterator)
+                start((database,identity(case),fixture,assessment), mode=mode)
+                before = case.dump()
+                with pytest.raises(StopAsyncIteration):
+                    await anext(iterator)
+                assert case.dump() == before
+            asyncio.run(observe())
+            assert len(case.app.state.synthetic_transport_calls) == 1
