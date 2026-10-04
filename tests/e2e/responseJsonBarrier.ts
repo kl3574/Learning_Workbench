@@ -21,7 +21,7 @@ export async function observeNextResponseJson(page: Page, path: string) {
       }
       channel.port2.postMessage(null)
     }
-    const observedFetch: typeof window.fetch = function (input, init) {
+    const observedFetch: typeof window.fetch = function (this: unknown, input, init) {
       const promise = Reflect.apply(fetch, this, [input, init]) as ReturnType<typeof fetch>
       const url = new URL(input instanceof Request ? input.url : String(input), location.href).href
       const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase()
