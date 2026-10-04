@@ -61,3 +61,40 @@ class CheckedCodexImportStage:
     binding: CodexImportBinding
     status: ImportStatus
     job: dm.JobRef
+    preview_reached: bool
+    preview_receipt_sha256: str | None
+
+
+class CodexImportRecord(dm.StrictModel):
+    version: Literal['codex-import-record-v1']
+    binding: CodexImportBinding
+    original_artifact_id: dm.Id
+    filename: str
+    media_type: str
+    job_input_json: str
+    created_at: dm.UTC
+
+
+class CodexImportBatch(dm.StrictModel):
+    version: Literal['codex-import-batch-v1']
+    workspace_id: dm.Id
+    aggregate_job_id: dm.Id
+    records: Annotated[list[CodexImportRecord], Field(min_length=1, max_length=32)]
+
+
+class CodexImportPreviewReceipt(dm.StrictModel):
+    version: Literal['codex-import-preview-v1']
+    workspace_id: dm.Id
+    import_id: dm.Id
+    binding_sha256: dm.Sha256
+    job_revision: dm.Revision
+    preview_json: str
+    event_prefix_json: str
+
+
+CODEX_SOURCE_RIGHTS = 'user_selected_model_output; unreviewed; rights_not_verified'
+
+
+def codex_source_warning() -> dm.Warning:
+    return dm.Warning(code='CODEX_IMPORTED_MATERIAL_UNREVIEWED', severity='warning',
+        message='这是用户选择回导的未审模型材料；不代表人类原作、已核引用或数学、来源、教学审核通过。')

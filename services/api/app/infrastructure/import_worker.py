@@ -18,6 +18,8 @@ from ..application.draft_candidate_models import ResolvedDraftCandidate
 from ..application.evidence import EvidenceRecovery
 from ..application.grading import GradingWorker
 from ..application.imports import ImportService, safe_filename
+from ..application.import_codex_models import codex_source_warning
+from .import_codex_repository import CodexImportRepository
 from ..application.recommendations import RecommendationWorker
 from ..application.retrieval import RetrievalWorker
 from .content_repository import damaged
@@ -119,6 +121,7 @@ class ImportWorker:
             if row is None:
                 return None
             guard_subject_access(connection, row["workspace_id"])
+            self.service.check_codex_source(connection, row["workspace_id"], row["import_id"])
             owner = identifier("lease")
             changed = connection.execute(
                 "UPDATE jobs SET status='running',revision=revision+1,lease_owner=?,lease_until=?,retry_count=retry_count+?,updated_at=? "
@@ -142,6 +145,7 @@ class ImportWorker:
             guard_subject_access(connection, lease.workspace_id)
             repository = ImportRepository(connection, lease.workspace_id)
             row = repository.load(lease.import_id)
+            self.service.check_codex_source(connection, lease.workspace_id, lease.import_id)
             if not self._owned(row, lease):
                 raise _Stopped()
             info = repository.blob(row["blob_sha256"])
@@ -205,12 +209,15 @@ class ImportWorker:
             guard_subject_access(connection, lease.workspace_id)
             repository = ImportRepository(connection, lease.workspace_id)
             row = repository.load(lease.import_id)
+            codex_record = self.service.check_codex_source(connection, lease.workspace_id, lease.import_id)
             if not self._owned(row, lease):
                 return False
             blob_store = self.service.frozen_store(row)
             objects = [ENTITY_MODELS[value.entity].model_validate(value.model_dump(mode="python")) for value in parsed.objects]
             solutions = [dm.SolutionPrivate.model_validate(value.model_dump(mode="python")) for value in parsed.solutions]
             warnings = list(parsed.warnings)
+            if codex_record is not None:
+                warnings.append(codex_source_warning())
             warnings.append(dm.Warning(code="IMPORT_REVIEW_UNVERIFIED", message="确认解析结果不会认证材料的数学正确性或来源权利。", severity="warning"))
             collisions = [value.id for value in objects if connection.execute("SELECT 1 FROM objects WHERE id=?", (value.id,)).fetchone()]
             if collisions:
@@ -264,6 +271,8 @@ class ImportWorker:
                                (metadata["visibility"], metadata["artifact_id"], lease.workspace_id))
             connection.execute("UPDATE ingestion_imports SET preview_json=? WHERE id=?", (json_text(preview), lease.import_id))
             repository.transition(row, job_status="awaiting_approval", import_status="preview_ready", lease_owner=lease.owner)
+            if codex_record is not None:
+                CodexImportRepository(connection, lease.workspace_id).freeze_preview(codex_record, repository.load(lease.import_id))
             return True
 
     def fail(self, lease: ImportLease, error: ApiError) -> None:
@@ -271,11 +280,14 @@ class ImportWorker:
             guard_subject_access(connection, lease.workspace_id)
             repository = ImportRepository(connection, lease.workspace_id)
             row = repository.load(lease.import_id)
+            codex_record = self.service.check_codex_source(connection, lease.workspace_id, lease.import_id)
             if not self._owned(row, lease):
                 return
             warning = dm.Warning(code=error.code, message="解析失败；原件保留，未改动正式课程。", severity="error")
             preview = self.service._preview_data(row)
             diagnostics = getattr(error, "warnings", ())
+            if codex_record is not None:
+                diagnostics = (*diagnostics, codex_source_warning())
             preview["warnings"] = [value.model_dump(mode="json") for value in diagnostics] + [warning.model_dump(mode="json")]
             if diagnostics:
                 metadata = json_object(row["source_metadata"])
