@@ -1,5 +1,18 @@
 """Offline local frames are observations, never live transport or shutdown proof."""
 from pathlib import Path
+import json
+import shutil
+import subprocess
+import sqlite3
+
+import pytest
+
+from packages.contracts.canonical import sha256_bytes
+from services.api.app.application.codex_interrupt_protocol_models import (
+    MAX_FRAME_BYTES, InterruptExchange, InterruptProtocolSource, PrivateProtocolFrame,
+)
+from services.api.app.infrastructure import codex_interrupt_protocol as protocol
+from services.api.app.infrastructure import codex_turn_protocol_catalog as selected9
 
 
 def test_local_interrupt_reply_and_terminal_are_separate_exact_observations():
@@ -48,18 +61,6 @@ def test_original_exchange_detects_missing_observation_members():
         verify_interrupt_exchange(source, acknowledged)
 
 
-import json
-import shutil
-import subprocess
-
-import pytest
-
-from packages.contracts.canonical import sha256_bytes
-from services.api.app.application.codex_interrupt_protocol_models import (
-    MAX_FRAME_BYTES, InterruptExchange, InterruptProtocolSource, PrivateProtocolFrame,
-)
-from services.api.app.infrastructure import codex_interrupt_protocol as protocol
-from services.api.app.infrastructure import codex_turn_protocol_catalog as selected9
 
 REQUEST = b'{"id":7,"method":"turn/interrupt","params":{"threadId":"t","turnId":"u"}}'
 REPLY = b'{"id":7,"result":{}}'
@@ -233,8 +234,8 @@ def test_unknown_method_returns_safe_reason_and_private_original_only(source, fr
 
 
 @pytest.mark.parametrize('frame', [b'{', b'\xff', b'{"id":7,"id":8,"result":{}}',
-    b'{"id":NaN,"result":{}}', b'{"id":Infinity,"result":{}}', b'['*6000+b'0'+b']'*6000],
-    ids=['syntax', 'utf8', 'duplicate', 'nan', 'infinity', 'deep-parser-bound'])
+    b'{"id":NaN,"result":{}}', b'{"id":Infinity,"result":{}}'],
+    ids=['syntax', 'utf8', 'duplicate', 'nan', 'infinity'])
 def test_malformed_duplicate_or_deep_json_is_a_private_rejection(source, frame):
     exchange = protocol.prepare_interrupt(source, REQUEST)
     observed = protocol.observe_interrupt(source, exchange, frame)
@@ -405,3 +406,78 @@ def test_exact_private_frame_hash_and_repr_do_not_turn_bytes_into_public_details
         PrivateProtocolFrame(raw=b'fixture-private-bytes', sha256='0'*64)
     frame = PrivateProtocolFrame(raw=b'fixture-private-bytes', sha256=sha256_bytes(b'fixture-private-bytes'))
     assert 'fixture-private-bytes' not in repr(frame)
+
+
+
+def test_bounded_deep_array_remains_a_private_safe_rejection(source):
+    # This is valid JSON when the interpreter can parse its depth. If the
+    # parser hits its own bound, that is a different safe rejection reason.
+    frame = b'['*6000+b'0'+b']'*6000
+    exchange = protocol.prepare_interrupt(source, REQUEST)
+    observed = protocol.observe_interrupt(source, exchange, frame)
+    assert observed.accepted is False
+    assert observed.reason in {'unsupported_shape', 'invalid_json'}
+    assert observed.frame.raw == frame
+    assert observed.exchange == exchange
+
+
+@pytest.mark.parametrize('field,value', [('implemented', 0), ('original_receipt_size', 55893.0),
+    ('historical_generated_files', 314.0), ('historical_exit_code', False)])
+def test_projection_and_source_numeric_aliases_are_not_source_facts(source, field, value):
+    body = source.model_dump(by_alias=True)
+    if field == 'implemented':
+        body[field] = value
+    else:
+        body['source_summary'][field] = value
+    with pytest.raises(ValueError):
+        InterruptProtocolSource.model_validate(body)
+
+
+def test_packaged_originals_bind_a_real_method_branch_without_receipt_paths(source):
+    assert sum(m.size for m in source.schemas) == 473257
+    assert source.selected9.implemented is False
+    assert source.source_summary.scope == 'manually_checked_selected8_only'
+    assert '/home/' not in source.source_summary_utf8
+    assert 'argv' not in type(source.source_summary).model_fields
+    assert source.source_summary.original_receipt_sha256 == source.selected9.source_receipt_sha256
+    request_schema = json.loads(next(m.raw_utf8 for m in source.schemas if m.path == 'ClientRequest.json'))
+    branch = next(m for m in request_schema['oneOf'] if m['properties']['method']['enum'] == ['turn/interrupt'])
+    assert branch['properties']['params']['$ref'] == '#/definitions/TurnInterruptParams'
+    assert branch['required'] == ['id', 'method', 'params']
+    notification_schema = json.loads(next(m.raw_utf8 for m in source.schemas if m.path == 'ServerNotification.json'))
+    branch = next(m for m in notification_schema['oneOf'] if m['properties']['method']['enum'] == ['turn/completed'])
+    assert branch['properties']['params']['$ref'] == '#/definitions/TurnCompletedNotification'
+    assert branch['required'] == ['method', 'params']
+
+
+def test_local_codec_named_execution_and_owner_storage_seams_are_zero(monkeypatch):
+    from services.api.app.infrastructure.codex_bootstrap_runtime import LocalCodexBootstrapRuntime
+    from services.api.app.infrastructure.codex_probe import LocalCodexProbe
+    from services.api.app.application.provider_codex_execution import _Gate
+    from services.api.app.infrastructure.provider_secret_store import FileSecretStore
+
+    counts = dict(process=0, freeze=0, validity=0, bootstrap=0, probe=0, model_transport=0, secret_read=0, sqlite=0)
+
+    def forbidden(name):
+        def called(*args, **kwargs):
+            counts[name] += 1
+            raise AssertionError('Local offline frames cannot enter an execution or owner-write seam')
+        return called
+
+    monkeypatch.setattr(subprocess, 'Popen', forbidden('process'))
+    monkeypatch.setattr(LocalCodexBootstrapRuntime, 'freeze', forbidden('freeze'))
+    monkeypatch.setattr(LocalCodexBootstrapRuntime, 'validity', forbidden('validity'))
+    monkeypatch.setattr(LocalCodexBootstrapRuntime, 'execute', forbidden('bootstrap'))
+    monkeypatch.setattr(LocalCodexProbe, 'read', forbidden('probe'))
+    monkeypatch.setattr(_Gate, 'request', forbidden('model_transport'))
+    monkeypatch.setattr(FileSecretStore, 'read', forbidden('secret_read'))
+    monkeypatch.setattr(sqlite3, 'connect', forbidden('sqlite'))
+    source = protocol.read_interrupt_source()
+    exchange = protocol.prepare_interrupt(source, REQUEST)
+    exchange = protocol.observe_interrupt(source, exchange, REPLY).exchange
+    receipt = protocol.observe_interrupt(source, exchange, TERMINAL)
+    assert receipt.accepted
+    assert protocol.verify_interrupt_exchange(source, receipt.exchange) == receipt.exchange
+    unknown = protocol.observe_interrupt(source, receipt.exchange, b'{"method":"unknown-fixture"}')
+    assert unknown.accepted is False
+    assert counts == dict(process=0, freeze=0, validity=0, bootstrap=0, probe=0, model_transport=0, secret_read=0, sqlite=0)
