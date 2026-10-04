@@ -157,7 +157,7 @@ class CodexApprovalsService:
                 raise ApiError(409, 'CODEX_TIMEOUT', '原任务期限已过。')
             category: Literal['network', 'unbound_operation'] = 'network' if callback.method == 'network/requestApproval' else 'unbound_operation'
             operation = ApprovalOperation(version='codex-unsupported-operation-v1', workspace_id=workspace,
-                approval_id=str(uuid4()), actor_session_id=session.anchor.actor_session_id,
+                approval_id='approval_'+uuid4().hex, actor_session_id=session.anchor.actor_session_id,
                 session_id=session.anchor.session_id, turn_id=turn_id, job_id=turn.control.job.id,
                 job_input_sha256=turn.prepared.command.ack.summary.job_input_sha256,
                 dispatch_id=provider.queued.dispatch_id, execution_owner_id=owner, lease=provider.started.lease,
