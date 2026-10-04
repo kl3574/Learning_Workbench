@@ -159,7 +159,8 @@ def test_unknown_execution_consumes_once_and_never_replays(consent_case, monkeyp
             with pytest.raises(ApiError) as error:
                 worker.execute_operation(identifier)
             assert error.value.code == 'CODEX_OUTCOME_UNKNOWN'
-    case, _, identifier, _ = exercise(consent_case, observe, monkeypatch)
+    case, prepared, identifier, _ = exercise(consent_case, observe, monkeypatch)
+    assert case.get('turns/'+prepared['turn_id']).json()['outcome'] == 'unknown'
     view = case.client.get('/api/v1/approvals/'+identifier).json()
     assert attempts == [True] and view['revision'] == 4 and view['execution'] == 'unknown'
     assert view['started_at'] is not None and view['finished_at'] is not None and view['result_sha256'] is None
