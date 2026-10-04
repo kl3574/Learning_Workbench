@@ -581,7 +581,7 @@ def test_dispatch_current_and_original_ack_reject_damaged_owned_graph(consent_ca
         elif damage=='job_tail':
             conn.execute('DELETE FROM job_events WHERE job_id=? AND seq=(SELECT MAX(seq) FROM job_events WHERE job_id=?)',(prep['job']['id'],prep['job']['id']))
         elif damage=='run':
-            conn.execute("UPDATE runs SET state_json='{}' WHERE id=?",(prep['job']['id'],))
+            conn.execute("UPDATE runs SET snapshot_json='{}' WHERE id=?",(prep['job']['id'],))
         elif damage=='lease':
             conn.execute("UPDATE jobs SET lease_owner='lease_other' WHERE id=?",(prep['job']['id'],))
         else:
