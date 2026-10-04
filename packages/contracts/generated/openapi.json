@@ -3250,6 +3250,400 @@
         "title": "CodexApprovalControl",
         "type": "object"
       },
+      "CodexArtifactEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "import_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "markdown",
+                  "html",
+                  "learnpack"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Import Kind"
+          },
+          "logical_path": {
+            "minLength": 1,
+            "title": "Logical Path",
+            "type": "string"
+          },
+          "media_type": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Media Type",
+            "type": "string"
+          },
+          "scan": {
+            "const": "PASS",
+            "title": "Scan",
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size": {
+            "maximum": 16777216.0,
+            "minimum": 0.0,
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "logical_path",
+          "size",
+          "sha256",
+          "media_type",
+          "scan",
+          "import_kind"
+        ],
+        "title": "CodexArtifactEntry",
+        "type": "object"
+      },
+      "CodexArtifactExcluded": {
+        "additionalProperties": false,
+        "properties": {
+          "entry_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Entry Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "CODEX_PROTOCOL_INVALID",
+                  "CODEX_PROFILE_CHANGED",
+                  "CODEX_RUNTIME_UNAVAILABLE",
+                  "CODEX_BINDING_INVALID",
+                  "CODEX_HISTORY_DAMAGED",
+                  "CODEX_INPUT_PROOF_UNAVAILABLE",
+                  "CODEX_OPERATION_UNSUPPORTED",
+                  "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED",
+                  "CODEX_TIMEOUT",
+                  "CODEX_RESOURCE_LIMIT",
+                  "CODEX_CANCELLED",
+                  "CODEX_OUTCOME_UNKNOWN",
+                  "CODEX_OPERATION_FAILED",
+                  "CODEX_ARTIFACT_REJECTED",
+                  "CODEX_ARTIFACT_MISSING",
+                  "CODEX_SOURCE_CHANGED",
+                  "CODEX_SOURCE_UNAVAILABLE",
+                  "CODEX_APPROVAL_EXPIRED",
+                  "CODEX_CONSENT_EXPIRED",
+                  "CODEX_CONSENT_REVOKED",
+                  "CODEX_BUDGET_EXCEEDED",
+                  "POLICY_DENIED",
+                  "ASSESSMENT_ACTIVE"
+                ],
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "CAPABILITY_UNSUPPORTED",
+                  "PROVIDER_CONFIGURATION_CHANGED",
+                  "PROVIDER_SECRET_UNAVAILABLE",
+                  "OUTBOUND_SOURCE_CHANGED",
+                  "OUTBOUND_SOURCE_UNAVAILABLE",
+                  "CONSENT_REQUIRED",
+                  "CONSENT_REVOKED",
+                  "CONSENT_EXPIRED",
+                  "OUTBOUND_BUDGET_EXCEEDED",
+                  "PROVIDER_TIMEOUT",
+                  "PROVIDER_CANCELLED",
+                  "PROVIDER_TRANSPORT_ERROR",
+                  "PROVIDER_PROTOCOL_ERROR",
+                  "PROVIDER_OUTCOME_UNKNOWN",
+                  "PROVIDER_USAGE_INCONSISTENT",
+                  "PROVIDER_REFUSAL",
+                  "PROVIDER_INCOMPLETE"
+                ],
+                "type": "string"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "entry_id",
+          "reason"
+        ],
+        "title": "CodexArtifactExcluded",
+        "type": "object"
+      },
+      "CodexArtifactImportItem": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Artifact Id",
+            "type": "string"
+          },
+          "import_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Import Id",
+            "type": "string"
+          },
+          "job": {
+            "$ref": "#/components/schemas/JobRef"
+          },
+          "source_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact_id",
+          "source_sha256",
+          "import_id",
+          "job"
+        ],
+        "title": "CodexArtifactImportItem",
+        "type": "object"
+      },
+      "CodexArtifactImportView": {
+        "additionalProperties": false,
+        "properties": {
+          "actor_session_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Actor Session Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CodexArtifactImportItem"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "job": {
+            "$ref": "#/components/schemas/JobRef"
+          },
+          "manifest_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Manifest Sha256",
+            "type": "string"
+          },
+          "session_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "turn_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job",
+          "session_id",
+          "turn_id",
+          "manifest_sha256",
+          "actor_session_id",
+          "items"
+        ],
+        "title": "CodexArtifactImportView",
+        "type": "object"
+      },
+      "CodexArtifactImportWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_ids": {
+            "items": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "type": "string"
+            },
+            "maxItems": 32,
+            "minItems": 1,
+            "title": "Artifact Ids",
+            "type": "array"
+          },
+          "expected_manifest_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Expected Manifest Sha256",
+            "type": "string"
+          },
+          "turn_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "artifact_ids",
+          "expected_manifest_sha256"
+        ],
+        "title": "CodexArtifactImportWrite",
+        "type": "object"
+      },
+      "CodexArtifactManifest": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$",
+            "title": "Created At",
+            "type": "string"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/CodexArtifactEntry"
+            },
+            "maxItems": 32,
+            "title": "Entries",
+            "type": "array"
+          },
+          "excluded": {
+            "items": {
+              "$ref": "#/components/schemas/CodexArtifactExcluded"
+            },
+            "maxItems": 32,
+            "title": "Excluded",
+            "type": "array"
+          },
+          "id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Id",
+            "type": "string"
+          },
+          "independent_pedagogy": {
+            "const": "NOT_RUN",
+            "title": "Independent Pedagogy",
+            "type": "string"
+          },
+          "mathematical": {
+            "const": "NOT_RUN",
+            "title": "Mathematical",
+            "type": "string"
+          },
+          "revision": {
+            "const": 1,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "run_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "runtime_profile_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Runtime Profile Sha256",
+            "type": "string"
+          },
+          "scan_profile_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Scan Profile Sha256",
+            "type": "string"
+          },
+          "session_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "source_job_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Source Job Id",
+            "type": "string"
+          },
+          "source_outcome": {
+            "enum": [
+              "completed",
+              "failed",
+              "incomplete",
+              "cancelled",
+              "unknown"
+            ],
+            "title": "Source Outcome",
+            "type": "string"
+          },
+          "sources": {
+            "const": "NOT_RUN",
+            "title": "Sources",
+            "type": "string"
+          },
+          "terminal_receipt_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Terminal Receipt Sha256",
+            "type": "string"
+          },
+          "total_bytes": {
+            "maximum": 16777216.0,
+            "minimum": 0.0,
+            "title": "Total Bytes",
+            "type": "integer"
+          },
+          "turn_id": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "version": {
+            "const": "codex-artifact-manifest-v1",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "id",
+          "revision",
+          "session_id",
+          "turn_id",
+          "run_id",
+          "source_job_id",
+          "source_outcome",
+          "runtime_profile_sha256",
+          "terminal_receipt_sha256",
+          "scan_profile_sha256",
+          "created_at",
+          "entries",
+          "excluded",
+          "total_bytes",
+          "mathematical",
+          "sources",
+          "independent_pedagogy"
+        ],
+        "title": "CodexArtifactManifest",
+        "type": "object"
+      },
+      "CodexArtifactManifestView": {
+        "additionalProperties": false,
+        "properties": {
+          "manifest": {
+            "$ref": "#/components/schemas/CodexArtifactManifest"
+          },
+          "manifest_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Manifest Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "manifest",
+          "manifest_sha256"
+        ],
+        "title": "CodexArtifactManifestView",
+        "type": "object"
+      },
       "CodexBlockRef": {
         "additionalProperties": false,
         "properties": {
@@ -22418,6 +22812,154 @@
         ]
       }
     },
+    "/api/v1/codex/artifact-imports/{job_id}": {
+      "get": {
+        "operationId": "read_api_v1_codex_artifact_imports__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexArtifactImportView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Read",
+        "tags": [
+          "codex"
+        ]
+      }
+    },
     "/api/v1/codex/capabilities": {
       "get": {
         "operationId": "capabilities_api_v1_codex_capabilities_get",
@@ -24216,6 +24758,191 @@
         ]
       }
     },
+    "/api/v1/codex/sessions/{id}/artifacts/import": {
+      "post": {
+        "operationId": "create_api_v1_codex_sessions__id__artifacts_import_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Origin",
+            "required": true,
+            "schema": {
+              "title": "Origin",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "title": "X-Csrf-Token",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CodexArtifactImportWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobRef"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Create",
+        "tags": [
+          "codex"
+        ]
+      }
+    },
     "/api/v1/codex/sessions/{id}/interrupt": {
       "post": {
         "operationId": "interrupt_api_v1_codex_sessions__id__interrupt_post",
@@ -24932,6 +25659,164 @@
           }
         ],
         "summary": "Start",
+        "tags": [
+          "codex"
+        ]
+      }
+    },
+    "/api/v1/codex/sessions/{id}/turns/{turn_id}/artifacts": {
+      "get": {
+        "operationId": "manifest_api_v1_codex_sessions__id__turns__turn_id__artifacts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "turn_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,79}$",
+              "title": "Turn Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CodexArtifactManifestView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "LocalSession": []
+          }
+        ],
+        "summary": "Manifest",
         "tags": [
           "codex"
         ]

@@ -4,6 +4,7 @@ from packages.contracts import domain_models as dm
 from ..application.codex_turn import CodexTurnService
 from ..application.errors import ApiError
 from ..codex_turn_dto import CodexTurnPrepareWrite, CodexTurnPreparationView, CodexTurnPage, CodexTurnControlView, CodexTurnStartWrite, CodexTurnStartAck, CodexTurnResultView, CodexInterruptWrite, CodexInterruptAck
+from ..codex_turn_dto import CodexArtifactManifestView
 from .codex_bootstrap_http import no_control_body
 from .content_http import query_fields
 from .http import current_identity, verify_write
@@ -45,6 +46,13 @@ def create_codex_turn_router(service: CodexTurnService) -> APIRouter:
         dependencies=[Depends(no_control_body), Depends(query_fields())])
     def result(id: dm.Id, request: Request) -> CodexTurnResultView:
         return service.read_result(request.state.identity,id)
+
+    @router.get('/sessions/{id}/turns/{turn_id}/artifacts', response_model=CodexArtifactManifestView,
+        dependencies=[Depends(no_control_body), Depends(query_fields())])
+    def manifest(id: dm.Id, turn_id: dm.Id, request: Request) -> CodexArtifactManifestView:
+        if service.artifacts is None:
+            raise ApiError(503, 'CODEX_RUNTIME_UNAVAILABLE', '产物所有者暂不可用。')
+        return service.artifacts.read_manifest(request.state.identity, id, turn_id)
 
     @router.get('/sessions/{id}/turns', response_model=CodexTurnPage,
         dependencies=[Depends(no_control_body), Depends(query_fields('cursor', 'limit'))],

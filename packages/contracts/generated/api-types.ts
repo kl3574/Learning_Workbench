@@ -528,6 +528,69 @@ export type CodexApprovalControl = {
   "validity": "current" | "expired" | "changed" | "unavailable" | "closed";
 };
 
+export type CodexArtifactEntry = {
+  "artifact_id": string;
+  "logical_path": string;
+  "size": number;
+  "sha256": string;
+  "media_type": string;
+  "scan": "PASS";
+  "import_kind": ("markdown" | "html" | "learnpack" | null);
+};
+
+export type CodexArtifactExcluded = {
+  "entry_id": string;
+  "reason": ("CODEX_PROTOCOL_INVALID" | "CODEX_PROFILE_CHANGED" | "CODEX_RUNTIME_UNAVAILABLE" | "CODEX_BINDING_INVALID" | "CODEX_HISTORY_DAMAGED" | "CODEX_INPUT_PROOF_UNAVAILABLE" | "CODEX_OPERATION_UNSUPPORTED" | "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED" | "CODEX_TIMEOUT" | "CODEX_RESOURCE_LIMIT" | "CODEX_CANCELLED" | "CODEX_OUTCOME_UNKNOWN" | "CODEX_OPERATION_FAILED" | "CODEX_ARTIFACT_REJECTED" | "CODEX_ARTIFACT_MISSING" | "CODEX_SOURCE_CHANGED" | "CODEX_SOURCE_UNAVAILABLE" | "CODEX_APPROVAL_EXPIRED" | "CODEX_CONSENT_EXPIRED" | "CODEX_CONSENT_REVOKED" | "CODEX_BUDGET_EXCEEDED" | "POLICY_DENIED" | "ASSESSMENT_ACTIVE" | "CAPABILITY_UNSUPPORTED" | "PROVIDER_CONFIGURATION_CHANGED" | "PROVIDER_SECRET_UNAVAILABLE" | "OUTBOUND_SOURCE_CHANGED" | "OUTBOUND_SOURCE_UNAVAILABLE" | "CONSENT_REQUIRED" | "CONSENT_REVOKED" | "CONSENT_EXPIRED" | "OUTBOUND_BUDGET_EXCEEDED" | "PROVIDER_TIMEOUT" | "PROVIDER_CANCELLED" | "PROVIDER_TRANSPORT_ERROR" | "PROVIDER_PROTOCOL_ERROR" | "PROVIDER_OUTCOME_UNKNOWN" | "PROVIDER_USAGE_INCONSISTENT" | "PROVIDER_REFUSAL" | "PROVIDER_INCOMPLETE");
+};
+
+export type CodexArtifactImportItem = {
+  "artifact_id": string;
+  "source_sha256": string;
+  "import_id": string;
+  "job": JobRef;
+};
+
+export type CodexArtifactImportView = {
+  "job": JobRef;
+  "session_id": string;
+  "turn_id": string;
+  "manifest_sha256": string;
+  "actor_session_id": string;
+  "items": Array<CodexArtifactImportItem>;
+};
+
+export type CodexArtifactImportWrite = {
+  "turn_id": string;
+  "artifact_ids": Array<string>;
+  "expected_manifest_sha256": string;
+};
+
+export type CodexArtifactManifest = {
+  "version": "codex-artifact-manifest-v1";
+  "id": string;
+  "revision": 1;
+  "session_id": string;
+  "turn_id": string;
+  "run_id": string;
+  "source_job_id": string;
+  "source_outcome": "completed" | "failed" | "incomplete" | "cancelled" | "unknown";
+  "runtime_profile_sha256": string;
+  "terminal_receipt_sha256": string;
+  "scan_profile_sha256": string;
+  "created_at": string;
+  "entries": Array<CodexArtifactEntry>;
+  "excluded": Array<CodexArtifactExcluded>;
+  "total_bytes": number;
+  "mathematical": "NOT_RUN";
+  "sources": "NOT_RUN";
+  "independent_pedagogy": "NOT_RUN";
+};
+
+export type CodexArtifactManifestView = {
+  "manifest": CodexArtifactManifest;
+  "manifest_sha256": string;
+};
+
 export type CodexBlockRef = {
   "entity": "block";
   "id": string;
