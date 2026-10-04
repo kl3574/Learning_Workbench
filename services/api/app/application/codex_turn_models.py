@@ -1,9 +1,10 @@
 """Versioned private preparation/control records; none is an execution proof."""
 from typing import Annotated, Literal
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 from packages.contracts import domain_models as dm
-from ..codex_turn_dto import CodexTurnPrepareWrite, CodexTurnPreparationView, CodexLocalToolBudget
+from ..codex_turn_dto import (CodexTurnPrepareWrite, CodexTurnPreparationView, CodexLocalToolBudget,
+    CodexTurnStartWrite, CodexTurnStartAck, CodexTurnControlView)
 from ..import_dto import JobCancelRequest, JobSnapshot
 from ..provider_dto import ProviderConfigView, ReferenceSummary
 from ..serialization import content_sha256
@@ -52,7 +53,7 @@ class TurnContext(dm.StrictModel):
     warnings: Annotated[list[dm.Warning], Field(max_length=32)]
 
 
-def context_digest(value: TurnContext) -> str:
+def context_digest(value: BaseModel) -> str:
     body = value.model_dump(mode='json')
     del body['snapshot']['snapshot_sha256']
     return content_sha256(body)
@@ -114,6 +115,43 @@ class EventEnvelope(dm.StrictModel):
     previous_sha256: dm.Sha256 | None
     occurred_at: dm.UTC
     event: TurnEvent
+
+
+class StartCommand(dm.StrictModel):
+    workspace_id: dm.Id
+    actor_session_id: dm.Id
+    route: Literal['start']
+    target_id: dm.Id
+    key: str
+    body: CodexTurnStartWrite
+    ack: CodexTurnStartAck
+
+
+class TurnProviderBound(dm.StrictModel):
+    kind: Literal['provider_bound']
+    turn_id: dm.Id
+    provider_seq: dm.Revision
+    provider_sha256: dm.Sha256
+    proposal_id: dm.Id
+    consent_id: dm.Id | None
+    consent_revision: dm.Revision | None
+    consent_status: Literal['active', 'revoked'] | None
+
+
+class TurnStarted(dm.StrictModel):
+    kind: Literal['start_queued']
+    turn_id: dm.Id
+    dispatch_id: dm.Id
+    command: StartCommand
+
+
+class TurnLifecycle(dm.StrictModel):
+    kind: Literal['lifecycle']
+    turn_id: dm.Id
+    phase: Literal['claim', 'terminal']
+    control: CodexTurnControlView
+    provider_seq: dm.Revision
+    provider_sha256: dm.Sha256
 
 
 def preparation_digest(workspace: str, view: CodexTurnPreparationView) -> str:

@@ -54,6 +54,8 @@ from .interfaces.static import WorkbenchStaticMount
 from .application.codex_bootstrap import CodexBootstrapService
 from .application.codex_turn import CodexTurnService
 from .interfaces.codex_turn_http import create_codex_turn_router
+from .application.provider_codex_consents import CodexConsentsService
+from .interfaces.codex_consent_http import create_codex_consent_router
 from .application.codex_bootstrap_ports import CodexBootstrapRuntime
 from .infrastructure.codex_bootstrap_runtime import LocalCodexBootstrapRuntime
 from .interfaces.codex_bootstrap_http import create_codex_bootstrap_router
@@ -88,6 +90,7 @@ from .infrastructure.authoring_numeric_runtime import NumericRuntime
 def create_app(settings: Settings | None = None, *,
                outbound_sources: OutboundSourceRegistry | None = None,
                request_preparer: ProviderRequestPreparer | None = None,
+               codex_proofs: ProofRegistry | None = None,
                codex_probe: CodexCapabilityProbe | None = None,
                codex_bootstrap_runtime: CodexBootstrapRuntime | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
@@ -140,7 +143,10 @@ def create_app(settings: Settings | None = None, *,
     content_impacts = ContentImpactDecisionService(database, artifacts)
     codex_bootstrap = CodexBootstrapService(database, codex_bootstrap_runtime if codex_bootstrap_runtime is not None
         else LocalCodexBootstrapRuntime(settings.data_dir, settings.codex_executable))
-    codex_turn = CodexTurnService(database, codex_bootstrap)
+    codex_registry = codex_proofs if codex_proofs is not None else ProofRegistry()
+    codex_turn = CodexTurnService(database, codex_bootstrap, codex_registry)
+    codex_consents = CodexConsentsService(database, codex_turn, provider_secrets, codex_registry)
+    codex_turn.outbound_owner = codex_consents
     jobs = JobService(database, review=review_service, restore_numeric=restore_numeric_service, codex_turn=codex_turn)
 
     @asynccontextmanager
@@ -228,6 +234,7 @@ def create_app(settings: Settings | None = None, *,
         codex_probe if codex_probe is not None else LocalCodexProbe(settings.data_dir, settings.codex_executable))))
     application.include_router(create_codex_bootstrap_router(codex_bootstrap, codex_turn))
     application.include_router(create_codex_turn_router(codex_turn))
+    application.include_router(create_codex_consent_router(codex_consents))
     application.include_router(create_concept_state_router(database))
     application.include_router(create_recommendation_router(database))
     application.include_router(create_retrieval_router(database))
