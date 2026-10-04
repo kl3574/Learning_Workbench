@@ -1,0 +1,181 @@
+"""Actual CLI backups of synthetic turn owners and checked blobs; never M7 restore acceptance."""
+from contextlib import contextmanager
+import zipfile
+
+from fastapi.testclient import TestClient
+import pytest
+
+from services.api.app.application.codex_turn_worker import SyntheticCodexExecutor
+from services.api.app.infrastructure.security import COOKIE_NAME, consume_bootstrap, issue_bootstrap_code
+from services.api.app.main import create_app
+from tests.integration.test_authoring_numeric_provider_history import table_hashes
+from tests.integration.test_backup_session_history import cli_backup
+from tests.integration.test_codex_artifact_manifest import execute, manifest_path
+from tests.integration.test_codex_bootstrap_http import Case, ControlledRuntime
+from tests.integration.test_codex_turn_dispatch_http import base_consent_case, consent_case, queued
+
+__all__ = ['base_consent_case', 'consent_case']
+
+TURN_TABLES = ('codex_turn_sessions', 'codex_turn_heads', 'codex_turn_events',
+               'codex_turn_event_members', 'codex_turn_members', 'codex_turn_commands')
+PROVIDER_TABLES = ('provider_codex_heads', 'provider_codex_events',
+                   'provider_codex_members', 'provider_codex_commands')
+MANIFEST_TABLES = ('codex_artifact_records', 'codex_artifact_members', 'artifacts', 'content_blobs')
+
+
+def owned_backup(case, temporary, *, manifest=False):
+    database = case.app.state.database
+    before = table_hashes(database)
+    required = TURN_TABLES + PROVIDER_TABLES + (MANIFEST_TABLES if manifest else ())
+    with database.connect() as conn:
+        counts = {name: conn.execute(f'SELECT count(*) FROM {name}').fetchone()[0] for name in required}
+        # Empty owner tables cannot prove the new turn or manifest backup contract.
+        assert all(counts.values()), counts
+        # These two cases do not create GenericApproval or Import history.
+        for name in ('codex_approval_events', 'codex_import_batches', 'codex_artifact_import_events'):
+            assert conn.execute(f'SELECT count(*) FROM {name}').fetchone()[0] == 0
+    copied, archive_manifest = cli_backup(database, temporary)
+    after = table_hashes(copied)
+    owners = {name for name in before if name.startswith(('codex_', 'provider_codex_'))} | set(required)
+    assert {name: before[name] for name in owners} == {name: after[name] for name in owners}
+    assert archive_manifest['sensitive_personal_data'] is True
+    assert archive_manifest['restore_acceptance'] == 'NOT_RUN'
+    # This known synthetic value is not a real credential. Inspect only fixture payloads.
+    archive, = (database.settings.data_dir / 'backups').glob('workspace-*.zip')
+    with zipfile.ZipFile(archive) as reader:
+        assert all(b'synthetic-codex-peer-value' not in reader.read(name) for name in reader.namelist())
+        assert not any(name.startswith('codex-answer-outputs/') for name in reader.namelist())
+    assert table_hashes(database) == before
+    return copied, archive_manifest, {name: after[name] for name in owners}
+
+
+@contextmanager
+def fresh_reader(copied, source, proofs, monkeypatch):
+    runtime = ControlledRuntime()
+    calls = []
+
+    def forbidden_transport(*args, **kwargs):
+        calls.append(True)
+        pytest.fail('backup readback or rejected authority attempted a synthetic dispatch')
+
+    app = create_app(copied.settings, codex_bootstrap_runtime=runtime, codex_proofs=proofs,
+                     codex_executor=SyntheticCodexExecutor(forbidden_transport))
+
+    def forbidden_worker(*args, **kwargs):
+        pytest.fail('GET or rejected authority attempted to run the restored worker')
+
+    monkeypatch.setattr(app.state.codex_turn_worker, 'run_once', forbidden_worker)
+    client = TestClient(app, base_url=copied.settings.origin)
+    try:
+        client.cookies.update(source.client.cookies)
+        assert client.get('/api/v1/session').status_code == 401
+        client.cookies.clear()
+        token, identity = consume_bootstrap(copied, issue_bootstrap_code(copied))
+        client.cookies.set(COOKIE_NAME, token)
+        assert identity.id != source.actor_id and identity.role == 'learner'
+        case = Case(app, client, {'Origin': copied.settings.origin, 'X-CSRF-Token': identity.csrf_token}, identity.id)
+        yield case, runtime, calls
+    finally:
+        client.close()
+
+
+def learner_reads(case, sid, prep, consent, *, entry=None):
+    before = table_hashes(case.app.state.database)
+    for path in ('sessions/' + sid, 'turns/' + prep['turn_id']):
+        response = case.get(path)
+        assert response.status_code == 200 and response.headers['cache-control'] == 'no-store'
+    for path in ('turn-preparations/' + prep['id'], 'consent-proposals/' + consent['proposal_id'],
+                 'consents/' + consent['id'], 'turns/' + prep['turn_id'] + '/result'):
+        response = case.get(path)
+        assert response.status_code == 403 and response.json()['error']['code'] == 'POLICY_DENIED'
+    if entry is not None:
+        assert case.get(manifest_path(sid, prep)).status_code == 403
+        assert case.client.get(f'/api/v1/artifacts/{entry["artifact_id"]}/download').status_code == 403
+    assert table_hashes(case.app.state.database) == before
+    response = case.client.post('/api/v1/session/role', json={'role': 'author'},
+                                headers={**case.headers, 'Idempotency-Key': 'fresh-backup-author'})
+    assert response.status_code == 200
+
+
+def original_facts_and_denied_authority(case, sid, prep, consent, body, ack, owners):
+    database = case.app.state.database
+    with database.transaction(immediate=False) as conn:
+        conn.execute('PRAGMA query_only=ON')
+        workspace = database.workspace_id()
+        _, _, history = case.app.state.codex_turn_service._owned_state(conn, workspace)
+        turn = history[sid].turns[prep['turn_id']]
+        assert turn.start.command.ack.model_dump(mode='json') == ack.json()
+        states, _ = case.app.state.codex_turn_service.outbound_owner.owned_states(conn, workspace)
+        state = states[prep['turn_id']]
+        assert state.granted.command.ack.model_dump(mode='json') == consent
+        assert state.granted.command.actor_session_id == prep['actor_session_id'] != case.actor_id
+    before = table_hashes(database)
+    # Identical old body/key must not replay for a fresh restored actor.
+    denied = case.post(f'sessions/{sid}/turns', body, 'start')
+    assert denied.status_code == 403 and denied.json()['error']['code'] == 'POLICY_DENIED'
+    denied = case.post('consents', {'proposal_id': consent['proposal_id'],
+                                  'proposal_sha256': consent['proposal_sha256']}, 'grant')
+    assert denied.status_code == 403 and denied.json()['error']['code'] == 'POLICY_DENIED'
+    assert table_hashes(database) == before
+    assert {name: before[name] for name in owners} == owners
+
+
+def test_actual_backup_keeps_queued_grant_history_without_auth_or_get_dispatch(consent_case, tmp_path, monkeypatch):
+    source, _, sid, proofs, _, _ = consent_case
+    prep, consent, body, ack = queued(consent_case)
+    copied, _, owners = owned_backup(source, tmp_path)
+    assert source.app.state.synthetic_transport_calls == []
+    with fresh_reader(copied, source, proofs, monkeypatch) as (case, runtime, calls):
+        learner_reads(case, sid, prep, consent)
+        before = table_hashes(copied)
+        control = case.get('turns/' + prep['turn_id'])
+        assert control.status_code == 200
+        assert control.json()['job']['status'] == 'queued' and control.json()['execution'] == 'not_started'
+        assert control.json()['started_at'] is None
+        proposal = case.get('consent-proposals/' + consent['proposal_id'])
+        assert proposal.status_code == 200 and proposal.json()['validity'] == 'unavailable'
+        assert proposal.json()['proposal_sha256'] == consent['proposal_sha256']
+        assert proposal.json()['summary'] == consent['summary']
+        current = case.get('consents/' + consent['id'])
+        assert current.status_code == 200 and current.json()['status'] == 'active'
+        assert current.json()['actor_session_id'] == source.actor_id
+        assert current.json()['dispatch']['started_at'] is None
+        assert current.json()['dispatch']['consumed_provider_calls'] == 0
+        assert case.get('sessions/' + sid).json()['active_turn_id'] == prep['turn_id']
+        assert table_hashes(copied) == before
+        original_facts_and_denied_authority(case, sid, prep, consent, body, ack, owners)
+        assert runtime.calls == [] and calls == []
+    assert source.app.state.synthetic_transport_calls == []
+
+
+def test_actual_backup_keeps_completed_manifest_and_blob_without_restoring_authority(consent_case, tmp_path, monkeypatch):
+    source, _, sid, proofs, _, _ = consent_case
+    _, _, prep, consent, body, ack = execute(consent_case)
+    response = source.get(manifest_path(sid, prep))
+    assert response.status_code == 200
+    original = response.json()
+    entry, = original['manifest']['entries']
+    expected = b'Synthetic exact answer \xce\xb1\n'
+    copied, archive_manifest, owners = owned_backup(source, tmp_path, manifest=True)
+    assert len(source.app.state.synthetic_transport_calls) == 1
+    assert any(item['path'] == 'blobs/' + entry['sha256'] and item['size'] == len(expected)
+               for item in archive_manifest['files'])
+    with fresh_reader(copied, source, proofs, monkeypatch) as (case, runtime, calls):
+        learner_reads(case, sid, prep, consent, entry=entry)
+        before = table_hashes(copied)
+        manifest = case.get(manifest_path(sid, prep))
+        assert manifest.status_code == 200 and manifest.content == response.content
+        assert manifest.headers['cache-control'] == 'no-store'
+        assert [manifest.json()['manifest'][key] for key in ('mathematical', 'sources', 'independent_pedagogy')] == ['NOT_RUN'] * 3
+        download = case.client.get(f'/api/v1/artifacts/{entry["artifact_id"]}/download')
+        assert download.status_code == 200 and download.content == expected
+        control = case.get('turns/' + prep['turn_id'])
+        assert control.status_code == 200 and control.json()['outcome'] == 'completed'
+        assert control.json()['manifest_id'] == original['manifest']['id']
+        result = case.get('turns/' + prep['turn_id'] + '/result')
+        assert result.status_code == 200 and result.json()['answer_markdown'].encode() == expected
+        assert case.get('consent-proposals/' + consent['proposal_id']).json()['validity'] == 'stale'
+        assert table_hashes(copied) == before
+        original_facts_and_denied_authority(case, sid, prep, consent, body, ack, owners)
+        assert runtime.calls == [] and calls == []
+    assert len(source.app.state.synthetic_transport_calls) == 1
