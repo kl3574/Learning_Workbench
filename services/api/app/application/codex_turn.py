@@ -112,7 +112,7 @@ class CodexTurnService:
             ack, value = turn.prepared.command.ack, turn.prepared.input
             validity = 'closed' if turn.control.execution == 'terminal' else 'unavailable'
             if validity != 'closed':
-                context = self.context.verify_turn(conn, value, ack.summary)
+                context = self.context.verify_turn(conn, current, value, ack.summary)
                 provider = checked_provider_configuration(conn, current, value.provider.id)
                 if provider != value.provider or not self.context.current(conn, current, context):
                     validity = 'changed'
@@ -163,6 +163,8 @@ class CodexTurnService:
                 repo.jobs.cancel(identifier, body.expected_revision)
             ack = repo.jobs.snapshot(identifier)
             event = TurnCancelled(kind='cancel_observed' if terminal else 'cancelled', turn_id=turn.control.id,
+                requested_session_revision=None if terminal else state.revision + 1,
+                terminal_session_revision=None if terminal else state.revision + 2,
                 command=CancelCommand(workspace_id=current.workspace_id, actor_session_id=current.id, route='cancel',
                     target_id=identifier, key=key, body=body, ack=ack))
             repo.append(state, event, ack.updated_at if not terminal else utc_now())

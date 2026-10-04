@@ -2,6 +2,9 @@
 import pytest
 
 from tests.integration.test_codex_bootstrap_http import ControlledRuntime, approve, make_case
+from tests.integration.test_assessment_learning_port import assessment_learning_state
+
+assessment_state = assessment_learning_state
 
 
 @pytest.fixture
@@ -54,7 +57,7 @@ def test_prepare_current_control_cancel_and_original_acks(turn_case, monkeypatch
         json={'expected_revision': 1}, headers={**case.headers, 'Idempotency-Key': 'cancel-original'})
     assert cancel.status_code == 200 and cancel.json()['status'] == 'cancelled', cancel.text
     current = case.get('sessions/' + session_id).json()
-    assert current['revision'] == 4 and current['active_turn_id'] is None
+    assert current['revision'] == 5 and current['active_turn_id'] is None
     assert case.get('turns/' + original['turn_id']).json()['outcome'] == 'cancelled'
     assert case.get('turn-preparations/' + original['id']).json()['validity'] == 'closed'
     before = case.dump()
@@ -93,7 +96,7 @@ def test_fresh_cas_active_slot_full_command_and_schema_zero_write(turn_case, bad
         body['context_refs'] = [{'entity': 'block', 'id': 'same', 'revision': 1}] * 2
     elif bad == 'unknown_provider':
         assert cancel(case, case.get(f'sessions/{sid}/turns').json()['items'][0]['job']['id']).status_code == 200
-        body['expected_session_revision'] = 4
+        body['expected_session_revision'] = 5
         body['provider_id'] = 'missing'
     before = case.dump()
     result = case.post(f'sessions/{sid}/turn-preparations', body, key)
@@ -119,7 +122,7 @@ def test_learner_control_cancel_no_subject_and_no_second_terminal(turn_case):
     assert cancel(case, value['job']['id'], 1, 'stale').status_code == 412
     second = cancel(case, value['job']['id'], 2, 'observe')
     assert second.content == first.content
-    assert case.get('sessions/' + sid).json()['revision'] == 4
+    assert case.get('sessions/' + sid).json()['revision'] == 5
     assert case.get('turns/' + value['turn_id']).json()['last_seq'] == 2
     before = case.dump()
     assert cancel(case, value['job']['id']).content == first.content
@@ -136,9 +139,9 @@ def test_new_actor_reads_old_control_but_cannot_take_original_session(turn_case,
         assert other.get('turns/' + original['turn_id']).json()['actor_session_id'] == case.actor_id
         assert cancel(other, original['job']['id']).status_code == 200
         before = case.dump()
-        assert other.post(f'sessions/{sid}/turn-preparations', turn_body(4), 'original-looking').status_code == 403
+        assert other.post(f'sessions/{sid}/turn-preparations', turn_body(5), 'original-looking').status_code == 403
         assert case.dump() == before
-        assert prepared(turn_case, revision=4, key='original-actor-new').status_code == 202
+        assert prepared(turn_case, revision=5, key='original-actor-new').status_code == 202
     finally:
         other.client.close()
 
@@ -202,11 +205,11 @@ def test_pagination_freezes_membership_but_reads_current_status(turn_case):
     case, _, sid, _, _ = turn_case
     first = prepared(turn_case).json()
     assert cancel(case, first['job']['id']).status_code == 200
-    second = prepared(turn_case, 4, 'two').json()
+    second = prepared(turn_case, 5, 'two').json()
     assert cancel(case, second['job']['id'], key='cancel-two').status_code == 200
     page = case.get(f'sessions/{sid}/turns?limit=1').json()
     assert page['items'][0]['id'] == second['turn_id'] and page['next_cursor']
-    prepared(turn_case, 6, 'three')
+    prepared(turn_case, 8, 'three')
     before = case.dump()
     older = case.get(f'sessions/{sid}/turns?limit=1&cursor=' + page['next_cursor'])
     assert older.status_code == 200 and [item['id'] for item in older.json()['items']] == [first['turn_id']]
@@ -249,3 +252,163 @@ def test_first_cancel_persists_request_and_release_as_two_session_changes(turn_c
     assert cancel(case, original['job']['id']).status_code == 200
     assert case.get('sessions/' + sid).json()['revision'] == 5
     assert case.get('turns/' + original['turn_id']).json()['last_seq'] == 2
+
+
+def identity(case):
+    from services.api.app.infrastructure.security import SessionIdentity
+    return SessionIdentity(case.actor_id, case.app.state.database.workspace_id(), 'author', '', '2099-01-01T00:00:00Z')
+
+
+def test_exact_public_source_order_original_pins_and_history_after_current_advance(turn_case):
+    from tests.integration.test_retrieval import publish_small
+    from services.api.app.infrastructure.content_repository import reference
+    from services.api.app.application.content import ContentService
+    case, _, sid, _, _ = turn_case
+    blocks, _, _ = publish_small(case.app.state.database, identity(case), 'turn-source', ['Alpha original\n', 'Beta original\n'])
+    body = {**turn_body(), 'context_refs': [reference(blocks[1]).model_dump(), reference(blocks[0]).model_dump()]}
+    response = case.post(f'sessions/{sid}/turn-preparations', body, 'sources')
+    assert response.status_code == 202, response.text
+    value = response.json()
+    assert [item['ref']['id'] for item in value['summary']['materials']] == [blocks[1].id, blocks[0].id]
+    new = blocks[0].model_copy(update={'revision': 2, 'title': 'Later metadata'})
+    ContentService(case.app.state.database).publish(identity(case).workspace_id, [new], {new.body_path: b'Alpha original\n'})
+    before = case.dump()
+    current = case.get('turn-preparations/' + value['id'])
+    assert current.status_code == 200 and current.json()['validity'] == 'changed'
+    assert current.json()['summary'] == value['summary']
+    replay = case.post(f'sessions/{sid}/turn-preparations', body, 'sources')
+    assert replay.content == response.content
+    assert case.dump() == before
+
+
+@pytest.mark.parametrize('large,damage', [(True, False), (True, True), (False, True)])
+def test_omission_still_verifies_actual_selected_bytes_before_any_job_is_saved(turn_case, large, damage):
+    from tests.integration.test_retrieval import publish_small
+    from services.api.app.infrastructure.content_repository import reference
+    case, _, sid, _, _ = turn_case
+    text = 'Original source α\n' * (4000 if large else 2)
+    blocks, _, _ = publish_small(case.app.state.database, identity(case), 'bounded', [text])
+    block = blocks[0]
+    if damage:
+        path = case.app.state.settings.data_dir / 'blobs' / block.body_sha256[:2] / block.body_sha256
+        path.write_bytes(b'corrupt actual synthetic source')
+    before = case.dump()
+    body = {**turn_body(), 'context_refs': [reference(block).model_dump()]}
+    response = case.post(f'sessions/{sid}/turn-preparations', body, 'bounded-source')
+    if damage:
+        assert response.status_code == 409, response.text
+        assert case.dump() == before
+    else:
+        assert response.status_code == 202, response.text
+        value = response.json()
+        assert value['summary']['materials'] == [] and value['summary']['character_count'] < 12000
+        assert any(item['code'] == 'CODEX_CONTEXT_MATERIAL_OMITTED' for item in value['summary']['warnings'])
+        before = case.dump()
+        read = case.get('turn-preparations/' + value['id'])
+        assert read.status_code == 200 and read.json() == value
+        assert case.dump() == before
+
+
+def test_changed_original_source_cannot_hide_behind_saved_context_for_safe_control(turn_case):
+    from tests.integration.test_retrieval import publish_small
+    from services.api.app.infrastructure.content_repository import reference
+    case, _, sid, _, _ = turn_case
+    blocks, _, _ = publish_small(case.app.state.database, identity(case), 'retained', ['Actual original\n'])
+    body = {**turn_body(), 'context_refs': [reference(blocks[0]).model_dump()]}
+    created = case.post(f'sessions/{sid}/turn-preparations', body, 'retained')
+    assert created.status_code == 202, created.text
+    value = created.json()
+    digest = blocks[0].body_sha256
+    (case.app.state.settings.data_dir / 'blobs' / digest[:2] / digest).write_bytes(b'corrupt original')
+    before = case.dump()
+    control = case.get('turns/' + value['turn_id'])
+    assert control.status_code == 409
+    replay = case.post(f'sessions/{sid}/turn-preparations', body, 'retained')
+    assert replay.status_code == 409
+    assert cancel(case, value['job']['id']).status_code == 409
+    assert case.dump() == before
+
+
+def test_concurrent_real_writers_reserve_one_slot_and_original_key_one_job(turn_case):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    from services.api.app.codex_turn_dto import CodexTurnPrepareWrite
+    from services.api.app.application.errors import ApiError
+    case, _, sid, _, _ = turn_case
+    service, actor = case.app.state.codex_turn_service, identity(case)
+    barrier = Barrier(2)
+    def run(key):
+        barrier.wait()
+        try:
+            return service.prepare_turn(actor, sid, CodexTurnPrepareWrite.model_validate(turn_body()), key)
+        except ApiError as error:
+            return error.status
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(run, ['same', 'same']))
+    assert results[0] == results[1]
+    assert len(case.get(f'sessions/{sid}/turns').json()['items']) == 1
+    assert cancel(case, results[0].job.id).status_code == 200
+    barrier = Barrier(2)
+    def distinct(key):
+        barrier.wait()
+        try:
+            return service.prepare_turn(actor, sid, CodexTurnPrepareWrite.model_validate(turn_body(5)), key)
+        except ApiError as error:
+            return error.status
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(distinct, ['one', 'two']))
+    assert sum(not isinstance(item, int) for item in results) == 1
+    assert 412 in results
+    assert len(case.get(f'sessions/{sid}/turns').json()['items']) == 2
+
+
+def test_cancel_transaction_failure_preserves_waiting_slot_and_no_terminal(turn_case):
+    case, _, sid, _, _ = turn_case
+    value = prepared(turn_case).json()
+    with case.app.state.database.transaction() as conn:
+        conn.execute("CREATE TRIGGER cancel_failure BEFORE UPDATE ON codex_turn_heads BEGIN SELECT RAISE(ABORT,'synthetic cancel rollback'); END;")
+    before = case.dump()
+    result = cancel(case, value['job']['id'])
+    assert result.status_code == 500
+    assert case.dump() == before
+    current = case.get('sessions/' + sid).json()
+    assert current['revision'] == 3 and current['active_turn_id'] == value['turn_id']
+    control = case.get('turns/' + value['turn_id']).json()
+    assert control['execution'] == 'not_started' and control['last_seq'] == 1
+
+
+@pytest.mark.parametrize('mode', ['independent', 'open_book'])
+def test_real_policy_exclusion_and_control_access(assessment_state, mode):
+    from tests.integration.test_assessment_policy import start
+    from services.api.app.application.errors import ApiError
+    database, _, fixture, assessment = assessment_state
+    runtime = ControlledRuntime()
+    case = make_case(database.settings.data_dir, codex_bootstrap_runtime=runtime)
+    case.app.state.provider_service.secret_store.initialize()
+    config = case.client.put('/api/v1/providers/codex_local/config', json={
+        'expected_revision': 0, 'adapter': 'compatible_chat', 'base_url': 'https://example.invalid',
+        'model': 'synthetic-model', 'embedding_model': None, 'endpoint_policy': 'public_https', 'pricing': None,
+    }, headers={**case.headers, 'Idempotency-Key': 'config'})
+    assert config.status_code == 200
+    _, _, body = approve(case)
+    session = case.post('sessions', body, 'session').json()['id']
+    turn = case.post(f'sessions/{session}/turn-preparations', turn_body(), 'prepared')
+    assert turn.status_code == 202, turn.text
+    owner_state = database, identity(case), fixture, assessment
+    if mode == 'independent':
+        before = case.dump()
+        with pytest.raises(ApiError) as rejected:
+            start(owner_state, mode=mode)
+        assert rejected.value.code == 'SUBJECT_WORK_ACTIVE'
+        assert case.dump() == before
+        assert cancel(case, turn.json()['job']['id']).status_code == 200
+    start(owner_state, mode=mode)
+    before = case.dump()
+    value = turn.json()
+    assert case.get('turns/' + value['turn_id']).status_code == 200
+    assert case.get(f'sessions/{session}/turns').status_code == 200
+    assert case.get('turn-preparations/' + value['id']).status_code == 409
+    assert case.post(f'sessions/{session}/turn-preparations', turn_body(), 'prepared').status_code == 409
+    assert case.dump() == before
+    assert cancel(case, value['job']['id'], 2 if mode == 'independent' else 1, 'safe-stop').status_code == 200
+    assert len(runtime.calls) == 1

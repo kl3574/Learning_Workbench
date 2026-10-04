@@ -10,6 +10,7 @@ from ..application.codex_turn_context import CodexTurnContext, damaged
 from ..application.codex_turn_models import (
     SessionAnchor, EventEnvelope, TurnPrepared, CancelCommand, preparation_digest,
 )
+from ..application.errors import ApiError
 from ..application.providers import checked_provider_configuration
 from ..codex_turn_dto import CodexTurnControlView
 from ..serialization import canonical_json, content_sha256
@@ -74,6 +75,10 @@ class CodexTurnRepository:
     def checked(self, bootstrap: dict[str, BootstrapSnapshot]) -> dict[str, CheckedSession]:
         try:
             return self._checked(bootstrap)
+        except ApiError as error:
+            if error.code in {"PROVIDER_INTEGRITY_INVALID", "AUTHORING_INTEGRITY_ERROR", "JOB_MISSING"}:
+                raise damaged() from None
+            raise
         except (ValueError, TypeError, KeyError, IndexError, RecursionError):
             raise damaged() from None
 
@@ -143,9 +148,13 @@ class CodexTurnRepository:
                         if state.active_turn_id != event.turn_id or turn.control.execution != 'not_started':
                             raise damaged()
                         turn.control = turn_control(turn.prepared, envelope.occurred_at)
-                        state.revision += 1
+                        if (event.requested_session_revision != state.revision + 1
+                                or event.terminal_session_revision != state.revision + 2):
+                            raise damaged()
+                        state.revision += 2
                         state.active_turn_id = None
-                    elif turn.control.execution != 'terminal':
+                    elif (turn.control.execution != 'terminal' or event.requested_session_revision is not None
+                          or event.terminal_session_revision is not None):
                         raise damaged()
                     if command.ack != self.jobs.snapshot(turn.control.job.id, turn.control.job_revision):
                         raise damaged()
@@ -188,7 +197,7 @@ class CodexTurnRepository:
             raise damaged()
         if checked_provider_configuration(self.conn, self.identity, value.provider.id, value.provider.revision) != value.provider:
             raise damaged()
-        context = self.context.verify_turn(self.conn, value, ack.summary)
+        context = self.context.verify_turn(self.conn, self.identity, value, ack.summary)
         if context.snapshot.created_at != ack.created_at:
             raise damaged()
         state.revision += 1
@@ -243,7 +252,7 @@ class CodexTurnRepository:
         elif event.kind == 'cancelled':
             control = turn_control(state.turns[event.turn_id].prepared, now)
             self.conn.execute('UPDATE runs SET snapshot_json=? WHERE id=?', (canonical_json(control), control.job.id))
-            revision, active = state.revision + 1, None
+            revision, active = state.revision + 2, None
         else:
             revision, active = state.revision, state.active_turn_id
         updated = self.conn.execute('UPDATE codex_turn_heads SET revision=?,event_count=?,head_sha256=?,active_turn_id=? WHERE session_id=? AND revision=? AND event_count=? AND head_sha256=?',
@@ -259,7 +268,6 @@ class CodexTurnRepository:
                 command = envelope.event.command
                 if (command.actor_session_id, command.route, command.target_id, command.key) == (identity.id, route, target, key):
                     if canonical_json(command.body) != canonical_json(body):
-                        from ..application.errors import ApiError
                         raise ApiError(409, 'IDEMPOTENCY_CONFLICT', '原命令与本次完整输入不一致。')
                     return command.ack
         return None

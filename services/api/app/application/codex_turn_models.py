@@ -48,6 +48,7 @@ class TurnContext(dm.StrictModel):
     scopes: Annotated[list[RetrievalScopeSnapshot], Field(max_length=8)]
     materials: Annotated[list[ReferenceSummary], Field(max_length=8)]
     omitted_refs: Annotated[list[dm.ContentRef], Field(max_length=8)]
+    omitted_scopes: Annotated[list[RetrievalScopeSnapshot], Field(max_length=8)]
     warnings: Annotated[list[dm.Warning], Field(max_length=32)]
 
 
@@ -96,6 +97,8 @@ class TurnPrepared(dm.StrictModel):
 class TurnCancelled(dm.StrictModel):
     kind: Literal['cancelled', 'cancel_observed']
     turn_id: dm.Id
+    requested_session_revision: dm.Revision | None
+    terminal_session_revision: dm.Revision | None
     command: CancelCommand
 
 

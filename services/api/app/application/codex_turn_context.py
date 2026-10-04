@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from packages.contracts import domain_models as dm
 from packages.contracts.canonical import strict_json, sha256_bytes
-from ..codex_turn_dto import CodexTurnPreparationSummary, CodexTurnRuntimeSummary
+from ..codex_turn_dto import CodexTurnPreparationSummary, CodexTurnRuntimeSummary, CodexTurnWarning
 from ..provider_dto import ReferenceSummary
 from ..serialization import canonical_json, content_sha256
 from ..infrastructure.database import Database
@@ -35,7 +35,7 @@ class CodexTurnContext:
         messages = [dm.GenerationMessage(role='system', content=TEMPLATE),
                     dm.GenerationMessage(role='user', content=value.request.message)]
         size = sum(len(item.content) for item in messages)
-        scopes, materials, evidence, omitted = [], [], [], []
+        scopes, materials, evidence, omitted, omitted_scopes = [], [], [], [], []
         for selected in value.request.context_refs:
             ref = dm.ContentRef.model_validate(selected.model_dump())
             scope = self.content.resolve_scope(conn, identity, [ref])
@@ -44,15 +44,18 @@ class CodexTurnContext:
             block = scope.descriptor.blocks[0]
             # Resolve every selection through Content even when it cannot fit;
             # omit only whole materials and record the omission explicitly.
+            actual = self.content.read_material(conn, identity, scope, ref)
+            self.content.verify_retained_block(conn, identity, scope)
             if block.body_bytes > 48000:
                 omitted.append(ref)
+                omitted_scopes.append(scope)
                 continue
-            actual = self.content.read_material(conn, identity, scope, ref)
             text = actual.body.decode('utf-8')
             locator = f'block:{ref.id}@r{ref.revision};body:{actual.body_sha256};cp:0-{len(text)}'
             item = dm.EvidenceChunk(ref=ref, locator=locator, text=text)
             if size + len(wrapped(item)) > 12000:
                 omitted.append(ref)
+                omitted_scopes.append(scope)
                 continue
             size += len(wrapped(item))
             scopes.append(scope)
@@ -68,13 +71,13 @@ class CodexTurnContext:
             request_sha256=content_sha256(value.request), resolved_refs=[item.ref for item in evidence],
             character_count=size, snapshot_sha256='0' * 64)
         context = TurnContext(version='codex-turn-context-v1', input=value, snapshot=snapshot,
-            messages=messages, evidence=evidence, scopes=scopes, materials=materials, omitted_refs=omitted, warnings=warnings)
+            messages=messages, evidence=evidence, scopes=scopes, materials=materials, omitted_refs=omitted, omitted_scopes=omitted_scopes, warnings=warnings)
         context.snapshot.snapshot_sha256 = context_digest(context)
         conn.execute('INSERT INTO context_snapshots(id,workspace_id,snapshot_sha256,envelope_json,created_at) VALUES(?,?,?,?,?)',
             (snapshot.id, identity.workspace_id, context.snapshot.snapshot_sha256, canonical_json(context), now))
         return context
 
-    def verify_turn(self, conn: sqlite3.Connection, value: TurnInput, summary: CodexTurnPreparationSummary) -> TurnContext:
+    def verify_turn(self, conn: sqlite3.Connection, identity: SessionIdentity, value: TurnInput, summary: CodexTurnPreparationSummary) -> TurnContext:
         if not conn.in_transaction:
             raise damaged()
         row = conn.execute('SELECT * FROM context_snapshots WHERE id=? AND workspace_id=?',
@@ -95,6 +98,10 @@ class CodexTurnContext:
             if not len(result.evidence) == len(result.materials) == len(result.scopes):
                 raise damaged()
             retained = []
+            if [scope.descriptor.scope_refs for scope in result.omitted_scopes] != [[ref] for ref in result.omitted_refs]:
+                raise damaged()
+            for scope in [*result.scopes, *result.omitted_scopes]:
+                self.content.verify_retained_block(conn, identity, scope)
             for item, material, scope in zip(result.evidence, result.materials, result.scopes, strict=True):
                 if len(scope.descriptor.blocks) != 1:
                     raise damaged()
@@ -131,7 +138,7 @@ class CodexTurnContext:
             prepared_input_sha256=prepared,
             runtime=CodexTurnRuntimeSummary(profile_sha256=content_sha256(runtime), **limits),
             character_count=value.snapshot.character_count, materials=value.materials,
-            history_turn_ids=[], tools=runtime.tools, warnings=[item.model_dump(mode="json") for item in value.warnings])
+            history_turn_ids=[], tools=runtime.tools, warnings=[CodexTurnWarning.model_validate(item.model_dump(mode="json")) for item in value.warnings])
 
     def current(self, conn: sqlite3.Connection, identity: SessionIdentity, context: TurnContext) -> bool:
         try:
