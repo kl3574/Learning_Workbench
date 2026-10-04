@@ -276,7 +276,7 @@ def test_damaged_broker_history_blocks_safe_get_and_old_ack_without_repair(conse
             failures.append(error)
             raise
     case.app.state.synthetic_executor.peer = peer
-    with pytest.raises(ApiError,match='') as result:
+    with pytest.raises(ApiError) as result:
         worker.run_once()
     assert result.value.code == 'CODEX_HISTORY_DAMAGED'
     if failures:
@@ -316,3 +316,69 @@ def test_all_broker_sql_identity_replacements_and_mutations_are_rejected(consent
                         conn.execute(statement)
                 assert case.dump() == before
     run_peer(case,body)
+
+
+def test_exact_control_phase_never_calls_bootstrap_proof_secret_model_or_operations(consent_case, monkeypatch):
+    from services.api.app.application.provider_codex_profile import CodexProofRegistry
+    case, runtime, sid, _, bootstrap_body, bootstrap_ack = consent_case
+    prep, _, start_body, start_ack = queued(consent_case)
+    worker = case.app.state.codex_turn_worker
+    counts = {key:0 for key in ('bootstrap_execute','proof_freeze','proof_prepare','secret_read','model_transport','operation')}
+    calls = []
+    def forbidden(name):
+        def fail(*args,**kwargs):
+            counts[name] += 1
+            raise AssertionError('Named forbidden control phase seam: '+name)
+        return fail
+    def body():
+        worker.bind_control_peer('synthetic-turn-fenced',lambda raw:calls.append(raw) or [])
+        # Setup already used one synthetic bootstrap + fixture proof/grant.
+        # Only this new control phase is fenced, not the full setup lifecycle.
+        with monkeypatch.context() as fence:
+            fence.setattr(type(runtime),'execute',forbidden('bootstrap_execute'))
+            fence.setattr(CodexProofRegistry,'freeze',forbidden('proof_freeze'))
+            fence.setattr(CodexProofRegistry,'prepare',forbidden('proof_prepare'))
+            fence.setattr(type(case.app.state.provider_service.secret_store),'read',forbidden('secret_read'))
+            fence.setattr(case.app.state.synthetic_executor,'transport',forbidden('model_transport'))
+            fence.setattr(worker,'execute_operation',forbidden('operation'))
+            old_body, ack = stop(case,sid,prep['turn_id'])
+            assert worker.interrupt_once() is True and worker.interrupt_once() is False
+            before = case.dump()
+            assert case.post(f'sessions/{sid}/interrupt',old_body,'stop').content == ack.content
+            assert case.post(f'sessions/{sid}/turns',start_body,'start').content == start_ack.content
+            assert case.post('sessions',bootstrap_body,'bootstrap-session').content == bootstrap_ack
+            assert case.get('turns/'+prep['turn_id']).status_code == 200
+            assert case.dump() == before and counts == {key:0 for key in counts}
+        assert len(calls) == 1
+    run_peer(case,body)
+
+
+def test_lost_original_owner_recovery_closes_unknown_without_restarting(consent_case, monkeypatch):
+    from contextlib import ExitStack
+    from datetime import datetime, timedelta, timezone
+    import threading
+    from services.api.app.application import codex_turn_worker as module
+    case, runtime, sid, proofs, _, _ = consent_case
+    prep, _, _, _ = queued(consent_case)
+    worker, calls = case.app.state.codex_turn_worker, []
+    # This deliberately controls the existing claim owner lifetime as setup;
+    # it does not execute a model or pretend that a CLI mapping was observed.
+    with ExitStack() as stack:
+        workspace, tid, owner, *_ = worker._claim(stack)
+        worker._callback_context = (workspace, tid, owner, threading.get_ident())
+        worker.bind_control_peer('synthetic-turn-recovery',lambda raw:calls.append(raw) or [])
+        stop(case,sid,tid)
+        worker._callback_context = None
+    later = (datetime.now(timezone.utc)+timedelta(minutes=2)).isoformat().replace('+00:00','Z')
+    monkeypatch.setattr(module,'utc_now',lambda:later)
+    restarted = create_app(case.app.state.settings,codex_bootstrap_runtime=runtime,codex_proofs=proofs)
+    assert restarted.state.codex_turn_worker.recover() == 1
+    current = case.get('turns/'+tid)
+    assert current.status_code == 200 and current.json()['outcome'] == 'unknown'
+    with case.app.state.database.transaction(immediate=False) as conn:
+        snapshot = restarted.state.codex_turn_worker.controls.read_control(conn,identity(case),tid)
+        assert snapshot.closed.reason == 'live_mapping_lost' and snapshot.started is None
+    before = case.dump()
+    assert restarted.state.codex_turn_worker.recover() == 0
+    assert case.get('turns/'+tid).status_code == 200
+    assert case.dump() == before and calls == [] and case.app.state.synthetic_transport_calls == []

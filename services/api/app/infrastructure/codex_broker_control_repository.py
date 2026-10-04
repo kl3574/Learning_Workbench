@@ -104,13 +104,16 @@ class CodexBrokerControlRepository:
                             raise damaged()
                         snapshot.started = event
                     elif isinstance(event, BrokerFrameObserved):
-                        if snapshot.started is None or snapshot.exchange is None:
+                        if (snapshot.started is None or snapshot.exchange is None
+                                or sum(r.event.kind == 'frame_observed' for r in snapshot.records) >= 64):
                             raise damaged()
                         observed = observe_interrupt(self.source, snapshot.exchange, event.frame.raw)
                         if (observed.accepted, observed.reason) != (event.accepted, event.reason):
                             raise damaged()
                         snapshot.exchange = observed.exchange
                     elif isinstance(event, BrokerControlClosed):
+                        if event.reason == 'transport_unknown' and snapshot.started is None:
+                            raise damaged()
                         snapshot.closed = event
                     else:
                         raise damaged()
