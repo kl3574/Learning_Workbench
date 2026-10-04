@@ -3,8 +3,17 @@ from fastapi.testclient import TestClient
 import pytest
 
 from packages.contracts.canonical import canonical_bytes
+from pydantic import ValidationError
 from services.api.app.application.codex_bootstrap_models import BootstrapFreeze
+from services.api.app.application.codex_turn_preparation_models import UnavailablePreparationContext
+from services.api.app.application.codex_turn_worker import SyntheticCodexExecutor
+from services.api.app.application.codex_operation_profile import CodexOperationRegistry
+from services.api.app.application.errors import ApiError
 from services.api.app.infrastructure.security import author_execution_identity
+from services.api.app.infrastructure.provider_transport import ProviderTransport
+from services.api.app.infrastructure.codex_probe import LocalCodexProbe
+from services.api.app.main import create_app
+from services.api.app.serialization import canonical_json, content_sha256
 from tests.integration.test_codex_bootstrap_http import ControlledRuntime, approve, make_case
 from tests.integration.test_codex_turn_preparation_http import turn_body
 from tests.integration.test_codex_turn_consent_http import preview_body
@@ -52,6 +61,34 @@ def owned_material(case, value):
         return case.app.state.codex_turn_service.read_outbound_preparation(conn, identity, value['id'], 1)
 
 
+def freeze_execution_seams(case, runtime, monkeypatch):
+    """Only the new preparation phase is observed; bootstrap setup already ran."""
+    calls = {name: 0 for name in ('freeze', 'validity', 'bootstrap', 'process', 'probe',
+                                 'secret_read', 'model_executor', 'model_transport', 'tool')}
+    def forbidden(name):
+        def call(*args, **kwargs):
+            calls[name] += 1
+            raise AssertionError('Unavailable preparation crossed forbidden '+name+' boundary')
+        return call
+    for name in ('freeze', 'validity'):
+        monkeypatch.setattr(runtime, name, forbidden(name))
+    monkeypatch.setattr(runtime, 'execute', forbidden('bootstrap'))
+    import subprocess
+    monkeypatch.setattr(subprocess, 'Popen', forbidden('process'))
+    monkeypatch.setattr(LocalCodexProbe, 'read', forbidden('probe'))
+    monkeypatch.setattr(type(case.app.state.provider_service.secret_store), 'read', forbidden('secret_read'))
+    monkeypatch.setattr(SyntheticCodexExecutor, 'execute', forbidden('model_executor'))
+    monkeypatch.setattr(ProviderTransport, 'stream', forbidden('model_transport'))
+    monkeypatch.setattr(CodexOperationRegistry, 'execute', forbidden('tool'))
+    return calls
+
+
+def prepare(case, sid, key='closure-turn'):
+    response = case.post(f'sessions/{sid}/turn-preparations', turn_body(), key)
+    assert response.status_code == 202
+    return response
+
+
 def test_real_prepare_freezes_known_owner_facts_and_pure_read_stays_unavailable(closure_case, monkeypatch):
     case, runtime, sid = closure_case
     calls = []
@@ -81,3 +118,172 @@ def test_real_prepare_freezes_known_owner_facts_and_pure_read_stays_unavailable(
     assert value['validity'] == 'unavailable' and value['proposal_id'] is None and value['consent_id'] is None
     assert case.app.state.codex_turn_worker.executor is None
     assert calls == [] and len(runtime.calls) == 1
+
+
+def test_new_actor_can_read_known_facts_but_cannot_inherit_original_source_authority(closure_case, tmp_path, monkeypatch):
+    case, runtime, sid = closure_case
+    calls = freeze_execution_seams(case, runtime, monkeypatch)
+    original = prepare(case, sid)
+    value = original.json()
+    other = make_case(tmp_path, codex_bootstrap_runtime=runtime)
+    try:
+        assert other.actor_id != case.actor_id
+        before = case.dump()
+        assert other.get('turn-preparations/'+value['id']).json() == value
+        assert other.get('turns/'+value['turn_id']).json()['actor_session_id'] == case.actor_id
+        response = other.post('consent-previews', preview_body(value), 'new-actor-preview')
+        assert response.status_code == 403 and response.json()['error']['code'] == 'POLICY_DENIED'
+        assert case.post(f'sessions/{sid}/turn-preparations', turn_body(), 'closure-turn').content == original.content
+        assert case.dump() == before
+    finally:
+        other.client.close()
+    assert not any(calls.values())
+
+
+def test_restart_reads_same_v4_without_current_runtime_secret_or_execution(closure_case, monkeypatch):
+    case, runtime, sid = closure_case
+    calls = freeze_execution_seams(case, runtime, monkeypatch)
+    original = prepare(case, sid)
+    value = original.json()
+    expected = canonical_bytes(owned_material(case, value).context)
+    app = create_app(case.app.state.settings, codex_bootstrap_runtime=runtime)
+    # This bounded reader does not enter lifespan or claim background recovery.
+    client = TestClient(app, base_url=app.state.settings.origin)
+    client.cookies.update(case.client.cookies)
+    try:
+        before = case.dump()
+        assert client.get('/api/v1/codex/turn-preparations/'+value['id']).json() == value
+        with app.state.database.transaction(immediate=False) as conn:
+            identity = author_execution_identity(conn, app.state.database.workspace_id(), case.actor_id)
+            actual = app.state.codex_turn_service.read_outbound_preparation(conn, identity, value['id'], 1)
+        assert canonical_bytes(actual.context) == expected
+        assert app.state.codex_turn_worker.executor is None
+        assert case.dump() == before
+    finally:
+        client.close()
+    assert not any(calls.values())
+
+
+@pytest.mark.parametrize('bad', ['true', 'zero', 'float_zero', 'missing_item', 'duplicate_item',
+                               'unknown_item', 'extra', 'provider', 'bootstrap_digest'])
+def test_v4_private_contract_rejects_false_aliases_unknown_qualifications_and_bad_binding(closure_case, bad):
+    case, _, sid = closure_case
+    value = prepare(case, sid).json()
+    data = owned_material(case, value).context.model_dump(mode='json')
+    if bad in {'true', 'zero', 'float_zero'}:
+        data['closure']['implemented'] = {'true': True, 'zero': 0, 'float_zero': 0.0}[bad]
+    elif bad == 'missing_item':
+        data['closure']['missing'].pop()
+    elif bad == 'duplicate_item':
+        data['closure']['missing'][1] = data['closure']['missing'][0]
+    elif bad == 'unknown_item':
+        data['closure']['missing'][0] = 'manual_trusted_proof'
+    elif bad == 'extra':
+        data['closure']['final_model_request_sha256'] = '0'*64
+    elif bad == 'provider':
+        data['closure']['provider']['model'] = 'borrowed-model'
+    else:
+        data['closure']['bootstrap_sha256'] = '0'*64
+    with pytest.raises(ValidationError):
+        UnavailablePreparationContext.model_validate(data)
+
+
+@pytest.mark.parametrize('damage', ['closure', 'bootstrap_copy', 'context', 'provider_original',
+                                  'bootstrap_member', 'turn_member', 'turn_tail'])
+def test_damaged_known_originals_fail_closed_without_get_repair_or_command_replay(closure_case, damage, monkeypatch):
+    import json
+    case, runtime, sid = closure_case
+    calls = freeze_execution_seams(case, runtime, monkeypatch)
+    value = prepare(case, sid).json()
+    with case.app.state.database.transaction() as conn:
+        if damage in {'closure', 'bootstrap_copy', 'context'}:
+            row = conn.execute('SELECT envelope_json FROM context_snapshots WHERE id=?',
+                (value['summary']['context_snapshot_id'],)).fetchone()
+            data = json.loads(row[0])
+            if damage == 'closure':
+                data['closure']['implemented'] = 0
+            elif damage == 'bootstrap_copy':
+                data['closure']['bootstrap']['finished']['outcome']['thread_id'] = 'borrowed-thread'
+                data['closure']['bootstrap_sha256'] = content_sha256(data['closure']['bootstrap'])
+            else:
+                data['messages'][-1]['content'] = 'changed-original-task'
+            conn.execute('UPDATE context_snapshots SET envelope_json=? WHERE id=?',
+                (canonical_json(data), value['summary']['context_snapshot_id']))
+        elif damage == 'provider_original':
+            conn.execute('DROP TRIGGER provider_config_history_no_update')
+            conn.execute("UPDATE provider_config_history SET config_json='{}' WHERE provider_id='codex_local'")
+        else:
+            table = {'bootstrap_member': 'codex_bootstrap_session_memberships', 'turn_member': 'codex_turn_event_members',
+                     'turn_tail': 'codex_turn_events'}[damage]
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name=?", (table,)):
+                conn.execute('DROP TRIGGER '+row[0])
+            conn.execute('DELETE FROM '+table)
+    before = case.dump()
+    for path in ['turn-preparations/'+value['id'], 'turns/'+value['turn_id'], 'sessions/'+sid]:
+        response = case.get(path)
+        assert response.status_code == 409
+    assert case.post(f'sessions/{sid}/turn-preparations', turn_body(), 'closure-turn').status_code == 409
+    assert case.post('consent-previews', preview_body(value), 'damaged-preview').status_code == 409
+    assert case.dump() == before and not any(calls.values())
+
+
+@pytest.mark.parametrize('phase', ['context', 'run', 'command'])
+def test_prepare_rolls_back_entire_known_material_and_original_slot(closure_case, phase, monkeypatch):
+    case, runtime, sid = closure_case
+    calls = freeze_execution_seams(case, runtime, monkeypatch)
+    table = {'context': 'context_snapshots', 'run': 'runs', 'command': 'codex_turn_commands'}[phase]
+    with case.app.state.database.transaction() as conn:
+        conn.execute('CREATE TRIGGER unavailable_fixture_failure BEFORE INSERT ON '+table+
+            " BEGIN SELECT RAISE(ABORT,'controlled unavailable preparation rollback'); END;")
+    before = case.dump()
+    response = case.post(f'sessions/{sid}/turn-preparations', turn_body(), 'rollback-'+phase)
+    assert response.status_code == 500 and response.json()['error']['code'] == 'INTERNAL_ERROR'
+    assert case.dump() == before
+    assert case.get('sessions/'+sid).json()['revision'] == 2
+    assert not any(calls.values())
+
+
+@pytest.mark.parametrize('change', ['config', 'secret'])
+def test_provider_current_advance_changes_qualification_not_original_known_facts_or_ack(closure_case, change, monkeypatch):
+    case, runtime, sid = closure_case
+    calls = freeze_execution_seams(case, runtime, monkeypatch)
+    original = prepare(case, sid)
+    value = original.json()
+    frozen = canonical_bytes(owned_material(case, value).context)
+    if change == 'config':
+        response = case.client.put('/api/v1/providers/codex_local/config', json={
+            'expected_revision': 1, 'adapter': 'compatible_chat', 'base_url': 'https://example.invalid',
+            'model': 'changed-unregistered-model', 'embedding_model': None, 'endpoint_policy': 'public_https', 'pricing': None,
+        }, headers={**case.headers, 'Idempotency-Key': 'config-advance'})
+    else:
+        response = case.client.post('/api/v1/providers/codex_local/secret', json={
+            'expected_revision': 1, 'secret': 'synthetic-not-a-model-credential'},
+            headers={**case.headers, 'Idempotency-Key': 'secret-advance'})
+    assert response.status_code == 200
+    before = case.dump()
+    read = case.get('turn-preparations/'+value['id'])
+    assert read.status_code == 200 and read.json()['validity'] == 'changed'
+    assert read.json()['summary'] == value['summary']
+    assert case.post(f'sessions/{sid}/turn-preparations', turn_body(), 'closure-turn').content == original.content
+    with case.app.state.database.transaction(immediate=False) as conn:
+        source = case.app.state.codex_turn_service.owned_outbound_sources(conn, case.app.state.database.workspace_id())
+        assert canonical_bytes(source[value['turn_id']].material.context) == frozen
+    assert case.dump() == before and not any(calls.values())
+
+
+def test_learner_reads_safe_control_but_not_private_preparation_and_cannot_change_source(closure_case, monkeypatch):
+    case, runtime, sid = closure_case
+    calls = freeze_execution_seams(case, runtime, monkeypatch)
+    value = prepare(case, sid).json()
+    assert case.client.post('/api/v1/session/role', json={'role': 'learner'},
+        headers={**case.headers, 'Idempotency-Key': 'closure-learner'}).status_code == 200
+    before = case.dump()
+    assert case.get('turn-preparations/'+value['id']).status_code == 403
+    control = case.get('turns/'+value['turn_id'])
+    assert control.status_code == 200
+    assert 'closure' not in control.text and 'synthetic-thread' not in control.text
+    assert case.post('consent-previews', preview_body(value), 'learner-preview').status_code == 403
+    with case.app.state.database.transaction(immediate=False) as conn:
+        with pytest.raises(ApiError):
+            author_execution_identity(conn, case.app.state.database.workspace_id(), case.actor_id)
+    assert case.dump() == before and not any(calls.values())
