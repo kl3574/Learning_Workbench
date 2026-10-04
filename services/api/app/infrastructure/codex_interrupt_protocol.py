@@ -12,7 +12,7 @@ from jsonschema.exceptions import ValidationError as SchemaError
 
 from packages.contracts.canonical import sha256_bytes, strict_json
 from ..application.codex_interrupt_protocol_models import (
-    INTERRUPT_PROJECTION_SHA256, INTERRUPT_SCHEMA_FILES, CapturedInterruptRequest,
+    INTERRUPT_PROJECTION_SHA256, INTERRUPT_SCHEMA_FILES, MAX_FRAME_BYTES, CapturedInterruptRequest,
     InterruptExchange, InterruptObservation, InterruptProtocolSource, InterruptReply, InterruptRequest,
     InterruptSchemaOriginal, InterruptSourceSummary, ObservedInterruptReply, ObservedTerminalNotification,
     PrivateProtocolFrame, RejectionReason, TerminalNotification, observation_membership_sha256,
@@ -62,6 +62,8 @@ def _validate_frame(schemas: dict[str, dict], body: dict, kind: str) -> None:
 def _frame(raw: bytes) -> PrivateProtocolFrame:
     # Overbound/empty/non-byte input is not admitted as a frame. The caller owns
     # its input; we never truncate a raw fact or claim the prefix was complete.
+    if type(raw) is not bytes or not 1 <= len(raw) <= MAX_FRAME_BYTES:
+        raise ValueError('A complete bounded byte frame is required')
     return PrivateProtocolFrame(raw=raw, sha256=sha256_bytes(raw))
 
 
@@ -105,7 +107,7 @@ def observe_interrupt(source: InterruptProtocolSource, exchange: InterruptExchan
 
     try:
         body = strict_json(frame.raw)
-    except ValueError:
+    except (ValueError, RecursionError):
         return rejected('invalid_json')
     if not isinstance(body, dict):
         return rejected('unsupported_shape')
