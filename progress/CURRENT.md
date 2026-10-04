@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-04T01:48:36Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
+更新：2026-10-04T02:12:21Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED_PR55_ISSUE31_CONCEPTS_PUSHED_NEW_CI_OBSERVED
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
 
-固定已批准唯一v3.0.15及派生目录/归属结构验收，从strictDTO/真实SQLite准备与安全控制读回开始实施M6.3；普通Provider/bootstrap历史不变，新模型profile没有完整输入证明时零外发，尚无新真实turn/工具/产物验收。
+完成固定v3.0.15 strict DTO及真实SQLite准备Job/安全控制读回/取消的局部HTTP验收和独立审阅，整合后运行适用组合门禁；并同步已批准规范及证据到draft PR56。147声明与116当前实现分开；新grant/dispatch/tool/manifest尚未验收，无完整proof零外发。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -294,6 +294,7 @@
 - M6.3_API_static_boundary: {'source': '00cb5ae4cf9cd157212374bf636f5086f5f6160d', 'status': 'LOCAL_FIXED_00CB_824_PASS_AND_CANONICAL_B3BB_RUNTIME_BYTES_VERIFIED', 'backend': '824PASS/0FAIL/2warnings/exit0', 'focused': '34PASS included in824', 'static_mypy': 'RuffPASS/mypy252PASS', 'source_inputs': '1383nonprogress exactGit beforeafter', 'originals': 'e913 dual backend1FAIL822PASS; db14 initial823PASS onlyabsentstatic; controlled with-ui1FAIL/without-ui1PASS retained', 'boundary': 'No newAPI/DTO/permission; reserved API paths excluded from root UI mount. Corrected remoteCI not yet run.', 'canonical': 'b3bbf8d9c4a1c9065be501497ba9b7117a21acf2'}
 - M6.3_combined_3df5074a: {'head': '3df5074a6d4f21d4d3bd94e11556c53f9a325a37', 'structural': '80PASS/1386engineeringinputs unchanged; original harnessrace retained', 'local_backend': '00cb824PASS/mypy252/Ruff; runtime bytes exactrootb3bb, client integration no Python edits', 'local_web': '83daf1058PASS/146files; completeapps/web tree exact066→root3df', 'native': '196b priorcomplete129PASS;066 finalnew2PASS;current130completeNOT_RUN', 'scope': 'Source-specific existing results carried exactly; combinednew remoteCI needed, full M6.3/quality unaccepted.'}
 - M6.3_source_publication_4ecc: {'head': '4ecc27a883782855a6e5611d7610979e4b4b05ca', 'status': 'ACTUAL_PUSH_DRAFT_PR_BOTH_CI_SUCCESS', 'evidence': 'progress/evidence/2026-10-03/M6.3-4ecc-terminal-CI-twelve-success/REPORT.json', 'push_evidence': 'progress/evidence/2026-10-03/M6.3-revision-source-publication-4ecc27a8/REPORT.json', 'numeric_evidence': 'progress/evidence/2026-10-03/M6.3-4ecc-official-numeric-blocked-artifacts/REPORT.json', 'scope': '4ecc已实际普通push/PR56 draft readback；push37165685426/PR37165687627各6jobsSUCCESS，12完整log及same-tree checkout已核。每backend824/contract808/integration2143+2物理ENVskip/Web1058/native130 PASS；旧e913两个FAIL保留。四实际新数值artifact仍BLOCKED/409，真实生产Provider/CLIturn/质量NOT_RUN，整个M6.3/AC21未验收。4e8合同用户已批准；同范围安全减权basis澄清复核后纳唯一v3.0.15并实施。'}
+- M6.3_v315_contract_adoption: {'status': 'SCOPED_STRUCTURAL_CONTRACTS_PASS_RUNTIME_IN_PROGRESS', 'source': '50ec27381c4e98513bf8aac48128c201e933423f', 'structural': '80generated/54core PASS', 'contracts': '168PASS', 'input_binding': '1386complete nonprogress files Git exact before/after', 'runtime_route_counts': '147declared/116registered/31unregistered', 'evidence': 'progress/evidence/2026-10-03/M6.3-v315-adoption-and-fixed-structural-contract-gates/REPORT.json', 'boundary': 'No new turn/model/tool/manifest runtime acceptance.'}
 
 ## 阻塞与待决项
 

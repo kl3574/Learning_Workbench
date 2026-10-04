@@ -1,0 +1,9 @@
+# Approved control-basis clarification: fixed author receipt
+
+Source `7820199bb7418a1de0b9a18913be135bdd76e2bf`, parent approved `4e8d4f79f7090af997b48926a0a9050fe2170b7d`. One isolated proposal file changed; canonical spec and production source are untouched. Full document SHA256 `79bcb378cbd756651f44098648c045e0e0c711e6f2c7b32295d1bc02903e0611`. Original proposal, author receipt and independent 4e8 P2-A/P2-B OPEN receipt remain preserved. This is the author's correction record, not the independent closure decision.
+
+The existing safe CodexTurnControlView gains required closed approval_controls and consent_control. Actual owner identity/revision/hash/state, exact same-order membership, consent retention after consume/revoke/expiry/terminal, current workspace checks and zero-write reads make existing decline/revoke commands constructible without academic details or old browser memory. Full approval/consent reads remain author/Policy protected; original actor is still required for approve/start. No HTTP route or execution authority was added.
+
+Static checks: no method/path change; sections 2/3/6/7/8/9 are byte-identical to 4e8; sole v3.0.14 spec remains bed7c924955512ec4a6775812c80e6c5ce82e968f19feb403e568099f8dc4144; selected source inputs equal Git; clean tree. V3_0_15_BODY.md is the exact full sections 2–10, and ADOPTION_INDEX.md is exact section 11. Parent will review and adopt the approved contract; this task does not edit canonical.
+
+No application, tests, CLI, model, browser, database, network or system probe execution. No remote mutation. Independent closure is requested from the original reviewer and is intentionally not inferred here. SAFE_SHARE.json plus PUBLIC_OUTER_ALLOWLIST.json are the only public candidates; no DB/archive/credential/account/runtime raw material.
