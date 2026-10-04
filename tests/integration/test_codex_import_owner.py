@@ -308,12 +308,23 @@ def test_parser_failure_remains_real_failure_with_model_origin_and_zero_publicat
     assert case.client.get('/api/v1/courses').json()['items'] == []
 
 
-def test_damaged_queued_source_does_not_claim_successful_work_or_repair_it(tmp_path):
+@pytest.mark.parametrize('damage', ['input', 'blob'])
+def test_damaged_queued_source_does_not_claim_successful_work_or_repair_it(tmp_path, damage):
     case, service, identity = fixture(tmp_path)
     binding, = stage(case, service, identity, [source(identity)])
     with case.app.state.database.transaction() as conn:
-        conn.execute("UPDATE jobs SET input_json='{}' WHERE id=?", (binding.import_job_id,))
-    assert case.app.state.import_worker.run_once() is False
+        if damage == 'input':
+            conn.execute("UPDATE jobs SET input_json='{}' WHERE id=?", (binding.import_job_id,))
+        else:
+            path = conn.execute('SELECT relative_path FROM content_blobs WHERE sha256=?', (binding.artifact_sha256,)).fetchone()[0]
+            blob = case.app.state.settings.data_dir / path
+            raw = blob.read_bytes()
+            assert sha256(raw).hexdigest() == binding.artifact_sha256
+            blob.write_bytes(b'x' * len(raw))
+    worked = case.app.state.import_worker.run_once()
+    assert worked is False
     with case.app.state.database.transaction(immediate=False) as conn:
         row = conn.execute('SELECT status,revision,input_json FROM jobs WHERE id=?', (binding.import_job_id,)).fetchone()
-    assert tuple(row) == ('queued', 1, '{}')
+    assert tuple(row)[:2] == ('queued', 1)
+    if damage == 'input':
+        assert row['input_json'] == '{}'
