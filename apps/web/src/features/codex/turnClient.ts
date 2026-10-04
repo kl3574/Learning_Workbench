@@ -1,11 +1,13 @@
 import type { JobSnapshot, SessionResponse } from '../../../../../packages/contracts/generated/api-types'
-import type { CodexCurrentSessionView, CodexTurnControlView, CodexTurnPage, CodexTurnPreparationView, CodexTurnPrepareWrite } from '../../../../../packages/contracts/generated/codex-turn-types'
+import type { CodexCurrentSessionView, CodexInterruptAck, CodexInterruptWrite, CodexTurnControlView, CodexTurnPage, CodexTurnPreparationView, CodexTurnPrepareWrite } from '../../../../../packages/contracts/generated/codex-turn-types'
 import schemas from '../../../../../packages/contracts/generated/codex-turn-schemas.json'
 import { request } from '../../api/client'
 import { checkedProvider, sameValue, validIdentity } from '../providers/providerSchema'
 import { bootstrapClient } from './bootstrapClient'
 
 type TurnWire = {
+ CodexInterruptWrite: CodexInterruptWrite
+ CodexInterruptAck: CodexInterruptAck
  CodexTurnPrepareWrite: CodexTurnPrepareWrite
  CodexTurnPreparationView: CodexTurnPreparationView
  CodexTurnControlView: CodexTurnControlView
@@ -87,6 +89,7 @@ export type TurnPort = {
  control(id: string): Promise<CodexTurnControlView>
  turns(id: string, query?: TurnPageQuery): Promise<CodexTurnPage>
  cancel(jobId: string, expectedRevision: number, key: string): Promise<JobSnapshot>
+ interrupt(id: string, body: CodexInterruptWrite, key: string): Promise<CodexInterruptAck>
 }
 export const turnClient: TurnPort = {
  session: bootstrapClient.session,
@@ -118,5 +121,11 @@ export const turnClient: TurnPort = {
  cancel: async (jobId, expectedRevision, key) => {
   const body = checkedProvider<{ expected_revision: number }>('JobCancelRequest', { expected_revision: expectedRevision })
   return checkedTurnJob(await request('POST /api/v1/jobs/{id}/cancel', body, { 'Idempotency-Key': key }, { path: { id: identity(jobId) } }), jobId)
+ },
+ interrupt: async (id, body, key) => {
+  const checked = checkedTurn('CodexInterruptWrite', body)
+  const value = checkedTurn('CodexInterruptAck', await request('POST /api/v1/codex/sessions/{id}/interrupt', checked, { 'Idempotency-Key': key }, { path: { id: identity(id) } }))
+  if (value.id !== id || value.turn_id !== checked.turn_id) invalid()
+  return value
  },
 }

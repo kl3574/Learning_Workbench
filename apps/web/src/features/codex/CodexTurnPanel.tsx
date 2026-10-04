@@ -53,7 +53,7 @@ export function CodexTurnPanel({ workspace, writeAdmitted, port, store, formStor
   <section aria-label="回合原命令与历史 ACK"><h4>原命令与历史 ACK</h4>
    <p>准备正文只向原作者且当前策略允许时显示。已保存表单和未知命令在权限变化后仍保留；历史 ACK 不更新当前 GET。</p>
    {state.commands.map(command => <article key={command.command_id}>
-    <p>{command.kind === 'prepare' ? '准备回合' : '取消回合 Job'} · {command.ack ? '原 ACK 已记录，不是当前状态' : command.error ? `安全错误 ${command.error.status} ${command.error.code ?? ''}；原基准保留` : '结果未知；原 key 与完整命令保留'}</p>
+    <p>{command.kind === 'prepare' ? '准备回合' : command.kind === 'cancel' ? '取消回合 Job' : '中断会话回合'} · {command.ack ? '原 ACK 已记录，不是当前状态' : command.error ? `安全错误 ${command.error.status} ${command.error.code ?? ''}；原基准保留` : '结果未知；原 key 与完整命令保留'}</p>
     {command.actor_session_id !== state.actor && <p>其他 actor 的安全控制记录只读；不能接管或重放。</p>}
     <details><summary>核对回合原命令 {command.command_id}</summary><p>原 actor {command.actor_session_id}</p><pre>{JSON.stringify({ session_id: command.session_id, body: command.body, basis: command.basis, ack: command.ack }, null, 2)}</pre></details>
     <button disabled={state.busy || !state.canReplay(command)} onClick={() => void state.execute(command)}>显式回放回合原 key {command.command_id}</button>
@@ -75,6 +75,8 @@ export function CodexTurnPanel({ workspace, writeAdmitted, port, store, formStor
    <button disabled={blocked} onClick={() => void state.readControl(value.id)}>刷新安全控制 {value.id}</button>
    <button disabled={blocked} onClick={() => void state.cancel(value)}>明确取消回合 Job {value.job.id}</button>
    <p>取消使用本次控制 GET 的 Job revision；ACK 和取消请求不证明远端已经停止。</p>
+   <button disabled={blocked || !state.canInterrupt(value)} onClick={() => void state.interrupt(value)}>明确中断会话回合 {value.id}</button>
+   <p>中断使用独立读取的 session 版本与本回合 ID；先核对当前 session 和回合控制。历史 ACK 不代表远端已停止。</p>
    <CodexTurnEventsPanel workspace={workspace} turn={value.id} run={value.job.id} admitted={state.allowed} port={eventPort} />
   </section>)}
   <CodexTurnOutboundPanel workspace={workspace} writeAdmitted={writeAdmitted} port={outboundPort} store={outboundStore} formStore={outboundFormStore} onState={setOutbound} />

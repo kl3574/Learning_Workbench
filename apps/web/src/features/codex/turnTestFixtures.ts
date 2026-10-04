@@ -23,4 +23,5 @@ export const turnPort = (): TurnPort => ({ session: vi.fn(async () => session())
  prepare: vi.fn<TurnPort['prepare']>(async (_id, request) => turnPreparation(request)), preparation: vi.fn(async () => turnPreparation()),
  control: vi.fn(async () => turnControl()), turns: vi.fn(async () => ({ items: [turnControl()], next_cursor: null })),
  cancel: vi.fn<TurnPort['cancel']>(async id => ({ ...turnCancelledJob(), id })),
+ interrupt: vi.fn<TurnPort['interrupt']>(async (id, body) => ({ id, turn_id: body.turn_id, status: 'interrupt_requested' })),
 })
