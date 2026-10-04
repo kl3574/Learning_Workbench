@@ -222,3 +222,31 @@ def test_current_role_is_checked_before_artifact_port_or_new_stage(tmp_path):
                 body=CodexArtifactImportWrite(turn_id=item.turn_id, artifact_ids=[item.artifact_id],
                     expected_manifest_sha256=item.manifest_sha256), aggregate_job_id='job_aggregate', source=peer)
     assert denied.value.status == 403 and peer.calls == [] and case.dump() == before
+
+
+@pytest.mark.parametrize('damage', ['all_binding_family', 'status_pair'])
+def test_complete_member_discovery_and_child_status_cannot_hide_damage(tmp_path, damage):
+    case, service, identity = fixture(tmp_path)
+    binding, = bindings = stage(case, service, identity, [source(identity)])
+    with case.app.state.database.transaction() as conn:
+        if damage == 'all_binding_family':
+            conn.execute('DELETE FROM codex_import_bindings')
+            conn.execute('DELETE FROM codex_import_batches')
+        else:
+            conn.execute("UPDATE ingestion_imports SET status='cancelled' WHERE id=?", (binding.import_id,))
+    before = case.dump()
+    with pytest.raises(ApiError):
+        with case.app.state.database.transaction(immediate=False) as conn:
+            conn.execute('PRAGMA query_only=ON')
+            service.codex_aggregate_members(conn, identity.workspace_id)
+    assert case.dump() == before
+
+
+@pytest.mark.parametrize('field', ['filename', 'media_type', 'import_kind'])
+def test_malformed_artifact_owner_descriptor_is_safe_error_not_unhandled_type(tmp_path, field):
+    case, service, identity = fixture(tmp_path)
+    item = replace(source(identity), **{field: 8})
+    before = case.dump()
+    with pytest.raises(ApiError):
+        stage(case, service, identity, [item])
+    assert case.dump() == before
