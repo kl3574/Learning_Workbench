@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-04T18:25:10Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
+更新：2026-10-04T18:51:32Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
 
 仓库发布：VERIFIED；Issues 同步：VERIFIED_ISSUE32_D6D4_QUALIFIED_TERMINAL_MANAGED_BLOCK_PUBLIC_SOURCE_STILL1A
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
 
-独立审阅新22eb客户端JSON屏障与只拦一次原200响应的test-only修复，保留480实际1P1F、f017三GET观察及原412完整FAIL/causeUNKNOWN；正常合入后冻结并执行该新组合所需门禁，不能借d69完整133PASS。归档当前实际终态、检查全部待公开源码/历史再普通sourcepush与PR56/新CI实际读回。继续独立合成备份历史回读准备；真实productionproof/Provider/物理Broker/数值环境/质量及整个M6.3/AC21/M7未验收。
+对最终可公开提交核全部当前树与待推送历史，普通sourcepush并读回PR56确切head/draft状态；同步Issue32/PR正文，读取真实新CI各event/job/checkout/log终态，保留旧1a真实pushFAIL。继续现行规范下的本地合成备份覆盖准备与独审；生产完整InputProof/Provider/实际CLIturn/物理Broker与数值环境、来源数学教学质量及整个M6.3/AC21/M7未验收。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -41,13 +41,13 @@
 
 ## 验证边界
 
-- spec_checks: 固定d6d4实际82generated、54core/147declared/134registered/13missing与Web1399/166files、七正确static PASS。两额外误调用mypy/extract_spec实际FAIL原日志保留，后来按Makefile正确命令另跑PASS。结构不等于M6.3/AC21验收。
-- unit: 4353 actual fullPython4341PASS/2actual numeric ENVskip. All564 Python and973/974 old nonWeb/e2e inputs exact atd6d4; sole .gitattributes archival-rule difference. This is input-qualified reuse, not a new Python run. Subsequent README wording is separately documentary and not silently called byte-identical.
-- contract: 4353 actual fullPython4341PASS/2actual numeric ENVskip. All564 Python and973/974 old nonWeb/e2e inputs exact atd6d4; sole .gitattributes archival-rule difference. This is input-qualified reuse, not a new Python run. Subsequent README wording is separately documentary and not silently called byte-identical. No independent contract subset count; do not add to aggregate.
-- integration: 4353 actual fullPython4341PASS/2actual numeric ENVskip. All564 Python and973/974 old nonWeb/e2e inputs exact atd6d4; sole .gitattributes archival-rule difference. This is input-qualified reuse, not a new Python run. Subsequent README wording is separately documentary and not silently called byte-identical. No independent integration subset count; no physical numeric fallback.
-- browser_native: NEW_COMPLETE_PASS_AT_D69：原make test-e2e133PASS/20.1m、exit0/wrapper0，logSHAad3c0608c6ab60b88071ceaf8a7c9cac95db2df7e82e3f50cb999beb474194f7；1512non-generated exact，5original generated outputs changed/no restore。d6d4对应1521/1522字节连续，唯一attributes文档差异。原412完整132PASS1FAIL/causeUNKNOWN及新observer480局部1PASS1FAIL保留。d69 handler-only客户端观察仍OPEN，133PASS不借给后续observer源码。
-- real_provider: PLATFORM_PROVIDER_NOT_RUN：production complete-input ProofRegistry/executor无符合要求注册证明；本轮0actual external model requests，无实key使用。历史直连成功描述缺可独立核验HTTP原回执，不能当当前平台Agent证据。
-- real_codex: PHYSICAL_CODEX_MODEL_OR_TOOL_TURN_NOT_RUN：本轮受限控制/合成memory与纯literal各独立限定；未建立实际CLI模型回合/host工具/Broker/资源安全验收。
+- spec_checks: 固定5d3实际1399Web/166files、七static PASS，1524全Git输入各命令前后一致；mypy287、generated82、54core/147declared/134registered/13missing为结构检查，不是整个平台完成。
+- unit: 固定4353完整Python实际4341PASS/2真实numericENVskip；当前5d3所有564Python和972/974原nonWeb/e2e输入逐Git相同，README及归档attributes两项文档差异明确排除。未重跑当前Python，contract/integration没有额外独立计数，不相加。
+- contract: 固定4353完整Python实际4341PASS/2真实numericENVskip；当前5d3所有564Python和972/974原nonWeb/e2e输入逐Git相同，README及归档attributes两项文档差异明确排除。未重跑当前Python，contract/integration没有额外独立计数，不相加。
+- integration: 固定4353完整Python实际4341PASS/2真实numericENVskip；当前5d3所有564Python和972/974原nonWeb/e2e输入逐Git相同，README及归档attributes两项文档差异明确排除。未重跑当前Python，contract/integration没有额外独立计数，不相加。
+- browser_native: ROOT_EXACT22_COMPLETE_PASS：原make test-e2e133PASS/20.4m，command/wrapper0，logSHAf2ea8017f0b8d7415ab6b8e99ef06ed74daccfe99852fc59b208ac3b5c8c6ec4；1514nongenerated exact，5生成输出变化/no restore。5d3所有runtime/test输入同22，README/attributes仅文档差异。原412完整132P1F及480局部1P1F不改；新22仅关闭精确JSON/当前同步链观察，不宣称全React完成。
+- real_provider: PLATFORM_PROVIDER_NOT_RUN：production完整InputProof/受控executor未有符合要求注册证明；本轮0actual external model request，无实key使用/存入源码/上传。历史直连成功缺原HTTP可核回执，不作为当前平台通过。
+- real_codex: PHYSICAL_CODEX_MODEL_OR_TOOL_TURN_NOT_RUN：控制bootstrap/纯内存和pureliteral合成执行分别限定，真实CLI模型turn、物理Broker/hosttools/writer-stop/resource验收未完成。
 - learning_effectiveness: NOT_RUN
 - ci: 当前1a实际push5success1browserFAIL(129P1F，Tutor148原因UNKNOWN)；PR6success/native130。12原日志/真实checkout/tree已核，每event911backend/956spec/2358integration+2actualnumericENVskip/1278Web，overlap不相加；旧失败均保留，整体M6.3未验。
 - m4_1_development: 开发和独立审查的所有原失败/修复、环境诊断已保留；最终源码新验收通过，不覆盖历史失败。
@@ -320,6 +320,9 @@
 - m6_3_progress_installer_rollforward: Original installer exit1 retained; all714files/4docs pure readback PASS, one exact ignored imports/archive forced staging, originaldiff2→five exact archivalattributes→laterdiff0, staged719scannerPASS/doc7bb actual. No original failure rewritten.
 - m7_1_codex_backup_preparation: READONLY d69 inventory; minimal synthetic backup-history coverage prepared independently under existing§20.17.7. No product restore/7routes implementation or M7.1 acceptance established.
 - m6_3_d6d4_documentary_rollforward_check: 七终态证据包与5进度/说明文件普通暂存118。原staged diffcheck实际exit2仅一个归档旧warning stdout的原空白，原件未改；追加该精确归档path -whitespace属性后另行检查，不追改原exit。README只是历史Provider描述限定，非生产改动。
+- m6_3_client22_current_combination: 22 test-only3paths independently Standards/Spec0new。精确JSON与有限同步current/catch观察CLOSED_BOUNDED；d69OPEN旧seal不改/全Reacteffects未证明。新5d3Web1399/static7、root22完整133PASS且输入限定明确；原412/480FAIL未抹去。
+- m6_3_publication_preflight: Current5d3 exactlocalgates ready; publicsource still1a/draft/open/unmerged. Finalcurrent-tree/outgoing-history audit and ordinarysourcepush/actualnewCIreadback remain NEXT, not claimed.
+- m7_1_isolated_codex_backup_preparation: 固定942fc新增181行测试，独立树2focusedPASS/21relatedPASS与Ruff/diffPASS；原fixture2FAIL保留、独审双轴0new。源候选未合入/推送，仅公开明确的合成文档证据。M7todo/正式restore和后台恢复/ApprovalImport覆盖NOT_RUN；非context TestClient，不补造runnerSHA或原maps mode。
 
 ## 阻塞与待决项
 

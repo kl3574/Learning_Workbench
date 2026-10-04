@@ -1,0 +1,2 @@
+import { defineConfig } from '${HOME}/.cache/learning-workbench-acceptance/m63-review-client-barrier-oct05/apps/web/node_modules/@playwright/test/index.mjs'
+export default defineConfig({ testDir: '${HOME}/.cache/learning-workbench-acceptance/m63-review-client-barrier-oct05/tests/e2e', testMatch: 'responseJsonBarrier.check.ts', fullyParallel: false, workers: 1, timeout: 30000, retries: 0, reporter: [['list']], outputDir: process.env.MECHANISM_OUTPUT, use: { headless: true, trace: 'off', screenshot: 'off', launchOptions: { executablePath: '/usr/bin/google-chrome' } } })
