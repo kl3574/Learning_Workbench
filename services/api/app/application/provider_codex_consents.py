@@ -234,6 +234,8 @@ class CodexConsentsService:
             ack=CodexConsentCreateAck(id='codexconsent_'+uuid4().hex,revision=1,status='active',actor_session_id=current.id,
                 proposal_id=original.id,proposal_sha256=original.proposal_sha256,summary=original.summary)
             now=utc_now()
+            if instant(now) >= instant(original.summary.expires_at):
+                raise ApiError(409,'CODEX_CONSENT_EXPIRED','原外发提案已到期，不能批准。')
             event=CodexGranted(kind='granted',command=CodexGrantCommand(route='grant',actor_session_id=current.id,key=key,body=body,ack=ack))
             envelope=repo.append(original.summary.turn_id,event,now,state)
             self._bind(conn,current,state,envelope)
