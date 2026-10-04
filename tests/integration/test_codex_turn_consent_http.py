@@ -420,3 +420,18 @@ def test_expired_projection_never_rewrites_durable_run_when_cancelling(consent_c
         repo = CodexTurnRepository(conn, actor, case.app.state.codex_turn_service.context)
         retained = repo.checked(original)[sid].turns[prep.json()['turn_id']]
         assert retained.control.consent_control.model_dump() == {'id': consent.json()['id'], 'revision': 1, 'status': 'active'}
+
+
+def test_grant_crossing_expiry_is_normal_refusal_not_history_corruption(consent_case, monkeypatch):
+    from services.api.app.application import provider_codex_consents
+    case, _, sid, _, _, _ = consent_case
+    _, preparation = consent_preparation(case, sid)
+    proposal = case.post('consent-previews', full_preview_body(preparation.json()), 'preview')
+    assert proposal.status_code == 201
+    value = proposal.json()
+    instants = iter([value['summary']['created_at'], value['summary']['expires_at']])
+    monkeypatch.setattr(provider_codex_consents, 'utc_now', lambda: next(instants))
+    before = case.dump()
+    result = case.post('consents', {'proposal_id': value['id'], 'proposal_sha256': value['proposal_sha256']}, 'boundary-grant')
+    assert result.status_code == 409 and result.json()['error']['code'] == 'CODEX_CONSENT_EXPIRED'
+    assert case.dump() == before
