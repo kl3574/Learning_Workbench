@@ -3,9 +3,10 @@ import { mkdtempSync, existsSync, statSync, readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
-import { expect, type BrowserContext, type BrowserType, type Page } from '../../apps/web/node_modules/@playwright/test/index.js'
+import playwrightTest, { type BrowserContext, type BrowserType, type Page } from '../../apps/web/node_modules/@playwright/test/index.js'
 import { availablePort, owned, ready, readyOwnedUi, stopOwned, withOwnedStartup, type OwnedProcess } from './ownedStartup'
 
+const { expect } = playwrightTest
 const root = resolve(import.meta.dirname, '../..')
 type AuthoringScenario = 'complete' | 'no_proof' | 'lesson' | 'practice_set' | 'assessment'
 type AuthoringFactory = 'single' | 'groups'
