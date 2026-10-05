@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from .provider_codex_consents import CodexConsentsService
     from .codex_approvals import CodexApprovalsService
     from .codex_artifacts import CodexArtifactsService
+    from .codex_broker_control import CodexBrokerControls
 
 
 Delivery = TypeVar("Delivery")
@@ -60,6 +61,7 @@ class CodexTurnService:
         self.outbound_owner: CodexConsentsService | None = None
         self.approvals: CodexApprovalsService | None = None
         self.artifacts: CodexArtifactsService | None = None
+        self.broker_controls: CodexBrokerControls | None = None
         self.execution_available: Callable[[CodexRuntimeProfile], bool] = lambda profile: False
 
     def _deliver(self, identity: SessionIdentity, value: Delivery, *, subject: bool) -> Delivery:
@@ -125,6 +127,10 @@ class CodexTurnService:
             self.approvals.verify_history(conn, current.workspace_id, history)
         if self.artifacts is not None:
             self.artifacts.verify_sources(conn, current.workspace_id, history)
+        if self.broker_controls is not None:
+            snapshots = self.broker_controls.verify_history(conn, current.workspace_id, original, history)
+            if self.outbound_owner is not None:
+                self.broker_controls.verify_started(snapshots, self.outbound_owner.owned_states(conn, current.workspace_id)[0])
         return current, original, repository, history
 
     def _control_views(self, conn, identity, history):
@@ -184,6 +190,8 @@ class CodexTurnService:
         history = repository.checked(original)
         from ..infrastructure.codex_artifact_repository import CodexArtifactRepository
         CodexArtifactRepository(conn, workspace_id).checked(history)
+        if self.broker_controls is not None:
+            self.broker_controls.verify_history(conn, workspace_id, original, history)
         return original, repository, history
 
     def _owned_source_views(self, transaction, workspace_id, history):
@@ -490,6 +498,8 @@ class CodexTurnService:
                 command=interrupt.model_dump(), stop=event.model_dump()))
         repo.append(state, event, ack.updated_at if not terminal and not already_requested else utc_now())
         self._state(conn,current)
+        if self.broker_controls is not None:
+            self.broker_controls.request_interrupt(conn, current, turn.control.id)
         current_control_access(conn, current, write=False)
         return ack
 

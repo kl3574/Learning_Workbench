@@ -21,6 +21,7 @@ from ..infrastructure.codex_turn_jobs import CodexTurnJobs
 from ..infrastructure.codex_answer_materializer import artifact_error
 from ..serialization import content_sha256
 from .codex_turn import CodexTurnService
+from .codex_broker_control import CodexBrokerControls
 from .codex_turn_models import TurnLifecycle
 from .errors import ApiError
 from .provider_codex_consents import CodexConsentsService
@@ -64,6 +65,9 @@ class CodexTurnWorker:
         self.last_error_code: str | None = None
         self._callback_context: tuple[str, str, str, int] | None = None
         self.imports: CodexArtifactImports | None = None
+        self.controls = CodexBrokerControls(turns, provider, lambda: self._callback_context
+            if type(self.executor) is SyntheticCodexExecutor else None)
+        turns.broker_controls = self.controls
 
     def available(self, profile: CodexRuntimeProfile) -> bool:
         return self.executor is not None and self.executor.available(profile)
@@ -285,6 +289,7 @@ class CodexTurnWorker:
                     result=None
                 finally:
                     self._callback_context=None
+                    self.controls.release(workspace, turn_id, owner)
                 collection, scan_error = None, None
                 if self.turns.artifacts is not None and self.turns.artifacts.producer is not None:
                     try:
@@ -300,6 +305,20 @@ class CodexTurnWorker:
                 return True
         finally:
             self._lock.release()
+
+    def bind_control_peer(self, upstream_turn_id: str, transport: Callable[[bytes], list[bytes]]):
+        context = self._callback_context
+        if (context is None or context[3] != threading.get_ident()
+                or type(self.executor) is not SyntheticCodexExecutor):
+            raise ApiError(409, 'CODEX_BINDING_INVALID', '没有原执行实例控制映射。')
+        return self.controls.bind_peer(context[0], context[1], context[2], context[3], upstream_turn_id, transport)
+
+    def interrupt_once(self) -> bool:
+        context = self._callback_context
+        if (context is None or context[3] != threading.get_ident()
+                or type(self.executor) is not SyntheticCodexExecutor):
+            return False
+        return self.controls.interrupt_once(context[0], context[1], context[2], context[3])
 
     def receive_operation(self, raw: bytes) -> str:
         """Internal synthetic adapter input; never an HTTP authority port.
@@ -344,5 +363,6 @@ class CodexTurnWorker:
                         continue
                     self._terminal(conn,workspace,repo,state,turn,provider_state,
                         outcome='unknown',code='CODEX_OUTCOME_UNKNOWN')
+                    self.controls.recover_owned(conn, workspace, turn_id)
                     count+=1
         return count
