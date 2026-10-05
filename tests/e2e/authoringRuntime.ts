@@ -1,12 +1,12 @@
-import { spawn, execFileSync, type ChildProcess } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { mkdtempSync, existsSync, statSync, readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
-import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
-import { setTimeout as pause } from 'node:timers/promises'
-import { expect, type BrowserContext, type BrowserType, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
+import playwrightTest, { type BrowserContext, type BrowserType, type Page } from '../../apps/web/node_modules/@playwright/test/index.js'
+import { availablePort, owned, ready, readyOwnedUi, stopOwned, withOwnedStartup, type OwnedProcess } from './ownedStartup'
 
+const { expect } = playwrightTest
 const root = resolve(import.meta.dirname, '../..')
 type AuthoringScenario = 'complete' | 'no_proof' | 'lesson' | 'practice_set' | 'assessment'
 type AuthoringFactory = 'single' | 'groups'
@@ -14,69 +14,6 @@ const factories = {
   single: 'tests.authoring_native_fixture:create_test_app',
   groups: 'tests.authoring_group_native_fixture:create_test_app',
 } as const
-type OwnedProcess = { child: ChildProcess; exit: Promise<void>; output: () => string }
-const ownedGroups = new Set<number>()
-// Playwright can dispose a timed-out worker before its async finally finishes.
-// A synchronous exit hook still signals only this worker's retained child groups.
-process.once('exit', () => {
-  for (const pid of ownedGroups) {
-    try { process.kill(-pid, 'SIGTERM') } catch { /* An already exited owned group needs no cleanup. */ }
-  }
-})
-
-async function availablePort() {
-  const socket = createServer()
-  await new Promise<void>((accept, reject) => { socket.once('error', reject); socket.listen(0, '127.0.0.1', accept) })
-  const address = socket.address()
-  if (!address || typeof address === 'string') throw new Error('No loopback test port')
-  await new Promise<void>((accept, reject) => socket.close(error => error ? reject(error) : accept()))
-  return address.port
-}
-
-function owned(command: string, args: string[], env: NodeJS.ProcessEnv): OwnedProcess {
-  const child = spawn(command, args, { cwd: root, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
-  if (child.pid) ownedGroups.add(child.pid)
-  let output = ''
-  for (const stream of [child.stdout, child.stderr]) stream?.on('data', chunk => { output = (output + String(chunk)).slice(-8192) })
-  const exit = new Promise<void>(accept => {
-    const done = () => { if (child.pid) ownedGroups.delete(child.pid); accept() }
-    child.once('close', done); child.once('error', done)
-  })
-  return { child, exit, output: () => output }
-}
-
-async function stopOwned(value: OwnedProcess | undefined) {
-  if (!value || value.child.exitCode !== null || value.child.signalCode !== null) return
-  const pid = value.child.pid
-  if (!pid) { await value.exit; return }
-  // Only signal the new process group created and retained by this harness.
-  // Never find/kill an existing server by its port or stop a user process.
-  try { process.kill(-pid, 'SIGTERM') } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error }
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const forced = new Promise<void>(accept => {
-    timer = setTimeout(() => {
-      try { process.kill(-pid, 'SIGKILL') } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error }
-      accept()
-    }, 5000)
-  })
-  await Promise.race([value.exit, forced])
-  clearTimeout(timer)
-  await value.exit
-}
-
-async function ready(url: string, service: OwnedProcess) {
-  const deadline = Date.now() + 20_000
-  while (Date.now() < deadline) {
-    if (service.child.exitCode !== null || service.child.signalCode !== null) throw new Error(`Owned test server exited before readiness: ${service.output()}`)
-    try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(1000) })
-      if (response.ok) return
-    } catch { /* Wait for this new process to bind its loopback port. */ }
-    await pause(50)
-  }
-  throw new Error(`Owned test server did not become ready: ${service.output()}`)
-}
-
 /** Explicit test-only factory runtime. The production RestartRuntime remains unchanged.
  * Process ownership/cleanup follows that existing harness; the complete-byte
  * proof and loopback endpoint are available only through this selected factory. */
@@ -100,21 +37,27 @@ export class AuthoringRuntime {
   static async start(): Promise<AuthoringRuntime>
   static async start(scenario: AuthoringScenario = 'no_proof', factory: AuthoringFactory = 'single') {
     if (factory === 'single' ? !['complete', 'no_proof'].includes(scenario) : factory !== 'groups' || !['lesson', 'practice_set', 'assessment'].includes(scenario)) throw new Error('Unknown closed Authoring test factory/scenario')
-    const apiPort = await availablePort()
-    let uiPort = await availablePort()
-    while (uiPort === apiPort) uiPort = await availablePort()
-    const runtime = new AuthoringRuntime(apiPort, uiPort, scenario, factory)
-    try {
-      await runtime.startApi()
-      runtime.ui = owned('bash', ['scripts/node.sh', 'npm', '--prefix', 'apps/web', 'run', 'dev', '--', '--port', String(uiPort)], runtime.env)
-      await ready(runtime.origin, runtime.ui)
-      return runtime
-    } catch (error) { await runtime.close(); throw error }
+    return withOwnedStartup(async deadline => {
+      const apiPort = await availablePort()
+      let uiPort = await availablePort()
+      while (uiPort === apiPort) {
+        if (Date.now() >= deadline) throw new Error('No distinct loopback test ports before readiness deadline')
+        uiPort = await availablePort()
+      }
+      const runtime = new AuthoringRuntime(apiPort, uiPort, scenario, factory)
+      try {
+        // API failures never enter the UI-only bind-collision retry path.
+        await runtime.startApi(deadline)
+        runtime.ui = owned('bash', ['scripts/node.sh', 'npm', '--prefix', 'apps/web', 'run', 'dev', '--', '--port', String(uiPort)], runtime.env)
+        await readyOwnedUi(uiPort, runtime.ui, deadline)
+        return runtime
+      } catch (error) { await runtime.close(); throw error }
+    })
   }
 
-  private async startApi() {
+  private async startApi(deadline?: number) {
     this.api = owned(`${root}/.venv/bin/python`, ['-B', '-m', 'uvicorn', factories[this.factory], '--factory', '--host', '127.0.0.1', '--port', String(this.apiPort), '--no-access-log'], this.env)
-    await ready(`http://127.0.0.1:${this.apiPort}/health`, this.api)
+    await ready(`http://127.0.0.1:${this.apiPort}/health`, this.api, { deadline })
     if (!this.api.child.pid) throw new Error('Owned API has no process identity')
     this.generations.push(this.api.child.pid)
   }
