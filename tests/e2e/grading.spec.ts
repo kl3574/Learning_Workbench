@@ -3,33 +3,96 @@ import { writeFileSync } from 'node:fs'
 import { RestartRuntime } from './restartRuntime'
 import { originalAssessmentPackage, importAssessmentPackage } from './assessmentTestData'
 import type { AssessmentGradingResult, AttemptSnapshot } from '../../packages/contracts/generated/api-types'
-const test = base.extend<{ runtime: RestartRuntime }>({
-  runtime: async ({}, use) => { const runtime = await RestartRuntime.start(); try { await use(runtime) } finally { await runtime.close() } },
-  page: async ({ runtime, playwright }, use) => { const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]; await runtime.authenticateOnly(page); await use(page) },
+type GradingPhase = 'fixture-enter' | 'runtime-start' | 'runtime-ready' | 'browser-open' | 'browser-opened' | 'authentication-start' | 'authentication-complete' | 'page-use' | 'page-finally' | 'fixture-finally'
+  | 'assessment-fixture-build' | 'assessment-fixture-built' | 'assessment-import' | 'assessment-imported' | 'assessment-goto' | 'assessment-goto-returned' | 'assessment-created-ack' | 'assessment-saved-visible'
+  | 'submit-enter' | 'submit-returned' | 'manual-form-enter' | 'manual-form-returned' | 'manual-confirm-enter' | 'manual-confirm-returned' | 'grade-enter' | 'grade-returned' | 'second-page-observed'
+type GradingCaller = 'revision-1' | 'revision-2' | 'revision-3' | 'other-revision'
+type ObservedJobStatus = 'queued' | 'running' | 'awaiting_approval' | 'completed' | 'failed' | 'cancelled'
+type GradingPoll = { sequence: number; elapsed_ms: number; caller: GradingCaller; route: '/api/v1/attempts/:id/result'; method: 'GET'; status: number; request_elapsed_ms: number; job_status?: ObservedJobStatus; job_status_invalid?: boolean; job_status_unreadable?: boolean; job_status_not_observed?: boolean }
+type GradingTiming = { mark: (stage: GradingPhase) => void; poll: (caller: GradingCaller, status: number, duration: number) => ((value: unknown, unreadable?: boolean) => void) | undefined; save: (boundary: 'page-finally' | 'fixture-finally') => void }
+const gradingTimingByPage = new WeakMap<Page, GradingTiming>()
+function shareGradingTiming(original: Page, second: Page) { const timing = gradingTimingByPage.get(original); if (timing) { gradingTimingByPage.set(second, timing); timing.mark('second-page-observed') } }
+const test = base.extend<{ runtime: RestartRuntime; gradingTiming: GradingTiming }>({
+  // This observer stays test-scoped inside the original timeout and does not add a request or wait.
+  gradingTiming: [async ({}, use, info) => {
+    const enabled = info.title === 'two browser profiles keep a stale manual-review baseline through an actual 412 before explicit three-way rebase'
+    const started = performance.now(), phases: { sequence: number; elapsed_ms: number; stage: GradingPhase }[] = [], polls: GradingPoll[] = []
+    let sequence = 0, phaseDropped = 0, pollDropped = 0, statusReadDropped = 0, statusReadAttempts = 0, statusReadPending = 0, saved = false
+    const timing: GradingTiming = {
+      mark(stage) { if (!enabled || saved) return; if (phases.length === 256) { phaseDropped++; return }; phases.push({ sequence: ++sequence, elapsed_ms: performance.now() - started, stage }) },
+      poll(caller, status, duration) {
+        if (!enabled || saved || !Number.isInteger(status) || status < 100 || status > 599 || !Number.isFinite(duration) || duration < 0) return
+        if (polls.length === 64) { pollDropped++; return }
+        const entry: GradingPoll = { sequence: ++sequence, elapsed_ms: performance.now() - started, caller, route: '/api/v1/attempts/:id/result', method: 'GET', status, request_elapsed_ms: duration }
+        polls.push(entry)
+        if (status !== 202) return
+        if (statusReadAttempts === 32 || statusReadPending === 8) { statusReadDropped++; entry.job_status_not_observed = true; return }
+        statusReadAttempts++; statusReadPending++
+        let settled = false
+        return (value, unreadable = false) => {
+          if (saved || settled) return
+          settled = true; statusReadPending--
+          if (unreadable) { entry.job_status_unreadable = true; return }
+          // Access only the top-level status. Never retain the response or inspect any other field.
+          const state: unknown = value != null && typeof value === 'object' && !Array.isArray(value) ? (value as { status?: unknown }).status : undefined
+          if (state === 'queued' || state === 'running' || state === 'awaiting_approval' || state === 'completed' || state === 'failed' || state === 'cancelled') entry.job_status = state
+          else entry.job_status_invalid = true
+        }
+      },
+      save(boundary) {
+        if (!enabled || saved) return
+        saved = true // Freeze before writing; late JSON observations cannot alter this record.
+        try {
+          writeFileSync(info.outputPath('grading-two-profile-timing.json'), JSON.stringify({
+            version: 'grading-two-profile-metadata-v1', clock: 'Node performance.now milliseconds since test-scoped observer fixture entry', observed_timeout_ms: info.timeout, retry: info.retry,
+            saved_at_boundary: boundary, phases, polls, status_reads: { attempted: statusReadAttempts, pending_at_freeze: statusReadPending }, dropped: { phases: phaseDropped, polls: pollDropped, status_reads: statusReadDropped }, limits: { phases: 256, polls: 64, status_reads: 32, status_reads_pending: 8 },
+            scope: 'Original test-scoped runtime/page/start/submit/manual/grade boundaries and existing GET result HTTP status/duration. A non-awaited read of an existing 202 response projects only the strict top-level job status enum. No added request/wait, ID, URL/query, header, authentication value, answer/reason, DOM, private field or raw JSON is recorded. Page-finally freeze precedes runtime cleanup; fixture-finally fallback covers setup failure. Timing includes observer scheduling overhead; worker/browser setup before observer entry and server progress between observations are unobserved. No cause or repair verdict.',
+          }, null, 2), { flag: 'wx' })
+        } catch { info.annotations.push({ type: 'diagnostic', description: 'Bounded grading metadata could not be saved; original outcome preserved.' }) }
+      },
+    }
+    timing.mark('fixture-enter')
+    try { await use(timing) } finally { timing.mark('fixture-finally'); timing.save('fixture-finally') }
+  }, { auto: true }],
+  runtime: async ({ gradingTiming }, use) => { gradingTiming.mark('runtime-start'); const runtime = await RestartRuntime.start(); gradingTiming.mark('runtime-ready'); try { await use(runtime) } finally { await runtime.close() } },
+  page: async ({ runtime, playwright, gradingTiming }, use) => {
+    gradingTiming.mark('browser-open'); const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]; gradingTiming.mark('browser-opened')
+    gradingTimingByPage.set(page, gradingTiming); gradingTiming.mark('authentication-start'); await runtime.authenticateOnly(page); gradingTiming.mark('authentication-complete'); gradingTiming.mark('page-use')
+    try { await use(page) } finally { gradingTiming.mark('page-finally'); gradingTiming.save('page-finally'); gradingTimingByPage.delete(page) }
+  },
 })
 async function start(page: Page, prefix: string) {
+  const timing = gradingTimingByPage.get(page); timing?.mark('assessment-fixture-build')
   const fixture = originalAssessmentPackage(prefix)
+  timing?.mark('assessment-fixture-built'); timing?.mark('assessment-import')
   const imported = await importAssessmentPackage(page, fixture)
+  timing?.mark('assessment-imported')
   await imported.dialog.getByRole('button', { name: '关闭导入', exact: true }).click()
+  timing?.mark('assessment-goto')
   await page.goto(`${new URL(page.url()).origin}/?assessment=${encodeURIComponent(JSON.stringify({ assessment_ref: fixture.assessment, course_ref: fixture.course }))}`)
+  timing?.mark('assessment-goto-returned')
   await page.getByRole('checkbox', { name: '我已核对内容状态与模式，确认开始未评分测试', exact: true }).check()
   const pending = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith(`/assessments/${fixture.assessment.id}/attempts`))
   await page.getByRole('button', { name: '明确开始本次测试', exact: true }).click()
   const response = await pending; expect(response.status()).toBe(201)
+  timing?.mark('assessment-created-ack')
   const attempt: AttemptSnapshot = await response.json()
   await expect(page.getByText('服务端作答已保存', { exact: true })).toBeVisible()
+  timing?.mark('assessment-saved-visible')
   return { fixture, attempt }
 }
-async function submit(page: Page) { await page.getByRole('button', { name: '提交本次测试', exact: true }).click(); await page.getByRole('button', { name: '确认提交已保存作答', exact: true }).click(); await expect(page.getByRole('region', { name: '当前评分结果', exact: true })).toBeVisible() }
+async function submit(page: Page) { const timing = gradingTimingByPage.get(page); timing?.mark('submit-enter'); await page.getByRole('button', { name: '提交本次测试', exact: true }).click(); await page.getByRole('button', { name: '确认提交已保存作答', exact: true }).click(); await expect(page.getByRole('region', { name: '当前评分结果', exact: true })).toBeVisible(); timing?.mark('submit-returned') }
 async function grade(page: Page, id: string, revision: number): Promise<AssessmentGradingResult> {
   let result: AssessmentGradingResult | undefined
-  await expect.poll(async () => { const response = await page.request.get(`/api/v1/attempts/${id}/result`); if (response.status() === 202) return 0; expect(response.status()).toBe(200); result = await response.json(); return result!.grading_revision }).toBe(revision)
+  const timing = gradingTimingByPage.get(page), caller: GradingCaller = revision === 1 ? 'revision-1' : revision === 2 ? 'revision-2' : revision === 3 ? 'revision-3' : 'other-revision'; timing?.mark('grade-enter')
+  await expect.poll(async () => { const started = performance.now(); const response = await page.request.get(`/api/v1/attempts/${id}/result`); const observe = timing?.poll(caller, response.status(), performance.now() - started); if (response.status() === 202) { if (observe) void response.json().then(value => observe(value), () => observe(undefined, true)).catch(() => { /* Diagnostic parsing must not change the original poll. */ }); return 0 }; expect(response.status()).toBe(200); result = await response.json(); return result!.grading_revision }).toBe(revision)
+  timing?.mark('grade-returned')
   return result!
 }
 async function settleLayout(page: Page) { const choice = page.getByRole('button', { name: '采用本地会话并重新保存', exact: true }); if (await choice.isVisible()) { await choice.click(); await expect(page.getByText('✓ UI 会话已保存', { exact: true })).toBeVisible() } }
-async function beginReview(page: Page) { const author = page.getByRole('button', { name: '切换为作者角色以人工复核', exact: true }); if (await author.isVisible()) await author.click(); await page.getByRole('button', { name: '填写人工复核', exact: true }).click() }
+async function beginReview(page: Page) { const timing = gradingTimingByPage.get(page); timing?.mark('manual-form-enter'); const author = page.getByRole('button', { name: '切换为作者角色以人工复核', exact: true }); if (await author.isVisible()) await author.click(); await page.getByRole('button', { name: '填写人工复核', exact: true }).click(); timing?.mark('manual-form-returned') }
 async function fillReview(page: Page, number: number, score: string, text: string) { await page.getByRole('checkbox', { name: `复核第 ${number} 题`, exact: true }).check(); await page.getByLabel(`第 ${number} 题人工分数`, { exact: true }).fill(score); await page.getByLabel(`第 ${number} 题复核依据`, { exact: true }).fill(text) }
-async function sendReview(page: Page) { await page.getByRole('button', { name: '提交人工复核', exact: true }).click(); await page.getByRole('button', { name: '确认提交人工分数与依据', exact: true }).click() }
+async function sendReview(page: Page) { const timing = gradingTimingByPage.get(page); timing?.mark('manual-confirm-enter'); await page.getByRole('button', { name: '提交人工复核', exact: true }).click(); await page.getByRole('button', { name: '确认提交人工分数与依据', exact: true }).click(); timing?.mark('manual-confirm-returned') }
 
 test('unreviewed original content stays null until an explicit author form creates a signed new grade without altering its reference approval', async ({ page }, info) => {
   const errors: string[] = [], resultStatuses: number[] = [], privateCalls: string[] = []
@@ -68,7 +131,7 @@ test('two browser profiles keep a stale manual-review baseline through an actual
   await page.getByLabel('人工复核理由', { exact: true }).fill('A 作者保留的原版本复核'); await fillReview(page, 1, '0.25', 'A 本页逐题依据')
   const other = await browser.newContext({ baseURL: new URL(page.url()).origin, storageState: await page.context().storageState() })
   try {
-    const second = await other.newPage(); await second.goto(page.url()); await beginReview(second)
+    const second = await other.newPage(); shareGradingTiming(page, second); await second.goto(page.url()); await beginReview(second)
     await second.getByLabel('人工复核理由', { exact: true }).fill('B 作者先提交的新版本'); await fillReview(second, 1, '0.75', 'B 服务端逐题依据'); await sendReview(second); await grade(second, attempt.id, 2)
     const rejected = page.waitForResponse(response => response.request().method() === 'POST' && response.url().endsWith(`/attempts/${attempt.id}/regrade`))
     await sendReview(page); expect((await rejected).status()).toBe(412)
