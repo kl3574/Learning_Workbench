@@ -2,9 +2,9 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-07T21:12:46Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
+更新：2026-10-07T21:35:20Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
 
-仓库发布：VERIFIED；Issues 同步：ACTUAL_ISSUE32_DRAFTPR56_PUBLIC4CA_TEN_ORIGINAL_JOBLOGS_PUSH_BROWSER_FAIL_PR_PASS_INTEGRATION_PENDING
+仓库发布：VERIFIED；Issues 同步：ACTUAL_ISSUE32_DRAFTPR56_SEVEN_API0_ORIGINAL_CURRENT93C_FULLGATE_FAIL_AND_NEW_TMPDIR_RECHECK
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
 
 保留当前93c原完整Python500F2090P2004E1skip/exit1与native65P68F/exit2；原文件输入前后exact。原日志有EDQUOT/SQLiteIO，不能把全部失败同因。新任务私有TMPDIR下完整Python83631已实际运行，结束后再单独native；不并行两fullgates、不放宽断言/timeout、不改原FAIL。M6.3/AC21/真实Agent未接受，M7todo。
@@ -42,14 +42,14 @@
 ## 验证边界
 
 - spec_checks: Fixed101 original native setup lint/typecheck(mypy295)/build(879modules)/verify-spec all actual0 with original ENV no HOME/CODEX_HOME override; M0 structure54models82derived147routes only. Separate static four actual0 capture with HOME override remains execution-deviant, not fully compliant acceptance. Specv3.0.15 SHA unchanged; runtime and learning acceptance separate.
-- unit: Fixed101 original complete combined Python gate: 4589 collected/4587 PASS/0FAIL/0ERROR/2numeric BLOCKED_ENVIRONMENT skips/3warnings/3172.43s; uv0 wrapper0, once, all1564 exact before/after/final closure. Counts are suite-wide, not separate category totals. Old079 4580P1F2ENVskip and CI FAIL retained; physical numeric/production Agent/M6.3 NOT_ACCEPTED.
-- contract: Fixed101 original complete combined Python gate: 4589 collected/4587 PASS/0FAIL/0ERROR/2numeric BLOCKED_ENVIRONMENT skips/3warnings/3172.43s; uv0 wrapper0, once, all1564 exact before/after/final closure. Counts are suite-wide, not separate category totals. Old079 4580P1F2ENVskip and CI FAIL retained; physical numeric/production Agent/M6.3 NOT_ACCEPTED.
-- integration: Fixed101 original complete combined Python gate: 4589 collected/4587 PASS/0FAIL/0ERROR/2numeric BLOCKED_ENVIRONMENT skips/3warnings/3172.43s; uv0 wrapper0, once, all1564 exact before/after/final closure. Counts are suite-wide, not separate category totals. Old079 4580P1F2ENVskip and CI FAIL retained; physical numeric/production Agent/M6.3 NOT_ACCEPTED.
-- browser_native: Frozenf4 originalonce133PASS19.0m/actual0; all1564before/restored Git/index/live equal, rawafter10known generated UI mutations frozen privately and guardedrestore0. Canonical laterattrs3literalrule delta separately reviewed, not exactf4wholemap. Originalbfpush132P1F/PR133P preserved, causeUNKNOWN; realAgent/M63 NOT_ACCEPTED.
+- unit: Current93c original whole Python gate FAIL: 4595collected/2090PASS500FAIL2004ERROR1Authoring numeric ENVskip3warnings/731.74s, actual1; all1565before/after exact. New whole same-source run83631 with task-private TMPDIR still RUNNING, terminal counts NOT_AVAILABLE; no per-category totals claimed. Historical101 PASS preserved separately.
+- contract: Current93c original whole Python gate FAIL: 4595collected/2090PASS500FAIL2004ERROR1Authoring numeric ENVskip3warnings/731.74s, actual1; all1565before/after exact. New whole same-source run83631 with task-private TMPDIR still RUNNING, terminal counts NOT_AVAILABLE; no per-category totals claimed. Historical101 PASS preserved separately.
+- integration: Current93c original whole Python gate FAIL: 4595collected/2090PASS500FAIL2004ERROR1Authoring numeric ENVskip3warnings/731.74s, actual1; all1565before/after exact. New whole same-source run83631 with task-private TMPDIR still RUNNING, terminal counts NOT_AVAILABLE; no per-category totals claimed. Historical101 PASS preserved separately.
+- browser_native: Current93c original whole native FAIL:65PASS68FAIL12.2m, make/wrapper2; all1565before/after exact/no source mutations. Three grading cases PASS are scoped only; new sequential TMPDIR gate NOT_STARTED pending actual Python terminal0. Historicalf4 133PASS preserved separately.
 - real_provider: PLATFORM_PROVIDER_NOT_RUN：production完整InputProof/受控executor未有符合要求注册证明；本轮0actual external model request，无实key使用/存入源码/上传。历史直连成功缺原HTTP可核回执，不作为当前平台通过。
 - real_codex: PHYSICAL_CODEX_MODEL_OR_TOOL_TURN_NOT_RUN：控制bootstrap/纯内存和pureliteral合成执行分别限定，真实CLI模型turn、物理Broker/hosttools/writer-stop/resource验收未完成。
 - learning_effectiveness: NOT_RUN
-- ci: Public4ca original events at 2026-10-07T20:11:18.391005+00:00: integration not terminal in both events; pushbrowser original132P1F40.3m,PRbrowser133P31.4m;8other original footers independently verified, no count aggregation. Oldbf failure retained; sourcecauseUNKNOWN.
+- ci: Public4ca original attempt1 events both terminal, snapshot118@2026-10-07T20:27:40UTC: push FAILURE(browser132PASS1FAIL), PR SUCCESS(browser133PASS); each integration2525PASS2numeric ENVskips2warnings. All12 original logs independently read back; source cause UNKNOWN, runtime before/after maps NOT_CAPTURED. Local93c repair not pushed or CI accepted.
 - m4_1_development: 开发和独立审查的所有原失败/修复、环境诊断已保留；最终源码新验收通过，不覆盖历史失败。
 - m4_1_exact: 5bd8157新lint/types/spec/247web/build/74native均PASS，504源码前后相同；同SHA双workflow12checks成功。
 - m4_1_layout_repair: PASS:真实412布局及焦点回归；原失败保留，限定机制归因；新74完整套件通过。

@@ -1,0 +1,149 @@
+from pathlib import Path
+import ast
+import datetime
+import errno
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import threading
+import time
+from types import SimpleNamespace
+
+root = Path(__file__).parent
+packet = root.parent / 'm63-native-wrapper-owned-child-bookkeeping-error-check-oct08'
+assert not packet.exists()
+packet.mkdir(mode=0o700)
+versions = {
+    'original': root / 'run-native-storage-isolated.py',
+    'owned': root / 'run-native-storage-isolated-owned.py',
+}
+sha = lambda raw: hashlib.sha256(raw).hexdigest()
+results = []
+
+for version, source in versions.items():
+    raw = source.read_bytes()
+    parsed = ast.parse(raw)
+    selected = [node for node in parsed.body if isinstance(node, ast.FunctionDef) and node.name == 'execute']
+    assert len(selected) == 1
+    isolated = compile(ast.Module(body=selected, type_ignores=[]), str(source), 'exec')
+    for failure_site in ['fixture.start.json', 'LIVE.json']:
+        out = packet / (version + '-' + failure_site.replace('.', '-'))
+        out.mkdir(mode=0o700)
+        started = threading.Event()
+        injected = threading.Event()
+        waiting = threading.Event()
+        release = threading.Event()
+        returned = threading.Event()
+        state = {'child': None, 'return': None, 'raised': None}
+        errors = []
+
+        def put(name, value):
+            if name == failure_site:
+                injected.set()
+                raise OSError(errno.EDQUOT, 'simulated owned fixture metadata write failure')
+            (out / name).write_text(json.dumps(value, indent=2) + '\n')
+
+        def popen(argv, **kwargs):
+            child = subprocess.Popen(argv, stdin=subprocess.PIPE, **kwargs)
+            state['child'] = child
+            started.set()
+            return child
+
+        def controlled_sleep(seconds):
+            assert seconds == 5
+            waiting.set()
+            assert release.wait(10), 'fixture controller did not release its own child'
+            time.sleep(0.005)
+
+        namespace = {
+            'O': out, 'put': put,
+            'now': lambda: datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            'H': sha, 'BOOKKEEPING_ERRORS': errors,
+            'os': os, 'json': json,
+            'subprocess': SimpleNamespace(Popen=popen),
+            'time': SimpleNamespace(sleep=controlled_sleep),
+        }
+        exec(isolated, namespace)
+
+        def run():
+            try:
+                state['return'] = namespace['execute'](
+                    'fixture',
+                    [sys.executable, '-c', 'import sys; sys.stdin.buffer.readline(); print("OWNED_CHILD_CLOSED")'],
+                    out,
+                )
+            except BaseException as error:
+                state['raised'] = {'class': type(error).__name__, 'errno': getattr(error, 'errno', None)}
+            finally:
+                returned.set()
+
+        worker = threading.Thread(target=run)
+        worker.start()
+        try:
+            assert started.wait(10) and injected.wait(10)
+            child = state['child']
+            assert child.poll() is None, 'owned child must still be blocked at injected write'
+            if version == 'original':
+                assert returned.wait(10)
+                assert state['raised'] == {'class': 'OSError', 'errno': errno.EDQUOT}
+                before_release = 'original execute raised while its actual owned child was still running'
+                assert child.poll() is None
+            else:
+                assert waiting.wait(10)
+                assert not returned.is_set()
+                assert any(event['metadata_file'] == failure_site and event['errno'] == errno.EDQUOT for event in errors)
+                before_release = 'fixed execute retained the write error and still waited for its actual owned child'
+            child.stdin.write(b'\n')
+            child.stdin.flush()
+            child.stdin.close()
+            release.set()
+            worker.join(10)
+            assert not worker.is_alive()
+            actual = child.wait(timeout=10)
+            assert actual == 0
+            if version == 'owned':
+                assert state['return'] == 0 and state['raised'] is None
+                receipt = json.loads((out / 'fixture.receipt.json').read_bytes())
+                assert receipt['actual_exit'] == 0 and receipt['bookkeeping_errors'] == errors
+                qualification = 0 if not errors else 20
+                assert qualification == 20, 'metadata failure must not qualify as a successful complete gate'
+            else:
+                qualification = 'NOT_APPLICABLE; original function raised before child terminal'
+            results.append({
+                'version': version, 'source_sha256': sha(raw), 'source_bytes': len(raw),
+                'extraction': 'exact execute AST only; main, native gate and platform never executed',
+                'injected_errno': errno.EDQUOT, 'injected_filename': failure_site,
+                'before_controller_release': before_release,
+                'actual_fixture_child_terminal_exit': actual,
+                'execute_return': state['return'], 'execute_raised': state['raised'],
+                'bookkeeping_errors': errors,
+                'complete_wrapper_qualification_if_sources_equal': qualification,
+                'stdout_sha256': sha((out / 'fixture.stdout').read_bytes()),
+                'stderr_sha256': sha((out / 'fixture.stderr').read_bytes()),
+                'fixture_only_timing': '5s polling sleep replaced with an event controlled by this fixture; native script unchanged',
+            })
+        finally:
+            release.set()
+            child = state['child']
+            if child is not None:
+                if child.poll() is None and child.stdin is not None and not child.stdin.closed:
+                    child.stdin.write(b'\n')
+                    child.stdin.flush()
+                    child.stdin.close()
+                child.wait(timeout=10)
+            worker.join(10)
+            assert not worker.is_alive()
+
+report = {
+    'status': 'PASS; original error path reproduced twice, fixed child ownership verified twice',
+    'scope': 'controlled bookkeeping OSError; four actual owned dummy child processes, all terminal0',
+    'actual_platform_tests': 'NOT_RUN', 'actual_native_tests': 'NOT_RUN',
+    'actual_host_EDQUOT_cause_probe': 'NOT_RUN; errno is explicitly injected only in owned fixture',
+    'network_model_key_actions': 'NOT_RUN',
+    'source_inputs': {name: {'bytes': len(path.read_bytes()), 'sha256': sha(path.read_bytes())} for name, path in versions.items()},
+    'cases': results,
+}
+(packet / 'REPORT.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
+print(json.dumps({'status': report['status'], 'cases': len(results), 'all_owned_dummy_children_terminal0': True}))

@@ -1,0 +1,108 @@
+{
+  "status": "PASS; original error path reproduced twice, fixed child ownership verified twice",
+  "scope": "controlled bookkeeping OSError; four actual owned dummy child processes, all terminal0",
+  "actual_platform_tests": "NOT_RUN",
+  "actual_native_tests": "NOT_RUN",
+  "actual_host_EDQUOT_cause_probe": "NOT_RUN; errno is explicitly injected only in owned fixture",
+  "network_model_key_actions": "NOT_RUN",
+  "source_inputs": {
+    "original": {
+      "bytes": 8718,
+      "sha256": "f8647d2cc6c250d61f77a229ad47747fa5a29a320e9a340eed7e00ce0ae712d8"
+    },
+    "owned": {
+      "bytes": 9721,
+      "sha256": "56344abc3f1f8875ebfdcfb1440eae4477076ae6bdc114aaee8b4310e000529e"
+    }
+  },
+  "cases": [
+    {
+      "version": "original",
+      "source_sha256": "f8647d2cc6c250d61f77a229ad47747fa5a29a320e9a340eed7e00ce0ae712d8",
+      "source_bytes": 8718,
+      "extraction": "exact execute AST only; main, native gate and platform never executed",
+      "injected_errno": 122,
+      "injected_filename": "fixture.start.json",
+      "before_controller_release": "original execute raised while its actual owned child was still running",
+      "actual_fixture_child_terminal_exit": 0,
+      "execute_return": null,
+      "execute_raised": {
+        "class": "OSError",
+        "errno": 122
+      },
+      "bookkeeping_errors": [],
+      "complete_wrapper_qualification_if_sources_equal": "NOT_APPLICABLE; original function raised before child terminal",
+      "stdout_sha256": "a5ce886f68ae3a267cbd9b4b5fb9a20bcce7bf8b1085feb38c6c024fd7eb1e2d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "fixture_only_timing": "5s polling sleep replaced with an event controlled by this fixture; native script unchanged"
+    },
+    {
+      "version": "original",
+      "source_sha256": "f8647d2cc6c250d61f77a229ad47747fa5a29a320e9a340eed7e00ce0ae712d8",
+      "source_bytes": 8718,
+      "extraction": "exact execute AST only; main, native gate and platform never executed",
+      "injected_errno": 122,
+      "injected_filename": "LIVE.json",
+      "before_controller_release": "original execute raised while its actual owned child was still running",
+      "actual_fixture_child_terminal_exit": 0,
+      "execute_return": null,
+      "execute_raised": {
+        "class": "OSError",
+        "errno": 122
+      },
+      "bookkeeping_errors": [],
+      "complete_wrapper_qualification_if_sources_equal": "NOT_APPLICABLE; original function raised before child terminal",
+      "stdout_sha256": "a5ce886f68ae3a267cbd9b4b5fb9a20bcce7bf8b1085feb38c6c024fd7eb1e2d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "fixture_only_timing": "5s polling sleep replaced with an event controlled by this fixture; native script unchanged"
+    },
+    {
+      "version": "owned",
+      "source_sha256": "56344abc3f1f8875ebfdcfb1440eae4477076ae6bdc114aaee8b4310e000529e",
+      "source_bytes": 9721,
+      "extraction": "exact execute AST only; main, native gate and platform never executed",
+      "injected_errno": 122,
+      "injected_filename": "fixture.start.json",
+      "before_controller_release": "fixed execute retained the write error and still waited for its actual owned child",
+      "actual_fixture_child_terminal_exit": 0,
+      "execute_return": 0,
+      "execute_raised": null,
+      "bookkeeping_errors": [
+        {
+          "phase": "fixture",
+          "metadata_file": "fixture.start.json",
+          "error_class": "OSError",
+          "errno": 122
+        }
+      ],
+      "complete_wrapper_qualification_if_sources_equal": 20,
+      "stdout_sha256": "a5ce886f68ae3a267cbd9b4b5fb9a20bcce7bf8b1085feb38c6c024fd7eb1e2d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "fixture_only_timing": "5s polling sleep replaced with an event controlled by this fixture; native script unchanged"
+    },
+    {
+      "version": "owned",
+      "source_sha256": "56344abc3f1f8875ebfdcfb1440eae4477076ae6bdc114aaee8b4310e000529e",
+      "source_bytes": 9721,
+      "extraction": "exact execute AST only; main, native gate and platform never executed",
+      "injected_errno": 122,
+      "injected_filename": "LIVE.json",
+      "before_controller_release": "fixed execute retained the write error and still waited for its actual owned child",
+      "actual_fixture_child_terminal_exit": 0,
+      "execute_return": 0,
+      "execute_raised": null,
+      "bookkeeping_errors": [
+        {
+          "phase": "fixture",
+          "metadata_file": "LIVE.json",
+          "error_class": "OSError",
+          "errno": 122
+        }
+      ],
+      "complete_wrapper_qualification_if_sources_equal": 20,
+      "stdout_sha256": "a5ce886f68ae3a267cbd9b4b5fb9a20bcce7bf8b1085feb38c6c024fd7eb1e2d",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "fixture_only_timing": "5s polling sleep replaced with an event controlled by this fixture; native script unchanged"
+    }
+  ]
+}
