@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-07T20:40:37Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
+更新：2026-10-07T20:50:44Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
 
 仓库发布：VERIFIED；Issues 同步：ACTUAL_ISSUE32_DRAFTPR56_PUBLIC4CA_TEN_ORIGINAL_JOBLOGS_PUSH_BROWSER_FAIL_PR_PASS_INTEGRATION_PENDING
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
 
-原4ca两CI已终态：pushFAIL/PRSUCCESS，全部12原日志已一次下载且有限字节核验，保留失败与UNKNOWN。准入并正常合入e8aa970评分GET读快照与当前权限gate修复，再在新源码运行完整Python/原native；不得继承旧f4/101结果。production完整proof/runtime、实际Agent和物理numeric仍未验收，M7todo。
+当前93c修复已正常本地合入并保留全部canonical进度。取得一次完整Python及原完整native实际终态/输入映射；native2975与完整Python20898已运行，不继承旧f4/101结果。原公开4ca pushFAIL/PRSUCCESS与2numericENVskip保留；生产完整proof/runtime与实际Agent仍未资格，M6.3/AC21未接受，M7todo。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
