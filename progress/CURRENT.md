@@ -2,12 +2,12 @@
 
 本文件从 `state.json` 生成；需求仅见 `PRODUCT_DESIGN.md`。
 
-更新：2026-10-07T21:35:20Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
+更新：2026-10-07T22:09:06Z；规范 SHA-256：`b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`
 
 仓库发布：VERIFIED；Issues 同步：ACTUAL_ISSUE32_DRAFTPR56_SEVEN_API0_ORIGINAL_CURRENT93C_FULLGATE_FAIL_AND_NEW_TMPDIR_RECHECK
 实施：IN_PROGRESS；当前任务：M6.3；下一任务：M6.3
 
-保留当前93c原完整Python500F2090P2004E1skip/exit1与native65P68F/exit2；原文件输入前后exact。原日志有EDQUOT/SQLiteIO，不能把全部失败同因。新任务私有TMPDIR下完整Python83631已实际运行，结束后再单独native；不并行两fullgates、不放宽断言/timeout、不改原FAIL。M6.3/AC21/真实Agent未接受，M7todo。
+保留两次当前93c完整Python原FAIL与native65P68F；原Node guard六失败已有原make setup0和同六case PASS，已启动锁定环境原完整Python59677一次。获取实际终态并独核1565输入后才单独native；不放宽断言/预算、不删除原失败。生产实际完整InputProof/受限executor仍缺，真实Agent/M6.3/AC21未接受，M7todo。
 
 | 任务 | 状态 | Issue | 验证代码 |
 |---|---|---|---|
@@ -42,9 +42,9 @@
 ## 验证边界
 
 - spec_checks: Fixed101 original native setup lint/typecheck(mypy295)/build(879modules)/verify-spec all actual0 with original ENV no HOME/CODEX_HOME override; M0 structure54models82derived147routes only. Separate static four actual0 capture with HOME override remains execution-deviant, not fully compliant acceptance. Specv3.0.15 SHA unchanged; runtime and learning acceptance separate.
-- unit: Current93c original whole Python gate FAIL: 4595collected/2090PASS500FAIL2004ERROR1Authoring numeric ENVskip3warnings/731.74s, actual1; all1565before/after exact. New whole same-source run83631 with task-private TMPDIR still RUNNING, terminal counts NOT_AVAILABLE; no per-category totals claimed. Historical101 PASS preserved separately.
-- contract: Current93c original whole Python gate FAIL: 4595collected/2090PASS500FAIL2004ERROR1Authoring numeric ENVskip3warnings/731.74s, actual1; all1565before/after exact. New whole same-source run83631 with task-private TMPDIR still RUNNING, terminal counts NOT_AVAILABLE; no per-category totals claimed. Historical101 PASS preserved separately.
-- integration: Current93c original whole Python gate FAIL: 4595collected/2090PASS500FAIL2004ERROR1Authoring numeric ENVskip3warnings/731.74s, actual1; all1565before/after exact. New whole same-source run83631 with task-private TMPDIR still RUNNING, terminal counts NOT_AVAILABLE; no per-category totals claimed. Historical101 PASS preserved separately.
+- unit: Current93c complete TMPDIR gate actualFAIL1:4587PASS6FAIL2numericENVskip3warnings/2946.71s,4595collected; six original Node24.21 guard errors, all1565before/after exact. Originalmake setup0 then scoped6PASS2warnings2.43s; new same-source complete locked gate59677 RUNNING, no terminal count. Earlier2090PASS500FAIL2004ERROR1skip and historical101 PASS retained; totals belong to whole suite, not individual categories.
+- contract: Current93c complete TMPDIR gate actualFAIL1:4587PASS6FAIL2numericENVskip3warnings/2946.71s,4595collected; six original Node24.21 guard errors, all1565before/after exact. Originalmake setup0 then scoped6PASS2warnings2.43s; new same-source complete locked gate59677 RUNNING, no terminal count. Earlier2090PASS500FAIL2004ERROR1skip and historical101 PASS retained; totals belong to whole suite, not individual categories.
+- integration: Current93c complete TMPDIR gate actualFAIL1:4587PASS6FAIL2numericENVskip3warnings/2946.71s,4595collected; six original Node24.21 guard errors, all1565before/after exact. Originalmake setup0 then scoped6PASS2warnings2.43s; new same-source complete locked gate59677 RUNNING, no terminal count. Earlier2090PASS500FAIL2004ERROR1skip and historical101 PASS retained; totals belong to whole suite, not individual categories.
 - browser_native: Current93c original whole native FAIL:65PASS68FAIL12.2m, make/wrapper2; all1565before/after exact/no source mutations. Three grading cases PASS are scoped only; new sequential TMPDIR gate NOT_STARTED pending actual Python terminal0. Historicalf4 133PASS preserved separately.
 - real_provider: PLATFORM_PROVIDER_NOT_RUN：production完整InputProof/受控executor未有符合要求注册证明；本轮0actual external model request，无实key使用/存入源码/上传。历史直连成功缺原HTTP可核回执，不作为当前平台通过。
 - real_codex: PHYSICAL_CODEX_MODEL_OR_TOOL_TURN_NOT_RUN：控制bootstrap/纯内存和pureliteral合成执行分别限定，真实CLI模型turn、物理Broker/hosttools/writer-stop/resource验收未完成。
@@ -411,6 +411,7 @@
 - m6_3_public4ca_original_browsers: {'report': 'progress/evidence/2026-10-07/M6.3-public4ca-original-push132P1F-PR133P-two-safeZIPs-bytebound-lastHTTP200-causeUNKNOWN/REPORT.json', 'source': '4ca05634adac74b59ac6b5d932445158724c4365', 'push': '132PASS1FAIL40.3m, targetmanualCAS30.4s expected3/0/test30000ms', 'PR': '133PASS31.4m, targetmanualCASPASS22.6s; checkout33b whole tree4ca equal', 'cause': 'UNKNOWN', 'last_push_HTTP200': '29.885s, revision and JSON settlement unobserved', 'all12jobs': 'NOT_TERMINAL_AT_CAPTURE', 'runtime_maps': 'NOT_CAPTURED'}
 - m6_3_public4ca_tenjob_original_body_sync: {'actual_GitHub_commands': 7, 'all_exits': 0, 'recorded_utc': '2026-10-07T20:12:59.746613+00:00', 'public_source': '4ca05634adac74b59ac6b5d932445158724c4365', 'local_documentary_head': '46eface069616a313aa2300654414189ba901f4d', 'issue_body_sha256': 'b2f00cce16bd88212ecb2274569c426c06cf8ae684f19e0adfc781ec38563adf', 'pr_body_sha256': 'cd2e35f72b6237fca2f592c124f940a3a4be3d7e241df387953d57117236be96', 'Issue_unmanaged_and_metadata_preserved': True, 'PR_title_base_head_draft_open_unmerged_preserved': True, 'snapshot_binding': {'sequence': 95, 'snapshot': '095-SNAPSHOT.json', 'sha256': 'bb23333b51c5cd4f4e62cdcf82a8e22c9d4c582417dc9c197f96c01614cbdcfb'}, 'model_calls': 0, 'sourcepush_merge_release_deploy': False, 'M63': 'NOT_ACCEPTED', 'M7': 'todo'}
 - m6_3_current_production_static_gap: {'report': 'progress/evidence/2026-10-07/M6.3-production-current46ef-selected18-source45ranges-static-gap-not-runtime-qualification/REPORT.json', 'tests': 'NOT_RUN', 'production': 'NOT_ACCEPTED', 'generic_port': 'future interface suggestion, not an added permission/completion prerequisite'}
+- m6_3_current93c_locked_toolchain_recheck: Current93c complete TMPDIR gate actualFAIL1:4587PASS6FAIL2numericENVskip3warnings/2946.71s,4595collected; six original Node24.21 guard errors, all1565before/after exact. Originalmake setup0 then scoped6PASS2warnings2.43s; new same-source complete locked gate59677 RUNNING, no terminal count. Earlier2090PASS500FAIL2004ERROR1skip and historical101 PASS retained; totals belong to whole suite, not individual categories.
 
 ## 阻塞与待决项
 
