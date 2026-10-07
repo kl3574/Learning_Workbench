@@ -171,20 +171,33 @@ def test_forward_guards_preserve_existing_source_rows_rowids_and_original_http_a
         lambda **kwargs: replace(settings_type(**kwargs), migrations_dir=prior))
     for original in make_consent_case(installed.data_dir):
         for values in make_dispatch_case(original):
-            case, sid, _, body = selected(values)
-            created = case.post(f'sessions/{sid}/artifacts/import', body, 'before-upgrade')
-            assert created.status_code == 202
-            assert ImportWorker(case.app.state.database).run_once() is True
-            view = case.get('artifact-imports/'+created.json()['id'])
-            assert view.status_code == 200
-            tables = ['codex_import_batches', 'codex_import_bindings', 'codex_import_previews']
+            # The historical catalog predates the Broker control owner (0036).
+            # Populate it through the original process-free owner composition,
+            # without asking the current Broker to read tables not installed
+            # until the actual forward upgrade below. Production keeps its
+            # mandatory Broker owner; no history or migration receipt is forged.
+            case = values[0]
             with case.app.state.database.connect() as conn:
-                rows = {table:[tuple(row) for row in conn.execute(f'SELECT rowid,* FROM {table} ORDER BY rowid')]
-                    for table in tables}
-                assert all(rows.values())
+                assert conn.execute("SELECT name FROM sqlite_master WHERE name LIKE 'codex_broker_%'").fetchall() == []
+            with monkeypatch.context() as legacy:
+                legacy.setattr(case.app.state.codex_turn_service, 'broker_controls', None)
+                case, sid, _, body = selected(values)
+                created = case.post(f'sessions/{sid}/artifacts/import', body, 'before-upgrade')
+                assert created.status_code == 202
+                assert ImportWorker(case.app.state.database).run_once() is True
+                view = case.get('artifact-imports/'+created.json()['id'])
+                assert view.status_code == 200
+                tables = ['codex_import_batches', 'codex_import_bindings', 'codex_import_previews']
+                with case.app.state.database.connect() as conn:
+                    rows = {table:[tuple(row) for row in conn.execute(f'SELECT rowid,* FROM {table} ORDER BY rowid')]
+                        for table in tables}
+                    assert all(rows.values())
             upgraded = Database(replace(case.app.state.settings, migrations_dir=installed.migrations_dir))
             upgraded.initialize()
             with upgraded.connect() as conn:
+                assert case.app.state.codex_turn_service.broker_controls is case.app.state.codex_turn_worker.controls
+                for table in ['codex_broker_records', 'codex_broker_members', 'codex_broker_heads']:
+                    assert conn.execute(f'SELECT count(*) FROM {table}').fetchone()[0] == 0
                 assert {table:[tuple(row) for row in conn.execute(f'SELECT rowid,* FROM {table} ORDER BY rowid')]
                     for table in tables} == rows
                 assert conn.execute('PRAGMA foreign_key_check').fetchall() == []
