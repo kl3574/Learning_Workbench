@@ -1,0 +1,504 @@
+diff --git a/tests/e2e/authoringRuntime.ts b/tests/e2e/authoringRuntime.ts
+index 603a9b53..49433229 100644
+--- a/tests/e2e/authoringRuntime.ts
++++ b/tests/e2e/authoringRuntime.ts
+@@ -1,11 +1,10 @@
+-import { spawn, execFileSync, type ChildProcess } from 'node:child_process'
++import { execFileSync } from 'node:child_process'
+ import { mkdtempSync, existsSync, statSync, readFileSync } from 'node:fs'
+ import { readFile } from 'node:fs/promises'
+-import { createServer } from 'node:net'
+ import { tmpdir } from 'node:os'
+ import { resolve } from 'node:path'
+-import { setTimeout as pause } from 'node:timers/promises'
+ import { expect, type BrowserContext, type BrowserType, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
++import { availablePort, owned, ready, readyOwnedUi, stopOwned, withOwnedStartup, type OwnedProcess } from './ownedStartup'
+ 
+ const root = resolve(import.meta.dirname, '../..')
+ type AuthoringScenario = 'complete' | 'no_proof' | 'lesson' | 'practice_set' | 'assessment'
+@@ -14,69 +13,6 @@ const factories = {
+   single: 'tests.authoring_native_fixture:create_test_app',
+   groups: 'tests.authoring_group_native_fixture:create_test_app',
+ } as const
+-type OwnedProcess = { child: ChildProcess; exit: Promise<void>; output: () => string }
+-const ownedGroups = new Set<number>()
+-// Playwright can dispose a timed-out worker before its async finally finishes.
+-// A synchronous exit hook still signals only this worker's retained child groups.
+-process.once('exit', () => {
+-  for (const pid of ownedGroups) {
+-    try { process.kill(-pid, 'SIGTERM') } catch { /* An already exited owned group needs no cleanup. */ }
+-  }
+-})
+-
+-async function availablePort() {
+-  const socket = createServer()
+-  await new Promise<void>((accept, reject) => { socket.once('error', reject); socket.listen(0, '127.0.0.1', accept) })
+-  const address = socket.address()
+-  if (!address || typeof address === 'string') throw new Error('No loopback test port')
+-  await new Promise<void>((accept, reject) => socket.close(error => error ? reject(error) : accept()))
+-  return address.port
+-}
+-
+-function owned(command: string, args: string[], env: NodeJS.ProcessEnv): OwnedProcess {
+-  const child = spawn(command, args, { cwd: root, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
+-  if (child.pid) ownedGroups.add(child.pid)
+-  let output = ''
+-  for (const stream of [child.stdout, child.stderr]) stream?.on('data', chunk => { output = (output + String(chunk)).slice(-8192) })
+-  const exit = new Promise<void>(accept => {
+-    const done = () => { if (child.pid) ownedGroups.delete(child.pid); accept() }
+-    child.once('close', done); child.once('error', done)
+-  })
+-  return { child, exit, output: () => output }
+-}
+-
+-async function stopOwned(value: OwnedProcess | undefined) {
+-  if (!value || value.child.exitCode !== null || value.child.signalCode !== null) return
+-  const pid = value.child.pid
+-  if (!pid) { await value.exit; return }
+-  // Only signal the new process group created and retained by this harness.
+-  // Never find/kill an existing server by its port or stop a user process.
+-  try { process.kill(-pid, 'SIGTERM') } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error }
+-  let timer: ReturnType<typeof setTimeout> | undefined
+-  const forced = new Promise<void>(accept => {
+-    timer = setTimeout(() => {
+-      try { process.kill(-pid, 'SIGKILL') } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error }
+-      accept()
+-    }, 5000)
+-  })
+-  await Promise.race([value.exit, forced])
+-  clearTimeout(timer)
+-  await value.exit
+-}
+-
+-async function ready(url: string, service: OwnedProcess) {
+-  const deadline = Date.now() + 20_000
+-  while (Date.now() < deadline) {
+-    if (service.child.exitCode !== null || service.child.signalCode !== null) throw new Error(`Owned test server exited before readiness: ${service.output()}`)
+-    try {
+-      const response = await fetch(url, { signal: AbortSignal.timeout(1000) })
+-      if (response.ok) return
+-    } catch { /* Wait for this new process to bind its loopback port. */ }
+-    await pause(50)
+-  }
+-  throw new Error(`Owned test server did not become ready: ${service.output()}`)
+-}
+-
+ /** Explicit test-only factory runtime. The production RestartRuntime remains unchanged.
+  * Process ownership/cleanup follows that existing harness; the complete-byte
+  * proof and loopback endpoint are available only through this selected factory. */
+@@ -100,21 +36,27 @@ export class AuthoringRuntime {
+   static async start(): Promise<AuthoringRuntime>
+   static async start(scenario: AuthoringScenario = 'no_proof', factory: AuthoringFactory = 'single') {
+     if (factory === 'single' ? !['complete', 'no_proof'].includes(scenario) : factory !== 'groups' || !['lesson', 'practice_set', 'assessment'].includes(scenario)) throw new Error('Unknown closed Authoring test factory/scenario')
+-    const apiPort = await availablePort()
+-    let uiPort = await availablePort()
+-    while (uiPort === apiPort) uiPort = await availablePort()
+-    const runtime = new AuthoringRuntime(apiPort, uiPort, scenario, factory)
+-    try {
+-      await runtime.startApi()
+-      runtime.ui = owned('bash', ['scripts/node.sh', 'npm', '--prefix', 'apps/web', 'run', 'dev', '--', '--port', String(uiPort)], runtime.env)
+-      await ready(runtime.origin, runtime.ui)
+-      return runtime
+-    } catch (error) { await runtime.close(); throw error }
++    return withOwnedStartup(async deadline => {
++      const apiPort = await availablePort()
++      let uiPort = await availablePort()
++      while (uiPort === apiPort) {
++        if (Date.now() >= deadline) throw new Error('No distinct loopback test ports before readiness deadline')
++        uiPort = await availablePort()
++      }
++      const runtime = new AuthoringRuntime(apiPort, uiPort, scenario, factory)
++      try {
++        // API failures never enter the UI-only bind-collision retry path.
++        await runtime.startApi(deadline)
++        runtime.ui = owned('bash', ['scripts/node.sh', 'npm', '--prefix', 'apps/web', 'run', 'dev', '--', '--port', String(uiPort)], runtime.env)
++        await readyOwnedUi(uiPort, runtime.ui, deadline)
++        return runtime
++      } catch (error) { await runtime.close(); throw error }
++    })
+   }
+ 
+-  private async startApi() {
++  private async startApi(deadline?: number) {
+     this.api = owned(`${root}/.venv/bin/python`, ['-B', '-m', 'uvicorn', factories[this.factory], '--factory', '--host', '127.0.0.1', '--port', String(this.apiPort), '--no-access-log'], this.env)
+-    await ready(`http://127.0.0.1:${this.apiPort}/health`, this.api)
++    await ready(`http://127.0.0.1:${this.apiPort}/health`, this.api, { deadline })
+     if (!this.api.child.pid) throw new Error('Owned API has no process identity')
+     this.generations.push(this.api.child.pid)
+   }
+diff --git a/tests/e2e/ownedStartup.node.ts b/tests/e2e/ownedStartup.node.ts
+new file mode 100644
+index 00000000..900b0277
+--- /dev/null
++++ b/tests/e2e/ownedStartup.node.ts
+@@ -0,0 +1,42 @@
++import assert from 'node:assert/strict'
++import { createServer } from 'node:net'
++import { test } from 'node:test'
++import { availablePort, owned, ready, stopOwned, withOwnedStartup, type OwnedProcess } from './ownedStartup.ts'
++
++const childServer = `
++  const { createServer } = await import('node:http');
++  const port = Number(process.argv[1]);
++  const server = createServer((_request, response) => response.end('owned-startup'));
++  server.once('error', error => { console.error(error); process.exitCode = 1; });
++  server.listen(port, '127.0.0.1', () => console.log('OWNED_BOUND:' + port));
++`
++
++test('owned startup recovers from one actual exited bind collision without disturbing its owner', async () => {
++  const collider = createServer(socket => socket.destroy())
++  await new Promise<void>(accept => collider.listen(0, '127.0.0.1', accept))
++  const address = collider.address()
++  assert(address && typeof address !== 'string')
++  const collisionPort = address.port
++  const children: OwnedProcess[] = []
++  let attempts = 0
++  try {
++    const result = await withOwnedStartup(async deadline => {
++      const port = attempts++ === 0 ? collisionPort : await availablePort()
++      const service = owned(process.execPath, ['--input-type=module', '-e', childServer, String(port)], {})
++      children.push(service)
++      try {
++        await ready(`http://127.0.0.1:${port}`, service, {
++          deadline, bindPort: port, boundMarker: new RegExp(`^OWNED_BOUND:${port}$`, 'm'),
++        })
++        return { port, service }
++      } catch (error) { await stopOwned(service); throw error }
++    })
++    assert.equal(await (await fetch(`http://127.0.0.1:${result.port}`)).text(), 'owned-startup')
++    assert.notEqual(result.port, collisionPort)
++    assert.equal(collider.listening, true)
++    assert.equal(children[0].child.exitCode, 1)
++  } finally {
++    await Promise.all(children.map(stopOwned))
++    await new Promise<void>((accept, reject) => collider.close(error => error ? reject(error) : accept()))
++  }
++})
+diff --git a/tests/e2e/ownedStartup.ts b/tests/e2e/ownedStartup.ts
+new file mode 100644
+index 00000000..9d4f1f5a
+--- /dev/null
++++ b/tests/e2e/ownedStartup.ts
+@@ -0,0 +1,127 @@
++import { spawn, type ChildProcess } from 'node:child_process'
++import { createServer } from 'node:net'
++import { resolve } from 'node:path'
++import { setTimeout as pause } from 'node:timers/promises'
++
++const root = resolve(import.meta.dirname, '../..')
++export type OwnedProcess = { child: ChildProcess; exit: Promise<void>; output: () => string; closed: () => boolean }
++const ownedGroups = new Set<number>()
++// Retain only process groups created by this worker, including timeout teardown.
++process.once('exit', () => {
++  for (const pid of ownedGroups) {
++    try { process.kill(-pid, 'SIGTERM') } catch { /* Already exited owned group. */ }
++  }
++})
++
++export async function availablePort() {
++  const socket = createServer()
++  await new Promise<void>((accept, reject) => {
++    socket.once('error', reject); socket.listen(0, '127.0.0.1', accept)
++  })
++  const address = socket.address()
++  if (!address || typeof address === 'string') throw new Error('No loopback test port')
++  await new Promise<void>((accept, reject) => socket.close(error => error ? reject(error) : accept()))
++  return address.port
++}
++
++export function owned(command: string, args: string[], env: NodeJS.ProcessEnv): OwnedProcess {
++  const child = spawn(command, args, { cwd: root, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
++  if (child.pid) ownedGroups.add(child.pid)
++  let output = ''
++  let closed = false
++  for (const stream of [child.stdout, child.stderr]) {
++    stream?.on('data', chunk => { output = (output + String(chunk)).slice(-8192) })
++  }
++  const exit = new Promise<void>(accept => {
++    const done = () => { if (child.pid) ownedGroups.delete(child.pid); accept() }
++    child.once('close', () => { closed = true; done() }); child.once('error', done)
++  })
++  return { child, exit, output: () => output, closed: () => closed }
++}
++
++export async function stopOwned(value: OwnedProcess | undefined) {
++  if (!value || value.closed()) return
++  const pid = value.child.pid
++  if (!pid) { await value.exit; return }
++  // Never find/kill an existing server by its port or stop a user process.
++  try { process.kill(-pid, 'SIGTERM') } catch (error) {
++    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
++  }
++  let timer: ReturnType<typeof setTimeout> | undefined
++  const forced = new Promise<void>(accept => {
++    timer = setTimeout(() => {
++      try { process.kill(-pid, 'SIGKILL') } catch (error) {
++        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error
++      }
++      accept()
++    }, 5000)
++  })
++  await Promise.race([value.exit, forced])
++  clearTimeout(timer)
++  await value.exit
++}
++
++export type ReadyOptions = { deadline?: number; bindPort?: number; boundMarker?: RegExp }
++
++class OwnedBindCollision extends Error {}
++const withoutColor = (value: string) => value.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
++
++function explicitBindCollision(output: string, port: number | undefined) {
++  if (!port || !Number.isSafeInteger(port) || port < 1 || port > 65535) return false
++  const diagnostic = withoutColor(output)
++  // Vite reports this exact failure instead of exposing the underlying errno.
++  const vite = new RegExp(`^\\s*Error: Port ${port} is already in use\\s*$`, 'm')
++  const node = new RegExp(`\\bEADDRINUSE\\b[^\\n]*127\\.0\\.0\\.1:${port}(?:\\s|$)`, 'm')
++  return vite.test(diagnostic) || node.test(diagnostic)
++}
++
++export async function ready(url: string, service: OwnedProcess, options: ReadyOptions = {}) {
++  const deadline = options.deadline ?? Date.now() + 20_000
++  while (Date.now() < deadline) {
++    if (service.child.exitCode !== null || service.child.signalCode !== null) {
++      // Wait for close/drained diagnostics before admitting a retry. A signal,
++      // exit 0, or a still-live child is never evidence of a bind collision.
++      if (!service.closed()) { await pause(Math.min(50, Math.max(0, deadline - Date.now()))); continue }
++      const message = `Owned test server exited before readiness: ${service.output()}`
++      if (service.child.exitCode !== null && service.child.exitCode > 0 &&
++          service.child.signalCode === null && explicitBindCollision(service.output(), options.bindPort)) {
++        throw new OwnedBindCollision(message)
++      }
++      throw new Error(message)
++    }
++    if (options.boundMarker) {
++      options.boundMarker.lastIndex = 0
++      if (!options.boundMarker.test(withoutColor(service.output()))) {
++        await pause(Math.min(50, Math.max(0, deadline - Date.now()))); continue
++      }
++    }
++    try {
++      const remaining = deadline - Date.now()
++      if (remaining <= 0) break
++      const response = await fetch(url, { signal: AbortSignal.timeout(Math.min(1000, remaining)) })
++      if (response.ok && service.child.exitCode === null && service.child.signalCode === null) return
++    } catch { /* Wait for this new process to bind its loopback port. */ }
++    await pause(Math.min(50, Math.max(0, deadline - Date.now())))
++  }
++  if (service.child.exitCode !== null || service.child.signalCode !== null) {
++    throw new Error(`Owned test server exited before readiness: ${service.output()}`)
++  }
++  throw new Error(`Owned test server did not become ready: ${service.output()}`)
++}
++
++export function readyOwnedUi(port: number, service: OwnedProcess, deadline: number) {
++  return ready(`http://127.0.0.1:${port}`, service, {
++    deadline, bindPort: port,
++    boundMarker: new RegExp(`\\bLocal:\\s+http://127\\.0\\.0\\.1:${port}/`),
++  })
++}
++
++/** A startup transaction closes its owned processes before rejecting. */
++export async function withOwnedStartup<T>(attempt: (deadline: number) => Promise<T>, timeoutMs = 20_000) {
++  const deadline = Date.now() + timeoutMs
++  try { return await attempt(deadline) } catch (error) {
++    if (!(error instanceof OwnedBindCollision) || Date.now() >= deadline) throw error
++    // Exactly one retry, with the original deadline and after caller cleanup.
++    return attempt(deadline)
++  }
++}
+diff --git a/tests/e2e/ownedStartupBounds.node.ts b/tests/e2e/ownedStartupBounds.node.ts
+new file mode 100644
+index 00000000..736e5569
+--- /dev/null
++++ b/tests/e2e/ownedStartupBounds.node.ts
+@@ -0,0 +1,189 @@
++import assert from 'node:assert/strict'
++import { createServer as httpServer } from 'node:http'
++import { createServer, type Server } from 'node:net'
++import { test } from 'node:test'
++import { availablePort, owned, ready, readyOwnedUi, stopOwned, withOwnedStartup, type OwnedProcess } from './ownedStartup.ts'
++
++const serverCode = `
++  const { createServer } = await import('node:http');
++  const port = Number(process.argv[1]);
++  const mode = process.argv[2];
++  const server = createServer((_request, response) => {
++    response.statusCode = mode === 'http-error' ? 503 : 200;
++    response.end('owned-startup');
++  });
++  server.once('error', error => {
++    if (mode === 'vite') console.error('Error: Port ' + port + ' is already in use');
++    else console.error(error);
++    process.exitCode = 1;
++  });
++  server.listen(port, '127.0.0.1', () => console.log('OWNED_BOUND:' + port));
++`
++
++async function listen(server: Server) {
++  await new Promise<void>((accept, reject) => {
++    server.once('error', reject); server.listen(0, '127.0.0.1', accept)
++  })
++  const address = server.address()
++  assert(address && typeof address !== 'string')
++  return address.port
++}
++
++async function closeServer(server: Server) {
++  await new Promise<void>((accept, reject) => server.close(error => error ? reject(error) : accept()))
++}
++
++function launch(children: OwnedProcess[], code: string, port: number, mode = '') {
++  const child = owned(process.execPath, ['--input-type=module', '-e', code, String(port), mode], {})
++  children.push(child)
++  return child
++}
++
++async function wait(service: OwnedProcess, port: number, deadline: number, admitUiBind = true) {
++  try {
++    await ready(`http://127.0.0.1:${port}`, service, {
++      deadline, bindPort: admitUiBind ? port : undefined, boundMarker: new RegExp(`^OWNED_BOUND:${port}$`, 'm'),
++    })
++  } catch (error) { await stopOwned(service); throw error }
++}
++
++test('a second actual collision ends startup with the original error and one shared deadline', async () => {
++  const collider = createServer(socket => socket.destroy())
++  const port = await listen(collider)
++  const children: OwnedProcess[] = []
++  const deadlines: number[] = []
++  try {
++    await assert.rejects(withOwnedStartup(async deadline => {
++      deadlines.push(deadline)
++      await wait(launch(children, serverCode, port), port, deadline)
++    }), /Owned test server exited before readiness: Error: listen EADDRINUSE/)
++    assert.equal(children.length, 2)
++    assert.equal(deadlines[0], deadlines[1])
++    assert(children.every(child => child.closed() && child.child.exitCode === 1))
++    assert.equal(collider.listening, true)
++  } finally { await Promise.all(children.map(stopOwned)); await closeServer(collider) }
++})
++
++test('an actual child bind collision in Vite diagnostic format may reselect the UI port once', async () => {
++  const collider = createServer(socket => socket.destroy())
++  const collisionPort = await listen(collider)
++  const children: OwnedProcess[] = []
++  try {
++    const port = await withOwnedStartup(async deadline => {
++      const port = children.length === 0 ? collisionPort : await availablePort()
++      await wait(launch(children, serverCode, port, 'vite'), port, deadline)
++      return port
++    })
++    assert.equal(await (await fetch(`http://127.0.0.1:${port}`)).text(), 'owned-startup')
++    assert.equal(children.length, 2)
++    assert.match(children[0].output(), new RegExp(`Error: Port ${collisionPort} is already in use`))
++    assert.equal(collider.listening, true)
++  } finally { await Promise.all(children.map(stopOwned)); await closeServer(collider) }
++})
++
++test('an unrelated startup exit preserves its diagnostic and is cleaned up without retry', async () => {
++  const children: OwnedProcess[] = []
++  const port = await availablePort()
++  try {
++    await assert.rejects(withOwnedStartup(async deadline => {
++      await wait(launch(children, "console.error('UNKNOWN_STARTUP_FAILURE'); process.exit(7)", port), port, deadline)
++    }), /Owned test server exited before readiness: UNKNOWN_STARTUP_FAILURE/)
++    assert.equal(children.length, 1)
++    assert.equal(children[0].child.exitCode, 7)
++    assert.equal(children[0].closed(), true)
++  } finally { await Promise.all(children.map(stopOwned)) }
++})
++
++test('API-stage bind failures cannot enter the UI-only collision retry', async () => {
++  const collider = createServer(socket => socket.destroy())
++  const port = await listen(collider)
++  const children: OwnedProcess[] = []
++  try {
++    await assert.rejects(withOwnedStartup(async deadline => {
++      await wait(launch(children, serverCode, port), port, deadline, false)
++    }), /Owned test server exited before readiness: Error: listen EADDRINUSE/)
++    assert.equal(children.length, 1)
++    assert.equal(children[0].closed(), true)
++    assert.equal(collider.listening, true)
++  } finally { await Promise.all(children.map(stopOwned)); await closeServer(collider) }
++})
++
++test('a live child printing a collision diagnostic is stopped as unknown readiness without retry', async () => {
++  const children: OwnedProcess[] = []
++  const port = await availablePort()
++  const live = `console.error('Error: listen EADDRINUSE: address already in use 127.0.0.1:${port}');
++    setInterval(() => {}, 1000);`
++  try {
++    await assert.rejects(withOwnedStartup(async deadline => {
++      await wait(launch(children, live, port), port, deadline)
++    }, 500), /Owned test server did not become ready:/)
++    assert.equal(children.length, 1)
++    assert.equal(children[0].closed(), true)
++    assert.equal(children[0].child.signalCode, 'SIGTERM')
++  } finally { await Promise.all(children.map(stopOwned)) }
++})
++
++test('another owned listener HTTP 200 is not readiness for a child that never reports its own bind', async () => {
++  const foreign = httpServer((_request, response) => response.end('other-owner'))
++  const port = await listen(foreign)
++  const children: OwnedProcess[] = []
++  try {
++    await assert.rejects(withOwnedStartup(async deadline => {
++      await wait(launch(children, 'setInterval(() => {}, 1000)', port), port, deadline)
++    }, 500), /Owned test server did not become ready:/)
++    assert.equal(children.length, 1)
++    assert.equal(children[0].closed(), true)
++    assert.equal(foreign.listening, true)
++    assert.equal(await (await fetch(`http://127.0.0.1:${port}`)).text(), 'other-owner')
++  } finally { await Promise.all(children.map(stopOwned)); await closeServer(foreign) }
++})
++
++test('an owned bound server HTTP readiness failure retains the original failure and cleanup', async () => {
++  const children: OwnedProcess[] = []
++  const port = await availablePort()
++  try {
++    await assert.rejects(withOwnedStartup(async deadline => {
++      await wait(launch(children, serverCode, port, 'http-error'), port, deadline)
++    }, 500), /Owned test server did not become ready: OWNED_BOUND:/)
++    assert.equal(children.length, 1)
++    assert.equal(children[0].closed(), true)
++  } finally { await Promise.all(children.map(stopOwned)) }
++})
++
++test('a collision on a different port preserves its error without reselection', async () => {
++  const collider = createServer(socket => socket.destroy())
++  const collisionPort = await listen(collider)
++  const selectedPort = await availablePort()
++  const children: OwnedProcess[] = []
++  try {
++    await assert.rejects(withOwnedStartup(async deadline => {
++      await wait(launch(children, serverCode, collisionPort), selectedPort, deadline)
++    }), /Owned test server exited before readiness: Error: listen EADDRINUSE/)
++    assert.equal(children.length, 1)
++    assert.equal(children[0].closed(), true)
++    assert.equal(collider.listening, true)
++  } finally { await Promise.all(children.map(stopOwned)); await closeServer(collider) }
++})
++
++test('UI readiness requires its own selected-port Vite marker even when another owner serves HTTP 200', async () => {
++  const foreign = httpServer((_request, response) => response.end('other-owner'))
++  const collisionPort = await listen(foreign)
++  const children: OwnedProcess[] = []
++  const viteServer = serverCode.replace(
++    "console.log('OWNED_BOUND:' + port)",
++    "console.log('\\x1b[32mLocal:\\x1b[0m http://127.0.0.1:' + port + '/')",
++  )
++  try {
++    const port = await withOwnedStartup(async deadline => {
++      const port = children.length === 0 ? collisionPort : await availablePort()
++      const service = launch(children, viteServer, port, 'vite')
++      try { await readyOwnedUi(port, service, deadline); return port }
++      catch (error) { await stopOwned(service); throw error }
++    })
++    assert.notEqual(port, collisionPort)
++    assert.equal(await (await fetch(`http://127.0.0.1:${port}`)).text(), 'owned-startup')
++    assert.equal(await (await fetch(`http://127.0.0.1:${collisionPort}`)).text(), 'other-owner')
++    assert.equal(children[0].closed(), true)
++    assert.equal(foreign.listening, true)
++  } finally { await Promise.all(children.map(stopOwned)); await closeServer(foreign) }
++})
