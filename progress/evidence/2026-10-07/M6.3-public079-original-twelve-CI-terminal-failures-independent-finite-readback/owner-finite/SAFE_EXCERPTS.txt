@@ -1,0 +1,169 @@
+push run37632652743 attempt1 job112830648507 backend
+original job-112830648507-logs-01.stdout bytes=44701 sha256=2ac062c4bd1f9fd67a574f91c1f25bc29786ab186f3b2d15c85aea6633d8549d
+L106 [checkout_identity] 079a008cf88b37e4517cb391503a1e7393ccf374
+L181 [checkout_identity] 079a008cf88b37e4517cb391503a1e7393ccf374
+L217 [original_ci_command] ##[group]Run python -m pip install uv==0.11.21
+L234 [original_ci_command] ##[group]Run uv sync --frozen
+L360 [original_ci_command] ##[group]Run uv run --frozen ruff check .
+L371 [reviewed_safe_failure_env_or_static_context] All checks passed!
+L372 [original_ci_command] ##[group]Run uv run --frozen mypy
+L383 [reviewed_safe_failure_env_or_static_context] Success: no issues found in 295 source files
+L384 [original_ci_command] ##[group]Run uv run --frozen python scripts/probe_document_sandbox.py
+L403 [original_ci_command] ##[group]Run uv run --frozen pytest tests/unit tests/security
+L415 [tool_version] platform linux -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+L419 [original_footer] collected 1114 items
+L496 [original_footer] ================= 1114 passed, 3 warnings in 77.81s (0:01:17) ==================
+
+push run37632652743 attempt1 job112830649019 browser
+original job-112830649019-logs-01.stdout bytes=94213 sha256=8deb687a4976999399c11b57ff07145d00a50f00dffd43370c9ed30a3743aa0f
+L108 [checkout_identity] 079a008cf88b37e4517cb391503a1e7393ccf374
+L172 [checkout_identity] 079a008cf88b37e4517cb391503a1e7393ccf374
+L224 [tool_version] node: v24.21.0
+L225 [tool_version] npm: 11.19.0
+L228 [original_ci_command] ##[group]Run python -m pip install uv==0.11.21
+L245 [original_ci_command] ##[group]Run uv sync --frozen
+L371 [original_ci_command] ##[group]Run npm ci --prefix apps/web
+L397 [original_ci_command] ##[group]Run npm --prefix apps/web exec -- playwright install --with-deps chromium
+L613 [original_ci_command] ##[group]Run make build
+L645 [original_ci_command] ##[group]Run make test-e2e
+L667 [original_footer] Running 133 tests using 1 worker
+L822 [original_footer] 133 passed (28.6m)
+
+push run37632652743 attempt1 job112830648865 frontend
+original job-112830648865-logs-01.stdout bytes=60775 sha256=0c56ddc5306fb2a09b2b54f6352ce67e5a2fd50ff50c61210b195d5aa691ff33
+L106 [checkout_identity] 079a008cf88b37e4517cb391503a1e7393ccf374
+L171 [checkout_identity] 079a008cf88b37e4517cb391503a1e7393ccf374
+L183 [tool_version] node: v24.21.0
+L184 [tool_version] npm: 11.19.0
+L197 [original_ci_command] ##[group]Run npm ci --prefix apps/web
+L216 [original_ci_command] ##[group]Run npm --prefix apps/web run lint
+L224 [original_ci_command] ##[group]Run npm --prefix apps/web run typecheck
+L232 [original_ci_command] ##[group]Run npm --prefix apps/web run test
+L467 [original_footer] Test Files  167 passed (167)
+L468 [original_footer] Tests  1421 passed (1421)
+L476 [original_ci_command] ##[group]Run make build
+
+push run37632652743 attempt1 job112830648805 integration
+original job-112830648805-logs-01.stdout bytes=61542 sha256=1dbd503c24d44e8e5140ef6e2ac3cf6dd6d193220330d3913b54c7bced03e002
+L106 [checkout_identity] 079a008cf88b37e4517cb391503a1e7393ccf374
+L159 [checkout_identity] 079a008cf88b37e4517cb391503a1e7393ccf374
+L195 [original_ci_command] ##[group]Run python -m pip install uv==0.11.21
+L212 [original_ci_command] ##[group]Run uv sync --frozen
+L338 [original_ci_command] ##[group]Run uv run --frozen pytest tests/integration
+L350 [tool_version] platform linux -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+L354 [original_footer] collected 2521 items
+L616 [reviewed_safe_failure_env_or_static_context] E       assert 503 == 202
+L619 [reviewed_safe_failure_env_or_static_context] tests/integration/test_codex_turn_consent_http.py:91: AssertionError
+L631 [reviewed_safe_failure_env_or_static_context] SKIPPED [1] tests/integration/test_authoring_numeric_runtime.py:46: BLOCKED_ENVIRONMENT: real sealed runtime did not execute the calculator; original FAIL retained
+L632 [reviewed_safe_failure_env_or_static_context] SKIPPED [1] tests/integration/test_restore_numeric_actual_runtime.py:42: BLOCKED_ENVIRONMENT: actual sealed Restore evaluator did not return a numeric PASS; no fallback
+L633 [reviewed_safe_failure_env_or_static_context] FAILED tests/integration/test_codex_artifact_repair_boundaries.py::test_forward_guards_preserve_existing_source_rows_rowids_and_original_http_acks - assert 503 == 202
+L635 [original_footer] ====== 1 failed, 2518 passed, 2 skipped, 2 warnings in 2971.49s (0:49:31) ======
+L636 [original_step_exit] ##[error]Process completed with exit code 1.
+
+push run37632652743 attempt1 job112830649006 security-publication
+original job-112830649006-logs-01.stdout bytes=21008 sha256=609b50eb746dfa101ec8ebf688ba384d402af4ebbfbdc4dda5b4c3082f28f67e
+L106 [checkout_identity] 079a008cf88b37e4517cb391503a1e7393ccf374
+L168 [checkout_identity] 079a008cf88b37e4517cb391503a1e7393ccf374
+L204 [original_ci_command] ##[group]Run python scripts/check_publication.py --all-tracked
+L215 [reviewed_safe_failure_env_or_static_context] PASS: scanned 23175 staged/tracked files against path and credential rules. Manual provenance review remains required.
+
+push run37632652743 attempt1 job112830648905 spec-contracts
+original job-112830648905-logs-01.stdout bytes=39638 sha256=de93bb95b1a197d4ab1a17d432790d82ad55b4cb9e58ec11955e3afdba6eaa27
+L108 [checkout_identity] 079a008cf88b37e4517cb391503a1e7393ccf374
+L181 [checkout_identity] 079a008cf88b37e4517cb391503a1e7393ccf374
+L233 [tool_version] node: v24.21.0
+L234 [tool_version] npm: 11.19.0
+L237 [original_ci_command] ##[group]Run npm ci --prefix apps/web
+L263 [original_ci_command] ##[group]Run python -m pip install uv==0.11.21
+L280 [original_ci_command] ##[group]Run uv sync --frozen
+L342 [original_ci_command] ##[group]Run make verify-spec
+L392 [original_ci_command] ##[group]Run uv run --frozen pytest tests/contract tests/unit/test_spec_*.py
+L404 [tool_version] platform linux -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+L408 [original_footer] collected 962 items
+L468 [original_footer] ================= 962 passed, 2 warnings in 576.45s (0:09:36) ==================
+
+pull_request run37632662238 attempt1 job112830674907 backend
+original job-112830674907-logs-01.stdout bytes=45258 sha256=1ed0891a5f9a293d6571d3063c74441393afdf8be90e583c4d6662d9a499af40
+L194 [checkout_identity] e9eb82d41dd87649be6c8090c35b5052ccb1319c
+L230 [original_ci_command] ##[group]Run python -m pip install uv==0.11.21
+L247 [original_ci_command] ##[group]Run uv sync --frozen
+L373 [original_ci_command] ##[group]Run uv run --frozen ruff check .
+L384 [reviewed_safe_failure_env_or_static_context] All checks passed!
+L385 [original_ci_command] ##[group]Run uv run --frozen mypy
+L396 [reviewed_safe_failure_env_or_static_context] Success: no issues found in 295 source files
+L397 [original_ci_command] ##[group]Run uv run --frozen python scripts/probe_document_sandbox.py
+L416 [original_ci_command] ##[group]Run uv run --frozen pytest tests/unit tests/security
+L428 [tool_version] platform linux -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+L432 [original_footer] collected 1114 items
+L509 [original_footer] ================= 1114 passed, 3 warnings in 76.66s (0:01:16) ==================
+
+pull_request run37632662238 attempt1 job112830674946 browser
+original job-112830674946-logs-01.stdout bytes=101263 sha256=efba20a76cf2bb20085f78000115630aae0df2cabf6f4f61d39d5a27050a88ea
+L195 [checkout_identity] e9eb82d41dd87649be6c8090c35b5052ccb1319c
+L247 [tool_version] node: v24.21.0
+L248 [tool_version] npm: 11.19.0
+L251 [original_ci_command] ##[group]Run python -m pip install uv==0.11.21
+L268 [original_ci_command] ##[group]Run uv sync --frozen
+L394 [original_ci_command] ##[group]Run npm ci --prefix apps/web
+L420 [original_ci_command] ##[group]Run npm --prefix apps/web exec -- playwright install --with-deps chromium
+L636 [original_ci_command] ##[group]Run make build
+L668 [original_ci_command] ##[group]Run make test-e2e
+L691 [original_footer] Running 133 tests using 1 worker
+L847 [reviewed_safe_failure_env_or_static_context] 1) ../../tests/e2e/review.spec.ts:36:1 › real history and exact material review preserve original submitted text, null scores and a selected old revision after reload
+L849 [reviewed_safe_failure_env_or_static_context] Error: Test timeout of 30000ms exceeded
+L853 [reviewed_safe_failure_env_or_static_context] > 147 |   await expect.poll(() => new URL(page.url()).searchParams.has('reader')).toBe(true)
+L858 [reviewed_safe_failure_env_or_static_context] at $RUNNER_HOME/work/Learning_Workbench/Learning_Workbench/tests/e2e/review.spec.ts:147:75
+L866 [original_footer] 1 failed
+L867 [reviewed_safe_failure_env_or_static_context] ../../tests/e2e/review.spec.ts:36:1 › real history and exact material review preserve original submitted text, null scores and a selected old revision after reload
+L868 [original_footer] 132 passed (39.9m)
+L870 [original_step_exit] ##[error]Process completed with exit code 2.
+
+pull_request run37632662238 attempt1 job112830674842 frontend
+original job-112830674842-logs-01.stdout bytes=64779 sha256=a18b5b24de138522e1d348465c80725bdacf50e40343e12ecce63a4c10c1cb87
+L195 [checkout_identity] e9eb82d41dd87649be6c8090c35b5052ccb1319c
+L207 [tool_version] node: v24.21.0
+L208 [tool_version] npm: 11.19.0
+L219 [original_ci_command] ##[group]Run npm ci --prefix apps/web
+L238 [original_ci_command] ##[group]Run npm --prefix apps/web run lint
+L246 [original_ci_command] ##[group]Run npm --prefix apps/web run typecheck
+L254 [original_ci_command] ##[group]Run npm --prefix apps/web run test
+L505 [original_footer] Test Files  167 passed (167)
+L506 [original_footer] Tests  1421 passed (1421)
+L514 [original_ci_command] ##[group]Run make build
+
+pull_request run37632662238 attempt1 job112830674741 integration
+original job-112830674741-logs-01.stdout bytes=63380 sha256=e1e9a4eac717ab53dd0d8ee6da6f232d53b04209534d6ce1274415f08b552d0e
+L192 [checkout_identity] e9eb82d41dd87649be6c8090c35b5052ccb1319c
+L228 [original_ci_command] ##[group]Run python -m pip install uv==0.11.21
+L245 [original_ci_command] ##[group]Run uv sync --frozen
+L371 [original_ci_command] ##[group]Run uv run --frozen pytest tests/integration
+L383 [tool_version] platform linux -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+L387 [original_footer] collected 2521 items
+L649 [reviewed_safe_failure_env_or_static_context] E       assert 503 == 202
+L652 [reviewed_safe_failure_env_or_static_context] tests/integration/test_codex_turn_consent_http.py:91: AssertionError
+L664 [reviewed_safe_failure_env_or_static_context] SKIPPED [1] tests/integration/test_authoring_numeric_runtime.py:46: BLOCKED_ENVIRONMENT: real sealed runtime did not execute the calculator; original FAIL retained
+L665 [reviewed_safe_failure_env_or_static_context] SKIPPED [1] tests/integration/test_restore_numeric_actual_runtime.py:42: BLOCKED_ENVIRONMENT: actual sealed Restore evaluator did not return a numeric PASS; no fallback
+L666 [reviewed_safe_failure_env_or_static_context] FAILED tests/integration/test_codex_artifact_repair_boundaries.py::test_forward_guards_preserve_existing_source_rows_rowids_and_original_http_acks - assert 503 == 202
+L668 [original_footer] ====== 1 failed, 2518 passed, 2 skipped, 2 warnings in 4497.52s (1:14:57) ======
+L669 [original_step_exit] ##[error]Process completed with exit code 1.
+
+pull_request run37632662238 attempt1 job112830674820 security-publication
+original job-112830674820-logs-01.stdout bytes=22147 sha256=cefbe0393d0f4ecfc3aad1eb9afefba1ee7543d26e4d27d1bfdb03437cd1ac31
+L190 [checkout_identity] e9eb82d41dd87649be6c8090c35b5052ccb1319c
+L226 [original_ci_command] ##[group]Run python scripts/check_publication.py --all-tracked
+L237 [reviewed_safe_failure_env_or_static_context] PASS: scanned 23175 staged/tracked files against path and credential rules. Manual provenance review remains required.
+
+pull_request run37632662238 attempt1 job112830674580 spec-contracts
+original job-112830674580-logs-01.stdout bytes=40389 sha256=9abf31e1ed5c26c1c7872d9cbe7b405ebabfbafef701ba21cfecc1d49946473a
+L197 [checkout_identity] e9eb82d41dd87649be6c8090c35b5052ccb1319c
+L249 [tool_version] node: v24.21.0
+L250 [tool_version] npm: 11.19.0
+L253 [original_ci_command] ##[group]Run npm ci --prefix apps/web
+L279 [original_ci_command] ##[group]Run python -m pip install uv==0.11.21
+L296 [original_ci_command] ##[group]Run uv sync --frozen
+L358 [original_ci_command] ##[group]Run make verify-spec
+L408 [original_ci_command] ##[group]Run uv run --frozen pytest tests/contract tests/unit/test_spec_*.py
+L420 [tool_version] platform linux -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+L424 [original_footer] collected 962 items
+L484 [original_footer] ================= 962 passed, 2 warnings in 575.52s (0:09:35) ==================
+

@@ -1,0 +1,182 @@
+{
+  "schema": "learning-workbench.forward-guard-independent-two-axis.v1",
+  "reviewed_utc": "2026-10-07T14:48:12.904397+00:00",
+  "source_head": "079a008cf88b37e4517cb391503a1e7393ccf374",
+  "reviewed_worktree_changed_paths": [
+    "tests/integration/test_codex_artifact_repair_boundaries.py"
+  ],
+  "reviewed_test_sha256": "7c18b1d3c8fb67fa1f0565fb1804c3f6cdd2941c85433a8bf762c69a44e6dc34",
+  "diff_bytes": 3559,
+  "diff_sha256": "9fd8ade1044c53334cc019ed3f63ec144a5d9cc88c503f40267a2cc90f6e1ac7",
+  "spec_sha256": "b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec",
+  "review_basis": "PRODUCT_DESIGN v3.0.15 §20.17.7 and original legacy migration preservation oracle",
+  "parallel_review_limitation": "No free collaboration slot; standards/spec axes completed sequentially within restricted independent task",
+  "standards_axis": {
+    "blocking_findings": [],
+    "hard_violation_count": 0,
+    "heuristic_findings": [],
+    "assessment": "NO_BLOCKING_FINDING_IN_FINITE_DIFF",
+    "evidence": [
+      "None assignment exists only in pytest monkeypatch.context, limited to constructing pre-0035/0036 historical source facts",
+      "context exits before actual forward Database.initialize and all post-upgrade original HTTP reads/replay",
+      "restored owner identity is asserted to be original codex_turn_worker.controls; production code and owner wiring remain unchanged",
+      "Broker tables are explicitly absent before history construction and empty after real upgrade; no fake broker/source rows or migration receipts introduced"
+    ]
+  },
+  "spec_axis": {
+    "blocking_findings": [],
+    "finding_count": 0,
+    "assessment": "ORIGINAL_PRESERVATION_ORACLES_RETAINED",
+    "requirements_checked": [
+      "original source table complete rowid,* values captured and equal after forward upgrade for all three import owner tables",
+      "original HTTP artifact-import view content exact equality after upgrade",
+      "original idempotency body/key ACK content exact equality after upgrade",
+      "all three import immutable UPDATE guards still asserted after upgrade",
+      "foreign_key_check still empty",
+      "single original synthetic transport call count retained",
+      "0036 tables remain genuinely empty after migration; no inferred legacy Broker execution history fabricated"
+    ],
+    "applicability_note": "Validates historical fixture owner composition, not a product runtime permission relaxation or whole M6.3 acceptance"
+  },
+  "post_upgrade_broker_path": "CodexArtifactImports._checked invokes turns._owned_state; restored broker_controls calls verify_history against the upgraded real database before later view/replay. Independent current Broker integrity tests retained and current related suite actually 44 passed.",
+  "original_receipt_readbacks": [
+    {
+      "original_group": "original-focused",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "--offline",
+        "pytest",
+        "tests/integration/test_codex_artifact_repair_boundaries.py::test_forward_guards_preserve_existing_source_rows_rowids_and_original_http_acks"
+      ],
+      "receipt_exit_code": 1,
+      "actual_footer": "======================== 1 failed, 2 warnings in 2.33s =========================",
+      "seconds": 2.9447357059998467,
+      "hash_size_readback": "PASS",
+      "streams": [
+        {
+          "file": "m63-artifact-forward-guard-diagnosis-oct07/original-focused/stdout.bin",
+          "bytes": 5156,
+          "sha256": "578bd75db287cb1e3837672f0b431207f47eadee1e5eddd96be5be0ba8885a0f"
+        },
+        {
+          "file": "m63-artifact-forward-guard-diagnosis-oct07/original-focused/stderr.bin",
+          "bytes": 139,
+          "sha256": "90ce139a6baea57e7b0bde44fd4140b1cf160e991d06e4634ceff2a1370688a4"
+        }
+      ]
+    },
+    {
+      "original_group": "green-original-one",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "--offline",
+        "pytest",
+        "tests/integration/test_codex_artifact_repair_boundaries.py::test_forward_guards_preserve_existing_source_rows_rowids_and_original_http_acks"
+      ],
+      "receipt_exit_code": 0,
+      "actual_footer": "======================== 1 passed, 2 warnings in 3.27s =========================",
+      "seconds": 3.679254665999906,
+      "hash_size_readback": "PASS",
+      "streams": [
+        {
+          "file": "m63-artifact-forward-guard-diagnosis-oct07/green-original-one/stdout.bin",
+          "bytes": 1430,
+          "sha256": "07adb07cf81c337039b1d18bd5dae5e5496ffebb1de7b7b871b0d35cf11cb091"
+        },
+        {
+          "file": "m63-artifact-forward-guard-diagnosis-oct07/green-original-one/stderr.bin",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ]
+    },
+    {
+      "original_group": "related-repair-and-broker",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "--offline",
+        "pytest",
+        "tests/integration/test_codex_artifact_repair_boundaries.py",
+        "tests/integration/test_codex_broker_control_owner.py"
+      ],
+      "receipt_exit_code": 0,
+      "actual_footer": "================== 44 passed, 2 warnings in 126.20s (0:02:06) ==================",
+      "seconds": 127.78851998300024,
+      "hash_size_readback": "PASS",
+      "streams": [
+        {
+          "file": "m63-artifact-forward-guard-diagnosis-oct07/related-repair-and-broker/stdout.bin",
+          "bytes": 1672,
+          "sha256": "76a7d4e7c66d311bc71b03d43f67554adec67b1b472c2f4254ddd7d29484c542"
+        },
+        {
+          "file": "m63-artifact-forward-guard-diagnosis-oct07/related-repair-and-broker/stderr.bin",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ]
+    }
+  ],
+  "source_manifest": [
+    {
+      "path": "PRODUCT_DESIGN.md",
+      "bytes": 520415,
+      "sha256": "b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec"
+    },
+    {
+      "path": "tests/integration/test_codex_artifact_repair_boundaries.py",
+      "bytes": 13382,
+      "sha256": "7c18b1d3c8fb67fa1f0565fb1804c3f6cdd2941c85433a8bf762c69a44e6dc34"
+    },
+    {
+      "path": "tests/integration/test_codex_artifact_import_http.py",
+      "bytes": 9116,
+      "sha256": "32d3c7c7b01a41be390af30b64fb3261f4be32c9143dd6455126f5a1fc795282"
+    },
+    {
+      "path": "tests/integration/test_codex_artifact_manifest.py",
+      "bytes": 8061,
+      "sha256": "4d4f88e70f42ee7d2c9116986eff6fef9418a6bb0ee6e580c11ef0a0cf46eaaf"
+    },
+    {
+      "path": "services/api/app/application/codex_turn.py",
+      "bytes": 35993,
+      "sha256": "59bf25e9f5a3decf3b8b9be0091395de6b5367557a1fed09ced36d6ad44eed2d"
+    },
+    {
+      "path": "services/api/app/application/codex_turn_worker.py",
+      "bytes": 20740,
+      "sha256": "0d8399681b1534522b17b7664864ac7676ffca64f748984b3790d72b23dabfd0"
+    },
+    {
+      "path": "services/api/app/application/codex_broker_control.py",
+      "bytes": 12463,
+      "sha256": "9ac8918be47faa874224bcc824a06a7ca4a999f618952a847b6a8915a2ecee36"
+    },
+    {
+      "path": "services/api/app/application/codex_artifact_imports.py",
+      "bytes": 11435,
+      "sha256": "84bdb61706135cfa6bd82ff215ae741764b00d8a17aabd3df785481f31d7d466"
+    },
+    {
+      "path": "migrations/0035_codex_import_immutable.sql",
+      "bytes": 1713,
+      "sha256": "4e7090d2463d396d58387ba3fffc9e29b2f724c0dcc305efa31fcf8ac79c7af9"
+    },
+    {
+      "path": "migrations/0036_codex_broker_control.sql",
+      "bytes": 2542,
+      "sha256": "bf0232aadea7081c8265b7f65aa1db6974c3988da1ade11fd258b74076bcb1b5"
+    }
+  ],
+  "code_mutation_by_reviewer": "NONE",
+  "tests_rerun_by_reviewer": "NONE",
+  "remote_mutation": "NONE",
+  "overall": "NO_BLOCKING_FINDING; ROOT_REVIEW_AND_NORMAL_INTEGRATION_REQUIRED; ORIGINAL_FULL_GATE_STATUS_NOT_REPLACED"
+}
