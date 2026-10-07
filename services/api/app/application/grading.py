@@ -50,7 +50,9 @@ class GradingService:
 
     def result(self, identity: SessionIdentity, identifier: str) -> AssessmentGradingResult | AssessmentGradingJob:
         from .evidence import checked_submission_basis, history
-        with self.database.transaction() as connection:
+        # Complete the immutable projection in a consistent WAL read snapshot,
+        # without reserving the writer needed to finish the grading job.
+        with self.database.transaction(immediate=False) as connection:
             Policy(connection, identity.workspace_id).check("attempt_read", attempt_id=identifier)
             repo = GradingRepository(connection, identity.workspace_id)
             record = repo.attempts.load(identifier)
@@ -63,11 +65,28 @@ class GradingService:
             grade = repo.load_grade(record)
             if job["status"] != "completed":
                 previous = self._project(connection, repo, record, grade, entries, release=False) if grade is not None else None
-                return AssessmentGradingJob(id=job["id"], status=job["status"], last_completed_result=previous, history=entries,
+                value: AssessmentGradingResult | AssessmentGradingJob = AssessmentGradingJob(id=job["id"], status=job["status"], last_completed_result=previous, history=entries,
                     current_review_policy=current_review_policy(connection, record))
-            if grade is None:
-                raise invalid_snapshot()
-            return self._project(connection, repo, record, grade, entries, release=record.policy.mode != "independent" or grade[0].status == "graded")
+            else:
+                if grade is None:
+                    raise invalid_snapshot()
+                value = self._project(connection, repo, record, grade, entries, release=record.policy.mode != "independent" or grade[0].status == "graded")
+        # Mutable delivery permission must be current, rather than inherited
+        # from the old snapshot. Keep this writer reservation to policy checks;
+        # history, evidence and material projection have already completed.
+        with self.database.transaction() as connection:
+            policy = Policy(connection, identity.workspace_id)
+            policy.check("attempt_read", attempt_id=identifier)
+            current = AssessmentRepository(connection, identity.workspace_id).load(identifier)
+            review_policy = current_review_policy(connection, current)
+            prepared = value if isinstance(value, AssessmentGradingResult) else value.last_completed_result
+            if prepared is not None:
+                for item in prepared.items:
+                    if item.solution_markdown is not None:
+                        policy.check("solution_read", question_ref=item.question_ref)
+        if isinstance(value, AssessmentGradingJob) and value.last_completed_result is not None:
+            value = value.model_copy(update={"last_completed_result": value.last_completed_result.model_copy(update={"current_review_policy": review_policy})})
+        return value.model_copy(update={"current_review_policy": review_policy})
 
     @staticmethod
     def _project(connection: sqlite3.Connection, repo: GradingRepository, record: AssessmentRecord,
