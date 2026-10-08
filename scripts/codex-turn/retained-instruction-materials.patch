@@ -1,0 +1,896 @@
+--- /dev/null
++++ b/core/src/agents_md_checkpoint_tests.rs
+@@ -0,0 +1,99 @@
++//! Tests the actual applied-state writer seams without refresh, file discovery or callbacks.
++use super::*;
++use codex_extension_api::LoadInstructionsFuture;
++use codex_extension_api::UserInstructionsProvider;
++
++async fn publish(manager: &AgentsMdManager, text: Option<&str>) {
++    let instructions = SessionInstructions {
++        user: text.map(|text| Instructions {
++            text: text.to_string(),
++            source: None,
++        }),
++        ..Default::default()
++    };
++    let loaded = LoadedAgentsMd::default()
++        .with_instructions(instructions.user.clone(), None)
++        .map(Arc::new);
++    manager.state.lock().await.publish(
++        instructions,
++        AgentsMdCache {
++            loaded,
++            ..Default::default()
++        },
++    );
++}
++
++#[tokio::test]
++async fn absence_checkpoint_is_stable_and_bound_to_its_manager() {
++    let manager = AgentsMdManager::new(SessionInstructions::default());
++    let other = AgentsMdManager::new(SessionInstructions::default());
++    let checkpoint = manager.applied_checkpoint().await;
++    assert!(checkpoint.matches_loaded(&None));
++    assert!(manager.checkpoint_is_current(&checkpoint).await);
++    assert!(!other.checkpoint_is_current(&checkpoint).await);
++    assert!(manager.checkpoint_is_current(&checkpoint).await);
++}
++
++#[tokio::test]
++async fn clearing_genuine_absence_revokes_the_old_checkpoint() {
++    let manager = AgentsMdManager::new(SessionInstructions::default());
++    let checkpoint = manager.applied_checkpoint().await;
++    manager.state.lock().await.clear_cache();
++    assert!(manager.get_loaded().await.is_none());
++    assert!(!manager.checkpoint_is_current(&checkpoint).await);
++    let current = manager.applied_checkpoint().await;
++    assert!(current.matches_loaded(&None));
++    assert!(manager.checkpoint_is_current(&current).await);
++}
++
++#[tokio::test]
++async fn equal_applied_publication_has_a_new_writer_lifetime() {
++    let manager = AgentsMdManager::new(SessionInstructions::default());
++    publish(&manager, Some("owned applied instructions")).await;
++    let checkpoint = manager.applied_checkpoint().await;
++    let before = manager.get_loaded().await.expect("applied instructions");
++    publish(&manager, Some("owned applied instructions")).await;
++    let after = manager
++        .get_loaded()
++        .await
++        .expect("equal applied instructions");
++    assert_eq!(before.as_ref(), after.as_ref());
++    assert!(!Arc::ptr_eq(&before, &after));
++    assert!(!manager.checkpoint_is_current(&checkpoint).await);
++}
++
++#[tokio::test]
++async fn applied_change_and_revert_cannot_revive_an_absence_checkpoint() {
++    let manager = AgentsMdManager::new(SessionInstructions::default());
++    let checkpoint = manager.applied_checkpoint().await;
++    publish(&manager, Some("temporary applied instructions")).await;
++    publish(&manager, None).await;
++    assert!(manager.get_loaded().await.is_none());
++    assert!(checkpoint.matches_loaded(&None));
++    assert!(!manager.checkpoint_is_current(&checkpoint).await);
++    assert!(
++        manager
++            .checkpoint_is_current(&manager.applied_checkpoint().await)
++            .await
++    );
++}
++
++struct NeverLoadedInstructions;
++
++impl UserInstructionsProvider for NeverLoadedInstructions {
++    fn load_user_instructions(&self) -> LoadInstructionsFuture<'_> {
++        panic!("inert checkpoint must never call an instruction provider")
++    }
++}
++
++#[tokio::test]
++async fn applied_checkpoint_capture_and_recheck_do_not_load_providers() {
++    let manager = AgentsMdManager::new(SessionInstructions {
++        user_provider: Some(Arc::new(NeverLoadedInstructions)),
++        ..Default::default()
++    });
++    let checkpoint = manager.applied_checkpoint().await;
++    assert!(checkpoint.matches_loaded(&None));
++    assert!(manager.checkpoint_is_current(&checkpoint).await);
++    assert!(manager.get_loaded().await.is_none());
++}
+--- a/core/src/agents_md_manager.rs
++++ b/core/src/agents_md_manager.rs
+@@ -17,9 +17,11 @@
+ use std::sync::Arc;
+ use tokio::sync::Mutex;
+ use tokio::sync::Semaphore;
++use tokio_util::sync::CancellationToken;
+ 
+ /// Owns instruction sources, refresh serialization, and the applied snapshot.
+ pub(crate) struct AgentsMdManager {
++    owner: Arc<()>,
+     refresh_lock: Semaphore,
+     state: Mutex<AgentsMdState>,
+ }
+@@ -36,6 +38,39 @@
+ struct AgentsMdState {
+     instructions: SessionInstructions,
+     cache: AgentsMdCache,
++    applied_reset: CancellationToken,
++}
++
++impl AgentsMdState {
++    fn clear_cache(&mut self) {
++        std::mem::take(&mut self.applied_reset).cancel();
++        self.cache = AgentsMdCache::default();
++    }
++
++    fn publish(&mut self, instructions: SessionInstructions, cache: AgentsMdCache) {
++        std::mem::take(&mut self.applied_reset).cancel();
++        self.instructions = instructions;
++        self.cache = cache;
++    }
++}
++
++/// The manager's applied state, including genuine absence. This is not a claim
++/// about fresh provider/filesystem contents or an outbound proof.
++#[derive(Clone)]
++pub(crate) struct AppliedAgentsMdCheckpoint {
++    owner: Arc<()>,
++    reset: CancellationToken,
++    loaded: Option<Arc<LoadedAgentsMd>>,
++}
++
++impl AppliedAgentsMdCheckpoint {
++    pub(crate) fn matches_loaded(&self, loaded: &Option<Arc<LoadedAgentsMd>>) -> bool {
++        match (&self.loaded, loaded) {
++            (None, None) => true,
++            (Some(captured), Some(current)) => Arc::ptr_eq(captured, current),
++            _ => false,
++        }
++    }
+ }
+ 
+ #[derive(Default)]
+@@ -50,10 +85,12 @@
+         instructions.user = normalize_instructions(instructions.user);
+         instructions.thread = normalize_instructions(instructions.thread);
+         Self {
++            owner: Arc::new(()),
+             refresh_lock: Semaphore::new(/*permits*/ 1),
+             state: Mutex::new(AgentsMdState {
+                 instructions,
+                 cache: AgentsMdCache::default(),
++                applied_reset: CancellationToken::new(),
+             }),
+         }
+     }
+@@ -88,7 +125,7 @@
+             if refresh_repository {
+                 // Tightened read permissions must not leave inaccessible instructions visible,
+                 // even if discovery fails or the caller cancels the refresh.
+-                state.cache = AgentsMdCache::default();
++                state.clear_cache();
+             }
+             (
+                 state.instructions.clone(),
+@@ -131,16 +168,63 @@
+             .with_instructions(instructions.user.clone(), instructions.thread.clone())
+             .map(Arc::new);
+             let mut state = self.state.lock().await;
+-            state.instructions = instructions;
+-            state.cache = AgentsMdCache {
+-                selections: Some(selections),
+-                active_project_trust_level,
+-                loaded: loaded.clone(),
+-            };
++            state.publish(
++                instructions,
++                AgentsMdCache {
++                    selections: Some(selections),
++                    active_project_trust_level,
++                    loaded: loaded.clone(),
++                },
++            );
+             Ok(loaded)
+         }
+         .await;
+         (result, warnings)
++    }
++
++    /// Read only the applied owner state; never invoke instruction providers or refresh.
++    pub(crate) async fn applied_checkpoint(&self) -> AppliedAgentsMdCheckpoint {
++        let state = self.state.lock().await;
++        AppliedAgentsMdCheckpoint {
++            owner: Arc::clone(&self.owner),
++            reset: state.applied_reset.child_token(),
++            loaded: state.cache.loaded.clone(),
++        }
++    }
++
++    pub(crate) async fn checkpoint_is_current(
++        &self,
++        checkpoint: &AppliedAgentsMdCheckpoint,
++    ) -> bool {
++        let state = self.state.lock().await;
++        Arc::ptr_eq(&self.owner, &checkpoint.owner)
++            && !checkpoint.reset.is_cancelled()
++            && checkpoint.matches_loaded(&state.cache.loaded)
++    }
++
++    /// Test setup uses the same applied writer seam and mutex as refresh.
++    #[cfg(test)]
++    pub(crate) async fn clear_applied_cache_for_test(&self) {
++        self.state.lock().await.clear_cache();
++    }
++
++    /// Publish genuine native instructions through the real applied writer seam.
++    #[cfg(test)]
++    pub(crate) async fn publish_applied_instructions_for_test(&self, user: Option<Instructions>) {
++        let instructions = SessionInstructions {
++            user,
++            ..Default::default()
++        };
++        let loaded = LoadedAgentsMd::default()
++            .with_instructions(instructions.user.clone(), None)
++            .map(Arc::new);
++        self.state.lock().await.publish(
++            instructions,
++            AgentsMdCache {
++                loaded,
++                ..Default::default()
++            },
++        );
+     }
+ 
+     pub(crate) async fn get_loaded(&self) -> Option<Arc<LoadedAgentsMd>> {
+@@ -180,3 +264,7 @@
+ fn normalize_instructions(instructions: Option<Instructions>) -> Option<Instructions> {
+     instructions.filter(|instructions| !instructions.text.trim().is_empty())
+ }
++
++#[cfg(test)]
++#[path = "agents_md_checkpoint_tests.rs"]
++mod checkpoint_tests;
+--- a/core/src/session/environment.rs
++++ b/core/src/session/environment.rs
+@@ -350,6 +350,7 @@
+             }
+         }
+ 
++        state.invalidate_prompt_instruction_materials();
+         state.session_configuration.environments = future;
+         if update_current {
+             // Invalidate MCP before installed configuration can wake a waiting turn.
+--- a/core/src/session/mcp.rs
++++ b/core/src/session/mcp.rs
+@@ -690,7 +690,7 @@
+             let mut state = self.state.lock().await;
+             let mut config = (*state.session_configuration.original_config_do_not_use).clone();
+             config.mcp_servers = refresh_config.mcp_servers.clone();
+-            state.session_configuration.original_config_do_not_use = Arc::new(config);
++            Self::replace_session_runtime_config(&mut state, Arc::new(config));
+             state.active_disabled_plugin_ids.clone()
+         };
+         let ready_selected_capability_roots = self
+--- a/core/src/session/mod.rs
++++ b/core/src/session/mod.rs
+@@ -1483,14 +1483,36 @@
+         let state = self.state.lock().await;
+         BaseInstructions {
+             text: state.session_configuration.base_instructions.clone(),
+-            provenance: state.base_instructions_provenance.clone(),
+-        }
++            provenance: state.base_instructions_provenance(),
++        }
++    }
++
++    /// Capture the real rendering inputs and their writer-owned lifetime in one state read.
++    /// This does not refresh instructions or construct a request.
++    pub(super) async fn capture_prompt_instruction_materials(
++        &self,
++    ) -> (CancellationToken, Arc<Config>, BaseInstructions) {
++        let state = self.state.lock().await;
++        (
++            state.prompt_instruction_reset(),
++            Arc::clone(&state.session_configuration.original_config_do_not_use),
++            BaseInstructions {
++                text: state.session_configuration.base_instructions.clone(),
++                provenance: state.base_instructions_provenance(),
++            },
++        )
+     }
+ 
+     /// Render the request copy without changing instructions persisted or inherited by forks.
+     pub(crate) async fn get_prompt_base_instructions(&self) -> BaseInstructions {
+-        let config = self.get_config().await;
+-        let instructions = self.get_base_instructions().await;
++        let (_, config, instructions) = self.capture_prompt_instruction_materials().await;
++        Self::render_prompt_base_instructions(config.as_ref(), instructions)
++    }
++
++    pub(super) fn render_prompt_base_instructions(
++        config: &Config,
++        instructions: BaseInstructions,
++    ) -> BaseInstructions {
+         if !config.update_plan_enabled
+             && config.model_catalog.is_none()
+             && matches!(
+@@ -1903,7 +1925,7 @@
+                 self.mark_mcp_runtime_dirty();
+             }
+             // Save new environment defaults for future turns. The running turn keeps its own.
+-            state.session_configuration = updated;
++            state.replace_session_configuration(updated);
+             if root_service_tier_changed {
+                 self.services.agent_control.propagate_config_update(
+                     AgentConfigUpdate::ServiceTier(
+@@ -2046,6 +2068,11 @@
+     pub(crate) async fn provider(&self) -> ModelProviderInfo {
+         let state = self.state.lock().await;
+         state.session_configuration.provider.info().clone()
++    }
++
++    fn replace_session_runtime_config(state: &mut SessionState, config: Arc<Config>) {
++        state.invalidate_prompt_instruction_materials();
++        state.session_configuration.original_config_do_not_use = config;
+     }
+ 
+     pub(crate) async fn refresh_runtime_config(&self, next_config: Config) {
+@@ -2106,7 +2133,7 @@
+                 warn!("failed to refresh MCP OAuth coordination config: {err}");
+             }
+             let config = Arc::new(config);
+-            state.session_configuration.original_config_do_not_use = Arc::clone(&config);
++            Self::replace_session_runtime_config(&mut state, Arc::clone(&config));
+             self.mark_mcp_runtime_dirty();
+             let new_config = notify_config_contributors
+                 .then(|| self.build_effective_session_config(&state.session_configuration));
+@@ -2176,7 +2203,7 @@
+         ) {
+             warn!("failed to refresh MCP OAuth coordination config: {err}");
+         }
+-        state.session_configuration.original_config_do_not_use = Arc::new(config);
++        Self::replace_session_runtime_config(&mut state, Arc::new(config));
+         self.services.mcp_runtime.invalidate_resource_caches();
+         self.mark_mcp_runtime_dirty();
+         drop(state);
+--- a/core/src/session/retained_outbound_snapshot_tests.rs
++++ b/core/src/session/retained_outbound_snapshot_tests.rs
+@@ -1006,3 +1006,7 @@
+ // Reuse only this existing owned native fixture; no sampling task is started.
+ #[path = "retained_sampling_preparation_tests.rs"]
+ mod sampling_preparation_tests;
++
++// Additional inert material tests reuse the owned native fixture; no task is run.
++#[path = "retained_sampling_instruction_tests.rs"]
++mod instruction_material_tests;
+--- /dev/null
++++ b/core/src/session/retained_sampling_instruction_tests.rs
+@@ -0,0 +1,291 @@
++//! Native material ownership tests only; no worker, refresh, encode, grant or transport.
++use super::fixture;
++use crate::session::retained_sampling_preparation::*;
++use crate::session::session::Session;
++use crate::session::step_context::StepContext;
++use codex_protocol::models::BaseInstructionsProvenance;
++use std::sync::Arc;
++
++async fn assembled(session: &Arc<Session>, step: &Arc<StepContext>) -> AssembledSamplingPrompt {
++    let input = NativeSamplingInput::capture(session, step).await;
++    let instructions = NativeSamplingInstructions::capture(session, step).await;
++    assemble_sampling_prompt(input, &instructions, &mut SamplingToolCache::new())
++        .await
++        .expect("ordinary native assembly only")
++}
++
++#[tokio::test]
++async fn inert_instruction_capture_keeps_native_history_config_and_applied_state() {
++    let (session, step, _home) = fixture().await;
++    let history = session.clone_history().await.into_shared_annotated_items();
++    let (reset, config, source) = session.capture_prompt_instruction_materials().await;
++    let checkpoint = session
++        .services
++        .agents_md_manager
++        .applied_checkpoint()
++        .await;
++    let _instructions = NativeSamplingInstructions::capture(&session, &step).await;
++    let (after_reset, after_config, after_source) =
++        session.capture_prompt_instruction_materials().await;
++    assert!(!reset.is_cancelled());
++    assert!(!after_reset.is_cancelled());
++    assert!(Arc::ptr_eq(&config, &after_config));
++    assert_eq!(source, after_source);
++    assert!(Arc::ptr_eq(
++        &history,
++        &session.clone_history().await.into_shared_annotated_items()
++    ));
++    assert!(
++        session
++            .services
++            .agents_md_manager
++            .checkpoint_is_current(&checkpoint)
++            .await
++    );
++    assert_eq!(
++        prepare_pregrant(&session, &step).err(),
++        Some(SamplingCaptureError::PregrantOwnerUnavailable)
++    );
++}
++
++#[tokio::test]
++async fn base_instruction_commit_invalidates_capture_and_preserves_original_prompt() {
++    let (session, step, _home) = fixture().await;
++    let captured = assembled(&session, &step)
++        .await
++        .retain()
++        .await
++        .expect("capture");
++    let before = captured.native_materials().0.base_instructions.clone();
++    {
++        let mut state = session.state.lock().await;
++        let mut configuration = state.session_configuration.clone();
++        configuration
++            .base_instructions
++            .push_str("\nLater owned instructions");
++        state.replace_session_configuration(configuration);
++    }
++    assert_eq!(
++        captured.verify_current(&session, &step).await,
++        Err(SamplingCaptureError::InstructionsChanged)
++    );
++    assert_eq!(captured.native_materials().0.base_instructions, before);
++    assert_eq!(
++        captured.controlled_prompt().err(),
++        Some(SamplingCaptureError::CompleteMaterialVersionsUnavailable)
++    );
++}
++
++#[tokio::test]
++async fn provenance_change_and_revert_cannot_revive_instruction_capture() {
++    let (session, step, _home) = fixture().await;
++    let captured = assembled(&session, &step)
++        .await
++        .retain()
++        .await
++        .expect("capture");
++    {
++        let mut state = session.state.lock().await;
++        let original = state.base_instructions_provenance();
++        state.set_base_instructions_provenance(Some(BaseInstructionsProvenance::Custom));
++        state.set_base_instructions_provenance(original);
++    }
++    assert_eq!(
++        captured.verify_current(&session, &step).await,
++        Err(SamplingCaptureError::InstructionsChanged)
++    );
++}
++
++#[tokio::test]
++async fn equal_config_arc_replacement_revokes_instruction_capture() {
++    let (session, step, _home) = fixture().await;
++    let captured = assembled(&session, &step)
++        .await
++        .retain()
++        .await
++        .expect("capture");
++    let (_, before_config, before_source) = session.capture_prompt_instruction_materials().await;
++    {
++        let mut state = session.state.lock().await;
++        let equal = Arc::new(
++            state
++                .session_configuration
++                .original_config_do_not_use
++                .as_ref()
++                .clone(),
++        );
++        Session::replace_session_runtime_config(&mut state, equal);
++    }
++    let (_, after_config, after_source) = session.capture_prompt_instruction_materials().await;
++    assert!(!Arc::ptr_eq(&before_config, &after_config));
++    assert_eq!(before_source, after_source);
++    assert_eq!(
++        before_config.update_plan_enabled,
++        after_config.update_plan_enabled
++    );
++    assert_eq!(
++        captured.verify_current(&session, &step).await,
++        Err(SamplingCaptureError::InstructionsChanged)
++    );
++}
++
++#[tokio::test]
++async fn configuration_change_and_revert_keep_captured_render_and_revoke_retention() {
++    // Independent literals from the existing codex-prompts contract in
++    // prompts/src/update_plan_instructions_tests.rs, including unrelated planning.
++    const ENABLED: &str = concat!(
++        "Before.\n\n## Planning\n",
++        "You have access to an `update_plan` tool which tracks steps.\n\n",
++        "### Examples\nKeep steps current.\n\n## Work\nImplement.\n\n",
++        "## `update_plan`\nUpdate the checklist.\n\n# Next\n",
++        "## Planning\nDiscuss architecture and inspect update_plan before editing.\n",
++    );
++    const DISABLED: &str = concat!(
++        "Before.\n\n## Work\nImplement.\n\n# Next\n",
++        "## Planning\nDiscuss architecture and inspect update_plan before editing.\n",
++    );
++    let (session, step, _home) = fixture().await;
++    {
++        let mut state = session.state.lock().await;
++        let mut configuration = state.session_configuration.clone();
++        configuration.base_instructions = ENABLED.to_string();
++        state.replace_session_configuration(configuration);
++        state.set_base_instructions_provenance(Some(BaseInstructionsProvenance::Model {
++            model: step.settings.model_info.slug.clone(),
++        }));
++        let mut config = state
++            .session_configuration
++            .original_config_do_not_use
++            .as_ref()
++            .clone();
++        config.update_plan_enabled = true;
++        config.model_catalog = None;
++        Session::replace_session_runtime_config(&mut state, Arc::new(config));
++    }
++    let (_, enabled_config, source) = session.capture_prompt_instruction_materials().await;
++    assert!(enabled_config.update_plan_enabled);
++    assert!(enabled_config.model_catalog.is_none());
++    assert_eq!(source.text, ENABLED);
++    assert_eq!(session.get_prompt_base_instructions().await.text, ENABLED);
++    let input = NativeSamplingInput::capture(&session, &step).await;
++    let instructions = NativeSamplingInstructions::capture(&session, &step).await;
++    {
++        let mut state = session.state.lock().await;
++        let mut disabled = enabled_config.as_ref().clone();
++        disabled.update_plan_enabled = false;
++        Session::replace_session_runtime_config(&mut state, Arc::new(disabled));
++    }
++    let (_, disabled_config, unchanged_source) =
++        session.capture_prompt_instruction_materials().await;
++    assert!(!disabled_config.update_plan_enabled);
++    assert!(disabled_config.model_catalog.is_none());
++    assert_eq!(unchanged_source, source);
++    let changed_render = session.get_prompt_base_instructions().await;
++    assert_eq!(changed_render.text, DISABLED);
++    assert!(
++        !changed_render
++            .text
++            .contains("You have access to an `update_plan` tool")
++    );
++    assert!(!changed_render.text.contains("## `update_plan`"));
++    assert_ne!(changed_render.text, ENABLED);
++    let (prompt, _) = assemble_sampling_prompt(input, &instructions, &mut SamplingToolCache::new())
++        .await
++        .expect("ordinary assembly preserves the original captured enabled instructions")
++        .into_ordinary();
++    assert_eq!(prompt.base_instructions.text, ENABLED);
++    assert_eq!(prompt.base_instructions.provenance, source.provenance);
++    assert_ne!(prompt.base_instructions.text, changed_render.text);
++    {
++        let mut state = session.state.lock().await;
++        Session::replace_session_runtime_config(&mut state, Arc::clone(&enabled_config));
++    }
++    let retained = assembled(&session, &step)
++        .await
++        .retain()
++        .await
++        .expect("fresh capture");
++    assert_eq!(retained.verify_current(&session, &step).await, Ok(()));
++    {
++        let mut state = session.state.lock().await;
++        let mut disabled = enabled_config.as_ref().clone();
++        disabled.update_plan_enabled = false;
++        Session::replace_session_runtime_config(&mut state, Arc::new(disabled));
++        Session::replace_session_runtime_config(&mut state, Arc::clone(&enabled_config));
++    }
++    assert_eq!(
++        retained.verify_current(&session, &step).await,
++        Err(SamplingCaptureError::InstructionsChanged)
++    );
++    assert_eq!(
++        retained.native_materials().0.base_instructions.text,
++        ENABLED
++    );
++    assert_eq!(
++        retained.native_materials().0.base_instructions.provenance,
++        source.provenance
++    );
++}
++
++#[tokio::test]
++async fn applied_absence_clear_revokes_a_retained_native_capture() {
++    let (session, step, _home) = fixture().await;
++    let manager = &session.services.agents_md_manager;
++    assert!(manager.get_loaded().await.is_none());
++    assert!(step.loaded_agents_md.is_none());
++    let retained = assembled(&session, &step)
++        .await
++        .retain()
++        .await
++        .expect("absence capture");
++    assert_eq!(retained.verify_current(&session, &step).await, Ok(()));
++    manager.clear_applied_cache_for_test().await;
++    // Both snapshots remain genuine None. Without the manager verification
++    // the revoked capture would incorrectly pass this assertion.
++    assert!(manager.get_loaded().await.is_none());
++    assert!(step.loaded_agents_md.is_none());
++    assert_eq!(
++        retained.verify_current(&session, &step).await,
++        Err(SamplingCaptureError::AppliedInstructionsChanged)
++    );
++    assert_eq!(
++        retained.controlled_prompt().err(),
++        Some(SamplingCaptureError::CompleteMaterialVersionsUnavailable)
++    );
++}
++
++#[tokio::test]
++async fn applied_change_and_revert_revokes_a_retained_native_absence_capture() {
++    let (session, step, _home) = fixture().await;
++    let manager = &session.services.agents_md_manager;
++    assert!(manager.get_loaded().await.is_none());
++    assert!(step.loaded_agents_md.is_none());
++    let retained = assembled(&session, &step)
++        .await
++        .retain()
++        .await
++        .expect("absence capture");
++    assert_eq!(retained.verify_current(&session, &step).await, Ok(()));
++    manager
++        .publish_applied_instructions_for_test(Some(codex_extension_api::Instructions {
++            text: "Temporary applied native instructions".to_string(),
++            source: None,
++        }))
++        .await;
++    assert!(manager.get_loaded().await.is_some());
++    assert_eq!(
++        retained.verify_current(&session, &step).await,
++        Err(SamplingCaptureError::AppliedInstructionsChanged)
++    );
++    manager.publish_applied_instructions_for_test(None).await;
++    assert!(manager.get_loaded().await.is_none());
++    assert!(step.loaded_agents_md.is_none());
++    assert_eq!(
++        retained.verify_current(&session, &step).await,
++        Err(SamplingCaptureError::AppliedInstructionsChanged)
++    );
++    assert_eq!(
++        prepare_pregrant(&session, &step).err(),
++        Some(SamplingCaptureError::PregrantOwnerUnavailable)
++    );
++}
+--- a/core/src/session/retained_sampling_preparation.rs
++++ b/core/src/session/retained_sampling_preparation.rs
+@@ -9,8 +9,10 @@
+ use super::session::Session;
+ use super::step_context::StepContext;
+ use super::turn::build_prompt;
++use crate::agents_md_manager::AppliedAgentsMdCheckpoint;
+ use crate::client::retained_metadata::capture_metadata_facts;
+ use crate::client_common::Prompt;
++use crate::config::Config;
+ use crate::responses_metadata::CodexResponsesMetadata;
+ use crate::responses_metadata::CodexResponsesRequestKind;
+ use crate::tools::router::ToolRouter;
+@@ -55,17 +57,73 @@
+     }
+ }
+ 
++/// Inert native instruction facts. The Session and applied-manager writer lifetimes
++/// cover only these facts, not executed-tool/client contributions or InputProof.
++#[derive(Clone)]
++struct NativeInstructionMaterials {
++    reset: CancellationToken,
++    config: Arc<Config>,
++    source: BaseInstructions,
++    agents_md: AppliedAgentsMdCheckpoint,
++}
++
++impl NativeInstructionMaterials {
++    async fn session_is_current(&self, session: &Arc<Session>) -> bool {
++        let (_, config, source) = session.capture_prompt_instruction_materials().await;
++        !self.reset.is_cancelled() && Arc::ptr_eq(&self.config, &config) && self.source == source
++    }
++
++    async fn verify_current(
++        &self,
++        session: &Arc<Session>,
++        step: &Arc<StepContext>,
++    ) -> Result<(), SamplingCaptureError> {
++        if !self.session_is_current(session).await {
++            return Err(SamplingCaptureError::InstructionsChanged);
++        }
++        if !self.agents_md.matches_loaded(&step.loaded_agents_md)
++            || !session
++                .services
++                .agents_md_manager
++                .checkpoint_is_current(&self.agents_md)
++                .await
++        {
++            return Err(SamplingCaptureError::AppliedInstructionsChanged);
++        }
++        // Establish that the Session lifetime did not change around the manager read.
++        if !self.session_is_current(session).await {
++            return Err(SamplingCaptureError::InstructionsChanged);
++        }
++        Ok(())
++    }
++}
++
+ /// Retains the actual rendered Session instruction copy used by this sampling loop.
+ pub(super) struct NativeSamplingInstructions {
+     session: Arc<Session>,
+     step: Arc<StepContext>,
+     instructions: BaseInstructions,
++    materials: NativeInstructionMaterials,
+ }
+ 
+ impl NativeSamplingInstructions {
+     pub(super) async fn capture(session: &Arc<Session>, step: &Arc<StepContext>) -> Self {
++        let (reset, config, source) = session.capture_prompt_instruction_materials().await;
++        let agents_md = session
++            .services
++            .agents_md_manager
++            .applied_checkpoint()
++            .await;
++        let instructions =
++            Session::render_prompt_base_instructions(config.as_ref(), source.clone());
+         Self {
+-            instructions: session.get_prompt_base_instructions().await,
++            instructions,
++            materials: NativeInstructionMaterials {
++                reset,
++                config,
++                source,
++                agents_md,
++            },
+             session: Arc::clone(session),
+             step: Arc::clone(step),
+         }
+@@ -76,6 +134,7 @@
+ pub(super) struct AssembledSamplingPrompt {
+     origin: NativeSamplingInput,
+     instructions_owner_matches: bool,
++    instruction_materials: NativeInstructionMaterials,
+     tool_router: Arc<ToolRouter>,
+     prompt: Prompt,
+     metadata: CodexResponsesMetadata,
+@@ -112,6 +171,7 @@
+     Ok(AssembledSamplingPrompt {
+         origin: input,
+         instructions_owner_matches,
++        instruction_materials: instructions.materials.clone(),
+         tool_router,
+         prompt,
+         metadata,
+@@ -122,6 +182,8 @@
+ pub(super) enum SamplingCaptureError {
+     Native(NativeCaptureError),
+     InstructionsOwnerMismatch,
++    InstructionsChanged,
++    AppliedInstructionsChanged,
+     HistoryChanged,
+     ToolPlanChanged,
+     MetadataChanged,
+@@ -158,6 +220,7 @@
+         let retained = RetainedSamplingPreparation {
+             native,
+             origin: self.origin,
++            instruction_materials: self.instruction_materials,
+             tool_router: self.tool_router,
+             prompt: self.prompt,
+             metadata: self.metadata,
+@@ -174,6 +237,7 @@
+ pub(super) struct RetainedSamplingPreparation {
+     native: RetainedNativeContext,
+     origin: NativeSamplingInput,
++    instruction_materials: NativeInstructionMaterials,
+     tool_router: Arc<ToolRouter>,
+     prompt: Prompt,
+     metadata: CodexResponsesMetadata,
+@@ -186,8 +250,8 @@
+         (&self.prompt, &self.metadata, self.native.model_info())
+     }
+ 
+-    /// Recheck current retained identities. This does not prove an ABA-free global
+-    /// epoch for instructions, executed-tool facts or later client contributors.
++    /// Recheck retained native identities and the instruction/config/applied lifetimes.
++    /// Executed-tool facts and later client contributors still have no complete version owner.
+     pub(super) async fn verify_current(
+         &self,
+         session: &Arc<Session>,
+@@ -209,11 +273,14 @@
+         {
+             return Err(SamplingCaptureError::ToolPlanChanged);
+         }
++        self.instruction_materials
++            .verify_current(session, step)
++            .await?;
+         Ok(())
+     }
+ 
+-    /// No complete instruction/executed-material/contributor version owner exists
+-    /// here. Even a mechanically current capture cannot enter the encoder yet.
++    /// Complete executed-material/contributor versions and trusted PREGRANT ownership
++    /// remain unavailable. The instruction checkpoint cannot authorize the encoder.
+     pub(super) fn controlled_prompt(&self) -> Result<&Prompt, SamplingCaptureError> {
+         Err(SamplingCaptureError::CompleteMaterialVersionsUnavailable)
+     }
+--- a/core/src/session/session.rs
++++ b/core/src/session/session.rs
+@@ -1497,7 +1497,7 @@
+                     &config.features,
+                 ),
+             );
+-            state.base_instructions_provenance = base_instructions_provenance.clone();
++            state.set_base_instructions_provenance(base_instructions_provenance.clone());
+             state.active_disabled_plugin_ids = session_configuration.disabled_plugin_ids.clone();
+             let managed_network_requirements_configured = config
+                 .config_layer_stack
+--- a/core/src/session/world_state.rs
++++ b/core/src/session/world_state.rs
+@@ -69,7 +69,7 @@
+                 .map(|previous| previous.model)
+                 .or_else(|| {
+                     state
+-                        .base_instructions_provenance
++                        .base_instructions_provenance()
+                         .as_ref()
+                         .and_then(|provenance| match provenance {
+                             BaseInstructionsProvenance::Model { model } => Some(model),
+--- a/core/src/state/session.rs
++++ b/core/src/state/session.rs
+@@ -71,7 +71,10 @@
+     /// Plugin selection of the last admitted task; settings updates take effect on the next task.
+     pub(crate) active_disabled_plugin_ids: Vec<String>,
+     /// Persisted origin of the session base instructions, when known.
+-    pub(crate) base_instructions_provenance: Option<BaseInstructionsProvenance>,
++    base_instructions_provenance: Option<BaseInstructionsProvenance>,
++    /// Revoked by actual instruction/configuration writers under the Session state lock.
++    /// This is a native material lifetime, not an authorization or input proof.
++    prompt_instruction_reset: CancellationToken,
+     pub(crate) history: ContextManager,
+     /// Cancels work bound to discarded history or a superseded Guardian evidence policy.
+     pub(crate) history_reset: CancellationToken,
+@@ -105,6 +108,31 @@
+ }
+ 
+ impl SessionState {
++    pub(crate) fn base_instructions_provenance(&self) -> Option<BaseInstructionsProvenance> {
++        self.base_instructions_provenance.clone()
++    }
++
++    pub(crate) fn set_base_instructions_provenance(
++        &mut self,
++        provenance: Option<BaseInstructionsProvenance>,
++    ) {
++        self.invalidate_prompt_instruction_materials();
++        self.base_instructions_provenance = provenance;
++    }
++
++    pub(crate) fn prompt_instruction_reset(&self) -> CancellationToken {
++        self.prompt_instruction_reset.child_token()
++    }
++
++    pub(crate) fn invalidate_prompt_instruction_materials(&mut self) {
++        std::mem::take(&mut self.prompt_instruction_reset).cancel();
++    }
++
++    pub(crate) fn replace_session_configuration(&mut self, configuration: SessionConfiguration) {
++        self.invalidate_prompt_instruction_materials();
++        self.session_configuration = configuration;
++    }
++
+     /// Create a new session state mirroring previous `State::default()` semantics.
+     #[cfg(test)]
+     pub(crate) fn new(session_configuration: SessionConfiguration) -> Self {
+@@ -124,6 +152,7 @@
+             active_disabled_plugin_ids: Vec::new(),
+             session_configuration,
+             base_instructions_provenance: None,
++            prompt_instruction_reset: CancellationToken::new(),
+             history,
+             history_reset: CancellationToken::new(),
+             latest_rate_limits: None,

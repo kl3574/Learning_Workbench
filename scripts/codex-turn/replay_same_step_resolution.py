@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare pinned same-Step repair sources or validate 9+32+7+10 and Clippy.
+"""Prepare pinned same-Step repair sources or validate 9+39+7+10+5 and Clippy.
 
 Only explicit CI setup provisions Rust/fetches dependencies. This engineering
 entry never runs Codex CLI, AppServer, a model, foreign handle or a sender, and
@@ -33,7 +33,7 @@ ASSETS = {
 FIELDS = {
     "schema_version", "status", "spec", "source", "inherited_inputs", "native03", "patch",
     "changed_files", "complete_source_graph", "test_metadata", "lock_sha256", "rust",
-    "test_selection", "profile", "source_binding", "clippy", "clippy_repair", "sampling_preparation", "production_boundary", "licensing",
+    "test_selection", "profile", "source_binding", "clippy", "clippy_repair", "sampling_preparation", "instruction_materials", "production_boundary", "licensing",
 }
 SOURCE_SHA = "351a23896ba75c2c32c2d9d2050a0987079d683ea4e92d3429b3e1833945e927"
 BASE_SHA = "9a8c163b2683280dfdae0145018f7f8c0cd14804ac87741ef4cf52a20988be28"
@@ -83,12 +83,78 @@ SAMPLING_PREPARATION = {'patch_file': 'retained-sampling-preparation-after-clipp
  'frozen_manifest_sha256': '801f552f6865cd0d7b4d5a1c5651b97cf2a58ccc9625af8432e7967f5c235cdf',
  'original_patch_sha256': '89aab184712b6d6fa6349fc665c6cef52c6d3d05bd0d76d930fc031b69b3a77f',
  'status': 'RAM candidate; true58 and Clippy NOT_RUN; no production admission'}
+INSTRUCTION_MATERIALS = {'patch_file': 'retained-instruction-materials.patch',
+ 'patch_sha256': '098953da16ebf403c3b31d0feb19a831b3bf80810131d194ec50fdb3d6702e12',
+ 'before_graph': {'rows': 8791,
+                  'sha256': '4d9ed864538e8084352cc7360b76b29d0b7b8ee75927125c797da7c2c90a7039'},
+ 'changed_files': [{'path': 'codex-rs/core/src/agents_md_checkpoint_tests.rs',
+                    'before_sha256': None,
+                    'after_sha256': '7b89e14b4cc72324a37a36068d616ba09327eee44cd2cce095717656d7763120',
+                    'after_bytes': 3827,
+                    'after_mode': 436},
+                   {'path': 'codex-rs/core/src/agents_md_manager.rs',
+                    'before_sha256': '6e15ec972549b0dbdc3b64b40e04b8e88e7e28a01a9d355e17b083cecf2d59b7',
+                    'after_sha256': '9ff588575991ce4fb2cc6d86b689c1ae0b6913d8a86a169e6b320b037aff2a49',
+                    'after_bytes': 10315,
+                    'after_mode': 436},
+                   {'path': 'codex-rs/core/src/session/environment.rs',
+                    'before_sha256': '78466f34d58934ce2932934b6a77368f9c30a46e2703f2b94179b12afdcb1017',
+                    'after_sha256': '026aa82c73f1c7a396b567fc01aeaaf24495d28677c3703fbce95b9cebd2d0ab',
+                    'after_bytes': 15232,
+                    'after_mode': 436},
+                   {'path': 'codex-rs/core/src/session/mcp.rs',
+                    'before_sha256': '672284362e5693709ee4787d0e04efa5cdd78ae3dcebe1743d4dddd82530220a',
+                    'after_sha256': 'f65ce83083b57c1098e8de081e51067b201a03e35dc5df91cd2f66ff8baad1a7',
+                    'after_bytes': 49794,
+                    'after_mode': 436},
+                   {'path': 'codex-rs/core/src/session/mod.rs',
+                    'before_sha256': 'bb707b8fa373d2610b45332a5746f4faeb471e05ab43946fd143a57dc248a7ff',
+                    'after_sha256': '16d2651bf5b68d10f0bdafb95b364080f22ee5c070e7a77a011f145c9c7d43a4',
+                    'after_bytes': 211740,
+                    'after_mode': 436},
+                   {'path': 'codex-rs/core/src/session/retained_outbound_snapshot_tests.rs',
+                    'before_sha256': 'aa8f9977b12921bcf72c392bf5979eab06809bdbbd733e43f7b1dbc76d83f13b',
+                    'after_sha256': 'd92fb31e8621ede989af30e2fb12a00fb808b96edab2c2d3b24c8d3553b476c5',
+                    'after_bytes': 38284,
+                    'after_mode': 436},
+                   {'path': 'codex-rs/core/src/session/retained_sampling_instruction_tests.rs',
+                    'before_sha256': None,
+                    'after_sha256': '2dce88b8cb25be18269dd587e631e86ed46807cf34045ab9ea5eba5ff09e66cd',
+                    'after_bytes': 11533,
+                    'after_mode': 436},
+                   {'path': 'codex-rs/core/src/session/retained_sampling_preparation.rs',
+                    'before_sha256': 'cafa07813e8abdb3eb3d266505fa5d3e7b693f3919957438284d45583510bf15',
+                    'after_sha256': '8ae505fd218cac5fb3c92e8f39c80619fa0ae39c108c078c2d02ad32c3078a49',
+                    'after_bytes': 11258,
+                    'after_mode': 436},
+                   {'path': 'codex-rs/core/src/session/session.rs',
+                    'before_sha256': '2da4c0288596269fbb6df6d9a04a389e8ce0184be77ee2bcce765521e63702a5',
+                    'after_sha256': '090da8de560a9326bdadd7995dc35afb639d1e94dab8f261aa7f8261b0c05e61',
+                    'after_bytes': 94084,
+                    'after_mode': 436},
+                   {'path': 'codex-rs/core/src/session/world_state.rs',
+                    'before_sha256': '5385374e5def781ed081dac2901e9d010106239ebeca38b5c7292df52f818203',
+                    'after_sha256': 'b60680cc657ed6ed55bb1314dab5c8a51c6530a5d7d871950e7f3d04d257124e',
+                    'after_bytes': 15366,
+                    'after_mode': 436},
+                   {'path': 'codex-rs/core/src/state/session.rs',
+                    'before_sha256': '3dedb51926cd6d341c667daa0152d7e36d487e97119c2c0e2dcaab7a93df7e44',
+                    'after_sha256': '2bd87da9028dc44c091bed60839d1a02bdf0dd943253a9ddea16c16c07afb1ab',
+                    'after_bytes': 18080,
+                    'after_mode': 436}],
+ 'unformatted_patch_sha256': '1a84968a61a9108612fd82b3d48dbfbcc2daab47d9f88c868e6381758932a397',
+ 'status': 'RAM candidate; source70 and Clippy NOT_RUN; no production admission',
+ 'scope': 'Actual Session instruction/config and applied-manager lifetimes only; no complete '
+          'contributor/executed versions or trusted PREGRANT owner'}
+INSTRUCTION_CHILD_PREFIX = 'session::retained_outbound_snapshot::tests::instruction_material_tests::'
+APPLIED_INSTRUCTIONS_PREFIX = 'agents_md_manager::checkpoint_tests::'
 SAMPLING_CHILD_PREFIX = "session::retained_outbound_snapshot::tests::sampling_preparation_tests::"
 SCOPES = [
     ("manager9", "codex-models-manager", "manager::retained_model_resolution::tests::", 9),
-    ("native32", "codex-core", "session::retained_outbound_snapshot::tests::", 32),
+    ("native39", "codex-core", "session::retained_outbound_snapshot::tests::", 39),
     ("step-settings7", "codex-core", "session::step_settings::tests::", 7),
     ("metadata10", "codex-core", "client::retained_metadata::tests::", 10),
+    ("applied-instructions5", "codex-core", APPLIED_INSTRUCTIONS_PREFIX, 5),
 ]
 CHANGED = {
     "codex-rs/models-manager/src/manager.rs",
@@ -200,6 +266,10 @@ def verify_inputs(bundle: Path) -> dict:
     require(sampling == SAMPLING_PREPARATION
             and sha256(bundle / sampling["patch_file"]) == sampling["patch_sha256"],
             "Closed five-row sampling patch after exact Clippy repair required")
+    instruction = manifest["instruction_materials"]
+    require(instruction == INSTRUCTION_MATERIALS
+            and sha256(bundle / instruction["patch_file"]) == instruction["patch_sha256"],
+            "Closed eleven-row inert instruction patch after exact source58 required")
     rows = manifest["changed_files"]
     require(len(rows) == 9 and {row["path"] for row in rows} == CHANGED,
             "Exactly nine same-Step source paths required")
@@ -211,14 +281,16 @@ def verify_inputs(bundle: Path) -> dict:
     for phase in ["source", "normalized"]:
         graph = manifest["complete_source_graph"][phase]
         require(set(graph) == {"rows", "sha256"} and type(graph["rows"]) is int
-                and graph["rows"] == 8791, "Complete source graph required")
+                and graph["rows"] == 8793, "Complete source graph required")
     selections = manifest["test_selection"]
-    require(len(selections["scopes"]) == 4 and selections["selected_total"] == 58
-            and selections["same_step_selected_total"] == 41 and selections["affected_ordinary_selected_total"] == 7
+    require(len(selections["scopes"]) == 5 and selections["selected_total"] == 70
+            and selections["same_step_selected_total"] == 48 and selections["affected_ordinary_selected_total"] == 7
             and selections["affected_metadata_selected_total"] == 10
             and selections["native_guard_selected_total"] == 22
-            and selections["native_sampling_selected_total"] == 10,
-            "Fixed nonzero41 including native22+sampling10 plus ordinary7 and metadata10 required")
+            and selections["native_sampling_selected_total"] == 10
+            and selections["native_instruction_selected_total"] == 7
+            and selections["applied_instruction_selected_total"] == 5,
+            "Fixed nonzero manager9/native39/ordinary7/metadata10/applied5 required")
     for scope, (label, package, selector, count) in zip(selections["scopes"], SCOPES):
         require(scope["label"] == label and scope["package"] == package and scope["filter"] == selector
                 and type(scope["expected_passed"]) is int and scope["expected_passed"] == count
@@ -274,7 +346,13 @@ def source_test_names(root: Path) -> list[list[str]]:
             child_names = re.findall(r"#\[tokio::test\]\s+async fn (\w+)\(", child)
             require(len(child_names) == len(set(child_names)) == 10, "Unique ten sampling child candidates required")
             names += [SAMPLING_CHILD_PREFIX + name for name in child_names]
-            require(len(names) == len(set(names)) == 32, "Unique native22 plus child10 candidates required")
+            declaration = '#[path = "retained_sampling_instruction_tests.rs"]\nmod instruction_material_tests;'
+            require(text.count(declaration) == 1, "Exact native instruction child module required")
+            child = (root / "codex-rs/core/src/session/retained_sampling_instruction_tests.rs").read_text()
+            child_names = re.findall(r"#\[tokio::test\]\s+async fn (\w+)\(", child)
+            require(len(child_names) == len(set(child_names)) == 7, "Unique seven instruction child candidates required")
+            names += [INSTRUCTION_CHILD_PREFIX + name for name in child_names]
+            require(len(names) == len(set(names)) == 39, "Unique native22 plus sampling10 plus instruction7 required")
         result.append(sorted(names))
     text = (root / "codex-rs/core/src/session/step_settings_tests.rs").read_text()
     names = re.findall(r"#\[(?:test|tokio::test)\]\s+(?:async )?fn (\w+)\(", text)
@@ -288,6 +366,13 @@ def source_test_names(root: Path) -> list[list[str]]:
     ]))
     metadata = (root / "codex-rs/core/src/retained_metadata_tests.rs").read_text()
     result.append(sorted(SCOPES[3][2] + name for name in re.findall(r"#\[test\]\s+fn (\w+)\(", metadata)))
+    manager = (root / "codex-rs/core/src/agents_md_manager.rs").read_text()
+    declaration = '#[cfg(test)]\n#[path = "agents_md_checkpoint_tests.rs"]\nmod checkpoint_tests;'
+    require(manager.count(declaration) == 1, "Exact applied-manager checkpoint child module required")
+    child = (root / "codex-rs/core/src/agents_md_checkpoint_tests.rs").read_text()
+    names = re.findall(r"#\[tokio::test\]\s+async fn (\w+)\(", child)
+    require(len(names) == len(set(names)) == 5, "Unique five applied-manager candidates required")
+    result.append(sorted(APPLIED_INSTRUCTIONS_PREFIX + name for name in names))
     return result
 
 def prepare(args: argparse.Namespace, output: Path, report: dict, manifest: dict,
@@ -323,6 +408,7 @@ def prepare(args: argparse.Namespace, output: Path, report: dict, manifest: dict
         ("same-step-r2", "same-step-resolution.patch", manifest),
         ("clippy-repair", "clippy-repair.patch", manifest["clippy_repair"]),
         ("sampling-preparation", manifest["sampling_preparation"]["patch_file"], manifest["sampling_preparation"]),
+        ("instruction-materials", manifest["instruction_materials"]["patch_file"], manifest["instruction_materials"]),
     ]:
         before = full_inventory(source)
         if label == "clippy-repair":
@@ -333,6 +419,10 @@ def prepare(args: argparse.Namespace, output: Path, report: dict, manifest: dict
             graph = manifest["sampling_preparation"]["before_graph"]
             require(len(before) == graph["rows"] and graph_digest(before) == graph["sha256"],
                     "Exact repaired source299 required before sampling patch")
+        if label == "instruction-materials":
+            graph = manifest["instruction_materials"]["before_graph"]
+            require(len(before) == graph["rows"] and graph_digest(before) == graph["sha256"],
+                    "Exact source58 required before inert instruction patch")
         for suffix, flags in [("check", ["--check"]), ("apply", [])]:
             row = recorder.run(label + "-" + suffix, ["git", "apply", *flags, str(bundle / filename)], source)
             if row["exit_code"] != 0:
@@ -533,25 +623,47 @@ def run_stage(args: argparse.Namespace, output: Path, report: dict, manifest: di
         else:
             report["tests"].update(status="RUNNING", scopes=[], selected_total_passed=0)
             for scope in manifest["test_selection"]["scopes"]:
-                if scope["label"] in {"native32", "step-settings7"}:
-                    label = "native" if scope["label"] == "native32" else "ordinary"
+                collections = []
+                if scope["label"] == "native39":
+                    collections = [
+                        ("native", scope["filter"], scope["test_names"], 39),
+                        ("sampling-child", SAMPLING_CHILD_PREFIX,
+                         [n for n in scope["test_names"] if n.startswith(SAMPLING_CHILD_PREFIX)], 10),
+                        ("instruction-child", INSTRUCTION_CHILD_PREFIX,
+                         [n for n in scope["test_names"] if n.startswith(INSTRUCTION_CHILD_PREFIX)], 7),
+                    ]
+                elif scope["label"] == "step-settings7":
+                    collections = [("ordinary", scope["filter"], scope["test_names"], 7)]
+                elif scope["label"] == "applied-instructions5":
+                    collections = [("applied-instructions", APPLIED_INSTRUCTIONS_PREFIX,
+                                    scope["test_names"], 5)]
+                for label, selector, expected_names, expected_count in collections:
                     prelaunch_health(output, report, label + "-list")
                     argv = [str(bins["cargo"]), "test", "--locked", "--offline", "-p", "codex-core",
-                            "--lib", scope["filter"], "--", "--list"]
+                            "--lib", selector, "--", "--list"]
                     row = recorder.run(label + "-test-list", argv, tests / "codex-rs", environment, task)
                     listed = (recorder.receipts / (label + "-test-list") / "stdout.log").read_text(errors="replace")
                     names = sorted(re.findall(r"(?m)^(\S+): test$", listed))
-                    matches = names == scope["test_names"] and len(names) == len(set(names))
+                    matches = (expected_count > 0 and len(expected_names) == expected_count
+                               and names == expected_names
+                               and len(names) == len(set(names)) == expected_count)
                     if label == "native":
-                        children = [name for name in names if name.startswith(SAMPLING_CHILD_PREFIX)]
-                        expected_children = [name for name in scope["test_names"] if name.startswith(SAMPLING_CHILD_PREFIX)]
-                        matches = matches and children == expected_children and len(children) == len(set(children)) == 10
-                    report[label + "_test_list"] = {"actual_exit": row["exit_code"], "test_names": names,
-                                                      "matches_fixed_source_candidates": matches,
-                                                      "scope": "Collection only; never behavior PASS"}
+                        for prefix, count in [(SAMPLING_CHILD_PREFIX, 10), (INSTRUCTION_CHILD_PREFIX, 7)]:
+                            actual_children = [n for n in names if n.startswith(prefix)]
+                            expected_children = [n for n in expected_names if n.startswith(prefix)]
+                            matches = (matches and actual_children == expected_children
+                                       and len(actual_children) == len(set(actual_children)) == count)
+                    report[label + "_test_list"] = {
+                        "actual_exit": row["exit_code"], "test_names": names,
+                        "expected_nonzero_count": expected_count,
+                        "matches_fixed_source_candidates": matches,
+                        "scope": "Collection only; never behavior PASS",
+                    }
                     if row["exit_code"] != 0 or not matches:
                         result = positive_exit(row["exit_code"]) or 1
                         break
+                if result:
+                    break
                 prelaunch_health(output, report, scope["label"])
                 row = recorder.run("cargo-" + scope["label"], [str(bins["cargo"])] + scope["argv_tail"],
                                    tests / "codex-rs", environment, task)
@@ -571,7 +683,7 @@ def run_stage(args: argparse.Namespace, output: Path, report: dict, manifest: di
                 if row["exit_code"] != 0 or not observed["selection_matches"]:
                     result = positive_exit(row["exit_code"]) or 1
                     break
-            report["tests"]["status"] = "PASS" if result == 0 and report["tests"]["selected_total_passed"] == 58 else "FAIL"
+            report["tests"]["status"] = "PASS" if result == 0 and report["tests"]["selected_total_passed"] == 70 else "FAIL"
             if report["tests"]["status"] == "PASS":
                 prelaunch_health(output, report, "clippy")
                 row = recorder.run("cargo-clippy", [str(bins["cargo"])] + CLIPPY_ARGV,

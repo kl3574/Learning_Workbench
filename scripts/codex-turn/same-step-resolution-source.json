@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "status": "Engineering source58 sampling-after-Clippy candidate; no production qualification, runtime results pending",
+  "status": "Engineering source70 inert instruction-material candidate; true70/Clippy NOT_RUN, no production qualification",
   "spec": {
     "version": "3.0.15",
     "sha256": "b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec"
@@ -143,12 +143,12 @@
   ],
   "complete_source_graph": {
     "source": {
-      "rows": 8791,
-      "sha256": "4d9ed864538e8084352cc7360b76b29d0b7b8ee75927125c797da7c2c90a7039"
+      "rows": 8793,
+      "sha256": "69c605abba0daa10e0d174445f7894861eba024afd1cbd9ea9a5d091dbee7f6c"
     },
     "normalized": {
-      "rows": 8791,
-      "sha256": "36d7d561af1aa3c2ab697242fc2c698689c3d99d9e0659db3267471c7fa166fd"
+      "rows": 8793,
+      "sha256": "d0abe3279fc2857490f5ae33f14af4155dd6a8dffbcfefa3e8fbcc507cec01fe"
     }
   },
   "test_metadata": {
@@ -237,10 +237,10 @@
         ]
       },
       {
-        "label": "native32",
+        "label": "native39",
         "package": "codex-core",
         "filter": "session::retained_outbound_snapshot::tests::",
-        "expected_passed": 32,
+        "expected_passed": 39,
         "test_names": [
           "session::retained_outbound_snapshot::tests::absent_native_active_owner_is_unavailable",
           "session::retained_outbound_snapshot::tests::actual_mcp_attribution_change_invalidates_capture",
@@ -252,6 +252,13 @@
           "session::retained_outbound_snapshot::tests::capture_rejects_a_step_from_another_native_thread",
           "session::retained_outbound_snapshot::tests::extra_metadata_defaults_and_execution_overlay_are_preserved_then_change_is_rejected",
           "session::retained_outbound_snapshot::tests::inherited_tier_keeps_pair_but_new_settings_invalidates_old_capture",
+          "session::retained_outbound_snapshot::tests::instruction_material_tests::applied_absence_clear_revokes_a_retained_native_capture",
+          "session::retained_outbound_snapshot::tests::instruction_material_tests::applied_change_and_revert_revokes_a_retained_native_absence_capture",
+          "session::retained_outbound_snapshot::tests::instruction_material_tests::base_instruction_commit_invalidates_capture_and_preserves_original_prompt",
+          "session::retained_outbound_snapshot::tests::instruction_material_tests::configuration_change_and_revert_keep_captured_render_and_revoke_retention",
+          "session::retained_outbound_snapshot::tests::instruction_material_tests::equal_config_arc_replacement_revokes_instruction_capture",
+          "session::retained_outbound_snapshot::tests::instruction_material_tests::inert_instruction_capture_keeps_native_history_config_and_applied_state",
+          "session::retained_outbound_snapshot::tests::instruction_material_tests::provenance_change_and_revert_cannot_revive_instruction_capture",
           "session::retained_outbound_snapshot::tests::matching_ids_cannot_replace_the_session_registered_step_arc",
           "session::retained_outbound_snapshot::tests::model_and_personality_updates_select_new_pairs_without_replacing_old_step",
           "session::retained_outbound_snapshot::tests::native_capture_rejects_another_steps_selection_spliced_with_this_model_arc",
@@ -341,17 +348,44 @@
           "--",
           "--nocapture"
         ]
+      },
+      {
+        "label": "applied-instructions5",
+        "package": "codex-core",
+        "filter": "agents_md_manager::checkpoint_tests::",
+        "expected_passed": 5,
+        "test_names": [
+          "agents_md_manager::checkpoint_tests::absence_checkpoint_is_stable_and_bound_to_its_manager",
+          "agents_md_manager::checkpoint_tests::applied_change_and_revert_cannot_revive_an_absence_checkpoint",
+          "agents_md_manager::checkpoint_tests::applied_checkpoint_capture_and_recheck_do_not_load_providers",
+          "agents_md_manager::checkpoint_tests::clearing_genuine_absence_revokes_the_old_checkpoint",
+          "agents_md_manager::checkpoint_tests::equal_applied_publication_has_a_new_writer_lifetime"
+        ],
+        "argv_tail": [
+          "test",
+          "--locked",
+          "--offline",
+          "-p",
+          "codex-core",
+          "--lib",
+          "agents_md_manager::checkpoint_tests::",
+          "--",
+          "--nocapture"
+        ]
       }
     ],
-    "same_step_selected_total": 41,
+    "same_step_selected_total": 48,
     "affected_ordinary_selected_total": 7,
-    "selected_total": 58,
+    "selected_total": 70,
     "filtered": "Observe actual counts only; do not infer54/2694",
     "step_case_names": "Source five direct names plus two explicit test_case labels; bounded actual Cargo --list must match before execution",
     "affected_metadata_selected_total": 10,
     "native_guard_selected_total": 22,
     "native_sampling_selected_total": 10,
-    "sampling_case_names": "Source child10 names use the explicit native tests child-module prefix; bounded actual Cargo native --list must match all32 and unique child10 before behavior execution"
+    "sampling_case_names": "Exact native child10 source names; separate nonzero Cargo --list and combined native39 list required before behavior",
+    "native_instruction_selected_total": 7,
+    "applied_instruction_selected_total": 5,
+    "instruction_case_names": "Exact native child7 and applied-manager child5 source names; separate nonzero Cargo --list required before behavior"
   },
   "profile": {
     "CARGO_PROFILE_DEV_DEBUG": "0",
@@ -478,5 +512,95 @@
     "frozen_manifest_sha256": "801f552f6865cd0d7b4d5a1c5651b97cf2a58ccc9625af8432e7967f5c235cdf",
     "original_patch_sha256": "89aab184712b6d6fa6349fc665c6cef52c6d3d05bd0d76d930fc031b69b3a77f",
     "status": "RAM candidate; true58 and Clippy NOT_RUN; no production admission"
+  },
+  "instruction_materials": {
+    "patch_file": "retained-instruction-materials.patch",
+    "patch_sha256": "098953da16ebf403c3b31d0feb19a831b3bf80810131d194ec50fdb3d6702e12",
+    "before_graph": {
+      "rows": 8791,
+      "sha256": "4d9ed864538e8084352cc7360b76b29d0b7b8ee75927125c797da7c2c90a7039"
+    },
+    "changed_files": [
+      {
+        "path": "codex-rs/core/src/agents_md_checkpoint_tests.rs",
+        "before_sha256": null,
+        "after_sha256": "7b89e14b4cc72324a37a36068d616ba09327eee44cd2cce095717656d7763120",
+        "after_bytes": 3827,
+        "after_mode": 436
+      },
+      {
+        "path": "codex-rs/core/src/agents_md_manager.rs",
+        "before_sha256": "6e15ec972549b0dbdc3b64b40e04b8e88e7e28a01a9d355e17b083cecf2d59b7",
+        "after_sha256": "9ff588575991ce4fb2cc6d86b689c1ae0b6913d8a86a169e6b320b037aff2a49",
+        "after_bytes": 10315,
+        "after_mode": 436
+      },
+      {
+        "path": "codex-rs/core/src/session/environment.rs",
+        "before_sha256": "78466f34d58934ce2932934b6a77368f9c30a46e2703f2b94179b12afdcb1017",
+        "after_sha256": "026aa82c73f1c7a396b567fc01aeaaf24495d28677c3703fbce95b9cebd2d0ab",
+        "after_bytes": 15232,
+        "after_mode": 436
+      },
+      {
+        "path": "codex-rs/core/src/session/mcp.rs",
+        "before_sha256": "672284362e5693709ee4787d0e04efa5cdd78ae3dcebe1743d4dddd82530220a",
+        "after_sha256": "f65ce83083b57c1098e8de081e51067b201a03e35dc5df91cd2f66ff8baad1a7",
+        "after_bytes": 49794,
+        "after_mode": 436
+      },
+      {
+        "path": "codex-rs/core/src/session/mod.rs",
+        "before_sha256": "bb707b8fa373d2610b45332a5746f4faeb471e05ab43946fd143a57dc248a7ff",
+        "after_sha256": "16d2651bf5b68d10f0bdafb95b364080f22ee5c070e7a77a011f145c9c7d43a4",
+        "after_bytes": 211740,
+        "after_mode": 436
+      },
+      {
+        "path": "codex-rs/core/src/session/retained_outbound_snapshot_tests.rs",
+        "before_sha256": "aa8f9977b12921bcf72c392bf5979eab06809bdbbd733e43f7b1dbc76d83f13b",
+        "after_sha256": "d92fb31e8621ede989af30e2fb12a00fb808b96edab2c2d3b24c8d3553b476c5",
+        "after_bytes": 38284,
+        "after_mode": 436
+      },
+      {
+        "path": "codex-rs/core/src/session/retained_sampling_instruction_tests.rs",
+        "before_sha256": null,
+        "after_sha256": "2dce88b8cb25be18269dd587e631e86ed46807cf34045ab9ea5eba5ff09e66cd",
+        "after_bytes": 11533,
+        "after_mode": 436
+      },
+      {
+        "path": "codex-rs/core/src/session/retained_sampling_preparation.rs",
+        "before_sha256": "cafa07813e8abdb3eb3d266505fa5d3e7b693f3919957438284d45583510bf15",
+        "after_sha256": "8ae505fd218cac5fb3c92e8f39c80619fa0ae39c108c078c2d02ad32c3078a49",
+        "after_bytes": 11258,
+        "after_mode": 436
+      },
+      {
+        "path": "codex-rs/core/src/session/session.rs",
+        "before_sha256": "2da4c0288596269fbb6df6d9a04a389e8ce0184be77ee2bcce765521e63702a5",
+        "after_sha256": "090da8de560a9326bdadd7995dc35afb639d1e94dab8f261aa7f8261b0c05e61",
+        "after_bytes": 94084,
+        "after_mode": 436
+      },
+      {
+        "path": "codex-rs/core/src/session/world_state.rs",
+        "before_sha256": "5385374e5def781ed081dac2901e9d010106239ebeca38b5c7292df52f818203",
+        "after_sha256": "b60680cc657ed6ed55bb1314dab5c8a51c6530a5d7d871950e7f3d04d257124e",
+        "after_bytes": 15366,
+        "after_mode": 436
+      },
+      {
+        "path": "codex-rs/core/src/state/session.rs",
+        "before_sha256": "3dedb51926cd6d341c667daa0152d7e36d487e97119c2c0e2dcaab7a93df7e44",
+        "after_sha256": "2bd87da9028dc44c091bed60839d1a02bdf0dd943253a9ddea16c16c07afb1ab",
+        "after_bytes": 18080,
+        "after_mode": 436
+      }
+    ],
+    "unformatted_patch_sha256": "1a84968a61a9108612fd82b3d48dbfbcc2daab47d9f88c868e6381758932a397",
+    "status": "RAM candidate; source70 and Clippy NOT_RUN; no production admission",
+    "scope": "Actual Session instruction/config and applied-manager lifetimes only; no complete contributor/executed versions or trusted PREGRANT owner"
   }
 }
