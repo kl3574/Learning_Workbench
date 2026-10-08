@@ -1,0 +1,17 @@
+固定源 `4388139417997d2b85aa005d11602247d9777a2a` 的新环境初始化实际 exit 0；六个原失败 Node contract case 仅执行一次，实际 `6 passed, 2 warnings in 2.87s`，exit 0。新完整 Python 门禁和当前 canonical 完整门禁均 NOT_RUN。
+
+新运行树为 `$HOME/.cache/learning-workbench-acceptance/m63-438-owned-env-health-implementation-oct08`；TMPDIR 为 `$HOME/.cache/learning-workbench-acceptance/m63-438-owned-env-health-temp-oct08/python`。除 literal `progress/` 外的 1580 个工程路径，其 Git/index/live 字节及 POSIX mode 在 before、after setup、before exact6、after exact6 四份源码图中完全相同。创建 checkout 后仅在新 owned 树把字节相同的 `scripts/codex-turn/replay_core_producer.py` 0775 对齐为 canonical 实际 0755，再捕获 before 图。没有修改 canonical、原用户树、原失败运行、旧封包或原断言、预算、timeout、retry。
+
+Python 依赖从原 uv.lock 以实际 `uv sync --frozen --offline --link-mode copy --python <named P24 interpreter>` 初始化新 `.venv`，37 个包；没有整棵复制旧 venv。实际 uv 为 `$HOME/.local/bin/uv`，版本 `0.11.21`，执行前 SHA256 `2856d1bf7e5bcfba7df20ae6f939340ae1f8022d2d103cada1a6da597df86e32`。uv.lock SHA256 `f5498d3e12605915155dc34f5c341d9132031204c07424b4483b063aa32bfc56`、pyproject SHA256 `13c2f5b08c00810d3646e7bbb7ba0a22bf5017044367c803ac3bd45eab231c94` 与成功 P24 源完全相同。
+
+新健康进程实际 `sys.executable` 和 pytest shebang 均指向新运行树 `.venv/bin/python`。13 个实际 import origins 和 37 个 distribution metadata locations 均位于新 `.venv/lib/python3.12/site-packages`，user site disabled，无 site-packages 外部 symlink。基准 CPython 仍为具名 P24 解释器指向的 uv-managed CPython 3.12.13；这不宣称解释器、stdlib、OS 的物理全 owned 闭包。上述 origins 仅属于新健康进程，不能追认原完整进程的 origins；原进程仍为 NOT_CAPTURED。
+
+Node 工具链及依赖由具名成功 P24 源离线复制到新 owned `.toolchain` 和物理 literal `apps/web/node_modules`，分别 5889、15664 个目录/文件/link 成员，所有字节、完整 mode、link target 与来源一致；exact6 后再次全图读回完全相同。实际复制的 Node archive SHA256 为 `fd8e59d5a511510f6a298afb548f18c7d2b1be404d8b4a27d94fbe49f56cb2d6`，31890184 bytes；没有本次下载。web package lock SHA256 `ae43fcb0a0a0eaf2a1981eb5c1c5523d530c80980f15e50fa10380190d05f23d` 与 P24 完全相同。新实际 Node 为 v24.21.0，TypeScript/native package 均为 7.0.2；getExePath 实际解析到新 literal node_modules 内 `@typescript/typescript-linux-x64/lib/tsc`，其 SHA256 `4f2de678286401759b3fb4475bafe35b8f32b4b3a07d92642bbf37eadc9b34a4`。版本/解析健康命令实际 exit 0。
+
+健康检查第一版 recorder 实际 exit 1：直接执行原 Git100644/nonexecutable `scripts/node.sh` 导致 PermissionError，Node child NOT_LAUNCHED。原脚本、初始 receipt、空 stdout/stderr 与错误分类完整保留；新健康第二版仅按原 fixture 使用 `bash scripts/node.sh ...`，实际 exit 0，没有 chmod 或修改工程源，也没有重跑已成功的 Python 健康命令。
+
+六个 node IDs 来自原 `EXACT-FAILURE-IDS-r2.json`，完整原六栈副本及 hashes 保留在 `original-FAIL-evidence/`。唯一诊断 argv 为 `uv run --frozen --offline --no-sync pytest <exact six IDs>`，实际 08:43:05.105815–08:43:08.434328 UTC，owned recorder PID 1053254 / owned uv Popen PID 1053278，等待真实 child terminal exit 0 后保存 receipt。实际 stdout 1769 bytes，SHA256 `309c44f955ff8e5476a154ec74cf829530070661dcaa3eae29702e8771e1d640`，stderr 0 bytes。唯一 task runtime ENV override 为新 TMPDIR；没有 HOME/CODEX_HOME/UV_LINK_MODE override。
+
+原完整 438 运行仍为 FAIL：4604 collected，4596 PASS / 6 FAIL / 2 numeric ENVskip / 3 warnings，exit 1。六个原 FAIL 均在 TypeScript getExePath.js:53 无法 resolve native package、尚未 TypeScript checking 时发生；原物理依赖目录 basename 为 `web-node_modules`，native package 目录存在。本次新正常布局和锁定依赖下的六例通过支持有限环境/解析诊断，不能排除其他潜在代码问题、证明排他的唯一原因、覆盖原 FAIL、追认旧进程来源或宣称 whole-current PASS。
+
+新健康与六例无需模型、网络、真实 CLI/AppServer、host/foreign process probes；没有启动 full/native、修改规范、canonical/remote 或旧封包。只证明具名 recorder/child 的实际等待与工具终态，不扩称所有未知后代的完整进程闭包。Spec 唯一文件 SHA256 保持 `b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec`。本包封存仅包括有限证据文件；runtime/venv/Node/TMP 不打包，依赖身份由捕获及复核图绑定。
