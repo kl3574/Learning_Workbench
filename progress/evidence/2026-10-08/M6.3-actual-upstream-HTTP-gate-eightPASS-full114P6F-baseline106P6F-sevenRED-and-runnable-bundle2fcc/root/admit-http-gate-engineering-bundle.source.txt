@@ -1,0 +1,49 @@
+from pathlib import Path
+import hashlib,json,subprocess,datetime,stat
+B=Path('$HOME/.cache/learning-workbench-acceptance');R=B/'m63-upstream-http-gate-engineering-oct08';V=B/'m63-http-gate-engineering-validation-oct08-qbsofna_';P=B/'m63-upstream-http-send-gate-oct08-bwzw1653';O=B/'m63-grading-snapshot-root-normal-integration-oct08/HTTP-GATE-ENGINEERING-BUNDLE-ROOT-ADMISSION.json'
+assert not O.exists();H=lambda b:hashlib.sha256(b).hexdigest();load=lambda root,n:json.loads((root/n).read_bytes());git=lambda *v:subprocess.check_output(['git',*v],cwd=R)
+f=load(V,'BUNDLE-FROZEN-COMMITTED.json');C='2fcc7b187314e6a7c9dedbf7c06cb1bd3bbf19cf';assert f['commit']==git('rev-parse','HEAD').decode().strip()==C
+assert git('rev-parse',C+'^').decode().strip()==f['base_commit']=='cfb8ffe22355b8b4acc1ff8ef7ef74fc84fd7693' and not git('status','--porcelain','-uall')
+names=[x['path'] for x in f['files']];assert len(names)==6 and sorted(git('diff','--name-only',C+'^',C).decode().splitlines())==sorted(names)
+for x in f['files']:
+ b=(R/x['path']).read_bytes();assert len(b)==x['bytes'] and H(b)==x['sha256'] and git('show',C+':'+x['path'])==b
+source=load(R,'scripts/codex-turn/source.json');assert source['spec_sha256']==H((R/'PRODUCT_DESIGN.md').read_bytes())=='b140764e416dac644b45ed8c0b6bd1c71eb9b578cb3b5b19d2530a94cea4cfec'
+patch=(P/'public-candidate/upstream-http-send-gate.patch').read_bytes();lines=patch.splitlines(keepends=True);assert sum(l==b' \n' for l in lines)==5
+transformed=b''.join(b'\n' if l==b' \n' else l for l in lines);assert transformed==(R/'scripts/codex-turn/http-client-gate.patch').read_bytes() and H(transformed)==source['patch']['sha256']
+assert source['locked_test_dependencies']==load(P,'LOCKED-SDK-DEPENDENCIES.json')
+assert source['candidate_crate_files']==load(P,'CANDIDATE-04-ALL-CRATE-SOURCE-HASHES.json')['files']
+checks=[]
+def receipt(path):
+ d=load(V,path+'/command.json');assert d['exit_code']==0
+ for n,x in d['outputs'].items():
+  b=(V/path/n).read_bytes();assert H(b)==x['sha256'] and len(b)==x.get('bytes',x.get('size'))
+ checks.append({'path':path+'/command.json','actual_exit':0,'sha256':H((V/path/'command.json').read_bytes())});return d
+for n in ['prepare-only-01','default-gate-01','publication-01','diff-check-01','replay-guards-01','source-only-commit-01']:receipt(n)
+records=[]
+for name,prepare in [('prepare-01',True),('gate-01',False)]:
+ rep=load(V,name+'/report.json');assert rep['status']=='PASS' and rep['replay_exit_code']==0 and rep['inputs']['script_sha256']==H((R/'scripts/codex-turn/replay_http_gate.py').read_bytes()) and rep['inputs']['manifest_sha256']==H((R/'scripts/codex-turn/source.json').read_bytes())
+ assert len(rep['commands'])==(2 if prepare else 5)
+ for cmd in rep['commands']:
+  n=name+'/receipts/'+cmd['label'];actual=receipt(n);assert actual==cmd
+ maps={phase:load(V,name+'/'+phase+'-files.json') for phase in ['original','patched','normalized','final']}
+ assert maps['normalized']==maps['final'] and len(maps['original'])==8775 and len(maps['final'])==8777
+ for phase in ['original','final']:
+  root=Path(rep['paths']['original' if phase=='original' else 'patched'])
+  assert {str(p.relative_to(root)) for p in root.rglob('*') if p.is_file() or p.is_symlink()}==set(maps[phase])
+  for relative,x in maps[phase].items():
+   p=root/relative
+   if x['kind']=='symlink':assert p.is_symlink() and p.readlink().as_posix()==x['target']
+   else:assert not p.is_symlink() and p.is_file() and H(p.read_bytes())==x['sha256'] and p.stat().st_size==x['bytes'] and stat.S_IMODE(p.stat().st_mode)==x['mode']
+ diff=lambda a,b:sorted(n for n in a.keys()|b.keys() if a.get(n)!=b.get(n))
+ assert diff(maps['original'],maps['patched'])==sorted(x['path'] for x in source['changed_files'])
+ assert diff(maps['patched'],maps['normalized'])==['codex-rs/Cargo.toml']
+ for x in source['changed_files']:assert maps['final'][x['path']]['sha256']==x['after_sha256']
+ for x in source['preserved_files']:assert maps['original'][x['path']]['sha256']==maps['final'][x['path']]['sha256']==x['sha256']
+ if prepare:assert rep['test']['status']=='NOT_RUN' and rep['test']['actual_exit_code'] is None and all('cargo' not in c['command'][0] for c in rep['commands'])
+ else:
+  assert rep['test']['summary']=={'passed':8,'failed':0,'ignored':0,'measured':0,'filtered':112}
+  stdout=(V/name/'receipts/cargo-library-test/stdout.log').read_bytes();assert b'test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 112 filtered out;' in stdout
+ records.append({'name':name,'actual_exit':0,'scope':rep['test']['scope'],'source_files_before':8775,'source_files_after':8777,'all_original_and_final_maps_live_exact':True,'report_sha256':H((V/name/'report.json').read_bytes())})
+validation=load(V,'ENGINEERING-REPLAY-RESULTS.json');binary=validation['current_replay_test_binary'];p=Path(binary['path']);assert H(p.read_bytes())==binary['sha256'] and p.stat().st_size==binary['bytes']
+result={'recorded_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'independent_root_admission':'PASS','candidate_commit':C,'base':f['base_commit'],'six_committed_tested_files_exact':f['files'],'sole_spec_unchanged':True,'actual_patch_transform':'exactfive blank context spaces to empty; four resultingRustSHAexact04','actual_replays':records,'actual_receipts':checks,'focused_ruff':{'actual_exit':0,'tool_chunk':'2a564d','argv':['task-owned-runtime/.venv/bin/ruff','check','scripts/codex-turn/replay_http_gate.py'],'provenance':'actual returned root exec tool result, not newly fabricated command receipt'},'captured_fresh_replay_binary':binary,'historical_complete_library':'FAIL114/6 retained; not rerun by replay','production':'INCOMPLETE NOT_ADMITTED','model_calls':0,'platform_runtime_scope':'old1565 locked93c unchanged; thisunused engineering bundle separately tested, not wholecurrentmap equivalence'}
+O.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n');print(json.dumps({'admission':'PASS','commit':C,'files':6,'actual_prepare':0,'actual_gate':'8PASS0FAIL112filtered','output':str(O),'sha256':H(O.read_bytes())}))

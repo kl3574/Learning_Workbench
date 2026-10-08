@@ -1,0 +1,45 @@
+from pathlib import Path
+import json,hashlib,tarfile,re,datetime
+B=Path('$HOME/.cache/learning-workbench-acceptance');P=B/'m63-upstream-http-send-gate-oct08-bwzw1653';S=B/'m63-upstream-producer-source-oct08-rbf1_r_c';O=B/'m63-grading-snapshot-root-normal-integration-oct08/UPSTREAM-HTTP-GATE-FINAL04-ROOT-ADMISSION.json'
+assert not O.exists();H=lambda b:hashlib.sha256(b).hexdigest();load=lambda n:json.loads((P/n).read_bytes())
+def verify(root,x):
+ p=root/x['path'];assert p.is_file() and not p.is_symlink() and p.resolve().is_relative_to(root.resolve());b=p.read_bytes();assert H(b)==x['sha256'];assert 'size' not in x or len(b)==x['size']
+m=load('SEALED-MANIFEST.json');assert m['total_files']==len(m['files'])==92 and len({x['path'] for x in m['files']})==92
+for x in m['files']:verify(P,x)
+assert H((P/'SEALED-MANIFEST.json').read_bytes())==load('SEAL.json')['manifest_sha256']=='1e1a1f6de943f5fe3c935275812919325b0864ce9ae8d1b77c17260681fe56e9'
+archive=S/'a956835d020762cb2b570053af06f643a11c0ecc.tar.gz';assert H(archive.read_bytes())=='351a23896ba75c2c32c2d9d2050a0987079d683ea4e92d3429b3e1833945e927'
+archive_count=0
+with tarfile.open(archive,'r:gz') as tar:
+ for t in tar:
+  if not t.isfile():continue
+  rel=Path(t.name).relative_to('codex-a956835d020762cb2b570053af06f643a11c0ecc');assert not rel.is_absolute() and '..' not in rel.parts
+  f=tar.extractfile(t);assert f is not None;data=f.read();assert (S/'source'/rel).read_bytes()==data;archive_count+=1
+assert archive_count==8774
+four=load('CANDIDATE-04-before-cargo.json')['changed_library_files'];assert len(four)==4
+for x in four:verify(P/'test-copy-04',x);verify(P/'public-candidate/tool-source',x)
+all04=load('CANDIDATE-04-ALL-CRATE-SOURCE-HASHES.json')['files'];assert len(all04)==50
+for x in all04:verify(P/'test-copy-04',x)
+base=load('BASELINE-before-cargo.json')['unchanged_upstream_crate_files'];assert len(base)==48
+for x in base:verify(P/'baseline-copy',x);verify(S/'source',x)
+red=load('RED-02-before-cargo.json')
+for x in red['original_candidate02_implementation_unchanged']+red['test_harness_only_files']:verify(P/'red-copy-02',x)
+original=(S/'source/codex-rs/Cargo.toml').read_bytes();test=(P/'test-copy-04/codex-rs/Cargo.toml').read_bytes();assert H(original)=='e558c28aaf94c9f20c7d57224eb9509084e31110850aad24d04bef7811dc335d' and H(test)=='436af5eb66ede70feba73b71a890a429722e35ae811657bd117d7e34bc751f38'
+assert original.count(b'version = "0.160.0"')==1 and original.replace(b'version = "0.160.0"',b'version = "0.0.0"')==test
+for r in [S/'source',P/'test-copy-04',P/'baseline-copy',P/'red-copy-02']:assert H((r/'codex-rs/Cargo.lock').read_bytes())=='5553f06583159ed64666b6eb4beea3154e06b612e6312528131bdc226a6a860c'
+for n in ['LICENSE','NOTICE']:assert (P/'public-candidate'/n).read_bytes()==(S/'source'/n).read_bytes()
+observations=[];failed_sets=[]
+for name,exitcode,counts in [('gate-test-locked-offline-04',0,(8,0,112)),('library-test-locked-offline-04',101,(114,6,0)),('baseline-library-test-locked-offline',101,(106,6,0)),('red-test-locked-offline-02',101,(0,7,120))]:
+ r=P/'receipts'/name;cmd=json.loads((r/'command.json').read_bytes());assert cmd['exit_code']==exitcode and '--locked' in cmd['command'] and '--offline' in cmd['command']
+ for n,x in cmd['outputs'].items():verify(r,{'path':n,'size':x['size'],'sha256':x['sha256']})
+ b=(r/'stdout.log').read_bytes();text=b.decode();expected=f'{counts[0]} passed; {counts[1]} failed; 0 ignored; 0 measured; {counts[2]} filtered out;';assert expected in text
+ matches=re.findall(r'^test (\S+) \.\.\. FAILED$',text,re.M);assert len(matches)==counts[1]
+ bindings=[];offset=0
+ for num,line in enumerate(b.splitlines(keepends=True),1):
+  if b'test result:' in line or b' ... FAILED' in line:bindings.append({'line':num,'byte_start':offset,'byte_end':offset+len(line),'sha256':H(line),'text':line.decode().rstrip('\n')})
+  offset+=len(line)
+ observations.append({'phase':name,'actual_exit':exitcode,'passed':counts[0],'failed':counts[1],'filtered':counts[2],'command_sha256':H((r/'command.json').read_bytes()),'stdout_sha256':H(b),'failed_names':matches,'log_bindings':bindings})
+ if name in ['library-test-locked-offline-04','baseline-library-test-locked-offline']:failed_sets.append(set(matches))
+assert failed_sets[0]==failed_sets[1] and len(failed_sets[0])==6
+review=P/'independent-rust-review-d5nwl8b_/REPORT-CANDIDATE-04.md';assert H(review.read_bytes())=='bb0469835ee9121c37ffecbc6b9489a42858b5f68b5fd664e0c820889d0abd9f'
+result={'recorded_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),'independent_root_receipt_source_admission':'PASS','sealed_finite_members':92,'manifest_sha256':H((P/'SEALED-MANIFEST.json').read_bytes()),'original_archive_regular_files_reverified':8774,'original_archive_sha256':H(archive.read_bytes()),'final04_files':four,'final04_crate_files':50,'unchanged_baseline_files':48,'test_only_metadata':'one exact workspace version0.160.0->0.0.0; original lock unchanged','results':observations,'six_failures_identical_in_candidate_and_unchanged_upstream':True,'exclusive_environment_root_cause':'NOT_ESTABLISHED','complete_library':'FAIL','bounded_gate':'PASS8/0','independent_static_report_sha256':H(review.read_bytes()),'production':'NOT_ADMITTED; no AppServer/persistent consent/qualified proof/runtime integration','model_calls':0,'test_binary_hash_per_phase':'NOT_CAPTURED'}
+O.write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n');print(json.dumps({'admission':'PASS','finite_members':92,'archive_files':8774,'complete_library':'FAIL114/6','bounded_gate':'PASS8/0','output':str(O),'sha256':H(O.read_bytes())}))
