@@ -244,7 +244,7 @@ registry/default None、UI和产品 wire 不变。此回放
 
 ### Retained foreign memory replay (internal engineering only)
 
-`replay_retained_request.py` 从同一固定官方 a956 归档应用独立22路径 Rust
+`replay_retained_request.py` 从同一固定官方 a956 归档应用独立24路径 Rust
 补丁，构建真实 core cdylib，再由私有 ctypes owner 实际调用同 B03 producer、
 AC 唯一 EncodedJson、FinalBearer05 freeze 和 HTTP04 retained Arc。
 现有20路径/core22的 JSON、patch、runner 原件保持独立；上节入口不含 foreign
@@ -257,7 +257,7 @@ python3 scripts/codex-turn/replay_retained_request.py --archive "$TASK_ARCHIVE" 
 输出必须是全新目录。构建固定 Rust1.95.0，strict `--locked --offline`、jobs2，
 原 Cargo.lock 不变；唯一测试元数据改动为 workspace.version0.160.0→0.0.0。
 仅回放进程临时采用 umask0002并恢复，保证 git apply 新源的完整模式可复核。
-原始8775/补丁及归一8783项的字节、完整文件模式与 LICENSE symlink 都绑定。
+原始8775/补丁及归一8785项的字节、完整文件模式与 LICENSE symlink 都绑定。
 `--prepare-only` 只做源码解包/补丁校验，零 Cargo、Rust 或 foreign 调用；
 它不代表真实 request prepare 或任何 foreign test 已通过。
 
@@ -275,3 +275,34 @@ Hash/inode只绑定本次封存 owned load path，未声称 qualified trusted lo
 TOCTOU保证；默认 panic hook 不改，catch_unwind不保证所有panic无日志，panic枝未测。
 本入口不发送请求、不运行 CLI/AppServer/模型或完整core/HTTP/API/guardian suites，
 不注册生产 executor/Proof。生产状态保持 INCOMPLETE / NOT_ADMITTED。
+
+
+### Typed metadata capture (internal engineering)
+
+The retained replay now binds 24 upstream Rust paths and 8785 prepared source
+members. `retained_metadata.rs` captures all 32 fields from the actual Codex
+metadata type and rejects unknown, malformed, defaulted or unsupported material
+before reconstructing the exact typed value. The template getter test observes
+17 nonnull fields; rich32 coverage uses typed fixtures. This does not establish
+final Session/same-Step identity, native-to-local mapping or trusted InputProof.
+Production registration remains empty and the executor remains unavailable.
+
+Private version05 executed 10 Rust tests, the original 17 foreign tests and two
+actual-getter foreign tests. The version06 fixture correction keeps every
+assertion and decoder check; its Linux Rust gate executed the same 10 tests.
+The first06 C dependency build failed before tests with temporary-storage quota
+errors and is retained separately. Windows was not compiled or executed; no
+new06 library or foreign test is claimed. The unchanged normal-library evidence
+belongs to sealed05. The current default replay builds its own library and runs
+its original17 foreign methods; prepare-only performs no Cargo or test call.
+
+To run the dedicated Rust metadata gate, first use prepare-only with a new
+private output directory. In the returned normalized `patched` source directory,
+use the pinned Rust1.95 toolchain, separately prepared owned Cargo cache and a new
+owned writable TMPDIR and target directory, then run:
+
+    cargo test --locked --offline -p codex-core --lib client::retained_metadata::tests:: -- --nocapture
+
+The expected selection is 10 tests with 2684 filtered. A zero-test compilation
+failure does not count as a behavioral RED. Preserve each attempt separately.
+This entry performs no model, CLI/AppServer, transport send or platform acceptance.

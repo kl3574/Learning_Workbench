@@ -810,18 +810,20 @@ diff --git a/codex-rs/codex-api/tests/clients.rs b/codex-rs/codex-api/tests/clie
 diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
 --- a/codex-rs/core/src/client.rs
 +++ b/codex-rs/core/src/client.rs
-@@ -32,6 +32,10 @@
+@@ -32,6 +32,12 @@
  use std::sync::atomic::AtomicBool;
  use std::sync::atomic::Ordering;
 
 +#[path = "responses_producer.rs"]
 +mod responses_producer;
++#[path = "retained_metadata.rs"]
++mod retained_metadata;
 +#[path = "retained_request_ffi.rs"]
 +mod retained_request_ffi;
  #[path = "client_tool_metadata.rs"]
  mod tool_metadata;
 
-@@ -50,7 +54,6 @@
+@@ -50,7 +56,6 @@
  use codex_api::RealtimeCallClient as ApiRealtimeCallClient;
  use codex_api::RealtimeSessionConfig as ApiRealtimeSessionConfig;
  use codex_api::Reasoning;
@@ -829,7 +831,7 @@ diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
  use codex_api::RequestTelemetry;
  use codex_api::ReqwestTransport;
  use codex_api::ResponseCreateWsRequest;
-@@ -62,12 +65,10 @@
+@@ -62,12 +67,10 @@
  use codex_api::ResponsesWsRequest;
  use codex_api::SharedAuthProvider;
  use codex_api::SseTelemetry;
@@ -842,7 +844,7 @@ diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
  use codex_api::response_create_client_metadata;
  use codex_http_client::ClientRouteClass;
  use codex_http_client::HttpClientFactory;
-@@ -81,7 +82,6 @@
+@@ -81,7 +84,6 @@
  use codex_otel::SessionTelemetry;
  use codex_otel::WEBSOCKET_CONTINUATION_COUNT_METRIC;
  use codex_otel::current_span_w3c_trace_context;
@@ -850,7 +852,7 @@ diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
  use codex_protocol::auth::AuthMode;
 
  use codex_protocol::ThreadId;
-@@ -99,9 +99,6 @@
+@@ -99,9 +101,6 @@
  use codex_protocol::protocol::W3cTraceContext;
  use codex_rollout_trace::InferenceTraceAttempt;
  use codex_rollout_trace::InferenceTraceContext;
@@ -860,7 +862,7 @@ diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
  use eventsource_stream::Event;
  use eventsource_stream::EventStreamError;
  use futures::StreamExt;
-@@ -119,7 +116,6 @@
+@@ -119,7 +118,6 @@
  use tracing::instrument;
  use tracing::trace;
  use tracing::warn;
@@ -868,7 +870,7 @@ diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
 
  use crate::attestation::AttestationContext;
  use crate::attestation::AttestationProvider;
-@@ -127,8 +123,6 @@
+@@ -127,8 +125,6 @@
  use crate::client_common::Prompt;
  use crate::client_common::ResponseEvent;
  use crate::client_common::ResponseStream;
@@ -877,7 +879,7 @@ diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
  use crate::cyber_access_program;
  use crate::feedback_tags;
  use crate::responses_metadata::CodexResponsesMetadata;
-@@ -348,6 +342,8 @@
+@@ -348,6 +344,8 @@
          reasoning: previous_reasoning,
          store: previous_store,
          stream: previous_stream,
@@ -886,7 +888,7 @@ diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
          stream_options: _,
          include: previous_include,
          service_tier: previous_service_tier,
-@@ -366,6 +362,8 @@
+@@ -366,6 +364,8 @@
          reasoning: current_reasoning,
          store: current_store,
          stream: current_stream,
@@ -895,7 +897,7 @@ diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
          stream_options: _,
          include: current_include,
          service_tier: current_service_tier,
-@@ -383,6 +381,8 @@
+@@ -383,6 +383,8 @@
          && previous_reasoning == current_reasoning
          && previous_store == current_store
          && previous_stream == current_stream
@@ -904,7 +906,7 @@ diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
          // Stream options control delivery for this response, not the context
          // referenced by `previous_response_id`.
          && previous_include == current_include
-@@ -860,27 +860,6 @@
+@@ -860,27 +862,6 @@
          request_telemetry
      }
 
@@ -932,7 +934,7 @@ diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
      #[allow(clippy::too_many_arguments)]
      pub(crate) fn build_responses_request(
          &self,
-@@ -892,130 +871,39 @@
+@@ -892,130 +873,39 @@
          responses_metadata: &CodexResponsesMetadata,
          include_internal: bool,
      ) -> Result<ResponsesApiRequest> {
@@ -1092,7 +1094,7 @@ diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
      }
 
      /// Returns whether the Responses-over-WebSocket transport is active for this session.
-@@ -1129,30 +1017,21 @@
+@@ -1129,30 +1019,21 @@
          auth: Option<&CodexAuth>,
          responses_headers: &ApiHeaderMap,
      ) {
@@ -1132,7 +1134,7 @@ diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
      }
 
      fn build_routing_hint_header(
-@@ -1362,14 +1241,17 @@
+@@ -1362,14 +1243,17 @@
                      Some(&self.turn_state),
                  );
                  add_originator_header(&mut headers, self.client.state.originator.as_str());
@@ -1155,7 +1157,7 @@ diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
                  headers
              },
              compression,
-@@ -1714,18 +1596,20 @@
+@@ -1714,18 +1598,20 @@
                  client_setup.auth.as_ref(),
                  &responses_headers,
              );
@@ -1182,7 +1184,7 @@ diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
              }
              request.access_programs = cyber_access_program::for_auth(
                  client_setup.auth.as_ref(),
-@@ -1738,7 +1622,7 @@
+@@ -1738,7 +1624,7 @@
              }
              let request_session_telemetry =
                  session_telemetry_for_request(session_telemetry, &request);
@@ -1191,7 +1193,7 @@ diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
              let interceptors = crate::model_request::prepare(
                  &self.client.request_contributors,
                  &self.client.state.thread_id.to_string(),
-@@ -1747,7 +1631,9 @@
+@@ -1747,7 +1633,9 @@
                  &mut request.client_metadata,
              );
              let inference_trace_attempt = inference_trace.start_attempt();
@@ -1202,7 +1204,7 @@ diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
              if let Some(input) = tool_metadata::bounded_input(&request, &request.input) {
                  if let Some(recorder) = &self.client.executed_tool_calls {
                      recorder.invalidate_wire_inventory_loss(&request.input, &input);
-@@ -1883,13 +1769,17 @@
+@@ -1883,13 +1771,17 @@
                  responses_metadata,
                  include_internal,
              )?;
@@ -1223,7 +1225,7 @@ diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
              let mut websocket_metadata = responses_metadata.clone();
              websocket_metadata.routing_hint = self.client.build_routing_hint_header(
                  client_setup.auth.as_ref(),
-@@ -2318,29 +2208,10 @@
+@@ -2318,29 +2210,10 @@
      beta_features_header: Option<&str>,
      turn_state: Option<&Arc<OnceLock<String>>>,
  ) -> ApiHeaderMap {
@@ -2782,16 +2784,637 @@ new file mode 100644
 +        matches!(error, codex_client::TransportError::Build(ref message) if message == "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED")
 +    );
 +}
+diff --git a/codex-rs/core/src/retained_metadata.rs b/codex-rs/core/src/retained_metadata.rs
+new file mode 100644
+--- /dev/null
++++ b/codex-rs/core/src/retained_metadata.rs
+@@ -0,0 +1,264 @@
++//! Pure capture/conversion of the actual Codex metadata snapshot. No authority.
++//! This does not read auth, context, telemetry, profiles, filesystem or network.
++use crate::responses_metadata::{
++    CodexResponsesMetadata, CodexResponsesRequestKind, TurnMetadataWorkspace, TurnToolFunctionInfo,
++    TurnToolNamespaceInfo, TurnToolNamespacesInfo, TurnToolSource, filter_extra_metadata,
++    validate_extra_metadata,
++};
++use http::HeaderValue;
++use serde::de::DeserializeOwned;
++use serde_json::{Map, Value};
++use std::collections::BTreeMap;
++
++const META_KEYS: &[&str] = &[
++    "parent_response_id",
++    "installation_id",
++    "session_id",
++    "thread_id",
++    "agent_name",
++    "turn_id",
++    "routing_hint",
++    "window_id",
++    "window_number",
++    "context_window_id",
++    "request_kind",
++    "forked_from_thread_id",
++    "forked_from_ordinal_exclusive",
++    "parent_thread_id",
++    "parent_turn_id",
++    "root_turn_id",
++    "subagent_header",
++    "subagent_kind",
++    "thread_source",
++    "turn_trigger",
++    "sandbox",
++    "sandbox_mode",
++    "auto_review_enabled",
++    "node_repl_auto_review_required",
++    "node_repl_disabled",
++    "workspaces",
++    "tool_namespaces_info",
++    "turn_started_at_unix_ms",
++    "history_ingest_requested",
++    "analytics_enabled",
++    "mcp_attribution",
++    "extra",
++];
++
++fn object<'a>(value: &'a Value, keys: &[&str]) -> Result<&'a Map<String, Value>, ()> {
++    let map = value.as_object().ok_or(())?;
++    if map.len() != keys.len() || keys.iter().any(|key| !map.contains_key(*key)) {
++        return Err(());
++    }
++    Ok(map)
++}
++fn text(value: &Value) -> Result<String, ()> {
++    value.as_str().map(str::to_owned).ok_or(())
++}
++fn parse<T: DeserializeOwned>(value: &Value) -> Result<T, ()> {
++    serde_json::from_value(value.clone()).map_err(|_| ())
++}
++
++fn optional<T: DeserializeOwned>(map: &Map<String, Value>, key: &str) -> Result<Option<T>, ()> {
++    map.get(key).map(parse).unwrap_or(Ok(None))
++}
++
++fn workspaces(value: &Value) -> Result<BTreeMap<String, TurnMetadataWorkspace>, ()> {
++    value
++        .as_object()
++        .ok_or(())?
++        .iter()
++        .map(|(key, value)| {
++            let fields = value.as_object().ok_or(())?;
++            // The actual turn getter only inserts discovered absolute roots
++            // with some enrichment. Reject an invented empty placeholder.
++            if !std::path::Path::new(key).is_absolute() || fields.is_empty() {
++                return Err(());
++            }
++            if fields.keys().any(|key| {
++                !matches!(
++                    key.as_str(),
++                    "associated_remote_urls" | "latest_git_commit_hash" | "has_changes"
++                )
++            }) {
++                return Err(());
++            }
++            Ok((
++                key.clone(),
++                TurnMetadataWorkspace {
++                    associated_remote_urls: optional(fields, "associated_remote_urls")?,
++                    latest_git_commit_hash: optional(fields, "latest_git_commit_hash")?,
++                    has_changes: optional(fields, "has_changes")?,
++                },
++            ))
++        })
++        .collect()
++}
++
++fn namespaces(value: &Value) -> Result<Option<TurnToolNamespacesInfo>, ()> {
++    if value.is_null() {
++        return Ok(None);
++    }
++    value
++        .as_object()
++        .ok_or(())?
++        .iter()
++        .map(|(key, value)| {
++            let fields = object(value, &["name", "functions"])?;
++            let functions = fields["functions"]
++                .as_object()
++                .ok_or(())?
++                .iter()
++                .map(|(key, value)| {
++                    let fields = object(
++                        value,
++                        &["name", "direct", "code_mode_name", "deferred", "source"],
++                    )?;
++                    let source_fields = fields["source"].as_object().ok_or(())?;
++                    let source = match source_fields.get("kind").and_then(Value::as_str) {
++                        Some("harness") => {
++                            object(&fields["source"], &["kind"])?;
++                            TurnToolSource::Harness
++                        }
++                        Some("mcp") => {
++                            object(&fields["source"], &["kind", "server_name"])?;
++                            TurnToolSource::Mcp {
++                                server_name: text(&source_fields["server_name"])?,
++                            }
++                        }
++                        _ => return Err(()),
++                    };
++                    Ok((
++                        key.clone(),
++                        TurnToolFunctionInfo {
++                            name: text(&fields["name"])?,
++                            direct: parse(&fields["direct"])?,
++                            code_mode_name: parse(&fields["code_mode_name"])?,
++                            deferred: parse(&fields["deferred"])?,
++                            source,
++                        },
++                    ))
++                })
++                .collect::<Result<BTreeMap<_, _>, ()>>()?;
++            Ok((
++                key.clone(),
++                TurnToolNamespaceInfo {
++                    name: text(&fields["name"])?,
++                    functions,
++                },
++            ))
++        })
++        .collect::<Result<BTreeMap<_, _>, ()>>()
++        .map(Some)
++}
++
++/// Copies every raw field from the real typed snapshot, never a null projection.
++/// Snapshot creation and production owner qualification remain separate.
++#[allow(
++    dead_code,
++    reason = "Private offline capture mechanism, no production resolver"
++)]
++pub(super) fn capture_metadata_facts(metadata: &CodexResponsesMetadata) -> Result<Value, ()> {
++    if !matches!(metadata.request_kind, Some(CodexResponsesRequestKind::Turn)) {
++        return Err(());
++    }
++    let routing_hint = metadata
++        .routing_hint
++        .as_ref()
++        .map(|value| value.to_str())
++        .transpose()
++        .map_err(|_| ())?;
++    Ok(serde_json::json!({
++        "parent_response_id": metadata.parent_response_id,
++        "installation_id": metadata.installation_id,
++        "session_id": metadata.session_id,
++        "thread_id": metadata.thread_id,
++        "agent_name": metadata.agent_name,
++        "turn_id": metadata.turn_id,
++        "routing_hint": routing_hint,
++        "window_id": metadata.window_id,
++        "window_number": metadata.window_number,
++        "context_window_id": metadata.context_window_id,
++        "request_kind": "turn",
++        "forked_from_thread_id": metadata.forked_from_thread_id,
++        "forked_from_ordinal_exclusive": metadata.forked_from_ordinal_exclusive,
++        "parent_thread_id": metadata.parent_thread_id,
++        "parent_turn_id": metadata.parent_turn_id,
++        "root_turn_id": metadata.root_turn_id,
++        "subagent_header": metadata.subagent_header,
++        "subagent_kind": metadata.subagent_kind,
++        "thread_source": metadata.thread_source,
++        "turn_trigger": metadata.turn_trigger,
++        "sandbox": metadata.sandbox,
++        "sandbox_mode": metadata.sandbox_mode,
++        "auto_review_enabled": metadata.auto_review_enabled,
++        "node_repl_auto_review_required": metadata.node_repl_auto_review_required,
++        "node_repl_disabled": metadata.node_repl_disabled,
++        "workspaces": metadata.workspaces,
++        "tool_namespaces_info": metadata.tool_namespaces_info,
++        "turn_started_at_unix_ms": metadata.turn_started_at_unix_ms,
++        "history_ingest_requested": metadata.history_ingest_requested,
++        "analytics_enabled": metadata.analytics_enabled,
++        "mcp_attribution": metadata.mcp_attribution,
++        "extra": metadata.extra,
++    }))
++}
++
++pub(super) fn decode_metadata_facts(value: &Value) -> Result<CodexResponsesMetadata, ()> {
++    let md = object(value, META_KEYS)?;
++    // Prewarm, compaction and memory are separate request profiles. Admission
++    // here concerns typed conversion only, never source or owner authority.
++    if md["request_kind"] != "turn" {
++        return Err(());
++    }
++    let mut metadata = CodexResponsesMetadata::new(
++        text(&md["installation_id"])?,
++        text(&md["session_id"])?,
++        text(&md["thread_id"])?,
++        text(&md["window_id"])?,
++    );
++    metadata.parent_response_id = parse(&md["parent_response_id"])?;
++    metadata.agent_name = parse(&md["agent_name"])?;
++    metadata.turn_id = parse(&md["turn_id"])?;
++    metadata.routing_hint = parse::<Option<String>>(&md["routing_hint"])?
++        .map(|value| HeaderValue::from_str(&value).map_err(|_| ()))
++        .transpose()?;
++    metadata.window_number = parse(&md["window_number"])?;
++    metadata.context_window_id = parse(&md["context_window_id"])?;
++    metadata.request_kind = Some(CodexResponsesRequestKind::Turn);
++    metadata.forked_from_thread_id = parse(&md["forked_from_thread_id"])?;
++    metadata.forked_from_ordinal_exclusive = parse(&md["forked_from_ordinal_exclusive"])?;
++    metadata.parent_thread_id = parse(&md["parent_thread_id"])?;
++    metadata.parent_turn_id = parse(&md["parent_turn_id"])?;
++    metadata.root_turn_id = parse(&md["root_turn_id"])?;
++    metadata.subagent_header = parse(&md["subagent_header"])?;
++    metadata.subagent_kind = parse(&md["subagent_kind"])?;
++    metadata.thread_source = parse(&md["thread_source"])?;
++    metadata.turn_trigger = parse(&md["turn_trigger"])?;
++    metadata.sandbox = parse(&md["sandbox"])?;
++    metadata.sandbox_mode = parse(&md["sandbox_mode"])?;
++    metadata.auto_review_enabled = parse(&md["auto_review_enabled"])?;
++    metadata.node_repl_auto_review_required = parse(&md["node_repl_auto_review_required"])?;
++    metadata.node_repl_disabled = parse(&md["node_repl_disabled"])?;
++    metadata.workspaces = workspaces(&md["workspaces"])?;
++    metadata.tool_namespaces_info = namespaces(&md["tool_namespaces_info"])?;
++    metadata.turn_started_at_unix_ms = parse(&md["turn_started_at_unix_ms"])?;
++    metadata.history_ingest_requested = parse(&md["history_ingest_requested"])?;
++    metadata.analytics_enabled = parse(&md["analytics_enabled"])?;
++    metadata.mcp_attribution = parse(&md["mcp_attribution"])?;
++    metadata.extra = parse(&md["extra"])?;
++    validate_extra_metadata(metadata.extra.iter()).map_err(|_| ())?;
++    if filter_extra_metadata(metadata.extra.clone()) != metadata.extra {
++        return Err(());
++    }
++    // A parser may canonicalize UUIDs/URLs or silently default unknown enum
++    // values. Every raw field must survive, including the complex snapshots.
++    if capture_metadata_facts(&metadata)? != *value {
++        return Err(());
++    }
++    Ok(metadata)
++}
++
++#[cfg(test)]
++#[path = "retained_metadata_tests.rs"]
++mod tests;
+diff --git a/codex-rs/core/src/retained_metadata_tests.rs b/codex-rs/core/src/retained_metadata_tests.rs
+new file mode 100644
+--- /dev/null
++++ b/codex-rs/core/src/retained_metadata_tests.rs
+@@ -0,0 +1,347 @@
++use super::*;
++use crate::turn_metadata::TurnMetadataState;
++use codex_models_manager::model_info::model_info_from_slug;
++use codex_protocol::config_types::WindowsSandboxLevel;
++use codex_protocol::models::PermissionProfile;
++use codex_protocol::protocol::SessionSource;
++use codex_utils_absolute_path::AbsolutePathBuf;
++use pretty_assertions::assert_eq;
++
++#[test]
++fn actual_turn_metadata_capture_retains_non_null_owner_fields() {
++    // Actual fixed upstream object and getter. Explicit test construction does
++    // not authenticate a production profile, native AppServer or model catalog.
++    let state = TurnMetadataState::new(
++        "owned-session".to_string(),
++        "00000000-0000-0000-0000-000000000001".to_string(),
++        /*forked_from_thread_id*/ None,
++        /*parent_thread_id*/ None,
++        &SessionSource::Exec,
++        /*thread_source*/ None,
++        "owned-turn".to_string(),
++        AbsolutePathBuf::from_absolute_path("/owned-metadata-capture")
++            .expect("owned absolute path"),
++        &PermissionProfile::read_only(),
++        WindowsSandboxLevel::Disabled,
++        /*enforce_managed_network*/ false,
++        /*auto_review_enabled*/ true,
++        &model_info_from_slug("gpt-5.4"),
++    );
++    let actual = state.to_responses_metadata(
++        "owned-installation".to_string(),
++        "owned-window".to_string(),
++        CodexResponsesRequestKind::Turn,
++    );
++    let value = capture_metadata_facts(&actual).expect("complete actual typed capture");
++    assert!(value["agent_name"].is_string());
++    assert!(value["auto_review_enabled"].is_boolean());
++    assert!(value["node_repl_auto_review_required"].is_boolean());
++    assert!(value["node_repl_disabled"].is_boolean());
++    assert!(value["sandbox"].is_string());
++    assert_eq!(value["sandbox_mode"], "read-only");
++    let decoded = decode_metadata_facts(&value).expect("non-null actual owner fields must survive");
++    assert_eq!(decoded.client_metadata(true), actual.client_metadata(true));
++    assert_eq!(
++        decoded.compatibility_headers(),
++        actual.compatibility_headers()
++    );
++    assert_eq!(
++        capture_metadata_facts(&decoded).expect("decoded capture"),
++        value
++    );
++}
++
++fn typed_fixture() -> CodexResponsesMetadata {
++    // Explicit typed test composition, not an authenticated runtime/catalog.
++    let mut metadata = CodexResponsesMetadata::new(
++        "owned-installation".to_string(),
++        "owned-session".to_string(),
++        "00000000-0000-0000-0000-000000000001".to_string(),
++        "owned-window".to_string(),
++    );
++    metadata.request_kind = Some(CodexResponsesRequestKind::Turn);
++    metadata.turn_id = Some("owned-turn".to_string());
++    metadata
++}
++
++fn assert_roundtrip(actual: &CodexResponsesMetadata) {
++    let capture = capture_metadata_facts(actual).expect("typed capture");
++    let decoded = decode_metadata_facts(&capture).expect("lossless typed conversion");
++    assert_eq!(
++        capture_metadata_facts(&decoded).expect("recapture"),
++        capture
++    );
++    assert_eq!(decoded.client_metadata(true), actual.client_metadata(true));
++    assert_eq!(
++        decoded.compatibility_headers(),
++        actual.compatibility_headers()
++    );
++}
++
++#[test]
++fn metadata_capture_preserves_all_32_non_null_typed_fields() {
++    let mut actual = typed_fixture();
++    actual.parent_response_id = Some("owned-parent-response".to_string());
++    actual.agent_name = Some("root/owned-agent".to_string());
++    actual.routing_hint = Some(HeaderValue::from_static("owned-route"));
++    actual.window_number = Some(u64::MAX);
++    actual.context_window_id =
++        Some(parse(&serde_json::json!("00000000-0000-0000-0000-000000000002")).expect("UUID"));
++    actual.forked_from_thread_id =
++        Some(parse(&serde_json::json!("00000000-0000-0000-0000-000000000003")).expect("thread"));
++    actual.forked_from_ordinal_exclusive = Some(2);
++    actual.parent_thread_id =
++        Some(parse(&serde_json::json!("00000000-0000-0000-0000-000000000004")).expect("thread"));
++    actual.parent_turn_id = Some("owned-parent-turn".to_string());
++    actual.root_turn_id = Some("owned-root-turn".to_string());
++    actual.subagent_header = Some("owned-subagent".to_string());
++    actual.subagent_kind = Some("owned-subagent-kind".to_string());
++    actual.thread_source = Some(codex_protocol::protocol::ThreadSource::User);
++    actual.turn_trigger = Some("owned-trigger".to_string());
++    actual.sandbox = Some("owned-sandbox".to_string());
++    actual.sandbox_mode = Some("read-only".to_string());
++    actual.auto_review_enabled = Some(true);
++    actual.node_repl_auto_review_required = Some(false);
++    actual.node_repl_disabled = Some(true);
++    #[cfg(windows)]
++    let owned_workspace = r"C:\owned-workspace";
++    #[cfg(not(windows))]
++    let owned_workspace = "/owned-workspace";
++    actual.workspaces.insert(
++        owned_workspace.to_string(),
++        TurnMetadataWorkspace {
++            associated_remote_urls: Some(BTreeMap::from([(
++                "origin".to_string(),
++                parse(&serde_json::json!("https://example.com/owned/repo.git"))
++                    .expect("sanitized URL"),
++            )])),
++            latest_git_commit_hash: Some("owned-fixture-hash".to_string()),
++            has_changes: Some(false),
++        },
++    );
++    actual.tool_namespaces_info = Some(BTreeMap::from([(
++        "owned".to_string(),
++        TurnToolNamespaceInfo {
++            name: "owned".to_string(),
++            functions: BTreeMap::from([
++                (
++                    "owned_fn".to_string(),
++                    TurnToolFunctionInfo {
++                        name: "owned_fn".to_string(),
++                        direct: true,
++                        code_mode_name: Some("owned.fn".to_string()),
++                        deferred: false,
++                        source: TurnToolSource::Harness,
++                    },
++                ),
++                (
++                    "owned_mcp".to_string(),
++                    TurnToolFunctionInfo {
++                        name: "owned_mcp".to_string(),
++                        direct: false,
++                        code_mode_name: None,
++                        deferred: true,
++                        source: TurnToolSource::Mcp {
++                            server_name: "owned-server".to_string(),
++                        },
++                    },
++                ),
++            ]),
++        },
++    )]));
++    actual.turn_started_at_unix_ms = Some(i64::MIN);
++    actual.history_ingest_requested = Some(true);
++    actual.analytics_enabled = Some(false);
++    actual.mcp_attribution = Some(parse(&serde_json::json!({"status":"complete","sources":[{"server_name":"owned-server","tool_name":"owned-tool","first_turn_id":"owned-first-turn"}]})).expect("typed MCP"));
++    actual
++        .extra
++        .insert("owned.product".to_string(), "Owned 中文 😀".to_string());
++    let capture = capture_metadata_facts(&actual).expect("complete capture");
++    assert_eq!(capture.as_object().expect("object").len(), 32);
++    assert!(
++        capture
++            .as_object()
++            .expect("object")
++            .values()
++            .all(|v| !v.is_null())
++    );
++    assert_roundtrip(&actual);
++}
++
++#[test]
++fn metadata_decode_rejects_unknown_missing_or_non_object_root() {
++    let good = capture_metadata_facts(&typed_fixture()).expect("fixture capture");
++    let mut unknown = good.clone();
++    unknown["ignored"] = serde_json::json!(true);
++    assert!(decode_metadata_facts(&unknown).is_err());
++    let mut missing = good.clone();
++    missing
++        .as_object_mut()
++        .expect("object")
++        .remove("analytics_enabled");
++    assert!(decode_metadata_facts(&missing).is_err());
++    assert!(decode_metadata_facts(&serde_json::json!([])).is_err());
++}
++
++#[test]
++fn metadata_decode_rejects_wrong_scalar_types_and_non_canonical_ids() {
++    let good = capture_metadata_facts(&typed_fixture()).expect("fixture capture");
++    for (field, invalid) in [
++        ("auto_review_enabled", serde_json::json!(1)),
++        ("window_number", serde_json::json!(-1)),
++        ("turn_started_at_unix_ms", serde_json::json!(1.5)),
++        ("context_window_id", serde_json::json!("not-a-uuid")),
++        (
++            "parent_thread_id",
++            serde_json::json!("00000000000000000000000000000001"),
++        ),
++        ("agent_name", serde_json::json!(false)),
++        ("routing_hint", serde_json::json!("bad\r\nowned-header")),
++    ] {
++        let mut value = good.clone();
++        value[field] = invalid;
++        assert!(
++            decode_metadata_facts(&value).is_err(),
++            "invalid owned field {field}"
++        );
++    }
++}
++
++#[test]
++fn metadata_decode_rejects_non_turn_request_profiles() {
++    let good = capture_metadata_facts(&typed_fixture()).expect("fixture capture");
++    for kind in [
++        serde_json::json!(null),
++        serde_json::json!("prewarm"),
++        serde_json::json!("compaction"),
++        serde_json::json!("memory"),
++    ] {
++        let mut value = good.clone();
++        value["request_kind"] = kind;
++        assert!(decode_metadata_facts(&value).is_err());
++    }
++    let mut actual = typed_fixture();
++    actual.request_kind = Some(CodexResponsesRequestKind::Memory);
++    assert!(capture_metadata_facts(&actual).is_err());
++}
++
++#[test]
++fn metadata_decode_rejects_workspace_placeholder_or_secret_normalization() {
++    let good = capture_metadata_facts(&typed_fixture()).expect("fixture capture");
++    for workspace in [
++        serde_json::json!({"unsupported":{}}),
++        serde_json::json!({"/owned":{}}),
++        serde_json::json!({"relative":{"has_changes":false}}),
++        serde_json::json!({"/owned":{"unknown":true}}),
++        serde_json::json!({"/owned":{"has_changes":null}}),
++        serde_json::json!({"/owned":{"associated_remote_urls":{"origin":"https://owned-user:owned-password@example.com/repo"}}}),
++    ] {
++        let mut value = good.clone();
++        value["workspaces"] = workspace;
++        assert!(decode_metadata_facts(&value).is_err());
++    }
++}
++
++#[test]
++fn metadata_decode_rejects_nested_unknown_or_silently_defaulted_mcp() {
++    let good = capture_metadata_facts(&typed_fixture()).expect("fixture capture");
++    for invalid in [
++        serde_json::json!({}),
++        serde_json::json!({"status":"complete","unknown":true}),
++        serde_json::json!({"status":"attribution_error","error_reason":"unrecognized-reason"}),
++        serde_json::json!({"status":"complete","sources":[]}),
++    ] {
++        let mut value = good.clone();
++        value["mcp_attribution"] = invalid;
++        assert!(decode_metadata_facts(&value).is_err());
++    }
++    let mut value = good.clone();
++    value["tool_namespaces_info"] = serde_json::json!({"owned":{"name":"owned","functions":{"fn":{"name":"fn","direct":true,"code_mode_name":null,"deferred":false,"source":{"kind":"harness","ignored":"x"}}}}});
++    assert!(decode_metadata_facts(&value).is_err());
++}
++
++#[test]
++fn metadata_decode_rejects_reserved_or_oversized_extra_without_filtering() {
++    let good = capture_metadata_facts(&typed_fixture()).expect("fixture capture");
++    for extra in [
++        serde_json::json!({"session_id":"override"}),
++        serde_json::json!({"window_number":"old-compatible-but-filtered"}),
++        serde_json::json!({"not valid":"x"}),
++        serde_json::json!({"owned":true}),
++        serde_json::json!({"owned":"x".repeat(129)}),
++    ] {
++        let mut value = good.clone();
++        value["extra"] = extra;
++        assert!(decode_metadata_facts(&value).is_err());
++    }
++}
++
++#[test]
++fn metadata_capture_is_owned_and_does_not_follow_later_snapshot_mutation() {
++    let mut actual = typed_fixture();
++    actual.agent_name = Some("owned-before".to_string());
++    let capture = capture_metadata_facts(&actual).expect("capture");
++    actual.agent_name = Some("owned-after".to_string());
++    assert_eq!(capture["agent_name"], "owned-before");
++    let decoded = decode_metadata_facts(&capture).expect("decode");
++    assert_eq!(decoded.agent_name.as_deref(), Some("owned-before"));
++}
++
++#[test]
++fn actual_turn_metadata_capture_exports_owned_fixture() {
++    // This exact typed getter is exercised without starting a session/runtime.
++    // The construction inputs are explicit owned fiction, not source authority.
++    let source = SessionSource::Exec;
++    let state = TurnMetadataState::new(
++        "owned-session".to_string(),
++        "00000000-0000-0000-0000-000000000001".to_string(),
++        None,
++        None,
++        &source,
++        Some(codex_protocol::protocol::ThreadSource::User),
++        "owned-turn".to_string(),
++        AbsolutePathBuf::from_absolute_path("/owned-metadata-capture")
++            .expect("owned absolute path"),
++        &PermissionProfile::read_only(),
++        WindowsSandboxLevel::Disabled,
++        false,
++        true,
++        &model_info_from_slug("gpt-5.4"),
++    );
++    state.set_root_turn_id("owned-root-turn".to_string());
++    state.set_turn_trigger("owned-user-turn".to_string());
++    state.set_responses_api_metadata(BTreeMap::from([(
++        "owned.product".to_string(),
++        "Owned 中文 😀".to_string(),
++    )]));
++    let actual = state.to_responses_metadata(
++        "owned-installation".to_string(),
++        "owned-window".to_string(),
++        CodexResponsesRequestKind::Turn,
++    );
++    assert_roundtrip(&actual);
++    let headers: Vec<_> = actual
++        .compatibility_headers()
++        .iter()
++        .map(|(name, value)| {
++            (
++                name.as_str().to_string(),
++                value
++                    .to_str()
++                    .expect("owned ASCII metadata header")
++                    .to_string(),
++            )
++        })
++        .collect();
++    let artifact = serde_json::json!({
++        "metadata":capture_metadata_facts(&actual).expect("all actual fields"),
++        "compatibility_headers":headers,
++        "client_metadata":actual.client_metadata(true),
++        "session_source":source,
++        "boundary":"Actual typed getter from owned fixture construction only; not catalog or production owner authority",
++    });
++    let encoded = serde_json::to_string(&artifact).expect("owned fixture serialization");
++    assert!(encoded.len() <= 16384);
++    // Only this known fictional fixture is emitted, with no auth/body/context.
++    println!("M63_OWNED_TYPED_METADATA_CAPTURE={encoded}");
++}
 diff --git a/codex-rs/core/src/retained_request_facts.rs b/codex-rs/core/src/retained_request_facts.rs
 new file mode 100644
 --- /dev/null
 +++ b/codex-rs/core/src/retained_request_facts.rs
-@@ -0,0 +1,469 @@
+@@ -0,0 +1,401 @@
 +//! ABI01 checked conversion of explicit resolved facts, not authority or a request DTO.
 +//! Unsupported tools/guardian/complex metadata are rejected, never silently defaulted.
 +use super::super::responses_producer::*;
 +use crate::client_common::Prompt;
-+use crate::responses_metadata::{CodexResponsesMetadata, CodexResponsesRequestKind};
++use crate::responses_metadata::CodexResponsesMetadata;
 +use codex_api::{Provider, RetryConfig};
 +use codex_protocol::ThreadId;
 +use codex_protocol::models::{BaseInstructions, ResponseItem};
@@ -2952,41 +3575,6 @@ new file mode 100644
 +    "multi_agent_version",
 +    "multi_agent_reasoning_effort",
 +];
-+const META_KEYS: &[&str] = &[
-+    "parent_response_id",
-+    "installation_id",
-+    "session_id",
-+    "thread_id",
-+    "agent_name",
-+    "turn_id",
-+    "routing_hint",
-+    "window_id",
-+    "window_number",
-+    "context_window_id",
-+    "request_kind",
-+    "forked_from_thread_id",
-+    "forked_from_ordinal_exclusive",
-+    "parent_thread_id",
-+    "parent_turn_id",
-+    "root_turn_id",
-+    "subagent_header",
-+    "subagent_kind",
-+    "thread_source",
-+    "turn_trigger",
-+    "sandbox",
-+    "sandbox_mode",
-+    "auto_review_enabled",
-+    "node_repl_auto_review_required",
-+    "node_repl_disabled",
-+    "workspaces",
-+    "tool_namespaces_info",
-+    "turn_started_at_unix_ms",
-+    "history_ingest_requested",
-+    "analytics_enabled",
-+    "mcp_attribution",
-+    "extra",
-+];
-+
 +pub(super) struct Materials {
 +    pub creation_key: String,
 +    pub prompt: Prompt,
@@ -3084,40 +3672,7 @@ new file mode 100644
 +            output_schema_strict: boolean(&p["output_schema_strict"])?,
 +            cyber_access_program: None,
 +        };
-+        let md = object(&top["metadata"], META_KEYS)?;
-+        for key in META_KEYS {
-+            if [
-+                "installation_id",
-+                "session_id",
-+                "thread_id",
-+                "window_id",
-+                "turn_id",
-+                "request_kind",
-+                "workspaces",
-+                "extra",
-+            ]
-+            .contains(key)
-+            {
-+                continue;
-+            }
-+            if !md[*key].is_null() {
-+                return Err(());
-+            }
-+        }
-+        if md["workspaces"] != Value::Object(Map::new())
-+            || md["extra"] != Value::Object(Map::new())
-+            || md["request_kind"] != "turn"
-+        {
-+            return Err(());
-+        }
-+        let mut metadata = CodexResponsesMetadata::new(
-+            text(&md["installation_id"])?,
-+            text(&md["session_id"])?,
-+            text(&md["thread_id"])?,
-+            text(&md["window_id"])?,
-+        );
-+        metadata.turn_id = parse(&md["turn_id"])?;
-+        metadata.request_kind = Some(CodexResponsesRequestKind::Turn);
++        let metadata = super::super::retained_metadata::decode_metadata_facts(&top["metadata"])?;
 +        let b = object(
 +            &top["policy"],
 +            &[
@@ -3324,7 +3879,7 @@ new file mode 100644
 +/// Safety: input/output buffers must be valid owned foreign allocations for their
 +/// declared bounded lengths and must remain alive for this synchronous call.
 +/// No credential or material enters any Debug/log/error representation.
-+#[unsafe(no_mangle)]
++#[cfg_attr(not(test), unsafe(no_mangle))]
 +pub unsafe extern "C" fn m63_request_create(
 +    materials: *const u8,
 +    length: usize,
@@ -3411,7 +3966,7 @@ new file mode 100644
 +    pub auth_sensitive: u64,
 +}
 +/// Safety: output points to one caller-owned RequestInfo; it is never retained.
-+#[unsafe(no_mangle)]
++#[cfg_attr(not(test), unsafe(no_mangle))]
 +pub unsafe extern "C" fn m63_request_info(handle: u64, output: *mut RequestInfo) -> i32 {
 +    if output.is_null() {
 +        return INVALID;
@@ -3443,7 +3998,7 @@ new file mode 100644
 +}
 +/// Safety: output has `capacity` owned writable bytes and size is one usize slot.
 +/// This private bounded copy is for owned verification; headers are never copied.
-+#[unsafe(no_mangle)]
++#[cfg_attr(not(test), unsafe(no_mangle))]
 +pub unsafe extern "C" fn m63_request_copy_body(
 +    handle: u64,
 +    output: *mut u8,
@@ -3468,7 +4023,7 @@ new file mode 100644
 +    })
 +}
 +/// Safety: output points to one owned u64 slot; clone shares the same frozen Arc.
-+#[unsafe(no_mangle)]
++#[cfg_attr(not(test), unsafe(no_mangle))]
 +pub unsafe extern "C" fn m63_request_clone(handle: u64, output: *mut u64) -> i32 {
 +    if output.is_null() {
 +        return INVALID;
@@ -3482,7 +4037,7 @@ new file mode 100644
 +}
 +/// Removes exactly one checked handle. Double/unknown release is rejected.
 +/// Last release drops the genuine request allocation; the creation tombstone stays.
-+#[unsafe(no_mangle)]
++#[cfg_attr(not(test), unsafe(no_mangle))]
 +pub extern "C" fn m63_request_release(handle: u64) -> i32 {
 +    caught(|| {
 +        registry()
