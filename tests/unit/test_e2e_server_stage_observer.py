@@ -295,5 +295,191 @@ class CleanupTests(unittest.TestCase):
         finally:
             collector._lock.release()
 
+
+class JobCorrelationTests(unittest.TestCase):
+    def test_workspace_scoped_ordinals_never_export_raw_identity(self):
+        collector = observer.Collector(clock=lambda: 100)
+        collector.arm()
+        first = collector.job("WORKSPACE_SECRET_A", "JOB_SECRET_A")
+        self.assertEqual(first, collector.job("WORKSPACE_SECRET_A", "JOB_SECRET_A"))
+        second = collector.job("WORKSPACE_SECRET_A", "JOB_SECRET_B")
+        third = collector.job("WORKSPACE_SECRET_B", "JOB_SECRET_A")
+        self.assertEqual([first, second, third], [1, 2, 3])
+        for ordinal in (first, second, third):
+            collector.emit(observer.Phase.CLAIM, observer.Edge.EXIT, job=ordinal)
+        snapshot = collector.freeze()
+        self.assertEqual([e["job"] for e in snapshot["events"]], [1, 2, 3])
+        self.assertNotIn("SECRET", json.dumps(snapshot))
+        self.assertNotIn("SECRET", repr(collector))
+        self.assertEqual(collector._jobs, {})
+        self.assertIsNone(collector.job("WORKSPACE_SECRET_A", "JOB_SECRET_A"))
+
+    def test_unarmed_and_unsupported_identity_do_not_fabricate_association(self):
+        collector = observer.Collector(clock=lambda: 100)
+        self.assertIsNone(collector.job("WORKSPACE_SECRET", "JOB_SECRET"))
+        collector.arm()
+        for workspace, identifier in ((None, "j"), ("w", None), (True, "j"),
+                                      ("", "j"), ("w", ""), ("w", "j" * 257)):
+            self.assertIsNone(collector.job(workspace, identifier))
+        collector.emit(observer.Phase.CLAIM, observer.Edge.EXIT)
+        snapshot = collector.freeze()
+        self.assertNotIn("job", snapshot["events"][0])
+        self.assertEqual(snapshot["diagnostic_errors"], 0)
+        self.assertNotIn("SECRET", json.dumps(snapshot))
+
+    def test_map_bound_preserves_known_association_and_omits_overflow(self):
+        collector = observer.Collector(clock=lambda: 100)
+        collector.arm()
+        self.assertEqual([collector.job("w", str(i)) for i in range(64)], list(range(1, 65)))
+        self.assertIsNone(collector.job("w", "overflow"))
+        self.assertEqual(collector.job("w", "0"), 1)
+        collector.emit(observer.Phase.CLAIM, observer.Edge.EXIT, job=1)
+        snapshot = collector.freeze()
+        self.assertEqual(snapshot["diagnostic_errors"], 1)
+        self.assertEqual(snapshot["events"][0]["job"], 1)
+
+    def test_contended_identity_admission_never_waits_or_reuses_another_job(self):
+        collector = observer.Collector(clock=lambda: 100)
+        collector.arm()
+        collector._lock.acquire()
+        try:
+            self.assertIsNone(collector.job("w", "one"))
+        finally:
+            collector._lock.release()
+        self.assertEqual(collector.job("w", "two"), 1)
+        self.assertEqual(collector.job("w", "one"), 2)
+        snapshot = collector.freeze()
+        self.assertEqual(snapshot["dropped"], 1)
+        self.assertEqual(snapshot["diagnostic_errors"], 0)
+
+    def test_invalid_serialized_ordinal_is_rejected_without_exporting_input(self):
+        collector = observer.Collector(clock=lambda: 100)
+        collector.arm()
+        for value in (0, 65, True, "JOB_SECRET", 1.0):
+            collector.emit(observer.Phase.CLAIM, observer.Edge.EXIT, job=value)
+        snapshot = collector.freeze()
+        self.assertEqual(snapshot["events"], [])
+        self.assertEqual(snapshot["diagnostic_errors"], 5)
+        self.assertNotIn("SECRET", json.dumps(snapshot))
+
+    def correlated_fixture(self):
+        f = BindingTests().fixture()
+        f.binding.restore()
+        repository = f.Repository()
+        repository.workspace_id = "WORKSPACE_SECRET"
+        state = {"current": None, "calls": [], "leases": []}
+
+        def enqueue(receiver, identifier):
+            state["calls"].append(("enqueue", identifier))
+            return SimpleNamespace(id=identifier)
+
+        def latest_job(receiver):
+            state["calls"].append(("latest", state["current"]))
+            return {"id": state["current"], "status": "queued"}
+
+        def regrade(receiver, identifier):
+            with receiver.database.transaction():
+                return repository.enqueue(identifier)
+
+        def result(receiver):
+            with receiver.database.transaction(immediate=False):
+                return repository.latest_job()
+
+        def claim():
+            state["calls"].append(("claim", state["current"]))
+            lease = SimpleNamespace(workspace_id=repository.workspace_id, job_id=state["current"])
+            state["leases"].append(lease)
+            return lease
+
+        def compute(lease):
+            state["calls"].append(("compute", lease.job_id))
+            return lease, object()
+
+        def finish(lease, result, audit):
+            state["calls"].append(("finish", lease.job_id))
+            return True
+
+        f.Repository.enqueue, f.Repository.latest_job = enqueue, latest_job
+        f.Service.regrade, f.Service.result = regrade, result
+        f.worker.grading.claim, f.worker.grading.compute, f.worker.grading.finish = claim, compute, finish
+        self.assertTrue(f.binding.install())
+        self.addCleanup(f.binding.restore)
+        return f, state
+
+    def test_interleaved_real_wrapper_values_link_enqueue_claim_compute_finish_and_read(self):
+        f, state = self.correlated_fixture()
+        first_ref = f.service.regrade("JOB_SECRET_A")
+        second_ref = f.service.regrade("JOB_SECRET_B")
+        self.assertEqual([first_ref.id, second_ref.id], ["JOB_SECRET_A", "JOB_SECRET_B"])
+        state["current"] = "JOB_SECRET_A"
+        first_lease = f.worker.grading.claim()
+        state["current"] = "JOB_SECRET_B"
+        second_lease = f.worker.grading.claim()
+        f.worker.grading.compute(second_lease)
+        f.worker.grading.compute(lease=first_lease)
+        self.assertTrue(f.worker.grading.finish(second_lease, None, None))
+        self.assertTrue(f.worker.grading.finish(lease=first_lease, result=None, audit=None))
+        self.assertEqual(f.service.result()["id"], "JOB_SECRET_B")
+        self.assertEqual(state["calls"], [
+            ("enqueue", "JOB_SECRET_A"), ("enqueue", "JOB_SECRET_B"),
+            ("claim", "JOB_SECRET_A"), ("claim", "JOB_SECRET_B"),
+            ("compute", "JOB_SECRET_B"), ("compute", "JOB_SECRET_A"),
+            ("finish", "JOB_SECRET_B"), ("finish", "JOB_SECRET_A"), ("latest", "JOB_SECRET_B")])
+        snapshot = f.collector.freeze()
+        committed = [e["job"] for e in snapshot["events"] if e["edge"] == "new-enqueue-committed"]
+        claims = [e["job"] for e in snapshot["events"] if e["phase"] == "grading-claim" and e["edge"] == "exit"]
+        computes = [e["job"] for e in snapshot["events"] if e["phase"] == "grading-compute" and e["edge"] == "enter"]
+        finishes = [e["job"] for e in snapshot["events"] if e["phase"] == "grading-finish" and e["edge"] == "exit"]
+        statuses = [e["job"] for e in snapshot["events"] if e["edge"] == "existing-status-read"]
+        self.assertEqual((committed, claims, computes, finishes, statuses),
+                         ([1, 2], [1, 2], [2, 1], [2, 1], [2]))
+        self.assertEqual(snapshot["diagnostic_errors"], 0)
+        self.assertNotIn("SECRET", json.dumps(snapshot))
+
+    def test_correlation_fault_preserves_original_calls_and_results(self):
+        f, state = self.correlated_fixture()
+        def broken(*args, **kwargs):
+            raise OSError("JOB_DIAGNOSTIC_SECRET")
+        f.collector.job = broken
+        reference = f.service.regrade("JOB_SECRET")
+        state["current"] = "JOB_SECRET"
+        lease = f.worker.grading.claim()
+        self.assertEqual(reference.id, lease.job_id)
+        f.worker.grading.compute(lease)
+        self.assertTrue(f.worker.grading.finish(lease, None, None))
+        self.assertEqual(f.service.result()["id"], "JOB_SECRET")
+        self.assertEqual(len(state["calls"]), 5)
+        snapshot = f.collector.freeze()
+        self.assertGreater(snapshot["diagnostic_errors"], 0)
+        self.assertTrue(all("job" not in e for e in snapshot["events"]))
+        self.assertNotIn("SECRET", json.dumps(snapshot))
+
+    def test_malformed_lease_accessor_preserves_original_return_and_exception(self):
+        f, state = self.correlated_fixture()
+        class BrokenLease:
+            @property
+            def workspace_id(self):
+                raise ValueError("PRIVATE_LEASE_SECRET")
+        lease = BrokenLease()
+        sentinel = object()
+        primary = RuntimeError("ORIGINAL_COMPUTE_SECRET")
+        f.binding.restore()
+        def compute(value):
+            state["calls"].append(("compute", value))
+            if value is lease:
+                return sentinel
+            raise primary
+        f.worker.grading.compute = compute
+        self.assertTrue(f.binding.install())
+        f.collector.arm()
+        self.assertIs(f.worker.grading.compute(lease), sentinel)
+        with self.assertRaises(RuntimeError) as received:
+            f.worker.grading.compute(object())
+        self.assertIs(received.exception, primary)
+        self.assertEqual(len(state["calls"]), 2)
+        snapshot = f.collector.freeze()
+        self.assertEqual(snapshot["diagnostic_errors"], 1)
+        self.assertNotIn("SECRET", json.dumps(snapshot))
+
 if __name__ == "__main__":
     unittest.main()

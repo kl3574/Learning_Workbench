@@ -67,6 +67,7 @@ class Collector:
         self._lock = Lock()
         self._tickets, self._dropped, self._errors, self._scopes = count(1), count(), count(), count(1)
         self._events: list[dict[str, Any]] = []
+        self._jobs: dict[tuple[str, str], int] = {}
         self._armed = self._frozen = False
         self._snapshot: dict[str, Any] | None = None
         self._origin = self.elapsed(raw=True)
@@ -104,9 +105,36 @@ class Collector:
         value = next(self._scopes)
         return value if value <= 4096 else None
 
+    def job(self, workspace: Any, identifier: Any) -> int | None:
+        """Pseudonymize only an existing owned result/lease; never export its IDs."""
+        if not self.armed:
+            return None
+        if (type(workspace) is not str or type(identifier) is not str
+                or not 1 <= len(workspace) <= 256 or not 1 <= len(identifier) <= 256):
+            return None
+        if not self._lock.acquire(blocking=False):
+            next(self._dropped)
+            return None
+        try:
+            if self._frozen:
+                return None
+            key = (workspace, identifier)
+            known = self._jobs.get(key)
+            if known is not None:
+                return known
+            if len(self._jobs) >= 64:
+                self.error()
+                return None
+            ordinal = len(self._jobs) + 1
+            self._jobs[key] = ordinal
+            return ordinal
+        finally:
+            self._lock.release()
+
     def emit(self, phase: Phase, edge: Edge, *, scope: int | None = None,
              parent: int | None = None, duration_ns: int | None = None,
-             outcome: Outcome | None = None, status: Status | None = None) -> None:
+             outcome: Outcome | None = None, status: Status | None = None,
+             job: int | None = None) -> None:
         if not self.armed:
             return
         try:
@@ -119,6 +147,8 @@ class Collector:
             for value in (scope, parent):
                 if value is not None and (type(value) is not int or not 1 <= value <= 4096):
                     raise ValueError("invalid scope")
+            if job is not None and (type(job) is not int or not 1 <= job <= 64):
+                raise ValueError("invalid job ordinal")
             if duration_ns is not None and (type(duration_ns) is not int or duration_ns < 0):
                 raise ValueError("invalid duration")
             if not self._lock.acquire(blocking=False):
@@ -135,7 +165,8 @@ class Collector:
                 if elapsed is None:
                     return
                 event = {"seq": sequence, "elapsed_ns": elapsed, "phase": phase.value, "edge": edge.value}
-                for key, value in (("scope", scope), ("parent", parent), ("duration_ns", duration_ns)):
+                for key, value in (("scope", scope), ("parent", parent),
+                                   ("duration_ns", duration_ns), ("job", job)):
                     if value is not None:
                         event[key] = value
                 if outcome is not None:
@@ -158,16 +189,17 @@ class Collector:
         acquired = self._lock.acquire(blocking=False)
         try:
             self._snapshot = {
-                "version": "e2e-server-stage-metadata-v1",
+                "version": "e2e-server-stage-metadata-v2",
                 "clock": "same-server-process monotonic_ns since observer construction",
                 "capture_state": "frozen" if acquired else "finalize-contended",
                 "armed": self._armed, "events": deepcopy(self._events) if acquired else [],
                 "limit": self._limit, "dropped": next(self._dropped), "diagnostic_errors": next(self._errors),
                 "finally_marker": boundary.value,
-                "scope": "Fixed enums/durations and task-local ordinal scopes. No IDs, body, headers, SQL or exception text. Queued is an existing WAL read snapshot, not permanent inactivity.",
+                "scope": "Fixed enums/durations and task-local scopes with bounded server-local job ordinals. Raw IDs remain only in the private RAM association map, never in output. Missing ordinals cannot correlate jobs. No body, headers, SQL or exception text. Queued is an existing WAL read snapshot, not permanent inactivity.",
             }
         finally:
             if acquired:
+                self._jobs.clear()
                 self._lock.release()
         return deepcopy(self._snapshot)
 
@@ -190,6 +222,7 @@ class _Scope:
     parent: int | None
     transactions: int = 0
     enqueued: bool = False
+    job: int | None = None
 
 
 class OwnedBindings:
@@ -226,6 +259,14 @@ class OwnedBindings:
         finished = self._safe("elapsed")
         return finished - started if type(started) is int and type(finished) is int and finished >= started else None
 
+    def _lease_job(self, lease: Any) -> int | None:
+        try:
+            return self._safe("job", getattr(lease, "workspace_id", None),
+                              getattr(lease, "job_id", None))
+        except BaseException:  # noqa: BLE001 - Diagnostic access cannot replace the original outcome.
+            self._safe("error")
+            return None
+
     def _call(self, phase: Phase, original: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         if phase is Phase.REGRADE:
             self._safe("arm")
@@ -234,24 +275,29 @@ class OwnedBindings:
         try:
             previous = self._current()
             scope = _Scope(phase, self._safe("scope"), previous.ordinal if previous else None)
+            if phase in (Phase.COMPUTE, Phase.FINISH):
+                scope.job = self._lease_job(args[0] if args else kwargs.get("lease"))
             started = self._safe("elapsed")
             self._local.scope = scope
-            self._safe("emit", phase, Edge.ENTER, scope=scope.ordinal, parent=scope.parent)
+            self._safe("emit", phase, Edge.ENTER, scope=scope.ordinal, parent=scope.parent, job=scope.job)
         except BaseException:  # noqa: BLE001 - Diagnostic faults must preserve the original outcome.
             return original(*args, **kwargs)
         try:
             value = original(*args, **kwargs)
         except BaseException:
             self._safe("emit", phase, Edge.EXIT, scope=scope.ordinal, parent=scope.parent,
-                       duration_ns=self._duration(started), outcome=Outcome.RAISED)
+                       duration_ns=self._duration(started), outcome=Outcome.RAISED, job=scope.job)
             raise
         else:
+            if phase is Phase.CLAIM and value is not None:
+                scope.job = self._lease_job(value)
             if phase is Phase.REGRADE and scope.enqueued:
-                self._safe("emit", phase, Edge.COMMITTED, scope=scope.ordinal, parent=scope.parent)
+                self._safe("emit", phase, Edge.COMMITTED, scope=scope.ordinal, parent=scope.parent, job=scope.job)
             no_work = (phase is Phase.CLAIM and value is None) or (
                 phase in (Phase.TICK, Phase.EVIDENCE, Phase.RECOMMENDATION, Phase.RETRIEVAL) and value is False)
             self._safe("emit", phase, Edge.EXIT, scope=scope.ordinal, parent=scope.parent,
-                       duration_ns=self._duration(started), outcome=Outcome.NO_WORK if no_work else Outcome.RETURNED)
+                       duration_ns=self._duration(started), outcome=Outcome.NO_WORK if no_work else Outcome.RETURNED,
+                       job=scope.job)
             return value
         finally:
             self._local.scope = previous
@@ -289,19 +335,19 @@ class OwnedBindings:
                 scope.transactions += 1
                 phase = (Phase.WAL if scope.transactions == 1 else Phase.POLICY) if scope.phase is Phase.RESULT else scope.phase
                 started = self._safe("elapsed")
-                self._safe("emit", phase, Edge.ENTER, scope=scope.ordinal, parent=scope.parent)
+                self._safe("emit", phase, Edge.ENTER, scope=scope.ordinal, parent=scope.parent, job=scope.job)
                 try:
                     with original_transaction(*args, **kwargs) as connection:
                         self._safe("emit", phase, Edge.READY, scope=scope.ordinal, parent=scope.parent,
-                                   duration_ns=self._duration(started))
+                                   duration_ns=self._duration(started), job=scope.job)
                         yield connection
                 except BaseException:
                     self._safe("emit", phase, Edge.EXIT, scope=scope.ordinal, parent=scope.parent,
-                               duration_ns=self._duration(started), outcome=Outcome.RAISED)
+                               duration_ns=self._duration(started), outcome=Outcome.RAISED, job=scope.job)
                     raise
                 else:
                     self._safe("emit", phase, Edge.EXIT, scope=scope.ordinal, parent=scope.parent,
-                               duration_ns=self._duration(started), outcome=Outcome.RETURNED)
+                               duration_ns=self._duration(started), outcome=Outcome.RETURNED, job=scope.job)
 
             self._replace(self.database, "transaction", observed_transaction)
             for name, phase in (("regrade", Phase.REGRADE), ("result", Phase.RESULT)):
@@ -321,6 +367,8 @@ class OwnedBindings:
                     scope = self._current()
                     if scope is not None and scope.phase is Phase.REGRADE:
                         scope.enqueued = True
+                        scope.job = self._safe("job", getattr(receiver, "workspace_id", None),
+                                               getattr(value, "id", None))
                 except BaseException:  # noqa: BLE001 - Diagnostic faults must preserve the original outcome.
                     self._safe("error")
                 return value
@@ -338,7 +386,10 @@ class OwnedBindings:
                         except BaseException:  # noqa: BLE001 - Diagnostic faults must preserve the original outcome.
                             status = Status.UNOBSERVED
                             self._safe("error")
-                        self._safe("emit", Phase.WAL, Edge.STATUS, scope=scope.ordinal, parent=scope.parent, status=status)
+                        scope.job = self._safe("job", getattr(receiver, "workspace_id", None),
+                                               value["id"] if value is not None else None)
+                        self._safe("emit", Phase.WAL, Edge.STATUS, scope=scope.ordinal, parent=scope.parent,
+                                   status=status, job=scope.job)
                 except BaseException:  # noqa: BLE001 - Diagnostic faults must preserve the original outcome.
                     self._safe("error")
                 return value
