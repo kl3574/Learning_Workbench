@@ -147,7 +147,7 @@ INSTRUCTION_MATERIALS = {'patch_file': 'retained-instruction-materials.patch',
  'scope': 'Actual Session instruction/config and applied-manager lifetimes only; no complete '
           'contributor/executed versions or trusted PREGRANT owner'}
 EXECUTED_STATE_CHECKPOINT = {'patch_file': 'executed-tool-calls-checkpoint.patch',
- 'patch_sha256': '0cacc0ff84a73cbdc6e3f2647cd0d2d21170d9421f189d04802b37ab866b2c5b',
+ 'patch_sha256': 'a0da138f3d4f847f81356680301538a5e53b7f8df1317deb2be77dda14c5ddb7',
  'before_graph': {'rows': 8793,
                   'sha256': '69c605abba0daa10e0d174445f7894861eba024afd1cbd9ea9a5d091dbee7f6c'},
  'changed_files': [{'path': 'codex-rs/core/src/tools/executed_tool_calls.rs',
@@ -157,8 +157,8 @@ EXECUTED_STATE_CHECKPOINT = {'patch_file': 'executed-tool-calls-checkpoint.patch
                     'after_mode': 436},
                    {'path': 'codex-rs/core/src/tools/executed_tool_calls_checkpoint_tests.rs',
                     'before_sha256': None,
-                    'after_sha256': '9956c221c8af09f38e9f5e43c54ace09157d3267224afd061e4f5bc3572d10cb',
-                    'after_bytes': 11599,
+                    'after_sha256': '97df3691a51b9aea27155c615795f847e517051be3dffae7964b10bb2c0fd9e9',
+                    'after_bytes': 11527,
                     'after_mode': 436}],
  'status': 'RAM candidate; source121 and Clippy NOT_RUN; no production admission',
  'scope': 'ExecutedToolCalls Option-state mutex visits only; pending Direct atomics, MCP revision '
