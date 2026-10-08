@@ -240,3 +240,38 @@ FinalAuth 资格和 bridge 未完成。平台已有持久 control ledger；
 registry/default None、UI和产品 wire 不变。此回放
 不执行 CLI/AppServer/真实模型，不声称 Agent 或整个M6.3已完成。原 LICENSE
 和 NOTICE 继续适用于上游派生补丁。
+
+
+### Retained foreign memory replay (internal engineering only)
+
+`replay_retained_request.py` 从同一固定官方 a956 归档应用独立22路径 Rust
+补丁，构建真实 core cdylib，再由私有 ctypes owner 实际调用同 B03 producer、
+AC 唯一 EncodedJson、FinalBearer05 freeze 和 HTTP04 retained Arc。
+现有20路径/core22的 JSON、patch、runner 原件保持独立；上节入口不含 foreign
+bridge，本独立入口实现的是进程内 memory bridge，尚未接可信 owner 或持久账本/send。
+
+```sh
+python3 scripts/codex-turn/replay_retained_request.py --archive "$TASK_ARCHIVE" --output-dir "$NEW_PRIVATE_OUTPUT" --toolchain-dir "$TASK_RUST195" --cargo-home "$TASK_CARGO_CACHE"
+```
+
+输出必须是全新目录。构建固定 Rust1.95.0，strict `--locked --offline`、jobs2，
+原 Cargo.lock 不变；唯一测试元数据改动为 workspace.version0.160.0→0.0.0。
+仅回放进程临时采用 umask0002并恢复，保证 git apply 新源的完整模式可复核。
+原始8775/补丁及归一8783项的字节、完整文件模式与 LICENSE symlink 都绑定。
+`--prepare-only` 只做源码解包/补丁校验，零 Cargo、Rust 或 foreign 调用；
+它不代表真实 request prepare 或任何 foreign test 已通过。
+
+默认17个实际 foreign 验收核真实分配保留、freeze/clone、并发构造、borrow/release
+及拒绝路径。新输出必须实际编译新的私有 `.so`，记录实际 hash，再运行17项；
+旧库或历史17PASS不能替代新回放。库只保留在 owned private output，不上传 Git。
+私有原17断言及 fixture 函数 AST 保持完全一致；仅模块路径、字段表读取和三行
+分号换行适配工程包，换行前后完整 AST 也相同。
+ABI01要求显式材料，非空的未支持工具/Guardian/复杂元数据直接拒绝。
+
+这些 plain facts、static bearer、caller key 和1024进程内 tombstone 均不认证权威。
+已存在的持久控制账本到真实 handle/实际 send 的事务桥、SecretStore/config trusted
+owner、InputProof计量、重启额度与资源/network executor资格仍未实施。
+Hash/inode只绑定本次封存 owned load path，未声称 qualified trusted loader或通用
+TOCTOU保证；默认 panic hook 不改，catch_unwind不保证所有panic无日志，panic枝未测。
+本入口不发送请求、不运行 CLI/AppServer/模型或完整core/HTTP/API/guardian suites，
+不注册生产 executor/Proof。生产状态保持 INCOMPLETE / NOT_ADMITTED。

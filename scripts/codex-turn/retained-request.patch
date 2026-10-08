@@ -1,0 +1,4218 @@
+diff --git a/codex-rs/codex-api/src/common.rs b/codex-rs/codex-api/src/common.rs
+--- a/codex-rs/codex-api/src/common.rs
++++ b/codex-rs/codex-api/src/common.rs
+@@ -16,6 +16,7 @@
+ use serde_json::Value;
+ use serde_json::value::RawValue;
+ use std::collections::HashMap;
++use std::num::NonZeroU64;
+ use std::pin::Pin;
+ use std::sync::Arc;
+ use std::task::Context;
+@@ -275,6 +276,13 @@
+     }
+ }
+
++/// Explicit truncation mode for the controlled HTTP Responses shape.
++#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
++#[serde(rename_all = "snake_case")]
++pub enum ResponsesTruncation {
++    Disabled,
++}
++
+ #[derive(Debug, Serialize, Clone, PartialEq)]
+ pub struct ResponsesApiRequest {
+     pub model: String,
+@@ -289,6 +297,10 @@
+     pub store: bool,
+     pub stream: bool,
+     #[serde(skip_serializing_if = "Option::is_none")]
++    pub max_output_tokens: Option<NonZeroU64>,
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub truncation: Option<ResponsesTruncation>,
++    #[serde(skip_serializing_if = "Option::is_none")]
+     pub stream_options: Option<StreamOptions>,
+     pub include: Vec<String>,
+     #[serde(skip_serializing_if = "Option::is_none")]
+@@ -301,6 +313,25 @@
+     pub client_metadata: Option<HashMap<String, String>>,
+     #[serde(skip_serializing_if = "Option::is_none")]
+     pub access_programs: Option<AccessPrograms>,
++}
++
++impl ResponsesApiRequest {
++    /// Reject HTTP-only limits before opening an unqualified WebSocket path.
++    pub fn ensure_websocket_supported(&self) -> Result<(), ApiError> {
++        reject_websocket_output_limits(self.max_output_tokens, self.truncation)
++    }
++}
++
++fn reject_websocket_output_limits(
++    max_output_tokens: Option<NonZeroU64>,
++    truncation: Option<ResponsesTruncation>,
++) -> Result<(), ApiError> {
++    if max_output_tokens.is_some() || truncation.is_some() {
++        return Err(ApiError::InvalidRequest {
++            message: "CODEX_OUTPUT_LIMIT_UNAVAILABLE".to_string(),
++        });
++    }
++    Ok(())
+ }
+
+ impl<'a> From<&'a ResponsesApiRequest> for ResponseCreateWsRequest<'a> {
+@@ -316,6 +347,8 @@
+             reasoning: request.reasoning.as_ref(),
+             store: request.store,
+             stream: request.stream,
++            max_output_tokens: request.max_output_tokens,
++            truncation: request.truncation,
+             stream_options: request.stream_options.as_ref(),
+             include: &request.include,
+             service_tier: request.service_tier.as_deref(),
+@@ -344,6 +377,10 @@
+     pub store: bool,
+     pub stream: bool,
+     #[serde(skip_serializing_if = "Option::is_none")]
++    pub max_output_tokens: Option<NonZeroU64>,
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub truncation: Option<ResponsesTruncation>,
++    #[serde(skip_serializing_if = "Option::is_none")]
+     pub stream_options: Option<&'a StreamOptions>,
+     pub include: &'a [String],
+     #[serde(skip_serializing_if = "Option::is_none")]
+@@ -358,6 +395,13 @@
+     pub client_metadata: Option<HashMap<String, String>>,
+     #[serde(skip_serializing_if = "Option::is_none")]
+     pub access_programs: Option<AccessPrograms>,
++}
++
++impl ResponseCreateWsRequest<'_> {
++    /// Reject these limits before serialization or any WebSocket send task.
++    pub fn ensure_websocket_supported(&self) -> Result<(), ApiError> {
++        reject_websocket_output_limits(self.max_output_tokens, self.truncation)
++    }
+ }
+
+ pub fn response_create_client_metadata(
+diff --git a/codex-rs/codex-api/src/endpoint/responses.rs b/codex-rs/codex-api/src/endpoint/responses.rs
+--- a/codex-rs/codex-api/src/endpoint/responses.rs
++++ b/codex-rs/codex-api/src/endpoint/responses.rs
+@@ -1,7 +1,9 @@
+ use crate::auth::SharedAuthProvider;
+ use crate::common::ResponseStream;
+ use crate::common::ResponsesApiRequest;
++use crate::common::ResponsesTruncation;
+ use crate::endpoint::session::EndpointSession;
++use crate::endpoint::session::prepare_encoded_json_request;
+ use crate::error::ApiError;
+ use crate::provider::Provider;
+ use crate::requests::Compression;
+@@ -12,6 +14,7 @@
+ use crate::telemetry::SseTelemetry;
+ use codex_client::EncodedJsonBody;
+ use codex_client::HttpTransport;
++use codex_client::Request;
+ use codex_client::RequestCompression;
+ use codex_client::RequestTelemetry;
+ use codex_protocol::protocol::SessionSource;
+@@ -19,6 +22,7 @@
+ use http::HeaderValue;
+ use http::Method;
+ use serde_json::Value;
++use std::num::NonZeroU64;
+ use std::sync::Arc;
+ use std::sync::OnceLock;
+ use tracing::instrument;
+@@ -36,6 +40,78 @@
+     pub extra_headers: HeaderMap,
+     pub compression: Compression,
+     pub turn_state: Option<Arc<OnceLock<String>>>,
++}
++
++/// Encode an already complete typed request once, with no auth or transport I/O.
++///
++/// Core request construction and its later metadata/input mutations must finish
++/// before this function. It does not instantiate a client, read credentials,
++/// refresh auth, run contributors, spawn tasks, or prove model/token capacity.
++/// The returned original EncodedJson allocation must be retained by the owner.
++pub fn prepare_responses_request(
++    provider: &Provider,
++    request: &ResponsesApiRequest,
++    options: &ResponsesOptions,
++) -> Result<Request, ApiError> {
++    let body = EncodedJsonBody::encode(request).map_err(|error| {
++        ApiError::Stream(format!("failed to encode responses request: {error}"))
++    })?;
++    let mut headers = options.extra_headers.clone();
++    if let Some(ref thread_id) = options.thread_id {
++        insert_header(&mut headers, "x-client-request-id", thread_id);
++    }
++    headers.extend(build_session_headers(
++        options.session_id.clone(),
++        options.thread_id.clone(),
++    ));
++    if let Some(subagent) = subagent_header(&options.session_source) {
++        insert_header(&mut headers, "x-openai-subagent", &subagent);
++    }
++    prepare_encoded_json_request(
++        provider,
++        Method::POST,
++        "/responses",
++        headers,
++        Some(body),
++        |request| configure_responses_request(request, options.compression),
++    )
++    .map_err(ApiError::from)
++}
++
++/// Set the explicit HTTP output limits before the shared one-time encoding.
++///
++/// This is local preparation only. The owner must finish trusted auth headers,
++/// check the retained body is unchanged, freeze that final request, and use the
++/// dedicated transport without the ordinary auth/retry execution wrapper.
++pub fn prepare_controlled_responses_request(
++    provider: &Provider,
++    mut request: ResponsesApiRequest,
++    options: &ResponsesOptions,
++    max_output_tokens: NonZeroU64,
++) -> Result<Request, ApiError> {
++    if options.compression != Compression::None
++        || request
++            .max_output_tokens
++            .is_some_and(|existing| existing != max_output_tokens)
++    {
++        return Err(ApiError::InvalidRequest {
++            message: "CODEX_OUTPUT_LIMIT_UNAVAILABLE".to_string(),
++        });
++    }
++    request.max_output_tokens = Some(max_output_tokens);
++    request.truncation = Some(ResponsesTruncation::Disabled);
++    prepare_responses_request(provider, &request, options)
++}
++
++fn configure_responses_request(request: &mut Request, compression: Compression) {
++    request.headers.insert(
++        http::header::ACCEPT,
++        HeaderValue::from_static("text/event-stream"),
++    );
++    request.compression = match compression {
++        Compression::None => RequestCompression::None,
++        Compression::Zstd => RequestCompression::Zstd,
++    };
+ }
+
+ impl<T: HttpTransport> ResponsesClient<T> {
+@@ -72,28 +148,17 @@
+         request: ResponsesApiRequest,
+         options: ResponsesOptions,
+     ) -> Result<ResponseStream, ApiError> {
+-        let ResponsesOptions {
+-            session_id,
+-            thread_id,
+-            session_source,
+-            extra_headers,
+-            compression,
+-            turn_state,
+-        } = options;
+-        let body = EncodedJsonBody::encode(&request)
+-            .map_err(|e| ApiError::Stream(format!("failed to encode responses request: {e}")))?;
+-
+-        let mut headers = extra_headers;
+-        if let Some(ref thread_id) = thread_id {
+-            insert_header(&mut headers, "x-client-request-id", thread_id);
+-        }
+-        headers.extend(build_session_headers(session_id, thread_id));
+-        if let Some(subagent) = subagent_header(&session_source) {
+-            insert_header(&mut headers, "x-openai-subagent", &subagent);
+-        }
+-
+-        self.stream_encoded(body, headers, compression, turn_state)
+-            .await
++        let request = prepare_responses_request(self.session.provider(), &request, &options)?;
++        let stream_response = self
++            .session
++            .stream_prepared_request(request, "/responses")
++            .await?;
++        Ok(spawn_response_stream(
++            stream_response,
++            self.session.provider().stream_idle_timeout,
++            self.sse_telemetry.clone(),
++            options.turn_state,
++        ))
+     }
+
+     #[instrument(
+@@ -127,11 +192,6 @@
+         compression: Compression,
+         turn_state: Option<Arc<OnceLock<String>>>,
+     ) -> Result<ResponseStream, ApiError> {
+-        let request_compression = match compression {
+-            Compression::None => RequestCompression::None,
+-            Compression::Zstd => RequestCompression::Zstd,
+-        };
+-
+         let stream_response = self
+             .session
+             .stream_encoded_json_with(
+@@ -139,13 +199,7 @@
+                 "/responses",
+                 extra_headers,
+                 Some(body),
+-                |req| {
+-                    req.headers.insert(
+-                        http::header::ACCEPT,
+-                        HeaderValue::from_static("text/event-stream"),
+-                    );
+-                    req.compression = request_compression;
+-                },
++                |request| configure_responses_request(request, compression),
+             )
+             .await?;
+
+@@ -157,3 +211,7 @@
+         ))
+     }
+ }
++
++#[cfg(test)]
++#[path = "responses_prepare_tests.rs"]
++mod prepare_tests;
+diff --git a/codex-rs/codex-api/src/endpoint/responses_prepare_tests.rs b/codex-rs/codex-api/src/endpoint/responses_prepare_tests.rs
+new file mode 100644
+--- /dev/null
++++ b/codex-rs/codex-api/src/endpoint/responses_prepare_tests.rs
+@@ -0,0 +1,242 @@
++use super::ResponsesOptions;
++use super::prepare_controlled_responses_request;
++use super::prepare_responses_request;
++use crate::common::ResponsesApiRequest;
++use crate::common::ResponsesTruncation;
++use crate::common::create_text_param_for_request;
++use crate::error::ApiError;
++use crate::provider::Provider;
++use crate::provider::RetryConfig;
++use crate::requests::Compression;
++use codex_client::RequestBody;
++use codex_http_client::FrozenResponsesRequest;
++use codex_protocol::models::ContentItem;
++use codex_protocol::models::ResponseItem;
++use http::HeaderMap;
++use http::HeaderValue;
++use http::Method;
++use pretty_assertions::assert_eq;
++use serde_json::json;
++use serde_json::value::RawValue;
++use std::collections::HashMap;
++use std::num::NonZeroU64;
++use std::sync::Arc;
++use std::time::Duration;
++
++fn provider() -> Provider {
++    Provider {
++        name: "local-producer-fixture".to_string(),
++        base_url: "https://example.com/v1".to_string(),
++        query_params: None,
++        headers: HeaderMap::from_iter([(
++            http::header::HeaderName::from_static("x-provider-fixture"),
++            HeaderValue::from_static("original"),
++        )]),
++        retry: RetryConfig {
++            max_attempts: 3,
++            base_delay: Duration::from_millis(1),
++            retry_429: true,
++            retry_5xx: true,
++            retry_transport: true,
++        },
++        stream_idle_timeout: Duration::from_secs(30),
++    }
++}
++
++fn complete_request() -> ResponsesApiRequest {
++    ResponsesApiRequest {
++        model: "local-producer-fixture".to_string(),
++        instructions: "Use only the complete selected material: 中文 😀".to_string(),
++        input: vec![ResponseItem::Message {
++            id: None,
++            role: "user".to_string(),
++            content: vec![ContentItem::InputText {
++                text: "Full history and reference <reference>é é</reference>".to_string(),
++            }],
++            phase: None,
++            internal_chat_message_metadata_passthrough: None,
++        }],
++        tools: Some(
++            Arc::<RawValue>::from(
++                serde_json::value::to_raw_value(&json!([{
++                    "type": "function", "name": "local_fixture",
++                    "parameters": {"type": "object", "properties": {"exact": {"type": "string"}}}
++                }]))
++                .expect("encode complete tools"),
++            )
++            .into(),
++        ),
++        tool_choice: "auto".to_string(),
++        parallel_tool_calls: false,
++        reasoning: None,
++        store: false,
++        stream: true,
++        max_output_tokens: None,
++        truncation: None,
++        stream_options: None,
++        include: vec!["reasoning.encrypted_content".to_string()],
++        service_tier: None,
++        prompt_cache_key: Some("original-cache-key".to_string()),
++        text: create_text_param_for_request(
++            /*verbosity*/ None,
++            &Some(json!({"type": "object", "properties": {"answer": {"type": "string"}}})),
++            /*output_schema_strict*/ true,
++        ),
++        client_metadata: Some(HashMap::from([
++            ("thread-id".to_string(), "original-thread".to_string()),
++            ("session-id".to_string(), "original-session".to_string()),
++        ])),
++        access_programs: None,
++    }
++}
++
++fn options() -> ResponsesOptions {
++    ResponsesOptions {
++        session_id: Some("original-session".to_string()),
++        thread_id: Some("original-thread".to_string()),
++        extra_headers: HeaderMap::from_iter([(
++            http::header::HeaderName::from_static("x-request-fixture"),
++            HeaderValue::from_static("original"),
++        )]),
++        ..ResponsesOptions::default()
++    }
++}
++
++#[test]
++fn controlled_prepare_retains_complete_typed_request_and_original_allocation() {
++    let input = complete_request();
++    let mut expected = serde_json::to_value(&input).expect("complete original request");
++    expected["max_output_tokens"] = json!(64);
++    expected["truncation"] = json!("disabled");
++    let maximum = NonZeroU64::new(64).expect("positive fixture budget");
++    let mut prepared =
++        prepare_controlled_responses_request(&provider(), input, &options(), maximum)
++            .expect("local controlled preparation");
++    let Some(RequestBody::EncodedJson(body)) = prepared.body.as_ref() else {
++        panic!("the producer must retain the real EncodedJson body");
++    };
++    let pointer = body.as_bytes().as_ptr();
++    let bytes = body.as_bytes().to_vec();
++    assert_eq!(
++        serde_json::from_slice::<serde_json::Value>(&bytes).expect("actual producer JSON"),
++        expected
++    );
++    assert_eq!(
++        (
++            &prepared.method,
++            prepared.url.as_str(),
++            prepared.compression
++        ),
++        (
++            &Method::POST,
++            "https://example.com/v1/responses",
++            codex_client::RequestCompression::None
++        )
++    );
++    let expected_headers = HeaderMap::from_iter([
++        (
++            http::header::HeaderName::from_static("x-provider-fixture"),
++            HeaderValue::from_static("original"),
++        ),
++        (
++            http::header::HeaderName::from_static("x-request-fixture"),
++            HeaderValue::from_static("original"),
++        ),
++        (
++            http::header::HeaderName::from_static("x-client-request-id"),
++            HeaderValue::from_static("original-thread"),
++        ),
++        (
++            http::header::HeaderName::from_static("thread-id"),
++            HeaderValue::from_static("original-thread"),
++        ),
++        (
++            http::header::HeaderName::from_static("session-id"),
++            HeaderValue::from_static("original-session"),
++        ),
++        (
++            http::header::ACCEPT,
++            HeaderValue::from_static("text/event-stream"),
++        ),
++        (
++            http::header::CONTENT_TYPE,
++            HeaderValue::from_static("application/json"),
++        ),
++    ]);
++    assert_eq!(prepared.headers, expected_headers);
++
++    // Final trusted header and local limits are supplied before freezing.
++    prepared.headers.insert(
++        http::header::AUTHORIZATION,
++        HeaderValue::from_static("Bearer local-only-fixture"),
++    );
++    prepared.timeout = Some(Duration::from_secs(2));
++    prepared.response_body_limit_bytes = Some(4096);
++    let frozen =
++        FrozenResponsesRequest::freeze(prepared, maximum).expect("freeze actual producer result");
++    let retained = frozen.prepared_request();
++    let Some(RequestBody::EncodedJson(body)) = retained.body.as_ref() else {
++        panic!("freeze must preserve the original EncodedJson allocation");
++    };
++    assert_eq!(body.as_bytes(), bytes);
++    assert_eq!(body.as_bytes().as_ptr(), pointer);
++    let again = retained
++        .clone()
++        .into_prepared()
++        .expect("retain an already prepared body");
++    let Some(RequestBody::EncodedJson(body)) = again.body.as_ref() else {
++        panic!("preparation must not replace the retained allocation");
++    };
++    assert_eq!(body.as_bytes(), bytes);
++    assert_eq!(body.as_bytes().as_ptr(), pointer);
++}
++
++#[test]
++fn ordinary_prepare_omits_output_limits_and_preserves_complete_wire() {
++    let input = complete_request();
++    let expected = serde_json::to_value(&input).expect("ordinary request value");
++    let prepared = prepare_responses_request(&provider(), &input, &options())
++        .expect("ordinary local preparation");
++    let Some(RequestBody::EncodedJson(body)) = prepared.body.as_ref() else {
++        panic!("ordinary typed preparation is also encoded once");
++    };
++    assert_eq!(
++        serde_json::from_slice::<serde_json::Value>(body.as_bytes()).expect("ordinary JSON"),
++        expected
++    );
++}
++
++#[test]
++fn controlled_prepare_rejects_compression_without_constructing_an_encoded_request() {
++    let options = ResponsesOptions {
++        compression: Compression::Zstd,
++        ..options()
++    };
++    let error = prepare_controlled_responses_request(
++        &provider(),
++        complete_request(),
++        &options,
++        NonZeroU64::new(64).expect("positive budget"),
++    )
++    .expect_err("controlled JSON must remain uncompressed");
++    assert!(
++        matches!(error, ApiError::InvalidRequest { message } if message == "CODEX_OUTPUT_LIMIT_UNAVAILABLE")
++    );
++}
++
++#[test]
++fn controlled_prepare_rejects_a_conflicting_existing_maximum() {
++    let mut input = complete_request();
++    input.max_output_tokens = NonZeroU64::new(32);
++    input.truncation = Some(ResponsesTruncation::Disabled);
++    let error = prepare_controlled_responses_request(
++        &provider(),
++        input,
++        &options(),
++        NonZeroU64::new(64).expect("positive budget"),
++    )
++    .expect_err("a caller's existing limit must not be silently replaced");
++    assert!(
++        matches!(error, ApiError::InvalidRequest { message } if message == "CODEX_OUTPUT_LIMIT_UNAVAILABLE")
++    );
++}
+diff --git a/codex-rs/codex-api/src/endpoint/responses_websocket.rs b/codex-rs/codex-api/src/endpoint/responses_websocket.rs
+--- a/codex-rs/codex-api/src/endpoint/responses_websocket.rs
++++ b/codex-rs/codex-api/src/endpoint/responses_websocket.rs
+@@ -242,6 +242,9 @@
+         connection_reused: bool,
+         turn_state: Option<Arc<OnceLock<String>>>,
+     ) -> Result<ResponseStream, ApiError> {
++        let ResponsesWsRequest::ResponseCreate(ws_request) = &request;
++        ws_request.ensure_websocket_supported()?;
++
+         let (tx_event, rx_event) =
+             mpsc::channel::<std::result::Result<ResponseEvent, ApiError>>(1600);
+         let (tx_interrupt, rx_interrupt) = oneshot::channel();
+@@ -250,7 +253,6 @@
+         let server_reasoning_included = self.server_reasoning_included;
+         let server_model = self.server_model.clone();
+         let telemetry = self.telemetry.clone();
+-        let ResponsesWsRequest::ResponseCreate(ws_request) = &request;
+         let client_metadata = ws_request.client_metadata.as_ref();
+         let timing_log_context = ResponsesWebsocketTimingLogContext {
+             model: ws_request.model.to_string(),
+@@ -919,9 +921,16 @@
+ }
+
+ fn serialize_websocket_request(request: &ResponsesWsRequest<'_>) -> Result<String, ApiError> {
++    let ResponsesWsRequest::ResponseCreate(ws_request) = request;
++    ws_request.ensure_websocket_supported()?;
++
+     serde_json::to_string(request)
+         .map_err(|err| ApiError::Stream(format!("failed to encode websocket request: {err}")))
+ }
++
++#[cfg(test)]
++#[path = "responses_websocket_output_limits_tests.rs"]
++mod output_limits_tests;
+
+ #[cfg(test)]
+ mod tests {
+@@ -967,6 +976,8 @@
+             tool_choice: "auto".to_string(),
+             parallel_tool_calls: true,
+             reasoning: None,
++            max_output_tokens: None,
++            truncation: None,
+             store: false,
+             stream: true,
+             stream_options: None,
+diff --git a/codex-rs/codex-api/src/endpoint/responses_websocket_output_limits_tests.rs b/codex-rs/codex-api/src/endpoint/responses_websocket_output_limits_tests.rs
+new file mode 100644
+--- /dev/null
++++ b/codex-rs/codex-api/src/endpoint/responses_websocket_output_limits_tests.rs
+@@ -0,0 +1,104 @@
++use super::serialize_websocket_request;
++use crate::common::ResponseCreateWsRequest;
++use crate::common::ResponsesApiRequest;
++use crate::common::ResponsesTruncation;
++use crate::common::ResponsesWsRequest;
++use crate::error::ApiError;
++use pretty_assertions::assert_eq;
++use serde_json::json;
++use std::num::NonZeroU64;
++
++fn api_request_without_output_limits() -> ResponsesApiRequest {
++    ResponsesApiRequest {
++        model: "gpt-test".to_string(),
++        instructions: String::new(),
++        input: Vec::new(),
++        tools: None,
++        tool_choice: "auto".to_string(),
++        parallel_tool_calls: false,
++        reasoning: None,
++        max_output_tokens: None,
++        truncation: None,
++        store: false,
++        stream: true,
++        stream_options: None,
++        include: Vec::new(),
++        service_tier: None,
++        prompt_cache_key: None,
++        text: None,
++        client_metadata: None,
++        access_programs: None,
++    }
++}
++
++#[test]
++fn websocket_serializer_rejects_max_output_tokens_only() {
++    let mut api_request = api_request_without_output_limits();
++    api_request.max_output_tokens = NonZeroU64::new(64);
++    let request = ResponsesWsRequest::ResponseCreate(ResponseCreateWsRequest::from(&api_request));
++
++    let error = serialize_websocket_request(&request)
++        .expect_err("WebSocket requests with max_output_tokens must not be serialized");
++
++    assert!(matches!(
++        error,
++        ApiError::InvalidRequest { message } if message == "CODEX_OUTPUT_LIMIT_UNAVAILABLE"
++    ));
++}
++
++#[test]
++fn websocket_serializer_rejects_truncation_only() {
++    let mut api_request = api_request_without_output_limits();
++    api_request.truncation = Some(ResponsesTruncation::Disabled);
++    let request = ResponsesWsRequest::ResponseCreate(ResponseCreateWsRequest::from(&api_request));
++
++    let error = serialize_websocket_request(&request)
++        .expect_err("WebSocket requests with truncation must not be serialized");
++
++    assert!(matches!(
++        error,
++        ApiError::InvalidRequest { message } if message == "CODEX_OUTPUT_LIMIT_UNAVAILABLE"
++    ));
++}
++
++#[test]
++fn websocket_serializer_rejects_both_output_limits() {
++    let mut api_request = api_request_without_output_limits();
++    api_request.max_output_tokens = NonZeroU64::new(64);
++    api_request.truncation = Some(ResponsesTruncation::Disabled);
++    let request = ResponsesWsRequest::ResponseCreate(ResponseCreateWsRequest::from(&api_request));
++
++    let error = serialize_websocket_request(&request)
++        .expect_err("WebSocket requests with output limits must not be serialized");
++
++    assert!(matches!(
++        error,
++        ApiError::InvalidRequest { message } if message == "CODEX_OUTPUT_LIMIT_UNAVAILABLE"
++    ));
++}
++
++#[test]
++fn websocket_serializer_preserves_request_without_output_limits() {
++    let api_request = api_request_without_output_limits();
++    let request = ResponsesWsRequest::ResponseCreate(ResponseCreateWsRequest::from(&api_request));
++
++    let request_text = serialize_websocket_request(&request)
++        .expect("ordinary WebSocket requests should remain supported");
++    let wire_payload = serde_json::from_str::<serde_json::Value>(&request_text)
++        .expect("parse ordinary WebSocket request");
++
++    assert_eq!(
++        wire_payload,
++        json!({
++            "type": "response.create",
++            "model": "gpt-test",
++            "input": [],
++            "tool_choice": "auto",
++            "parallel_tool_calls": false,
++            "reasoning": null,
++            "store": false,
++            "stream": true,
++            "include": []
++        })
++    );
++}
+diff --git a/codex-rs/codex-api/src/endpoint/session.rs b/codex-rs/codex-api/src/endpoint/session.rs
+--- a/codex-rs/codex-api/src/endpoint/session.rs
++++ b/codex-rs/codex-api/src/endpoint/session.rs
+@@ -15,6 +15,25 @@
+ use serde_json::Value;
+ use std::sync::Arc;
+ use tracing::instrument;
++
++/// Construct the final encoded request locally, before any auth or transport.
++pub(crate) fn prepare_encoded_json_request<C>(
++    provider: &Provider,
++    method: Method,
++    path: &str,
++    extra_headers: HeaderMap,
++    body: Option<EncodedJsonBody>,
++    configure: C,
++) -> Result<Request, TransportError>
++where
++    C: Fn(&mut Request),
++{
++    let mut request = provider.build_request(method, path);
++    request.headers.extend(extra_headers);
++    request.body = body.map(RequestBody::EncodedJson);
++    configure(&mut request);
++    request.into_prepared().map_err(TransportError::Build)
++}
+
+ pub(crate) struct EndpointSession<T: HttpTransport> {
+     transport: T,
+@@ -113,12 +132,6 @@
+         Ok(response)
+     }
+
+-    #[instrument(
+-        name = "endpoint_session.stream_encoded_json_with",
+-        level = "info",
+-        skip_all,
+-        fields(http.method = %method, api.path = path)
+-    )]
+     pub(crate) async fn stream_encoded_json_with<C>(
+         &self,
+         method: Method,
+@@ -130,10 +143,30 @@
+     where
+         C: Fn(&mut Request),
+     {
+-        let body = body.map(RequestBody::EncodedJson);
+-        let mut request = self.make_request(&method, path, &extra_headers, body.as_ref());
+-        configure(&mut request);
+-        let request = request.into_prepared().map_err(TransportError::Build)?;
++        let request = prepare_encoded_json_request(
++            &self.provider,
++            method,
++            path,
++            extra_headers,
++            body,
++            configure,
++        )?;
++        self.stream_prepared_request(request, path).await
++    }
++
++    /// Ordinary execution keeps its existing auth and retry behavior.
++    /// Controlled owners must use their dedicated frozen transport instead.
++    #[instrument(
++        name = "endpoint_session.stream_encoded_json_with",
++        level = "info",
++        skip_all,
++        fields(http.method = %request.method, api.path = path)
++    )]
++    pub(crate) async fn stream_prepared_request(
++        &self,
++        request: Request,
++        path: &str,
++    ) -> Result<StreamResponse, ApiError> {
+         let make_request = || request.clone();
+
+         let stream = run_with_request_telemetry(
+diff --git a/codex-rs/codex-api/src/lib.rs b/codex-rs/codex-api/src/lib.rs
+--- a/codex-rs/codex-api/src/lib.rs
++++ b/codex-rs/codex-api/src/lib.rs
+@@ -43,6 +43,7 @@
+ pub use crate::common::ResponseStream;
+ pub use crate::common::ResponsesApiRequest;
+ pub use crate::common::ResponsesApiTools;
++pub use crate::common::ResponsesTruncation;
+ pub use crate::common::ResponsesWsRequest;
+ pub use crate::common::StreamOptions;
+ pub use crate::common::TextControls;
+@@ -73,6 +74,8 @@
+ pub use crate::endpoint::ResponsesWebsocketConnection;
+ pub use crate::endpoint::ResponsesWebsocketProbe;
+ pub use crate::endpoint::SearchClient;
++pub use crate::endpoint::responses::prepare_controlled_responses_request;
++pub use crate::endpoint::responses::prepare_responses_request;
+ pub use crate::endpoint::session_update_session_json;
+ pub use crate::error::ApiError;
+ pub use crate::files::HostedFileUploadContext;
+diff --git a/codex-rs/codex-api/tests/clients.rs b/codex-rs/codex-api/tests/clients.rs
+--- a/codex-rs/codex-api/tests/clients.rs
++++ b/codex-rs/codex-api/tests/clients.rs
+@@ -353,6 +353,8 @@
+         reasoning: None,
+         store: false,
+         stream: true,
++        max_output_tokens: None,
++        truncation: None,
+         stream_options: None,
+         include: Vec::new(),
+         service_tier: None,
+@@ -441,6 +443,8 @@
+         reasoning: None,
+         store: false,
+         stream: true,
++        max_output_tokens: None,
++        truncation: None,
+         stream_options: None,
+         include: Vec::new(),
+         service_tier: None,
+@@ -562,6 +566,8 @@
+         reasoning: None,
+         store: true,
+         stream: true,
++        max_output_tokens: None,
++        truncation: None,
+         stream_options: None,
+         include: Vec::new(),
+         service_tier: None,
+diff --git a/codex-rs/core/src/client.rs b/codex-rs/core/src/client.rs
+--- a/codex-rs/core/src/client.rs
++++ b/codex-rs/core/src/client.rs
+@@ -32,6 +32,10 @@
+ use std::sync::atomic::AtomicBool;
+ use std::sync::atomic::Ordering;
+
++#[path = "responses_producer.rs"]
++mod responses_producer;
++#[path = "retained_request_ffi.rs"]
++mod retained_request_ffi;
+ #[path = "client_tool_metadata.rs"]
+ mod tool_metadata;
+
+@@ -50,7 +54,6 @@
+ use codex_api::RealtimeCallClient as ApiRealtimeCallClient;
+ use codex_api::RealtimeSessionConfig as ApiRealtimeSessionConfig;
+ use codex_api::Reasoning;
+-use codex_api::ReasoningContext;
+ use codex_api::RequestTelemetry;
+ use codex_api::ReqwestTransport;
+ use codex_api::ResponseCreateWsRequest;
+@@ -62,12 +65,10 @@
+ use codex_api::ResponsesWsRequest;
+ use codex_api::SharedAuthProvider;
+ use codex_api::SseTelemetry;
+-use codex_api::StreamOptions;
+ use codex_api::TransportError;
+ use codex_api::WebsocketTelemetry;
+ use codex_api::auth_header_telemetry;
+ use codex_api::build_session_headers;
+-use codex_api::create_text_param_for_request;
+ use codex_api::response_create_client_metadata;
+ use codex_http_client::ClientRouteClass;
+ use codex_http_client::HttpClientFactory;
+@@ -81,7 +82,6 @@
+ use codex_otel::SessionTelemetry;
+ use codex_otel::WEBSOCKET_CONTINUATION_COUNT_METRIC;
+ use codex_otel::current_span_w3c_trace_context;
+-use codex_protocol::ResponseItemId;
+ use codex_protocol::auth::AuthMode;
+
+ use codex_protocol::ThreadId;
+@@ -99,9 +99,6 @@
+ use codex_protocol::protocol::W3cTraceContext;
+ use codex_rollout_trace::InferenceTraceAttempt;
+ use codex_rollout_trace::InferenceTraceContext;
+-use codex_tools::create_tools_json_for_responses_api;
+-use codex_tools::create_tools_json_for_responses_lite;
+-use codex_tools::create_tools_raw_json_for_responses_api;
+ use eventsource_stream::Event;
+ use eventsource_stream::EventStreamError;
+ use futures::StreamExt;
+@@ -119,7 +116,6 @@
+ use tracing::instrument;
+ use tracing::trace;
+ use tracing::warn;
+-use uuid::Uuid;
+
+ use crate::attestation::AttestationContext;
+ use crate::attestation::AttestationProvider;
+@@ -127,8 +123,6 @@
+ use crate::client_common::Prompt;
+ use crate::client_common::ResponseEvent;
+ use crate::client_common::ResponseStream;
+-use crate::context::BaseInstructionsFragment;
+-use crate::context::ContextualUserFragment;
+ use crate::cyber_access_program;
+ use crate::feedback_tags;
+ use crate::responses_metadata::CodexResponsesMetadata;
+@@ -348,6 +342,8 @@
+         reasoning: previous_reasoning,
+         store: previous_store,
+         stream: previous_stream,
++        max_output_tokens: previous_max_output_tokens,
++        truncation: previous_truncation,
+         stream_options: _,
+         include: previous_include,
+         service_tier: previous_service_tier,
+@@ -366,6 +362,8 @@
+         reasoning: current_reasoning,
+         store: current_store,
+         stream: current_stream,
++        max_output_tokens: current_max_output_tokens,
++        truncation: current_truncation,
+         stream_options: _,
+         include: current_include,
+         service_tier: current_service_tier,
+@@ -383,6 +381,8 @@
+         && previous_reasoning == current_reasoning
+         && previous_store == current_store
+         && previous_stream == current_stream
++        && previous_max_output_tokens == current_max_output_tokens
++        && previous_truncation == current_truncation
+         // Stream options control delivery for this response, not the context
+         // referenced by `previous_response_id`.
+         && previous_include == current_include
+@@ -860,27 +860,6 @@
+         request_telemetry
+     }
+
+-    fn build_reasoning(
+-        &self,
+-        model_info: &ModelInfo,
+-        effort: Option<ReasoningEffortConfig>,
+-        summary: ReasoningSummaryConfig,
+-    ) -> Reasoning {
+-        Reasoning {
+-            effort: effort
+-                .or_else(|| model_info.default_reasoning_level.clone())
+-                .map(|effort| model_info.resolve_reasoning_effort(effort)),
+-            summary: (model_info.supports_reasoning_summary_parameter
+-                && summary != ReasoningSummaryConfig::None)
+-                .then_some(summary),
+-            // When Responses Lite is disabled, omit context so Responses uses the default,
+-            // which is currently `current_turn`.
+-            context: model_info
+-                .use_responses_lite
+-                .then_some(ReasoningContext::AllTurns),
+-        }
+-    }
+-
+     #[allow(clippy::too_many_arguments)]
+     pub(crate) fn build_responses_request(
+         &self,
+@@ -892,130 +871,39 @@
+         responses_metadata: &CodexResponsesMetadata,
+         include_internal: bool,
+     ) -> Result<ResponsesApiRequest> {
+-        let mut input = prompt.get_formatted_input_for_request(model_info);
+-        if !self.reasoning_effort_override_enabled(model_info) {
+-            // Unsupported models and disabled overrides must also accept saved history.
+-            // Filter only the request copy; persisted history remains unchanged.
+-            input.retain(|item| !matches!(item, ResponseItem::ConfigurationUpdate { .. }));
+-        }
+-        let is_openai = self.state.provider.info().is_openai();
+-        let (instructions, tools) = if model_info.use_responses_lite {
+-            // These prompt-only items are rebuilt on every request. Hash their visible payloads
+-            // within the thread so retries and resumed sessions preserve their identity.
+-            let prefix_namespace = Uuid::new_v5(
+-                &Uuid::NAMESPACE_OID,
+-                self.state.thread_id.to_string().as_bytes(),
++        let policy = responses_producer::ResolvedBodyPolicy {
++            thread_id: self.state.thread_id,
++            is_openai: self.state.provider.info().is_openai(),
++            is_bedrock: self.state.provider.info().is_amazon_bedrock(),
++            namespace_tools: self.state.provider.capabilities().namespace_tools,
++            reasoning_effort_override_enabled: self.reasoning_effort_override_enabled(model_info),
++            concurrent_reasoning_summaries_enabled: self
++                .state
++                .concurrent_reasoning_summaries_enabled,
++            model_verbosity: self.state.model_verbosity,
++            prompt_cache_key: self.prompt_cache_key(responses_metadata),
++        };
++        let built = responses_producer::build_responses_request_from_resolved(
++            prompt,
++            model_info,
++            effort,
++            summary,
++            service_tier,
++            responses_metadata,
++            include_internal,
++            &policy,
++        )?;
++        if built.ignored_verbosity {
++            warn!(
++                "model_verbosity is set but ignored as the model does not support verbosity: {}",
++                model_info.slug
+             );
+-            let tools = if self.state.provider.capabilities().namespace_tools {
+-                create_tools_json_for_responses_lite(&prompt.tools)?
+-            } else {
+-                create_tools_json_for_responses_api(&prompt.tools)?
+-            };
+-            let mut prefix = vec![ResponseItem::AdditionalTools {
+-                id: Some(ResponseItemId::with_suffix(
+-                    "at",
+-                    Uuid::new_v5(&prefix_namespace, &serde_json::to_vec(&tools)?),
+-                )),
+-                role: "developer".to_string(),
+-                tools,
+-            }];
+-            if !prompt.base_instructions.text.is_empty() {
+-                let mut instructions = ContextualUserFragment::into(BaseInstructionsFragment(
+-                    prompt.base_instructions.text.clone(),
+-                ));
+-                instructions.set_id(Some(ResponseItemId::with_suffix(
+-                    "msg",
+-                    Uuid::new_v5(&prefix_namespace, prompt.base_instructions.text.as_bytes()),
+-                )));
+-                prefix.push(instructions);
+-            }
+-            input.splice(0..0, prefix);
+-            (String::new(), None)
+-        } else {
+-            (
+-                prompt.base_instructions.text.clone(),
+-                Some(create_tools_raw_json_for_responses_api(&prompt.tools)?.into()),
+-            )
+-        };
+-        if !is_openai {
+-            for item in &mut input {
+-                item.clear_internal_chat_message_metadata_passthrough();
+-                if let ResponseItem::FunctionCall {
+-                    encrypted_function_args,
+-                    ..
+-                } = item
+-                {
+-                    *encrypted_function_args = None;
+-                }
+-            }
+-        }
+-        let reasoning = self.build_reasoning(model_info, effort, summary);
+-        let stream_options = (self.state.concurrent_reasoning_summaries_enabled
+-            && is_openai
+-            && reasoning.summary.is_some())
+-        .then_some(StreamOptions {
+-            reasoning_summary_delivery: codex_api::ReasoningSummaryDelivery::SequentialCutoff,
+-        });
+-        let include = vec!["reasoning.encrypted_content".to_string()];
+-        let verbosity = if model_info.support_verbosity {
+-            self.state.model_verbosity.or(model_info.default_verbosity)
+-        } else {
+-            if self.state.model_verbosity.is_some() {
+-                warn!(
+-                    "model_verbosity is set but ignored as the model does not support verbosity: {}",
+-                    model_info.slug
+-                );
+-            }
+-            None
+-        };
+-        let text = create_text_param_for_request(
+-            verbosity,
+-            &prompt.output_schema,
+-            prompt.output_schema_strict,
+-        );
+-        let prompt_cache_key = Some(self.prompt_cache_key(responses_metadata));
+-        let service_tier = if self.state.provider.info().is_amazon_bedrock() {
+-            // Bedrock only supports the implicit default tier, including with custom catalogs.
+-            None
+-        } else {
+-            model_info.service_tier_for_request(service_tier)
+-        };
+-        if !include_internal {
+-            for item in &mut input {
+-                item.clear_tool_result_metadata();
+-            }
+-        }
+-        let client_metadata = responses_metadata.client_metadata(include_internal);
+-        let request = ResponsesApiRequest {
+-            model: model_info.slug.clone(),
+-            instructions,
+-            input,
+-            tools,
+-            tool_choice: "auto".to_string(),
+-            parallel_tool_calls: prompt.parallel_tool_calls && !model_info.use_responses_lite,
+-            reasoning: Some(reasoning),
+-            store: false,
+-            stream: true,
+-            stream_options,
+-            include,
+-            service_tier,
+-            prompt_cache_key,
+-            text,
+-            client_metadata: Some(client_metadata),
+-            access_programs: None,
+-        };
+-        Ok(request)
++        }
++        Ok(built.request)
+     }
+
+     fn prepare_response_items_for_request(&self, input: &mut [ResponseItem]) {
+-        for item in input {
+-            if item.id().is_some_and(|id| !id.is_prefixed()) {
+-                item.set_id(/*new_id*/ None);
+-            }
+-            if !self.state.content_item_kinds_enabled {
+-                item.clear_content_item_kinds();
+-            }
+-        }
++        responses_producer::prepare_response_items(input, self.state.content_item_kinds_enabled);
+     }
+
+     /// Returns whether the Responses-over-WebSocket transport is active for this session.
+@@ -1129,30 +1017,21 @@
+         auth: Option<&CodexAuth>,
+         responses_headers: &ApiHeaderMap,
+     ) {
+-        if let Some(metadata) = metadata.as_mut() {
+-            metadata.remove("guardian_credits_requested");
+-            metadata.remove("parent_response_id");
+-        }
+-        let guardian_reviewer = is_guardian_reviewer(responses_headers);
+-        if guardian_reviewer && let Some(parent_response_id) = parent_response_id {
+-            metadata.get_or_insert_with(HashMap::new).insert(
+-                "parent_response_id".to_owned(),
+-                parent_response_id.to_owned(),
+-            );
+-        }
+-        if !guardian_reviewer
++        let reviewer = is_guardian_reviewer(responses_headers);
++        let credits = !reviewer
+             && !crate::guardian::is_basic_session_source(&self.state.session_source)
+             && matches!(
+                 auth,
+                 Some(CodexAuth::Chatgpt(_) | CodexAuth::ChatgptAuthTokens(_))
+             )
+             && self.uses_codex_backend(auth)
+-            && self.state.provider.info().supports_codex_backend_routes()
+-        {
+-            metadata
+-                .get_or_insert_with(HashMap::new)
+-                .insert("guardian_credits_requested".to_owned(), "true".to_owned());
+-        }
++            && self.state.provider.info().supports_codex_backend_routes();
++        responses_producer::apply_guardian_metadata(
++            metadata,
++            parent_response_id,
++            reviewer,
++            credits,
++        );
+     }
+
+     fn build_routing_hint_header(
+@@ -1362,14 +1241,17 @@
+                     Some(&self.turn_state),
+                 );
+                 add_originator_header(&mut headers, self.client.state.originator.as_str());
+-                headers.extend(
++                responses_producer::extend_headers(
++                    &mut headers,
+                     self.client
+                         .build_responses_compatibility_headers(responses_metadata),
+                 );
+-                if let Some(header_value) = self.client.generate_attestation_header_for().await {
+-                    headers.insert(X_OAI_ATTESTATION_HEADER, header_value);
+-                }
+-                add_responses_lite_header(&mut headers, use_responses_lite);
++                let attestation = self.client.generate_attestation_header_for().await;
++                responses_producer::finish_options_headers(
++                    &mut headers,
++                    attestation,
++                    use_responses_lite,
++                );
+                 headers
+             },
+             compression,
+@@ -1714,18 +1596,20 @@
+                 client_setup.auth.as_ref(),
+                 &responses_headers,
+             );
+-            if is_guardian_reviewer(&responses_headers) {
+-                request.service_tier = None;
+-            }
++            responses_producer::apply_guardian_tier(
++                &mut request,
++                is_guardian_reviewer(&responses_headers),
++            );
+             if let Some(header_value) = self.client.build_routing_hint_header(
+                 client_setup.auth.as_ref(),
+                 &responses_headers,
+                 &request.model,
+                 request.service_tier.as_deref(),
+             ) {
+-                options
+-                    .extra_headers
+-                    .insert(X_CODEX_ROUTING_HINT_HEADER, header_value);
++                responses_producer::apply_routing_header(
++                    &mut options.extra_headers,
++                    Some(header_value),
++                );
+             }
+             request.access_programs = cyber_access_program::for_auth(
+                 client_setup.auth.as_ref(),
+@@ -1738,7 +1622,7 @@
+             }
+             let request_session_telemetry =
+                 session_telemetry_for_request(session_telemetry, &request);
+-            options.extra_headers.extend(responses_headers);
++            responses_producer::extend_headers(&mut options.extra_headers, responses_headers);
+             let interceptors = crate::model_request::prepare(
+                 &self.client.request_contributors,
+                 &self.client.state.thread_id.to_string(),
+@@ -1747,7 +1631,9 @@
+                 &mut request.client_metadata,
+             );
+             let inference_trace_attempt = inference_trace.start_attempt();
+-            inference_trace_attempt.add_request_headers(&mut options.extra_headers);
++            let mut trace_headers = ApiHeaderMap::new();
++            inference_trace_attempt.add_request_headers(&mut trace_headers);
++            responses_producer::extend_headers(&mut options.extra_headers, trace_headers);
+             if let Some(input) = tool_metadata::bounded_input(&request, &request.input) {
+                 if let Some(recorder) = &self.client.executed_tool_calls {
+                     recorder.invalidate_wire_inventory_loss(&request.input, &input);
+@@ -1883,13 +1769,17 @@
+                 responses_metadata,
+                 include_internal,
+             )?;
+-            if is_guardian_reviewer(&responses_headers) {
+-                request.service_tier = None;
+-            }
++            responses_producer::apply_guardian_tier(
++                &mut request,
++                is_guardian_reviewer(&responses_headers),
++            );
+             request.access_programs = cyber_access_program::for_auth(
+                 client_setup.auth.as_ref(),
+                 prompt.cyber_access_program,
+             );
++            request
++                .ensure_websocket_supported()
++                .map_err(|error| self.client.state.provider.map_api_error(error))?;
+             let mut websocket_metadata = responses_metadata.clone();
+             websocket_metadata.routing_hint = self.client.build_routing_hint_header(
+                 client_setup.auth.as_ref(),
+@@ -2318,29 +2208,10 @@
+     beta_features_header: Option<&str>,
+     turn_state: Option<&Arc<OnceLock<String>>>,
+ ) -> ApiHeaderMap {
+-    let mut headers = ApiHeaderMap::new();
+-    if let Some(value) = beta_features_header
+-        && !value.is_empty()
+-        && let Ok(header_value) = HeaderValue::from_str(value)
+-    {
+-        headers.insert("x-codex-beta-features", header_value);
+-    }
+-    if let Some(turn_state) = turn_state
+-        && let Some(state) = turn_state.get()
+-        && let Ok(header_value) = HeaderValue::from_str(state)
+-    {
+-        headers.insert(X_CODEX_TURN_STATE_HEADER, header_value);
+-    }
+-    headers
+-}
+-
+-fn add_responses_lite_header(headers: &mut ApiHeaderMap, use_responses_lite: bool) {
+-    if use_responses_lite {
+-        headers.insert(
+-            X_OPENAI_INTERNAL_CODEX_RESPONSES_LITE_HEADER,
+-            HeaderValue::from_static("true"),
+-        );
+-    }
++    responses_producer::initial_headers(
++        beta_features_header,
++        turn_state.and_then(|state| state.get()).map(String::as_str),
++    )
+ }
+
+ const RESPONSE_STREAM_CHANNEL_CAPACITY: usize = 1600;
+diff --git a/codex-rs/core/src/client_common_tests.rs b/codex-rs/core/src/client_common_tests.rs
+--- a/codex-rs/core/src/client_common_tests.rs
++++ b/codex-rs/core/src/client_common_tests.rs
+@@ -120,6 +120,8 @@
+         reasoning: None,
+         store: false,
+         stream: true,
++        max_output_tokens: None,
++        truncation: None,
+         stream_options: None,
+         include: vec![],
+         prompt_cache_key: None,
+@@ -168,6 +170,8 @@
+         reasoning: None,
+         store: false,
+         stream: true,
++        max_output_tokens: None,
++        truncation: None,
+         stream_options: None,
+         include: vec![],
+         prompt_cache_key: None,
+@@ -230,6 +234,8 @@
+         reasoning: None,
+         store: false,
+         stream: true,
++        max_output_tokens: None,
++        truncation: None,
+         stream_options: None,
+         include: vec![],
+         prompt_cache_key: None,
+@@ -255,6 +261,8 @@
+         reasoning: None,
+         store: false,
+         stream: true,
++        max_output_tokens: None,
++        truncation: None,
+         stream_options: None,
+         include: vec![],
+         prompt_cache_key: None,
+diff --git a/codex-rs/core/src/client_tool_metadata.rs b/codex-rs/core/src/client_tool_metadata.rs
+--- a/codex-rs/core/src/client_tool_metadata.rs
++++ b/codex-rs/core/src/client_tool_metadata.rs
+@@ -9,10 +9,17 @@
+
+ const MAX_RESPONSE_MESSAGE_BYTES: usize = 15 * 1024 * 1024;
+
+-pub(super) fn bounded_input<T: Serialize>(
++pub(super) struct BoundedInput {
++    pub input: Vec<ResponseItem>,
++    pub before_metadata_bytes: usize,
++    pub after_metadata_bytes: usize,
++}
++
++/// Pure calculation; no global telemetry, recorder or writer is accessed.
++pub(super) fn calculate_bounded_input<T: Serialize>(
+     message: &T,
+     input: &[ResponseItem],
+-) -> Option<Vec<ResponseItem>> {
++) -> Option<BoundedInput> {
+     if !input.iter().any(|item| {
+         item.executed_tool_call_metadata().is_some_and(|metadata| {
+             metadata.executed_tool_calls.is_some()
+@@ -35,9 +42,27 @@
+     if before == after {
+         return None;
+     }
+-    metadata_metrics::record_shedding("message", before, after, codex_otel::global().as_ref());
+     // Ordinary content alone can exceed the soft limit. Preserve it and existing error handling.
+-    Some(bounded)
++    Some(BoundedInput {
++        input: bounded,
++        before_metadata_bytes: before,
++        after_metadata_bytes: after,
++    })
++}
++
++/// Ordinary execution preserves its original metric effect outside calculation.
++pub(super) fn bounded_input<T: Serialize>(
++    message: &T,
++    input: &[ResponseItem],
++) -> Option<Vec<ResponseItem>> {
++    let bound = calculate_bounded_input(message, input)?;
++    metadata_metrics::record_shedding(
++        "message",
++        bound.before_metadata_bytes,
++        bound.after_metadata_bytes,
++        codex_otel::global().as_ref(),
++    );
++    Some(bound.input)
+ }
+
+ #[cfg(test)]
+diff --git a/codex-rs/core/src/client_tool_metadata_tests.rs b/codex-rs/core/src/client_tool_metadata_tests.rs
+--- a/codex-rs/core/src/client_tool_metadata_tests.rs
++++ b/codex-rs/core/src/client_tool_metadata_tests.rs
+@@ -51,6 +51,8 @@
+         reasoning: None,
+         store: false,
+         stream: true,
++        max_output_tokens: None,
++        truncation: None,
+         stream_options: None,
+         include: Vec::new(),
+         service_tier: None,
+diff --git a/codex-rs/core/src/model_request.rs b/codex-rs/core/src/model_request.rs
+--- a/codex-rs/core/src/model_request.rs
++++ b/codex-rs/core/src/model_request.rs
+@@ -25,15 +25,23 @@
+                 model,
+             });
+             if let Some(additions) = additions {
+-                for (key, value) in crate::responses_metadata::filter_extra_metadata(additions) {
+-                    if key != "parent_response_id" {
+-                        metadata.get_or_insert_default().entry(key).or_insert(value);
+-                    }
+-                }
++                merge_resolved_metadata(metadata, additions);
+             }
+             interceptor
+         })
+         .collect()
++}
++
++/// Merge already resolved additions without invoking a contributor callback.
++pub(crate) fn merge_resolved_metadata(
++    metadata: &mut Option<HashMap<String, String>>,
++    additions: impl IntoIterator<Item = (String, String)>,
++) {
++    for (key, value) in crate::responses_metadata::filter_extra_metadata(additions) {
++        if key != "parent_response_id" {
++            metadata.get_or_insert_default().entry(key).or_insert(value);
++        }
++    }
+ }
+
+ pub(crate) fn intercept_stream(
+diff --git a/codex-rs/core/src/responses_producer.rs b/codex-rs/core/src/responses_producer.rs
+new file mode 100644
+--- /dev/null
++++ b/codex-rs/core/src/responses_producer.rs
+@@ -0,0 +1,559 @@
++//! Pure construction from already resolved owner material. No authority/proof is created here.
++//! No ModelClient, auth object, callback, telemetry, writer, live OnceLock or transport is accepted.
++//! This private B staging interface is not connected to a platform bridge or production registry.
++
++use super::tool_metadata;
++use crate::client_common::Prompt;
++use crate::context::BaseInstructionsFragment;
++use crate::context::ContextualUserFragment;
++use crate::responses_metadata::CodexResponsesMetadata;
++use codex_api::AccessPrograms;
++use codex_api::ApiError;
++use codex_api::Provider;
++use codex_api::Reasoning;
++use codex_api::ReasoningContext;
++use codex_api::ResponsesApiRequest;
++use codex_api::ResponsesOptions;
++use codex_api::ResponsesTruncation;
++use codex_api::StreamOptions;
++use codex_api::create_text_param_for_request;
++use codex_client::Request;
++use codex_protocol::ResponseItemId;
++use codex_protocol::ThreadId;
++use codex_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
++use codex_protocol::config_types::Verbosity as VerbosityConfig;
++use codex_protocol::error::Result;
++use codex_protocol::models::ResponseItem;
++use codex_protocol::openai_models::ModelInfo;
++use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
++use codex_protocol::protocol::SessionSource;
++use codex_tools::create_tools_json_for_responses_api;
++use codex_tools::create_tools_json_for_responses_lite;
++use codex_tools::create_tools_raw_json_for_responses_api;
++use http::HeaderMap;
++use http::HeaderValue;
++use std::collections::BTreeMap;
++use std::collections::HashMap;
++use std::num::NonZeroU64;
++use uuid::Uuid;
++
++pub(super) struct ResolvedBodyPolicy {
++    pub thread_id: ThreadId,
++    pub is_openai: bool,
++    pub is_bedrock: bool,
++    pub namespace_tools: bool,
++    pub reasoning_effort_override_enabled: bool,
++    pub concurrent_reasoning_summaries_enabled: bool,
++    pub model_verbosity: Option<VerbosityConfig>,
++    pub prompt_cache_key: String,
++}
++
++pub(super) struct BuiltResponsesRequest {
++    pub request: ResponsesApiRequest,
++    pub ignored_verbosity: bool,
++}
++
++fn build_reasoning(
++    model_info: &ModelInfo,
++    effort: Option<ReasoningEffortConfig>,
++    summary: ReasoningSummaryConfig,
++) -> Reasoning {
++    Reasoning {
++        effort: effort
++            .or_else(|| model_info.default_reasoning_level.clone())
++            .map(|effort| model_info.resolve_reasoning_effort(effort)),
++        summary: (model_info.supports_reasoning_summary_parameter
++            && summary != ReasoningSummaryConfig::None)
++            .then_some(summary),
++        context: model_info
++            .use_responses_lite
++            .then_some(ReasoningContext::AllTurns),
++    }
++}
++
++#[allow(clippy::too_many_arguments)]
++pub(super) fn build_responses_request_from_resolved(
++    prompt: &Prompt,
++    model_info: &ModelInfo,
++    effort: Option<ReasoningEffortConfig>,
++    summary: ReasoningSummaryConfig,
++    service_tier: Option<String>,
++    responses_metadata: &CodexResponsesMetadata,
++    include_internal: bool,
++    policy: &ResolvedBodyPolicy,
++) -> Result<BuiltResponsesRequest> {
++    let mut input = prompt.get_formatted_input_for_request(model_info);
++    if !policy.reasoning_effort_override_enabled {
++        // Unsupported models and disabled overrides must also accept saved history.
++        // Filter only the request copy; persisted history remains unchanged.
++        input.retain(|item| !matches!(item, ResponseItem::ConfigurationUpdate { .. }));
++    }
++    let is_openai = policy.is_openai;
++    let (instructions, tools) = if model_info.use_responses_lite {
++        // These prompt-only items are rebuilt on every request. Hash their visible payloads
++        // within the thread so retries and resumed sessions preserve their identity.
++        let prefix_namespace = Uuid::new_v5(
++            &Uuid::NAMESPACE_OID,
++            policy.thread_id.to_string().as_bytes(),
++        );
++        let tools = if policy.namespace_tools {
++            create_tools_json_for_responses_lite(&prompt.tools)?
++        } else {
++            create_tools_json_for_responses_api(&prompt.tools)?
++        };
++        let mut prefix = vec![ResponseItem::AdditionalTools {
++            id: Some(ResponseItemId::with_suffix(
++                "at",
++                Uuid::new_v5(&prefix_namespace, &serde_json::to_vec(&tools)?),
++            )),
++            role: "developer".to_string(),
++            tools,
++        }];
++        if !prompt.base_instructions.text.is_empty() {
++            let mut instructions = ContextualUserFragment::into(BaseInstructionsFragment(
++                prompt.base_instructions.text.clone(),
++            ));
++            instructions.set_id(Some(ResponseItemId::with_suffix(
++                "msg",
++                Uuid::new_v5(&prefix_namespace, prompt.base_instructions.text.as_bytes()),
++            )));
++            prefix.push(instructions);
++        }
++        input.splice(0..0, prefix);
++        (String::new(), None)
++    } else {
++        (
++            prompt.base_instructions.text.clone(),
++            Some(create_tools_raw_json_for_responses_api(&prompt.tools)?.into()),
++        )
++    };
++    if !is_openai {
++        for item in &mut input {
++            item.clear_internal_chat_message_metadata_passthrough();
++            if let ResponseItem::FunctionCall {
++                encrypted_function_args,
++                ..
++            } = item
++            {
++                *encrypted_function_args = None;
++            }
++        }
++    }
++    let reasoning = build_reasoning(model_info, effort, summary);
++    let stream_options =
++        (policy.concurrent_reasoning_summaries_enabled && is_openai && reasoning.summary.is_some())
++            .then_some(StreamOptions {
++                reasoning_summary_delivery: codex_api::ReasoningSummaryDelivery::SequentialCutoff,
++            });
++    let include = vec!["reasoning.encrypted_content".to_string()];
++    let ignored_verbosity = !model_info.support_verbosity && policy.model_verbosity.is_some();
++    let verbosity = if model_info.support_verbosity {
++        policy.model_verbosity.or(model_info.default_verbosity)
++    } else {
++        None
++    };
++    let text = create_text_param_for_request(
++        verbosity,
++        &prompt.output_schema,
++        prompt.output_schema_strict,
++    );
++    let prompt_cache_key = Some(policy.prompt_cache_key.clone());
++    let service_tier = if policy.is_bedrock {
++        // Bedrock only supports the implicit default tier, including with custom catalogs.
++        None
++    } else {
++        model_info.service_tier_for_request(service_tier)
++    };
++    if !include_internal {
++        for item in &mut input {
++            item.clear_tool_result_metadata();
++        }
++    }
++    let client_metadata = responses_metadata.client_metadata(include_internal);
++    let request = ResponsesApiRequest {
++        model: model_info.slug.clone(),
++        instructions,
++        input,
++        tools,
++        tool_choice: "auto".to_string(),
++        parallel_tool_calls: prompt.parallel_tool_calls && !model_info.use_responses_lite,
++        reasoning: Some(reasoning),
++        store: false,
++        stream: true,
++        max_output_tokens: None,
++        truncation: None,
++        stream_options,
++        include,
++        service_tier,
++        prompt_cache_key,
++        text,
++        client_metadata: Some(client_metadata),
++        access_programs: None,
++    };
++    Ok(BuiltResponsesRequest {
++        request,
++        ignored_verbosity,
++    })
++}
++
++pub(super) fn prepare_response_items(input: &mut [ResponseItem], content_item_kinds_enabled: bool) {
++    for item in input {
++        if item.id().is_some_and(|id| !id.is_prefixed()) {
++            item.set_id(None);
++        }
++        if !content_item_kinds_enabled {
++            item.clear_content_item_kinds();
++        }
++    }
++}
++
++pub(super) fn apply_guardian_metadata(
++    metadata: &mut Option<HashMap<String, String>>,
++    parent: Option<&str>,
++    reviewer: bool,
++    credits_requested: bool,
++) {
++    if let Some(metadata) = metadata.as_mut() {
++        metadata.remove("guardian_credits_requested");
++        metadata.remove("parent_response_id");
++    }
++    if reviewer {
++        if let Some(parent) = parent {
++            metadata
++                .get_or_insert_with(HashMap::new)
++                .insert("parent_response_id".to_string(), parent.to_string());
++        }
++    } else if credits_requested {
++        metadata
++            .get_or_insert_with(HashMap::new)
++            .insert("guardian_credits_requested".to_string(), "true".to_string());
++    }
++}
++
++pub(super) fn apply_guardian_tier(request: &mut ResponsesApiRequest, reviewer: bool) {
++    if reviewer {
++        request.service_tier = None;
++    }
++}
++
++pub(super) fn initial_headers(beta: Option<&str>, sticky_turn_state: Option<&str>) -> HeaderMap {
++    let mut headers = HeaderMap::new();
++    if let Some(value) = beta
++        .filter(|value| !value.is_empty())
++        .and_then(|value| HeaderValue::from_str(value).ok())
++    {
++        headers.insert("x-codex-beta-features", value);
++    }
++    if let Some(value) = sticky_turn_state.and_then(|value| HeaderValue::from_str(value).ok()) {
++        headers.insert(super::X_CODEX_TURN_STATE_HEADER, value);
++    }
++    headers
++}
++
++pub(super) fn extend_headers(target: &mut HeaderMap, additions: HeaderMap) {
++    target.extend(additions);
++}
++
++pub(super) fn finish_options_headers(
++    headers: &mut HeaderMap,
++    attestation: Option<HeaderValue>,
++    use_lite: bool,
++) {
++    if let Some(value) = attestation {
++        headers.insert(super::X_OAI_ATTESTATION_HEADER, value);
++    }
++    if use_lite {
++        headers.insert(
++            super::X_OPENAI_INTERNAL_CODEX_RESPONSES_LITE_HEADER,
++            HeaderValue::from_static("true"),
++        );
++    }
++}
++
++pub(super) fn apply_routing_header(headers: &mut HeaderMap, routing: Option<HeaderValue>) {
++    if let Some(value) = routing {
++        headers.insert(super::X_CODEX_ROUTING_HINT_HEADER, value);
++    }
++}
++
++// These are completeness/shape facts supplied by an internal owner, not proof authority.
++// Unknown and known absence differ. Required values cannot be omitted by this helper.
++#[allow(
++    dead_code,
++    reason = "Private B staging interface; no platform bridge is registered"
++)]
++pub(super) enum Resolved<T> {
++    Unresolved,
++    Value(T),
++}
++impl<T> Resolved<T> {
++    fn take(self) -> std::result::Result<T, ApiError> {
++        match self {
++            Self::Value(value) => Ok(value),
++            Self::Unresolved => Err(unavailable()),
++        }
++    }
++}
++
++#[allow(
++    dead_code,
++    reason = "Private B staging interface; no platform bridge is registered"
++)]
++pub(super) enum Requirement {
++    Required,
++    NotRequired,
++}
++#[allow(
++    dead_code,
++    reason = "Private B staging interface; no platform bridge is registered"
++)]
++pub(super) enum GuardianCredits {
++    Requested,
++    NotRequested,
++}
++
++#[allow(
++    dead_code,
++    reason = "Private B staging interface; no platform bridge is registered"
++)]
++pub(super) struct ControlledHttpFacts {
++    // Actual Responses cache-affinity header; logical identity remains in metadata.
++    pub responses_session_id: String,
++    pub thread_id: String,
++    pub session_source: SessionSource,
++    pub beta: Resolved<Option<String>>,
++    pub sticky_turn_state: Resolved<Option<String>>,
++    // Stock add_originator_header reads a process-global default. The controlled
++    // path needs its actual resolved explicit HeaderValue, even for that default.
++    pub originator: Resolved<HeaderValue>,
++    pub compatibility_headers: Resolved<HeaderMap>,
++    pub attestation_requirement: Requirement,
++    pub attestation: Resolved<Option<HeaderValue>>,
++    pub guardian_credits: Resolved<GuardianCredits>,
++    pub access_programs: Resolved<Option<AccessPrograms>>,
++    pub routing_hint: Resolved<Option<HeaderValue>>,
++    pub responses_headers: Resolved<HeaderMap>,
++    pub content_item_kinds_enabled: bool,
++    pub expected_contributors: usize,
++    pub contributions: Resolved<Vec<BTreeMap<String, String>>>,
++    pub trace_requirement: Requirement,
++    pub trace_header: Resolved<Option<HeaderValue>>,
++}
++
++fn unavailable() -> ApiError {
++    ApiError::InvalidRequest {
++        message: "CODEX_FROZEN_REQUEST_UNSUPPORTED".to_string(),
++    }
++}
++
++fn matches_header(headers: &HeaderMap, name: &str, expected: Option<&HeaderValue>) -> bool {
++    let mut actual = headers.get_all(name).iter();
++    actual.next() == expected && actual.next().is_none()
++}
++
++/// Local-only composition of real core construction and AC01's one-time encoding.
++/// The owner must supply genuine frozen selection/config/header/contribution facts.
++/// Mechanical validation below does not authenticate them or produce InputProof.
++/// FinalAuth, durable ledger, profile/resource/DNS qualification and bridge are absent.
++#[allow(
++    dead_code,
++    clippy::too_many_arguments,
++    reason = "Private B staging interface; no platform bridge is registered"
++)]
++pub(super) fn prepare_controlled_core_request(
++    prompt: &Prompt,
++    model_info: &ModelInfo,
++    effort: Option<ReasoningEffortConfig>,
++    summary: ReasoningSummaryConfig,
++    service_tier: Option<String>,
++    metadata: &CodexResponsesMetadata,
++    include_internal: bool,
++    policy: &ResolvedBodyPolicy,
++    provider: &Provider,
++    facts: ControlledHttpFacts,
++    maximum: NonZeroU64,
++) -> std::result::Result<Request, ApiError> {
++    let beta = facts.beta.take()?;
++    let sticky = facts.sticky_turn_state.take()?;
++    let originator = facts.originator.take()?;
++    let compatibility = facts.compatibility_headers.take()?;
++    let attestation = facts.attestation.take()?;
++    let credits = facts.guardian_credits.take()?;
++    let access = facts.access_programs.take()?;
++    let routing = facts.routing_hint.take()?;
++    let response_headers = facts.responses_headers.take()?;
++    let contributions = facts.contributions.take()?;
++    let trace = facts.trace_header.take()?;
++    // Match the existing ModelClient::responses_session_id rule using only
++    // immutable resolved values, without reading the live client or its globals.
++    let expected_responses_session_id = if facts.session_source.is_non_root_agent() {
++        metadata.session_id.as_str()
++    } else {
++        policy.prompt_cache_key.as_str()
++    };
++    if (matches!(facts.attestation_requirement, Requirement::Required) && attestation.is_none())
++        || (matches!(facts.trace_requirement, Requirement::Required) && trace.is_none())
++        || contributions.len() != facts.expected_contributors
++        || facts.thread_id != metadata.thread_id
++        || facts.thread_id != policy.thread_id.to_string()
++        || facts.responses_session_id != expected_responses_session_id
++    {
++        return Err(unavailable());
++    }
++    if facts.responses_session_id.is_empty()
++        || facts.thread_id.is_empty()
++        || HeaderValue::from_str(&facts.responses_session_id).is_err()
++        || HeaderValue::from_str(&facts.thread_id).is_err()
++        || beta
++            .as_ref()
++            .is_some_and(|value| value.is_empty() || HeaderValue::from_str(value).is_err())
++        || sticky
++            .as_ref()
++            .is_some_and(|value| HeaderValue::from_str(value).is_err())
++    {
++        return Err(unavailable());
++    }
++    let reviewer = super::is_guardian_reviewer(&response_headers);
++    if reviewer && matches!(credits, GuardianCredits::Requested) {
++        return Err(unavailable());
++    }
++    let BuiltResponsesRequest { mut request, .. } = build_responses_request_from_resolved(
++        prompt,
++        model_info,
++        effort,
++        summary,
++        service_tier,
++        metadata,
++        include_internal,
++        policy,
++    )
++    .map_err(|_| unavailable())?;
++    // Limits must precede the final actual-envelope optional-metadata calculation.
++    request.max_output_tokens = Some(maximum);
++    request.truncation = Some(ResponsesTruncation::Disabled);
++    let mut headers = initial_headers(beta.as_deref(), sticky.as_deref());
++    headers.insert("originator", originator.clone());
++    extend_headers(&mut headers, compatibility);
++    finish_options_headers(
++        &mut headers,
++        attestation.clone(),
++        model_info.use_responses_lite,
++    );
++    apply_guardian_metadata(
++        &mut request.client_metadata,
++        metadata.parent_response_id.as_deref(),
++        reviewer,
++        matches!(credits, GuardianCredits::Requested),
++    );
++    apply_guardian_tier(&mut request, reviewer);
++    apply_routing_header(&mut headers, routing);
++    request.access_programs = access;
++    prepare_response_items(&mut request.input, facts.content_item_kinds_enabled);
++    extend_headers(&mut headers, response_headers);
++    for additions in contributions {
++        crate::model_request::merge_resolved_metadata(&mut request.client_metadata, additions);
++    }
++    if let Some(trace) = trace.as_ref() {
++        headers.insert("x-codex-inference-call-id", trace.clone());
++    }
++    // Check the exact local header merge before the only API payload encoding.
++    // Known absence is not interchangeable with an unexamined provider default.
++    let mut final_headers = provider.headers.clone();
++    extend_headers(&mut final_headers, headers.clone());
++    if !matches_header(&final_headers, "originator", Some(&originator))
++        || !matches_header(
++            &final_headers,
++            super::X_OAI_ATTESTATION_HEADER,
++            attestation.as_ref(),
++        )
++        || !matches_header(&final_headers, "x-codex-inference-call-id", trace.as_ref())
++    {
++        return Err(unavailable());
++    }
++    if let Some(bound) = tool_metadata::calculate_bounded_input(&request, &request.input) {
++        request.input = bound.input;
++    }
++    let options = ResponsesOptions {
++        session_id: Some(facts.responses_session_id),
++        thread_id: Some(facts.thread_id),
++        session_source: Some(facts.session_source),
++        extra_headers: headers,
++        compression: codex_api::Compression::None,
++        turn_state: None,
++    };
++    codex_api::prepare_controlled_responses_request(provider, request, &options, maximum)
++}
++
++/// Explicitly resolved auth mode for this limited local finalization mechanism.
++/// This value is a completeness fact, not trusted owner authority or InputProof.
++#[derive(Clone, Copy, Debug)]
++#[allow(
++    dead_code,
++    reason = "Private FinalAuth staging; no production bridge is registered"
++)]
++pub(super) enum ControlledAuthMode {
++    StaticApiKeyBearer,
++    ChatGpt,
++    RequestSigning,
++    Refreshing,
++}
++
++/// Install final static bearer auth before freezing the actual encoded Request.
++/// The same qualified owner must resolve all auth-dependent B03 facts first.
++/// This helper does no auth refresh, transport, callback, encoding or I/O; its
++/// output is only frozen material and an Arc-local one-use capability. Actual
++/// config/secret versions, ledger and InputProof remain the trusted owner's job.
++/// A controlled sender must use HTTP04's for_frozen_responses_request route,
++/// never ordinary EndpointSession/AuthProvider/retry after this boundary.
++#[allow(
++    dead_code,
++    reason = "Private bearer mechanism; the trusted owner bridge is absent"
++)]
++pub(super) fn finalize_controlled_bearer_request(
++    mut request: Request,
++    mode: Resolved<ControlledAuthMode>,
++    mut bearer: HeaderValue,
++    maximum: NonZeroU64,
++) -> std::result::Result<std::sync::Arc<codex_http_client::FrozenResponsesRequest>, ApiError> {
++    if !matches!(mode.take()?, ControlledAuthMode::StaticApiKeyBearer)
++        || request.headers.contains_key(http::header::AUTHORIZATION)
++        || request
++            .headers
++            .contains_key(http::header::PROXY_AUTHORIZATION)
++        || request.headers.contains_key(http::header::COOKIE)
++        || !matches!(
++            request.body.as_ref(),
++            Some(codex_client::RequestBody::EncodedJson(_))
++        )
++    {
++        return Err(unavailable());
++    }
++    // Accept only a single canonical RFC6750 bearer value. Never normalize,
++    // print, hash publicly, refresh or reconstruct the credential here.
++    let token = bearer
++        .to_str()
++        .ok()
++        .and_then(|value| value.strip_prefix("Bearer "))
++        .ok_or_else(unavailable)?;
++    let mut parts = token.splitn(/*n*/ 2, '=');
++    let value = parts.next().ok_or_else(unavailable)?;
++    if value.is_empty()
++        || !value
++            .bytes()
++            .all(|byte| byte.is_ascii_alphanumeric() || b"-._~+/".contains(&byte))
++        || parts
++            .next()
++            .is_some_and(|padding| !padding.bytes().all(|byte| byte == b'='))
++    {
++        return Err(unavailable());
++    }
++    bearer.set_sensitive(/*val*/ true);
++    request.headers.insert(http::header::AUTHORIZATION, bearer);
++    codex_http_client::FrozenResponsesRequest::freeze(request, maximum)
++        .map(std::sync::Arc::new)
++        .map_err(|_| unavailable())
++}
++
++#[cfg(test)]
++#[path = "responses_producer_tests.rs"]
++mod tests;
+diff --git a/codex-rs/core/src/responses_producer_tests.rs b/codex-rs/core/src/responses_producer_tests.rs
+new file mode 100644
+--- /dev/null
++++ b/codex-rs/core/src/responses_producer_tests.rs
+@@ -0,0 +1,820 @@
++use super::*;
++use crate::test_support::TestCodexResponsesRequestKind;
++use crate::test_support::responses_metadata;
++use codex_client::RequestBody;
++use codex_http_client::FrozenResponsesRequest;
++use codex_protocol::models::BaseInstructions;
++use codex_protocol::models::ContentItem;
++use pretty_assertions::assert_eq;
++use serde_json::json;
++use std::time::Duration;
++
++fn thread() -> ThreadId {
++    ThreadId::from_u128(1)
++}
++fn metadata() -> CodexResponsesMetadata {
++    let mut metadata = responses_metadata(
++        "installation",
++        "original-session",
++        &thread().to_string(),
++        Some("turn"),
++        "window".to_string(),
++        &SessionSource::Cli,
++        None,
++        TestCodexResponsesRequestKind::Turn,
++    );
++    metadata.parent_response_id = Some("original-parent".to_string());
++    metadata
++}
++fn policy() -> ResolvedBodyPolicy {
++    ResolvedBodyPolicy {
++        thread_id: thread(),
++        is_openai: true,
++        is_bedrock: false,
++        namespace_tools: true,
++        reasoning_effort_override_enabled: false,
++        concurrent_reasoning_summaries_enabled: false,
++        model_verbosity: None,
++        prompt_cache_key: "original-cache-key".to_string(),
++    }
++}
++fn prompt() -> Prompt {
++    Prompt {
++        input: vec![
++            ResponseItem::Message {
++                id: Some(ResponseItemId::from_server("legacy-unprefixed".to_string())),
++                role: "user".to_string(),
++                content: vec![ContentItem::InputText {
++                    text: "Complete earlier user 中文 😀".to_string(),
++                }],
++                phase: None,
++                internal_chat_message_metadata_passthrough: None,
++            },
++            ResponseItem::Message {
++                id: Some(ResponseItemId::with_suffix("msg", "kept")),
++                role: "assistant".to_string(),
++                content: vec![ContentItem::OutputText {
++                    text: "Complete earlier answer é é".to_string(),
++                }],
++                phase: None,
++                internal_chat_message_metadata_passthrough: None,
++            },
++        ],
++        base_instructions: BaseInstructions {
++            text: "Full selected instructions and reference".to_string(),
++            ..BaseInstructions::default()
++        },
++        output_schema: Some(json!({"type":"object","properties":{"answer":{"type":"string"}}})),
++        ..Prompt::default()
++    }
++}
++fn provider() -> Provider {
++    Provider {
++        name: "owned-local-fixture".to_string(),
++        base_url: "https://example.com/v1".to_string(),
++        query_params: None,
++        headers: HeaderMap::new(),
++        retry: codex_api::RetryConfig {
++            max_attempts: 3,
++            base_delay: Duration::from_millis(1),
++            retry_429: true,
++            retry_5xx: true,
++            retry_transport: true,
++        },
++        stream_idle_timeout: Duration::from_secs(2),
++    }
++}
++fn facts() -> ControlledHttpFacts {
++    ControlledHttpFacts {
++        responses_session_id: "original-cache-key".to_string(),
++        thread_id: thread().to_string(),
++        session_source: SessionSource::Cli,
++        beta: Resolved::Value(Some("original-beta".to_string())),
++        sticky_turn_state: Resolved::Value(Some("original-sticky".to_string())),
++        originator: Resolved::Value(HeaderValue::from_static("original-originator")),
++        compatibility_headers: Resolved::Value(HeaderMap::from_iter([(
++            http::header::HeaderName::from_static("x-fixture-order"),
++            HeaderValue::from_static("compatibility"),
++        )])),
++        attestation_requirement: Requirement::Required,
++        attestation: Resolved::Value(Some(HeaderValue::from_static("original-attestation"))),
++        guardian_credits: Resolved::Value(GuardianCredits::NotRequested),
++        access_programs: Resolved::Value(None),
++        routing_hint: Resolved::Value(Some(HeaderValue::from_static("original-routing"))),
++        responses_headers: Resolved::Value(HeaderMap::from_iter([
++            (
++                http::header::HeaderName::from_static("x-codex-guardian"),
++                HeaderValue::from_static("reviewer"),
++            ),
++            (
++                http::header::HeaderName::from_static("x-fixture-order"),
++                HeaderValue::from_static("responses-last"),
++            ),
++        ])),
++        content_item_kinds_enabled: false,
++        expected_contributors: 2,
++        contributions: Resolved::Value(vec![
++            BTreeMap::from([
++                (
++                    "resolved-contributor".to_string(),
++                    "original-value".to_string(),
++                ),
++                ("thread_id".to_string(), "forbidden-replacement".to_string()),
++                (
++                    "parent_response_id".to_string(),
++                    "forbidden-parent".to_string(),
++                ),
++            ]),
++            BTreeMap::from([(
++                "resolved-contributor".to_string(),
++                "forbidden-later-replacement".to_string(),
++            )]),
++        ]),
++        trace_requirement: Requirement::Required,
++        trace_header: Resolved::Value(Some(HeaderValue::from_static("original-trace"))),
++    }
++}
++fn prepare(facts: ControlledHttpFacts) -> std::result::Result<Request, ApiError> {
++    prepare_controlled_core_request(
++        &prompt(),
++        &model(),
++        None,
++        ReasoningSummaryConfig::None,
++        Some("flex".to_string()),
++        &metadata(),
++        false,
++        &policy(),
++        &provider(),
++        facts,
++        NonZeroU64::new(64).expect("positive fixture"),
++    )
++}
++fn body(request: &Request) -> &codex_client::EncodedJsonBody {
++    let Some(RequestBody::EncodedJson(body)) = request.body.as_ref() else {
++        panic!("actual API encoded body required")
++    };
++    body
++}
++fn unavailable_error(error: ApiError) {
++    assert!(
++        matches!(error, ApiError::InvalidRequest { message } if message == "CODEX_FROZEN_REQUEST_UNSUPPORTED")
++    );
++}
++
++#[test]
++fn controlled_final_material_reaches_one_actual_encoding_and_retained_gate_allocation() {
++    let mut request = prepare(facts()).expect("pure controlled core preparation");
++    let original = body(&request).clone();
++    let pointer = original.as_bytes().as_ptr();
++    let json: serde_json::Value =
++        serde_json::from_slice(original.as_bytes()).expect("actual original encoded bytes");
++    assert_eq!(json["max_output_tokens"], 64);
++    assert_eq!(json["truncation"], "disabled");
++    assert_eq!(json["instructions"], prompt().base_instructions.text);
++    assert_eq!(
++        json["input"][0]["content"][0]["text"],
++        "Complete earlier user 中文 😀"
++    );
++    assert_eq!(
++        json["input"][1]["content"][0]["text"],
++        "Complete earlier answer é é"
++    );
++    assert!(json["input"][0].get("id").is_none());
++    assert_eq!(json["input"][1]["id"], "msg_kept");
++    assert_eq!(
++        json["client_metadata"]["parent_response_id"],
++        "original-parent"
++    );
++    assert_eq!(
++        json["client_metadata"]["resolved-contributor"],
++        "original-value"
++    );
++    assert_ne!(
++        json["client_metadata"]["thread_id"],
++        "forbidden-replacement"
++    );
++    assert!(json.get("service_tier").is_none());
++    assert_eq!(request.headers["x-fixture-order"], "responses-last");
++    assert_eq!(request.headers["originator"], "original-originator");
++    assert_eq!(
++        request.headers["x-codex-inference-call-id"],
++        "original-trace"
++    );
++    assert_eq!(
++        request.headers[super::super::X_OAI_ATTESTATION_HEADER],
++        "original-attestation"
++    );
++    // Trusted fixture-only finalization is outside producer; no real secret/auth call.
++    request.headers.insert(
++        http::header::AUTHORIZATION,
++        HeaderValue::from_static("Bearer owned-local-fixture"),
++    );
++    let frozen =
++        FrozenResponsesRequest::freeze(request, NonZeroU64::new(64).expect("positive maximum"))
++            .expect("actual gate accepts final body");
++    let retained = frozen.prepared_request();
++    assert_eq!(body(&retained).as_bytes(), original.as_bytes());
++    assert_eq!(body(&retained).as_bytes().as_ptr(), pointer);
++}
++
++#[test]
++fn controlled_rejects_unresolved_facts_and_missing_required_values() {
++    for slot in 0..5 {
++        let mut input = facts();
++        match slot {
++            0 => input.originator = Resolved::Unresolved,
++            1 => input.attestation = Resolved::Value(None),
++            2 => input.trace_header = Resolved::Value(None),
++            3 => input.contributions = Resolved::Unresolved,
++            _ => input.access_programs = Resolved::Unresolved,
++        }
++        unavailable_error(
++            prepare(input).expect_err("required genuine material must not be invented"),
++        );
++    }
++}
++
++#[test]
++fn controlled_rejects_contribution_count_and_identity_mismatch() {
++    let mut input = facts();
++    input.expected_contributors = 3;
++    unavailable_error(prepare(input).expect_err("no silently dropped contributor"));
++    let mut input = facts();
++    input.thread_id = "different-thread".to_string();
++    unavailable_error(prepare(input).expect_err("header and metadata identity must agree"));
++    let mut input = facts();
++    input.responses_session_id = "different-session".to_string();
++    unavailable_error(prepare(input).expect_err("header and metadata session must agree"));
++}
++
++fn explicitly_absent_optional_facts() -> ControlledHttpFacts {
++    let mut input = facts();
++    input.attestation_requirement = Requirement::NotRequired;
++    input.attestation = Resolved::Value(None);
++    input.trace_requirement = Requirement::NotRequired;
++    input.trace_header = Resolved::Value(None);
++    input.expected_contributors = 0;
++    input.contributions = Resolved::Value(Vec::new());
++    input.routing_hint = Resolved::Value(None);
++    input.responses_headers = Resolved::Value(HeaderMap::new());
++    input
++}
++
++#[test]
++fn controlled_accepts_resolved_absence_without_inventing_optional_material() {
++    let request = prepare(explicitly_absent_optional_facts()).expect("known absence is resolved");
++    assert!(
++        !request
++            .headers
++            .contains_key(super::super::X_OAI_ATTESTATION_HEADER)
++    );
++    assert!(!request.headers.contains_key("x-codex-inference-call-id"));
++    assert!(
++        !request
++            .headers
++            .contains_key(super::super::X_CODEX_ROUTING_HINT_HEADER)
++    );
++    let json: serde_json::Value =
++        serde_json::from_slice(body(&request).as_bytes()).expect("actual encoding");
++    assert_eq!(json["max_output_tokens"], 64);
++    assert_eq!(json["truncation"], "disabled");
++    assert!(
++        json["client_metadata"]
++            .get("resolved-contributor")
++            .is_none()
++    );
++}
++
++#[test]
++fn controlled_counts_output_fields_in_final_envelope_before_optional_metadata_shedding() {
++    use codex_protocol::models::ExecutedToolCall;
++    use codex_protocol::models::FunctionCallOutputPayload;
++    use codex_protocol::models::ResponseInputItem;
++    use codex_protocol::models::ToolResultMetadata;
++    let mut output = ResponseItem::from(ResponseInputItem::FunctionCallOutput {
++        call_id: "call".to_string(),
++        output: FunctionCallOutputPayload::from_text("keep result".to_string()),
++    });
++    let mut call = ExecutedToolCall::new("owned-local".to_string(), json!({"query":"keep"}));
++    call.set_tool_result_metadata(ToolResultMetadata::new(
++        &json!({"provider":"x".repeat(16 * 1024)}),
++    ));
++    output.append_executed_tool_calls(vec![call]);
++    output.set_tool_call_cell_id("cell");
++    output.mark_tool_calls_complete();
++    let mut prompt = Prompt {
++        input: vec![output],
++        base_instructions: BaseInstructions {
++            text: "x".to_string(),
++            ..BaseInstructions::default()
++        },
++        ..Prompt::default()
++    };
++    let maximum_bytes = 15 * 1024 * 1024;
++    let mut base = build_responses_request_from_resolved(
++        &prompt,
++        &model(),
++        None,
++        ReasoningSummaryConfig::None,
++        None,
++        &metadata(),
++        true,
++        &policy(),
++    )
++    .expect("actual base envelope")
++    .request;
++    let base_bytes = crate::utils::json::serialized_json_bytes(&base).expect("actual base count");
++    prompt.base_instructions.text = "x".repeat(maximum_bytes - base_bytes + 1);
++    base.instructions = prompt.base_instructions.text.clone();
++    assert_eq!(
++        crate::utils::json::serialized_json_bytes(&base).expect("exact boundary"),
++        maximum_bytes
++    );
++    assert!(tool_metadata::calculate_bounded_input(&base, &base.input).is_none());
++    let request = prepare_controlled_core_request(
++        &prompt,
++        &model(),
++        None,
++        ReasoningSummaryConfig::None,
++        None,
++        &metadata(),
++        true,
++        &policy(),
++        &provider(),
++        explicitly_absent_optional_facts(),
++        NonZeroU64::new(64).expect("positive maximum"),
++    )
++    .expect("final controlled envelope");
++    let encoded = body(&request).as_bytes();
++    assert!(
++        encoded.len() <= maximum_bytes,
++        "hard fields must be counted before optional metadata budget"
++    );
++    let json: serde_json::Value =
++        serde_json::from_slice(encoded).expect("actual encoded final envelope");
++    assert_eq!(json["max_output_tokens"], 64);
++    assert_eq!(json["truncation"], "disabled");
++    assert_eq!(
++        json["instructions"]
++            .as_str()
++            .expect("complete instructions")
++            .len(),
++        prompt.base_instructions.text.len()
++    );
++    assert_eq!(json["input"][0]["output"], "keep result");
++    assert_ne!(
++        json["input"][0]["internal_chat_message_metadata_passthrough"]["executed_tool_calls"][0]["tool_result_metadata"],
++        json!({"provider":"x".repeat(16 * 1024)})
++    );
++}
++
++#[test]
++fn controlled_rejects_late_header_overwrite_and_invalid_resolved_header() {
++    let mut input = facts();
++    input.responses_headers = Resolved::Value(HeaderMap::from_iter([(
++        http::header::HeaderName::from_static("originator"),
++        HeaderValue::from_static("changed"),
++    )]));
++    unavailable_error(
++        prepare(input).expect_err("final merged originator must match actual snapshot"),
++    );
++    let mut input = facts();
++    input.beta = Resolved::Value(Some("invalid\nheader".to_string()));
++    unavailable_error(
++        prepare(input).expect_err("provided invalid material cannot be silently omitted"),
++    );
++}
++
++#[test]
++fn ordinary_core_builder_keeps_none_limits_and_full_request_copy() {
++    let prompt = prompt();
++    let built = build_responses_request_from_resolved(
++        &prompt,
++        &model(),
++        None,
++        ReasoningSummaryConfig::None,
++        None,
++        &metadata(),
++        false,
++        &policy(),
++    )
++    .expect("pure base builder");
++    assert_eq!(built.request.max_output_tokens, None);
++    assert_eq!(built.request.truncation, None);
++    assert_eq!(built.request.instructions, prompt.base_instructions.text);
++    assert_eq!(built.request.input, prompt.input);
++    assert!(
++        built
++            .request
++            .client_metadata
++            .as_ref()
++            .expect("actual metadata")
++            .get("parent_response_id")
++            .is_none()
++    );
++}
++
++fn model() -> ModelInfo {
++    serde_json::from_value(json!({
++        "slug": "gpt-test",
++        "display_name": "gpt-test",
++        "description": "desc",
++        "default_reasoning_level": "medium",
++        "supported_reasoning_levels": [
++            {"effort": "medium", "description": "medium"}
++        ],
++        "shell_type": "shell_command",
++        "visibility": "list",
++        "supported_in_api": true,
++        "priority": 1,
++        "upgrade": null,
++        "model_messages": null,
++        "support_verbosity": false,
++        "default_verbosity": null,
++        "apply_patch_tool_type": null,
++        "truncation_policy": {"mode": "bytes", "limit": 10000},
++        "supports_image_detail_original": false,
++        "context_window": 272000,
++        "auto_compact_token_limit": null,
++        "experimental_supported_tools": []
++    }))
++    .expect("deserialize test model info")
++}
++
++// Root cache-affinity headers and logical request identity are separate upstream fields.
++#[test]
++fn controlled_session_affinity_preserves_actual_root_parent_cache_header() {
++    let mut input = facts();
++    let mut body_policy = policy();
++    body_policy.prompt_cache_key = "actual-parent-cache-affinity".to_string();
++    input.responses_session_id = body_policy.prompt_cache_key.clone();
++    let request = prepare_controlled_core_request(
++        &prompt(),
++        &model(),
++        /*effort*/ None,
++        ReasoningSummaryConfig::None,
++        /*service_tier*/ None,
++        &metadata(),
++        /*include_internal*/ false,
++        &body_policy,
++        &provider(),
++        input,
++        NonZeroU64::new(64).expect("positive maximum"),
++    )
++    .expect("actual root affinity header must be accepted");
++    assert_eq!(
++        request.headers["session-id"],
++        "actual-parent-cache-affinity"
++    );
++    let json: serde_json::Value =
++        serde_json::from_slice(body(&request).as_bytes()).expect("actual final bytes");
++    assert_eq!(json["prompt_cache_key"], "actual-parent-cache-affinity");
++    assert_eq!(json["client_metadata"]["session_id"], "original-session");
++}
++
++#[test]
++fn controlled_session_affinity_rejects_logical_identity_used_as_root_header() {
++    let mut input = facts();
++    input.responses_session_id = "original-session".to_string();
++    let mut body_policy = policy();
++    body_policy.prompt_cache_key = "actual-parent-cache-affinity".to_string();
++    unavailable_error(
++        prepare_controlled_core_request(
++            &prompt(),
++            &model(),
++            /*effort*/ None,
++            ReasoningSummaryConfig::None,
++            /*service_tier*/ None,
++            &metadata(),
++            /*include_internal*/ false,
++            &body_policy,
++            &provider(),
++            input,
++            NonZeroU64::new(64).expect("positive maximum"),
++        )
++        .expect_err("logical metadata identity must not replace actual root cache header"),
++    );
++}
++
++#[test]
++fn controlled_session_affinity_non_root_keeps_logical_header_with_parent_cache_body() {
++    let mut input = facts();
++    input.session_source =
++        SessionSource::Internal(codex_protocol::protocol::InternalSessionSource::Guardian);
++    input.responses_session_id = "original-session".to_string();
++    let mut logical = metadata();
++    logical.parent_thread_id = Some(ThreadId::from_u128(2));
++    let mut body_policy = policy();
++    body_policy.prompt_cache_key = format!(
++        "guardian:{}",
++        logical.parent_thread_id.expect("actual parent fixture")
++    );
++    let request = prepare_controlled_core_request(
++        &prompt(),
++        &model(),
++        /*effort*/ None,
++        ReasoningSummaryConfig::None,
++        /*service_tier*/ None,
++        &logical,
++        /*include_internal*/ false,
++        &body_policy,
++        &provider(),
++        input,
++        NonZeroU64::new(64).expect("positive maximum"),
++    )
++    .expect("non-root original identity header must be accepted");
++    assert_eq!(request.headers["session-id"], "original-session");
++    let json: serde_json::Value =
++        serde_json::from_slice(body(&request).as_bytes()).expect("actual final bytes");
++    assert_eq!(json["prompt_cache_key"], body_policy.prompt_cache_key);
++    assert_eq!(json["client_metadata"]["session_id"], "original-session");
++}
++
++#[test]
++fn controlled_session_affinity_rejects_parent_cache_body_used_as_non_root_header() {
++    let mut input = facts();
++    input.session_source =
++        SessionSource::Internal(codex_protocol::protocol::InternalSessionSource::Guardian);
++    let mut logical = metadata();
++    logical.parent_thread_id = Some(ThreadId::from_u128(2));
++    let mut body_policy = policy();
++    body_policy.prompt_cache_key = format!(
++        "guardian:{}",
++        logical.parent_thread_id.expect("actual parent fixture")
++    );
++    input.responses_session_id = body_policy.prompt_cache_key.clone();
++    unavailable_error(
++        prepare_controlled_core_request(
++            &prompt(),
++            &model(),
++            /*effort*/ None,
++            ReasoningSummaryConfig::None,
++            /*service_tier*/ None,
++            &logical,
++            /*include_internal*/ false,
++            &body_policy,
++            &provider(),
++            input,
++            NonZeroU64::new(64).expect("positive maximum"),
++        )
++        .expect_err("non-root actual header must keep logical identity"),
++    );
++}
++
++// Required FinalAuth ordering: auth must exist in the immutable request before freeze.
++#[test]
++fn final_bearer_header_is_part_of_the_frozen_genuine_request() {
++    let request = prepare(facts()).expect("actual one-encoded B03 request");
++    let mut bearer = HeaderValue::from_static("Bearer synthetic-final-fixture");
++    bearer.set_sensitive(/*val*/ true);
++    let maximum = NonZeroU64::new(/*n*/ 64).expect("positive fixture");
++    let frozen = finalize_controlled_bearer_request(
++        request,
++        Resolved::Value(ControlledAuthMode::StaticApiKeyBearer),
++        bearer.clone(),
++        maximum,
++    )
++    .expect("final auth installed before real freeze");
++    let mut released = frozen.prepared_request();
++    released.headers.insert(http::header::AUTHORIZATION, bearer);
++    assert_eq!(
++        frozen
++            .prepared_request()
++            .headers
++            .get(http::header::AUTHORIZATION),
++        released.headers.get(http::header::AUTHORIZATION),
++        "final auth must already be immutable before release"
++    );
++}
++
++fn final_bearer(request: Request) -> std::sync::Arc<FrozenResponsesRequest> {
++    finalize_controlled_bearer_request(
++        request,
++        Resolved::Value(ControlledAuthMode::StaticApiKeyBearer),
++        HeaderValue::from_static("Bearer synthetic-final-fixture"),
++        NonZeroU64::new(/*n*/ 64).expect("positive fixture"),
++    )
++    .expect("static final bearer freezes")
++}
++
++#[test]
++fn final_bearer_preserves_encoded_allocation_and_every_existing_request_limit() {
++    let mut request = prepare(facts()).expect("actual B03 producer");
++    request.timeout = Some(Duration::from_secs(/*secs*/ 2));
++    request.response_body_limit_bytes = Some(8192);
++    let original = body(&request).clone();
++    let url = request.url.clone();
++    let method = request.method.clone();
++    let mut expected_headers = request.headers.clone();
++    let mut bearer = HeaderValue::from_static("Bearer synthetic-final-fixture");
++    bearer.set_sensitive(/*val*/ true);
++    expected_headers.insert(http::header::AUTHORIZATION, bearer);
++    let frozen = final_bearer(request);
++    let final_request = frozen.prepared_request();
++    assert_eq!(
++        body(&final_request).as_bytes().as_ptr(),
++        original.as_bytes().as_ptr()
++    );
++    assert_eq!(frozen.body_bytes().as_ptr(), original.as_bytes().as_ptr());
++    assert_eq!(frozen.body_bytes(), original.as_bytes());
++    assert_eq!(final_request.method, method);
++    assert_eq!(final_request.url, url);
++    assert_eq!(final_request.timeout, Some(Duration::from_secs(/*secs*/ 2)));
++    assert_eq!(final_request.response_body_limit_bytes, Some(8192));
++    assert_eq!(final_request.headers, expected_headers);
++    assert!(final_request.headers[http::header::AUTHORIZATION].is_sensitive());
++    assert_eq!(
++        final_request
++            .headers
++            .get_all(http::header::AUTHORIZATION)
++            .iter()
++            .count(),
++        1
++    );
++    assert!(!format!("{frozen:?}").contains("synthetic-final-fixture"));
++    assert!(!format!("{final_request:?}").contains("synthetic-final-fixture"));
++}
++
++#[test]
++fn final_bearer_rejects_every_unresolved_or_nonstatic_auth_mode() {
++    for mode in [
++        Resolved::Unresolved,
++        Resolved::Value(ControlledAuthMode::ChatGpt),
++        Resolved::Value(ControlledAuthMode::RequestSigning),
++        Resolved::Value(ControlledAuthMode::Refreshing),
++    ] {
++        unavailable_error(
++            finalize_controlled_bearer_request(
++                prepare(facts()).expect("genuine B03 request"),
++                mode,
++                HeaderValue::from_static("Bearer synthetic-final-fixture"),
++                NonZeroU64::new(/*n*/ 64).expect("positive fixture"),
++            )
++            .expect_err("mode unavailable before transport"),
++        );
++    }
++}
++
++#[test]
++fn final_bearer_rejects_existing_duplicate_and_conflicting_auth_channels() {
++    for header in [
++        http::header::AUTHORIZATION,
++        http::header::PROXY_AUTHORIZATION,
++        http::header::COOKIE,
++    ] {
++        for duplicate in [false, true] {
++            let mut request = prepare(facts()).expect("genuine B03 request");
++            request.headers.append(
++                header.clone(),
++                HeaderValue::from_static("synthetic-original"),
++            );
++            if duplicate {
++                request.headers.append(
++                    header.clone(),
++                    HeaderValue::from_static("synthetic-conflict"),
++                );
++            }
++            unavailable_error(
++                finalize_controlled_bearer_request(
++                    request,
++                    Resolved::Value(ControlledAuthMode::StaticApiKeyBearer),
++                    HeaderValue::from_static("Bearer synthetic-final-fixture"),
++                    NonZeroU64::new(/*n*/ 64).expect("positive fixture"),
++                )
++                .expect_err("existing auth is never overwritten"),
++            );
++        }
++    }
++}
++
++#[test]
++fn final_bearer_rejects_empty_wrong_scheme_and_ambiguous_credential_values() {
++    let mut values: Vec<_> = [
++        "",
++        "Bearer ",
++        "Basic synthetic",
++        "Bearer a b",
++        "Bearer a=b",
++        "Bearer a,b",
++    ]
++    .into_iter()
++    .map(HeaderValue::from_static)
++    .collect();
++    values
++        .push(HeaderValue::from_bytes(b"Bearer \x80").expect("valid header with non-ASCII value"));
++    for bearer in values {
++        unavailable_error(
++            finalize_controlled_bearer_request(
++                prepare(facts()).expect("genuine B03 request"),
++                Resolved::Value(ControlledAuthMode::StaticApiKeyBearer),
++                bearer,
++                NonZeroU64::new(/*n*/ 64).expect("positive fixture"),
++            )
++            .expect_err("invalid credential rejected without value in the error"),
++        );
++    }
++}
++
++#[test]
++fn final_bearer_keeps_actual_encoded_shape_and_output_limit_fail_closed() {
++    for change in ["body", "maximum", "compression", "method"] {
++        let mut request = prepare(facts()).expect("genuine B03 request");
++        let mut maximum = NonZeroU64::new(/*n*/ 64).expect("positive fixture");
++        match change {
++            "body" => {
++                request.body = Some(RequestBody::Json(
++                    json!({"max_output_tokens":64,"truncation":"disabled"}),
++                ))
++            }
++            "maximum" => maximum = NonZeroU64::new(/*n*/ 65).expect("positive different maximum"),
++            "compression" => request.compression = codex_client::RequestCompression::Zstd,
++            "method" => request.method = http::Method::GET,
++            _ => unreachable!("closed fixture cases"),
++        }
++        unavailable_error(
++            finalize_controlled_bearer_request(
++                request,
++                Resolved::Value(ControlledAuthMode::StaticApiKeyBearer),
++                HeaderValue::from_static("Bearer synthetic-final-fixture"),
++                maximum,
++            )
++            .expect_err("unsupported genuine shape never reaches transport"),
++        );
++    }
++}
++
++#[tokio::test]
++async fn final_bearer_actual_sender_rejects_late_auth_change_with_zero_owned_connections() {
++    use codex_http_client::HttpTransport;
++    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).expect("owned listener");
++    listener
++        .set_nonblocking(/*nonblocking*/ true)
++        .expect("nonblocking owned observer");
++    let address = listener.local_addr().expect("owned address");
++    let mut request = prepare(facts()).expect("genuine B03 request");
++    request.url = format!("https://{address}/v1/responses");
++    let frozen = final_bearer(request);
++    let sender = codex_http_client::ReqwestTransport::for_frozen_responses_request(
++        std::sync::Arc::clone(&frozen),
++    )
++    .expect("actual restricted client builds locally");
++    let mut changed = frozen.prepared_request();
++    changed.headers.insert(
++        http::header::AUTHORIZATION,
++        HeaderValue::from_static("Bearer changed-fixture"),
++    );
++    let error = sender
++        .stream(changed)
++        .await
++        .err()
++        .expect("late auth cannot be released");
++    assert!(
++        matches!(error, codex_client::TransportError::Build(ref message) if message == "CODEX_FROZEN_REQUEST_CHANGED")
++    );
++    assert!(
++        matches!(listener.accept(), Err(error) if error.kind() == std::io::ErrorKind::WouldBlock)
++    );
++    let error = sender
++        .clone()
++        .execute(frozen.prepared_request())
++        .await
++        .err()
++        .expect("mismatch consumes shared capability");
++    assert!(
++        matches!(error, codex_client::TransportError::Build(ref message) if message == "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED")
++    );
++}
++
++#[tokio::test]
++async fn final_bearer_actual_connection_failure_cannot_refund_frozen_auth_or_send_again() {
++    use codex_http_client::HttpTransport;
++    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).expect("owned port");
++    let address = listener.local_addr().expect("owned address");
++    drop(listener);
++    let mut request = prepare(facts()).expect("genuine B03 request");
++    request.url = format!("https://{address}/v1/responses");
++    request.timeout = Some(Duration::from_secs(/*secs*/ 2));
++    let frozen = final_bearer(request);
++    let sender = codex_http_client::ReqwestTransport::for_frozen_responses_request(
++        std::sync::Arc::clone(&frozen),
++    )
++    .expect("restricted sender");
++    let error = sender
++        .execute(frozen.prepared_request())
++        .await
++        .err()
++        .expect("owned closed port fails");
++    assert!(matches!(error, codex_client::TransportError::Connection(_)));
++    let rebuilt = codex_http_client::ReqwestTransport::for_frozen_responses_request(
++        std::sync::Arc::clone(&frozen),
++    )
++    .expect("new sender retains same Arc");
++    let error = rebuilt
++        .stream(frozen.prepared_request())
++        .await
++        .err()
++        .expect("no refund after failure");
++    assert!(
++        matches!(error, codex_client::TransportError::Build(ref message) if message == "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED")
++    );
++}
+diff --git a/codex-rs/core/src/retained_request_facts.rs b/codex-rs/core/src/retained_request_facts.rs
+new file mode 100644
+--- /dev/null
++++ b/codex-rs/core/src/retained_request_facts.rs
+@@ -0,0 +1,469 @@
++//! ABI01 checked conversion of explicit resolved facts, not authority or a request DTO.
++//! Unsupported tools/guardian/complex metadata are rejected, never silently defaulted.
++use super::super::responses_producer::*;
++use crate::client_common::Prompt;
++use crate::responses_metadata::{CodexResponsesMetadata, CodexResponsesRequestKind};
++use codex_api::{Provider, RetryConfig};
++use codex_protocol::ThreadId;
++use codex_protocol::models::{BaseInstructions, ResponseItem};
++use codex_protocol::openai_models::ModelInfo;
++use codex_protocol::protocol::SessionSource;
++use http::{HeaderMap, HeaderValue};
++use serde::de::{DeserializeOwned, MapAccess, SeqAccess, Visitor};
++use serde::{Deserialize, Deserializer};
++use serde_json::{Map, Value};
++use std::collections::{BTreeMap, HashSet};
++use std::num::NonZeroU64;
++use std::sync::Arc;
++use std::time::Duration;
++
++type Checked<T> = Result<T, ()>;
++struct Unique;
++impl<'de> Deserialize<'de> for Unique {
++    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
++        struct V;
++        impl<'de> Visitor<'de> for V {
++            type Value = Unique;
++            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++                f.write_str("unique JSON names")
++            }
++            fn visit_bool<E: serde::de::Error>(self, _: bool) -> Result<Unique, E> {
++                Ok(Unique)
++            }
++            fn visit_i64<E: serde::de::Error>(self, _: i64) -> Result<Unique, E> {
++                Ok(Unique)
++            }
++            fn visit_u64<E: serde::de::Error>(self, _: u64) -> Result<Unique, E> {
++                Ok(Unique)
++            }
++            fn visit_f64<E: serde::de::Error>(self, _: f64) -> Result<Unique, E> {
++                Ok(Unique)
++            }
++            fn visit_str<E: serde::de::Error>(self, _: &str) -> Result<Unique, E> {
++                Ok(Unique)
++            }
++            fn visit_unit<E: serde::de::Error>(self) -> Result<Unique, E> {
++                Ok(Unique)
++            }
++            fn visit_seq<A: SeqAccess<'de>>(self, mut a: A) -> Result<Unique, A::Error> {
++                while a.next_element::<Unique>()?.is_some() {}
++                Ok(Unique)
++            }
++            fn visit_map<A: MapAccess<'de>>(self, mut a: A) -> Result<Unique, A::Error> {
++                let mut names = HashSet::new();
++                while let Some(name) = a.next_key::<String>()? {
++                    if !names.insert(name) {
++                        return Err(serde::de::Error::custom("duplicate fact"));
++                    }
++                    a.next_value::<Unique>()?;
++                }
++                Ok(Unique)
++            }
++        }
++        d.deserialize_any(V)
++    }
++}
++fn object<'a>(v: &'a Value, keys: &[&str]) -> Checked<&'a Map<String, Value>> {
++    let m = v.as_object().ok_or(())?;
++    if m.len() != keys.len() || keys.iter().any(|k| !m.contains_key(*k)) {
++        return Err(());
++    }
++    Ok(m)
++}
++fn text(v: &Value) -> Checked<String> {
++    v.as_str().map(str::to_owned).ok_or(())
++}
++fn boolean(v: &Value) -> Checked<bool> {
++    v.as_bool().ok_or(())
++}
++fn parse<T: DeserializeOwned>(v: &Value) -> Checked<T> {
++    serde_json::from_value(v.clone()).map_err(|_| ())
++}
++fn headers(v: &Value) -> Checked<HeaderMap> {
++    let mut h = HeaderMap::new();
++    let rows = v.as_array().ok_or(())?;
++    if rows.len() > 128 {
++        return Err(());
++    }
++    for row in rows {
++        let pair = row.as_array().ok_or(())?;
++        if pair.len() != 2 {
++            return Err(());
++        }
++        let name =
++            http::header::HeaderName::from_bytes(text(&pair[0])?.as_bytes()).map_err(|_| ())?;
++        let value = HeaderValue::from_str(&text(&pair[1])?).map_err(|_| ())?;
++        if h.contains_key(&name) {
++            return Err(());
++        }
++        h.insert(name, value);
++    }
++    Ok(h)
++}
++fn optional_header(v: &Value) -> Checked<Option<HeaderValue>> {
++    if v.is_null() {
++        Ok(None)
++    } else {
++        HeaderValue::from_str(&text(v)?).map(Some).map_err(|_| ())
++    }
++}
++fn requirement(v: &Value) -> Checked<Requirement> {
++    match v.as_str() {
++        Some("required") => Ok(Requirement::Required),
++        Some("not_required") => Ok(Requirement::NotRequired),
++        _ => Err(()),
++    }
++}
++const MODEL_KEYS: &[&str] = &[
++    "guardian",
++    "slug",
++    "display_name",
++    "description",
++    "default_reasoning_level",
++    "supported_reasoning_levels",
++    "shell_type",
++    "visibility",
++    "supported_in_api",
++    "priority",
++    "additional_speed_tiers",
++    "service_tiers",
++    "default_service_tier",
++    "available_access_programs",
++    "availability_nux",
++    "upgrade",
++    "model_messages",
++    "include_skills_usage_instructions",
++    "include_plugin_usage_instructions",
++    "include_apps_usage_instructions",
++    "supports_reasoning_summary_parameter",
++    "default_reasoning_summary",
++    "support_verbosity",
++    "default_verbosity",
++    "apply_patch_tool_type",
++    "web_search_tool_type",
++    "truncation_policy",
++    "supports_image_detail_original",
++    "context_window",
++    "max_context_window",
++    "auto_compact_token_limit",
++    "comp_hash",
++    "effective_context_window_percent",
++    "experimental_supported_tools",
++    "input_modalities",
++    "used_fallback_model_metadata",
++    "supports_search_tool",
++    "supports_experimental_context",
++    "use_responses_lite",
++    "supports_reasoning_effort_updates",
++    "node_repl_auto_review_required",
++    "node_repl_disabled",
++    "auto_review_model_override",
++    "model_specialty",
++    "tool_mode",
++    "multi_agent_version",
++    "multi_agent_reasoning_effort",
++];
++const META_KEYS: &[&str] = &[
++    "parent_response_id",
++    "installation_id",
++    "session_id",
++    "thread_id",
++    "agent_name",
++    "turn_id",
++    "routing_hint",
++    "window_id",
++    "window_number",
++    "context_window_id",
++    "request_kind",
++    "forked_from_thread_id",
++    "forked_from_ordinal_exclusive",
++    "parent_thread_id",
++    "parent_turn_id",
++    "root_turn_id",
++    "subagent_header",
++    "subagent_kind",
++    "thread_source",
++    "turn_trigger",
++    "sandbox",
++    "sandbox_mode",
++    "auto_review_enabled",
++    "node_repl_auto_review_required",
++    "node_repl_disabled",
++    "workspaces",
++    "tool_namespaces_info",
++    "turn_started_at_unix_ms",
++    "history_ingest_requested",
++    "analytics_enabled",
++    "mcp_attribution",
++    "extra",
++];
++
++pub(super) struct Materials {
++    pub creation_key: String,
++    pub prompt: Prompt,
++    pub model: ModelInfo,
++    pub metadata: CodexResponsesMetadata,
++    pub policy: ResolvedBodyPolicy,
++    pub provider: Provider,
++    pub facts: ControlledHttpFacts,
++    pub maximum: NonZeroU64,
++    pub effort: Option<codex_protocol::openai_models::ReasoningEffort>,
++    pub summary: codex_protocol::config_types::ReasoningSummary,
++    pub service_tier: Option<String>,
++    pub include_internal: bool,
++    pub timeout: Option<Duration>,
++    pub response_cap: Option<usize>,
++}
++impl Materials {
++    pub fn from_slice(bytes: &[u8]) -> Checked<Self> {
++        serde_json::from_slice::<Unique>(bytes).map_err(|_| ())?;
++        let value: Value = serde_json::from_slice(bytes).map_err(|_| ())?;
++        let top = object(
++            &value,
++            &[
++                "abi_version",
++                "creation_key",
++                "prompt",
++                "model_info",
++                "metadata",
++                "policy",
++                "provider",
++                "http_facts",
++                "maximum",
++                "effort",
++                "summary",
++                "service_tier",
++                "include_internal",
++                "timeout_ms",
++                "response_body_limit_bytes",
++                "auth_mode",
++            ],
++        )?;
++        if top["abi_version"] != 1 || top["auth_mode"] != "static_api_key_bearer" {
++            return Err(());
++        }
++        let creation_key = text(&top["creation_key"])?;
++        if creation_key.is_empty() || creation_key.len() > 128 || !creation_key.is_ascii() {
++            return Err(());
++        }
++        let m = object(&top["model_info"], MODEL_KEYS)?;
++        // Skip-deserialized fallback and unsupported model policy cannot masquerade as resolved.
++        if m["used_fallback_model_metadata"] != false
++            || !m["guardian"].is_null()
++            || !m["model_messages"].is_null()
++            || !m["available_access_programs"].is_null()
++        {
++            return Err(());
++        }
++        let model: ModelInfo = parse(&top["model_info"])?;
++        let p = object(
++            &top["prompt"],
++            &[
++                "input",
++                "tools",
++                "parallel_tool_calls",
++                "base_instructions",
++                "output_schema",
++                "output_schema_strict",
++                "cyber_access_program",
++            ],
++        )?;
++        if p["tools"] != Value::Array(vec![]) || !p["cyber_access_program"].is_null() {
++            return Err(());
++        }
++        let instructions = object(&p["base_instructions"], &["text", "provenance"])?;
++        let base_instructions = BaseInstructions {
++            text: text(&instructions["text"])?,
++            provenance: parse(&instructions["provenance"])?,
++        };
++        let input: Vec<ResponseItem> = parse(&p["input"])?;
++        // History shape must be the exact typed representation, not an ignored-field DTO.
++        if serde_json::to_value(&input).map_err(|_| ())? != p["input"] {
++            return Err(());
++        }
++        let output_schema = if p["output_schema"].is_null() {
++            None
++        } else {
++            Some(p["output_schema"].clone())
++        };
++        let prompt = Prompt {
++            input,
++            tools: Arc::from([]),
++            parallel_tool_calls: boolean(&p["parallel_tool_calls"])?,
++            base_instructions,
++            output_schema,
++            output_schema_strict: boolean(&p["output_schema_strict"])?,
++            cyber_access_program: None,
++        };
++        let md = object(&top["metadata"], META_KEYS)?;
++        for key in META_KEYS {
++            if [
++                "installation_id",
++                "session_id",
++                "thread_id",
++                "window_id",
++                "turn_id",
++                "request_kind",
++                "workspaces",
++                "extra",
++            ]
++            .contains(key)
++            {
++                continue;
++            }
++            if !md[*key].is_null() {
++                return Err(());
++            }
++        }
++        if md["workspaces"] != Value::Object(Map::new())
++            || md["extra"] != Value::Object(Map::new())
++            || md["request_kind"] != "turn"
++        {
++            return Err(());
++        }
++        let mut metadata = CodexResponsesMetadata::new(
++            text(&md["installation_id"])?,
++            text(&md["session_id"])?,
++            text(&md["thread_id"])?,
++            text(&md["window_id"])?,
++        );
++        metadata.turn_id = parse(&md["turn_id"])?;
++        metadata.request_kind = Some(CodexResponsesRequestKind::Turn);
++        let b = object(
++            &top["policy"],
++            &[
++                "thread_id",
++                "is_openai",
++                "is_bedrock",
++                "namespace_tools",
++                "reasoning_effort_override_enabled",
++                "concurrent_reasoning_summaries_enabled",
++                "model_verbosity",
++                "prompt_cache_key",
++            ],
++        )?;
++        let policy = ResolvedBodyPolicy {
++            thread_id: parse::<ThreadId>(&b["thread_id"])?,
++            is_openai: boolean(&b["is_openai"])?,
++            is_bedrock: boolean(&b["is_bedrock"])?,
++            namespace_tools: boolean(&b["namespace_tools"])?,
++            reasoning_effort_override_enabled: boolean(&b["reasoning_effort_override_enabled"])?,
++            concurrent_reasoning_summaries_enabled: boolean(
++                &b["concurrent_reasoning_summaries_enabled"],
++            )?,
++            model_verbosity: parse(&b["model_verbosity"])?,
++            prompt_cache_key: text(&b["prompt_cache_key"])?,
++        };
++        let pr = object(
++            &top["provider"],
++            &[
++                "name",
++                "base_url",
++                "query_params",
++                "headers",
++                "retry",
++                "stream_idle_timeout_ms",
++            ],
++        )?;
++        let retry = object(
++            &pr["retry"],
++            &[
++                "max_attempts",
++                "base_delay_ms",
++                "retry_429",
++                "retry_5xx",
++                "retry_transport",
++            ],
++        )?;
++        let provider = Provider {
++            name: text(&pr["name"])?,
++            base_url: text(&pr["base_url"])?,
++            query_params: parse(&pr["query_params"])?,
++            headers: headers(&pr["headers"])?,
++            retry: RetryConfig {
++                max_attempts: parse(&retry["max_attempts"])?,
++                base_delay: Duration::from_millis(parse(&retry["base_delay_ms"])?),
++                retry_429: boolean(&retry["retry_429"])?,
++                retry_5xx: boolean(&retry["retry_5xx"])?,
++                retry_transport: boolean(&retry["retry_transport"])?,
++            },
++            stream_idle_timeout: Duration::from_millis(parse(&pr["stream_idle_timeout_ms"])?),
++        };
++        let f = object(
++            &top["http_facts"],
++            &[
++                "responses_session_id",
++                "thread_id",
++                "session_source",
++                "beta",
++                "sticky_turn_state",
++                "originator",
++                "compatibility_headers",
++                "attestation_requirement",
++                "attestation",
++                "guardian_credits",
++                "access_programs",
++                "routing_hint",
++                "responses_headers",
++                "content_item_kinds_enabled",
++                "expected_contributors",
++                "contributions",
++                "trace_requirement",
++                "trace_header",
++            ],
++        )?;
++        let session_source: SessionSource = parse(&f["session_source"])?;
++        if matches!(&session_source, SessionSource::Unknown)
++            || serde_json::to_value(&session_source).map_err(|_| ())? != f["session_source"]
++        {
++            return Err(());
++        }
++        let response_headers = headers(&f["responses_headers"])?;
++        if f["guardian_credits"] != "not_requested"
++            || !f["access_programs"].is_null()
++            || response_headers
++                .keys()
++                .any(|k| k.as_str().starts_with("x-codex-guardian"))
++        {
++            return Err(());
++        }
++        let facts = ControlledHttpFacts {
++            responses_session_id: text(&f["responses_session_id"])?,
++            thread_id: text(&f["thread_id"])?,
++            session_source,
++            beta: Resolved::Value(parse(&f["beta"])?),
++            sticky_turn_state: Resolved::Value(parse(&f["sticky_turn_state"])?),
++            originator: Resolved::Value(optional_header(&f["originator"])?.ok_or(())?),
++            compatibility_headers: Resolved::Value(headers(&f["compatibility_headers"])?),
++            attestation_requirement: requirement(&f["attestation_requirement"])?,
++            attestation: Resolved::Value(optional_header(&f["attestation"])?),
++            guardian_credits: Resolved::Value(GuardianCredits::NotRequested),
++            access_programs: Resolved::Value(None),
++            routing_hint: Resolved::Value(optional_header(&f["routing_hint"])?),
++            responses_headers: Resolved::Value(response_headers),
++            content_item_kinds_enabled: boolean(&f["content_item_kinds_enabled"])?,
++            expected_contributors: parse(&f["expected_contributors"])?,
++            contributions: Resolved::Value(parse::<Vec<BTreeMap<String, String>>>(
++                &f["contributions"],
++            )?),
++            trace_requirement: requirement(&f["trace_requirement"])?,
++            trace_header: Resolved::Value(optional_header(&f["trace_header"])?),
++        };
++        Ok(Self {
++            creation_key,
++            prompt,
++            model,
++            metadata,
++            policy,
++            provider,
++            facts,
++            maximum: NonZeroU64::new(parse(&top["maximum"])?).ok_or(())?,
++            effort: parse(&top["effort"])?,
++            summary: parse(&top["summary"])?,
++            service_tier: parse(&top["service_tier"])?,
++            include_internal: boolean(&top["include_internal"])?,
++            timeout: parse::<Option<u64>>(&top["timeout_ms"])?.map(Duration::from_millis),
++            response_cap: parse(&top["response_body_limit_bytes"])?,
++        })
++    }
++}
+diff --git a/codex-rs/core/src/retained_request_ffi.rs b/codex-rs/core/src/retained_request_ffi.rs
+new file mode 100644
+--- /dev/null
++++ b/codex-rs/core/src/retained_request_ffi.rs
+@@ -0,0 +1,233 @@
++//! Private in-process ABI01 memory bridge. No send, live auth, ledger or authority.
++//! Foreign pointers are only caller-owned bounded buffers; handles are checked IDs,
++//! never foreign-owned Rust pointers. Each key can create at most once per process.
++use super::responses_producer::{
++    ControlledAuthMode, Resolved, finalize_controlled_bearer_request,
++    prepare_controlled_core_request,
++};
++#[path = "retained_request_facts.rs"]
++mod facts;
++use codex_client::RequestBody;
++use codex_http_client::FrozenResponsesRequest;
++use http::HeaderValue;
++use std::collections::{HashMap, HashSet};
++use std::sync::{Arc, Mutex, OnceLock};
++
++const INVALID: i32 = 1;
++const DUPLICATE: i32 = 2;
++const UNSUPPORTED: i32 = 3;
++const PANIC: i32 = 4;
++const MAX_FACT_BYTES: usize = 1_048_576;
++const MAX_HANDLES: usize = 1024;
++struct Retained {
++    frozen: Arc<FrozenResponsesRequest>,
++    encoded_address: usize,
++}
++#[derive(Default)]
++struct Registry {
++    next: u64,
++    seen: HashSet<String>,
++    handles: HashMap<u64, Arc<Retained>>,
++}
++static REGISTRY: OnceLock<Mutex<Registry>> = OnceLock::new();
++fn registry() -> &'static Mutex<Registry> {
++    REGISTRY.get_or_init(|| Mutex::new(Registry::default()))
++}
++fn caught(f: impl FnOnce() -> Result<(), i32>) -> i32 {
++    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)) {
++        Ok(Ok(())) => 0,
++        Ok(Err(code)) => code,
++        Err(_) => PANIC,
++    }
++}
++fn lookup(handle: u64) -> Result<Arc<Retained>, i32> {
++    registry()
++        .lock()
++        .map_err(|_| PANIC)?
++        .handles
++        .get(&handle)
++        .cloned()
++        .ok_or(INVALID)
++}
++fn insert(r: &mut Registry, retained: Arc<Retained>) -> Result<u64, i32> {
++    if r.handles.len() >= MAX_HANDLES {
++        return Err(UNSUPPORTED);
++    }
++    r.next = r.next.checked_add(1).ok_or(UNSUPPORTED)?;
++    let id = r.next;
++    r.handles.insert(id, retained);
++    Ok(id)
++}
++/// Safety: input/output buffers must be valid owned foreign allocations for their
++/// declared bounded lengths and must remain alive for this synchronous call.
++/// No credential or material enters any Debug/log/error representation.
++#[unsafe(no_mangle)]
++pub unsafe extern "C" fn m63_request_create(
++    materials: *const u8,
++    length: usize,
++    bearer: *const u8,
++    bearer_length: usize,
++    output: *mut u64,
++) -> i32 {
++    if materials.is_null()
++        || bearer.is_null()
++        || output.is_null()
++        || length == 0
++        || length > MAX_FACT_BYTES
++        || bearer_length == 0
++        || bearer_length > 4096
++    {
++        return INVALID;
++    }
++    caught(|| {
++        // SAFETY: the private owned caller guarantees exactly the buffers checked above.
++        let input = unsafe { std::slice::from_raw_parts(materials, length) };
++        let auth = unsafe { std::slice::from_raw_parts(bearer, bearer_length) };
++        let m = facts::Materials::from_slice(input).map_err(|_| UNSUPPORTED)?;
++        {
++            let mut r = registry().lock().map_err(|_| PANIC)?;
++            if r.seen.contains(&m.creation_key) {
++                return Err(DUPLICATE);
++            }
++            if r.seen.len() >= MAX_HANDLES {
++                return Err(UNSUPPORTED);
++            }
++            r.seen.insert(m.creation_key.clone());
++        }
++        // No request JSON arrives from Python. The genuine existing core producer
++        // creates its actual envelope and calls the sole shared EncodedJson encoder.
++        let mut request = prepare_controlled_core_request(
++            &m.prompt,
++            &m.model,
++            m.effort,
++            m.summary,
++            m.service_tier,
++            &m.metadata,
++            m.include_internal,
++            &m.policy,
++            &m.provider,
++            m.facts,
++            m.maximum,
++        )
++        .map_err(|_| UNSUPPORTED)?;
++        request.timeout = m.timeout;
++        request.response_body_limit_bytes = m.response_cap;
++        let encoded_address = match request.body.as_ref() {
++            Some(RequestBody::EncodedJson(body)) => body.as_bytes().as_ptr() as usize,
++            _ => return Err(UNSUPPORTED),
++        };
++        let auth = HeaderValue::from_bytes(auth).map_err(|_| UNSUPPORTED)?;
++        let frozen = finalize_controlled_bearer_request(
++            request,
++            Resolved::Value(ControlledAuthMode::StaticApiKeyBearer),
++            auth,
++            m.maximum,
++        )
++        .map_err(|_| UNSUPPORTED)?;
++        if frozen.body_bytes().as_ptr() as usize != encoded_address {
++            return Err(UNSUPPORTED);
++        }
++        let id = insert(
++            &mut *registry().lock().map_err(|_| PANIC)?,
++            Arc::new(Retained {
++                frozen,
++                encoded_address,
++            }),
++        )?;
++        // SAFETY: output is the caller's owned u64 slot for this call.
++        unsafe { output.write(id) };
++        Ok(())
++    })
++}
++/// A borrowed state projection contains no body, URL or Authorization value.
++#[repr(C)]
++pub struct RequestInfo {
++    pub body_bytes: u64,
++    pub encoded_frozen_same: u64,
++    pub cloned_body_same: u64,
++    pub auth_sensitive: u64,
++}
++/// Safety: output points to one caller-owned RequestInfo; it is never retained.
++#[unsafe(no_mangle)]
++pub unsafe extern "C" fn m63_request_info(handle: u64, output: *mut RequestInfo) -> i32 {
++    if output.is_null() {
++        return INVALID;
++    }
++    caught(|| {
++        let r = lookup(handle)?;
++        let request = r.frozen.prepared_request();
++        let clone_address = match request.body.as_ref() {
++            Some(RequestBody::EncodedJson(b)) => b.as_bytes().as_ptr() as usize,
++            _ => return Err(UNSUPPORTED),
++        };
++        let info = RequestInfo {
++            body_bytes: r.frozen.body_bytes().len() as u64,
++            encoded_frozen_same: u64::from(
++                r.encoded_address == r.frozen.body_bytes().as_ptr() as usize,
++            ),
++            cloned_body_same: u64::from(clone_address == r.encoded_address),
++            auth_sensitive: u64::from(
++                request
++                    .headers
++                    .get(http::header::AUTHORIZATION)
++                    .is_some_and(HeaderValue::is_sensitive),
++            ),
++        };
++        // SAFETY: output is the caller's owned struct slot.
++        unsafe { output.write(info) };
++        Ok(())
++    })
++}
++/// Safety: output has `capacity` owned writable bytes and size is one usize slot.
++/// This private bounded copy is for owned verification; headers are never copied.
++#[unsafe(no_mangle)]
++pub unsafe extern "C" fn m63_request_copy_body(
++    handle: u64,
++    output: *mut u8,
++    capacity: usize,
++    size: *mut usize,
++) -> i32 {
++    if output.is_null() || size.is_null() || capacity == 0 || capacity > MAX_FACT_BYTES {
++        return INVALID;
++    }
++    caught(|| {
++        let r = lookup(handle)?;
++        let body = r.frozen.body_bytes();
++        if body.len() > capacity {
++            return Err(INVALID);
++        }
++        // SAFETY: caller owns this buffer; no Rust reference survives the copy.
++        unsafe {
++            std::ptr::copy_nonoverlapping(body.as_ptr(), output, body.len());
++            size.write(body.len())
++        };
++        Ok(())
++    })
++}
++/// Safety: output points to one owned u64 slot; clone shares the same frozen Arc.
++#[unsafe(no_mangle)]
++pub unsafe extern "C" fn m63_request_clone(handle: u64, output: *mut u64) -> i32 {
++    if output.is_null() {
++        return INVALID;
++    }
++    caught(|| {
++        let retained = lookup(handle)?;
++        let id = insert(&mut *registry().lock().map_err(|_| PANIC)?, retained)?;
++        unsafe { output.write(id) };
++        Ok(())
++    })
++}
++/// Removes exactly one checked handle. Double/unknown release is rejected.
++/// Last release drops the genuine request allocation; the creation tombstone stays.
++#[unsafe(no_mangle)]
++pub extern "C" fn m63_request_release(handle: u64) -> i32 {
++    caught(|| {
++        registry()
++            .lock()
++            .map_err(|_| PANIC)?
++            .handles
++            .remove(&handle)
++            .ok_or(INVALID)?;
++        Ok(())
++    })
++}
+diff --git a/codex-rs/ext/guardian-v2/src/async_scorer/sampler.rs b/codex-rs/ext/guardian-v2/src/async_scorer/sampler.rs
+--- a/codex-rs/ext/guardian-v2/src/async_scorer/sampler.rs
++++ b/codex-rs/ext/guardian-v2/src/async_scorer/sampler.rs
+@@ -241,6 +241,8 @@
+             }),
+             store: false,
+             stream: true,
++            max_output_tokens: None,
++            truncation: None,
+             stream_options: None,
+             include: Vec::new(),
+             service_tier: None,
+diff --git a/codex-rs/http-client/src/frozen_responses_request.rs b/codex-rs/http-client/src/frozen_responses_request.rs
+new file mode 100644
+--- /dev/null
++++ b/codex-rs/http-client/src/frozen_responses_request.rs
+@@ -0,0 +1,235 @@
++//! One-use binding to the existing serializer's exact Responses request bytes.
++//!
++//! This is a transport capability, not an input-token proof or a durable consent.
++//! The owner must freeze after all request/header mutations, share the same `Arc`
++//! across every HTTP attempt, and separately exclude other outbound transports.
++
++use crate::Request;
++use crate::RequestBody;
++use crate::RequestCompression;
++use crate::request::PreparedRequestBody;
++use http::Method;
++use serde::Deserialize;
++use serde::Deserializer;
++use serde::de::MapAccess;
++use serde::de::SeqAccess;
++use serde::de::Visitor;
++use std::collections::HashSet;
++use std::num::NonZeroU64;
++use std::sync::atomic::AtomicBool;
++use std::sync::atomic::Ordering;
++use thiserror::Error;
++
++/// An immutable existing request and a shared, non-resettable send capability.
++pub struct FrozenResponsesRequest {
++    request: Request,
++    prepared: PreparedRequestBody,
++    claimed: AtomicBool,
++}
++
++impl std::fmt::Debug for FrozenResponsesRequest {
++    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        formatter
++            .debug_struct("FrozenResponsesRequest")
++            .finish_non_exhaustive()
++    }
++}
++
++#[derive(Debug, Error, PartialEq, Eq)]
++pub enum FrozenRequestError {
++    #[error("CODEX_FROZEN_REQUEST_UNSUPPORTED")]
++    Unsupported,
++    #[error("CODEX_OUTPUT_LIMIT_UNAVAILABLE")]
++    OutputLimit,
++    #[error("CODEX_FROZEN_REQUEST_CHANGED")]
++    Changed,
++    #[error("CODEX_NEW_OUTBOUND_CONSENT_REQUIRED")]
++    AlreadyClaimed,
++}
++
++// Deserialize only to check limits in the actual encoded body. Never reserialize
++// this view or use it in place of the original request. Serde rejects duplicate
++// occurrences of these known fields rather than choosing one ambiguously.
++#[derive(Deserialize)]
++struct OutputLimits {
++    max_output_tokens: NonZeroU64,
++    truncation: String,
++}
++
++// Reject duplicate names at every object depth before interpreting limits.
++// This parser is validation only; the exact original bytes remain the payload.
++struct UniqueJson;
++
++impl<'de> Deserialize<'de> for UniqueJson {
++    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
++        struct UniqueVisitor;
++        impl<'de> Visitor<'de> for UniqueVisitor {
++            type Value = UniqueJson;
++
++            fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++                formatter.write_str("JSON with unique object names")
++            }
++
++            fn visit_bool<E: serde::de::Error>(self, _: bool) -> Result<UniqueJson, E> {
++                Ok(UniqueJson)
++            }
++
++            fn visit_i64<E: serde::de::Error>(self, _: i64) -> Result<UniqueJson, E> {
++                Ok(UniqueJson)
++            }
++
++            fn visit_u64<E: serde::de::Error>(self, _: u64) -> Result<UniqueJson, E> {
++                Ok(UniqueJson)
++            }
++
++            fn visit_f64<E: serde::de::Error>(self, _: f64) -> Result<UniqueJson, E> {
++                Ok(UniqueJson)
++            }
++
++            fn visit_str<E: serde::de::Error>(self, _: &str) -> Result<UniqueJson, E> {
++                Ok(UniqueJson)
++            }
++
++            fn visit_unit<E: serde::de::Error>(self) -> Result<UniqueJson, E> {
++                Ok(UniqueJson)
++            }
++
++            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<UniqueJson, A::Error> {
++                while seq.next_element::<UniqueJson>()?.is_some() {}
++                Ok(UniqueJson)
++            }
++
++            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<UniqueJson, A::Error> {
++                let mut names = HashSet::new();
++                while let Some(name) = map.next_key::<String>()? {
++                    if !names.insert(name) {
++                        return Err(serde::de::Error::custom("duplicate JSON name"));
++                    }
++                    map.next_value::<UniqueJson>()?;
++                }
++                Ok(UniqueJson)
++            }
++        }
++        deserializer.deserialize_any(UniqueVisitor)
++    }
++}
++
++impl FrozenResponsesRequest {
++    /// Freeze an already encoded, uncompressed HTTPS Responses POST.
++    ///
++    /// No request field is injected here. In particular the real producer must
++    /// already encode the exact positive output limit and disabled truncation.
++    /// Compression, supplied Host/framing, and URL credentials/query/fragment
++    /// are excluded. Accept must be explicit before freeze, closing reqwest's
++    /// otherwise late default. Content-Type must be exactly application/json.
++    pub fn freeze(
++        request: Request,
++        max_output_tokens: NonZeroU64,
++    ) -> Result<Self, FrozenRequestError> {
++        let url = reqwest::Url::parse(&request.url).map_err(|_| FrozenRequestError::Unsupported)?;
++        if request.method != Method::POST
++            || url.scheme() != "https"
++            || url.host_str().is_none()
++            || !url.username().is_empty()
++            || url.password().is_some()
++            || url.query().is_some()
++            || url.fragment().is_some()
++            || !url.path().ends_with("/responses")
++            || url.as_str() != request.url
++            || request.compression != RequestCompression::None
++            || request.headers.contains_key(http::header::CONTENT_ENCODING)
++            || request.headers.contains_key(http::header::HOST)
++            || request.headers.contains_key(http::header::CONTENT_LENGTH)
++            || request
++                .headers
++                .contains_key(http::header::TRANSFER_ENCODING)
++            || !request.headers.contains_key(http::header::ACCEPT)
++        {
++            return Err(FrozenRequestError::Unsupported);
++        }
++        let Some(RequestBody::EncodedJson(body)) = request.body.as_ref() else {
++            return Err(FrozenRequestError::Unsupported);
++        };
++        if body
++            .as_bytes()
++            .iter()
++            .find(|byte| !byte.is_ascii_whitespace())
++            != Some(&b'{')
++        {
++            return Err(FrozenRequestError::OutputLimit);
++        }
++        serde_json::from_slice::<UniqueJson>(body.as_bytes())
++            .map_err(|_| FrozenRequestError::OutputLimit)?;
++        let limits: OutputLimits =
++            serde_json::from_slice(body.as_bytes()).map_err(|_| FrozenRequestError::OutputLimit)?;
++        if limits.max_output_tokens != max_output_tokens || limits.truncation != "disabled" {
++            return Err(FrozenRequestError::OutputLimit);
++        }
++        let request = request
++            .into_prepared()
++            .map_err(|_| FrozenRequestError::Unsupported)?;
++        let prepared = request
++            .prepare_body_for_send()
++            .map_err(|_| FrozenRequestError::Unsupported)?;
++        if prepared
++            .headers
++            .get_all(http::header::CONTENT_TYPE)
++            .iter()
++            .count()
++            != 1
++            || prepared
++                .headers
++                .get(http::header::CONTENT_TYPE)
++                .and_then(|value| value.to_str().ok())
++                != Some("application/json")
++        {
++            return Err(FrozenRequestError::Unsupported);
++        }
++        Ok(Self {
++            request,
++            prepared,
++            claimed: AtomicBool::new(false),
++        })
++    }
++
++    /// Clone the real prepared request; its encoded body shares the frozen bytes.
++    pub fn prepared_request(&self) -> Request {
++        self.request.clone()
++    }
++
++    /// Borrow the original final wire body for a separate reviewed input proof.
++    pub fn body_bytes(&self) -> &[u8] {
++        self.prepared.body.as_deref().unwrap_or_default()
++    }
++
++    pub(crate) fn claim(
++        &self,
++        request: &reqwest::Request,
++        response_body_limit_bytes: Option<usize>,
++    ) -> Result<(), FrozenRequestError> {
++        // Claim before any network action, and burn even a mismatched attempt.
++        // A build/connection/HTTP/stream failure never restores this capability.
++        self.claimed
++            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
++            .map_err(|_| FrozenRequestError::AlreadyClaimed)?;
++        if request.method() != &self.request.method
++            || request.url().as_str() != self.request.url
++            || request.headers() != &self.prepared.headers
++            || request.timeout().copied() != self.request.timeout
++            || response_body_limit_bytes != self.request.response_body_limit_bytes
++            || request.body().and_then(reqwest::Body::as_bytes) != Some(self.body_bytes())
++            || request
++                .body()
++                .and_then(reqwest::Body::as_bytes)
++                .map(<[u8]>::as_ptr)
++                != Some(self.body_bytes().as_ptr())
++        {
++            return Err(FrozenRequestError::Changed);
++        }
++        Ok(())
++    }
++}
++
++#[cfg(test)]
++#[path = "frozen_responses_request_tests.rs"]
++mod tests;
+diff --git a/codex-rs/http-client/src/frozen_responses_request_tests.rs b/codex-rs/http-client/src/frozen_responses_request_tests.rs
+new file mode 100644
+--- /dev/null
++++ b/codex-rs/http-client/src/frozen_responses_request_tests.rs
+@@ -0,0 +1,346 @@
++use super::*;
++use crate::EncodedJsonBody;
++use crate::HttpTransport;
++use crate::ReqwestTransport;
++use crate::TransportError;
++use pretty_assertions::assert_eq;
++use serde::Serialize;
++use serde::ser::SerializeMap;
++use serde_json::json;
++use std::sync::Arc;
++use std::sync::Barrier;
++use std::time::Duration;
++
++fn output_limit() -> NonZeroU64 {
++    NonZeroU64::new(64).expect("positive output limit")
++}
++
++fn encoded_request(body: &impl Serialize) -> Request {
++    let mut request = Request::new(
++        Method::POST,
++        "https://example.test/v1/responses".to_string(),
++    );
++    request.headers.insert(
++        http::header::ACCEPT,
++        http::HeaderValue::from_static("text/event-stream"),
++    );
++    request.body = Some(RequestBody::EncodedJson(
++        EncodedJsonBody::encode(body).expect("actual serializer should encode"),
++    ));
++    request
++}
++
++fn frozen_request() -> FrozenResponsesRequest {
++    FrozenResponsesRequest::freeze(
++        encoded_request(&json!({
++            "model": "test-model",
++            "input": [{"role": "user", "content": "bounded input"}],
++            "max_output_tokens": 64,
++            "truncation": "disabled"
++        })),
++        output_limit(),
++    )
++    .expect("real encoded request should freeze")
++}
++
++fn built_request(frozen: &FrozenResponsesRequest) -> reqwest::Request {
++    let request = frozen.prepared_request();
++    let prepared = request.prepare_body_for_send().expect("already prepared");
++    let mut built = reqwest::Request::new(request.method, request.url.parse().expect("valid URL"));
++    *built.headers_mut() = prepared.headers;
++    *built.body_mut() = prepared.body.map(Into::into);
++    *built.timeout_mut() = request.timeout;
++    built
++}
++
++#[test]
++fn frozen_responses_request_preserves_the_actual_encoded_allocation() {
++    let request = encoded_request(&json!({"max_output_tokens":64,"truncation":"disabled"}));
++    let original = match request.body.as_ref().expect("encoded body") {
++        RequestBody::EncodedJson(body) => body.as_bytes().as_ptr(),
++        _ => panic!("actual encoded body required"),
++    };
++    let frozen = FrozenResponsesRequest::freeze(request, output_limit()).expect("should freeze");
++    let clone = frozen.prepared_request();
++    let clone_body = clone
++        .prepare_body_for_send()
++        .expect("prepared")
++        .body
++        .expect("body");
++    assert_eq!(frozen.body_bytes().as_ptr(), original);
++    assert_eq!(clone_body.as_ptr(), original);
++    let built = built_request(&frozen);
++    assert_eq!(
++        built
++            .body()
++            .and_then(reqwest::Body::as_bytes)
++            .map(<[u8]>::as_ptr),
++        Some(original)
++    );
++    assert_eq!(
++        frozen.claim(&built, clone.response_body_limit_bytes),
++        Ok(())
++    );
++    assert_eq!(
++        frozen.claim(&built, clone.response_body_limit_bytes),
++        Err(FrozenRequestError::AlreadyClaimed)
++    );
++}
++
++#[test]
++fn frozen_responses_request_rejects_missing_ambiguous_or_changed_output_limits() {
++    for body in [
++        json!({"truncation":"disabled"}),
++        json!({"max_output_tokens":0,"truncation":"disabled"}),
++        json!({"max_output_tokens":65,"truncation":"disabled"}),
++        json!({"max_output_tokens":"64","truncation":"disabled"}),
++        json!({"max_output_tokens":64,"truncation":"auto"}),
++        json!({"max_output_tokens":64}),
++        json!([64, "disabled"]),
++    ] {
++        assert_eq!(
++            FrozenResponsesRequest::freeze(encoded_request(&body), output_limit()).err(),
++            Some(FrozenRequestError::OutputLimit)
++        );
++    }
++}
++
++struct DuplicateNames;
++
++impl Serialize for DuplicateNames {
++    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
++        let mut map = serializer.serialize_map(Some(2))?;
++        map.serialize_entry("content", "first")?;
++        map.serialize_entry("content", "second")?;
++        map.end()
++    }
++}
++
++#[test]
++fn frozen_responses_request_rejects_duplicate_names_inside_real_serialized_input() {
++    #[derive(Serialize)]
++    struct ActualBody {
++        max_output_tokens: u64,
++        truncation: &'static str,
++        input: [DuplicateNames; 1],
++    }
++    let request = encoded_request(&ActualBody {
++        max_output_tokens: 64,
++        truncation: "disabled",
++        input: [DuplicateNames],
++    });
++    assert_eq!(
++        FrozenResponsesRequest::freeze(request, output_limit()).err(),
++        Some(FrozenRequestError::OutputLimit)
++    );
++}
++
++#[test]
++fn frozen_responses_request_excludes_raw_json_compression_and_unsafe_destination_shapes() {
++    let good = frozen_request().prepared_request();
++    let mut json_body = good.clone();
++    json_body.body = Some(RequestBody::Json(
++        json!({"max_output_tokens":64,"truncation":"disabled"}),
++    ));
++    let mut raw_body = good.clone();
++    raw_body.body = Some(RequestBody::Raw(bytes::Bytes::copy_from_slice(
++        frozen_request().body_bytes(),
++    )));
++    let mut compressed = good.clone();
++    compressed.compression = RequestCompression::Zstd;
++    let mut content_encoding = good.clone();
++    content_encoding.headers.insert(
++        http::header::CONTENT_ENCODING,
++        http::HeaderValue::from_static("zstd"),
++    );
++    let mut requests = vec![json_body, raw_body, compressed, content_encoding];
++    for (header, value) in [
++        (http::header::HOST, "other.invalid"),
++        (http::header::CONTENT_LENGTH, "1"),
++        (http::header::TRANSFER_ENCODING, "gzip"),
++        (http::header::CONTENT_TYPE, "text/plain"),
++    ] {
++        let mut request = good.clone();
++        request.headers.insert(
++            header,
++            http::HeaderValue::from_str(value).expect("valid header"),
++        );
++        requests.push(request);
++    }
++    let mut missing_accept = good.clone();
++    missing_accept.headers.remove(http::header::ACCEPT);
++    requests.push(missing_accept);
++    let mut duplicate_content_type = good.clone();
++    duplicate_content_type.headers.append(
++        http::header::CONTENT_TYPE,
++        http::HeaderValue::from_static("text/plain"),
++    );
++    requests.push(duplicate_content_type);
++    for url in [
++        "http://example.test/v1/responses",
++        "https://user:pass@example.test/v1/responses",
++        "https://example.test/v1/responses?redirect=other",
++        "https://example.test/v1/responses#fragment",
++        "https://example.test/v1/compact",
++    ] {
++        let mut request = good.clone();
++        request.url = url.to_string();
++        requests.push(request);
++    }
++    for request in requests {
++        assert_eq!(
++            FrozenResponsesRequest::freeze(request, output_limit()).err(),
++            Some(FrozenRequestError::Unsupported)
++        );
++    }
++}
++
++#[test]
++fn frozen_responses_request_concurrent_clones_share_exactly_one_claim() {
++    let frozen = Arc::new(frozen_request());
++    let barrier = Arc::new(Barrier::new(16));
++    let threads: Vec<_> = (0..16)
++        .map(|_| {
++            let frozen = Arc::clone(&frozen);
++            let barrier = Arc::clone(&barrier);
++            std::thread::spawn(move || {
++                let built = built_request(&frozen);
++                barrier.wait();
++                frozen.claim(&built, frozen.request.response_body_limit_bytes)
++            })
++        })
++        .collect();
++    let results: Vec<_> = threads
++        .into_iter()
++        .map(|thread| thread.join().expect("thread completes"))
++        .collect();
++    assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
++    assert_eq!(
++        results
++            .iter()
++            .filter(|result| **result == Err(FrozenRequestError::AlreadyClaimed))
++            .count(),
++        15
++    );
++}
++
++#[tokio::test]
++async fn frozen_responses_request_transport_rejects_mutations_before_any_network_send() {
++    for change in [
++        "method",
++        "url",
++        "headers",
++        "body",
++        "timeout",
++        "response cap",
++        "reserialized bytes",
++    ] {
++        let frozen = Arc::new(frozen_request());
++        let transport = ReqwestTransport::for_frozen_responses_request(Arc::clone(&frozen))
++            .expect("client builds without sending");
++        let mut request = frozen.prepared_request();
++        match change {
++            "method" => request.method = Method::GET,
++            "url" => request.url = "https://changed.invalid/v1/responses".to_string(),
++            "headers" => {
++                request.headers.insert(
++                    http::header::AUTHORIZATION,
++                    http::HeaderValue::from_static("Bearer changed"),
++                );
++            }
++            "body" => {
++                request.body = Some(RequestBody::EncodedJson(
++                    EncodedJsonBody::encode(
++                        &json!({"max_output_tokens":128,"truncation":"disabled"}),
++                    )
++                    .expect("encode mutation"),
++                ))
++            }
++            "timeout" => request.timeout = Some(Duration::from_secs(1)),
++            "response cap" => request.response_body_limit_bytes = Some(1),
++            "reserialized bytes" => {
++                let value: serde_json::Value =
++                    serde_json::from_slice(frozen.body_bytes()).expect("valid original JSON");
++                let body = EncodedJsonBody::encode(&value).expect("reserialize same fields");
++                assert_eq!(body.as_bytes(), frozen.body_bytes());
++                request.body = Some(RequestBody::EncodedJson(body));
++            }
++            _ => unreachable!("closed cases"),
++        }
++        let error = transport
++            .stream(request)
++            .await
++            .err()
++            .expect("must reject before DNS or HTTP");
++        assert!(
++            matches!(error, TransportError::Build(ref message) if message == "CODEX_FROZEN_REQUEST_CHANGED")
++        );
++        let error = transport
++            .clone()
++            .execute(frozen.prepared_request())
++            .await
++            .err()
++            .expect("mismatch burns capability");
++        assert!(
++            matches!(error, TransportError::Build(ref message) if message == "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED")
++        );
++    }
++}
++
++#[tokio::test]
++async fn frozen_responses_request_new_transport_cannot_refund_a_claimed_capability() {
++    let frozen = Arc::new(frozen_request());
++    assert_eq!(
++        frozen.claim(
++            &built_request(&frozen),
++            frozen.request.response_body_limit_bytes
++        ),
++        Ok(())
++    );
++    // Simulate any failure/cancellation after claim without making a connection.
++    let first =
++        ReqwestTransport::for_frozen_responses_request(Arc::clone(&frozen)).expect("client builds");
++    let second = ReqwestTransport::for_frozen_responses_request(Arc::clone(&frozen))
++        .expect("another client builds");
++    for transport in [first, second] {
++        let error = transport
++            .execute(frozen.prepared_request())
++            .await
++            .err()
++            .expect("spent capability rejects before network");
++        assert!(
++            matches!(error, TransportError::Build(ref message) if message == "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED")
++        );
++    }
++}
++
++#[tokio::test]
++async fn frozen_responses_request_connection_failure_does_not_refund_the_real_sender() {
++    let listener = std::net::TcpListener::bind(("127.0.0.1", 0)).expect("owned port binds");
++    let address = listener.local_addr().expect("owned address");
++    drop(listener);
++    let mut request = frozen_request().prepared_request();
++    request.url = format!("https://{address}/v1/responses");
++    request.timeout = Some(Duration::from_secs(2));
++    let frozen = Arc::new(
++        FrozenResponsesRequest::freeze(request, output_limit()).expect("freeze owned URL"),
++    );
++    let transport =
++        ReqwestTransport::for_frozen_responses_request(Arc::clone(&frozen)).expect("client builds");
++    let error = transport
++        .execute(frozen.prepared_request())
++        .await
++        .err()
++        .expect("owned closed port fails");
++    assert!(matches!(error, TransportError::Connection(_)));
++    let retry = ReqwestTransport::for_frozen_responses_request(Arc::clone(&frozen))
++        .expect("client rebuilds");
++    let error = retry
++        .stream(frozen.prepared_request())
++        .await
++        .err()
++        .expect("consumed gate survives rebuilt sender");
++    assert!(
++        matches!(error, TransportError::Build(ref message) if message == "CODEX_NEW_OUTBOUND_CONSENT_REQUIRED")
++    );
++}
+diff --git a/codex-rs/http-client/src/lib.rs b/codex-rs/http-client/src/lib.rs
+--- a/codex-rs/http-client/src/lib.rs
++++ b/codex-rs/http-client/src/lib.rs
+@@ -5,6 +5,7 @@
+ mod client_tls;
+ mod custom_ca;
+ mod error;
++mod frozen_responses_request;
+ mod network_policy;
+ mod outbound_proxy;
+ mod request;
+@@ -36,6 +37,8 @@
+ pub use crate::custom_ca::maybe_build_rustls_client_config_with_custom_ca;
+ pub use crate::error::StreamError;
+ pub use crate::error::TransportError;
++pub use crate::frozen_responses_request::FrozenRequestError;
++pub use crate::frozen_responses_request::FrozenResponsesRequest;
+ pub use crate::network_policy::DestinationPolicy;
+ pub use crate::network_policy::NetworkPermit;
+ pub use crate::network_policy::NetworkPolicy;
+diff --git a/codex-rs/http-client/src/transport.rs b/codex-rs/http-client/src/transport.rs
+--- a/codex-rs/http-client/src/transport.rs
++++ b/codex-rs/http-client/src/transport.rs
+@@ -3,6 +3,7 @@
+ //! Each request's limit applies to observed body bytes, including unsuccessful responses;
+ //! declared content lengths are only an additional early-rejection check.
+
++use crate::FrozenResponsesRequest;
+ use crate::HttpResponse;
+ use crate::RouteAwareClientPool;
+ use crate::RouteAwareRequestError;
+@@ -21,6 +22,7 @@
+ use http::HeaderMap;
+ use http::Method;
+ use http::StatusCode;
++use std::sync::Arc;
+ use tracing::Level;
+ use tracing::enabled;
+ use tracing::trace;
+@@ -47,6 +49,7 @@
+ #[derive(Clone, Debug)]
+ pub struct ReqwestTransport {
+     client: TransportClient,
++    frozen_responses_request: Option<Arc<FrozenResponsesRequest>>,
+ }
+
+ #[derive(Clone, Debug)]
+@@ -63,6 +66,7 @@
+     pub fn from_http_client(client: HttpClient) -> Self {
+         Self {
+             client: TransportClient::Fixed(client),
++            frozen_responses_request: None,
+         }
+     }
+
+@@ -70,7 +74,33 @@
+     pub fn from_route_aware_client_pool(client: RouteAwareClientPool) -> Self {
+         Self {
+             client: TransportClient::RouteAware(Box::new(client)),
+-        }
++            frozen_responses_request: None,
++        }
++    }
++
++    /// Build the restricted real HTTP sender for one already frozen request.
++    ///
++    /// Clones and newly constructed senders must share the same capability.
++    /// This does not bind AppServer's other transports or persist platform consent.
++    pub fn for_frozen_responses_request(
++        frozen: Arc<FrozenResponsesRequest>,
++    ) -> Result<Self, TransportError> {
++        let client = reqwest::Client::builder()
++            .no_proxy()
++            .redirect(reqwest::redirect::Policy::none())
++            .retry(reqwest::retry::never())
++            .http1_only()
++            .pool_max_idle_per_host(0)
++            .no_gzip()
++            .no_brotli()
++            .no_zstd()
++            .no_deflate()
++            .build()
++            .map_err(|error| TransportError::Build(error.without_url().to_string()))?;
++        Ok(Self {
++            client: TransportClient::Fixed(HttpClient::new_without_request_logging(client)),
++            frozen_responses_request: Some(frozen),
++        })
+     }
+
+     async fn send(&self, req: Request) -> Result<HttpResponse, TransportError> {
+@@ -83,7 +113,7 @@
+             body: _,
+             compression: _,
+             timeout,
+-            response_body_limit_bytes: _,
++            response_body_limit_bytes,
+         } = req;
+
+         let method = Method::from_bytes(method.as_str().as_bytes()).unwrap_or(Method::GET);
+@@ -103,6 +133,19 @@
+                     let request = request
+                         .build(client)
+                         .map_err(|error| Self::map_error(error.into()))?;
++                    if let Some(frozen) = &self.frozen_responses_request {
++                        frozen
++                            .claim(&request, response_body_limit_bytes)
++                            .map_err(|error| TransportError::Build(error.to_string()))?;
++                        // Bypass late trace/default-header injection; claim the
++                        // actual built request immediately before real execution.
++                        return client
++                            .inner
++                            .execute(request)
++                            .await
++                            .map(HttpResponse::from)
++                            .map_err(|error| Self::map_error(error.into()));
++                    }
+                     client
+                         .execute(request)
+                         .await
