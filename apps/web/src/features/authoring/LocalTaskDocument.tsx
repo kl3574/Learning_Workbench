@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { SessionResponse } from '../../../../../packages/contracts/generated/api-types'
 import { ApiError, getSessionGeneration, subscribeSessionAccess } from '../../api/client'
 import type { AuthoringPort } from './authoringClient'
@@ -14,7 +14,9 @@ export function LocalTaskDocument({ workspace, actor, port, inputs, busy, denied
   const current = useRef({ owner, port }); current.current = { owner, port }
   const live = useRef(true), pending = useRef<object | null>(null), urls = useRef(new Set<string>())
   const [working, setWorking] = useState(false), [message, setMessage] = useState('')
-  useEffect(() => {
+  // Finish the owner/port handoff before this commit can admit a click. A
+  // deferred passive cleanup/setup must not erase a newly admitted token.
+  useLayoutEffect(() => {
     live.current = true; pending.current = null; setWorking(false); setMessage('')
     return () => { live.current = false; pending.current = null; for (const url of urls.current) URL.revokeObjectURL(url); urls.current.clear() }
   }, [owner, port])

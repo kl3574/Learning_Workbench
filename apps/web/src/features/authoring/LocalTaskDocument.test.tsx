@@ -1,8 +1,10 @@
 import 'fake-indexeddb/auto'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, test, vi } from 'vitest'
+import { useLayoutEffect } from 'react'
 import { ApiError, request } from '../../api/client'
 import { AuthoringPanel } from './AuthoringPanel'
+import { LocalTaskDocument } from './LocalTaskDocument'
 import type { AuthoringPort } from './authoringClient'
 import type { SessionResponse } from '../../../../../packages/contracts/generated/api-types'
 
@@ -103,6 +105,55 @@ test('double clicking one pending read downloads once and permission failure doe
   expect(createURL).toHaveBeenCalledOnce()
   expect((screen.getByLabelText('例题主题') as HTMLTextAreaElement).value).toBe('合成主题 α\n第二行')
   expect(f.state.mock.lastCall?.[0].dirty).toBe(true)
+})
+
+test('a click in the new scope commit retains synchronous admission when lifecycle effects flush', async () => {
+  const f = setup(); await fill(); f.view.unmount()
+  const pending = deferred<SessionResponse>()
+  f.port.session = vi.fn(() => pending.promise)
+  const inputs = { topic: 'commit scope topic', prerequisites: '', objectives: 'commit scope objective', proof: 'full' as const }
+  function CommitClick({ busy }: { busy: boolean }) {
+    // Exercise the public button after the new scope commits, before passive
+    // effects settle; the subsequent explicit click must share its admission.
+    useLayoutEffect(() => { if (!busy) screen.getByRole('button', { name: '下载当前四项需求说明' }).click() }, [busy])
+    return <LocalTaskDocument workspace={f.workspace} actor={f.session.actor_session_id} port={f.port} inputs={inputs} busy={busy} denied={() => undefined} />
+  }
+  const view = render(<CommitClick busy={true} />)
+  view.rerender(<CommitClick busy={false} />)
+  expect(f.port.session).toHaveBeenCalledOnce()
+  fireEvent.click(screen.getByRole('button', { name: '下载当前四项需求说明' }))
+  expect(f.port.session).toHaveBeenCalledOnce()
+  await act(async () => pending.resolve({ ...f.session }))
+  await waitFor(() => expect(f.clicked).toHaveBeenCalledOnce())
+  expect(createURL).toHaveBeenCalledOnce(); expect(f.mutation).not.toHaveBeenCalled()
+})
+
+test.each(['inputs', 'port'] as const)('completion of an old %s scope cannot release the new pending command', async mode => {
+  const f = setup(); await fill(); f.view.unmount()
+  const first = deferred<SessionResponse>(), second = deferred<SessionResponse>()
+  const firstSession = vi.fn(() => first.promise), secondSession = vi.fn(() => second.promise)
+  const oldPort = { ...f.port, session: firstSession }
+  const oldInputs = { topic: 'old scope topic', prerequisites: '', objectives: 'scope objective', proof: 'full' as const }
+  const view = render(<LocalTaskDocument workspace={f.workspace} actor={f.session.actor_session_id} port={oldPort} inputs={oldInputs} busy={false} denied={() => undefined} />)
+  fireEvent.click(screen.getByRole('button', { name: '下载当前四项需求说明' }))
+  expect(firstSession).toHaveBeenCalledOnce()
+  const newInputs = mode === 'inputs' ? { ...oldInputs, topic: 'new scope topic' } : oldInputs
+  const newPort = mode === 'port' ? { ...oldPort, session: secondSession } : oldPort
+  if (mode === 'inputs') oldPort.session = secondSession
+  view.rerender(<LocalTaskDocument workspace={f.workspace} actor={f.session.actor_session_id} port={newPort} inputs={newInputs} busy={false} denied={() => undefined} />)
+  const button = screen.getByRole('button', { name: '下载当前四项需求说明' })
+  fireEvent.click(button); expect(secondSession).toHaveBeenCalledOnce()
+  await act(async () => first.resolve({ ...f.session }))
+  expect(createURL).not.toHaveBeenCalled(); expect(f.clicked).not.toHaveBeenCalled()
+  expect(button.matches(':disabled')).toBe(true)
+  fireEvent.click(button); expect(secondSession).toHaveBeenCalledOnce()
+  await act(async () => second.resolve({ ...f.session }))
+  await waitFor(() => expect(f.clicked).toHaveBeenCalledOnce())
+  expect(createURL).toHaveBeenCalledOnce()
+  const text = await readBlob(createURL.mock.calls[0][0])
+  expect(text).toContain(newInputs.topic)
+  if (mode === 'inputs') expect(text).not.toContain(oldInputs.topic)
+  expect(f.mutation).not.toHaveBeenCalled()
 })
 
 test.each(['unknown', 'authorized'])('the document and its explanation state only non-execution with %s Broker status', async mode => {

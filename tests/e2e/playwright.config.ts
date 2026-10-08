@@ -6,6 +6,8 @@ const root = resolve(import.meta.dirname, '../..')
 const data = process.env.LEARNING_E2E_DATA_DIR ?? mkdtempSync(`${tmpdir()}/learning-workbench-e2e-`)
 process.env.LEARNING_E2E_DATA_DIR = data
 export default defineConfig({
+  // CI git diff metadata collects complete stdout before truncating it.
+  captureGitInfo: { commit: true, diff: false },
   testDir: '.', testMatch: '*.spec.ts', fullyParallel: false, workers: 1, timeout: 30000,
   reporter: [['list']], outputDir: process.env.LEARNING_E2E_OUTPUT_DIR ?? resolve(root, '.local_data/e2e-results'),
   use: { baseURL: 'http://127.0.0.1:5173', headless: true, trace: 'off', screenshot: 'only-on-failure', viewport: { width: 1440, height: 900 }, launchOptions: existsSync('/usr/bin/google-chrome') ? { executablePath: '/usr/bin/google-chrome' } : {} },
