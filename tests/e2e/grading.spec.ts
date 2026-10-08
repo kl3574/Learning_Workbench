@@ -54,7 +54,7 @@ const test = base.extend<{ runtime: RestartRuntime; gradingTiming: GradingTiming
     timing.mark('fixture-enter')
     try { await use(timing) } finally { timing.mark('fixture-finally'); timing.save('fixture-finally') }
   }, { auto: true }],
-  runtime: async ({ gradingTiming }, use) => { gradingTiming.mark('runtime-start'); const runtime = await RestartRuntime.start(); gradingTiming.mark('runtime-ready'); try { await use(runtime) } finally { await runtime.close() } },
+  runtime: async ({ gradingTiming }, use, info) => { gradingTiming.mark('runtime-start'); const runtime = await RestartRuntime.start({ serverStageObserver: info.title === 'two browser profiles keep a stale manual-review baseline through an actual 412 before explicit three-way rebase' }); gradingTiming.mark('runtime-ready'); try { await use(runtime) } finally { try { await runtime.close() } finally { runtime.saveServerStageEvidence(info.outputPath('server-stage-timing.json')) } } },
   page: async ({ runtime, playwright, gradingTiming }, use) => {
     gradingTiming.mark('browser-open'); const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]; gradingTiming.mark('browser-opened')
     gradingTimingByPage.set(page, gradingTiming); gradingTiming.mark('authentication-start'); await runtime.authenticateOnly(page); gradingTiming.mark('authentication-complete'); gradingTiming.mark('page-use')

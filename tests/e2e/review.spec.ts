@@ -41,7 +41,7 @@ const test = base.extend<{ runtime: RestartRuntime; setupTiming: SetupTiming }>(
     observer.mark('fixture-enter')
     try { await use(observer) } finally { observer.mark('fixture-finally'); observer.save('fixture-finally') }
   }, { auto: true }],
-  runtime: async ({ setupTiming }, use) => { setupTiming.mark('runtime-start'); const runtime = await RestartRuntime.start(); setupTiming.mark('runtime-ready'); try { await use(runtime) } finally { await runtime.close() } },
+  runtime: async ({ setupTiming }, use, info) => { setupTiming.mark('runtime-start'); const runtime = await RestartRuntime.start({ serverStageObserver: info.title === 'real history and exact material review preserve original submitted text, null scores and a selected old revision after reload' }); setupTiming.mark('runtime-ready'); try { await use(runtime) } finally { try { await runtime.close() } finally { runtime.saveServerStageEvidence(info.outputPath('server-stage-timing.json')) } } },
   page: async ({ runtime, playwright, setupTiming }, use) => {
     setupTiming.mark('browser-open'); const context = await runtime.openBrowser(playwright.chromium), page = context.pages()[0]; setupTiming.mark('browser-opened')
     setupTimingByPage.set(page, setupTiming); setupTiming.mark('authentication-start'); await runtime.authenticateOnly(page); setupTiming.mark('authentication-complete')

@@ -1,10 +1,11 @@
 import { spawn, execFileSync, type ChildProcess } from 'node:child_process'
-import { mkdtempSync, existsSync, statSync } from 'node:fs'
+import { mkdtempSync, existsSync, statSync, openSync, closeSync, fstatSync, readFileSync, writeFileSync, constants } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { setTimeout as pause } from 'node:timers/promises'
 import { expect, type BrowserContext, type BrowserType, type Page } from '../../apps/web/node_modules/@playwright/test/index.mjs'
+import { serverStageMetadata } from './serverStageEvidence'
 
 const root = resolve(import.meta.dirname, '../..')
 type OwnedProcess = { child: ChildProcess; exit: Promise<void>; output: () => string }
@@ -81,16 +82,16 @@ export class RestartRuntime {
   private ui?: OwnedProcess
   private context?: BrowserContext
 
-  private constructor(private readonly apiPort: number, uiPort: number) {
+  private constructor(private readonly apiPort: number, uiPort: number, private readonly serverStages = false) {
     this.origin = `http://127.0.0.1:${uiPort}`
     this.env = { ...process.env, LEARNING_DATA_DIR: this.data, LEARNING_UI_ORIGIN: this.origin, LEARNING_HOST: '127.0.0.1', LEARNING_PORT: String(apiPort) }
   }
 
-  static async start() {
+  static async start(options: { serverStageObserver?: boolean } = {}) {
     const apiPort = await availablePort()
     let uiPort = await availablePort()
     while (uiPort === apiPort) uiPort = await availablePort()
-    const runtime = new RestartRuntime(apiPort, uiPort)
+    const runtime = new RestartRuntime(apiPort, uiPort, options.serverStageObserver === true)
     try {
       await runtime.startApi()
       runtime.ui = owned('bash', ['scripts/node.sh', 'npm', '--prefix', 'apps/web', 'run', 'dev', '--', '--port', String(uiPort)], runtime.env)
@@ -100,7 +101,9 @@ export class RestartRuntime {
   }
 
   private async startApi() {
-    this.api = owned(`${root}/.venv/bin/python`, ['-B', '-m', 'uvicorn', 'services.api.app.main:create_app', '--factory', '--host', '127.0.0.1', '--port', String(this.apiPort), '--no-access-log'], this.env)
+    const entry = this.serverStages ? ['server_stage_runtime:create_app', '--app-dir', 'tests/e2e'] : ['services.api.app.main:create_app']
+    const env = this.serverStages ? { ...this.env, LEARNING_E2E_SERVER_STAGE_OBSERVER: '1', LEARNING_E2E_SERVER_STAGE_GENERATION: String(this.generations.length) } : this.env
+    this.api = owned(`${root}/.venv/bin/python`, ['-B', '-m', 'uvicorn', ...entry, '--factory', '--host', '127.0.0.1', '--port', String(this.apiPort), '--no-access-log'], env)
     await ready(`http://127.0.0.1:${this.apiPort}/health`, this.api)
     if (!this.api.child.pid) throw new Error('Owned API has no process identity')
     this.generations.push(this.api.child.pid)
@@ -149,5 +152,24 @@ export class RestartRuntime {
     const results = await Promise.allSettled([this.closeBrowser(), stopOwned(this.ui), stopOwned(this.api)])
     const failures = results.filter((value): value is PromiseRejectedResult => value.status === 'rejected')
     if (failures.length) throw new AggregateError(failures.map(value => value.reason), 'Owned test runtime cleanup failed')
+  }
+
+  saveServerStageEvidence(outputPath: string) {
+    if (!this.serverStages) return
+    try {
+      const generations: Record<string, unknown>[] = []
+      for (let generation = 0; generation < Math.min(this.generations.length, 4); generation++) {
+        let fd: number | undefined
+        try {
+          fd = openSync(resolve(this.data, `e2e-server-stages-${generation}.json`), constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
+          const stat = fstatSync(fd)
+          if (!stat.isFile() || stat.size > 131072) throw new Error('Invalid bounded diagnostic file')
+          const server = serverStageMetadata(JSON.parse(readFileSync(fd, 'utf8')))
+          generations.push(server ? { generation, capture: 'captured', server } : { generation, capture: 'not-captured', reason: 'invalid-metadata' })
+        } catch { generations.push({ generation, capture: 'not-captured', reason: 'missing-or-unreadable-metadata' }) }
+        finally { if (fd !== undefined) { try { closeSync(fd) } catch { /* Diagnostic ownership only. */ } } }
+      }
+      writeFileSync(outputPath, JSON.stringify({ version: 'e2e-server-stage-artifact-v1', saved_at_boundary: 'runtime-close-finally', generations, scope: 'Each generation has its own server clock. Cleanup-time freeze is not browser-first-failure time; missing output is NOT_CAPTURED. No extra request, SQL, thread, wait or outcome assertion.' }, null, 2), { flag: 'wx' })
+    } catch { /* Diagnostics must not replace original failure or cleanup outcome. */ }
   }
 }
